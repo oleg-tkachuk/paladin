@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"paladin/internal/api/grpc"
+	grpcapi "paladin/internal/api/grpc"
 	httpapi "paladin/internal/api/http"
 	"paladin/internal/breaker"
 	"paladin/internal/config"
@@ -193,7 +193,8 @@ func (a *App) Run() error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		ln, err := net.Listen("tcp", a.Cfg.Server.GRPC.Addr)
+		lc := net.ListenConfig{}
+		ln, err := lc.Listen(context.Background(), "tcp", a.Cfg.Server.GRPC.Addr)
 		if err != nil {
 			errCh <- err
 
