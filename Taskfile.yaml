@@ -1,0 +1,63 @@
+version: '3'
+
+vars:
+  PROJECT_NAME: acme
+  COMPOSE_FILE: ./deploy/docker-compose.yaml
+  ENV_FILE_SERVICE: ./deploy/env/service.env
+  TIMEZONE: Europe/Kyiv
+  K8S_COMMON_NAMESPACE: paladin
+
+tasks:
+  default:
+    desc: "Lists tasks with or without a description"
+    cmds:
+      - task -a
+
+  ds:prune:
+    desc: "Docker system prune"
+    deps:
+      - dd:start
+    cmds:
+      - docker system prune --volumes --force
+
+  dd:start:
+    desc: "Start Docker Desktop"
+    cmds:
+      - docker desktop start
+
+  minikube:start:
+    desc: "Start minikube"
+    deps:
+      - dd:start
+    cmds:
+      - minikube start --kubernetes-version=latest
+
+  minikube:stop:
+    desc: "Stop minikube"
+    cmds:
+      - minikube stop
+
+  minikube:addons:enable:
+    desc: "Enable minikube addons"
+    cmds:
+      - minikube addons enable default-storageclass
+      - minikube addons enable storage-provisioner
+
+  build:
+    desc: "Build the image"
+    cmds:
+      - |
+        echo "INFO: Building Docker images..."
+        docker context use desktop-linux
+        docker buildx use desktop-linux
+        docker context ls
+        docker buildx ls
+        echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" > {{.ENV_FILE_SERVICE}}
+        echo "BUILD_TIME=$(TZ=${TIMEZONE} date +%Y-%m-%dT%H:%M:%S%z)" >> {{.ENV_FILE_SERVICE}}
+        eval $(minikube docker-env) && docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} --env-file {{.ENV_FILE_SERVICE}} build --no-cache
+
+  kubectl:set-context:
+    desc: "Set the current kubectl context to the common namespace"
+    cmds:
+      - kubectl config set-context --current --namespace={{.K8S_COMMON_NAMESPACE}}
+

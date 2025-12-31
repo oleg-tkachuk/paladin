@@ -1,0 +1,39 @@
+logger:
+  level: info
+  format: json # console or json
+
+server:
+  mode: release
+  name: paladin
+  http:
+    addr: "0.0.0.0:8080"
+  grpc:
+    addr: "0.0.0.0:9090"
+  shutdown_timeout: 20s
+
+postgres:
+  dsn: "postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable"
+
+s3:
+  bucket: paladin
+  region: us-east-1
+  endpoint: "http://seaweed-s3:8333"
+  force_path_style: true
+  access_key: dummy
+  secret_key: dummy
+  presign_ttl: 15m
+  part_size: "8MB"
+
+policy:
+  max_object_size: "100MB"
+  allowed_content_types:
+    - "image/jpeg"
+    - "image/png"
+    - "application/pdf"
+
+otel:
+  enabled: false
+  service_name: paladin
+  environment: local
+  otlp_endpoint: "otel-collector:4317"
+  insecure: true
