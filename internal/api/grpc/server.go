@@ -13,6 +13,7 @@ import (
 )
 
 type Server struct {
+	UnimplementedPaladinServer
 	log *zap.Logger
 	svc *service.ObjectsService
 }

@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "paladin/internal/api/grpc;grpcapi";
+
+service Paladin {
+  rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
+  rpc GetObject(GetObjectRequest) returns (GetObjectResponse);
+  rpc CompleteObject(CompleteObjectRequest) returns (CompleteObjectResponse);
+
+  rpc InitiateMultipart(InitiateMultipartRequest) returns (InitiateMultipartResponse);
+  rpc SignPart(SignPartRequest) returns (SignPartResponse);
+  rpc CompleteMultipart(CompleteMultipartRequest) returns (CompleteMultipartResponse);
+  rpc AbortMultipart(AbortMultipartRequest) returns (AbortMultipartResponse);
+}
+
+message CreateObjectRequest {
+  string tenant_id = 1;
+  string content_type = 2;
+  int64 size_bytes = 3;
+}
+
+message CreateObjectResponse {
+  string object_id = 1;
+  string object_key = 2;
+  string upload_url = 3;
+  string method = 4;
+  map<string, string> headers = 5;
+  int64 expires_at_unix = 6;
+}
+
+message GetObjectRequest {
+  string tenant_id = 1;
+  string object_id = 2;
+}
+
+message GetObjectResponse {
+  string object_id = 1;
+  string object_key = 2;
+  string bucket = 3;
+  string content_type = 4;
+  int64 size_bytes = 5;
+  string status = 6;
+  string download_url = 7;
+  int64 expires_at_unix = 8;
+}
+
+message CompleteObjectRequest {
+  string tenant_id = 1;
+  string object_id = 2;
+}
+
+message CompleteObjectResponse {
+  string status = 1;
+}
+
+message InitiateMultipartRequest {
+  string tenant_id = 1;
+  string content_type = 2;
+  int64 size_bytes = 3;
+}
+
+message InitiateMultipartResponse {
+  string object_id = 1;
+  string object_key = 2;
+  string upload_id = 3;
+  int64 part_size = 4;
+  int64 expires_at_unix = 5;
+}
+
+message SignPartRequest {
+  string tenant_id = 1;
+  string upload_id = 2;
+  int32 part_number = 3;
+}
+
+message SignPartResponse {
+  string upload_url = 1;
+  string method = 2;
+  int64 expires_at_unix = 3;
+}
+
+message CompleteMultipartRequest {
+  string tenant_id = 1;
+  string upload_id = 2;
+  repeated CompleteMultipartPart parts = 3;
+}
+
+message CompleteMultipartPart {
+  int32 part_number = 1;
+  string etag = 2;
+}
+
+message CompleteMultipartResponse {
+  string object_id = 1;
+  string status = 2;
+}
+
+message AbortMultipartRequest {
+  string tenant_id = 1;
+  string upload_id = 2;
+}
+
+message AbortMultipartResponse {
+  string status = 1;
+}
