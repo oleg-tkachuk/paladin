@@ -17,6 +17,10 @@ server: {
 
 postgres: {
   dsn: string
+  max_conns: int | *20
+  min_conns: int | *2
+  max_conn_lifetime: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30m"
+  max_conn_idle_time: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
 }
 
 s3: {

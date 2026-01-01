@@ -22,7 +22,12 @@ COPY ./internal ./internal
 COPY ./configs ./configs
 COPY ./migrations ./migrations
 
-RUN cd ./cmd/server &&     CGO_ENABLED=0 go build -trimpath -ldflags="-w -s       -X 'main.version=${APP_VERSION}'       -X 'main.commit=${GIT_COMMIT_HASH}'       -X 'main.buildTime=${BUILD_TIME}'"     -o /app/paladin .
+RUN cd ./cmd/server && \
+    CGO_ENABLED=0 go build -trimpath -tags=go_json -ldflags="-w -s \
+      -X 'main.version=${APP_VERSION}' \
+      -X 'main.commit=${GIT_COMMIT_HASH}' \
+      -X 'main.buildTime=${BUILD_TIME}'" \
+    -o /app/paladin .
 
 FROM gcr.io/distroless/static:nonroot
 

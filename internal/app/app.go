@@ -77,7 +77,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	var db *postgres.DB
 
 	op := func() error {
-		d, err := postgres.New(ctx, cfg.Postgres.DSN)
+		d, err := postgres.New(ctx, cfg.Postgres)
 		if err != nil {
 			return err
 		}

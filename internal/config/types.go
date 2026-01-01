@@ -36,7 +36,11 @@ type GRPCServer struct {
 }
 
 type Postgres struct {
-    DSN string `yaml:"dsn"`
+	DSN             string        `yaml:"dsn"`
+	MaxConns        int32         `yaml:"max_conns"`
+	MinConns        int32         `yaml:"min_conns"`
+	MaxConnLifetime time.Duration `yaml:"max_conn_lifetime"`
+	MaxConnIdleTime time.Duration `yaml:"max_conn_idle_time"`
 }
 
 type S3 struct {
