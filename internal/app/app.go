@@ -165,7 +165,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, s3cfg.PartSizeBytes)
 
-	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime)
+	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes)
 
 	// HTTP server
 	hs := &http.Server{

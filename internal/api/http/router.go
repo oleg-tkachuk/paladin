@@ -15,7 +15,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string) *Server {
+func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string, logProbes bool) *Server {
 	gin.SetMode(mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -34,11 +34,15 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 	})
 
 	r.GET("/health/livez", func(c *gin.Context) {
-		log.Debug("Liveness check called")
+		if logProbes {
+			log.Debug("Liveness check called")
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	r.GET("/health/readyz", func(c *gin.Context) {
-		log.Debug("Readiness check called")
+		if logProbes {
+			log.Debug("Readiness check called")
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 

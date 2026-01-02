@@ -13,6 +13,7 @@ server:
   grpc:
     addr: "0.0.0.0:9090"
   shutdown_timeout: 20s
+  log_probes: false
 
 postgres:
   dsn: "postgres://acme:change-me@postgresql.databases.svc.cluster.local:5432/acme?sslmode=disable"

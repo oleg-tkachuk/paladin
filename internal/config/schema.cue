@@ -15,6 +15,7 @@ server: {
   http: { addr: string }
   grpc: { addr: string }
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
+  log_probes: bool | *true
 }
 
 postgres: {

@@ -28,6 +28,7 @@ type Server struct {
 	HTTP            HTTPServer    `yaml:"http" json:"http"`
 	GRPC            GRPCServer    `yaml:"grpc" json:"grpc"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
+	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
 
 type HTTPServer struct {
