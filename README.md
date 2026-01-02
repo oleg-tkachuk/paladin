@@ -55,6 +55,7 @@ logger:
 ```yaml
 server:
   mode: release         # release, debug, test
+  log_probes: false     # Toggles logging for health check probes
 ```
 
 ### Health Probes
@@ -63,9 +64,19 @@ Exposes standard endpoints following Kubernetes best practices:
 
 - `GET /health/livez` - Liveness probe (Restart logic). Checks if process is responsive.
 - `GET /health/startupz` - Startup probe (Initialization). Checks if config and clients are ready.
-- `GET /health/readyz` - Readiness probe (Traffic). Checks connectivity to Postgres and SeaweedFS.
+- `GET /health/readyz` - Readiness probe (Traffic). Checks connectivity to Postgres and SeaweedFS (S3).
 
-**Config**: `server.log_probes: true|false` (Toggles probe logging).
+## Testing
+
+The project uses [Ginkgo](https://onsi.github.io/ginkgo/) and [Gomega](https://onsi.github.io/gomega/) for BDD-style unit testing.
+
+```bash
+# Run all unit tests
+task test
+
+# Or using go test directly
+go test -v ./internal/service/...
+```
 
 ## Local Development
 
@@ -76,6 +87,9 @@ task build
 # Start the full stack (Postgres + SeaweedFS + PALADIN)
 task up
 
+# Run unit tests
+task test
+
 # Verify the service is ready
 curl -s http://localhost:8080/health/readyz | jq .
 ```
@@ -85,6 +99,7 @@ curl -s http://localhost:8080/health/readyz | jq .
 ### HTTP API
 
 - `GET /health/livez` - Liveness probe
+- `GET /health/startupz` - Startup probe
 - `GET /health/readyz` - Readiness probe
 - `GET /version` - Version information
 - `GET /metrics` - Prometheus metrics
@@ -98,7 +113,15 @@ curl -s http://localhost:8080/health/readyz | jq .
 - `Paladin/CompleteMultipartUpload`
 - `Paladin/AbortMultipartUpload`
 
+## Architecture
+
+The service follows an interface-first design to ensure testability and maintainability:
+
+- **Service Layer**: Decoupled from storage and database using Go interfaces.
+- **Circuit Breakers**: Distributed via a central factory for consistent fault tolerance.
+- **State Management**: Atomic state transitions for multipart uploads.
+
 ## Notes
 
 - **Data Flow**: This service intentionally does not proxy or stream object data. It only manages metadata and signs access URLs.
-- **SeaweedFS**: For local development, dummy credentials are used as the service defaults to static client credentials.
+- **S3 Connectivity**: The `readyz` probe performs a `HeadBucket` operation to verify S3 connectivity.

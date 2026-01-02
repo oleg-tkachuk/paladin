@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"paladin/internal/breaker"
-	"paladin/internal/storage/s3"
-	"paladin/internal/store/postgres"
 )
 
 type DependencyStatus struct {
@@ -13,13 +11,21 @@ type DependencyStatus struct {
 	Breakers   map[string]string `json:"breakers,omitempty"`
 }
 
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+type S3HealthChecker interface {
+	Health(ctx context.Context) error
+}
+
 type HealthService struct {
-	db      *postgres.DB
-	s3      *s3.Client
+	db      Pinger
+	s3      S3HealthChecker
 	breaker breaker.Factory
 }
 
-func NewHealthService(db *postgres.DB, s3 *s3.Client, breaker breaker.Factory) *HealthService {
+func NewHealthService(db Pinger, s3 S3HealthChecker, breaker breaker.Factory) *HealthService {
 	return &HealthService{
 		db:      db,
 		s3:      s3,
