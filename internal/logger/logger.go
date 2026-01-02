@@ -78,11 +78,6 @@ func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
 	// Attach environment fields
 	fields := []zap.Field{
 		zap.String("service", baseFields["service"]),
-		zap.String("pod", baseFields["pod"]),
-		zap.String("env", baseFields["env"]),
-		zap.String("version", baseFields["version"]),
-		zap.String("commit", baseFields["commit"]),
-		zap.String("build_time", baseFields["build_time"]),
 	}
 
 	// Optional: include additional env fields without leaking secrets

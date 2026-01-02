@@ -66,6 +66,14 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		return nil, err
 	}
 
+	log.Info("Service metadata",
+		zap.String("version", version),
+		zap.String("commit", commit),
+		zap.String("build_time", buildTime),
+		zap.String("pod", cfg.PodName),
+		zap.String("env", cfg.Env),
+	)
+
 	ctx := context.Background()
 
 	otelShutdown, err := obs.InitOTel(ctx, cfg.OTel)
