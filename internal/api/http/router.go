@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"paladin/internal/middleware"
 	"paladin/internal/service"
@@ -15,7 +16,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string, logProbes bool) *Server {
+func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -37,13 +38,41 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 		if logProbes {
 			log.Debug("Liveness check called")
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		// If we are here, the process is running and responsive.
+		// In a real app, you might check for deadlocks or other fatal internal state.
+		c.JSON(http.StatusOK, gin.H{"status": "alive"})
 	})
+
+	r.GET("/health/startupz", func(c *gin.Context) {
+		if logProbes {
+			log.Debug("Startup check called")
+		}
+		if !started.Load() {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "starting",
+				"reason": "initialization_in_progress",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "started"})
+	})
+
 	r.GET("/health/readyz", func(c *gin.Context) {
 		if logProbes {
 			log.Debug("Readiness check called")
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+
+		ready, status := hs.CheckReady(c.Request.Context())
+		if !ready {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":       "not_ready",
+				"reason":       "dependency_unavailable",
+				"dependencies": status,
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	})
 
 	v1 := r.Group("/v1")

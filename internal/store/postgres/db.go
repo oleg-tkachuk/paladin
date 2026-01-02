@@ -66,6 +66,14 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	return &DB{Pool: pool, log: log}, nil
 }
 
+func (d *DB) Ping(ctx context.Context) error {
+	if d == nil || d.Pool == nil {
+		return fmt.Errorf("database pool not initialized")
+	}
+
+	return d.Pool.Ping(ctx)
+}
+
 func (d *DB) Close() {
 	if d != nil && d.Pool != nil {
 		d.Pool.Close()

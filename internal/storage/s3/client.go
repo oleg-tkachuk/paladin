@@ -92,6 +92,18 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
+func (c *Client) Health(ctx context.Context) error {
+	if c == nil || c.s3 == nil {
+		return fmt.Errorf("s3 client not initialized")
+	}
+
+	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(c.Bucket),
+	})
+
+	return err
+}
+
 func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64) (Presigned, error) {
 	in := &s3.PutObjectInput{
 		Bucket:      aws.String(c.Bucket),

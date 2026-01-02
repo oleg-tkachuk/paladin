@@ -111,3 +111,27 @@ func Execute(w *CircuitBreakerWrapper, fn func() (interface{}, error)) (interfac
 
 	return res, err
 }
+
+func (w *CircuitBreakerWrapper) State() gobreaker.State {
+	if w == nil || w.cb == nil {
+		return gobreaker.StateClosed
+	}
+
+	return w.cb.State()
+}
+
+func (r *Registry) All() map[string]*CircuitBreakerWrapper {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	res := make(map[string]*CircuitBreakerWrapper, len(r.breakers))
+	for k, v := range r.breakers {
+		res[k] = v
+	}
+
+	return res
+}
+
+func AllBreakers() map[string]*CircuitBreakerWrapper {
+	return defaultRegistry.All()
+}

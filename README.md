@@ -55,8 +55,17 @@ logger:
 ```yaml
 server:
   mode: release         # release, debug, test
-  log_probes: false     # Toggles logging for health check probes (/health/livez, /health/readyz)
 ```
+
+### Health Probes
+
+Exposes standard endpoints following Kubernetes best practices:
+
+- `GET /health/livez` - Liveness probe (Restart logic). Checks if process is responsive.
+- `GET /health/startupz` - Startup probe (Initialization). Checks if config and clients are ready.
+- `GET /health/readyz` - Readiness probe (Traffic). Checks connectivity to Postgres and SeaweedFS.
+
+**Config**: `server.log_probes: true|false` (Toggles probe logging).
 
 ## Local Development
 

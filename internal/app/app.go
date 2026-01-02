@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	grpcapi "paladin/internal/api/grpc"
@@ -37,6 +38,7 @@ type App struct {
 
 	db           *postgres.DB
 	otelShutdown obs.ShutdownFunc
+	started      atomic.Bool
 }
 
 func New(version, commit, buildTime, configPath string) (*App, error) {
@@ -164,11 +166,19 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	brk := breaker.NewFactory(cfg)
 
 	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, s3cfg.PartSizeBytes)
+	hs := service.NewHealthService(db, s3c, brk)
 
-	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes)
+	app := &App{
+		Version: version, Commit: commit, BuildTime: buildTime,
+		Cfg: cfg, Logger: log,
+		db:           db,
+		otelShutdown: otelShutdown,
+	}
+
+	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes, hs, &app.started)
 
 	// HTTP server
-	hs := &http.Server{
+	app.httpSrv = &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
 		Handler:           httpSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -178,20 +188,13 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	}
 
 	// gRPC server
-	gs := grpc.NewServer(
+	app.grpcSrv = grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
-	grpcapi.RegisterPaladinServer(gs, grpcapi.NewServer(log, svc))
-	reflection.Register(gs)
+	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(log, svc))
+	reflection.Register(app.grpcSrv)
 
-	return &App{
-		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: log,
-		httpSrv:      hs,
-		grpcSrv:      gs,
-		db:           db,
-		otelShutdown: otelShutdown,
-	}, nil
+	return app, nil
 }
 
 func (a *App) Run() error {
@@ -214,6 +217,8 @@ func (a *App) Run() error {
 	go func() {
 		errCh <- a.httpSrv.ListenAndServe()
 	}()
+
+	a.started.Store(true)
 
 	return <-errCh
 }
