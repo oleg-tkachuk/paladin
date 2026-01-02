@@ -33,11 +33,11 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 		})
 	})
 
-	r.GET("/health/live", func(c *gin.Context) {
+	r.GET("/health/livez", func(c *gin.Context) {
 		log.Debug("Liveness check called")
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	r.GET("/health/ready", func(c *gin.Context) {
+	r.GET("/health/readyz", func(c *gin.Context) {
 		log.Debug("Readiness check called")
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
