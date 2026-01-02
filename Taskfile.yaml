@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   PROJECT_NAME: acme
@@ -60,4 +60,9 @@ tasks:
     desc: "Set the current kubectl context to the common namespace"
     cmds:
       - kubectl config set-context --current --namespace={{.K8S_COMMON_NAMESPACE}}
+
+  test:
+    desc: "Run unit tests"
+    cmds:
+      - go test -v ./...
 
