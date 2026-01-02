@@ -16,7 +16,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(mode)
 	r := gin.New()
 	r.Use(gin.Recovery())

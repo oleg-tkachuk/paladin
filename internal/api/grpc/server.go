@@ -15,10 +15,10 @@ import (
 type Server struct {
 	UnimplementedPaladinServer
 	log *zap.Logger
-	svc *service.ObjectsService
+	svc service.ObjectsService
 }
 
-func NewServer(log *zap.Logger, svc *service.ObjectsService) *Server {
+func NewServer(log *zap.Logger, svc service.ObjectsService) *Server {
 	return &Server{log: log, svc: svc}
 }
 

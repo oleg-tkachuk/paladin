@@ -129,7 +129,7 @@ var _ = Describe("ObjectsService", func() {
 		mockMPRepo  *MockMultipartRepo
 		mockS3      *MockS3Client
 		mockBreaker *MockBreakerFactory
-		svc         *service.ObjectsService
+		svc         service.ObjectsService
 		ctx         context.Context
 	)
 
