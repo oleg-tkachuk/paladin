@@ -72,7 +72,10 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+		c.JSON(http.StatusOK, gin.H{
+			"status":       "ready",
+			"dependencies": status,
+		})
 	})
 
 	v1 := r.Group("/v1")
