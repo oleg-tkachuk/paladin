@@ -59,6 +59,8 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	}
 
 	log.Info("PostgreSQL pool initialized",
+		zap.String("endpoint", fmt.Sprintf("postgres://%s:****@%s:%d/%s",
+			poolCfg.ConnConfig.User, poolCfg.ConnConfig.Host, poolCfg.ConnConfig.Port, poolCfg.ConnConfig.Database)),
 		zap.Int32("max_conns", poolCfg.MaxConns),
 		zap.Int32("min_conns", poolCfg.MinConns),
 	)
