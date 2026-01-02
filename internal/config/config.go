@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"paladin/internal/utils"
@@ -16,29 +17,29 @@ import (
 //go:embed schema.cue
 var cueSchema string
 
-func Load(path string, log *zap.Logger) Config {
+func Load(path string, log *zap.Logger) (Config, error) {
 	ctx := cuecontext.New()
 
 	schemaVal := ctx.CompileString(cueSchema)
 	if schemaVal.Err() != nil {
-		log.Fatal("CUE schema invalid", zap.Error(schemaVal.Err()))
+		return Config{}, fmt.Errorf("CUE schema invalid: %w", schemaVal.Err())
 	}
 
 	yamlBytes, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatal("YAML read error", zap.String("path", path), zap.Error(err))
+		return Config{}, fmt.Errorf("YAML read error (%s): %w", path, err)
 	}
 
 	yamlFile, err := cueyaml.Extract(path, yamlBytes)
 	if err != nil {
-		log.Fatal("YAML -> CUE AST error", zap.Error(err))
+		return Config{}, fmt.Errorf("YAML -> CUE AST error: %w", err)
 	}
 
 	yamlVal := ctx.BuildFile(yamlFile)
 
 	combined := schemaVal.Unify(yamlVal)
 	if err := combined.Validate(); err != nil {
-		log.Fatal("YAML validation failed", zap.String("path", path), zap.Error(err))
+		return Config{}, fmt.Errorf("YAML validation failed (%s): %w", path, err)
 	}
 
 	var cfg Config
@@ -46,27 +47,27 @@ func Load(path string, log *zap.Logger) Config {
 	// to support time.Duration and other types goyaml handles better.
 	finalYAML, err := cueyaml.Encode(combined)
 	if err != nil {
-		log.Fatal("CUE -> YAML encoding failed", zap.Error(err))
+		return Config{}, fmt.Errorf("CUE -> YAML encoding failed: %w", err)
 	}
 
 	if err := goyaml.Unmarshal(finalYAML, &cfg); err != nil {
-		log.Fatal("YAML unmarshal failed", zap.Error(err))
+		return Config{}, fmt.Errorf("YAML unmarshal failed: %w", err)
 	}
 
 	// Parse sizes
 	if n, err := utils.ParseSizeString(cfg.S3.PartSizeRaw); err == nil {
 		cfg.S3.PartSizeBytes = n
 	} else {
-		log.Fatal("Failed to parse s3.part_size", zap.Error(err))
+		return Config{}, fmt.Errorf("failed to parse s3.part_size (%s): %w", cfg.S3.PartSizeRaw, err)
 	}
 
 	if n, err := utils.ParseSizeString(cfg.Policy.MaxObjectSizeRaw); err == nil {
 		cfg.Policy.MaxObjectSizeBytes = n
 	} else {
-		log.Fatal("Failed to parse policy.max_object_size", zap.Error(err))
+		return Config{}, fmt.Errorf("failed to parse policy.max_object_size (%s): %w", cfg.Policy.MaxObjectSizeRaw, err)
 	}
 
 	log.Info("Config loaded", zap.String("path", path))
 
-	return cfg
+	return cfg, nil
 }

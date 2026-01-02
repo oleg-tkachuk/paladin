@@ -16,16 +16,41 @@ import (
 	"github.com/google/uuid"
 )
 
+type ObjectsRepository interface {
+	Create(ctx context.Context, rec postgres.ObjectRecord) error
+	Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)
+	MarkActive(ctx context.Context, tenantID string, id uuid.UUID) error
+}
+
+type MultipartRepository interface {
+	Create(ctx context.Context, rec postgres.MultipartRecord) error
+	GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error)
+	UpsertPartETag(ctx context.Context, multipartID uuid.UUID, partNumber int, etag string, sizeBytes *int64) error
+	MarkCompleted(ctx context.Context, tenantID string, uploadID string) error
+	MarkAborted(ctx context.Context, tenantID string, uploadID string) error
+}
+
+type S3Client interface {
+	BucketName() string
+	PresignTTLDuration() time.Duration
+	PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64) (s3.Presigned, error)
+	PresignGetObject(ctx context.Context, key string) (s3.Presigned, error)
+	PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32) (s3.Presigned, error)
+	CreateMultipartUpload(ctx context.Context, key string, contentType string) (s3.MultipartInit, error)
+	CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []types.CompletedPart) error
+	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
+}
+
 type ObjectsService struct {
 	policy   Policy
-	s3       *s3.Client
-	objRepo  *postgres.ObjectsRepo
-	mpRepo   *postgres.MultipartRepo
+	s3       S3Client
+	objRepo  ObjectsRepository
+	mpRepo   MultipartRepository
 	brk      breaker.Factory
 	partSize int64
 }
 
-func NewObjectsService(policy Policy, s3c *s3.Client, objRepo *postgres.ObjectsRepo, mpRepo *postgres.MultipartRepo, brk breaker.Factory, partSize int64) *ObjectsService {
+func NewObjectsService(policy Policy, s3c S3Client, objRepo ObjectsRepository, mpRepo MultipartRepository, brk breaker.Factory, partSize int64) *ObjectsService {
 	return &ObjectsService{policy: policy, s3: s3c, objRepo: objRepo, mpRepo: mpRepo, brk: brk, partSize: partSize}
 }
 
@@ -46,18 +71,18 @@ func (s *ObjectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	}
 
 	rec := postgres.ObjectRecord{
-		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: s.s3.Bucket,
+		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: s.s3.BucketName(),
 		ContentType: contentType, SizeBytes: sizeBytes, ChecksumSHA256: checksumStr,
 		Status: postgres.ObjectPending,
 	}
 
 	if err := s.objRepo.Create(ctx, rec); err != nil {
-		return uuid.UUID{}, "", s3.Presigned{}, err
+		return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("repo create: %w", err)
 	}
 
 	p, err := s.s3.PresignPutObject(ctx, key, contentType, sizeBytes)
 	if err != nil {
-		return uuid.UUID{}, "", s3.Presigned{}, err
+		return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("s3 presign put: %w", err)
 	}
 
 	return id, key, p, nil
@@ -66,19 +91,23 @@ func (s *ObjectsService) CreateSingle(ctx context.Context, tenantID string, cont
 func (s *ObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, s3.Presigned, error) {
 	rec, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
-		return nil, s3.Presigned{}, err
+		return nil, s3.Presigned{}, fmt.Errorf("repo get: %w", err)
 	}
 
 	p, err := s.s3.PresignGetObject(ctx, rec.ObjectKey)
 	if err != nil {
-		return nil, s3.Presigned{}, err
+		return nil, s3.Presigned{}, fmt.Errorf("s3 presign get: %w", err)
 	}
 
 	return rec, p, nil
 }
 
 func (s *ObjectsService) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID) error {
-	return s.objRepo.MarkActive(ctx, tenantID, id)
+	if err := s.objRepo.MarkActive(ctx, tenantID, id); err != nil {
+		return fmt.Errorf("repo mark active: %w", err)
+	}
+
+	return nil
 }
 
 type MultipartInitResponse struct {
@@ -98,26 +127,26 @@ func (s *ObjectsService) InitiateMultipart(ctx context.Context, tenantID string,
 	objectKey := fmt.Sprintf("%s/%s", tenantID, objectID.String())
 
 	if err := s.objRepo.Create(ctx, postgres.ObjectRecord{
-		ID: objectID, TenantID: tenantID, ObjectKey: objectKey, Bucket: s.s3.Bucket,
+		ID: objectID, TenantID: tenantID, ObjectKey: objectKey, Bucket: s.s3.BucketName(),
 		ContentType: contentType, SizeBytes: sizeBytes, Status: postgres.ObjectPending,
 	}); err != nil {
-		return MultipartInitResponse{}, err
+		return MultipartInitResponse{}, fmt.Errorf("repo create object: %w", err)
 	}
 
 	init, err := s.s3.CreateMultipartUpload(ctx, objectKey, contentType)
 	if err != nil {
-		return MultipartInitResponse{}, err
+		return MultipartInitResponse{}, fmt.Errorf("s3 create multipart: %w", err)
 	}
 
 	mpuID, _ := uuid.NewV7()
-	expires := time.Now().Add(s.s3.PresignTTL)
+	expires := time.Now().Add(s.s3.PresignTTLDuration())
 
 	if err := s.mpRepo.Create(ctx, postgres.MultipartRecord{
 		ID: mpuID, TenantID: tenantID, ObjectID: objectID,
 		UploadID: init.UploadID, Bucket: init.Bucket, ObjectKey: init.Key, ContentType: contentType,
 		PartSize: s.partSize, Status: postgres.MultipartInitiated, ExpiresAt: expires,
 	}); err != nil {
-		return MultipartInitResponse{}, err
+		return MultipartInitResponse{}, fmt.Errorf("repo create multipart: %w", err)
 	}
 
 	return MultipartInitResponse{
@@ -132,10 +161,15 @@ func (s *ObjectsService) InitiateMultipart(ctx context.Context, tenantID string,
 func (s *ObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error) {
 	mpu, err := s.mpRepo.GetByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
-		return s3.Presigned{}, err
+		return s3.Presigned{}, fmt.Errorf("repo get multipart: %w", err)
 	}
 
-	return s.s3.PresignUploadPart(ctx, mpu.ObjectKey, mpu.UploadID, partNumber)
+	p, err := s.s3.PresignUploadPart(ctx, mpu.ObjectKey, mpu.UploadID, partNumber)
+	if err != nil {
+		return s3.Presigned{}, fmt.Errorf("s3 presign upload part: %w", err)
+	}
+
+	return p, nil
 }
 
 type CompletePart struct {
@@ -146,7 +180,7 @@ type CompletePart struct {
 func (s *ObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (uuid.UUID, error) {
 	mpu, err := s.mpRepo.GetByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("repo get multipart: %w", err)
 	}
 
 	completed := make([]types.CompletedPart, 0, len(parts))
@@ -164,15 +198,15 @@ func (s *ObjectsService) CompleteMultipart(ctx context.Context, tenantID string,
 	if _, err := fault.Execute(w, func() (interface{}, error) {
 		return nil, s.s3.CompleteMultipartUpload(ctx, mpu.ObjectKey, mpu.UploadID, completed)
 	}); err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("s3 complete multipart: %w", err)
 	}
 
 	if err := s.mpRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("repo mark multipart completed: %w", err)
 	}
 
 	if err := s.objRepo.MarkActive(ctx, tenantID, mpu.ObjectID); err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, fmt.Errorf("repo mark object active: %w", err)
 	}
 
 	return mpu.ObjectID, nil
@@ -181,15 +215,19 @@ func (s *ObjectsService) CompleteMultipart(ctx context.Context, tenantID string,
 func (s *ObjectsService) AbortMultipart(ctx context.Context, tenantID string, uploadID string) error {
 	mpu, err := s.mpRepo.GetByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
-		return err
+		return fmt.Errorf("repo get multipart: %w", err)
 	}
 
 	w := s.brk.Get("s3.abort_multipart")
 	if _, err := fault.Execute(w, func() (interface{}, error) {
 		return nil, s.s3.AbortMultipartUpload(ctx, mpu.ObjectKey, mpu.UploadID)
 	}); err != nil {
-		return err
+		return fmt.Errorf("s3 abort multipart: %w", err)
 	}
 
-	return s.mpRepo.MarkAborted(ctx, tenantID, uploadID)
+	if err := s.mpRepo.MarkAborted(ctx, tenantID, uploadID); err != nil {
+		return fmt.Errorf("repo mark multipart aborted: %w", err)
+	}
+
+	return nil
 }

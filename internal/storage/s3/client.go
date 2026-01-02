@@ -115,7 +115,7 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
 	if err != nil {
 		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
-		return Presigned{}, err
+		return Presigned{}, fmt.Errorf("presign put object: %w", err)
 	}
 
 	c.log.Debug("S3 presign PUT success", zap.String("key", key), zap.String("content_type", contentType))
@@ -137,7 +137,7 @@ func (c *Client) PresignGetObject(ctx context.Context, key string) (Presigned, e
 	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
 	if err != nil {
 		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
-		return Presigned{}, err
+		return Presigned{}, fmt.Errorf("presign get object: %w", err)
 	}
 
 	c.log.Debug("S3 presign GET success", zap.String("key", key))
@@ -164,7 +164,7 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	})
 	if err != nil {
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
-		return MultipartInit{}, err
+		return MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
 
 	uploadID := aws.ToString(out.UploadId)
@@ -186,7 +186,7 @@ func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, pa
 		PartNumber: aws.Int32(partNumber),
 	}, s3.WithPresignExpires(c.PresignTTL))
 	if err != nil {
-		return Presigned{}, err
+		return Presigned{}, fmt.Errorf("presign upload part: %w", err)
 	}
 
 	return Presigned{
@@ -208,7 +208,7 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 
 	if err != nil {
 		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
-		return err
+		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
 	c.log.Info("S3 multipart upload completed", zap.String("key", key), zap.String("upload_id", uploadID))
@@ -223,4 +223,12 @@ func (c *Client) AbortMultipartUpload(ctx context.Context, key, uploadID string)
 	})
 
 	return err
+}
+
+func (c *Client) BucketName() string {
+	return c.Bucket
+}
+
+func (c *Client) PresignTTLDuration() time.Duration {
+	return c.PresignTTL
 }

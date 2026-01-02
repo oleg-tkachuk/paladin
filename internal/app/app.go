@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -51,7 +53,14 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	// Load YAML if present
 	if configPath != "" {
-		cfg = config.Load(configPath, boot)
+		if _, err := os.Stat(configPath); err != nil {
+			return nil, fmt.Errorf("config file stat: %w", err)
+		}
+		var err error
+		cfg, err = config.Load(configPath, boot)
+		if err != nil {
+			return nil, fmt.Errorf("config load: %w", err)
+		}
 		cfg.Env = utils.GetEnvOrDefault("ENV", cfg.Env)
 		cfg.PodName = utils.GetEnvOrDefault("POD_NAME", cfg.PodName)
 	}
@@ -65,7 +74,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		"build_time": buildTime,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("logger init: %w", err)
 	}
 
 	log.Info("Service metadata",
