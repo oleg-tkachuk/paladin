@@ -23,11 +23,11 @@ COPY ./configs ./configs
 COPY ./migrations ./migrations
 
 RUN cd ./cmd/server && \
-    CGO_ENABLED=0 go build -trimpath -tags=go_json -ldflags="-w -s \
-      -X 'main.version=${APP_VERSION}' \
-      -X 'main.commit=${GIT_COMMIT_HASH}' \
-      -X 'main.buildTime=${BUILD_TIME}'" \
-    -o /app/paladin .
+  CGO_ENABLED=0 go build -trimpath -tags=go_json -ldflags="-w -s \
+  -X 'main.version=${APP_VERSION}' \
+  -X 'main.commit=${GIT_COMMIT_HASH}' \
+  -X 'main.buildTime=${BUILD_TIME}'" \
+  -o /app/paladin .
 
 FROM gcr.io/distroless/static:nonroot
 
@@ -37,6 +37,7 @@ ARG GRPC_PORT
 WORKDIR /app
 COPY --from=builder --chown=nonroot:nonroot /app/paladin /app/paladin
 COPY --from=builder --chown=nonroot:nonroot /app/migrations /app/migrations
+COPY --from=builder --chown=nonroot:nonroot /app/configs /app/configs
 
 EXPOSE ${HTTP_PORT}
 EXPOSE ${GRPC_PORT}
