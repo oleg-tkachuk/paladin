@@ -30,3 +30,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build data
+deploy/env/service.env
+
+# Binary files
+server

@@ -1,0 +1,46 @@
+### Create object
+POST http://localhost:8080/v1/objects
+Content-Type: application/json
+X-Tenant-ID: demo
+
+{
+  "content_type": "application/pdf",
+  "size_bytes": 12345
+}
+
+### Get object metadata + presigned download
+GET http://localhost:8080/v1/objects/{{object_id}}
+X-Tenant-ID: demo
+
+### Complete object (mark active)
+POST http://localhost:8080/v1/objects/{{object_id}}/complete
+X-Tenant-ID: demo
+
+### Initiate multipart
+POST http://localhost:8080/v1/multipart
+Content-Type: application/json
+X-Tenant-ID: demo
+
+{
+  "content_type": "application/pdf",
+  "size_bytes": 20000000
+}
+
+### Sign part
+POST http://localhost:8080/v1/multipart/{{upload_id}}/parts/1/sign
+X-Tenant-ID: demo
+
+### Complete multipart
+POST http://localhost:8080/v1/multipart/{{upload_id}}/complete
+Content-Type: application/json
+X-Tenant-ID: demo
+
+{
+  "parts": [
+    { "part_number": 1, "etag": ""etag-from-s3"" }
+  ]
+}
+
+### Abort multipart
+POST http://localhost:8080/v1/multipart/{{upload_id}}/abort
+X-Tenant-ID: demo

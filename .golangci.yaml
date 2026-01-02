@@ -1,0 +1,142 @@
+version: "2"
+run:
+  timeout: 5m
+  #modules-download-mode: readonly
+
+linters:
+  # Default set of linters.
+  # The value can be: `standard`, `all`, `none`, or `fast`.
+  # Default: standard
+  default: standard
+  # Enable specific linter.
+  # https://golangci-lint.run/usage/linters/#enabled-by-default
+  enable:
+    - asasalint
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - decorder
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - goconst
+    - gocritic
+
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - govet
+    - grouper
+    - importas
+    - ineffassign
+    - interfacebloat
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - promlinter
+    - reassign
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+
+  # Disable specific linter.
+  # https://golangci-lint.run/usage/linters/#disabled-by-default
+  disable:
+     - cyclop
+     - depguard
+     - exhaustruct
+     - funlen
+     - gocognit
+     - gocyclo
+     - godox
+     - ireturn
+     - varnamelen
+     - wsl
+     - wrapcheck
+
+linters-settings:
+  staticcheck:
+    checks: ["all"]
+  gosec:
+    includes:
+      - G101
+      - G102
+      - G103
+      - G104
+      - G106
+      - G107
+      - G108
+      - G109
+      - G110
+      - G111
+      - G112
+      - G114
+      - G201
+      - G202
+      - G203
+      - G204
+      - G301
+      - G302
+      - G303
+      - G304
+      - G305
+      - G306
+      - G307
+      - G401
+      - G402
+      - G403
+      - G404
+      - G501
+      - G502
+      - G503
+      - G504
+      - G505
+    severity: medium
+    confidence: medium
+    config:
+      global:
+        nosec: true
+      G101:
+        ignore_entropy: true
+  lll:
+    line-length: 140
+    tab-width: 2
+  makezero:
+    always: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+  # Since this is an existing project, showing only new issues might be preferred,
+  # but usually "new: false" is safer to see everything unless explicitly asked to only show new.
+  # However, the user asked to "fix issues", so seeing everything is better.
+  # The original config had new: true and new-from-patch, which caused errors when no patch file existed.
+  # I will revert to standard behavior (show all issues or default).
+  new: false
+  fix: false 
