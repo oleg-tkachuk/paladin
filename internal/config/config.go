@@ -42,7 +42,14 @@ func Load(path string, log *zap.Logger) Config {
 	}
 
 	var cfg Config
-	if err := goyaml.Unmarshal(yamlBytes, &cfg); err != nil {
+	// Encode back to YAML to apply defaults and luego unmarshal with goyaml
+	// to support time.Duration and other types goyaml handles better.
+	finalYAML, err := cueyaml.Encode(combined)
+	if err != nil {
+		log.Fatal("CUE -> YAML encoding failed", zap.Error(err))
+	}
+
+	if err := goyaml.Unmarshal(finalYAML, &cfg); err != nil {
 		log.Fatal("YAML unmarshal failed", zap.Error(err))
 	}
 

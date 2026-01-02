@@ -12,12 +12,12 @@ server:
   shutdown_timeout: 20s
 
 postgres:
-  dsn: "postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable"
+  dsn: "postgres://acme:change-me@postgresql.databases.svc.cluster.local:5432/acme?sslmode=disable"
 
 s3:
   bucket: paladin
   region: us-east-1
-  endpoint: "http://seaweed-s3:8333"
+  endpoint: "http://seaweedfs-s3.storage.svc.cluster.local:8333"
   force_path_style: true
   access_key: dummy
   secret_key: dummy
