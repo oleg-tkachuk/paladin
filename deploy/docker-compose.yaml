@@ -109,7 +109,7 @@ services:
       - ./../configs:/app/configs:ro
       - ./../migrations:/app/migrations:ro
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/ready"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/readyz"]
       interval: 5s
       timeout: 3s
       retries: 30

@@ -18,7 +18,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 ```bash
 task build
 task up
-curl -s http://localhost:8080/health/ready | jq .
+curl -s http://localhost:8080/health/readyz | jq .
 ```
 
 The compose stack includes:

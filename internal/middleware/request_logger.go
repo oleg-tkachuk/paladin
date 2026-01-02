@@ -11,7 +11,7 @@ import (
 
 func isTechPath(path string) bool {
 	switch path {
-	case "/health/live", "/health/ready", "/metrics", "/version":
+	case "/health/livez", "/health/readyz", "/metrics", "/version":
 		return true
 	default:
 		return false
