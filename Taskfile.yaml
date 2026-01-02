@@ -5,7 +5,7 @@ vars:
   COMPOSE_FILE: ./deploy/docker-compose.yaml
   ENV_FILE_SERVICE: ./deploy/env/service.env
   TIMEZONE: Europe/Kyiv
-  K8S_COMMON_NAMESPACE: paladin
+  K8S_COMMON_NAMESPACE: objectcontrolplane
 
 tasks:
   default:
