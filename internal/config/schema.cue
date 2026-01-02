@@ -1,6 +1,5 @@
 package config
 
-import "strings"
 
 logger: {
   level:  "debug" | "warn" | "warning" | "error" | *"info"
@@ -36,7 +35,7 @@ s3: {
 
 policy: {
   max_object_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"100MB"
-  allowed_content_types: [...string]: string
+  allowed_content_types: [...string]
 }
 
 otel: {
