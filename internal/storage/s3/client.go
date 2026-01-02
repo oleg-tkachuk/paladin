@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"go.uber.org/zap"
 )
 
 type Client struct {
@@ -22,9 +23,10 @@ type Client struct {
 
 	s3        *s3.Client
 	presigner *s3.PresignClient
+	log       *zap.Logger
 }
 
-func New(ctx context.Context, cfg config.S3) (*Client, error) {
+func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	staticCreds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
 
 	resolved, err := url.Parse(cfg.Endpoint)
@@ -60,11 +62,14 @@ func New(ctx context.Context, cfg config.S3) (*Client, error) {
 
 	presigner := s3.NewPresignClient(c)
 
+	log.Info("S3 client initialized", zap.String("bucket", cfg.Bucket), zap.String("endpoint", cfg.Endpoint))
+
 	return &Client{
 		Bucket:     cfg.Bucket,
 		PresignTTL: cfg.PresignTTL,
 		s3:         c,
 		presigner:  presigner,
+		log:        log,
 	}, nil
 }
 
@@ -79,9 +84,10 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	// Best-effort bucket creation for local S3 gateways; ignore errors if exists.
 	_, err := c.s3.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(c.Bucket)})
 	if err != nil {
-		// Many S3-compatible backends return error if bucket exists; ignore.
+		c.log.Debug("S3 bucket create ignored (likely exists)", zap.String("bucket", c.Bucket), zap.Error(err))
 		return nil
 	}
+	c.log.Info("S3 bucket created", zap.String("bucket", c.Bucket))
 
 	return nil
 }
@@ -96,8 +102,11 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 
 	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
 	if err != nil {
+		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
 		return Presigned{}, err
 	}
+
+	c.log.Debug("S3 presign PUT success", zap.String("key", key), zap.String("content_type", contentType))
 
 	return Presigned{
 		URL:       out.URL,
@@ -115,8 +124,11 @@ func (c *Client) PresignGetObject(ctx context.Context, key string) (Presigned, e
 
 	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
 	if err != nil {
+		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
 		return Presigned{}, err
 	}
+
+	c.log.Debug("S3 presign GET success", zap.String("key", key))
 
 	return Presigned{
 		URL:       out.URL,
@@ -139,8 +151,12 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
+		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
 		return MultipartInit{}, err
 	}
+
+	uploadID := aws.ToString(out.UploadId)
+	c.log.Info("S3 multipart upload initiated", zap.String("key", key), zap.String("upload_id", uploadID))
 
 	return MultipartInit{
 		UploadID:  aws.ToString(out.UploadId),
@@ -178,7 +194,13 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 		},
 	})
 
-	return err
+	if err != nil {
+		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
+		return err
+	}
+
+	c.log.Info("S3 multipart upload completed", zap.String("key", key), zap.String("upload_id", uploadID))
+	return nil
 }
 
 func (c *Client) AbortMultipartUpload(ctx context.Context, key, uploadID string) error {

@@ -2,8 +2,11 @@ package config
 
 
 logger: {
-  level:  "debug" | "warn" | "warning" | "error" | *"info"
+  level:  "debug" | "info" | "warn" | "warning" | "error" | "dpanic" | "panic" | "fatal" | *"info"
   format: "console" | *"json"
+  development: bool | *false
+  disable_caller: bool | *false
+  disable_stacktrace: bool | *false
 }
 
 server: {

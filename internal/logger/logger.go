@@ -5,15 +5,17 @@ import (
 	"os"
 	"strings"
 
+	"paladin/internal/config"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // New creates a zap.Logger with sampling and environment fields.
-func New(level, format string, baseFields map[string]string) (*zap.Logger, error) {
+func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
 	var lvl zapcore.Level
 
-	switch strings.ToLower(level) {
+	switch strings.ToLower(c.Level) {
 	case "debug":
 		lvl = zapcore.DebugLevel
 	case "info":
@@ -22,27 +24,35 @@ func New(level, format string, baseFields map[string]string) (*zap.Logger, error
 		lvl = zapcore.WarnLevel
 	case "error":
 		lvl = zapcore.ErrorLevel
+	case "dpanic":
+		lvl = zapcore.DPanicLevel
+	case "panic":
+		lvl = zapcore.PanicLevel
+	case "fatal":
+		lvl = zapcore.FatalLevel
 	default:
-		return nil, fmt.Errorf("unsupported log level: %s", level)
+		return nil, fmt.Errorf("unsupported log level: %s", c.Level)
 	}
 
 	var enc string
 
-	switch strings.ToLower(format) {
+	switch strings.ToLower(c.Format) {
 	case "json", "":
 		enc = "json"
 	case "console":
 		enc = "console"
 	default:
-		return nil, fmt.Errorf("unsupported log format: %s", format)
+		return nil, fmt.Errorf("unsupported log format: %s", c.Format)
 	}
 
 	cfg := zap.Config{
-		Level:            zap.NewAtomicLevelAt(lvl),
-		Development:      false,
-		Encoding:         enc,
-		OutputPaths:      []string{"stdout"},
-		ErrorOutputPaths: []string{"stderr"},
+		Level:             zap.NewAtomicLevelAt(lvl),
+		Development:       c.Development,
+		DisableCaller:     c.DisableCaller,
+		DisableStacktrace: c.DisableStacktrace,
+		Encoding:          enc,
+		OutputPaths:       []string{"stdout"},
+		ErrorOutputPaths:  []string{"stderr"},
 		EncoderConfig: zapcore.EncoderConfig{
 			TimeKey:        "time",
 			LevelKey:       "level",
@@ -60,7 +70,7 @@ func New(level, format string, baseFields map[string]string) (*zap.Logger, error
 		},
 	}
 
-	log, err := cfg.Build(zap.AddCallerSkip(1))
+	log, err := cfg.Build()
 	if err != nil {
 		return nil, err
 	}

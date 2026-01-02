@@ -15,8 +15,11 @@ type Config struct {
 }
 
 type Logger struct {
-	Level  string `yaml:"level" json:"level"`
-	Format string `yaml:"format" json:"format"`
+	Level             string `yaml:"level" json:"level"`
+	Format            string `yaml:"format" json:"format"`
+	Development       bool   `yaml:"development" json:"development"`
+	DisableCaller     bool   `yaml:"disable_caller" json:"disable_caller"`
+	DisableStacktrace bool   `yaml:"disable_stacktrace" json:"disable_stacktrace"`
 }
 
 type Server struct {

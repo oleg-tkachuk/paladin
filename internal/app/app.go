@@ -54,7 +54,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		cfg.PodName = utils.GetEnvOrDefault("POD_NAME", cfg.PodName)
 	}
 
-	log, err := logger.New(cfg.Logger.Level, cfg.Logger.Format, map[string]string{
+	log, err := logger.New(cfg.Logger, map[string]string{
 		"service":    cfg.Server.Name,
 		"pod":        cfg.PodName,
 		"env":        cfg.Env,
@@ -77,7 +77,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	var db *postgres.DB
 
 	op := func() error {
-		d, err := postgres.New(ctx, cfg.Postgres)
+		d, err := postgres.New(ctx, cfg.Postgres, log)
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		}
 	}
 
-	s3c, err := s3.New(ctx, s3cfg)
+	s3c, err := s3.New(ctx, s3cfg, log)
 	if err != nil {
 		return nil, err
 	}

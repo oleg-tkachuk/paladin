@@ -10,13 +10,15 @@ import (
 	"paladin/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 type DB struct {
 	Pool *pgxpool.Pool
+	log  *zap.Logger
 }
 
-func New(ctx context.Context, cfg config.Postgres) (*DB, error) {
+func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool config parse: %w", err)
@@ -52,10 +54,16 @@ func New(ctx context.Context, cfg config.Postgres) (*DB, error) {
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
+		log.Error("PostgreSQL pool init failed", zap.Error(err))
 		return nil, fmt.Errorf("pgxpool init: %w", err)
 	}
 
-	return &DB{Pool: pool}, nil
+	log.Info("PostgreSQL pool initialized",
+		zap.Int32("max_conns", poolCfg.MaxConns),
+		zap.Int32("min_conns", poolCfg.MinConns),
+	)
+
+	return &DB{Pool: pool, log: log}, nil
 }
 
 func (d *DB) Close() {

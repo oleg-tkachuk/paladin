@@ -1,6 +1,9 @@
 logger:
-  level: info
-  format: json
+  level: info # debug, info, warn, error, dpanic, panic, fatal
+  format: json # json, console
+  development: false
+  disable_caller: false
+  disable_stacktrace: false
 
 server:
   mode: release
