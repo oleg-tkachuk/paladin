@@ -20,7 +20,7 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID(log))
-	r.Use(middleware.RequestLogger(log))
+	r.Use(middleware.RequestLogger(log, logProbes))
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 

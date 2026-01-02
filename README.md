@@ -4,54 +4,92 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 
 ## Features
 
-- **Metadata Management**: Creates and tracks object records in PostgreSQL.
-- **Presigned URLs**: Secure, time-limited access for PUT, GET, and Multipart operations.
-- **Dual API**: Exposes internal gRPC and external HTTP (Gin) interfaces.
-- **CUE-powered Configuration**: Robust validation and default values using CUE.
-- **Enhanced Observability**: Comprehensive logging for S3, Postgres, and migrations.
+- **Metadata Management**: Atomically tracks object metadata and multipart upload states in PostgreSQL.
+- **Secure Access**: Generates time-limited presigned URLs for single-part and multipart uploads/downloads.
+- **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
+- **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
+- **Advanced Logging**: Structured JSON/Console logging with support for all Zap levels and dynamic sampling.
+
+## Tech Stack
+
+- **Server**: [Gin](https://gin-gonic.com/) (HTTP), [gRPC](https://grpc.io/)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) with [pgx](https://github.com/jackc/pgx)
+- **Config**: [CUE](https://cuelang.org/)
+- **Logging**: [Zap](https://github.com/uber-go/zap)
+- **Observability**: [OpenTelemetry](https://opentelemetry.io/)
+
+## Project Structure
+
+```text
+├── cmd/server          # Application entrypoint (Cobra CLI)
+├── configs/            # Configuration files
+├── deploy/             # Docker and Kubernetes deployment manifests
+├── internal/
+│   ├── api/            # HTTP and gRPC transport layers
+│   ├── app/            # Application wire-up logic
+│   ├── config/         # CUE-powered configuration parsing
+│   ├── logger/         # Structured logger initialization
+│   ├── service/        # Core business logic (presigning, state management)
+│   ├── storage/        # S3 client and storage abstractions
+│   └── store/          # PostgreSQL repository implementations
+└── migrations/         # SQL migration files
+```
 
 ## Configuration
 
 The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from `configs/paladin.yaml`.
 
-### Logger
-
-Customizable logging levels and formats:
+### Logger Configuration
 
 ```yaml
 logger:
-  level: info # debug, info, warn, error, dpanic, panic, fatal
-  format: json # json, console
-  development: false
-  disable_caller: false
-  disable_stacktrace: false
+  level: info           # Options: debug, info, warn, error, dpanic, panic, fatal
+  format: json          # Options: json, console
+  development: false    # Enables development-friendly panic behavior
+  disable_caller: false  # Disables file/line number reporting
+  disable_stacktrace: false # Disables stacktraces for error logs
 ```
 
-### Health Probes
+### Server Configuration
 
-Exposes standard endpoints and supports toggling probe logs:
-
-- **Endpoints**: `/health/livez`, `/health/readyz`
-- **Config**: `server.log_probes: true|false`
+```yaml
+server:
+  mode: release         # release, debug, test
+  log_probes: false     # Toggles logging for health check probes (/health/livez, /health/readyz)
+```
 
 ## Local Development
 
 ```bash
-# Build and start the stack
+# Build the server binary and Docker image
 task build
+
+# Start the full stack (Postgres + SeaweedFS + PALADIN)
 task up
 
-# Check readiness
+# Verify the service is ready
 curl -s http://localhost:8080/health/readyz | jq .
 ```
 
-The compose stack includes:
+## API Endpoints
 
-- **Postgres**: Metadata store.
-- **SeaweedFS**: S3 gateway and filer.
-- **Paladin**: This service.
+### HTTP API
+
+- `GET /health/livez` - Liveness probe
+- `GET /health/readyz` - Readiness probe
+- `GET /version` - Version information
+- `GET /metrics` - Prometheus metrics
+
+### gRPC API
+
+- `Paladin/PresignPut`
+- `Paladin/PresignGet`
+- `Paladin/CreateMultipartUpload`
+- `Paladin/PresignUploadPart`
+- `Paladin/CompleteMultipartUpload`
+- `Paladin/AbortMultipartUpload`
 
 ## Notes
 
-- This service intentionally does not stream data; it only manages access via presigned URLs.
-- For SeaweedFS S3 gateway, you can use dummy credentials; the service defaults to static credentials for local development.
+- **Data Flow**: This service intentionally does not proxy or stream object data. It only manages metadata and signs access URLs.
+- **SeaweedFS**: For local development, dummy credentials are used as the service defaults to static client credentials.
