@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+func isHealthPath(path string) bool {
+	return path == "/health/livez" || path == "/health/readyz"
+}
+
 func isTechPath(path string) bool {
 	switch path {
 	case "/health/livez", "/health/readyz", "/metrics", "/version":
@@ -18,12 +22,16 @@ func isTechPath(path string) bool {
 	}
 }
 
-func RequestLogger(log *zap.Logger) gin.HandlerFunc {
+func RequestLogger(log *zap.Logger, logProbes bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
 
 		c.Next()
+
+		if isHealthPath(path) && !logProbes {
+			return
+		}
 
 		dur := time.Since(start)
 		status := c.Writer.Status()

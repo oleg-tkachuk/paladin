@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,12 +47,14 @@ type MultipartRepo struct {
 func NewMultipartRepo(db *DB) *MultipartRepo { return &MultipartRepo{db: db} }
 
 func (r *MultipartRepo) Create(ctx context.Context, rec MultipartRecord) error {
-	_, err := r.db.Pool.Exec(ctx, `
+	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO multipart_uploads (id, tenant_id, object_id, upload_id, bucket, object_key, content_type, part_size_bytes, status, expires_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    `, rec.ID, rec.TenantID, rec.ObjectID, rec.UploadID, rec.Bucket, rec.ObjectKey, rec.ContentType, rec.PartSize, rec.Status, rec.ExpiresAt)
+    `, rec.ID, rec.TenantID, rec.ObjectID, rec.UploadID, rec.Bucket, rec.ObjectKey, rec.ContentType, rec.PartSize, rec.Status, rec.ExpiresAt); err != nil {
+		return fmt.Errorf("create multipart: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*MultipartRecord, error) {
@@ -63,21 +66,23 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 
 	var rec MultipartRecord
 	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectID, &rec.UploadID, &rec.Bucket, &rec.ObjectKey, &rec.ContentType, &rec.PartSize, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan multipart: %w", err)
 	}
 
 	return &rec, nil
 }
 
 func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUID, partNumber int, etag string, sizeBytes *int64) error {
-	_, err := r.db.Pool.Exec(ctx, `
+	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO multipart_parts (multipart_id, part_number, etag, size_bytes)
         VALUES ($1,$2,$3,$4)
         ON CONFLICT (multipart_id, part_number)
         DO UPDATE SET etag=EXCLUDED.etag, size_bytes=EXCLUDED.size_bytes
-    `, multipartID, partNumber, etag, sizeBytes)
+    `, multipartID, partNumber, etag, sizeBytes); err != nil {
+		return fmt.Errorf("upsert part etag: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]MultipartPartRecord, error) {
@@ -97,29 +102,37 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 	for rows.Next() {
 		var p MultipartPartRecord
 		if err := rows.Scan(&p.MultipartID, &p.PartNumber, &p.ETag, &p.SizeBytes, &p.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan multipart part: %w", err)
 		}
 
 		out = append(out, p)
 	}
 
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *MultipartRepo) MarkCompleted(ctx context.Context, tenantID string, uploadID string) error {
-	_, err := r.db.Pool.Exec(ctx, `
+	if _, err := r.db.Pool.Exec(ctx, `
         UPDATE multipart_uploads SET status='completed', updated_at=now()
         WHERE tenant_id=$1 AND upload_id=$2
-    `, tenantID, uploadID)
+    `, tenantID, uploadID); err != nil {
+		return fmt.Errorf("mark multipart completed: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, uploadID string) error {
-	_, err := r.db.Pool.Exec(ctx, `
+	if _, err := r.db.Pool.Exec(ctx, `
         UPDATE multipart_uploads SET status='aborted', updated_at=now()
         WHERE tenant_id=$1 AND upload_id=$2
-    `, tenantID, uploadID)
+    `, tenantID, uploadID); err != nil {
+		return fmt.Errorf("mark multipart aborted: %w", err)
+	}
 
-	return err
+	return nil
 }

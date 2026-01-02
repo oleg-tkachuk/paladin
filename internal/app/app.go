@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"sync/atomic"
 	"time"
 
 	grpcapi "paladin/internal/api/grpc"
@@ -37,6 +40,7 @@ type App struct {
 
 	db           *postgres.DB
 	otelShutdown obs.ShutdownFunc
+	started      atomic.Bool
 }
 
 func New(version, commit, buildTime, configPath string) (*App, error) {
@@ -49,7 +53,14 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	// Load YAML if present
 	if configPath != "" {
-		cfg = config.Load(configPath, boot)
+		if _, err := os.Stat(configPath); err != nil {
+			return nil, fmt.Errorf("config file stat: %w", err)
+		}
+		var err error
+		cfg, err = config.Load(configPath, boot)
+		if err != nil {
+			return nil, fmt.Errorf("config load: %w", err)
+		}
 		cfg.Env = utils.GetEnvOrDefault("ENV", cfg.Env)
 		cfg.PodName = utils.GetEnvOrDefault("POD_NAME", cfg.PodName)
 	}
@@ -63,7 +74,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		"build_time": buildTime,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("logger init: %w", err)
 	}
 
 	log.Info("Service metadata",
@@ -164,11 +175,19 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	brk := breaker.NewFactory(cfg)
 
 	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, s3cfg.PartSizeBytes)
+	hs := service.NewHealthService(db, s3c, brk)
 
-	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes)
+	app := &App{
+		Version: version, Commit: commit, BuildTime: buildTime,
+		Cfg: cfg, Logger: log,
+		db:           db,
+		otelShutdown: otelShutdown,
+	}
+
+	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes, hs, &app.started)
 
 	// HTTP server
-	hs := &http.Server{
+	app.httpSrv = &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
 		Handler:           httpSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -178,20 +197,13 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	}
 
 	// gRPC server
-	gs := grpc.NewServer(
+	app.grpcSrv = grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
-	grpcapi.RegisterPaladinServer(gs, grpcapi.NewServer(log, svc))
-	reflection.Register(gs)
+	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(log, svc))
+	reflection.Register(app.grpcSrv)
 
-	return &App{
-		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: log,
-		httpSrv:      hs,
-		grpcSrv:      gs,
-		db:           db,
-		otelShutdown: otelShutdown,
-	}, nil
+	return app, nil
 }
 
 func (a *App) Run() error {
@@ -214,6 +226,8 @@ func (a *App) Run() error {
 	go func() {
 		errCh <- a.httpSrv.ListenAndServe()
 	}()
+
+	a.started.Store(true)
 
 	return <-errCh
 }

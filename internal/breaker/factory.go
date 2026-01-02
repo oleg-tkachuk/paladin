@@ -10,6 +10,7 @@ import (
 
 type Factory interface {
 	Get(name string) *fault.CircuitBreakerWrapper
+	CheckHealth() map[string]string
 }
 
 type lazyBreaker struct {
@@ -28,7 +29,6 @@ func NewFactory(cfg config.Config) Factory {
 }
 
 func (f *factory) Get(name string) *fault.CircuitBreakerWrapper {
-	// If you want to disable breakers globally, add a config flag here.
 	f.mu.Lock()
 
 	lb, ok := f.registry[name]
@@ -50,4 +50,13 @@ func (f *factory) Get(name string) *fault.CircuitBreakerWrapper {
 	})
 
 	return lb.cb
+}
+
+func (f *factory) CheckHealth() map[string]string {
+	res := make(map[string]string)
+	for name, w := range fault.AllBreakers() {
+		res[name] = w.State().String()
+	}
+
+	return res
 }
