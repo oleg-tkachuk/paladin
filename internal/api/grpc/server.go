@@ -158,3 +158,21 @@ func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest)
 
 	return &AbortMultipartResponse{Status: "aborted"}, nil
 }
+
+func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid object id")
+	}
+
+	if err := s.svc.Delete(ctx, tenant, id); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &DeleteObjectResponse{Status: "deleted"}, nil
+}

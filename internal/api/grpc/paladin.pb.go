@@ -413,6 +413,102 @@ func (x *CompleteObjectResponse) GetStatus() string {
 	return ""
 }
 
+type DeleteObjectRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	ObjectId      string                 `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteObjectRequest) Reset() {
+	*x = DeleteObjectRequest{}
+	mi := &file_proto_paladin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteObjectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteObjectRequest) ProtoMessage() {}
+
+func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_paladin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteObjectRequest.ProtoReflect.Descriptor instead.
+func (*DeleteObjectRequest) Descriptor() ([]byte, []int) {
+	return file_proto_paladin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeleteObjectRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *DeleteObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+type DeleteObjectResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteObjectResponse) Reset() {
+	*x = DeleteObjectResponse{}
+	mi := &file_proto_paladin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteObjectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteObjectResponse) ProtoMessage() {}
+
+func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_paladin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteObjectResponse.ProtoReflect.Descriptor instead.
+func (*DeleteObjectResponse) Descriptor() ([]byte, []int) {
+	return file_proto_paladin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteObjectResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 type InitiateMultipartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -424,7 +520,7 @@ type InitiateMultipartRequest struct {
 
 func (x *InitiateMultipartRequest) Reset() {
 	*x = InitiateMultipartRequest{}
-	mi := &file_proto_paladin_proto_msgTypes[6]
+	mi := &file_proto_paladin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +532,7 @@ func (x *InitiateMultipartRequest) String() string {
 func (*InitiateMultipartRequest) ProtoMessage() {}
 
 func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[6]
+	mi := &file_proto_paladin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +545,7 @@ func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartRequest.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{6}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *InitiateMultipartRequest) GetTenantId() string {
@@ -486,7 +582,7 @@ type InitiateMultipartResponse struct {
 
 func (x *InitiateMultipartResponse) Reset() {
 	*x = InitiateMultipartResponse{}
-	mi := &file_proto_paladin_proto_msgTypes[7]
+	mi := &file_proto_paladin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -498,7 +594,7 @@ func (x *InitiateMultipartResponse) String() string {
 func (*InitiateMultipartResponse) ProtoMessage() {}
 
 func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[7]
+	mi := &file_proto_paladin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -511,7 +607,7 @@ func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartResponse.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{7}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *InitiateMultipartResponse) GetObjectId() string {
@@ -560,7 +656,7 @@ type SignPartRequest struct {
 
 func (x *SignPartRequest) Reset() {
 	*x = SignPartRequest{}
-	mi := &file_proto_paladin_proto_msgTypes[8]
+	mi := &file_proto_paladin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -572,7 +668,7 @@ func (x *SignPartRequest) String() string {
 func (*SignPartRequest) ProtoMessage() {}
 
 func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[8]
+	mi := &file_proto_paladin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -585,7 +681,7 @@ func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartRequest.ProtoReflect.Descriptor instead.
 func (*SignPartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{8}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SignPartRequest) GetTenantId() string {
@@ -620,7 +716,7 @@ type SignPartResponse struct {
 
 func (x *SignPartResponse) Reset() {
 	*x = SignPartResponse{}
-	mi := &file_proto_paladin_proto_msgTypes[9]
+	mi := &file_proto_paladin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +728,7 @@ func (x *SignPartResponse) String() string {
 func (*SignPartResponse) ProtoMessage() {}
 
 func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[9]
+	mi := &file_proto_paladin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +741,7 @@ func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartResponse.ProtoReflect.Descriptor instead.
 func (*SignPartResponse) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{9}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SignPartResponse) GetUploadUrl() string {
@@ -680,7 +776,7 @@ type CompleteMultipartRequest struct {
 
 func (x *CompleteMultipartRequest) Reset() {
 	*x = CompleteMultipartRequest{}
-	mi := &file_proto_paladin_proto_msgTypes[10]
+	mi := &file_proto_paladin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +788,7 @@ func (x *CompleteMultipartRequest) String() string {
 func (*CompleteMultipartRequest) ProtoMessage() {}
 
 func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[10]
+	mi := &file_proto_paladin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +801,7 @@ func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartRequest.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{10}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CompleteMultipartRequest) GetTenantId() string {
@@ -739,7 +835,7 @@ type CompleteMultipartPart struct {
 
 func (x *CompleteMultipartPart) Reset() {
 	*x = CompleteMultipartPart{}
-	mi := &file_proto_paladin_proto_msgTypes[11]
+	mi := &file_proto_paladin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -751,7 +847,7 @@ func (x *CompleteMultipartPart) String() string {
 func (*CompleteMultipartPart) ProtoMessage() {}
 
 func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[11]
+	mi := &file_proto_paladin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -764,7 +860,7 @@ func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartPart.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartPart) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{11}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CompleteMultipartPart) GetPartNumber() int32 {
@@ -791,7 +887,7 @@ type CompleteMultipartResponse struct {
 
 func (x *CompleteMultipartResponse) Reset() {
 	*x = CompleteMultipartResponse{}
-	mi := &file_proto_paladin_proto_msgTypes[12]
+	mi := &file_proto_paladin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -803,7 +899,7 @@ func (x *CompleteMultipartResponse) String() string {
 func (*CompleteMultipartResponse) ProtoMessage() {}
 
 func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[12]
+	mi := &file_proto_paladin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -816,7 +912,7 @@ func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartResponse.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{12}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompleteMultipartResponse) GetObjectId() string {
@@ -843,7 +939,7 @@ type AbortMultipartRequest struct {
 
 func (x *AbortMultipartRequest) Reset() {
 	*x = AbortMultipartRequest{}
-	mi := &file_proto_paladin_proto_msgTypes[13]
+	mi := &file_proto_paladin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -855,7 +951,7 @@ func (x *AbortMultipartRequest) String() string {
 func (*AbortMultipartRequest) ProtoMessage() {}
 
 func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[13]
+	mi := &file_proto_paladin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -868,7 +964,7 @@ func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartRequest.ProtoReflect.Descriptor instead.
 func (*AbortMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{13}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AbortMultipartRequest) GetTenantId() string {
@@ -894,7 +990,7 @@ type AbortMultipartResponse struct {
 
 func (x *AbortMultipartResponse) Reset() {
 	*x = AbortMultipartResponse{}
-	mi := &file_proto_paladin_proto_msgTypes[14]
+	mi := &file_proto_paladin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1002,7 @@ func (x *AbortMultipartResponse) String() string {
 func (*AbortMultipartResponse) ProtoMessage() {}
 
 func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_paladin_proto_msgTypes[14]
+	mi := &file_proto_paladin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1015,7 @@ func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartResponse.ProtoReflect.Descriptor instead.
 func (*AbortMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_proto_paladin_proto_rawDescGZIP(), []int{14}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AbortMultipartResponse) GetStatus() string {
@@ -969,6 +1065,11 @@ const file_proto_paladin_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\"0\n" +
 	"\x16CompleteObjectResponse\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"O\n" +
+	"\x13DeleteObjectRequest\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
+	"\tobject_id\x18\x02 \x01(\tR\bobjectId\".\n" +
+	"\x14DeleteObjectResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\"y\n" +
 	"\x18InitiateMultipartRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12!\n" +
@@ -1007,11 +1108,12 @@ const file_proto_paladin_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
 	"\tupload_id\x18\x02 \x01(\tR\buploadId\"0\n" +
 	"\x16AbortMultipartResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status2\xb6\x04\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status2\x81\x05\n" +
 	"\x12Paladin\x12I\n" +
 	"\fCreateObject\x12\x1b.paladin.v1.CreateObjectRequest\x1a\x1c.paladin.v1.CreateObjectResponse\x12@\n" +
 	"\tGetObject\x12\x18.paladin.v1.GetObjectRequest\x1a\x19.paladin.v1.GetObjectResponse\x12O\n" +
-	"\x0eCompleteObject\x12\x1d.paladin.v1.CompleteObjectRequest\x1a\x1e.paladin.v1.CompleteObjectResponse\x12X\n" +
+	"\x0eCompleteObject\x12\x1d.paladin.v1.CompleteObjectRequest\x1a\x1e.paladin.v1.CompleteObjectResponse\x12I\n" +
+	"\fDeleteObject\x12\x1b.paladin.v1.DeleteObjectRequest\x1a\x1c.paladin.v1.DeleteObjectResponse\x12X\n" +
 	"\x11InitiateMultipart\x12 .paladin.v1.InitiateMultipartRequest\x1a!.paladin.v1.InitiateMultipartResponse\x12=\n" +
 	"\bSignPart\x12\x17.paladin.v1.SignPartRequest\x1a\x18.paladin.v1.SignPartResponse\x12X\n" +
 	"\x11CompleteMultipart\x12 .paladin.v1.CompleteMultipartRequest\x1a!.paladin.v1.CompleteMultipartResponse\x12O\n" +
@@ -1029,7 +1131,7 @@ func file_proto_paladin_proto_rawDescGZIP() []byte {
 	return file_proto_paladin_proto_rawDescData
 }
 
-var file_proto_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_proto_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_proto_paladin_proto_goTypes = []any{
 	(*CreateObjectRequest)(nil),       // 0: paladin.v1.CreateObjectRequest
 	(*CreateObjectResponse)(nil),      // 1: paladin.v1.CreateObjectResponse
@@ -1037,36 +1139,40 @@ var file_proto_paladin_proto_goTypes = []any{
 	(*GetObjectResponse)(nil),         // 3: paladin.v1.GetObjectResponse
 	(*CompleteObjectRequest)(nil),     // 4: paladin.v1.CompleteObjectRequest
 	(*CompleteObjectResponse)(nil),    // 5: paladin.v1.CompleteObjectResponse
-	(*InitiateMultipartRequest)(nil),  // 6: paladin.v1.InitiateMultipartRequest
-	(*InitiateMultipartResponse)(nil), // 7: paladin.v1.InitiateMultipartResponse
-	(*SignPartRequest)(nil),           // 8: paladin.v1.SignPartRequest
-	(*SignPartResponse)(nil),          // 9: paladin.v1.SignPartResponse
-	(*CompleteMultipartRequest)(nil),  // 10: paladin.v1.CompleteMultipartRequest
-	(*CompleteMultipartPart)(nil),     // 11: paladin.v1.CompleteMultipartPart
-	(*CompleteMultipartResponse)(nil), // 12: paladin.v1.CompleteMultipartResponse
-	(*AbortMultipartRequest)(nil),     // 13: paladin.v1.AbortMultipartRequest
-	(*AbortMultipartResponse)(nil),    // 14: paladin.v1.AbortMultipartResponse
-	nil,                               // 15: paladin.v1.CreateObjectResponse.HeadersEntry
+	(*DeleteObjectRequest)(nil),       // 6: paladin.v1.DeleteObjectRequest
+	(*DeleteObjectResponse)(nil),      // 7: paladin.v1.DeleteObjectResponse
+	(*InitiateMultipartRequest)(nil),  // 8: paladin.v1.InitiateMultipartRequest
+	(*InitiateMultipartResponse)(nil), // 9: paladin.v1.InitiateMultipartResponse
+	(*SignPartRequest)(nil),           // 10: paladin.v1.SignPartRequest
+	(*SignPartResponse)(nil),          // 11: paladin.v1.SignPartResponse
+	(*CompleteMultipartRequest)(nil),  // 12: paladin.v1.CompleteMultipartRequest
+	(*CompleteMultipartPart)(nil),     // 13: paladin.v1.CompleteMultipartPart
+	(*CompleteMultipartResponse)(nil), // 14: paladin.v1.CompleteMultipartResponse
+	(*AbortMultipartRequest)(nil),     // 15: paladin.v1.AbortMultipartRequest
+	(*AbortMultipartResponse)(nil),    // 16: paladin.v1.AbortMultipartResponse
+	nil,                               // 17: paladin.v1.CreateObjectResponse.HeadersEntry
 }
 var file_proto_paladin_proto_depIdxs = []int32{
-	15, // 0: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
-	11, // 1: paladin.v1.CompleteMultipartRequest.parts:type_name -> paladin.v1.CompleteMultipartPart
+	17, // 0: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
+	13, // 1: paladin.v1.CompleteMultipartRequest.parts:type_name -> paladin.v1.CompleteMultipartPart
 	0,  // 2: paladin.v1.Paladin.CreateObject:input_type -> paladin.v1.CreateObjectRequest
 	2,  // 3: paladin.v1.Paladin.GetObject:input_type -> paladin.v1.GetObjectRequest
 	4,  // 4: paladin.v1.Paladin.CompleteObject:input_type -> paladin.v1.CompleteObjectRequest
-	6,  // 5: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
-	8,  // 6: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
-	10, // 7: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
-	13, // 8: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
-	1,  // 9: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
-	3,  // 10: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
-	5,  // 11: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
-	7,  // 12: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
-	9,  // 13: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
-	12, // 14: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
-	14, // 15: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
+	6,  // 5: paladin.v1.Paladin.DeleteObject:input_type -> paladin.v1.DeleteObjectRequest
+	8,  // 6: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
+	10, // 7: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
+	12, // 8: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
+	15, // 9: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
+	1,  // 10: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
+	3,  // 11: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
+	5,  // 12: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
+	7,  // 13: paladin.v1.Paladin.DeleteObject:output_type -> paladin.v1.DeleteObjectResponse
+	9,  // 14: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
+	11, // 15: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
+	14, // 16: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
+	16, // 17: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
+	10, // [10:18] is the sub-list for method output_type
+	2,  // [2:10] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -1083,7 +1189,7 @@ func file_proto_paladin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_paladin_proto_rawDesc), len(file_proto_paladin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

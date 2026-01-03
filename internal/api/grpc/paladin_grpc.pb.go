@@ -22,6 +22,7 @@ const (
 	Paladin_CreateObject_FullMethodName      = "/paladin.v1.Paladin/CreateObject"
 	Paladin_GetObject_FullMethodName         = "/paladin.v1.Paladin/GetObject"
 	Paladin_CompleteObject_FullMethodName    = "/paladin.v1.Paladin/CompleteObject"
+	Paladin_DeleteObject_FullMethodName      = "/paladin.v1.Paladin/DeleteObject"
 	Paladin_InitiateMultipart_FullMethodName = "/paladin.v1.Paladin/InitiateMultipart"
 	Paladin_SignPart_FullMethodName          = "/paladin.v1.Paladin/SignPart"
 	Paladin_CompleteMultipart_FullMethodName = "/paladin.v1.Paladin/CompleteMultipart"
@@ -35,6 +36,7 @@ type PaladinClient interface {
 	CreateObject(ctx context.Context, in *CreateObjectRequest, opts ...grpc.CallOption) (*CreateObjectResponse, error)
 	GetObject(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectResponse, error)
 	CompleteObject(ctx context.Context, in *CompleteObjectRequest, opts ...grpc.CallOption) (*CompleteObjectResponse, error)
+	DeleteObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
 	InitiateMultipart(ctx context.Context, in *InitiateMultipartRequest, opts ...grpc.CallOption) (*InitiateMultipartResponse, error)
 	SignPart(ctx context.Context, in *SignPartRequest, opts ...grpc.CallOption) (*SignPartResponse, error)
 	CompleteMultipart(ctx context.Context, in *CompleteMultipartRequest, opts ...grpc.CallOption) (*CompleteMultipartResponse, error)
@@ -73,6 +75,16 @@ func (c *objectControlPlaneClient) CompleteObject(ctx context.Context, in *Compl
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CompleteObjectResponse)
 	err := c.cc.Invoke(ctx, Paladin_CompleteObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) DeleteObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteObjectResponse)
+	err := c.cc.Invoke(ctx, Paladin_DeleteObject_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +138,7 @@ type PaladinServer interface {
 	CreateObject(context.Context, *CreateObjectRequest) (*CreateObjectResponse, error)
 	GetObject(context.Context, *GetObjectRequest) (*GetObjectResponse, error)
 	CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error)
+	DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
 	InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error)
 	SignPart(context.Context, *SignPartRequest) (*SignPartResponse, error)
 	CompleteMultipart(context.Context, *CompleteMultipartRequest) (*CompleteMultipartResponse, error)
@@ -148,6 +161,9 @@ func (UnimplementedPaladinServer) GetObject(context.Context, *GetObjectRequest) 
 }
 func (UnimplementedPaladinServer) CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteObject not implemented")
+}
+func (UnimplementedPaladinServer) DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteObject not implemented")
 }
 func (UnimplementedPaladinServer) InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InitiateMultipart not implemented")
@@ -232,6 +248,24 @@ func _Paladin_CompleteObject_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PaladinServer).CompleteObject(ctx, req.(*CompleteObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_DeleteObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).DeleteObject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_DeleteObject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).DeleteObject(ctx, req.(*DeleteObjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -326,6 +360,10 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteObject",
 			Handler:    _Paladin_CompleteObject_Handler,
+		},
+		{
+			MethodName: "DeleteObject",
+			Handler:    _Paladin_DeleteObject_Handler,
 		},
 		{
 			MethodName: "InitiateMultipart",
