@@ -36,6 +36,11 @@ func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uu
 	return args.Error(0)
 }
 
+func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }

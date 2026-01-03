@@ -91,6 +91,25 @@ func completeObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
+func deleteObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+
+			return
+		}
+
+		if err := svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Details: err.Error()})
+
+			return
+		}
+
+		c.JSON(http.StatusOK, DeleteObjectResponse{Status: "deleted"})
+	}
+}
+
 func initiateMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req InitiateMultipartRequest

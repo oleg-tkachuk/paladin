@@ -16,6 +16,10 @@ X-Tenant-ID: demo
 POST http://localhost:8080/v1/objects/{{object_id}}/complete
 X-Tenant-ID: demo
 
+### Delete object (mark deleted)
+DELETE http://localhost:8080/v1/objects/{{object_id}}
+X-Tenant-ID: demo
+
 ### Initiate multipart
 POST http://localhost:8080/v1/multipart
 Content-Type: application/json

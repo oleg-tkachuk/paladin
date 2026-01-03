@@ -43,6 +43,10 @@ type CompleteObjectResponse struct {
 	Status string `json:"status"`
 }
 
+type DeleteObjectResponse struct {
+	Status string `json:"status"`
+}
+
 type InitiateMultipartRequest struct {
 	ContentType string `binding:"required" json:"content_type"`
 	SizeBytes   int64  `binding:"required" json:"size_bytes"`

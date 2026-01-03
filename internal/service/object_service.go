@@ -20,6 +20,7 @@ type ObjectsRepository interface {
 	Create(ctx context.Context, rec postgres.ObjectRecord) error
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)
 	MarkActive(ctx context.Context, tenantID string, id uuid.UUID) error
+	MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) error
 }
 
 type MultipartRepository interface {
@@ -45,6 +46,7 @@ type ObjectsService interface {
 	CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, checksum []byte) (uuid.UUID, string, s3.Presigned, error)
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, s3.Presigned, error)
 	MarkComplete(ctx context.Context, tenantID string, id uuid.UUID) error
+	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
 	InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64) (MultipartInitResponse, error)
 	SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error)
 	CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (uuid.UUID, error)
@@ -115,6 +117,14 @@ func (s *objectsService) Get(ctx context.Context, tenantID string, id uuid.UUID)
 func (s *objectsService) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID) error {
 	if err := s.objRepo.MarkActive(ctx, tenantID, id); err != nil {
 		return fmt.Errorf("repo mark active: %w", err)
+	}
+
+	return nil
+}
+
+func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+	if err := s.objRepo.MarkDeleted(ctx, tenantID, id); err != nil {
+		return fmt.Errorf("repo mark deleted: %w", err)
 	}
 
 	return nil

@@ -72,3 +72,14 @@ func (r *ObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uuid.U
 
 	return nil
 }
+
+func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) error {
+	if _, err := r.db.Pool.Exec(ctx, `
+        UPDATE objects SET status='deleted', updated_at=now()
+        WHERE tenant_id=$1 AND id=$2
+    `, tenantID, id); err != nil {
+		return fmt.Errorf("mark object deleted: %w", err)
+	}
+
+	return nil
+}

@@ -41,6 +41,11 @@ func (m *MockObjectsService) MarkComplete(ctx context.Context, tenantID string, 
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
 func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64) (service.MultipartInitResponse, error) {
 	args := m.Called(ctx, tenantID, contentType, sizeBytes)
 	return args.Get(0).(service.MultipartInitResponse), args.Error(1)
