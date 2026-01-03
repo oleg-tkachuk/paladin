@@ -36,6 +36,84 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 └── migrations/         # SQL migration files
 ```
 
+## Database Schema
+
+The service uses PostgreSQL to track object metadata and multipart upload state. The schema is defined in [`migrations/001_init.sql`](migrations/001_init.sql).
+
+### Tables
+
+#### `objects`
+
+Tracks the lifecycle of each object with the following states:
+
+- **pending** - Object created, awaiting upload completion
+- **active** - Upload completed and verified
+- **deleted** - Soft-deleted (marked for cleanup)
+
+Key fields:
+
+- `id` (UUID) - Primary key
+- `tenant_id` - Multi-tenancy isolation
+- `object_key` - S3 object key (unique per tenant)
+- `bucket` - S3 bucket name
+- `content_type` - MIME type
+- `size_bytes` - Object size
+- `checksum_sha256` - Optional integrity checksum
+- `status` - Lifecycle state
+- `expires_at` - Optional expiration timestamp
+
+Indexes:
+
+- `idx_objects_tenant_created_at` - Query objects by tenant and creation time
+- `uq_objects_tenant_key` - Enforce unique object keys per tenant
+
+#### `multipart_uploads`
+
+Manages multipart upload sessions with states:
+
+- **initiated** - Upload session started
+- **completed** - All parts uploaded and finalized
+- **aborted** - Upload cancelled
+- **expired** - Upload session timed out
+
+Key fields:
+
+- `id` (UUID) - Primary key
+- `tenant_id` - Multi-tenancy isolation
+- `object_id` - References `objects.id` (CASCADE delete)
+- `upload_id` - S3 multipart upload ID
+- `part_size_bytes` - Size of each part
+- `status` - Upload session state
+- `expires_at` - Session expiration time
+
+Indexes:
+
+- `idx_mpu_tenant_created_at` - Query uploads by tenant and creation time
+- `uq_mpu_tenant_upload` - Enforce unique upload IDs per tenant
+
+#### `multipart_parts`
+
+Tracks individual parts within a multipart upload (optional tracking):
+
+Key fields:
+
+- `multipart_id` - References `multipart_uploads.id` (CASCADE delete)
+- `part_number` - Part sequence number
+- `etag` - S3 ETag for verification
+- `size_bytes` - Part size
+
+Primary key: `(multipart_id, part_number)`
+
+### Relationships
+
+```text
+objects (1) ──< (N) multipart_uploads ──< (N) multipart_parts
+```
+
+- One object can have multiple multipart upload sessions (e.g., retries)
+- One multipart upload consists of multiple parts
+- Cascade deletes ensure referential integrity
+
 ## Configuration
 
 The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from `configs/paladin.yaml`.
