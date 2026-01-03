@@ -282,12 +282,14 @@ curl -s http://localhost:8080/health/readyz | jq .
 
 ### gRPC API
 
-- `Paladin/PresignPut`
-- `Paladin/PresignGet`
-- `Paladin/CreateMultipartUpload`
-- `Paladin/PresignUploadPart`
-- `Paladin/CompleteMultipartUpload`
-- `Paladin/AbortMultipartUpload`
+- `Paladin/CreateObject`
+- `Paladin/GetObject`
+- `Paladin/CompleteObject`
+- `Paladin/DeleteObject`
+- `Paladin/InitiateMultipart`
+- `Paladin/SignPart`
+- `Paladin/CompleteMultipart`
+- `Paladin/AbortMultipart`
 
 ## Architecture
 
