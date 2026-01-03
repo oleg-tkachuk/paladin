@@ -8,6 +8,7 @@ service Paladin {
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
   rpc GetObject(GetObjectRequest) returns (GetObjectResponse);
   rpc CompleteObject(CompleteObjectRequest) returns (CompleteObjectResponse);
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
 
   rpc InitiateMultipart(InitiateMultipartRequest) returns (InitiateMultipartResponse);
   rpc SignPart(SignPartRequest) returns (SignPartResponse);
@@ -52,6 +53,15 @@ message CompleteObjectRequest {
 }
 
 message CompleteObjectResponse {
+  string status = 1;
+}
+
+message DeleteObjectRequest {
+  string tenant_id = 1;
+  string object_id = 2;
+}
+
+message DeleteObjectResponse {
   string status = 1;
 }
 
