@@ -1,5 +1,6 @@
 # Initiate Multipart
 POST {{host}}/v1/multipart
+Host: paladin.local
 {
   "content_type": "image/png",
   "size_bytes": 104857600
@@ -13,12 +14,14 @@ jsonpath "$.part_size" exists
 
 # Sign Part 1
 POST {{host}}/v1/multipart/{{upload_id}}/parts/1/sign
+Host: paladin.local
 HTTP 200
 [Asserts]
 jsonpath "$.upload_url" exists
 
 # Complete Multipart
 POST {{host}}/v1/multipart/{{upload_id}}/complete
+Host: paladin.local
 {
   "parts": [
     {
