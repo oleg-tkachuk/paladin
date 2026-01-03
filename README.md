@@ -116,26 +116,104 @@ objects (1) ──< (N) multipart_uploads ──< (N) multipart_parts
 
 ## Configuration
 
-The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from `configs/paladin.yaml`.
+The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from [`configs/paladin.yaml`](file:///workspace/configs/paladin.yaml).
 
-### Logger Configuration
+### Logger
+
+Controls structured logging output:
 
 ```yaml
 logger:
-  level: info           # Options: debug, info, warn, error, dpanic, panic, fatal
-  format: json          # Options: json, console
-  development: false    # Enables development-friendly panic behavior
-  disable_caller: false  # Disables file/line number reporting
-  disable_stacktrace: false # Disables stacktraces for error logs
+  level: debug              # Log level: debug, info, warn, error, dpanic, panic, fatal
+  format: json              # Output format: json (production) or console (development)
+  development: false        # Enable development mode (DPanic causes panic)
+  disable_caller: false     # Disable file/line number in logs
+  disable_stacktrace: false # Disable stack traces on error logs
 ```
 
-### Server Configuration
+### Server
+
+HTTP and gRPC server configuration:
 
 ```yaml
 server:
-  mode: release         # release, debug, test
-  log_probes: false     # Toggles logging for health check probes
+  mode: release             # Gin mode: release, debug, test
+  name: paladin # Service name
+  http:
+    addr: "0.0.0.0:8080"    # HTTP server bind address
+  grpc:
+    addr: "0.0.0.0:9090"    # gRPC server bind address
+  shutdown_timeout: 20s     # Graceful shutdown timeout
+  log_probes: false         # Log health check probe requests
 ```
+
+### PostgreSQL
+
+Database connection settings:
+
+```yaml
+postgres:
+  dsn: "postgres://user:pass@host:5432/dbname?sslmode=disable"
+```
+
+The DSN (Data Source Name) includes:
+
+- Username and password
+- Host and port
+- Database name
+- SSL mode (disable for local dev, require for production)
+
+### S3 Storage
+
+S3-compatible storage configuration (AWS S3, SeaweedFS, MinIO):
+
+```yaml
+s3:
+  bucket: paladin               # Default bucket name
+  region: us-east-1         # AWS region
+  endpoint: "http://seaweedfs-s3.storage.svc.cluster.local:8333" # S3 endpoint URL
+  force_path_style: true    # Use path-style URLs (required for MinIO/SeaweedFS)
+  access_key: dummy         # S3 access key
+  secret_key: dummy         # S3 secret key
+  presign_ttl: 15m          # Presigned URL expiration time
+  part_size: "8MB"          # Multipart upload part size
+```
+
+**Notes:**
+
+- `force_path_style: true` is required for non-AWS S3 implementations
+- `presign_ttl` determines how long upload/download URLs remain valid
+- `part_size` affects multipart upload performance (larger = fewer parts, smaller = more parallelism)
+
+### Policy
+
+Upload validation and restrictions:
+
+```yaml
+policy:
+  max_object_size: "100MB"  # Maximum allowed object size
+  allowed_content_types:    # Whitelist of allowed MIME types
+    - "image/jpeg"
+    - "image/png"
+    - "application/pdf"
+```
+
+Objects exceeding `max_object_size` or with disallowed content types will be rejected.
+
+### OpenTelemetry (Optional)
+
+Distributed tracing and observability:
+
+```yaml
+otel:
+  enabled: false            # Enable/disable OpenTelemetry
+  service_name: paladin # Service identifier in traces
+  environment: local        # Environment tag (local, dev, staging, prod)
+  otlp_endpoint: "otel-collector:4317" # OTLP collector endpoint
+  insecure: true            # Use insecure connection (disable TLS)
+```
+
+Set `enabled: true` to export traces to an OpenTelemetry collector.
 
 ### Health Probes
 
