@@ -16,7 +16,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -72,7 +72,10 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+		c.JSON(http.StatusOK, gin.H{
+			"status":       "ready",
+			"dependencies": status,
+		})
 	})
 
 	v1 := r.Group("/v1")
@@ -80,6 +83,7 @@ func NewServer(mode string, log *zap.Logger, svc *service.ObjectsService, versio
 		v1.POST("/objects", createObjectHandler(svc))
 		v1.GET("/objects/:id", getObjectHandler(svc))
 		v1.POST("/objects/:id/complete", completeObjectHandler(svc))
+		v1.DELETE("/objects/:id", deleteObjectHandler(svc))
 
 		v1.POST("/multipart", initiateMultipartHandler(svc))
 		v1.POST("/multipart/:upload_id/parts/:part_number/sign", signPartHandler(svc))

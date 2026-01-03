@@ -36,6 +36,11 @@ func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uu
 	return args.Error(0)
 }
 
+func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }
@@ -129,7 +134,7 @@ var _ = Describe("ObjectsService", func() {
 		mockMPRepo  *MockMultipartRepo
 		mockS3      *MockS3Client
 		mockBreaker *MockBreakerFactory
-		svc         *service.ObjectsService
+		svc         service.ObjectsService
 		ctx         context.Context
 	)
 

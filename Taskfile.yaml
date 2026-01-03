@@ -61,8 +61,19 @@ tasks:
     cmds:
       - kubectl config set-context --current --namespace={{.K8S_COMMON_NAMESPACE}}
 
+  up:
+    desc: "Start the local stack"
+    cmds:
+      - docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} up -d --build
+
   test:
     desc: "Run unit tests"
     cmds:
       - go test -v ./...
 
+  test:hurl:
+    desc: "Run Hurl integration tests"
+    vars:
+      HOST: '{{.HOST | default "http://localhost:8080"}}'
+    cmds:
+      - hurl --variable host={{.HOST}} --test tests/hurl/*.hurl

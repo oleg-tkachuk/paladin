@@ -16,7 +16,7 @@ func tenantID(c *gin.Context) string {
 	return utils.TenantIDFromContext(c.Request.Context(), "default")
 }
 
-func createObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func createObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req CreateObjectRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -43,7 +43,7 @@ func createObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func getObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func getObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -72,7 +72,7 @@ func getObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func completeObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func completeObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -91,7 +91,26 @@ func completeObjectHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func initiateMultipartHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func deleteObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+
+			return
+		}
+
+		if err := svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Details: err.Error()})
+
+			return
+		}
+
+		c.JSON(http.StatusOK, DeleteObjectResponse{Status: "deleted"})
+	}
+}
+
+func initiateMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req InitiateMultipartRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -117,7 +136,7 @@ func initiateMultipartHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func signPartHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func signPartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 
@@ -143,7 +162,7 @@ func signPartHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func completeMultipartHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func completeMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 
@@ -170,7 +189,7 @@ func completeMultipartHandler(svc *service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func abortMultipartHandler(svc *service.ObjectsService) gin.HandlerFunc {
+func abortMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 		if err := svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadID); err != nil {

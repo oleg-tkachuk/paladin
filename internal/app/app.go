@@ -92,10 +92,46 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		return nil, err
 	}
 
+	// Environment overrides for technical fields (DB/S3)
+	if v := utils.GetEnvOrDefault("DB_DSN", ""); v != "" {
+		cfg.Postgres.DSN = v
+	}
+
+	if v := utils.GetEnvOrDefault("S3_BUCKET", ""); v != "" {
+		cfg.S3.Bucket = v
+	}
+	if v := utils.GetEnvOrDefault("S3_REGION", ""); v != "" {
+		cfg.S3.Region = v
+	}
+	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
+		cfg.S3.Endpoint = v
+	}
+	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
+		cfg.S3.AccessKey = v
+	}
+	if v := utils.GetEnvOrDefault("S3_SECRET_KEY", ""); v != "" {
+		cfg.S3.SecretKey = v
+	}
+	if v := utils.GetEnvOrDefault("S3_FORCE_PATH_STYLE", ""); v != "" {
+		cfg.S3.ForcePathStyle = v == "true" || v == "1"
+	}
+	if v := utils.GetEnvOrDefault("S3_PRESIGN_TTL", ""); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.S3.PresignTTL = d
+		}
+	}
+	if v := utils.GetEnvOrDefault("S3_PART_SIZE", ""); v != "" {
+		cfg.S3.PartSizeRaw = v
+		if n, err := utils.ParseSizeString(v); err == nil {
+			cfg.S3.PartSizeBytes = n
+		}
+	}
+
 	// DB connect with retries (production-friendly)
 	var db *postgres.DB
 
 	op := func() error {
+		log.Debug("Connecting to PostgreSQL", zap.String("dsn", cfg.Postgres.DSN))
 		d, err := postgres.New(ctx, cfg.Postgres, log)
 		if err != nil {
 			return err
@@ -123,46 +159,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		log.Warn("Migrations failed (check volume mount if running locally)", zap.Error(err))
 	}
 
-	s3cfg := cfg.S3
-	// Allow env overrides in container-centric setup
-	if v := utils.GetEnvOrDefault("S3_BUCKET", ""); v != "" {
-		s3cfg.Bucket = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_REGION", ""); v != "" {
-		s3cfg.Region = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
-		s3cfg.Endpoint = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
-		s3cfg.AccessKey = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_SECRET_KEY", ""); v != "" {
-		s3cfg.SecretKey = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_FORCE_PATH_STYLE", ""); v != "" {
-		s3cfg.ForcePathStyle = v == "true" || v == "1"
-	}
-
-	if v := utils.GetEnvOrDefault("S3_PRESIGN_TTL", ""); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			s3cfg.PresignTTL = d
-		}
-	}
-
-	if v := utils.GetEnvOrDefault("S3_PART_SIZE", ""); v != "" {
-		s3cfg.PartSizeRaw = v
-		if n, err := utils.ParseSizeString(v); err == nil {
-			s3cfg.PartSizeBytes = n
-		}
-	}
-
-	s3c, err := s3.New(ctx, s3cfg, log)
+	s3c, err := s3.New(ctx, cfg.S3, log)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +171,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	mpRepo := postgres.NewMultipartRepo(db)
 	brk := breaker.NewFactory(cfg)
 
-	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, s3cfg.PartSizeBytes)
+	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, cfg.S3.PartSizeBytes)
 	hs := service.NewHealthService(db, s3c, brk)
 
 	app := &App{
