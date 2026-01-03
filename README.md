@@ -116,7 +116,7 @@ objects (1) ──< (N) multipart_uploads ──< (N) multipart_parts
 
 ## Configuration
 
-The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from [`configs/paladin.yaml`](file:///workspace/configs/paladin.yaml).
+The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from [`configs/paladin.yaml`](configs/paladin.yaml).
 
 ### Logger
 
