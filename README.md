@@ -256,6 +256,8 @@ curl -s http://localhost:8080/health/readyz | jq .
 
 ## API Endpoints
 
+For detailed API documentation, see [API.md](API.md).
+
 ### HTTP API
 
 **Health & Monitoring:**
