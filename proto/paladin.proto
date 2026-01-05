@@ -7,6 +7,7 @@ option go_package = "paladin/internal/api/grpc;grpcapi";
 service Paladin {
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
   rpc GetObject(GetObjectRequest) returns (GetObjectResponse);
+  rpc GetObjectMeta(GetObjectRequest) returns (GetObjectMetaResponse);
   rpc CompleteObject(CompleteObjectRequest) returns (CompleteObjectResponse);
   rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
 
@@ -20,6 +21,8 @@ message CreateObjectRequest {
   string tenant_id = 1;
   string content_type = 2;
   int64 size_bytes = 3;
+  map<string, string> labels = 4;
+  string external_ref = 5;
 }
 
 message CreateObjectResponse {
@@ -45,6 +48,20 @@ message GetObjectResponse {
   string status = 6;
   string download_url = 7;
   int64 expires_at_unix = 8;
+  map<string, string> labels = 9;
+  string external_ref = 10;
+}
+
+message GetObjectMetaResponse {
+  string object_id = 1;
+  string object_key = 2;
+  string bucket = 3;
+  string content_type = 4;
+  int64 size_bytes = 5;
+  string status = 6;
+  int64 expires_at_unix = 7;
+  map<string, string> labels = 8;
+  string external_ref = 9;
 }
 
 message CompleteObjectRequest {
@@ -69,6 +86,8 @@ message InitiateMultipartRequest {
   string tenant_id = 1;
   string content_type = 2;
   int64 size_bytes = 3;
+  map<string, string> labels = 4;
+  string external_ref = 5;
 }
 
 message InitiateMultipartResponse {

@@ -28,7 +28,12 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 		tenant = utils.TenantIDFromContext(ctx, "default")
 	}
 
-	id, key, p, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, nil)
+	var externalRef *string
+	if req.ExternalRef != "" {
+		externalRef = &req.ExternalRef
+	}
+
+	id, key, p, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, nil, req.Labels, externalRef)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -59,6 +64,11 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
+	var ref string
+	if rec.ExternalRef != nil {
+		ref = *rec.ExternalRef
+	}
+
 	return &GetObjectResponse{
 		ObjectId:      rec.ID.String(),
 		ObjectKey:     rec.ObjectKey,
@@ -68,6 +78,47 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 		Status:        string(rec.Status),
 		DownloadUrl:   p.URL,
 		ExpiresAtUnix: p.ExpiresAt.Unix(),
+		Labels:        rec.Labels,
+		ExternalRef:   ref,
+	}, nil
+}
+
+func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*GetObjectMetaResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid object id")
+	}
+
+	rec, err := s.svc.GetMeta(ctx, tenant, id)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+
+	var ref string
+	if rec.ExternalRef != nil {
+		ref = *rec.ExternalRef
+	}
+
+	var expires int64
+	if rec.ExpiresAt != nil {
+		expires = rec.ExpiresAt.Unix()
+	}
+
+	return &GetObjectMetaResponse{
+		ObjectId:      rec.ID.String(),
+		ObjectKey:     rec.ObjectKey,
+		Bucket:        rec.Bucket,
+		ContentType:   rec.ContentType,
+		SizeBytes:     rec.SizeBytes,
+		Status:        string(rec.Status),
+		ExpiresAtUnix: expires,
+		Labels:        rec.Labels,
+		ExternalRef:   ref,
 	}, nil
 }
 
@@ -95,7 +146,12 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 		tenant = utils.TenantIDFromContext(ctx, "default")
 	}
 
-	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes)
+	var externalRef *string
+	if req.ExternalRef != "" {
+		externalRef = &req.ExternalRef
+	}
+
+	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

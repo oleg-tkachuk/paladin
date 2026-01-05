@@ -15,8 +15,10 @@ type VersionResponse struct {
 }
 
 type CreateObjectRequest struct {
-	ContentType string `binding:"required" json:"content_type"`
-	SizeBytes   int64  `binding:"required" json:"size_bytes"`
+	ContentType string            `binding:"required" json:"content_type"`
+	SizeBytes   int64             `binding:"required" json:"size_bytes"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	ExternalRef *string           `json:"external_ref,omitempty"`
 }
 
 type CreateObjectResponse struct {
@@ -29,14 +31,28 @@ type CreateObjectResponse struct {
 }
 
 type GetObjectResponse struct {
-	ObjectID    string    `json:"object_id"`
-	ObjectKey   string    `json:"object_key"`
-	Bucket      string    `json:"bucket"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	Status      string    `json:"status"`
-	DownloadURL string    `json:"download_url"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	ObjectID    string            `json:"object_id"`
+	ObjectKey   string            `json:"object_key"`
+	Bucket      string            `json:"bucket"`
+	ContentType string            `json:"content_type"`
+	SizeBytes   int64             `json:"size_bytes"`
+	Status      string            `json:"status"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	ExternalRef *string           `json:"external_ref,omitempty"`
+	DownloadURL string            `json:"download_url"`
+	ExpiresAt   time.Time         `json:"expires_at"`
+}
+
+type GetObjectMetaResponse struct {
+	ObjectID    string            `json:"object_id"`
+	ObjectKey   string            `json:"object_key"`
+	Bucket      string            `json:"bucket"`
+	ContentType string            `json:"content_type"`
+	SizeBytes   int64             `json:"size_bytes"`
+	Status      string            `json:"status"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	ExternalRef *string           `json:"external_ref,omitempty"`
+	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
 }
 
 type CompleteObjectResponse struct {
@@ -48,8 +64,10 @@ type DeleteObjectResponse struct {
 }
 
 type InitiateMultipartRequest struct {
-	ContentType string `binding:"required" json:"content_type"`
-	SizeBytes   int64  `binding:"required" json:"size_bytes"`
+	ContentType string            `binding:"required" json:"content_type"`
+	SizeBytes   int64             `binding:"required" json:"size_bytes"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	ExternalRef *string           `json:"external_ref,omitempty"`
 }
 
 type InitiateMultipartResponse struct {

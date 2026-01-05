@@ -26,14 +26,19 @@ type MockObjectsService struct {
 	mock.Mock
 }
 
-func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, checksum []byte) (uuid.UUID, string, s3.Presigned, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes, checksum)
+func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, checksum []byte, labels map[string]string, externalRef *string) (uuid.UUID, string, s3.Presigned, error) {
+	args := m.Called(ctx, tenantID, contentType, sizeBytes, checksum, labels, externalRef)
 	return args.Get(0).(uuid.UUID), args.String(1), args.Get(2).(s3.Presigned), args.Error(3)
 }
 
 func (m *MockObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, s3.Presigned, error) {
 	args := m.Called(ctx, tenantID, id)
 	return args.Get(0).(*postgres.ObjectRecord), args.Get(1).(s3.Presigned), args.Error(2)
+}
+
+func (m *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
 }
 
 func (m *MockObjectsService) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID) error {
@@ -46,8 +51,8 @@ func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uui
 	return args.Error(0)
 }
 
-func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64) (service.MultipartInitResponse, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes)
+func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string) (service.MultipartInitResponse, error) {
+	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef)
 	return args.Get(0).(service.MultipartInitResponse), args.Error(1)
 }
 
@@ -211,7 +216,7 @@ var _ = Describe("Router", func() {
 		Context("with valid request", func() {
 			BeforeEach(func() {
 				id := uuid.New()
-				mockSvc.On("CreateSingle", mock.Anything, "default", "image/png", int64(1024), mock.Anything).
+				mockSvc.On("CreateSingle", mock.Anything, "default", "image/png", int64(1024), mock.Anything, mock.Anything, mock.Anything).
 					Return(id, "default/"+id.String(), s3.Presigned{URL: "http://upload"}, nil)
 			})
 
@@ -230,7 +235,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart", func() {
 		It("initiates multipart upload", func() {
 			objID := uuid.New()
-			mockSvc.On("InitiateMultipart", mock.Anything, "default", "application/octet-stream", int64(100*1024*1024)).
+			mockSvc.On("InitiateMultipart", mock.Anything, "default", "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything).
 				Return(service.MultipartInitResponse{
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)

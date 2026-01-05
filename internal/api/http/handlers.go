@@ -25,7 +25,7 @@ func createObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 			return
 		}
 
-		id, key, p, err := svc.CreateSingle(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, nil)
+		id, key, p, err := svc.CreateSingle(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, nil, req.Labels, req.ExternalRef)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "validation_error", Details: err.Error()})
 
@@ -119,7 +119,7 @@ func initiateMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 			return
 		}
 
-		out, err := svc.InitiateMultipart(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes)
+		out, err := svc.InitiateMultipart(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, req.Labels, req.ExternalRef)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "validation_error", Details: err.Error()})
 
@@ -199,6 +199,34 @@ func abortMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, AbortMultipartResponse{Status: "aborted"})
+	}
+}
+
+func getObjectMetaHandler(svc service.ObjectsService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+			return
+		}
+
+		rec, err := svc.GetMeta(c.Request.Context(), tenantID(c), id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{Error: "not_found", Details: err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, GetObjectMetaResponse{
+			ObjectID:    id.String(),
+			ObjectKey:   rec.ObjectKey,
+			Bucket:      rec.Bucket,
+			ContentType: rec.ContentType,
+			SizeBytes:   rec.SizeBytes,
+			Status:      string(rec.Status),
+			Labels:      rec.Labels,
+			ExternalRef: rec.ExternalRef,
+			ExpiresAt:   rec.ExpiresAt,
+		})
 	}
 }
 
