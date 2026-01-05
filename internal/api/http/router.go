@@ -82,6 +82,7 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 	{
 		v1.POST("/objects", createObjectHandler(svc))
 		v1.GET("/objects/:id", getObjectHandler(svc))
+		v1.GET("/objects/:id/meta", getObjectMetaHandler(svc))
 		v1.POST("/objects/:id/complete", completeObjectHandler(svc))
 		v1.DELETE("/objects/:id", deleteObjectHandler(svc))
 

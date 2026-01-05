@@ -31,6 +31,11 @@ func (m *MockObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID
 	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
 }
 
+func (m *MockObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*postgres.ObjectRecord, error) {
+	args := m.Called(ctx, tenantID, externalRef)
+	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+}
+
 func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uuid.UUID) error {
 	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
@@ -161,7 +166,7 @@ var _ = Describe("ObjectsService", func() {
 			mockRepo.On("Create", ctx, mock.Anything).Return(nil)
 			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes).Return(s3.Presigned{URL: "http://example.com"}, nil)
 
-			id, key, p, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil)
+			id, key, p, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(Equal(uuid.Nil))
@@ -177,7 +182,7 @@ var _ = Describe("ObjectsService", func() {
 			contentType := "text/plain" // Not allowed
 			sizeBytes := int64(100)
 
-			_, _, _, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil)
+			_, _, _, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("content_type not allowed"))
@@ -200,7 +205,7 @@ var _ = Describe("ObjectsService", func() {
 			}, nil)
 			mockS3.On("PresignTTLDuration").Return(1 * time.Hour)
 
-			resp, err := svc.InitiateMultipart(ctx, tenantID, contentType, sizeBytes)
+			resp, err := svc.InitiateMultipart(ctx, tenantID, contentType, sizeBytes, nil, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.UploadID).To(Equal("test-upload-id"))

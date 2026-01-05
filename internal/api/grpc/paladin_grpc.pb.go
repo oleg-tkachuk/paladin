@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	Paladin_CreateObject_FullMethodName      = "/paladin.v1.Paladin/CreateObject"
 	Paladin_GetObject_FullMethodName         = "/paladin.v1.Paladin/GetObject"
+	Paladin_GetObjectMeta_FullMethodName     = "/paladin.v1.Paladin/GetObjectMeta"
 	Paladin_CompleteObject_FullMethodName    = "/paladin.v1.Paladin/CompleteObject"
 	Paladin_DeleteObject_FullMethodName      = "/paladin.v1.Paladin/DeleteObject"
 	Paladin_InitiateMultipart_FullMethodName = "/paladin.v1.Paladin/InitiateMultipart"
@@ -35,6 +36,7 @@ const (
 type PaladinClient interface {
 	CreateObject(ctx context.Context, in *CreateObjectRequest, opts ...grpc.CallOption) (*CreateObjectResponse, error)
 	GetObject(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectResponse, error)
+	GetObjectMeta(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectMetaResponse, error)
 	CompleteObject(ctx context.Context, in *CompleteObjectRequest, opts ...grpc.CallOption) (*CompleteObjectResponse, error)
 	DeleteObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
 	InitiateMultipart(ctx context.Context, in *InitiateMultipartRequest, opts ...grpc.CallOption) (*InitiateMultipartResponse, error)
@@ -65,6 +67,16 @@ func (c *objectControlPlaneClient) GetObject(ctx context.Context, in *GetObjectR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetObjectResponse)
 	err := c.cc.Invoke(ctx, Paladin_GetObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) GetObjectMeta(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectMetaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetObjectMetaResponse)
+	err := c.cc.Invoke(ctx, Paladin_GetObjectMeta_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +149,7 @@ func (c *objectControlPlaneClient) AbortMultipart(ctx context.Context, in *Abort
 type PaladinServer interface {
 	CreateObject(context.Context, *CreateObjectRequest) (*CreateObjectResponse, error)
 	GetObject(context.Context, *GetObjectRequest) (*GetObjectResponse, error)
+	GetObjectMeta(context.Context, *GetObjectRequest) (*GetObjectMetaResponse, error)
 	CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error)
 	DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
 	InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error)
@@ -158,6 +171,9 @@ func (UnimplementedPaladinServer) CreateObject(context.Context, *CreateObjectReq
 }
 func (UnimplementedPaladinServer) GetObject(context.Context, *GetObjectRequest) (*GetObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetObject not implemented")
+}
+func (UnimplementedPaladinServer) GetObjectMeta(context.Context, *GetObjectRequest) (*GetObjectMetaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetObjectMeta not implemented")
 }
 func (UnimplementedPaladinServer) CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteObject not implemented")
@@ -230,6 +246,24 @@ func _Paladin_GetObject_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PaladinServer).GetObject(ctx, req.(*GetObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_GetObjectMeta_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).GetObjectMeta(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_GetObjectMeta_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).GetObjectMeta(ctx, req.(*GetObjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -356,6 +390,10 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetObject",
 			Handler:    _Paladin_GetObject_Handler,
+		},
+		{
+			MethodName: "GetObjectMeta",
+			Handler:    _Paladin_GetObjectMeta_Handler,
 		},
 		{
 			MethodName: "CompleteObject",

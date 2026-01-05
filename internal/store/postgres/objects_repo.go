@@ -25,6 +25,8 @@ type ObjectRecord struct {
 	SizeBytes      int64
 	ChecksumSHA256 *string
 	Status         ObjectStatus
+	Labels         map[string]string
+	ExternalRef    *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ExpiresAt      *time.Time
@@ -38,9 +40,9 @@ func NewObjectsRepo(db *DB) *ObjectsRepo { return &ObjectsRepo{db: db} }
 
 func (r *ObjectsRepo) Create(ctx context.Context, rec ObjectRecord) error {
 	if _, err := r.db.Pool.Exec(ctx, `
-        INSERT INTO objects (id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    `, rec.ID, rec.TenantID, rec.ObjectKey, rec.Bucket, rec.ContentType, rec.SizeBytes, rec.ChecksumSHA256, rec.Status, rec.ExpiresAt); err != nil {
+        INSERT INTO objects (id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, expires_at, labels, external_ref)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    `, rec.ID, rec.TenantID, rec.ObjectKey, rec.Bucket, rec.ContentType, rec.SizeBytes, rec.ChecksumSHA256, rec.Status, rec.ExpiresAt, rec.Labels, rec.ExternalRef); err != nil {
 		return fmt.Errorf("create object: %w", err)
 	}
 
@@ -49,13 +51,13 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec ObjectRecord) error {
 
 func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*ObjectRecord, error) {
 	row := r.db.Pool.QueryRow(ctx, `
-        SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at
+        SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref
         FROM objects
         WHERE tenant_id=$1 AND id=$2
     `, tenantID, id)
 
 	var rec ObjectRecord
-	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef); err != nil {
 		return nil, fmt.Errorf("scan object: %w", err)
 	}
 
@@ -82,4 +84,19 @@ func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.
 	}
 
 	return nil
+}
+
+func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*ObjectRecord, error) {
+	row := r.db.Pool.QueryRow(ctx, `
+        SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref
+        FROM objects
+        WHERE tenant_id=$1 AND external_ref=$2
+    `, tenantID, externalRef)
+
+	var rec ObjectRecord
+	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef); err != nil {
+		return nil, fmt.Errorf("scan object: %w", err)
+	}
+
+	return &rec, nil
 }
