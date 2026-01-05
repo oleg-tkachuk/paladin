@@ -3,7 +3,11 @@ POST {{host}}/v1/multipart
 Host: paladin.local
 {
   "content_type": "image/png",
-  "size_bytes": 104857600
+  "size_bytes": 104857600,
+  "labels": {
+    "type": "multipart-test"
+  },
+  "external_ref": "mp-ref-001"
 }
 HTTP 200
 [Captures]
