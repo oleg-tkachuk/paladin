@@ -16,7 +16,7 @@ server:
   log_probes: false
 
 postgres:
-  dsn: "postgres://acme:change-me@postgresql.databases.svc.cluster.local:5432/acme?sslmode=disable"
+  dsn: "postgres://acme:change-me@paladin-postgresql.databases.svc.cluster.local:5432/acme?sslmode=disable"
 
 s3:
   bucket: paladin
