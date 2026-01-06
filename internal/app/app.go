@@ -14,7 +14,7 @@ import (
 	"paladin/internal/breaker"
 	"paladin/internal/config"
 	"paladin/internal/logger"
-	"paladin/internal/obs"
+	"paladin/internal/observability"
 	"paladin/internal/service"
 	"paladin/internal/storage/s3"
 	"paladin/internal/store/postgres"
@@ -39,7 +39,7 @@ type App struct {
 	grpcSrv *grpc.Server
 
 	db           *postgres.DB
-	otelShutdown obs.ShutdownFunc
+	otelShutdown observability.ShutdownFunc
 	started      atomic.Bool
 }
 
@@ -87,7 +87,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	ctx := context.Background()
 
-	otelShutdown, err := obs.InitOTel(ctx, cfg.OTel)
+	otelShutdown, err := observability.InitOTel(ctx, cfg.OTel)
 	if err != nil {
 		return nil, err
 	}
