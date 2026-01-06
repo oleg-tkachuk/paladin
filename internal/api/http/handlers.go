@@ -10,24 +10,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+func respondWithError(c *gin.Context, log *zap.Logger, code int, err error) {
+	if code >= 500 {
+		log.Error("Request failed", zap.Error(err), zap.Int("status", code), zap.String("path", c.Request.URL.Path))
+	} else if code >= 400 {
+		log.Warn("Request failed", zap.Error(err), zap.Int("status", code), zap.String("path", c.Request.URL.Path))
+	}
+	c.JSON(code, ErrorResponse{Error: http.StatusText(code), Details: err.Error()})
+}
 
 func tenantID(c *gin.Context) string {
 	return utils.TenantIDFromContext(c.Request.Context(), "default")
 }
 
-func createObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+func createObjectHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req CreateObjectRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		id, key, p, err := svc.CreateSingle(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, nil, req.Labels, req.ExternalRef)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "validation_error", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
@@ -43,18 +53,18 @@ func createObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func getObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+func getObjectHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		rec, p, err := svc.Get(c.Request.Context(), tenantID(c), id)
 		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: "not_found", Details: err.Error()})
+			respondWithError(c, log, http.StatusNotFound, err)
 
 			return
 		}
@@ -72,17 +82,17 @@ func getObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func completeObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+func completeObjectHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		if err := svc.MarkComplete(c.Request.Context(), tenantID(c), id); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Details: err.Error()})
+			respondWithError(c, log, http.StatusInternalServerError, err)
 
 			return
 		}
@@ -91,17 +101,17 @@ func completeObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func deleteObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
+func deleteObjectHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		if err := svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Details: err.Error()})
+			respondWithError(c, log, http.StatusInternalServerError, err)
 
 			return
 		}
@@ -110,18 +120,18 @@ func deleteObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func initiateMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
+func initiateMultipartHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req InitiateMultipartRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		out, err := svc.InitiateMultipart(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, req.Labels, req.ExternalRef)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "validation_error", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
@@ -136,20 +146,20 @@ func initiateMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func signPartHandler(svc service.ObjectsService) gin.HandlerFunc {
+func signPartHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 
 		pn, err := strconv.Atoi(c.Param("part_number"))
 		if err != nil || pn <= 0 {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid part number"})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
 
 		p, err := svc.SignPart(c.Request.Context(), tenantID(c), uploadID, int32(pn))
 		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: "not_found", Details: err.Error()})
+			respondWithError(c, log, http.StatusNotFound, err)
 
 			return
 		}
@@ -162,13 +172,13 @@ func signPartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func completeMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
+func completeMultipartHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 
 		var req CompleteMultipartRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
@@ -180,7 +190,7 @@ func completeMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 
 		objID, err := svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadID, parts)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "operation_failed", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
@@ -189,11 +199,11 @@ func completeMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func abortMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
+func abortMultipartHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploadID := c.Param("upload_id")
 		if err := svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadID); err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "operation_failed", Details: err.Error()})
+			respondWithError(c, log, http.StatusBadRequest, err)
 
 			return
 		}
@@ -202,17 +212,17 @@ func abortMultipartHandler(svc service.ObjectsService) gin.HandlerFunc {
 	}
 }
 
-func getObjectMetaHandler(svc service.ObjectsService) gin.HandlerFunc {
+func getObjectMetaHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "bad_request", Details: "invalid object id"})
+			respondWithError(c, log, http.StatusBadRequest, err)
 			return
 		}
 
 		rec, err := svc.GetMeta(c.Request.Context(), tenantID(c), id)
 		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: "not_found", Details: err.Error()})
+			respondWithError(c, log, http.StatusNotFound, err)
 			return
 		}
 
