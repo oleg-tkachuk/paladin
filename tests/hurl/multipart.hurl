@@ -38,6 +38,18 @@ HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
 
-# Abort (Cleanup test)
-# Since we already completed, this might fail or be irrelevant for the same object, 
-# but we can test the endpoint separately if needed.
+# Verify Metadata
+GET {{host}}/v1/objects/{{object_id}}
+Host: paladin.local
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "active"
+jsonpath "$.labels.type" == "multipart-test"
+jsonpath "$.external_ref" == "mp-ref-001"
+
+# Cleanup
+DELETE {{host}}/v1/objects/{{object_id}}
+Host: paladin.local
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "deleted"

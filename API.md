@@ -38,6 +38,8 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 | :--- | :--- | :--- | :--- |
 | `content_type` | string | **Yes** | MIME type of the object (e.g., `image/jpeg`). Must be allowed by server policy. |
 | `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must not exceed server limits. |
+| `labels` | map[string]string | No | Optional key-value tags to attach to the object. |
+| `external_ref` | string | No | Optional external reference ID (must be unique per tenant if provided). |
 
 **Response Body**:
 
@@ -55,7 +57,7 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 ```bash
 curl -X POST http://localhost:8080/v1/objects \
   -H "Content-Type: application/json" \
-  -d '{"content_type": "image/png", "size_bytes": 1024}'
+  -d '{"content_type": "image/png", "size_bytes": 1024, "labels": {"type": "invoice"}}'
 ```
 
 #### Get Object
@@ -81,6 +83,8 @@ Retrieves metadata for an existing object and generates a presigned URL for down
 | `status` | string | Current state: `pending`, `active`, or `deleted`. |
 | `download_url` | string | Presigned URL to download the file. |
 | `expires_at` | string (ISO8601) | Timestamp when the download URL expires. |
+| `labels` | map[string]string | Custom key-value tags. |
+| `external_ref` | string | External reference ID. |
 
 #### Complete Object
 
@@ -135,6 +139,8 @@ Starts a multipart upload session. This is required for large files or when the 
 | :--- | :--- | :--- | :--- |
 | `content_type` | string | **Yes** | MIME type of the file. |
 | `size_bytes` | int64 | **Yes** | Total size of the file. Used to calculate part sizing. |
+| `labels` | map[string]string | No | Optional key-value tags. |
+| `external_ref` | string | No | Optional external reference ID. |
 
 **Response Body**:
 
@@ -232,6 +238,8 @@ Initiates a single object upload.
   - `tenant_id` (string): Tenant identifier.
   - `content_type` (string): MIME type.
   - `size_bytes` (int64): Object size.
+  - `labels` (map<string, string>): Optional tags.
+  - `external_ref` (string): Optional external reference.
 - **Response**: `CreateObjectResponse`
   - `object_id` (string): UUID.
   - `object_key` (string): Storage key.
@@ -242,7 +250,7 @@ Initiates a single object upload.
 
 #### `GetObject`
 
-Gets object metadata.
+Gets object metadata and download URL.
 
 - **Request**: `GetObjectRequest`
   - `tenant_id` (string)
@@ -256,6 +264,26 @@ Gets object metadata.
   - `status` (string)
   - `download_url` (string)
   - `expires_at_unix` (int64)
+  - `labels` (map<string, string>)
+  - `external_ref` (string)
+
+#### `GetObjectMeta`
+
+Gets object metadata without download URL.
+
+- **Request**: `GetObjectRequest`
+  - `tenant_id` (string)
+  - `object_id` (string)
+- **Response**: `GetObjectMetaResponse`
+  - `object_id` (string)
+  - `object_key` (string)
+  - `bucket` (string)
+  - `content_type` (string)
+  - `size_bytes` (int64)
+  - `status` (string)
+  - `expires_at_unix` (int64)
+  - `labels` (map<string, string>)
+  - `external_ref` (string)
 
 #### `CompleteObject`
 
@@ -285,6 +313,8 @@ Starts a multipart session.
   - `tenant_id` (string)
   - `content_type` (string)
   - `size_bytes` (int64)
+  - `labels` (map<string, string>)
+  - `external_ref` (string)
 - **Response**: `InitiateMultipartResponse`
   - `object_id` (string)
   - `object_key` (string)

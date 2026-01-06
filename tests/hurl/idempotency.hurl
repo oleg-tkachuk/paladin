@@ -38,3 +38,10 @@ HTTP 400
 [Asserts]
 jsonpath "$.error" == "validation_error"
 jsonpath "$.details" contains "conflict"
+
+# Cleanup
+DELETE {{host}}/v1/objects/{{id_1}}
+Host: paladin.local
+HTTP 200
+[Asserts]
+jsonpath "$.status" == "deleted"
