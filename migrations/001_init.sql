@@ -1,3 +1,4 @@
+-- +goose Up
 -- objects: metadata record for object lifecycle
 CREATE TABLE IF NOT EXISTS objects (
   id              UUID PRIMARY KEY,
@@ -46,3 +47,8 @@ CREATE TABLE IF NOT EXISTS multipart_parts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_mpp_multipart_id ON multipart_parts (multipart_id);
+
+-- +goose Down
+DROP TABLE IF EXISTS multipart_parts;
+DROP TABLE IF EXISTS multipart_uploads;
+DROP TABLE IF EXISTS objects;
