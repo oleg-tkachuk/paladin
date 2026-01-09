@@ -86,6 +86,31 @@ Retrieves metadata for an existing object and generates a presigned URL for down
 | `labels` | map[string]string | Custom key-value tags. |
 | `external_ref` | string | External reference ID. |
 
+#### Get Object Metadata
+
+Retrieves metadata for an existing object **without** generating a download URL. Useful for checking status or headers.
+
+- **Method**: `GET`
+- **Endpoint**: `/objects/:id/meta`
+- **Path Parameters**:
+  - `id`: Object UUID
+- **Success Code**: `200 OK`
+- **Error Codes**: `400 Bad Request`, `404 Not Found`
+
+**Response Body**:
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `object_id` | string (UUID) | Unique identifier of the object. |
+| `object_key` | string | Internal storage key. |
+| `bucket` | string | Name of the S3 bucket where the object is stored. |
+| `content_type` | string | MIME type of the object. |
+| `size_bytes` | int64 | Size of the object in bytes. |
+| `status` | string | Current state: `pending`, `active`, or `deleted`. |
+| `labels` | map[string]string | Custom key-value tags. |
+| `external_ref` | string | External reference ID. |
+| `expires_at` | string (ISO8601) | Optional expiration timestamp (if set). |
+
 #### Complete Object
 
 Marks an upload as complete and the object as `active`. This tells the system that the client has successfully uploaded the file to the presigned URL.
