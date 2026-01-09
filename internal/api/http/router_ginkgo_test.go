@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	httpapi "paladin/internal/api/http"
+	"paladin/internal/config"
 	"paladin/internal/fault"
 	"paladin/internal/service"
 	"paladin/internal/storage/s3"
@@ -123,7 +124,17 @@ var _ = Describe("Router", func() {
 		started = &atomic.Bool{}
 		started.Store(true)
 
-		server = httpapi.NewServer("test", zap.NewNop(), mockSvc, "1.0.0", "deadbeef", "2023-01-01", false, hs, started)
+		cfg := &config.Config{
+			Server: config.Server{
+				Mode:      "test",
+				LogProbes: false,
+			},
+			Security: config.Security{
+				TrustTenantIDFromRequest: true, // Test relies on default/legacy behavior likely
+			},
+		}
+
+		server = httpapi.NewServer(cfg, zap.NewNop(), mockSvc, "1.0.0", "deadbeef", "2023-01-01", hs, started)
 		recorder = httptest.NewRecorder()
 	})
 

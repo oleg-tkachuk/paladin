@@ -30,6 +30,7 @@ s3: {
   bucket: string
   region: string
   endpoint: string
+  public_endpoint: string | *""
   force_path_style: bool | *true
   access_key: string
   secret_key: string
@@ -39,7 +40,33 @@ s3: {
 
 policy: {
   max_object_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"100MB"
-  allowed_content_types: [...string]
+  max_multipart_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"1TB"
+  min_part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"5MB"
+  max_part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"5GB"
+  max_parts: int | *10000
+  presign_put_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  presign_get_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  presign_part_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  allowed_content_types: [...string] | *[]
+  labels_max_bytes: int | *4096
+  labels_max_keys: int | *10
+  external_ref_max_len: int | *256
+  object_key_max_len: int | *1024
+}
+
+security: {
+  trust_tenant_id_from_request: bool | *false
+  reject_tenant_mismatch: bool | *true
+  enable_rls: bool | *false
+  log_sensitive: bool | *false
+}
+
+housekeeping: {
+  enable_reaper: bool | *true
+  pending_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+  multipart_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
+  gc_interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+  delete_orphaned_parts: bool | *false
 }
 
 otel: {

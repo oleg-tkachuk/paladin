@@ -76,6 +76,8 @@ func getObjectHandler(log *zap.Logger, svc service.ObjectsService) gin.HandlerFu
 			ContentType: rec.ContentType,
 			SizeBytes:   rec.SizeBytes,
 			Status:      string(rec.Status),
+			Labels:      rec.Labels,
+			ExternalRef: rec.ExternalRef,
 			DownloadURL: p.URL,
 			ExpiresAt:   p.ExpiresAt,
 		})

@@ -36,14 +36,19 @@ func (m *MockObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string,
 	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
 }
 
-func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uuid.UUID) error {
+func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	args := m.Called(ctx, tenantID, id)
-	return args.Error(0)
+	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) error {
+func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	args := m.Called(ctx, tenantID, id)
-	return args.Error(0)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]postgres.ObjectRecord, error) {
+	args := m.Called(ctx, cutoff, limit)
+	return args.Get(0).([]postgres.ObjectRecord), args.Error(1)
 }
 
 type MockMultipartRepo struct {
@@ -72,6 +77,16 @@ func (m *MockMultipartRepo) MarkCompleted(ctx context.Context, tenantID string, 
 
 func (m *MockMultipartRepo) MarkAborted(ctx context.Context, tenantID string, uploadID string) error {
 	args := m.Called(ctx, tenantID, uploadID)
+	return args.Error(0)
+}
+
+func (m *MockMultipartRepo) ListExpired(ctx context.Context, limit int) ([]postgres.MultipartRecord, error) {
+	args := m.Called(ctx, limit)
+	return args.Get(0).([]postgres.MultipartRecord), args.Error(1)
+}
+
+func (m *MockMultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
+	args := m.Called(ctx, tenantID, uploadID, objectID)
 	return args.Error(0)
 }
 
@@ -239,6 +254,7 @@ var _ = Describe("ObjectsService", func() {
 				UploadID:  uploadID,
 				ObjectID:  objID,
 				ObjectKey: "test-key",
+				Status:    postgres.MultipartInitiated, // Needs to be Initiated
 			}
 
 			mockMPRepo.On("GetByUploadID", ctx, tenantID, uploadID).Return(mpu, nil)
@@ -248,8 +264,8 @@ var _ = Describe("ObjectsService", func() {
 			mockBreaker.On("Get", "s3.complete_multipart").Return(brk)
 
 			mockS3.On("CompleteMultipartUpload", ctx, "test-key", uploadID, mock.Anything).Return(nil)
-			mockMPRepo.On("MarkCompleted", ctx, tenantID, uploadID).Return(nil)
-			mockRepo.On("MarkActive", ctx, tenantID, objID).Return(nil)
+			// Updated to use transactional CompleteUpload
+			mockMPRepo.On("CompleteUpload", ctx, tenantID, uploadID, objID).Return(nil)
 
 			resID, err := svc.CompleteMultipart(ctx, tenantID, uploadID, parts)
 

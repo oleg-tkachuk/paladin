@@ -67,6 +67,26 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse policy.max_object_size (%s): %w", cfg.Policy.MaxObjectSizeRaw, err)
 	}
 
+	if n, err := utils.ParseSizeString(cfg.Policy.MaxMultipartSizeRaw); err == nil {
+		cfg.Policy.MaxMultipartSizeBytes = n
+	} else {
+		// optional: default if failure? No, schema validation guarantees format, but we should handle it.
+		// Actually, if CUE validates the regex, the format is correct.
+		return Config{}, fmt.Errorf("failed to parse policy.max_multipart_size (%s): %w", cfg.Policy.MaxMultipartSizeRaw, err)
+	}
+
+	if n, err := utils.ParseSizeString(cfg.Policy.MinPartSizeRaw); err == nil {
+		cfg.Policy.MinPartSizeBytes = n
+	} else {
+		return Config{}, fmt.Errorf("failed to parse policy.min_part_size (%s): %w", cfg.Policy.MinPartSizeRaw, err)
+	}
+
+	if n, err := utils.ParseSizeString(cfg.Policy.MaxPartSizeRaw); err == nil {
+		cfg.Policy.MaxPartSizeBytes = n
+	} else {
+		return Config{}, fmt.Errorf("failed to parse policy.max_part_size (%s): %w", cfg.Policy.MaxPartSizeRaw, err)
+	}
+
 	log.Info("Config loaded", zap.String("path", path))
 
 	return cfg, nil

@@ -14,11 +14,13 @@ import (
 	"paladin/internal/breaker"
 	"paladin/internal/config"
 	"paladin/internal/logger"
+	"paladin/internal/middleware"
 	"paladin/internal/observability"
 	"paladin/internal/service"
 	"paladin/internal/storage/s3"
 	"paladin/internal/store/postgres"
 	"paladin/internal/utils"
+	"paladin/internal/worker"
 
 	"github.com/cenkalti/backoff/v4"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -41,6 +43,10 @@ type App struct {
 	db           *postgres.DB
 	otelShutdown observability.ShutdownFunc
 	started      atomic.Bool
+
+	reaper       *worker.Reaper
+	reaperCtx    context.Context
+	reaperCancel context.CancelFunc
 }
 
 func New(version, commit, buildTime, configPath string) (*App, error) {
@@ -181,7 +187,15 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		otelShutdown: otelShutdown,
 	}
 
-	httpSrv := httpapi.NewServer(cfg.Server.Mode, log, svc, version, commit, buildTime, cfg.Server.LogProbes, hs, &app.started)
+	// Import middleware for gRPC interceptors
+	// Note: We need to import middleware package.
+	// Since we can't add imports easily without knowing current imports block position,
+	// we will assume we added the import or add it in a separate step if needed.
+	// But ReplaceFileContent doesn't support adding imports easily unless we replace the whole imports block.
+	// Wait, I can just use paladin/internal/middleware if it's already imported?
+	// It is NOT imported in app.go yet.
+
+	httpSrv := httpapi.NewServer(&cfg, log, svc, version, commit, buildTime, hs, &app.started)
 
 	// HTTP server
 	app.httpSrv = &http.Server{
@@ -194,11 +208,29 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	}
 
 	// gRPC server
+	// Setup interceptor chain
+	// We need 'paladin/internal/middleware' imported.
+	// I will add the import in a separate tool call to be safe, or just use full path if I could (but Go doesn't allow that).
+	// I'll assume I'll add the import first.
+
+	// For now, let's fix the httpSrv call and add the interceptor logic, assuming imports will be fixed.
+	interceptors := middleware.SetupGRPCInterceptors(&cfg, log)
+
 	app.grpcSrv = grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(interceptors...),
 	)
 	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(log, svc))
 	reflection.Register(app.grpcSrv)
+
+	// Reaper
+	rpr := worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, log)
+	// Context for reaper
+	rCtx, rCancel := context.WithCancel(context.Background())
+
+	app.reaper = rpr
+	app.reaperCtx = rCtx
+	app.reaperCancel = rCancel
 
 	return app, nil
 }
@@ -223,6 +255,36 @@ func (a *App) Run() error {
 	go func() {
 		errCh <- a.httpSrv.ListenAndServe()
 	}()
+
+	// Start Reaper
+	if a.reaper != nil {
+		go a.reaper.Start(a.reaperCtx)
+	}
+	// Verify context is available
+	// We use the context created in New
+	// Actually we just start it here
+	// But we need the context created in New? No, we stored cancel logic.
+	// But we need to pass the context to Start.
+	// Allow me to refactor: New creates context, Run starts it?
+	// Or Run creates context?
+	// App struct has reaperCancel. But not the context itself?
+	// I should store `reaperCtx` in App too? Or just recreate context in Run?
+	// No, shutdown calls cancel.
+	// I ignored storing the context in steps above?
+	// Let's assume I need to update App struct again?
+	// Or just start it in New? But New returns App, doesn't start things usually.
+
+	// Let's modify New to NOT start, just setup.
+	// In Run, we accept `ctx`? No, Run() error.
+
+	// I will just use `a.reaperCancel` in Shutdown.
+	// I need the context to pass to Start.
+	// I'll add `reaperCtx` to App struct.
+
+	// Correction: I should add reaperCtx to App struct.
+	// I'll do it in next step.
+
+	// For now let's just use the stored fields in Shutdown.
 
 	a.started.Store(true)
 
@@ -249,6 +311,10 @@ func (a *App) Shutdown() {
 
 	if a.otelShutdown != nil {
 		_ = a.otelShutdown(ctx)
+	}
+
+	if a.reaperCancel != nil {
+		a.reaperCancel()
 	}
 
 	_ = a.Logger.Sync()

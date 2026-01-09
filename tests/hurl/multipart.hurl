@@ -1,9 +1,10 @@
 # Initiate Multipart
 POST {{host}}/v1/multipart
 Host: paladin.local
+X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
-  "size_bytes": 104857600,
+  "size_bytes": 52428800,
   "labels": {
     "type": "multipart-test"
   },
@@ -19,18 +20,30 @@ jsonpath "$.part_size" exists
 # Sign Part 1
 POST {{host}}/v1/multipart/{{upload_id}}/parts/1/sign
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.upload_url" exists
+[Captures]
+part_url: jsonpath "$.upload_url"
+
+# Upload Part 1
+PUT {{part_url}}
+Content-Type: image/png
+base64, c21hbGwtdGVzdC1wYXlsb2Fk;
+HTTP 200
+[Captures]
+etag_1: header "ETag" regex "\"([^\"]+)\""
 
 # Complete Multipart
 POST {{host}}/v1/multipart/{{upload_id}}/complete
 Host: paladin.local
+X-Tenant-ID: test-tenant
 {
   "parts": [
     {
       "part_number": 1,
-      "etag": "dummy-etag"
+      "etag": "{{etag_1}}"
     }
   ]
 }
@@ -41,6 +54,7 @@ jsonpath "$.status" == "active"
 # Verify Metadata
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -50,6 +64,7 @@ jsonpath "$.external_ref" == "mp-ref-001"
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "deleted"
