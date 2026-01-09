@@ -80,16 +80,16 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 
 	v1 := r.Group("/v1")
 	{
-		v1.POST("/objects", createObjectHandler(svc))
-		v1.GET("/objects/:id", getObjectHandler(svc))
-		v1.GET("/objects/:id/meta", getObjectMetaHandler(svc))
-		v1.POST("/objects/:id/complete", completeObjectHandler(svc))
-		v1.DELETE("/objects/:id", deleteObjectHandler(svc))
+		v1.POST("/objects", createObjectHandler(log, svc))
+		v1.GET("/objects/:id", getObjectHandler(log, svc))
+		v1.GET("/objects/:id/meta", getObjectMetaHandler(log, svc))
+		v1.POST("/objects/:id/complete", completeObjectHandler(log, svc))
+		v1.DELETE("/objects/:id", deleteObjectHandler(log, svc))
 
-		v1.POST("/multipart", initiateMultipartHandler(svc))
-		v1.POST("/multipart/:upload_id/parts/:part_number/sign", signPartHandler(svc))
-		v1.POST("/multipart/:upload_id/complete", completeMultipartHandler(svc))
-		v1.POST("/multipart/:upload_id/abort", abortMultipartHandler(svc))
+		v1.POST("/multipart", initiateMultipartHandler(log, svc))
+		v1.POST("/multipart/:upload_id/parts/:part_number/sign", signPartHandler(log, svc))
+		v1.POST("/multipart/:upload_id/complete", completeMultipartHandler(log, svc))
+		v1.POST("/multipart/:upload_id/abort", abortMultipartHandler(log, svc))
 	}
 
 	return &Server{engine: r}

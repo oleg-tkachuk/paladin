@@ -60,7 +60,9 @@ var rootCmd = &cobra.Command{
 
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		<-quit
+		sig := <-quit
+
+		bootstrap.Info("Shutdown signal received", zap.String("signal", sig.String()))
 
 		a.Shutdown()
 	},

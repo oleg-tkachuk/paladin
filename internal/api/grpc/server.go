@@ -35,6 +35,7 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 
 	id, key, p, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, nil, req.Labels, externalRef)
 	if err != nil {
+		s.log.Warn("CreateObject failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -56,11 +57,13 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 
 	id, err := uuid.Parse(req.ObjectId)
 	if err != nil {
+		s.log.Warn("GetObject invalid ID", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
 	rec, p, err := s.svc.Get(ctx, tenant, id)
 	if err != nil {
+		s.log.Warn("GetObject failed", zap.Error(err))
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
@@ -91,11 +94,13 @@ func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*Get
 
 	id, err := uuid.Parse(req.ObjectId)
 	if err != nil {
+		s.log.Warn("GetObjectMeta invalid ID", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
 	rec, err := s.svc.GetMeta(ctx, tenant, id)
 	if err != nil {
+		s.log.Warn("GetObjectMeta failed", zap.Error(err))
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
@@ -130,10 +135,12 @@ func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest)
 
 	id, err := uuid.Parse(req.ObjectId)
 	if err != nil {
+		s.log.Warn("CompleteObject invalid ID", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
 	if err := s.svc.MarkComplete(ctx, tenant, id); err != nil {
+		s.log.Error("CompleteObject failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -153,6 +160,7 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 
 	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef)
 	if err != nil {
+		s.log.Warn("InitiateMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -173,6 +181,7 @@ func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartR
 
 	p, err := s.svc.SignPart(ctx, tenant, req.UploadId, req.PartNumber)
 	if err != nil {
+		s.log.Warn("SignPart failed", zap.Error(err))
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
@@ -196,6 +205,7 @@ func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRe
 
 	objID, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)
 	if err != nil {
+		s.log.Warn("CompleteMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -209,6 +219,7 @@ func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest)
 	}
 
 	if err := s.svc.AbortMultipart(ctx, tenant, req.UploadId); err != nil {
+		s.log.Warn("AbortMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -223,10 +234,12 @@ func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*D
 
 	id, err := uuid.Parse(req.ObjectId)
 	if err != nil {
+		s.log.Warn("DeleteObject invalid ID", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
 	if err := s.svc.Delete(ctx, tenant, id); err != nil {
+		s.log.Error("DeleteObject failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 

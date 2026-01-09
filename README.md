@@ -28,17 +28,22 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 ├── internal/
 │   ├── api/            # HTTP and gRPC transport layers
 │   ├── app/            # Application wire-up logic
+│   ├── breaker/        # Circuit breaker implementations
 │   ├── config/         # CUE-powered configuration parsing
+│   ├── fault/          # Fault injection for testing
 │   ├── logger/         # Structured logger initialization
+│   ├── middleware/     # HTTP/gRPC middleware
+│   ├── observability/  # OpenTelemetry instrumentation (traces/metrics)
 │   ├── service/        # Core business logic (presigning, state management)
 │   ├── storage/        # S3 client and storage abstractions
-│   └── store/          # PostgreSQL repository implementations
+│   ├── store/          # PostgreSQL repository implementations
+│   └── utils/          # Shared utilities
 └── migrations/         # SQL migration files
 ```
 
 ## Database Schema
 
-The service uses PostgreSQL to track object metadata and multipart upload state. The schema is defined in [`migrations/001_init.sql`](migrations/001_init.sql).
+The service uses PostgreSQL to track object metadata and multipart upload state. The schema is defined in `migrations/`.
 
 ### Tables
 
@@ -61,11 +66,15 @@ Key fields:
 - `checksum_sha256` - Optional integrity checksum
 - `status` - Lifecycle state
 - `expires_at` - Optional expiration timestamp
+- `labels` (JSONB) - Custom key-value tags
+- `external_ref` (Text) - Optional external reference ID (unique per tenant)
 
 Indexes:
 
 - `idx_objects_tenant_created_at` - Query objects by tenant and creation time
 - `uq_objects_tenant_key` - Enforce unique object keys per tenant
+- `idx_objects_labels` - GIN index for label filtering
+- `uq_objects_tenant_external_ref` - Enforce unique external ref per tenant
 
 #### `multipart_uploads`
 
@@ -286,6 +295,7 @@ For detailed API documentation, see [API.md](API.md).
 
 - `Paladin/CreateObject`
 - `Paladin/GetObject`
+- `Paladin/GetObjectMeta`
 - `Paladin/CompleteObject`
 - `Paladin/DeleteObject`
 - `Paladin/InitiateMultipart`
