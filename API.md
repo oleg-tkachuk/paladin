@@ -8,6 +8,15 @@ This document provides detailed information about the REST and gRPC APIs exposed
 
 The REST API is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
 
+### Authentication & Multi-Tenancy
+
+The service enforces tenant isolation. Tenant identity is derived from the authentication context.
+
+- **Production**: Typically derived from JWT claims (Bearer token).
+- **Trusted Gateway**: If configured (`security.trust_tenant_id_from_request: true`), the service respects the `X-Tenant-ID` header.
+
+**Strict Enforcement**: Requests attempting to access resources belonging to a different tenant than the one in the auth context will be rejected with `403 Forbidden`.
+
 ### Common Error Response
 
 All API endpoints may return the following error structure in case of 4xx or 5xx status codes:
@@ -18,6 +27,19 @@ All API endpoints may return the following error structure in case of 4xx or 5xx
   "details": "string"  // Human-readable error message
 }
 ```
+
+**Common Error Codes:**
+
+| Code | HTTP Status | Description |
+| :--- | :--- | :--- |
+| `bad_request` | 400 | Malformed input |
+| `validation_failed` | 400 | Logic validation failed |
+| `unauthorized` | 401 | Missing/Invalid credentials |
+| `forbidden` | 403 | Valid credentials, incomplete rights |
+| `not_found` | 404 | Resource does not exist |
+| `conflict` | 409 | Conflict with current state |
+| `too_large` | 413 | Payload or object size exceeded |
+| `internal` | 500 | Unhandled exception/bug |
 
 ---
 

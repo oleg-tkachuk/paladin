@@ -29,40 +29,54 @@ type Client struct {
 func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	staticCreds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
 
-	resolved, err := url.Parse(cfg.Endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("invalid s3 endpoint: %w", err)
-	}
-
-	// AWS SDK requires an endpoint resolver for non-AWS endpoints
-	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		if strings.EqualFold(service, s3.ServiceID) {
-			return aws.Endpoint{
-				URL:               resolved.String(),
-				HostnameImmutable: true,
-				SigningRegion:     cfg.Region,
-			}, nil
+	createClient := func(endpoint string) (*s3.Client, error) {
+		resolved, err := url.Parse(endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("invalid s3 endpoint: %w", err)
 		}
 
-		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-	})
+		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			if strings.EqualFold(service, s3.ServiceID) {
+				return aws.Endpoint{
+					URL:               resolved.String(),
+					HostnameImmutable: true,
+					SigningRegion:     cfg.Region,
+				}, nil
+			}
+			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+		})
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithRegion(cfg.Region),
-		awsconfig.WithCredentialsProvider(staticCreds),
-		awsconfig.WithEndpointResolverWithOptions(customResolver),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("aws config load: %w", err)
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+			awsconfig.WithRegion(cfg.Region),
+			awsconfig.WithCredentialsProvider(staticCreds),
+			awsconfig.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("aws config load: %w", err)
+		}
+
+		return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.UsePathStyle = cfg.ForcePathStyle
+		}), nil
 	}
 
-	c := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.UsePathStyle = cfg.ForcePathStyle
-	})
+	c, err := createClient(cfg.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("create internal s3 client: %w", err)
+	}
 
-	presigner := s3.NewPresignClient(c)
+	presignClient := c
+	if cfg.PublicEndpoint != "" {
+		p, err := createClient(cfg.PublicEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("create public s3 client: %w", err)
+		}
+		presignClient = p
+	}
 
-	log.Info("S3 client initialized", zap.String("bucket", cfg.Bucket), zap.String("endpoint", cfg.Endpoint))
+	presigner := s3.NewPresignClient(presignClient)
+
+	log.Info("S3 client initialized", zap.String("bucket", cfg.Bucket), zap.String("endpoint", cfg.Endpoint), zap.String("public_endpoint", cfg.PublicEndpoint))
 
 	return &Client{
 		Bucket:     cfg.Bucket,

@@ -4,6 +4,7 @@
 # Create Single Object (Minimal)
 POST {{host}}/v1/objects
 Host: paladin.local
+X-Tenant-ID: test-tenant
 {
   "content_type": "image/jpeg",
   "size_bytes": 13
@@ -19,6 +20,7 @@ jsonpath "$.method" == "PUT"
 # Get Object Metadata (Standard)
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{object_id}}"
@@ -30,6 +32,7 @@ jsonpath "$.external_ref" not exists
 # Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -37,6 +40,7 @@ jsonpath "$.status" == "active"
 # Verify Final State
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -44,6 +48,7 @@ jsonpath "$.status" == "active"
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "deleted"
@@ -55,6 +60,7 @@ jsonpath "$.status" == "deleted"
 # Create Object with Metadata
 POST {{host}}/v1/objects
 Host: paladin.local
+X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 1024,
@@ -73,6 +79,7 @@ jsonpath "$.object_key" exists
 # Get Object (Standard) - Check Metadata Preserved
 GET {{host}}/v1/objects/{{meta_object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{meta_object_id}}"
@@ -84,6 +91,7 @@ jsonpath "$.download_url" exists
 # Get Object via Meta Endpoint (New) - Check No Download URL
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{meta_object_id}}"
@@ -95,6 +103,7 @@ jsonpath "$.status" == "pending"
 # Mark Complete
 POST {{host}}/v1/objects/{{meta_object_id}}/complete
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -102,6 +111,7 @@ jsonpath "$.status" == "active"
 # Verify Final Meta
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -109,6 +119,7 @@ jsonpath "$.status" == "active"
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{meta_object_id}}
 Host: paladin.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "deleted"

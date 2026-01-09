@@ -136,3 +136,70 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 
 	return nil
 }
+
+func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Set local tenant_id for RLS if configured
+	if _, err := tx.Exec(ctx, fmt.Sprintf("SELECT set_config('app.tenant_id', '%s', true)", tenantID)); err != nil {
+		return fmt.Errorf("set tenant_id: %w", err)
+	}
+
+	// 1. Mark multipart completed
+	tag, err := tx.Exec(ctx, `
+        UPDATE multipart_uploads SET status='completed', updated_at=now()
+        WHERE tenant_id=$1 AND upload_id=$2 AND status='initiated'
+    `, tenantID, uploadID)
+	if err != nil {
+		return fmt.Errorf("update multipart: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("multipart upload not found or not initiated")
+	}
+
+	// 2. Mark object active
+	tag, err = tx.Exec(ctx, `
+        UPDATE objects SET status='active', updated_at=now()
+        WHERE id=$1 AND tenant_id=$2
+    `, objectID, tenantID)
+	if err != nil {
+		return fmt.Errorf("update object: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("object not found")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]MultipartRecord, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+        SELECT id, tenant_id, object_id, upload_id, bucket, object_key, content_type, part_size_bytes, status, created_at, updated_at, expires_at
+        FROM multipart_uploads
+        WHERE status='initiated' AND expires_at < NOW()
+        LIMIT $1
+    `, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query expired multipart: %w", err)
+	}
+	defer rows.Close()
+
+	var out []MultipartRecord
+	for rows.Next() {
+		var rec MultipartRecord
+		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.ObjectID, &rec.UploadID, &rec.Bucket, &rec.ObjectKey, &rec.ContentType, &rec.PartSize, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("scan multipart: %w", err)
+		}
+		out = append(out, rec)
+	}
+
+	return out, rows.Err()
+}

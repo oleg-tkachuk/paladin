@@ -6,7 +6,8 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 
 - **Metadata Management**: Atomically tracks object metadata and multipart upload states in PostgreSQL.
 - **Secure Access**: Generates time-limited presigned URLs for single-part and multipart uploads/downloads.
-- **Lifecycle Management**: Soft-delete objects with status tracking (pending, active, deleted).
+- **Multi-Tenancy**: Built-in tenant isolation with Row-Level Security (RLS) support.
+- **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads via background Reaper.
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
 - **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
 - **Advanced Logging**: Structured JSON/Console logging with support for all Zap levels and dynamic sampling.
@@ -208,6 +209,30 @@ policy:
 ```
 
 Objects exceeding `max_object_size` or with disallowed content types will be rejected.
+
+### Security
+
+Enforces tenant isolation and authentication policies:
+
+```yaml
+security:
+  trust_tenant_id_from_request: false # If true, trust X-Tenant-ID header (e.g. from gateway)
+  reject_tenant_mismatch: true        # Reject if path param tenant != auth context tenant
+  enable_rls: false                   # Enable Row Level Security in DB (requires migration 003)
+  log_sensitive: false                # Mask sensitive fields in logs
+```
+
+### Housekeeping (Reaper)
+
+Background worker to clean up expired pending objects and orphaned multipart uploads:
+
+```yaml
+housekeeping:
+  enable_reaper: true
+  pending_ttl: "24h"    # Time until pending objects are hard deleted
+  multipart_ttl: "72h"  # Time until incomplete multipart uploads are aborted
+  gc_interval: "1h"     # Cleanup job frequency
+```
 
 ### OpenTelemetry (Optional)
 

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"paladin/internal/config"
 	"paladin/internal/middleware"
 	"paladin/internal/service"
 
@@ -16,12 +17,12 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version, commit, buildTime string, logProbes bool, hs *service.HealthService, started *atomic.Bool) *Server {
-	gin.SetMode(mode)
+func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
+	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(middleware.RequestID(log))
-	r.Use(middleware.RequestLogger(log, logProbes))
+
+	// Use canonical stack
+	middleware.SetupHTTPStack(r, cfg, log)
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -35,7 +36,7 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 	})
 
 	r.GET("/health/livez", func(c *gin.Context) {
-		if logProbes {
+		if cfg.Server.LogProbes {
 			log.Debug("Liveness check called")
 		}
 		// If we are here, the process is running and responsive.
@@ -44,7 +45,7 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 	})
 
 	r.GET("/health/startupz", func(c *gin.Context) {
-		if logProbes {
+		if cfg.Server.LogProbes {
 			log.Debug("Startup check called")
 		}
 		if !started.Load() {
@@ -58,7 +59,7 @@ func NewServer(mode string, log *zap.Logger, svc service.ObjectsService, version
 	})
 
 	r.GET("/health/readyz", func(c *gin.Context) {
-		if logProbes {
+		if cfg.Server.LogProbes {
 			log.Debug("Readiness check called")
 		}
 
