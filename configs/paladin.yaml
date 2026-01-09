@@ -42,6 +42,7 @@ policy:
     - "image/jpeg"
     - "image/png"
     - "application/pdf"
+    - "text/plain"
   labels_max_bytes: 4096
   labels_max_keys: 10
   external_ref_max_len: 256
