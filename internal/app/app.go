@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -130,6 +131,19 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		cfg.S3.PartSizeRaw = v
 		if n, err := utils.ParseSizeString(v); err == nil {
 			cfg.S3.PartSizeBytes = n
+		}
+	}
+
+	if v := utils.GetEnvOrDefault("POLICY_ALLOWED_CONTENT_TYPES", ""); v != "" {
+		parts := strings.Split(v, ",")
+		var cleaned []string
+		for _, p := range parts {
+			if t := strings.TrimSpace(p); t != "" {
+				cleaned = append(cleaned, t)
+			}
+		}
+		if len(cleaned) > 0 {
+			cfg.Policy.AllowedContentTypes = cleaned
 		}
 	}
 
