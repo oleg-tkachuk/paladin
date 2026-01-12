@@ -3,7 +3,7 @@
 
 # 1. Create Object Entry
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -23,7 +23,7 @@ HTTP 200
 
 # 3. Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -31,7 +31,7 @@ jsonpath "$.status" == "active"
 
 # 4. Retrieve (Get Download URL)
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -48,7 +48,7 @@ bytes == file,fixtures/hello.txt;
 
 # 6. List This File (Get Metadata)
 GET {{host}}/v1/objects/{{object_id}}/meta
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -59,7 +59,7 @@ jsonpath "$.size_bytes" == 96
 
 # 7. Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
