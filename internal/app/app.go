@@ -113,6 +113,9 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
 		cfg.S3.Endpoint = v
 	}
+	if v := utils.GetEnvOrDefault("S3_PUBLIC_ENDPOINT", ""); v != "" {
+		cfg.S3.PublicEndpoint = v
+	}
 	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
 		cfg.S3.AccessKey = v
 	}
