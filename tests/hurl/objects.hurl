@@ -3,7 +3,7 @@
 
 # Create Single Object (Minimal)
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/jpeg",
@@ -16,10 +16,14 @@ upload_url: jsonpath "$.upload_url"
 [Asserts]
 jsonpath "$.object_key" exists
 jsonpath "$.method" == "PUT"
+# Verify SSE headers (default config uses AES256)
+jsonpath "$.headers['x-amz-server-side-encryption']" == "AES256"
+# Verify TTL (default 15m = 900s)
+jsonpath "$.upload_url" includes "X-Amz-Expires=900"
 
 # Get Object Metadata (Standard)
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -31,7 +35,7 @@ jsonpath "$.external_ref" not exists
 
 # Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -39,7 +43,7 @@ jsonpath "$.status" == "active"
 
 # Verify Final State
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -47,7 +51,7 @@ jsonpath "$.status" == "active"
 
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -59,7 +63,7 @@ jsonpath "$.status" == "deleted"
 
 # Create Object with Metadata
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -78,7 +82,7 @@ jsonpath "$.object_key" exists
 
 # Get Object (Standard) - Check Metadata Preserved
 GET {{host}}/v1/objects/{{meta_object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -90,7 +94,7 @@ jsonpath "$.download_url" exists
 
 # Get Object via Meta Endpoint (New) - Check No Download URL
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -102,7 +106,7 @@ jsonpath "$.status" == "pending"
 
 # Mark Complete
 POST {{host}}/v1/objects/{{meta_object_id}}/complete
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -110,7 +114,7 @@ jsonpath "$.status" == "active"
 
 # Verify Final Meta
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -118,7 +122,7 @@ jsonpath "$.status" == "active"
 
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{meta_object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]

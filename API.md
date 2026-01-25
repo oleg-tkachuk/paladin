@@ -17,6 +17,15 @@ The service enforces tenant isolation. Tenant identity is derived from the authe
 
 **Strict Enforcement**: Requests attempting to access resources belonging to a different tenant than the one in the auth context will be rejected with `403 Forbidden`.
 
+### Rate Limiting
+
+The API implements a token-bucket rate limiter per tenant.
+
+- **Limit**: 10 requests per second (default).
+- **Burst**: 20 requests (default).
+
+Exceeding the limit results in `429 Too Many Requests`.
+
 ### Common Error Response
 
 All API endpoints may return the following error structure in case of 4xx or 5xx status codes:
@@ -39,6 +48,7 @@ All API endpoints may return the following error structure in case of 4xx or 5xx
 | `not_found` | 404 | Resource does not exist |
 | `conflict` | 409 | Conflict with current state |
 | `too_large` | 413 | Payload or object size exceeded |
+| `too_many_requests` | 429 | Rate limit exceeded |
 | `internal` | 500 | Unhandled exception/bug |
 
 ---
@@ -81,6 +91,8 @@ curl -X POST http://localhost:8080/v1/objects \
   -H "Content-Type: application/json" \
   -d '{"content_type": "image/png", "size_bytes": 1024, "labels": {"type": "invoice"}}'
 ```
+
+> **Note**: If Server-Side Encryption (SSE) is enabled, the `headers` field in the response will contain the required encryption headers (e.g., `x-amz-server-side-encryption`). These headers **must** be included in your `PUT` request to S3, or the upload will fail.
 
 #### Get Object
 

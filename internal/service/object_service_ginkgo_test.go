@@ -104,18 +104,18 @@ func (m *MockS3Client) PresignTTLDuration() time.Duration {
 	return args.Get(0).(time.Duration)
 }
 
-func (m *MockS3Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64) (s3.Presigned, error) {
-	args := m.Called(ctx, key, contentType, sizeBytes)
+func (m *MockS3Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (s3.Presigned, error) {
+	args := m.Called(ctx, key, contentType, sizeBytes, ttl)
 	return args.Get(0).(s3.Presigned), args.Error(1)
 }
 
-func (m *MockS3Client) PresignGetObject(ctx context.Context, key string) (s3.Presigned, error) {
-	args := m.Called(ctx, key)
+func (m *MockS3Client) PresignGetObject(ctx context.Context, key string, ttl time.Duration) (s3.Presigned, error) {
+	args := m.Called(ctx, key, ttl)
 	return args.Get(0).(s3.Presigned), args.Error(1)
 }
 
-func (m *MockS3Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32) (s3.Presigned, error) {
-	args := m.Called(ctx, key, uploadID, partNumber)
+func (m *MockS3Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32, ttl time.Duration) (s3.Presigned, error) {
+	args := m.Called(ctx, key, uploadID, partNumber, ttl)
 	return args.Get(0).(s3.Presigned), args.Error(1)
 }
 
@@ -178,8 +178,9 @@ var _ = Describe("ObjectsService", func() {
 			sizeBytes := int64(100)
 
 			mockS3.On("BucketName").Return("test-bucket")
+			mockS3.On("PresignTTLDuration").Return(15 * time.Minute)
 			mockRepo.On("Create", ctx, mock.Anything).Return(nil)
-			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes).Return(s3.Presigned{URL: "http://example.com"}, nil)
+			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes, mock.Anything).Return(s3.Presigned{URL: "http://example.com"}, nil)
 
 			id, key, p, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, nil)
 
@@ -236,7 +237,8 @@ var _ = Describe("ObjectsService", func() {
 				UploadID:  uploadID,
 				ObjectKey: "test-key",
 			}, nil)
-			mockS3.On("PresignUploadPart", ctx, "test-key", uploadID, partNumber).Return(s3.Presigned{URL: "http://example.com/part1"}, nil)
+			mockS3.On("PresignTTLDuration").Return(15 * time.Minute)
+			mockS3.On("PresignUploadPart", ctx, "test-key", uploadID, partNumber, mock.Anything).Return(s3.Presigned{URL: "http://example.com/part1"}, nil)
 
 			p, err := svc.SignPart(ctx, tenantID, uploadID, partNumber)
 

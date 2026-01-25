@@ -1,6 +1,6 @@
 # Initiate Multipart
 POST {{host}}/v1/multipart
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -19,11 +19,13 @@ jsonpath "$.part_size" exists
 
 # Sign Part 1
 POST {{host}}/v1/multipart/{{upload_id}}/parts/1/sign
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.upload_url" exists
+# Verify TTL (default 15m = 900s)
+jsonpath "$.upload_url" includes "X-Amz-Expires=900"
 [Captures]
 part_url: jsonpath "$.upload_url"
 
@@ -37,7 +39,7 @@ etag_1: header "ETag" regex "\"([^\"]+)\""
 
 # Complete Multipart
 POST {{host}}/v1/multipart/{{upload_id}}/complete
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "parts": [
@@ -53,7 +55,7 @@ jsonpath "$.status" == "active"
 
 # Verify Metadata
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -63,7 +65,7 @@ jsonpath "$.external_ref" == "mp-ref-001"
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]

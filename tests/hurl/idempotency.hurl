@@ -1,6 +1,6 @@
 # 1. Create Initial Object with External Ref
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -15,7 +15,7 @@ jsonpath "$.object_id" exists
 
 # 2. Retry with SAME parameters (Should be Idempotent)
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -30,7 +30,7 @@ variable "id_1" == "{{id_2}}"
 
 # 3. Retry with DIFFERENT parameters (Should Fail)
 POST {{host}}/v1/objects
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -44,7 +44,7 @@ jsonpath "$.details" contains "conflict"
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{id_1}}
-Host: paladin.local
+Host: paladin.paladin.svc.cluster.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]

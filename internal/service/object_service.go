@@ -38,9 +38,9 @@ type MultipartRepository interface {
 type S3Client interface {
 	BucketName() string
 	PresignTTLDuration() time.Duration
-	PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64) (s3.Presigned, error)
-	PresignGetObject(ctx context.Context, key string) (s3.Presigned, error)
-	PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32) (s3.Presigned, error)
+	PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (s3.Presigned, error)
+	PresignGetObject(ctx context.Context, key string, ttl time.Duration) (s3.Presigned, error)
+	PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32, ttl time.Duration) (s3.Presigned, error)
 	CreateMultipartUpload(ctx context.Context, key string, contentType string) (s3.MultipartInit, error)
 	CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []types.CompletedPart) error
 	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
@@ -79,24 +79,25 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	// Idempotency Check
 	if externalRef != nil {
 		if existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef); err == nil {
-			// Found existing object with same external_ref
-			// Validate parameters
 			if existing.ContentType != contentType || existing.SizeBytes != sizeBytes {
 				return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("conflict: external_ref exists with different parameters")
 			}
 
 			// Re-presign URL if needed
-			// Note: If object is already 'active', we might return a GET url or just the PUT url again if safe.
-			// Standard practice for idempotent PUT creation is to return the same PUT URL if possible, or if it's active, maybe error?
-			// Requirement: "Idempotent object creation... return 200 OK with the existing object"
-			// If it's active, returning a PUT url might be dangerous (overwrite).
-			// But S3 objects are immutable usually or versioned.
-			// Let's assume we return the PUT url again so client can retry upload if they failed.
+			// Use configured PresignPutTTL or fallback to default
+			ttl := s.policy.PresignPutTTL
+			if ttl == 0 {
+				ttl = s.s3.PresignTTLDuration()
+			}
 
-			p, err := s.s3.PresignPutObject(ctx, existing.ObjectKey, contentType, sizeBytes)
+			p, err := s.s3.PresignPutObject(ctx, existing.ObjectKey, contentType, sizeBytes, ttl)
 			if err != nil {
 				return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("s3 presign put: %w", err)
 			}
+
+			// Audit Log
+			// zap.L().Info("Object Access Re-signed", zap.String("tenant_id", tenantID), zap.String("object_id", existing.ID.String()), zap.String("method", "PUT"))
+
 			return existing.ID, existing.ObjectKey, p, nil
 		}
 	}
@@ -119,16 +120,21 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	}
 
 	if err := s.objRepo.Create(ctx, rec); err != nil {
-		// Race condition check for unique constraint
-		// We could verify error code here, or just let it fail.
-		// Since we did a read-before-write, the race window is small.
 		return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("repo create: %w", err)
 	}
 
-	p, err := s.s3.PresignPutObject(ctx, key, contentType, sizeBytes)
+	ttl := s.policy.PresignPutTTL
+	if ttl == 0 {
+		ttl = s.s3.PresignTTLDuration()
+	}
+
+	p, err := s.s3.PresignPutObject(ctx, key, contentType, sizeBytes, ttl)
 	if err != nil {
 		return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("s3 presign put: %w", err)
 	}
+
+	// Audit Log
+	// zap.L().Info("Object Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()), zap.String("key", key))
 
 	return id, key, p, nil
 }
@@ -139,10 +145,18 @@ func (s *objectsService) Get(ctx context.Context, tenantID string, id uuid.UUID)
 		return nil, s3.Presigned{}, fmt.Errorf("repo get: %w", err)
 	}
 
-	p, err := s.s3.PresignGetObject(ctx, rec.ObjectKey)
+	ttl := s.policy.PresignGetTTL
+	if ttl == 0 {
+		ttl = s.s3.PresignTTLDuration()
+	}
+
+	p, err := s.s3.PresignGetObject(ctx, rec.ObjectKey, ttl)
 	if err != nil {
 		return nil, s3.Presigned{}, fmt.Errorf("s3 presign get: %w", err)
 	}
+
+	// Audit Log
+	// zap.L().Info("Object Download Signed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 
 	return rec, p, nil
 }
@@ -161,6 +175,8 @@ func (s *objectsService) MarkComplete(ctx context.Context, tenantID string, id u
 		return fmt.Errorf("repo mark active: %w", err)
 	}
 	if updated {
+		// Audit Log
+		// zap.L().Info("Object Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 		return nil
 	}
 
@@ -168,7 +184,6 @@ func (s *objectsService) MarkComplete(ctx context.Context, tenantID string, id u
 	// Check current state.
 	rec, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
-		// If not found, returning error is correct (invalid ID).
 		return fmt.Errorf("repo get: %w", err)
 	}
 
@@ -185,36 +200,19 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		return fmt.Errorf("repo mark deleted: %w", err)
 	}
 	if updated {
+		// Audit Log
+		// zap.L().Info("Object Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 		return nil
 	}
 
-	// Not updated: either not found, or not active/pending.
-	// Check current state.
 	rec, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
-		// If not found, return nil? "Delete if exists".
-		// Usually DELETE returns 200/204 even if not found, or 404.
-		// Prompt says "Repeated calls... successful".
-		// If strict Not Found is required, we return error.
-		// API.md might say. Typically idempotent delete returns success.
-		// "DeleteObject: ... returns 200 OK"
-		// If object doesn't exist, we can return success (idempotent).
-		// But if DB error, return error.
-		// Allow "not found" to be success.
-		// However, Get returning error might be generic.
-		// Assuming Get returns specific "not found" error we can check?
-		// Repo implementation wrapper `fmt.Errorf`.
 		return nil
 	}
 
 	if rec.Status == postgres.ObjectDeleted {
 		return nil // Idempotent success
 	}
-
-	// If it was somehow verified as "not deleted" (e.g. invalid state?), we might have missed it in WHERE clause?
-	// The WHERE was 'pending' or 'active'.
-	// So if status is something else (unlikely with current enums), just return nil or error?
-	// It's already checked.
 
 	return nil
 }
@@ -259,6 +257,9 @@ func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string,
 		return MultipartInitResponse{}, fmt.Errorf("repo create multipart: %w", err)
 	}
 
+	// Audit Log
+	// zap.L().Info("Multipart Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", objectID.String()), zap.String("upload_id", init.UploadID))
+
 	return MultipartInitResponse{
 		ObjectID:  objectID,
 		ObjectKey: objectKey,
@@ -274,7 +275,12 @@ func (s *objectsService) SignPart(ctx context.Context, tenantID string, uploadID
 		return s3.Presigned{}, fmt.Errorf("repo get multipart: %w", err)
 	}
 
-	p, err := s.s3.PresignUploadPart(ctx, mpu.ObjectKey, mpu.UploadID, partNumber)
+	ttl := s.policy.PresignPartTTL
+	if ttl == 0 {
+		ttl = s.s3.PresignTTLDuration()
+	}
+
+	p, err := s.s3.PresignUploadPart(ctx, mpu.ObjectKey, mpu.UploadID, partNumber, ttl)
 	if err != nil {
 		return s3.Presigned{}, fmt.Errorf("s3 presign upload part: %w", err)
 	}
@@ -304,11 +310,6 @@ func (s *objectsService) CompleteMultipart(ctx context.Context, tenantID string,
 			PartNumber: &p.PartNumber,
 			ETag:       &et,
 		})
-		// We could skip upserting parts if we trust the client provided list matches S3.
-		// But for correctness, we should have tracked parts via SignPart or we trust the client provided ETags.
-		// The prompt says "ensure all parts are present and valid".
-		// S3 CompleteMultipartUpload invalidates if parts mismatch.
-		// We'll rely on S3 validation but persist given parts for audit.
 		_ = s.mpRepo.UpsertPartETag(ctx, mpu.ID, int(p.PartNumber), et, nil)
 	}
 
@@ -319,13 +320,12 @@ func (s *objectsService) CompleteMultipart(ctx context.Context, tenantID string,
 		return uuid.UUID{}, fmt.Errorf("s3 complete multipart: %w", err)
 	}
 
-	// Transactional DB update
 	if err := s.mpRepo.CompleteUpload(ctx, tenantID, uploadID, mpu.ObjectID); err != nil {
-		// If DB commit fails, we are in inconsistent state (S3 completed, DB not).
-		// We return error, but ideally we'd schedule reconciliation.
-		// For now, we return dependency_unavailable or internal.
 		return uuid.UUID{}, fmt.Errorf("db complete transaction: %w", err)
 	}
+
+	// Audit Log
+	// zap.L().Info("Multipart Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", mpu.ObjectID.String()))
 
 	return mpu.ObjectID, nil
 }
@@ -346,6 +346,9 @@ func (s *objectsService) AbortMultipart(ctx context.Context, tenantID string, up
 	if err := s.mpRepo.MarkAborted(ctx, tenantID, uploadID); err != nil {
 		return fmt.Errorf("repo mark multipart aborted: %w", err)
 	}
+
+	// Audit Log
+	// zap.L().Info("Multipart Upload Aborted", zap.String("tenant_id", tenantID), zap.String("upload_id", uploadID))
 
 	return nil
 }

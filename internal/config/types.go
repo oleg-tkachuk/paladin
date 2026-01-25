@@ -10,6 +10,7 @@ type Config struct {
 	Policy       Policy       `yaml:"policy" json:"policy"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
+	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
 	OTel         OTel         `yaml:"otel" json:"otel"`
 
 	PodName string `yaml:"-"`
@@ -34,7 +35,11 @@ type Server struct {
 }
 
 type HTTPServer struct {
-	Addr string `yaml:"addr" json:"addr"`
+	Addr              string        `yaml:"addr" json:"addr"`
+	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout" json:"read_header_timeout"`
+	ReadTimeout       time.Duration `yaml:"read_timeout" json:"read_timeout"`
+	WriteTimeout      time.Duration `yaml:"write_timeout" json:"write_timeout"`
+	IdleTimeout       time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
 }
 
 type GRPCServer struct {
@@ -60,6 +65,8 @@ type S3 struct {
 	PresignTTL     time.Duration `yaml:"presign_ttl" json:"presign_ttl"`
 	PartSizeRaw    string        `yaml:"part_size" json:"part_size"`
 	PartSizeBytes  int64         `yaml:"-"`
+	SSEType        string        `yaml:"sse_type" json:"sse_type"`     // e.g. "AES256" or "aws:kms"
+	SSEKeyID       string        `yaml:"sse_key_id" json:"sse_key_id"` // Optional KMS Key ID
 }
 
 type Policy struct {
@@ -95,6 +102,11 @@ type Housekeeping struct {
 	MultipartTTL        time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
 	GCInterval          time.Duration `yaml:"gc_interval" json:"gc_interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
+}
+
+type RateLimit struct {
+	RequestsPerSecond float64 `yaml:"requests_per_second" json:"requests_per_second"`
+	Burst             int     `yaml:"burst" json:"burst"`
 }
 
 type OTel struct {

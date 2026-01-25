@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -112,6 +113,9 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
 		cfg.S3.Endpoint = v
 	}
+	if v := utils.GetEnvOrDefault("S3_PUBLIC_ENDPOINT", ""); v != "" {
+		cfg.S3.PublicEndpoint = v
+	}
 	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
 		cfg.S3.AccessKey = v
 	}
@@ -130,6 +134,19 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		cfg.S3.PartSizeRaw = v
 		if n, err := utils.ParseSizeString(v); err == nil {
 			cfg.S3.PartSizeBytes = n
+		}
+	}
+
+	if v := utils.GetEnvOrDefault("POLICY_ALLOWED_CONTENT_TYPES", ""); v != "" {
+		parts := strings.Split(v, ",")
+		var cleaned []string
+		for _, p := range parts {
+			if t := strings.TrimSpace(p); t != "" {
+				cleaned = append(cleaned, t)
+			}
+		}
+		if len(cleaned) > 0 {
+			cfg.Policy.AllowedContentTypes = cleaned
 		}
 	}
 
@@ -201,10 +218,10 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	app.httpSrv = &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
 		Handler:           httpSrv.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
 	}
 
 	// gRPC server

@@ -86,7 +86,7 @@ services:
       S3_PART_SIZE: 8MB
 
       POLICY_MAX_OBJECT_SIZE: 100MB
-      POLICY_ALLOWED_CONTENT_TYPES: image/jpeg,image/png,application/pdf
+      POLICY_ALLOWED_CONTENT_TYPES: image/jpeg,image/png,application/pdf,text/plain
 
       # OTel (optional)
       OTEL_ENABLED: "false"
