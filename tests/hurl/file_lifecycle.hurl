@@ -18,6 +18,7 @@ upload_url: jsonpath "$.upload_url"
 # 2. Upload File Content to Presigned URL
 PUT {{upload_url}}
 Content-Type: text/plain
+x-amz-server-side-encryption: AES256
 file,fixtures/hello.txt;
 HTTP 200
 

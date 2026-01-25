@@ -16,6 +16,10 @@ upload_url: jsonpath "$.upload_url"
 [Asserts]
 jsonpath "$.object_key" exists
 jsonpath "$.method" == "PUT"
+# Verify SSE headers (default config uses AES256)
+jsonpath "$.headers['x-amz-server-side-encryption']" == "AES256"
+# Verify TTL (default 15m = 900s)
+jsonpath "$.upload_url" includes "X-Amz-Expires=900"
 
 # Get Object Metadata (Standard)
 GET {{host}}/v1/objects/{{object_id}}

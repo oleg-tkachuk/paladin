@@ -218,10 +218,10 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	app.httpSrv = &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
 		Handler:           httpSrv.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       90 * time.Second,
+		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
 	}
 
 	// gRPC server

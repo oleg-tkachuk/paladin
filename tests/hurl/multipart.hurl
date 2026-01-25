@@ -24,6 +24,8 @@ X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.upload_url" exists
+# Verify TTL (default 15m = 900s)
+jsonpath "$.upload_url" includes "X-Amz-Expires=900"
 [Captures]
 part_url: jsonpath "$.upload_url"
 

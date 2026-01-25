@@ -20,6 +20,8 @@ import (
 type Client struct {
 	Bucket     string
 	PresignTTL time.Duration
+	SSEType    string
+	SSEKeyID   string
 
 	s3        *s3.Client
 	presigner *s3.PresignClient
@@ -81,6 +83,8 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	return &Client{
 		Bucket:     cfg.Bucket,
 		PresignTTL: cfg.PresignTTL,
+		SSEType:    cfg.SSEType,
+		SSEKeyID:   cfg.SSEKeyID,
 		s3:         c,
 		presigner:  presigner,
 		log:        log,
@@ -118,7 +122,7 @@ func (c *Client) Health(ctx context.Context) error {
 	return err
 }
 
-func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64) (Presigned, error) {
+func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (Presigned, error) {
 	in := &s3.PutObjectInput{
 		Bucket:      aws.String(c.Bucket),
 		Key:         aws.String(key),
@@ -126,7 +130,19 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 		// ContentLength is not supported by all gateways in presign; enforced on control plane.
 	}
 
-	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
+	if c.SSEType != "" {
+		in.ServerSideEncryption = types.ServerSideEncryption(c.SSEType)
+		if c.SSEKeyID != "" {
+			in.SSEKMSKeyId = aws.String(c.SSEKeyID)
+		}
+	}
+
+	expiry := c.PresignTTL
+	if ttl > 0 {
+		expiry = ttl
+	}
+
+	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
 		return Presigned{}, fmt.Errorf("presign put object: %w", err)
@@ -134,21 +150,34 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 
 	c.log.Debug("S3 presign PUT success", zap.String("key", key), zap.String("content_type", contentType))
 
+	headers := map[string]string{"Content-Type": contentType}
+	if c.SSEType != "" {
+		headers["x-amz-server-side-encryption"] = c.SSEType
+		if c.SSEKeyID != "" {
+			headers["x-amz-server-side-encryption-aws-kms-key-id"] = c.SSEKeyID
+		}
+	}
+
 	return Presigned{
 		URL:       out.URL,
 		Method:    "PUT",
-		Headers:   map[string]string{"Content-Type": contentType},
-		ExpiresAt: time.Now().Add(c.PresignTTL),
+		Headers:   headers,
+		ExpiresAt: time.Now().Add(expiry),
 	}, nil
 }
 
-func (c *Client) PresignGetObject(ctx context.Context, key string) (Presigned, error) {
+func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Duration) (Presigned, error) {
 	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),
 	}
 
-	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(c.PresignTTL))
+	expiry := c.PresignTTL
+	if ttl > 0 {
+		expiry = ttl
+	}
+
+	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
 		return Presigned{}, fmt.Errorf("presign get object: %w", err)
@@ -159,7 +188,7 @@ func (c *Client) PresignGetObject(ctx context.Context, key string) (Presigned, e
 	return Presigned{
 		URL:       out.URL,
 		Method:    "GET",
-		ExpiresAt: time.Now().Add(c.PresignTTL),
+		ExpiresAt: time.Now().Add(expiry),
 	}, nil
 }
 
@@ -171,11 +200,20 @@ type MultipartInit struct {
 }
 
 func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentType string) (MultipartInit, error) {
-	out, err := c.s3.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+	in := &s3.CreateMultipartUploadInput{
 		Bucket:      aws.String(c.Bucket),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
-	})
+	}
+
+	if c.SSEType != "" {
+		in.ServerSideEncryption = types.ServerSideEncryption(c.SSEType)
+		if c.SSEKeyID != "" {
+			in.SSEKMSKeyId = aws.String(c.SSEKeyID)
+		}
+	}
+
+	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
 		return MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
@@ -192,13 +230,18 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	}, nil
 }
 
-func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32) (Presigned, error) {
+func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32, ttl time.Duration) (Presigned, error) {
+	expiry := c.PresignTTL
+	if ttl > 0 {
+		expiry = ttl
+	}
+
 	out, err := c.presigner.PresignUploadPart(ctx, &s3.UploadPartInput{
 		Bucket:     aws.String(c.Bucket),
 		Key:        aws.String(key),
 		UploadId:   aws.String(uploadID),
 		PartNumber: aws.Int32(partNumber),
-	}, s3.WithPresignExpires(c.PresignTTL))
+	}, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return Presigned{}, fmt.Errorf("presign upload part: %w", err)
 	}
@@ -206,7 +249,7 @@ func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, pa
 	return Presigned{
 		URL:       out.URL,
 		Method:    "PUT",
-		ExpiresAt: time.Now().Add(c.PresignTTL),
+		ExpiresAt: time.Now().Add(expiry),
 	}, nil
 }
 

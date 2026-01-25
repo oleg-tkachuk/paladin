@@ -7,6 +7,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 - **Metadata Management**: Atomically tracks object metadata and multipart upload states in PostgreSQL.
 - **Secure Access**: Generates time-limited presigned URLs for single-part and multipart uploads/downloads.
 - **Multi-Tenancy**: Built-in tenant isolation with Row-Level Security (RLS) support.
+- **Rate Limiting**: Configurable per-tenant rate limits to prevent abuse.
 - **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads via background Reaper.
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
 - **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
@@ -190,6 +191,8 @@ s3:
   secret_key: dummy         # S3 secret key
   presign_ttl: 15m          # Presigned URL expiration time
   part_size: "8MB"          # Multipart upload part size
+  sse_type: "AES256"        # Server-side encryption type (AES256 or aws:kms)
+  # sse_key_id: "alias/key" # Optional KMS Key ID
 ```
 
 **Notes:**
@@ -252,6 +255,18 @@ otel:
 ```
 
 Set `enabled: true` to export traces to an OpenTelemetry collector.
+
+Set `enabled: true` to export traces to an OpenTelemetry collector.
+
+### Rate Limiting
+
+Controls API rate limits per tenant:
+
+```yaml
+rate_limit:
+  requests_per_second: 10   # Tokens added per second
+  burst: 20                 # Maximum burst size
+```
 
 ### Health Probes
 

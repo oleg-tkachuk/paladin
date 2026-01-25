@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"paladin/internal/config"
 )
@@ -11,6 +12,9 @@ import (
 type Policy struct {
 	MaxObjectSizeBytes  int64
 	AllowedContentTypes map[string]struct{}
+	PresignPutTTL       time.Duration
+	PresignGetTTL       time.Duration
+	PresignPartTTL      time.Duration
 }
 
 func NewPolicy(cfg config.Policy) Policy {
@@ -22,6 +26,9 @@ func NewPolicy(cfg config.Policy) Policy {
 	return Policy{
 		MaxObjectSizeBytes:  cfg.MaxObjectSizeBytes,
 		AllowedContentTypes: m,
+		PresignPutTTL:       cfg.PresignPutTTL,
+		PresignGetTTL:       cfg.PresignGetTTL,
+		PresignPartTTL:      cfg.PresignPartTTL,
 	}
 }
 
