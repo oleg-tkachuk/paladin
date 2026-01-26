@@ -40,11 +40,11 @@ func RequestLogger(log *zap.Logger, logProbes bool) gin.HandlerFunc {
 		tenant := utils.TenantIDFromContext(c.Request.Context(), "")
 
 		fields := []zap.Field{
-			zap.String("method", c.Request.Method),
-			zap.String("path", path),
-			zap.Int("status", status),
-			zap.Duration("latency", dur),
-			zap.String("ip", c.ClientIP()),
+			zap.String("http.request.method", c.Request.Method),
+			zap.String("url.path", path),
+			zap.Int("http.response.status_code", status),
+			zap.Duration("duration", dur),
+			zap.String("client.address", c.ClientIP()),
 		}
 		if rid != "" {
 			fields = append(fields, zap.String("request_id", rid))

@@ -10,14 +10,15 @@ import (
 
 func ContextLogger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rid := utils.RequestIDFromContext(c.Request.Context(), "")
+		// Get logger with potential current context enrichment
+		l := logger.FromContext(c.Request.Context())
 
-		l := log
+		rid := utils.RequestIDFromContext(c.Request.Context(), "")
 		if rid != "" {
 			l = l.With(zap.String("request_id", rid))
 		}
 
-		// Attach to context
+		// Update context with enriched logger
 		ctx := logger.WithContext(c.Request.Context(), l)
 		c.Request = c.Request.WithContext(ctx)
 

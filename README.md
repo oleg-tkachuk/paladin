@@ -11,7 +11,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 - **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads via background Reaper.
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
 - **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
-- **Advanced Logging**: Standardized structured JSON/Console logging with `zap.ReplaceGlobals` and context-aware traceability (automatic `request_id` correlation).
+- **Advanced Logging**: Standardized structured JSON/Console logging with `zap.ReplaceGlobals` and automatic OpenTelemetry context enrichment (`trace_id`, `span_id`, `request_id`). Follows OTel semantic conventions for field naming.
 
 ## Tech Stack
 
@@ -142,6 +142,17 @@ logger:
   development: false        # Enable development mode (DPanic causes panic)
   disable_caller: false     # Disable file/line number in logs
   disable_stacktrace: false # Disable stack traces on error logs
+```
+
+The service logs include fields for improved traceability and OTel compliance, such as:
+
+```json
+{
+  "error": "string",      // Short error code (e.g., "bad_request", "not_found")
+  "details": "string",    // Human-readable error message
+  "request_id": "string", // Unique ID for this specific request
+  "trace_id": "string"    // Distributed trace identifier (OTel compatible)
+}
 ```
 
 ### Server
