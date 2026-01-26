@@ -22,19 +22,6 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
-	// Use canonical stack
-	middleware.SetupHTTPStack(r, cfg, log)
-
-	// Rate Limiting
-	if cfg.RateLimit.RequestsPerSecond > 0 {
-		r.Use(middleware.RateLimitMiddleware(rate.Limit(cfg.RateLimit.RequestsPerSecond), cfg.RateLimit.Burst))
-	} else {
-		// Default fallback if config is missing or zero (safer to have default or just disabled?)
-		// Let's assume 10/20 as safe default if not configured, or trust config loader.
-		// Given we just added it to config, we should expect it.
-		r.Use(middleware.RateLimitMiddleware(10, 20))
-	}
-
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	r.GET("/version", func(c *gin.Context) {
@@ -89,6 +76,19 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 			"dependencies": status,
 		})
 	})
+
+	// Use canonical stack for API routes
+	middleware.SetupHTTPStack(r, cfg, log)
+
+	// Rate Limiting
+	if cfg.RateLimit.RequestsPerSecond > 0 {
+		r.Use(middleware.RateLimitMiddleware(rate.Limit(cfg.RateLimit.RequestsPerSecond), cfg.RateLimit.Burst))
+	} else {
+		// Default fallback if config is missing or zero (safer to have default or just disabled?)
+		// Let's assume 10/20 as safe default if not configured, or trust config loader.
+		// Given we just added it to config, we should expect it.
+		r.Use(middleware.RateLimitMiddleware(10, 20))
+	}
 
 	v1 := r.Group("/v1")
 	{
