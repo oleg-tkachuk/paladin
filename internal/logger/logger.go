@@ -8,6 +8,7 @@ import (
 
 	"paladin/internal/config"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -112,10 +113,21 @@ func WithContext(ctx context.Context, l *zap.Logger) context.Context {
 }
 
 // FromContext returns the logger attached to the context, or the global logger if none is found.
+// It also ensures the logger has the latest trace context.
 func FromContext(ctx context.Context) *zap.Logger {
-	if l, ok := ctx.Value(ctxKey{}).(*zap.Logger); ok {
-		return l
+	l := zap.L()
+	if ctxL, ok := ctx.Value(ctxKey{}).(*zap.Logger); ok {
+		l = ctxL
 	}
 
-	return zap.L()
+	// Always attempt to enrich with current trace context
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		sc := span.SpanContext()
+		l = l.With(
+			zap.String("trace_id", sc.TraceID().String()),
+			zap.String("span_id", sc.SpanID().String()),
+		)
+	}
+
+	return l
 }
