@@ -167,6 +167,10 @@ Database connection settings:
 ```yaml
 postgres:
   dsn: "postgres://user:pass@host:5432/dbname?sslmode=disable"
+  max_conns: 20             # Max connections in pool
+  min_conns: 2              # Min connections in pool
+  max_conn_lifetime: 30m    # Max connection lifetime
+  max_conn_idle_time: 5m    # Max connection idle time
 ```
 
 The DSN (Data Source Name) includes:

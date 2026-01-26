@@ -16,7 +16,7 @@ type VersionResponse struct {
 
 type CreateObjectRequest struct {
 	ContentType string            `binding:"required" json:"content_type"`
-	SizeBytes   int64             `binding:"required" json:"size_bytes"`
+	SizeBytes   int64             `binding:"required,min=1" json:"size_bytes"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	ExternalRef *string           `json:"external_ref,omitempty"`
 }
@@ -65,7 +65,7 @@ type DeleteObjectResponse struct {
 
 type InitiateMultipartRequest struct {
 	ContentType string            `binding:"required" json:"content_type"`
-	SizeBytes   int64             `binding:"required" json:"size_bytes"`
+	SizeBytes   int64             `binding:"required,min=1" json:"size_bytes"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	ExternalRef *string           `json:"external_ref,omitempty"`
 }

@@ -4,6 +4,7 @@
 # Create Single PNG Object
 POST {{host}}/v1/objects
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 54321
@@ -20,6 +21,7 @@ jsonpath "$.upload_url" exists
 # Get Object Metadata
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{object_id}}"
@@ -30,6 +32,7 @@ jsonpath "$.size_bytes" == 54321
 # Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -37,6 +40,7 @@ jsonpath "$.status" == "active"
 # Verify Final State
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
@@ -45,6 +49,7 @@ jsonpath "$.content_type" == "image/png"
 # Delete Object
 DELETE {{host}}/v1/objects/{{object_id}}
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "deleted"
@@ -52,6 +57,7 @@ jsonpath "$.status" == "deleted"
 # Verify Object is Deleted
 GET {{host}}/v1/objects/{{object_id}}
 Host: paladin.paladin.svc.cluster.local
+X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "deleted"
