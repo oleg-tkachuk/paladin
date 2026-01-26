@@ -11,7 +11,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 - **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads via background Reaper.
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
 - **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
-- **Advanced Logging**: Structured JSON/Console logging with support for all Zap levels and dynamic sampling.
+- **Advanced Logging**: Standardized structured JSON/Console logging with `zap.ReplaceGlobals` and context-aware traceability (automatic `request_id` correlation).
 
 ## Tech Stack
 

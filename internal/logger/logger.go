@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -88,9 +89,33 @@ func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
 	return log.With(fields...), nil
 }
 
+// ReplaceGlobals replaces the global zap logger and sugared logger.
+func ReplaceGlobals(log *zap.Logger) {
+	zap.ReplaceGlobals(log)
+}
+
 // NewBootstrapLogger returns a simple logger for early startup.
+// It uses a production-ready configuration that writes to stdout.
 func NewBootstrapLogger() *zap.Logger {
-	l, _ := zap.NewDevelopment()
+	cfg := zap.NewProductionConfig()
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	l, _ := cfg.Build()
 
 	return l
+}
+
+type ctxKey struct{}
+
+// WithContext returns a new context with the given logger attached.
+func WithContext(ctx context.Context, l *zap.Logger) context.Context {
+	return context.WithValue(ctx, ctxKey{}, l)
+}
+
+// FromContext returns the logger attached to the context, or the global logger if none is found.
+func FromContext(ctx context.Context) *zap.Logger {
+	if l, ok := ctx.Value(ctxKey{}).(*zap.Logger); ok {
+		return l
+	}
+
+	return zap.L()
 }

@@ -28,6 +28,7 @@ var rootCmd = &cobra.Command{
 	Short: "Start the Paladin service",
 	Run: func(cmd *cobra.Command, args []string) {
 		bootstrap := logger.NewBootstrapLogger()
+		logger.ReplaceGlobals(bootstrap)
 
 		abs, err := filepath.Abs(configPath)
 		if err != nil {

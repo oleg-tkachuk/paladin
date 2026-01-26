@@ -5,6 +5,7 @@ import "time"
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Details string `json:"details,omitempty"`
+	TraceID string `json:"trace_id,omitempty"`
 }
 
 type VersionResponse struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"paladin/internal/config"
+	"paladin/internal/logger"
 	"paladin/internal/utils"
 
 	"go.uber.org/zap"
@@ -20,12 +21,27 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 		RecoveryInterceptor(log),
 		// 2. RequestID
 		RequestIDInterceptor(),
-		// 3. Logger
+		// 3. ContextLogger
+		ContextLoggerInterceptor(log),
+		// 4. Logger
 		LoggerInterceptor(log),
-		// 4. Auth & Tenant
+		// 5. Auth & Tenant
 		AuthInterceptor(cfg.Security),
-		// 5. Tenant Enforcement
+		// 6. Tenant Enforcement
 		EnforceTenantInterceptor(cfg.Security),
+	}
+}
+
+func ContextLoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		rid := utils.RequestIDFromContext(ctx, "")
+		l := log
+		if rid != "" {
+			l = l.With(zap.String("request_id", rid))
+		}
+		ctx = logger.WithContext(ctx, l)
+
+		return handler(ctx, req)
 	}
 }
 

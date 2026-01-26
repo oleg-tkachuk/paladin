@@ -83,6 +83,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("logger init: %w", err)
 	}
+	logger.ReplaceGlobals(log)
 
 	log.Info("Service metadata",
 		zap.String("version", version),

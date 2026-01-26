@@ -9,6 +9,7 @@ import (
 
 	"paladin/internal/breaker"
 	"paladin/internal/fault"
+	"paladin/internal/logger"
 	"paladin/internal/storage/s3"
 	"paladin/internal/store/postgres"
 
@@ -97,7 +98,7 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 			}
 
 			// Audit Log
-			zap.L().Info("Object Access Re-signed", zap.String("tenant_id", tenantID), zap.String("object_id", existing.ID.String()), zap.String("method", "PUT"))
+			logger.FromContext(ctx).Info("Object Access Re-signed", zap.String("tenant_id", tenantID), zap.String("object_id", existing.ID.String()), zap.String("method", "PUT"))
 
 			return existing.ID, existing.ObjectKey, p, nil
 		}
@@ -135,7 +136,7 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	}
 
 	// Audit Log
-	zap.L().Info("Object Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()), zap.String("key", key))
+	logger.FromContext(ctx).Info("Object Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()), zap.String("key", key))
 
 	return id, key, p, nil
 }
@@ -157,7 +158,7 @@ func (s *objectsService) Get(ctx context.Context, tenantID string, id uuid.UUID)
 	}
 
 	// Audit Log
-	zap.L().Info("Object Download Signed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	logger.FromContext(ctx).Info("Object Download Signed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 
 	return rec, p, nil
 }
@@ -177,7 +178,7 @@ func (s *objectsService) MarkComplete(ctx context.Context, tenantID string, id u
 	}
 	if updated {
 		// Audit Log
-		zap.L().Info("Object Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info("Object Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 		return nil
 	}
 
@@ -202,7 +203,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	}
 	if updated {
 		// Audit Log
-		zap.L().Info("Object Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info("Object Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 		return nil
 	}
 
@@ -259,7 +260,7 @@ func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string,
 	}
 
 	// Audit Log
-	zap.L().Info("Multipart Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", objectID.String()), zap.String("upload_id", init.UploadID))
+	logger.FromContext(ctx).Info("Multipart Upload Initiated", zap.String("tenant_id", tenantID), zap.String("object_id", objectID.String()), zap.String("upload_id", init.UploadID))
 
 	return MultipartInitResponse{
 		ObjectID:  objectID,
@@ -326,7 +327,7 @@ func (s *objectsService) CompleteMultipart(ctx context.Context, tenantID string,
 	}
 
 	// Audit Log
-	zap.L().Info("Multipart Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", mpu.ObjectID.String()))
+	logger.FromContext(ctx).Info("Multipart Upload Completed", zap.String("tenant_id", tenantID), zap.String("object_id", mpu.ObjectID.String()))
 
 	return mpu.ObjectID, nil
 }
@@ -349,7 +350,7 @@ func (s *objectsService) AbortMultipart(ctx context.Context, tenantID string, up
 	}
 
 	// Audit Log
-	zap.L().Info("Multipart Upload Aborted", zap.String("tenant_id", tenantID), zap.String("upload_id", uploadID))
+	logger.FromContext(ctx).Info("Multipart Upload Aborted", zap.String("tenant_id", tenantID), zap.String("upload_id", uploadID))
 
 	return nil
 }

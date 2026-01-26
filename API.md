@@ -37,7 +37,8 @@ All API endpoints may return the following error structure in case of 4xx or 5xx
 ```json
 {
   "error": "string",   // Short error code (e.g., "bad_request", "not_found")
-  "details": "string"  // Human-readable error message
+  "details": "string",  // Human-readable error message
+  "trace_id": "string"  // Correlated Request ID (found in X-Request-ID header/logs)
 }
 ```
 
