@@ -28,7 +28,10 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	// 3. RequestID (and weak tenant extraction if trusted)
 	r.Use(RequestID(log, cfg.Security.TrustTenantIDFromRequest))
 
-	// 4. Logger (Structured Zap)
+	// 4. ContextLogger (attaches log-with-rid to ctx)
+	r.Use(ContextLogger(log))
+
+	// 5. Logger (Structured Zap)
 	r.Use(RequestLogger(log, cfg.Server.LogProbes))
 
 	// 5. Auth & Tenant Derivation

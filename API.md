@@ -15,7 +15,11 @@ The service enforces tenant isolation. Tenant identity is derived from the authe
 - **Production**: Typically derived from JWT claims (Bearer token).
 - **Trusted Gateway**: If configured (`security.trust_tenant_id_from_request: true`), the service respects the `X-Tenant-ID` header.
 
-**Strict Enforcement**: Requests attempting to access resources belonging to a different tenant than the one in the auth context will be rejected with `403 Forbidden`.
+**Strict Enforcement**:
+
+- If `security.trust_tenant_id_from_request` is enabled, the `X-Tenant-ID` header is **required**.
+- If disabled, the service expects authentication via other means (e.g., JWT).
+- Requests without a valid tenant context will be rejected with `401 Unauthorized` or `403 Forbidden`.
 
 ### Rate Limiting
 
@@ -33,7 +37,8 @@ All API endpoints may return the following error structure in case of 4xx or 5xx
 ```json
 {
   "error": "string",   // Short error code (e.g., "bad_request", "not_found")
-  "details": "string"  // Human-readable error message
+  "details": "string",  // Human-readable error message
+  "trace_id": "string"  // Correlated Request ID (found in X-Request-ID header/logs)
 }
 ```
 
@@ -69,7 +74,7 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `content_type` | string | **Yes** | MIME type of the object (e.g., `image/jpeg`). Must be allowed by server policy. |
-| `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must not exceed server limits. |
+| `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must be > 0 and not exceed server limits. |
 | `labels` | map[string]string | No | Optional key-value tags to attach to the object. |
 | `external_ref` | string | No | Optional external reference ID (must be unique per tenant if provided). |
 

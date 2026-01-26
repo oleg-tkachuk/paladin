@@ -141,6 +141,7 @@ var _ = Describe("Router", func() {
 	Describe("GET /version", func() {
 		It("returns version information", func() {
 			req, _ := http.NewRequest("GET", "/version", nil)
+			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -156,6 +157,7 @@ var _ = Describe("Router", func() {
 	Describe("GET /health/livez", func() {
 		It("returns 200 alive", func() {
 			req, _ := http.NewRequest("GET", "/health/livez", nil)
+			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -171,6 +173,7 @@ var _ = Describe("Router", func() {
 
 			It("returns 503 starting", func() {
 				req, _ := http.NewRequest("GET", "/health/startupz", nil)
+				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
 				Expect(recorder.Code).To(Equal(http.StatusServiceUnavailable))
@@ -181,6 +184,7 @@ var _ = Describe("Router", func() {
 		Context("when started", func() {
 			It("returns 200 started", func() {
 				req, _ := http.NewRequest("GET", "/health/startupz", nil)
+				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
 				Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -199,6 +203,7 @@ var _ = Describe("Router", func() {
 
 			It("returns 200 ready", func() {
 				req, _ := http.NewRequest("GET", "/health/readyz", nil)
+				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
 				Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -215,6 +220,7 @@ var _ = Describe("Router", func() {
 
 			It("returns 503 not_ready", func() {
 				req, _ := http.NewRequest("GET", "/health/readyz", nil)
+				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
 				Expect(recorder.Code).To(Equal(http.StatusServiceUnavailable))
@@ -235,6 +241,7 @@ var _ = Describe("Router", func() {
 				body := `{"content_type": "image/png", "size_bytes": 1024}`
 				req, _ := http.NewRequest("POST", "/v1/objects", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
 				Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -254,6 +261,7 @@ var _ = Describe("Router", func() {
 			body := `{"content_type": "application/octet-stream", "size_bytes": 104857600}`
 			req, _ := http.NewRequest("POST", "/v1/multipart", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -267,6 +275,7 @@ var _ = Describe("Router", func() {
 				Return(s3.Presigned{URL: "http://sign"}, nil)
 
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/1/sign", nil)
+			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -282,6 +291,7 @@ var _ = Describe("Router", func() {
 
 			body := `{"parts": [{"part_number": 1, "etag": "etag1"}]}`
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/complete", strings.NewReader(body))
+			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -296,6 +306,7 @@ var _ = Describe("Router", func() {
 				Return(nil)
 
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/abort", nil)
+			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))

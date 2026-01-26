@@ -21,6 +21,10 @@ server:
 
 postgres:
   dsn: "postgres://app_user:change-me@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+  max_conns: 20
+  min_conns: 2
+  max_conn_lifetime: 30m
+  max_conn_idle_time: 5m
 
 s3:
   bucket: paladin
@@ -33,7 +37,7 @@ s3:
   presign_ttl: 15m
   part_size: "8MB"
   sse_type: "AES256" # or "aws:kms"
-  # sse_key_id: "alias/my-key"
+  sse_key_id: "" # Optional KMS Key ID
 
 policy:
   max_object_size: "100MB"
@@ -59,12 +63,6 @@ security:
   reject_tenant_mismatch: true # If requested tenant != derived tenant, reject request.
   enable_rls: false # Enable Row Level Security in DB (requires migration 003)
   log_sensitive: false
-
-http:
-  addr: "0.0.0.0:8080"
-
-grpc:
-  addr: "0.0.0.0:9090"
 
 housekeeping:
   enable_reaper: true

@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"strings"
-
 	"paladin/internal/config"
 	"paladin/internal/errors"
 	"paladin/internal/utils"
@@ -17,35 +15,23 @@ import (
 // or a trusted gateway header if configured, prioritizing the Auth token claims if available.
 func Auth(cfg config.Security, log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Try to get tenant from Context (set by RequestID if trusted header found)
-		// 2. Try to get from Authorization header (simulate JWT parsing)
-
-		// This is where strict JWT validation would go.
-		// For now, we assume if TrustTenantIDFromRequest is false, we MUST have a token.
-
 		ctx := c.Request.Context()
 		currentTenant := utils.TenantIDFromContext(ctx, "")
 
-		authHeader := c.GetHeader("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			// Simulate extraction. In real world: jwt.Parse...
-			// token := strings.TrimPrefix(authHeader, "Bearer ")
-			// claims := parse(token)
-			// realTenant := claims["tenant_id"]
-
-			// For this exercise, we don't have the JWT lib wired up,
-			// so we will skip actual validation but enforce that IF we had it, we'd set it.
-			// To avoid breaking the app without JWT keys, we'll log a warning if simulated.
-		}
-
-		// If we still don't have a tenant and we don't trust the header, we might reject.
-		// However, for migration safety, we might default to "default" or fail.
-		if currentTenant == "" && !cfg.TrustTenantIDFromRequest {
-			// Strict mode: if no auth and no trust, we can't identify tenant.
-			// But maybe the endpoint is public?
-			// We'll let the EnforceTenant middleware decide if tenant is required.
-		} else if currentTenant == "" {
-			// Fallback for legacy behavior if needed, or leave empty.
+		// Strict mode: if no tenant identified and configuration requires trust or token,
+		// we must reject if we can't establish identity.
+		if currentTenant == "" {
+			if cfg.TrustTenantIDFromRequest {
+				// We trust the header, but it was missing or empty.
+				c.AbortWithStatusJSON(errors.MapToHTTP(errors.Unauthorized("missing tenant context", nil)))
+				return
+			}
+			// If not trusting header, we expected a token (which we removed simulation for).
+			// So effectively, we fail if we can't find a tenant.
+			// However, to keep it backward compatible for now if needed, we might allow it
+			// to fall through to EnforceTenant. But let's be strict as requested.
+			c.AbortWithStatusJSON(errors.MapToHTTP(errors.Unauthorized("authentication required", nil)))
+			return
 		}
 
 		c.Next()
