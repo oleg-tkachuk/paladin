@@ -99,7 +99,8 @@ X-Tenant-ID: test-tenant
 }
 HTTP 400
 [Asserts]
-jsonpath "$.error" == "Bad Request"
+jsonpath "$.error.code" == "bad_request"
+jsonpath "$.error.request_id" exists
 
 # Invalid Labels Type (String instead of Map)
 POST {{host}}/v1/objects
@@ -112,4 +113,5 @@ X-Tenant-ID: test-tenant
 }
 HTTP 400
 [Asserts]
-jsonpath "$.error" == "Bad Request"
+jsonpath "$.error.code" == "bad_request"
+jsonpath "$.error.request_id" exists

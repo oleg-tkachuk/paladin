@@ -5,7 +5,7 @@ X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 500,
-  "external_ref": "idem-key-001"
+  "external_ref": "idem-key-run-unique"
 }
 HTTP 200
 [Captures]
@@ -20,7 +20,7 @@ X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 500,
-  "external_ref": "idem-key-001"
+  "external_ref": "idem-key-run-unique"
 }
 HTTP 200
 [Captures]
@@ -35,12 +35,14 @@ X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 600,
-  "external_ref": "idem-key-001"
+  "external_ref": "idem-key-run-unique"
 }
-HTTP 400
+HTTP 409
 [Asserts]
-jsonpath "$.error" == "Bad Request"
-jsonpath "$.details" contains "conflict"
+jsonpath "$.error.code" == "conflict"
+jsonpath "$.error.message" contains "external_ref"
+jsonpath "$.error.request_id" exists
+jsonpath "$.error.trace_id" exists
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{id_1}}

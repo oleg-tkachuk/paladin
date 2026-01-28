@@ -36,10 +36,13 @@ All API endpoints may return the following error structure in case of 4xx or 5xx
 
 ```json
 {
-  "error": "string",      // Short error code (e.g., "bad_request", "not_found")
-  "details": "string",    // Human-readable error message
-  "request_id": "string", // Unique ID for this specific request
-  "trace_id": "string"    // Distributed trace identifier (OTel compatible)
+  "error": {
+    "code": "string",
+    "message": "string",
+    "details": "string",
+    "request_id": "string",
+    "trace_id": "string"
+  }
 }
 ```
 

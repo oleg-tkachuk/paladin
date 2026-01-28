@@ -23,14 +23,14 @@ func Auth(cfg config.Security, log *zap.Logger) gin.HandlerFunc {
 		if currentTenant == "" {
 			if cfg.TrustTenantIDFromRequest {
 				// We trust the header, but it was missing or empty.
-				c.AbortWithStatusJSON(errors.MapToHTTP(errors.Unauthorized("missing tenant context", nil)))
+				c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), errors.Unauthorized("missing tenant context", nil)))
 				return
 			}
 			// If not trusting header, we expected a token (which we removed simulation for).
 			// So effectively, we fail if we can't find a tenant.
 			// However, to keep it backward compatible for now if needed, we might allow it
 			// to fall through to EnforceTenant. But let's be strict as requested.
-			c.AbortWithStatusJSON(errors.MapToHTTP(errors.Unauthorized("authentication required", nil)))
+			c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), errors.Unauthorized("authentication required", nil)))
 			return
 		}
 
@@ -54,7 +54,7 @@ func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 		reqTenant := c.Param("tenant_id") // if route is /v1/:tenant_id/...
 		if reqTenant != "" && derivedTenant != "" && reqTenant != derivedTenant {
 			if cfg.RejectTenantMismatch {
-				c.AbortWithStatusJSON(errors.MapToHTTP(errors.Forbidden("tenant mismatch", nil)))
+				c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), errors.Forbidden("tenant mismatch", nil)))
 				return
 			}
 			// Warn?
