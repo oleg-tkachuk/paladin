@@ -17,9 +17,10 @@ The service enforces tenant isolation. Tenant identity is derived from the authe
 
 **Strict Enforcement**:
 
+- The service strictly enforces tenant isolation. Every request must have a valid tenant context.
 - If `security.trust_tenant_id_from_request` is enabled, the `X-Tenant-ID` header is **required**.
-- If disabled, the service expects authentication via other means (e.g., JWT).
-- Requests without a valid tenant context will be rejected with `401 Unauthorized` or `403 Forbidden`.
+- If disabled, the service expects authentication via other means (e.g., JWT) that populates the tenant context.
+- **Requests without a valid tenant context will be rejected with `401 Unauthorized`.**
 
 ### Rate Limiting
 
