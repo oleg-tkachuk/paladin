@@ -77,7 +77,8 @@ func respondWithError(c *gin.Context, code int, err error) {
 }
 
 func tenantID(c *gin.Context) string {
-	return utils.TenantIDFromContext(c.Request.Context(), "default")
+	// Middleware guarantees TenantID is present.
+	return utils.TenantIDFromContext(c.Request.Context(), "")
 }
 
 func createObjectHandler(svc service.ObjectsService) gin.HandlerFunc {
