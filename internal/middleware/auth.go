@@ -66,7 +66,8 @@ func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 			// We'll set a default for now to pass existing tests if they lack auth,
 			// but strictly we should 401.
 			// For the purpose of this task (Logic Upgrade), we'll assume we want strictness.
-			// c.Code(401)
+			c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), errors.Unauthorized("missing tenant context", nil)))
+			return
 		} else {
 			// Ensure it's set in context for others
 		}
