@@ -19,7 +19,7 @@ jsonpath "$.method" == "PUT"
 # Verify SSE headers (default config uses AES256)
 jsonpath "$.headers['x-amz-server-side-encryption']" == "AES256"
 # Verify TTL (default 15m = 900s)
-jsonpath "$.upload_url" includes "X-Amz-Expires=900"
+jsonpath "$.upload_url" contains "X-Amz-Expires=900"
 
 # Get Object Metadata (Standard)
 GET {{host}}/v1/objects/{{object_id}}
@@ -72,7 +72,7 @@ X-Tenant-ID: test-tenant
     "env": "test",
     "project": "acme"
   },
-  "external_ref": "ref-123"
+  "external_ref": "ref-objects-run-final"
 }
 HTTP 200
 [Captures]
@@ -89,7 +89,7 @@ HTTP 200
 jsonpath "$.object_id" == "{{meta_object_id}}"
 jsonpath "$.labels.env" == "test"
 jsonpath "$.labels.project" == "acme"
-jsonpath "$.external_ref" == "ref-123"
+jsonpath "$.external_ref" == "ref-objects-run-final"
 jsonpath "$.download_url" exists
 
 # Get Object via Meta Endpoint (New) - Check No Download URL
@@ -100,7 +100,7 @@ HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{meta_object_id}}"
 jsonpath "$.labels.env" == "test"
-jsonpath "$.external_ref" == "ref-123"
+jsonpath "$.external_ref" == "ref-objects-run-final"
 jsonpath "$.download_url" not exists
 jsonpath "$.status" == "pending"
 

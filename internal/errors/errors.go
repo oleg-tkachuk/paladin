@@ -1,9 +1,12 @@
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+
+	"paladin/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -67,14 +70,33 @@ func TooLarge(msg string, err error) *AppError    { return New(CodeTooLarge, msg
 func RateLimited(msg string, err error) *AppError { return New(CodeRateLimited, msg, err) }
 func Internal(msg string, err error) *AppError    { return New(CodeInternal, msg, err) }
 
+// ErrorResponse is the unified error structure
+type ErrorResponse struct {
+	Error ErrorDetails `json:"error"`
+}
+
+// ErrorDetails contains the error information
+type ErrorDetails struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Details   string `json:"details,omitempty"`
+	RequestID string `json:"request_id"`
+	TraceID   string `json:"trace_id"`
+}
+
 // MapToHTTP maps an error to an HTTP status code and response body
-func MapToHTTP(err error) (int, map[string]any) {
+func MapToHTTP(ctx context.Context, err error) (int, ErrorResponse) {
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
 		// Default to internal error if unknown
-		return http.StatusInternalServerError, map[string]any{
-			"error":   CodeInternal,
-			"details": "Internal server error",
+		// Log the actual error in the caller, here we just return the generic response
+		return http.StatusInternalServerError, ErrorResponse{
+			Error: ErrorDetails{
+				Code:      CodeInternal,
+				Message:   "Internal server error",
+				RequestID: utils.RequestIDFromContext(ctx, ""),
+				TraceID:   utils.TraceIDFromContext(ctx, ""),
+			},
 		}
 	}
 
@@ -104,15 +126,37 @@ func MapToHTTP(err error) (int, map[string]any) {
 		statusCode = http.StatusInternalServerError
 	}
 
-	resp := map[string]any{
-		"error":   appErr.Code,
-		"details": appErr.Message,
-	}
-	if len(appErr.Details) > 0 {
-		resp["metadata"] = appErr.Details
+	traceID := utils.TraceIDFromContext(ctx, "")
+	reqID := utils.RequestIDFromContext(ctx, "")
+
+	// If Details map is present, we might want to convert it to string or pick a specific message.
+	// For now, consistent with requirements, we keep 'details' as optional string.
+	// We'll use appErr.Message for 'details' if it differs from the standard message?
+	// Or just put appErr.Message in 'message'.
+	// Requirement: message = short human readable. details = optional context.
+
+	// Let's use appErr.Message as the main message.
+	// If appErr.Err (wrapped error) is present, maybe use that as details?
+	// But requirements say "no stack traces". appErr.Err.Error() might be safe or might be technical.
+	// Let's stick to simple mapping for now. `appErr.Message` -> `message`.
+
+	details := ""
+	if appErr.Err != nil {
+		// Be careful not to expose sensitive info, but typically appErr.Err is the cause.
+		// For internal errors, we might mask this. For 4xx, it might be useful.
+		// Requirement 4: details is OPTIONAL and MUST contain additional context only (no stack traces).
+		details = appErr.Err.Error()
 	}
 
-	return statusCode, resp
+	return statusCode, ErrorResponse{
+		Error: ErrorDetails{
+			Code:      appErr.Code,
+			Message:   appErr.Message,
+			Details:   details,
+			RequestID: reqID,
+			TraceID:   traceID,
+		},
+	}
 }
 
 // MapToGRPC maps an error to a gRPC status error

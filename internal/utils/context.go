@@ -35,3 +35,12 @@ func TenantIDFromContext(ctx context.Context, fallback string) string {
 
 	return fallback
 }
+
+func TraceIDFromContext(ctx context.Context, fallback string) string {
+	if v := ctx.Value(TraceIDKey); v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	return fallback
+}

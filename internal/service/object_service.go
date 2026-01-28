@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"paladin/internal/breaker"
+	"paladin/internal/errors"
 	"paladin/internal/fault"
 	"paladin/internal/logger"
 	"paladin/internal/storage/s3"
@@ -82,7 +83,7 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	if externalRef != nil {
 		if existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef); err == nil {
 			if existing.ContentType != contentType || existing.SizeBytes != sizeBytes {
-				return uuid.UUID{}, "", s3.Presigned{}, fmt.Errorf("conflict: external_ref exists with different parameters")
+				return uuid.UUID{}, "", s3.Presigned{}, errors.Conflict("external_ref exists with different parameters", nil)
 			}
 
 			// Re-presign URL if needed

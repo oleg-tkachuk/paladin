@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -311,6 +312,31 @@ var _ = Describe("Router", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 			Expect(recorder.Body.String()).To(ContainSubstring("aborted"))
+		})
+	})
+	Describe("Error Handling", func() {
+		It("returns unified error response for 404", func() {
+			mockSvc.On("Get", mock.Anything, "default", mock.Anything).
+				Return(&postgres.ObjectRecord{}, s3.Presigned{}, errors.New("not found"))
+
+			req, _ := http.NewRequest("GET", "/v1/objects/"+uuid.NewString(), nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusNotFound))
+
+			var resp map[string]interface{}
+			err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify structure: {"error": {"code": "...", "message": "...", "request_id": "..."}}
+			Expect(resp).To(HaveKey("error"))
+			errObj, ok := resp["error"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			Expect(errObj).To(HaveKey("code"))
+			Expect(errObj).To(HaveKey("message"))
+			Expect(errObj).To(HaveKey("request_id"))
+			Expect(errObj).To(HaveKey("trace_id"))
 		})
 	})
 })

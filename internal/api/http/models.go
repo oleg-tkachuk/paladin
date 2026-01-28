@@ -2,12 +2,6 @@ package httpapi
 
 import "time"
 
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Details string `json:"details,omitempty"`
-	TraceID string `json:"trace_id,omitempty"`
-}
-
 type VersionResponse struct {
 	Service   string `json:"service"`
 	Version   string `json:"version"`

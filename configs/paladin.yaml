@@ -74,8 +74,8 @@ housekeeping:
   delete_orphaned_parts: false
 
 rate_limit:
-  requests_per_second: 10
-  burst: 20
+  requests_per_second: 300
+  burst: 500
 
 otel:
   enabled: false

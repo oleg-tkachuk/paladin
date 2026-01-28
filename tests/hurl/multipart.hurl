@@ -8,7 +8,7 @@ X-Tenant-ID: test-tenant
   "labels": {
     "type": "multipart-test"
   },
-  "external_ref": "mp-ref-001"
+  "external_ref": "mp-ref-run-final"
 }
 HTTP 200
 [Captures]
@@ -25,7 +25,7 @@ HTTP 200
 [Asserts]
 jsonpath "$.upload_url" exists
 # Verify TTL (default 15m = 900s)
-jsonpath "$.upload_url" includes "X-Amz-Expires=900"
+jsonpath "$.upload_url" contains "X-Amz-Expires=900"
 [Captures]
 part_url: jsonpath "$.upload_url"
 
@@ -61,7 +61,7 @@ HTTP 200
 [Asserts]
 jsonpath "$.status" == "active"
 jsonpath "$.labels.type" == "multipart-test"
-jsonpath "$.external_ref" == "mp-ref-001"
+jsonpath "$.external_ref" == "mp-ref-run-final"
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}

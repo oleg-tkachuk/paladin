@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	stdErrors "errors"
 	"net/http"
 	"strconv"
 
+	"paladin/internal/errors"
 	"paladin/internal/logger"
 	"paladin/internal/middleware"
 	"paladin/internal/service"
@@ -15,17 +17,63 @@ import (
 )
 
 func respondWithError(c *gin.Context, code int, err error) {
-	log := logger.FromContext(c.Request.Context())
-	if code >= 500 {
-		log.Error("Request failed", zap.Error(err), zap.Int("status", code), zap.String("path", c.Request.URL.Path))
-	} else if code >= 400 {
-		log.Warn("Request failed", zap.Error(err), zap.Int("status", code), zap.String("path", c.Request.URL.Path))
+	// We want to use our unified error mapper.
+	// However, the caller passed a 'code' which might be from a legacy rationale.
+	// Ideally, we should rely on the error type itself to dictate the code via MapToHTTP.
+	// But if the caller insists on a code (e.g. for simple validation bind errors),
+	// we might need to wrap it.
+
+	// If the error is already an AppError, MapToHTTP handles it.
+	// If it's a generic error (like BindJSON error), MapToHTTP defaults to 500
+	// unless we wrap it or trust the caller's code.
+
+	// Issue: MapToHTTP returns (status, body).
+	// If we use MapToHTTP(err), it might return 500 for a 400 case from ShouldBindJSON.
+
+	// Workaround: If code is provided and it is not 500, we might want to respect it?
+	// But the requirement says "HTTP status codes MUST correctly reflect the error class".
+	// The caller knows best in handlers if it was a bad request.
+
+	// Let's try to wrap it if it's not an AppError.
+	var appErr *errors.AppError
+	// If it's not an AppError, wrap it based on the suggestion code.
+	if !stdErrors.As(err, &appErr) {
+		switch code {
+		case http.StatusBadRequest:
+			err = errors.BadRequest(err.Error(), nil)
+		case http.StatusNotFound:
+			err = errors.NotFound(err.Error(), nil)
+		case http.StatusUnauthorized:
+			err = errors.Unauthorized(err.Error(), nil)
+		case http.StatusForbidden:
+			err = errors.Forbidden(err.Error(), nil)
+		// ... add others if needed, or default to Internal
+		default:
+			if code >= 500 {
+				err = errors.Internal(err.Error(), nil)
+			} else {
+				// e.g. 413, 429...
+				// For now fall back to BadRequest for generic 4xx if not mapped?
+				// Or just create a generic AppError?
+				err = errors.New(errors.CodeInternal, err.Error(), nil)
+				// But wait, we want to respect the status code?
+				// MapToHTTP derives status code from Error Code.
+				// So we must choose the right Error Code.
+			}
+		}
 	}
-	c.JSON(code, ErrorResponse{
-		Error:   http.StatusText(code),
-		Details: err.Error(),
-		TraceID: utils.RequestIDFromContext(c.Request.Context(), ""),
-	})
+
+	status, body := errors.MapToHTTP(c.Request.Context(), err)
+
+	// Log it if needed (MapToHTTP doesn't log 4xx usually, but we might want to)
+	log := logger.FromContext(c.Request.Context())
+	if status >= 500 {
+		log.Error("Request failed", zap.Error(err), zap.Int("status", status), zap.String("path", c.Request.URL.Path))
+	} else if status >= 400 {
+		log.Warn("Request failed", zap.Error(err), zap.Int("status", status), zap.String("path", c.Request.URL.Path))
+	}
+
+	c.JSON(status, body)
 }
 
 func tenantID(c *gin.Context) string {

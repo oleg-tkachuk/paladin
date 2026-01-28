@@ -84,9 +84,13 @@ services:
       S3_SECRET_KEY: dummy
       S3_PRESIGN_TTL: 15m
       S3_PART_SIZE: 8MB
+      S3_PUBLIC_ENDPOINT: http://localhost:8333
 
       POLICY_MAX_OBJECT_SIZE: 100MB
       POLICY_ALLOWED_CONTENT_TYPES: image/jpeg,image/png,application/pdf,text/plain
+
+      RATE_LIMIT_REQUESTS_PER_SECOND: 300
+      RATE_LIMIT_BURST: 500
 
       # OTel (optional)
       OTEL_ENABLED: "false"
