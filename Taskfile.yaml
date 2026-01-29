@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  PROJECT_NAME: acme
+  PROJECT_NAME: paladin
   COMPOSE_FILE: ./deploy/docker-compose.yaml
   ENV_FILE_SERVICE: ./deploy/env/service.env
   TIMEZONE: Europe/Kyiv
