@@ -165,10 +165,21 @@ server:
   name: paladin # Service name
   http:
     addr: "0.0.0.0:8080"    # HTTP server bind address
+    # List of trusted proxies (CIDRs) for correct client IP resolution
+    trusted_proxies: [] 
+    # TLS Configuration (optional)
+    tls:
+      enabled: false
+      cert_path: ""
+      key_path: ""
+      ca_path: ""
+      server_name: ""
+      insecure_skip_verify: false
   grpc:
     addr: "0.0.0.0:9090"    # gRPC server bind address
   shutdown_timeout: 20s     # Graceful shutdown timeout
   log_probes: false         # Log health check probe requests
+
 ```
 
 ### PostgreSQL

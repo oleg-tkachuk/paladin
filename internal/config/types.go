@@ -35,11 +35,23 @@ type Server struct {
 }
 
 type HTTPServer struct {
-	Addr              string        `yaml:"addr" json:"addr"`
-	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout" json:"read_header_timeout"`
-	ReadTimeout       time.Duration `yaml:"read_timeout" json:"read_timeout"`
-	WriteTimeout      time.Duration `yaml:"write_timeout" json:"write_timeout"`
-	IdleTimeout       time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	Addr               string        `yaml:"addr" json:"addr"`
+	ReadHeaderTimeout  time.Duration `yaml:"read_header_timeout" json:"read_header_timeout"`
+	ReadTimeout        time.Duration `yaml:"read_timeout" json:"read_timeout"`
+	WriteTimeout       time.Duration `yaml:"write_timeout" json:"write_timeout"`
+	IdleTimeout        time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	TrustedProxies     []string      `yaml:"trusted_proxies" json:"trusted_proxies"`
+	CORSAllowedOrigins []string      `yaml:"cors_allowed_origins" json:"cors_allowed_origins"`
+	TLS                TLS           `yaml:"tls" json:"tls"`
+}
+
+type TLS struct {
+	Enabled            bool   `yaml:"enabled" json:"enabled"`
+	CertPath           string `yaml:"cert_path" json:"cert_path"`
+	KeyPath            string `yaml:"key_path" json:"key_path"`
+	CaPath             string `yaml:"ca_path" json:"ca_path"`
+	ServerName         string `yaml:"server_name" json:"server_name"`
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
 }
 
 type GRPCServer struct {

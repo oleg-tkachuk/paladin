@@ -254,7 +254,6 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 }
 
 func (a *App) Run() error {
-	a.Logger.Info("Starting HTTP server", zap.String("addr", a.httpSrv.Addr))
 	a.Logger.Info("Starting gRPC server", zap.String("addr", a.Cfg.Server.GRPC.Addr))
 
 	errCh := make(chan error, 2)
@@ -271,38 +270,26 @@ func (a *App) Run() error {
 	}()
 
 	go func() {
-		errCh <- a.httpSrv.ListenAndServe()
+		if a.Cfg.Server.HTTP.TLS.Enabled {
+			a.Logger.Info("Starting HTTPS server with TLS",
+				zap.String("addr", a.httpSrv.Addr),
+				zap.String("cert_path", a.Cfg.Server.HTTP.TLS.CertPath),
+			)
+			if err := a.httpSrv.ListenAndServeTLS(a.Cfg.Server.HTTP.TLS.CertPath, a.Cfg.Server.HTTP.TLS.KeyPath); err != nil && err != http.ErrServerClosed {
+				a.Logger.Fatal("HTTPS server listen failed", zap.Error(err))
+			}
+		} else {
+			a.Logger.Info("Starting HTTP server", zap.String("addr", a.httpSrv.Addr))
+			if err := a.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				a.Logger.Fatal("HTTP server listen failed", zap.Error(err))
+			}
+		}
 	}()
 
 	// Start Reaper
 	if a.reaper != nil {
 		go a.reaper.Start(a.reaperCtx)
 	}
-	// Verify context is available
-	// We use the context created in New
-	// Actually we just start it here
-	// But we need the context created in New? No, we stored cancel logic.
-	// But we need to pass the context to Start.
-	// Allow me to refactor: New creates context, Run starts it?
-	// Or Run creates context?
-	// App struct has reaperCancel. But not the context itself?
-	// I should store `reaperCtx` in App too? Or just recreate context in Run?
-	// No, shutdown calls cancel.
-	// I ignored storing the context in steps above?
-	// Let's assume I need to update App struct again?
-	// Or just start it in New? But New returns App, doesn't start things usually.
-
-	// Let's modify New to NOT start, just setup.
-	// In Run, we accept `ctx`? No, Run() error.
-
-	// I will just use `a.reaperCancel` in Shutdown.
-	// I need the context to pass to Start.
-	// I'll add `reaperCtx` to App struct.
-
-	// Correction: I should add reaperCtx to App struct.
-	// I'll do it in next step.
-
-	// For now let's just use the stored fields in Shutdown.
 
 	a.started.Store(true)
 

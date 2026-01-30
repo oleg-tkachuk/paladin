@@ -22,6 +22,10 @@ The service enforces tenant isolation. Tenant identity is derived from the authe
 - If disabled, the service expects authentication via other means (e.g., JWT) that populates the tenant context.
 - **Requests without a valid tenant context will be rejected with `401 Unauthorized`.**
 
+### Transport Security
+
+All API endpoints can be served over **HTTPS** with full TLS support (configurable via server settings). In production environments, it is recommended to enable TLS to ensure secure communication.
+
 ### Rate Limiting
 
 The API implements a token-bucket rate limiter per tenant.

@@ -22,6 +22,14 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
+	if len(cfg.Server.HTTP.TrustedProxies) > 0 {
+		if err := r.SetTrustedProxies(cfg.Server.HTTP.TrustedProxies); err != nil {
+			log.Warn("Failed to set trusted proxies", zap.Error(err))
+		}
+	} else {
+		_ = r.SetTrustedProxies(nil)
+	}
+
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	r.GET("/version", func(c *gin.Context) {

@@ -16,8 +16,12 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	r.Use(gin.Recovery())
 
 	// 2. CORS (Optional, good for web)
+	allowedOrigins := cfg.Server.HTTP.CORSAllowedOrigins
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"*"}
+	}
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Configure from config in prod
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-Tenant-ID"},
 		ExposeHeaders:    []string{"Content-Length", "X-Request-ID"},
