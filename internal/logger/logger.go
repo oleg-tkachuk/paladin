@@ -14,7 +14,7 @@ import (
 )
 
 // New creates a zap.Logger with sampling and environment fields.
-func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
+func New(c config.Logger) (*zap.Logger, error) {
 	var lvl zapcore.Level
 
 	switch strings.ToLower(c.Level) {
@@ -67,9 +67,14 @@ func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
 			LineEnding:     zapcore.DefaultLineEnding,
 		},
 		Sampling: &zap.SamplingConfig{
-			Initial:    100,
-			Thereafter: 100,
+			Initial:    c.Sampling.Initial,
+			Thereafter: c.Sampling.Thereafter,
 		},
+	}
+
+	// Disable sampling if not enabled
+	if !c.Sampling.Enabled {
+		cfg.Sampling = nil
 	}
 
 	log, err := cfg.Build()
@@ -77,9 +82,10 @@ func New(c config.Logger, baseFields map[string]string) (*zap.Logger, error) {
 		return nil, err
 	}
 
-	// Attach environment fields
+	// Attach fields from config
 	fields := []zap.Field{
-		zap.String("service", baseFields["service"]),
+		zap.String("service", c.Fields.Service),
+		zap.String("env", c.Fields.Env),
 	}
 
 	// Optional: include additional env fields without leaking secrets

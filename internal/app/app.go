@@ -72,20 +72,14 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		cfg.PodName = utils.GetEnvOrDefault("POD_NAME", cfg.PodName)
 	}
 
-	log, err := logger.New(cfg.Logger, map[string]string{
-		"service":    cfg.Server.Name,
-		"pod":        cfg.PodName,
-		"env":        cfg.Env,
-		"version":    version,
-		"commit":     commit,
-		"build_time": buildTime,
-	})
+	// Initialize Logger
+	l, err := logger.New(cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("logger init: %w", err)
 	}
-	logger.ReplaceGlobals(log)
+	logger.ReplaceGlobals(l)
 
-	log.Info("Service metadata",
+	l.Info("Service metadata",
 		zap.String("version", version),
 		zap.String("commit", commit),
 		zap.String("build_time", buildTime),
@@ -102,39 +96,39 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	// Environment overrides for technical fields (DB/S3)
 	if v := utils.GetEnvOrDefault("DB_DSN", ""); v != "" {
-		cfg.Postgres.DSN = v
+		cfg.Datastores.Postgres.DSN = v
 	}
 
 	if v := utils.GetEnvOrDefault("S3_BUCKET", ""); v != "" {
-		cfg.S3.Bucket = v
+		cfg.Datastores.S3.Bucket = v
 	}
 	if v := utils.GetEnvOrDefault("S3_REGION", ""); v != "" {
-		cfg.S3.Region = v
+		cfg.Datastores.S3.Region = v
 	}
 	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
-		cfg.S3.Endpoint = v
+		cfg.Datastores.S3.Endpoint = v
 	}
 	if v := utils.GetEnvOrDefault("S3_PUBLIC_ENDPOINT", ""); v != "" {
-		cfg.S3.PublicEndpoint = v
+		cfg.Datastores.S3.PublicEndpoint = v
 	}
 	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
-		cfg.S3.AccessKey = v
+		cfg.Datastores.S3.AccessKey = v
 	}
 	if v := utils.GetEnvOrDefault("S3_SECRET_KEY", ""); v != "" {
-		cfg.S3.SecretKey = v
+		cfg.Datastores.S3.SecretKey = v
 	}
 	if v := utils.GetEnvOrDefault("S3_FORCE_PATH_STYLE", ""); v != "" {
-		cfg.S3.ForcePathStyle = v == "true" || v == "1"
+		cfg.Datastores.S3.ForcePathStyle = v == "true" || v == "1"
 	}
 	if v := utils.GetEnvOrDefault("S3_PRESIGN_TTL", ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
-			cfg.S3.PresignTTL = d
+			cfg.Datastores.S3.PresignTTL = d
 		}
 	}
 	if v := utils.GetEnvOrDefault("S3_PART_SIZE", ""); v != "" {
-		cfg.S3.PartSizeRaw = v
+		cfg.Datastores.S3.PartSizeRaw = v
 		if n, err := utils.ParseSizeString(v); err == nil {
-			cfg.S3.PartSizeBytes = n
+			cfg.Datastores.S3.PartSizeBytes = n
 		}
 	}
 
@@ -155,8 +149,8 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	var db *postgres.DB
 
 	op := func() error {
-		log.Debug("Connecting to PostgreSQL", zap.String("dsn", cfg.Postgres.DSN))
-		d, err := postgres.New(ctx, cfg.Postgres, log)
+		l.Debug("Connecting to PostgreSQL", zap.String("dsn", cfg.Datastores.Postgres.DSN))
+		d, err := postgres.New(ctx, cfg.Datastores.Postgres, l)
 		if err != nil {
 			return err
 		}
@@ -180,10 +174,10 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 
 	if err := db.RunMigrations(ctx, "/app/migrations"); err != nil {
 		// In local mode we ship migrations into container; in dev you can mount.
-		log.Warn("Migrations failed (check volume mount if running locally)", zap.Error(err))
+		l.Warn("Migrations failed (check volume mount if running locally)", zap.Error(err))
 	}
 
-	s3c, err := s3.New(ctx, cfg.S3, log)
+	s3c, err := s3.New(ctx, cfg.Datastores.S3, l)
 	if err != nil {
 		return nil, err
 	}
@@ -195,12 +189,12 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	mpRepo := postgres.NewMultipartRepo(db)
 	brk := breaker.NewFactory(cfg)
 
-	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, cfg.S3.PartSizeBytes)
+	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, cfg.Datastores.S3.PartSizeBytes)
 	hs := service.NewHealthService(db, s3c, brk)
 
 	app := &App{
 		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: log,
+		Cfg: cfg, Logger: l,
 		db:           db,
 		otelShutdown: otelShutdown,
 	}
@@ -213,7 +207,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	// Wait, I can just use paladin/internal/middleware if it's already imported?
 	// It is NOT imported in app.go yet.
 
-	httpSrv := httpapi.NewServer(&cfg, log, svc, version, commit, buildTime, hs, &app.started)
+	httpSrv := httpapi.NewServer(&cfg, l, svc, version, commit, buildTime, hs, &app.started)
 
 	// HTTP server
 	app.httpSrv = &http.Server{
@@ -232,17 +226,17 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	// I'll assume I'll add the import first.
 
 	// For now, let's fix the httpSrv call and add the interceptor logic, assuming imports will be fixed.
-	interceptors := middleware.SetupGRPCInterceptors(&cfg, log)
+	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 
 	app.grpcSrv = grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(log, svc))
+	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(l, svc))
 	reflection.Register(app.grpcSrv)
 
 	// Reaper
-	rpr := worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, log)
+	rpr := worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l)
 	// Context for reaper
 	rCtx, rCancel := context.WithCancel(context.Background())
 

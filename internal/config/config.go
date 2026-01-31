@@ -55,10 +55,10 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	}
 
 	// Parse sizes
-	if n, err := utils.ParseSizeString(cfg.S3.PartSizeRaw); err == nil {
-		cfg.S3.PartSizeBytes = n
+	if n, err := utils.ParseSizeString(cfg.Datastores.S3.PartSizeRaw); err == nil {
+		cfg.Datastores.S3.PartSizeBytes = n
 	} else {
-		return Config{}, fmt.Errorf("failed to parse s3.part_size (%s): %w", cfg.S3.PartSizeRaw, err)
+		return Config{}, fmt.Errorf("failed to parse s3.part_size (%s): %w", cfg.Datastores.S3.PartSizeRaw, err)
 	}
 
 	if n, err := utils.ParseSizeString(cfg.Policy.MaxObjectSizeRaw); err == nil {
