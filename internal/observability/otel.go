@@ -22,7 +22,7 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 	}
 
 	exporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
+		otlptracegrpc.WithEndpoint(cfg.Endpoint),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -31,8 +31,8 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(cfg.ServiceName),
-			attribute.String("deployment.environment", cfg.Environment),
+			semconv.ServiceName(cfg.Resource.ServiceName),
+			attribute.String("deployment.environment", cfg.Resource.DeploymentEnvironment),
 		),
 	)
 	if err != nil {

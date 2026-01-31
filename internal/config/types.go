@@ -3,10 +3,10 @@ package config
 import "time"
 
 type Config struct {
+	App          App          `yaml:"app" json:"app"`
 	Logger       Logger       `yaml:"logger" json:"logger"`
 	Server       Server       `yaml:"server" json:"server"`
-	Postgres     Postgres     `yaml:"postgres" json:"postgres"`
-	S3           S3           `yaml:"s3" json:"s3"`
+	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
 	Policy       Policy       `yaml:"policy" json:"policy"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
@@ -17,12 +17,30 @@ type Config struct {
 	Env     string `yaml:"-"`
 }
 
+type App struct {
+	Name string `yaml:"name" json:"name"`
+	Env  string `yaml:"env" json:"env"`
+}
+
 type Logger struct {
-	Level             string `yaml:"level" json:"level"`
-	Format            string `yaml:"format" json:"format"`
-	Development       bool   `yaml:"development" json:"development"`
-	DisableCaller     bool   `yaml:"disable_caller" json:"disable_caller"`
-	DisableStacktrace bool   `yaml:"disable_stacktrace" json:"disable_stacktrace"`
+	Level             string       `yaml:"level" json:"level"`
+	Format            string       `yaml:"format" json:"format"`
+	Development       bool         `yaml:"development" json:"development"`
+	DisableCaller     bool         `yaml:"disable_caller" json:"disable_caller"`
+	DisableStacktrace bool         `yaml:"disable_stacktrace" json:"disable_stacktrace"`
+	Sampling          LogSampling  `yaml:"sampling" json:"sampling"`
+	Fields            LoggerFields `yaml:"fields" json:"fields"`
+}
+
+type LogSampling struct {
+	Enabled    bool `yaml:"enabled" json:"enabled"`
+	Initial    int  `yaml:"initial" json:"initial"`
+	Thereafter int  `yaml:"thereafter" json:"thereafter"`
+}
+
+type LoggerFields struct {
+	Service string `yaml:"service" json:"service"`
+	Env     string `yaml:"env" json:"env"`
 }
 
 type Server struct {
@@ -40,6 +58,10 @@ type HTTPServer struct {
 	ReadTimeout        time.Duration `yaml:"read_timeout" json:"read_timeout"`
 	WriteTimeout       time.Duration `yaml:"write_timeout" json:"write_timeout"`
 	IdleTimeout        time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	MaxHeaderBytes     int           `yaml:"max_header_bytes" json:"max_header_bytes"`
+	MaxBodyBytes       int64         `yaml:"max_body_bytes" json:"max_body_bytes"`
+	RequestIDHeader    string        `yaml:"request_id_header" json:"request_id_header"`
+	RealIPHeader       string        `yaml:"real_ip_header" json:"real_ip_header"`
 	TrustedProxies     []string      `yaml:"trusted_proxies" json:"trusted_proxies"`
 	CORSAllowedOrigins []string      `yaml:"cors_allowed_origins" json:"cors_allowed_origins"`
 	TLS                TLS           `yaml:"tls" json:"tls"`
@@ -55,15 +77,34 @@ type TLS struct {
 }
 
 type GRPCServer struct {
-	Addr string `yaml:"addr" json:"addr"`
+	Addr              string `yaml:"addr" json:"addr"`
+	ReflectionEnabled bool   `yaml:"reflection_enabled" json:"reflection_enabled"`
+	MaxRecvMsgSize    int    `yaml:"max_recv_msg_size" json:"max_recv_msg_size"`
+	MaxSendMsgSize    int    `yaml:"max_send_msg_size" json:"max_send_msg_size"`
+}
+
+type Datastores struct {
+	Postgres Postgres `yaml:"postgres" json:"postgres"`
+	S3       S3       `yaml:"s3" json:"s3"`
 }
 
 type Postgres struct {
-	DSN             string        `yaml:"dsn" json:"dsn"`
+	DSN               string           `yaml:"dsn" json:"dsn"`
+	Pool              PostgresPool     `yaml:"pool" json:"pool"`
+	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
+	HealthcheckPeriod time.Duration    `yaml:"healthcheck_period" json:"healthcheck_period"`
+}
+
+type PostgresPool struct {
 	MaxConns        int32         `yaml:"max_conns" json:"max_conns"`
 	MinConns        int32         `yaml:"min_conns" json:"min_conns"`
 	MaxConnLifetime time.Duration `yaml:"max_conn_lifetime" json:"max_conn_lifetime"`
 	MaxConnIdleTime time.Duration `yaml:"max_conn_idle_time" json:"max_conn_idle_time"`
+}
+
+type PostgresTimeouts struct {
+	Connect   time.Duration `yaml:"connect" json:"connect"`
+	Statement time.Duration `yaml:"statement" json:"statement"`
 }
 
 type S3 struct {
@@ -122,9 +163,14 @@ type RateLimit struct {
 }
 
 type OTel struct {
-	Enabled      bool   `yaml:"enabled" json:"enabled"`
-	ServiceName  string `yaml:"service_name" json:"service_name"`
-	Environment  string `yaml:"environment" json:"environment"`
-	OTLPEndpoint string `yaml:"otlp_endpoint" json:"otlp_endpoint"`
-	Insecure     bool   `yaml:"insecure" json:"insecure"`
+	Enabled  bool         `yaml:"enabled" json:"enabled"`
+	Endpoint string       `yaml:"endpoint" json:"endpoint"`
+	Protocol string       `yaml:"protocol" json:"protocol"`
+	Insecure bool         `yaml:"insecure" json:"insecure"`
+	Resource OTelResource `yaml:"resource" json:"resource"`
+}
+
+type OTelResource struct {
+	ServiceName           string `yaml:"service.name" json:"service.name"`
+	DeploymentEnvironment string `yaml:"deployment.environment" json:"deployment.environment"`
 }

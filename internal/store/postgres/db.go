@@ -25,10 +25,12 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	}
 
 	// Apply config from struct
-	poolCfg.MaxConns = cfg.MaxConns
-	poolCfg.MinConns = cfg.MinConns
-	poolCfg.MaxConnLifetime = cfg.MaxConnLifetime
-	poolCfg.MaxConnIdleTime = cfg.MaxConnIdleTime
+	poolCfg.MaxConns = cfg.Pool.MaxConns
+	poolCfg.MinConns = cfg.Pool.MinConns
+	poolCfg.MaxConnLifetime = cfg.Pool.MaxConnLifetime
+	poolCfg.MaxConnIdleTime = cfg.Pool.MaxConnIdleTime
+	poolCfg.HealthCheckPeriod = cfg.HealthcheckPeriod
+	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
 
 	// Allow overrides via env
 	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
