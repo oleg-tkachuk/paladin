@@ -5,12 +5,13 @@ on:
     branches:
       - main
     paths:
+      - "api/**"
       - "cmd/**"
       - "configs/**"
       - "deploy/**"
       - "internal/**"
       - "migrations/**"
-      - "proto/**"
+      - "tests/**"
       - "go.mod"
       - "go.sum"
       - "Taskfile.yaml"
