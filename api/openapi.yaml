@@ -1,0 +1,462 @@
+openapi: 3.0.3
+info:
+  title: Paladin API
+  version: 1.0.0
+  description: API for managing objects and multipart uploads.
+
+servers:
+  - url: /v1
+
+paths:
+  /objects:
+    post:
+      summary: Create a single object
+      operationId: createObject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateObjectRequest"
+      responses:
+        "200":
+          description: Object created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateObjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get object details
+      operationId: getObject
+      responses:
+        "200":
+          description: Object details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetObjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      summary: Delete an object
+      operationId: deleteObject
+      responses:
+        "200":
+          description: Object deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteObjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/meta:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get object metadata
+      operationId: getObjectMeta
+      responses:
+        "200":
+          description: Object metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetObjectMetaResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/complete:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Mark object upload as complete
+      operationId: completeObject
+      responses:
+        "200":
+          description: Object marked as complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompleteObjectResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart:
+    post:
+      summary: Initiate multipart upload
+      operationId: initiateMultipart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitiateMultipartRequest"
+      responses:
+        "200":
+          description: Multipart upload initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InitiateMultipartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart/{upload_id}/parts/{part_number}/sign:
+    parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: part_number
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      summary: Sign a part for upload
+      operationId: signPart
+      responses:
+        "200":
+          description: Signed URL for part upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignPartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart/{upload_id}/complete:
+    parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Complete multipart upload
+      operationId: completeMultipart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteMultipartRequest"
+      responses:
+        "200":
+          description: Multipart upload completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompleteMultipartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart/{upload_id}/abort:
+    parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Abort multipart upload
+      operationId: abortMultipart
+      responses:
+        "200":
+          description: Multipart upload aborted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbortMultipartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    CreateObjectRequest:
+      type: object
+      required:
+        - content_type
+        - size_bytes
+      properties:
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        external_ref:
+          type: string
+
+    CreateObjectResponse:
+      type: object
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        upload_url:
+          type: string
+        method:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    GetObjectResponse:
+      type: object
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        bucket:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        status:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        external_ref:
+          type: string
+        download_url:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    GetObjectMetaResponse:
+      type: object
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        bucket:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        status:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        external_ref:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    CompleteObjectResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    DeleteObjectResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    InitiateMultipartRequest:
+      type: object
+      required:
+        - content_type
+        - size_bytes
+      properties:
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        external_ref:
+          type: string
+
+    InitiateMultipartResponse:
+      type: object
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        upload_id:
+          type: string
+        part_size:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+
+    SignPartResponse:
+      type: object
+      properties:
+        upload_url:
+          type: string
+        method:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    CompletePart:
+      type: object
+      required:
+        - part_number
+        - etag
+      properties:
+        part_number:
+          type: integer
+          format: int32
+        etag:
+          type: string
+
+    CompleteMultipartRequest:
+      type: object
+      required:
+        - parts
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletePart"
+
+    CompleteMultipartResponse:
+      type: object
+      properties:
+        object_id:
+          type: string
+        status:
+          type: string
+
+    AbortMultipartResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetails"
+
+    ErrorDetails:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+        request_id:
+          type: string
+        trace_id:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
