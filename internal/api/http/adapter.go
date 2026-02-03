@@ -57,7 +57,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		return
 	}
 
-	c.JSON(http.StatusOK, api.CreateObjectResponse{
+	c.JSON(http.StatusCreated, api.CreateObjectResponse{
 		ObjectId:  out.ID,
 		ObjectKey: out.Key,
 		Bucket:    out.Bucket,
