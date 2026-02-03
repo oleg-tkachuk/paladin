@@ -34,19 +34,19 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 		externalRef = &req.ExternalRef
 	}
 
-	id, key, p, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, nil, req.Labels, externalRef)
+	out, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("CreateObject failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	return &CreateObjectResponse{
-		ObjectId:      id.String(),
-		ObjectKey:     key,
-		UploadUrl:     p.URL,
-		Method:        p.Method,
-		Headers:       p.Headers,
-		ExpiresAtUnix: p.ExpiresAt.Unix(),
+		ObjectId:      out.ID.String(),
+		ObjectKey:     out.Key,
+		UploadUrl:     out.Upload.URL,
+		Method:        out.Upload.Method,
+		Headers:       out.Upload.Headers,
+		ExpiresAtUnix: out.Upload.ExpiresAt.Unix(),
 	}, nil
 }
 
@@ -62,7 +62,7 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
-	rec, p, err := s.svc.Get(ctx, tenant, id)
+	rec, err := s.svc.Get(ctx, tenant, id)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GetObject failed", zap.Error(err))
 		return nil, status.Error(codes.NotFound, err.Error())
@@ -74,16 +74,14 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 	}
 
 	return &GetObjectResponse{
-		ObjectId:      rec.ID.String(),
-		ObjectKey:     rec.ObjectKey,
-		Bucket:        rec.Bucket,
-		ContentType:   rec.ContentType,
-		SizeBytes:     rec.SizeBytes,
-		Status:        string(rec.Status),
-		DownloadUrl:   p.URL,
-		ExpiresAtUnix: p.ExpiresAt.Unix(),
-		Labels:        rec.Labels,
-		ExternalRef:   ref,
+		ObjectId:    rec.ID.String(),
+		ObjectKey:   rec.ObjectKey,
+		Bucket:      rec.Bucket,
+		ContentType: rec.ContentType,
+		SizeBytes:   rec.SizeBytes,
+		Status:      string(rec.Status),
+		Labels:      rec.Labels,
+		ExternalRef: ref,
 	}, nil
 }
 
@@ -140,7 +138,7 @@ func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest)
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
-	if err := s.svc.MarkComplete(ctx, tenant, id); err != nil {
+	if _, err := s.svc.CompleteObject(ctx, tenant, id, nil, nil); err != nil {
 		logger.FromContext(ctx).Error("CompleteObject failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -159,7 +157,7 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 		externalRef = &req.ExternalRef
 	}
 
-	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef)
+	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("InitiateMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -204,13 +202,13 @@ func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRe
 		parts = append(parts, service.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
 	}
 
-	objID, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)
+	rec, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)
 	if err != nil {
 		logger.FromContext(ctx).Warn("CompleteMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	return &CompleteMultipartResponse{ObjectId: objID.String(), Status: "active"}, nil
+	return &CompleteMultipartResponse{ObjectId: rec.ID.String(), Status: "active"}, nil
 }
 
 func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest) (*AbortMultipartResponse, error) {

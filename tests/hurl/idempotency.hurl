@@ -1,6 +1,6 @@
 # 1. Create Initial Object with External Ref
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -15,7 +15,7 @@ jsonpath "$.object_id" exists
 
 # 2. Retry with SAME parameters (Should be Idempotent)
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -30,7 +30,7 @@ variable "id_1" == "{{id_2}}"
 
 # 3. Retry with DIFFERENT parameters (Should Fail)
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -46,8 +46,38 @@ jsonpath "$.error.trace_id" exists
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{id_1}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
+HTTP 204
+
+# 4. Create Object with Idempotency-Key Header
+POST {{host}}/v1/objects
+Host: paladin-api.acme
+X-Tenant-ID: test-tenant
+Idempotency-Key: unique-key-12345678
+{
+  "content_type": "text/plain",
+  "size_bytes": 100
+}
+HTTP 200
+[Captures]
+idem_header_id: jsonpath "$.object_id"
+
+# 5. Retry with SAME Idempotency-Key Header
+POST {{host}}/v1/objects
+Host: paladin-api.acme
+X-Tenant-ID: test-tenant
+Idempotency-Key: unique-key-12345678
+{
+  "content_type": "text/plain",
+  "size_bytes": 100
+}
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "deleted"
+jsonpath "$.object_id" == "{{idem_header_id}}"
+
+# Cleanup
+DELETE {{host}}/v1/objects/{{idem_header_id}}
+Host: paladin-api.acme
+X-Tenant-ID: test-tenant
+HTTP 204

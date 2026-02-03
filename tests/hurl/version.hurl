@@ -1,5 +1,5 @@
 GET {{host}}/version
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: default
 HTTP 200
 [Asserts]

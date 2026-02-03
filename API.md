@@ -6,7 +6,10 @@ This document provides detailed information about the REST and gRPC APIs exposed
 
 **Base URL**: `/v1`
 
-The REST API is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
+The REST API is driven by an [OpenAPI 3.0 specification](./api/openapi.yaml). It is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
+
+**Contract-First Development**:
+The API follows a contract-first approach. Go types, server interfaces, and request validation are automatically generated from the OpenAPI spec. Documentation below describes the current contract, but the `openapi.yaml` file remains the absolute source of truth.
 
 ### Authentication & Multi-Tenancy
 
@@ -28,12 +31,44 @@ All API endpoints can be served over **HTTPS** with full TLS support (configurab
 
 ### Rate Limiting
 
-The API implements a token-bucket rate limiter per tenant.
+The API implements a token-bucket rate limiter per tenant with automatic cleanup:
 
-- **Limit**: 10 requests per second (default).
-- **Burst**: 20 requests (default).
+- **Limit**: 300 requests per second (default, configurable)
+- **Burst**: 500 requests (default, configurable)
+- **Max Tenants**: 10,000 concurrent rate limiters (configurable)
+- **Cleanup**: Inactive limiters removed after 10 minutes (configurable)
 
 Exceeding the limit results in `429 Too Many Requests`.
+
+**Configuration**:
+
+```yaml
+rate_limit:
+  requests_per_second: 300
+  burst: 500
+  max_tenants: 10000
+  cleanup_ttl: 10m
+  cleanup_interval: 5m
+```
+
+### Idempotency
+
+The API supports idempotency keys for safe retries of create operations:
+
+- **Header**: `Idempotency-Key: <unique-string>`
+- **TTL**: 24 hours (default, configurable)
+- **Supported Operations**: `CreateObject`, `InitiateMultipart`
+
+**Usage**:
+
+```bash
+curl -X POST http://localhost:8080/v1/objects \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: unique-request-id-123" \
+  -d '{"content_type": "image/png", "size_bytes": 1024}'
+```
+
+If the same idempotency key is used within the TTL window, the original response is returned without creating a duplicate resource.
 
 ### Common Error Response
 
@@ -86,6 +121,12 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 | `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must be > 0 and not exceed server limits. |
 | `labels` | map[string]string | No | Optional key-value tags to attach to the object. |
 | `external_ref` | string | No | Optional external reference ID (must be unique per tenant if provided). |
+
+**Request Headers** (Optional):
+
+| Header | Description |
+| :--- | :--- |
+| `Idempotency-Key` | Unique string to ensure safe retries. If provided, duplicate requests with the same key within 24h will return the original response. |
 
 **Response Body**:
 
@@ -214,6 +255,12 @@ Starts a multipart upload session. This is required for large files or when the 
 | `size_bytes` | int64 | **Yes** | Total size of the file. Used to calculate part sizing. |
 | `labels` | map[string]string | No | Optional key-value tags. |
 | `external_ref` | string | No | Optional external reference ID. |
+
+**Request Headers** (Optional):
+
+| Header | Description |
+| :--- | :--- |
+| `Idempotency-Key` | Unique string to ensure safe retries. If provided, duplicate requests with the same key within 24h will return the original response. |
 
 **Response Body**:
 

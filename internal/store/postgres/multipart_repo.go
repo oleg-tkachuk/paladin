@@ -15,6 +15,7 @@ const (
 	MultipartCompleted MultipartStatus = "completed"
 	MultipartAborted   MultipartStatus = "aborted"
 	MultipartExpired   MultipartStatus = "expired"
+	MultipartUploaded  MultipartStatus = "uploaded"
 )
 
 type MultipartRecord struct {

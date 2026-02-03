@@ -98,6 +98,15 @@ type Presigned struct {
 	ExpiresAt time.Time         `json:"expires_at"`
 }
 
+type HeadRecord struct {
+	Key          string
+	ETag         string
+	SizeBytes    int64
+	ContentType  string
+	LastModified time.Time
+	Metadata     map[string]string
+}
+
 func (c *Client) EnsureBucket(ctx context.Context) error {
 	// Best-effort bucket creation for local S3 gateways; ignore errors if exists.
 	_, err := c.s3.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(c.Bucket)})
@@ -288,4 +297,30 @@ func (c *Client) BucketName() string {
 
 func (c *Client) PresignTTLDuration() time.Duration {
 	return c.PresignTTL
+}
+
+func (c *Client) HeadObject(ctx context.Context, key string) (*HeadRecord, error) {
+	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(c.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &HeadRecord{
+		Key:          key,
+		ETag:         aws.ToString(out.ETag),
+		SizeBytes:    aws.ToInt64(out.ContentLength),
+		ContentType:  aws.ToString(out.ContentType),
+		LastModified: aws.ToTime(out.LastModified),
+		Metadata:     out.Metadata,
+	}, nil
+}
+func (c *Client) DeleteObject(ctx context.Context, key string) error {
+	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(c.Bucket),
+		Key:    aws.String(key),
+	})
+	return err
 }

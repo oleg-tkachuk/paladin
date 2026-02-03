@@ -1,20 +1,22 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"paladin/internal/config"
+	"paladin/internal/utils"
 )
 
-type Policy struct {
-	MaxObjectSizeBytes  int64
-	AllowedContentTypes map[string]struct{}
-	PresignPutTTL       time.Duration
-	PresignGetTTL       time.Duration
-	PresignPartTTL      time.Duration
+type policyImpl struct {
+	maxObjectSizeBytes  int64
+	allowedContentTypes map[string]struct{}
+	presignPutTTL       time.Duration
+	presignGetTTL       time.Duration
+	presignPartTTL      time.Duration
 }
 
 func NewPolicy(cfg config.Policy) Policy {
@@ -23,26 +25,38 @@ func NewPolicy(cfg config.Policy) Policy {
 		m[strings.ToLower(strings.TrimSpace(ct))] = struct{}{}
 	}
 
-	return Policy{
-		MaxObjectSizeBytes:  cfg.MaxObjectSizeBytes,
-		AllowedContentTypes: m,
-		PresignPutTTL:       cfg.PresignPutTTL,
-		PresignGetTTL:       cfg.PresignGetTTL,
-		PresignPartTTL:      cfg.PresignPartTTL,
+	return &policyImpl{
+		maxObjectSizeBytes:  cfg.MaxObjectSizeBytes,
+		allowedContentTypes: m,
+		presignPutTTL:       cfg.PresignPutTTL,
+		presignGetTTL:       cfg.PresignGetTTL,
+		presignPartTTL:      cfg.PresignPartTTL,
 	}
 }
 
-func (p Policy) Validate(contentType string, sizeBytes int64) error {
-	if sizeBytes <= 0 {
-		return errors.New("size_bytes must be > 0")
+func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action Action) error {
+	// Basic authorization placeholder.
+	// In a real app, this would check RBAC/ABAC.
+	if tenantID == "" {
+		return errors.New("unauthorized: tenant_id required")
+	}
+	return nil
+}
+
+func (p *policyImpl) Validate(contentType string, sizeBytes int64) error {
+	// Validate content type format
+	if err := utils.ValidateContentType(contentType); err != nil {
+		return fmt.Errorf("invalid content_type: %w", err)
 	}
 
-	if sizeBytes > p.MaxObjectSizeBytes {
-		return fmt.Errorf("payload too large: %d > %d", sizeBytes, p.MaxObjectSizeBytes)
+	// Validate size bounds
+	if err := utils.ValidateSizeBytes(sizeBytes, p.maxObjectSizeBytes); err != nil {
+		return err
 	}
 
+	// Check if content type is allowed
 	ct := strings.ToLower(strings.TrimSpace(contentType))
-	if _, ok := p.AllowedContentTypes[ct]; !ok {
+	if _, ok := p.allowedContentTypes[ct]; !ok {
 		return fmt.Errorf("content_type not allowed: %s", contentType)
 	}
 
