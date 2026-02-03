@@ -3,6 +3,7 @@
 -- Author: Performance Optimization Phase 3
 -- Date: 2026-02-03
 
+-- +goose NO TRANSACTION
 -- +goose Up
 -- Index for listing objects by tenant, status, and creation time (most common query pattern)
 -- +goose StatementBegin
