@@ -16,6 +16,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 ## Tech Stack
 
 - **Server**: [Gin](https://gin-gonic.com/) (HTTP), [gRPC](https://grpc.io/)
+- **API Contract**: [OpenAPI 3.0](https://www.openapis.org/) with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen)
 - **Database**: [PostgreSQL](https://www.postgresql.org/) with [pgx](https://github.com/jackc/pgx)
 - **Config**: [CUE](https://cuelang.org/)
 - **Logging**: [Zap](https://github.com/uber-go/zap)
@@ -24,6 +25,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 ## Project Structure
 
 ```text
+├── api/                # OpenAPI specification
 ├── cmd/server          # Application entrypoint (Cobra CLI)
 ├── configs/            # Configuration files
 ├── deploy/             # Docker and Kubernetes deployment manifests
@@ -33,6 +35,8 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 │   ├── breaker/        # Circuit breaker implementations
 │   ├── config/         # CUE-powered configuration parsing
 │   ├── fault/          # Fault injection for testing
+│   ├── generated/      # Generated code (API, etc.)
+│   │   └── api/        # Generated OpenAPI code
 │   ├── logger/         # Structured logger initialization
 │   ├── middleware/     # HTTP/gRPC middleware
 │   ├── observability/  # OpenTelemetry instrumentation (traces/metrics)
@@ -40,7 +44,8 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 │   ├── storage/        # S3 client and storage abstractions
 │   ├── store/          # PostgreSQL repository implementations
 │   └── utils/          # Shared utilities
-└── migrations/         # SQL migration files
+├── migrations/         # SQL migration files
+└── tools.go            # Tool dependencies (oapi-codegen, etc.)
 ```
 
 ## Database Schema

@@ -6,7 +6,10 @@ This document provides detailed information about the REST and gRPC APIs exposed
 
 **Base URL**: `/v1`
 
-The REST API is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
+The REST API is driven by an [OpenAPI 3.0 specification](./api/openapi.yaml). It is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
+
+**Contract-First Development**:
+The API follows a contract-first approach. Go types, server interfaces, and request validation are automatically generated from the OpenAPI spec. Documentation below describes the current contract, but the `openapi.yaml` file remains the absolute source of truth.
 
 ### Authentication & Multi-Tenancy
 
