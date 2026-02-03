@@ -3,7 +3,7 @@
 
 # 1. Create Object Entry
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -12,7 +12,7 @@ X-Tenant-ID: test-tenant
 HTTP 200
 [Captures]
 object_id: jsonpath "$.object_id"
-upload_url: jsonpath "$.upload_url"
+upload_url: jsonpath "$.upload.url"
 [Asserts]
 
 # 2. Upload File Content to Presigned URL
@@ -24,22 +24,22 @@ HTTP 200
 
 # 3. Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "active"
+jsonpath "$.status" == "complete"
 
-# 4. Retrieve (Get Download URL)
-GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.paladin.svc.cluster.local
+# 4. Retrieve (Sign Download URL)
+POST {{host}}/v1/objects/{{object_id}}/sign-download
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
+{}
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "active"
-jsonpath "$.download_url" exists
+jsonpath "$.download.url" exists
 [Captures]
-download_url: jsonpath "$.download_url"
+download_url: jsonpath "$.download.url"
 
 # 5. Verify Content (Download)
 GET {{download_url}}
@@ -49,19 +49,17 @@ bytes == file,fixtures/hello.txt;
 
 # 6. List This File (Get Metadata)
 GET {{host}}/v1/objects/{{object_id}}/meta
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{object_id}}"
-jsonpath "$.status" == "active"
+jsonpath "$.status" == "complete"
 jsonpath "$.content_type" == "text/plain"
 jsonpath "$.size_bytes" == 96
 
 # 7. Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
-HTTP 200
-[Asserts]
-jsonpath "$.status" == "deleted"
+HTTP 204

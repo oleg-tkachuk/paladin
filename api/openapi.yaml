@@ -1,17 +1,75 @@
 openapi: 3.0.3
 info:
   title: Paladin API
-  version: 1.0.0
-  description: API for managing objects and multipart uploads.
+  version: 1.1.0
+  description: >
+    S3-compatible control plane for managing object metadata and issuing pre-signed URLs
+    for single PUT and multipart uploads. Includes explicit commit (complete) step.
 
 servers:
   - url: /v1
 
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Objects
+  - name: Multipart
+  - name: Ops
+
 paths:
   /objects:
+    get:
+      tags: [Objects]
+      summary: List objects
+      operationId: listObjects
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectStatus"
+        - name: external_ref
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: created_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Objects list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListObjectsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
     post:
-      summary: Create a single object
+      tags: [Objects]
+      summary: Create a single object and return signed upload action (PUT)
       operationId: createObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -19,29 +77,37 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateObjectRequest"
       responses:
-        "200":
-          description: Object created successfully
+        "201":
+          description: Object created
+          headers:
+            Location:
+              description: Canonical object resource URL
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateObjectResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /objects/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: "#/components/parameters/ObjectID"
+
     get:
-      summary: Get object details
+      tags: [Objects]
+      summary: Get object details (without signing download URL)
       operationId: getObject
       responses:
         "200":
@@ -52,36 +118,64 @@ paths:
                 $ref: "#/components/schemas/GetObjectResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalError"
-    delete:
-      summary: Delete an object
-      operationId: deleteObject
-      responses:
-        "200":
-          description: Object deleted successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DeleteObjectResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
+    head:
+      tags: [Objects]
+      summary: Check object existence
+      operationId: headObject
+      responses:
+        "200":
+          description: Object exists
+          headers:
+            X-Object-Status:
+              schema:
+                $ref: "#/components/schemas/ObjectStatus"
+            X-Object-Size-Bytes:
+              schema:
+                type: integer
+                format: int64
+            X-Object-Content-Type:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Objects]
+      summary: Delete an object (idempotent, synchronous)
+      operationId: deleteObject
+      responses:
+        "204":
+          description: Deleted (or already absent)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /objects/{id}/meta:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
+      - $ref: "#/components/parameters/ObjectID"
+
     get:
+      tags: [Objects]
       summary: Get object metadata
       operationId: getObjectMeta
       responses:
@@ -93,40 +187,162 @@ paths:
                 $ref: "#/components/schemas/GetObjectMetaResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /objects/{id}/complete:
-    parameters:
-      - name: id
-        in: path
+    patch:
+      tags: [Objects]
+      summary: Update object metadata (labels/external_ref)
+      operationId: patchObjectMeta
+      requestBody:
         required: true
-        schema:
-          type: string
-          format: uuid
-    post:
-      summary: Mark object upload as complete
-      operationId: completeObject
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchObjectMetaRequest"
       responses:
         "200":
-          description: Object marked as complete
+          description: Updated metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetObjectMetaResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/sign-upload:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    post:
+      tags: [Objects]
+      summary: Re-issue signed upload action for single PUT (if upload not completed)
+      operationId: signObjectUpload
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignObjectUploadRequest"
+      responses:
+        "200":
+          description: Signed upload action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignObjectUploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/sign-download:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    post:
+      tags: [Objects]
+      summary: Issue signed download action (GET)
+      operationId: signObjectDownload
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignObjectDownloadRequest"
+      responses:
+        "200":
+          description: Signed download action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignObjectDownloadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    post:
+      tags: [Objects]
+      summary: Commit single object upload (server validates via S3 HEAD)
+      operationId: completeObject
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteObjectRequest"
+      responses:
+        "200":
+          description: Object committed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CompleteObjectResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /multipart:
     post:
+      tags: [Multipart]
       summary: Initiate multipart upload
       operationId: initiateMultipart
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -134,32 +350,64 @@ paths:
             schema:
               $ref: "#/components/schemas/InitiateMultipartRequest"
       responses:
-        "200":
+        "201":
           description: Multipart upload initiated
+          headers:
+            Location:
+              description: Canonical multipart resource URL
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/InitiateMultipartResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart/{upload_id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadID"
+
+    get:
+      tags: [Multipart]
+      summary: Get multipart upload details
+      operationId: getMultipart
+      responses:
+        "200":
+          description: Multipart details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMultipartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /multipart/{upload_id}/parts/{part_number}/sign:
     parameters:
-      - name: upload_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: part_number
-        in: path
-        required: true
-        schema:
-          type: integer
-          minimum: 1
+      - $ref: "#/components/parameters/UploadID"
+      - $ref: "#/components/parameters/PartNumber"
+
     post:
-      summary: Sign a part for upload
+      tags: [Multipart]
+      summary: Sign a single part for upload
       operationId: signPart
       responses:
         "200":
@@ -170,19 +418,61 @@ paths:
                 $ref: "#/components/schemas/SignPartResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /multipart/{upload_id}/parts/sign:
+    parameters:
+      - $ref: "#/components/parameters/UploadID"
+
+    post:
+      tags: [Multipart]
+      summary: Sign multiple parts (batch)
+      operationId: signPartsBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignPartsBatchRequest"
+      responses:
+        "200":
+          description: Signed URLs for requested parts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignPartsBatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /multipart/{upload_id}/complete:
     parameters:
-      - name: upload_id
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/UploadID"
+
     post:
+      tags: [Multipart]
       summary: Complete multipart upload
       operationId: completeMultipart
       requestBody:
@@ -200,19 +490,25 @@ paths:
                 $ref: "#/components/schemas/CompleteMultipartResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /multipart/{upload_id}/abort:
     parameters:
-      - name: upload_id
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/UploadID"
+
     post:
+      tags: [Multipart]
       summary: Abort multipart upload
       operationId: abortMultipart
       responses:
@@ -224,44 +520,133 @@ paths:
                 $ref: "#/components/schemas/AbortMultipartResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalError"
 
-components:
-  schemas:
-    CreateObjectRequest:
-      type: object
-      required:
-        - content_type
-        - size_bytes
-      properties:
-        content_type:
-          type: string
-        size_bytes:
-          type: integer
-          format: int64
-          minimum: 1
-        labels:
-          type: object
-          additionalProperties:
-            type: string
-        external_ref:
-          type: string
+  /healthz:
+    get:
+      tags: [Ops]
+      summary: Liveness probe
+      operationId: healthz
+      security: []
+      responses:
+        "200":
+          description: OK
 
-    CreateObjectResponse:
+  /readyz:
+    get:
+      tags: [Ops]
+      summary: Readiness probe
+      operationId: readyz
+      security: []
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Not ready
+
+  /version:
+    get:
+      tags: [Ops]
+      summary: Build/version info
+      operationId: version
+      security: []
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ObjectID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    UploadID:
+      name: upload_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+
+    PartNumber:
+      name: part_number
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+
+  schemas:
+    ObjectStatus:
+      type: string
+      enum: [pending, uploading, uploaded, complete, aborted, deleted, error]
+
+    Labels:
       type: object
+      additionalProperties:
+        type: string
+
+    SignedAction:
+      type: object
+      required: [url, method, expires_at]
       properties:
-        object_id:
-          type: string
-          format: uuid
-        object_key:
-          type: string
-        upload_url:
+        url:
           type: string
         method:
           type: string
+          enum: [GET, PUT]
         headers:
           type: object
           additionalProperties:
@@ -270,172 +655,391 @@ components:
           type: string
           format: date-time
 
-    GetObjectResponse:
+    CreateObjectRequest:
       type: object
-      properties:
-        object_id:
-          type: string
-          format: uuid
-        object_key:
-          type: string
-        bucket:
-          type: string
-        content_type:
-          type: string
-        size_bytes:
-          type: integer
-          format: int64
-        status:
-          type: string
-        labels:
-          type: object
-          additionalProperties:
-            type: string
-        external_ref:
-          type: string
-        download_url:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-
-    GetObjectMetaResponse:
-      type: object
-      properties:
-        object_id:
-          type: string
-          format: uuid
-        object_key:
-          type: string
-        bucket:
-          type: string
-        content_type:
-          type: string
-        size_bytes:
-          type: integer
-          format: int64
-        status:
-          type: string
-        labels:
-          type: object
-          additionalProperties:
-            type: string
-        external_ref:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-
-    CompleteObjectResponse:
-      type: object
-      properties:
-        status:
-          type: string
-
-    DeleteObjectResponse:
-      type: object
-      properties:
-        status:
-          type: string
-
-    InitiateMultipartRequest:
-      type: object
-      required:
-        - content_type
-        - size_bytes
+      required: [content_type, size_bytes]
       properties:
         content_type:
           type: string
+          minLength: 1
         size_bytes:
           type: integer
           format: int64
           minimum: 1
         labels:
-          type: object
-          additionalProperties:
-            type: string
+          $ref: "#/components/schemas/Labels"
         external_ref:
           type: string
+          maxLength: 512
+        upload_expires_in_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          description: Optional override for signed URL lifetime (server may cap).
 
-    InitiateMultipartResponse:
+    CreateObjectResponse:
       type: object
+      required: [object_id, object_key, bucket, status, upload]
       properties:
         object_id:
           type: string
           format: uuid
         object_key:
+          type: string
+        bucket:
+          type: string
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
+        upload:
+          $ref: "#/components/schemas/SignedAction"
+
+    ObjectCommon:
+      type: object
+      required:
+        [
+          object_id,
+          object_key,
+          bucket,
+          content_type,
+          size_bytes,
+          status,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        bucket:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
+        labels:
+          $ref: "#/components/schemas/Labels"
+        external_ref:
+          type: string
+        stored_etag:
+          type: string
+          description: Populated after successful commit/complete.
+        stored_size_bytes:
+          type: integer
+          format: int64
+          description: Populated after successful commit/complete.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+
+    GetObjectResponse:
+      allOf:
+        - $ref: "#/components/schemas/ObjectCommon"
+
+    GetObjectMetaResponse:
+      allOf:
+        - $ref: "#/components/schemas/ObjectCommon"
+
+    PatchObjectMetaRequest:
+      type: object
+      properties:
+        labels:
+          $ref: "#/components/schemas/Labels"
+        external_ref:
+          type: string
+          maxLength: 512
+
+    SignObjectUploadRequest:
+      type: object
+      properties:
+        upload_expires_in_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+
+    SignObjectUploadResponse:
+      type: object
+      required: [object_id, upload]
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        upload:
+          $ref: "#/components/schemas/SignedAction"
+
+    SignObjectDownloadRequest:
+      type: object
+      properties:
+        download_expires_in_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+
+    SignObjectDownloadResponse:
+      type: object
+      required: [object_id, download]
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        download:
+          $ref: "#/components/schemas/SignedAction"
+
+    CompleteObjectRequest:
+      type: object
+      properties:
+        etag:
+          type: string
+          description: Optional. If provided, server may compare with HEAD result when meaningful.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Optional. If provided, server validates against HEAD Content-Length.
+
+    CompleteObjectResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
+        stored_etag:
+          type: string
+        stored_size_bytes:
+          type: integer
+          format: int64
+        completed_at:
+          type: string
+          format: date-time
+
+    InitiateMultipartRequest:
+      type: object
+      required: [content_type, size_bytes]
+      properties:
+        content_type:
+          type: string
+          minLength: 1
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        labels:
+          $ref: "#/components/schemas/Labels"
+        external_ref:
+          type: string
+          maxLength: 512
+        upload_expires_in_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+
+    InitiateMultipartResponse:
+      type: object
+      required:
+        [
+          object_id,
+          object_key,
+          bucket,
+          upload_id,
+          part_size,
+          status,
+          expires_at,
+        ]
+      properties:
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        bucket:
           type: string
         upload_id:
           type: string
         part_size:
           type: integer
           format: int64
+          minimum: 5242880
+          description: Suggested part size (server-defined).
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
         expires_at:
+          type: string
+          format: date-time
+
+    GetMultipartResponse:
+      type: object
+      required:
+        [
+          upload_id,
+          object_id,
+          object_key,
+          bucket,
+          status,
+          part_size,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        upload_id:
+          type: string
+        object_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        bucket:
+          type: string
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
+        part_size:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
     SignPartResponse:
       type: object
-      properties:
-        upload_url:
-          type: string
-        method:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-
-    CompletePart:
-      type: object
-      required:
-        - part_number
-        - etag
+      required: [part_number, upload]
       properties:
         part_number:
           type: integer
           format: int32
+          minimum: 1
+        upload:
+          $ref: "#/components/schemas/SignedAction"
+
+    SignPartsBatchRequest:
+      type: object
+      required: [part_numbers]
+      properties:
+        part_numbers:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+
+    SignPartsBatchResponse:
+      type: object
+      required: [upload_id, parts]
+      properties:
+        upload_id:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignPartResponse"
+
+    CompletePart:
+      type: object
+      required: [part_number, etag]
+      properties:
+        part_number:
+          type: integer
+          format: int32
+          minimum: 1
         etag:
           type: string
 
     CompleteMultipartRequest:
       type: object
-      required:
-        - parts
+      required: [parts]
       properties:
         parts:
           type: array
+          minItems: 1
           items:
             $ref: "#/components/schemas/CompletePart"
 
     CompleteMultipartResponse:
       type: object
+      required: [object_id, status]
       properties:
         object_id:
           type: string
+          format: uuid
         status:
+          $ref: "#/components/schemas/ObjectStatus"
+        stored_etag:
           type: string
+        stored_size_bytes:
+          type: integer
+          format: int64
+        completed_at:
+          type: string
+          format: date-time
 
     AbortMultipartResponse:
       type: object
+      required: [status]
       properties:
         status:
+          $ref: "#/components/schemas/ObjectStatus"
+
+    ListObjectsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObjectCommon"
+        next_cursor:
+          type: string
+
+    VersionResponse:
+      type: object
+      required: [service, version]
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+        git_sha:
+          type: string
+        build_time:
           type: string
 
     ErrorResponse:
       type: object
+      required: [error]
       properties:
         error:
           $ref: "#/components/schemas/ErrorDetails"
 
     ErrorDetails:
       type: object
+      required: [code, message]
       properties:
         code:
           type: string
+          description: Machine-readable error code (e.g., invalid_argument, not_found, conflict).
         message:
           type: string
+          description: Human-readable message.
         details:
-          type: string
+          type: object
+          additionalProperties: true
+          description: Optional structured details.
         request_id:
           type: string
         trace_id:
@@ -448,12 +1052,42 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
     NotFound:
       description: Not Found
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    UnprocessableEntity:
+      description: Unprocessable Entity
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
     InternalError:
       description: Internal Server Error
       content:

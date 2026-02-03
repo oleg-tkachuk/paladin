@@ -46,6 +46,21 @@ func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id u
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error) {
+	args := m.Called(ctx, tenantID, id, etag, sizeBytes)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {
+	args := m.Called(ctx, tenantID, filter, limit, cursor)
+	return args.Get(0).([]postgres.ObjectRecord), args.String(1), args.Error(2)
+}
+
+func (m *MockObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+	args := m.Called(ctx, tenantID, id, labels, externalRef)
+	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+}
+
 func (m *MockObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]postgres.ObjectRecord, error) {
 	args := m.Called(ctx, cutoff, limit)
 	return args.Get(0).([]postgres.ObjectRecord), args.Error(1)
@@ -134,6 +149,19 @@ func (m *MockS3Client) AbortMultipartUpload(ctx context.Context, key, uploadID s
 	return args.Error(0)
 }
 
+func (m *MockS3Client) HeadObject(ctx context.Context, key string) (*s3.HeadRecord, error) {
+	args := m.Called(ctx, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*s3.HeadRecord), args.Error(1)
+}
+
+func (m *MockS3Client) DeleteObject(ctx context.Context, key string) error {
+	args := m.Called(ctx, key)
+	return args.Error(0)
+}
+
 type MockBreakerFactory struct {
 	mock.Mock
 }
@@ -153,7 +181,6 @@ var _ = Describe("ObjectsService", func() {
 		mockRepo    *MockObjectsRepo
 		mockMPRepo  *MockMultipartRepo
 		mockS3      *MockS3Client
-		mockBreaker *MockBreakerFactory
 		svc         service.ObjectsService
 		ctx         context.Context
 	)
@@ -162,13 +189,28 @@ var _ = Describe("ObjectsService", func() {
 		mockRepo = new(MockObjectsRepo)
 		mockMPRepo = new(MockMultipartRepo)
 		mockS3 = new(MockS3Client)
-		mockBreaker = new(MockBreakerFactory)
 		policy := service.NewPolicy(config.Policy{
 			MaxObjectSizeBytes:  100 * 1024 * 1024,
 			AllowedContentTypes: []string{"application/json"},
 		})
-		svc = service.NewObjectsService(policy, mockS3, mockRepo, mockMPRepo, mockBreaker, 5*1024*1024)
+		svc = service.NewObjectsService(
+			mockRepo,
+			mockMPRepo,
+			mockS3,
+			policy,
+			nil,            // idempotency repo
+			5*1024*1024,    // part size
+			5*time.Second,  // fast timeout
+			30*time.Second, // default timeout
+			60*time.Second, // s3 timeout
+			2*time.Minute,  // long timeout
+			24*time.Hour,   // idempotency TTL
+		)
 		ctx = context.Background()
+
+		// Default expectations for common calls
+		mockS3.On("PresignTTLDuration").Return(15 * time.Minute).Maybe()
+		mockS3.On("BucketName").Return("test-bucket").Maybe()
 	})
 
 	Describe("CreateSingle", func() {
@@ -179,15 +221,15 @@ var _ = Describe("ObjectsService", func() {
 
 			mockS3.On("BucketName").Return("test-bucket")
 			mockS3.On("PresignTTLDuration").Return(15 * time.Minute)
-			mockRepo.On("Create", ctx, mock.Anything).Return(nil)
+			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes, mock.Anything).Return(s3.Presigned{URL: "http://example.com"}, nil)
 
-			id, key, p, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, nil)
+			out, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(id).NotTo(Equal(uuid.Nil))
-			Expect(key).To(ContainSubstring(tenantID))
-			Expect(p.URL).To(Equal("http://example.com"))
+			Expect(out.ID).NotTo(Equal(uuid.Nil))
+			Expect(out.Key).To(ContainSubstring(tenantID))
+			Expect(out.Upload.URL).To(Equal("http://example.com"))
 
 			mockRepo.AssertExpectations(GinkgoT())
 			mockS3.AssertExpectations(GinkgoT())
@@ -198,7 +240,7 @@ var _ = Describe("ObjectsService", func() {
 			contentType := "text/plain" // Not allowed
 			sizeBytes := int64(100)
 
-			_, _, _, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, nil)
+			_, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("content_type not allowed"))
@@ -211,17 +253,17 @@ var _ = Describe("ObjectsService", func() {
 			contentType := "application/json"
 			sizeBytes := int64(10000000) // 10MB
 
-			mockRepo.On("Create", ctx, mock.Anything).Return(nil)
-			mockMPRepo.On("Create", ctx, mock.Anything).Return(nil)
+			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+			mockMPRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockS3.On("BucketName").Return("test-bucket")
-			mockS3.On("CreateMultipartUpload", ctx, mock.Anything, contentType).Return(s3.MultipartInit{
+			mockS3.On("CreateMultipartUpload", mock.Anything, mock.Anything, contentType).Return(s3.MultipartInit{
 				UploadID: "test-upload-id",
 				Key:      "test-key",
 				Bucket:   "test-bucket",
 			}, nil)
 			mockS3.On("PresignTTLDuration").Return(1 * time.Hour)
 
-			resp, err := svc.InitiateMultipart(ctx, tenantID, contentType, sizeBytes, nil, nil)
+			resp, err := svc.InitiateMultipart(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.UploadID).To(Equal("test-upload-id"))
@@ -233,12 +275,12 @@ var _ = Describe("ObjectsService", func() {
 			uploadID := "test-upload-id"
 			partNumber := int32(1)
 
-			mockMPRepo.On("GetByUploadID", ctx, tenantID, uploadID).Return(&postgres.MultipartRecord{
+			mockMPRepo.On("GetByUploadID", mock.Anything, tenantID, uploadID).Return(&postgres.MultipartRecord{
 				UploadID:  uploadID,
 				ObjectKey: "test-key",
 			}, nil)
 			mockS3.On("PresignTTLDuration").Return(15 * time.Minute)
-			mockS3.On("PresignUploadPart", ctx, "test-key", uploadID, partNumber, mock.Anything).Return(s3.Presigned{URL: "http://example.com/part1"}, nil)
+			mockS3.On("PresignUploadPart", mock.Anything, "test-key", uploadID, partNumber, mock.Anything).Return(s3.Presigned{URL: "http://example.com/part1"}, nil)
 
 			p, err := svc.SignPart(ctx, tenantID, uploadID, partNumber)
 
@@ -259,20 +301,20 @@ var _ = Describe("ObjectsService", func() {
 				Status:    postgres.MultipartInitiated, // Needs to be Initiated
 			}
 
-			mockMPRepo.On("GetByUploadID", ctx, tenantID, uploadID).Return(mpu, nil)
-			mockMPRepo.On("UpsertPartETag", ctx, mpu.ID, 1, "etag1", mock.Anything).Return(nil)
+			mockMPRepo.On("GetByUploadID", mock.Anything, tenantID, uploadID).Return(mpu, nil)
+			mockS3.On("CompleteMultipartUpload", mock.Anything, "test-key", uploadID, mock.Anything).Return(nil)
+			mockS3.On("HeadObject", mock.Anything, "test-key").Return(&s3.HeadRecord{
+				ETag:      "etag1",
+				SizeBytes: 100,
+			}, nil)
+			mockRepo.On("MarkComplete", mock.Anything, tenantID, objID, "etag1", int64(100)).Return(true, nil)
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&postgres.ObjectRecord{ID: objID, Status: postgres.ObjectComplete}, nil)
+			mockMPRepo.On("MarkCompleted", mock.Anything, tenantID, uploadID).Return(nil)
 
-			brk := fault.GetWithConfig(fault.BreakerConfig{Name: "test"})
-			mockBreaker.On("Get", "s3.complete_multipart").Return(brk)
-
-			mockS3.On("CompleteMultipartUpload", ctx, "test-key", uploadID, mock.Anything).Return(nil)
-			// Updated to use transactional CompleteUpload
-			mockMPRepo.On("CompleteUpload", ctx, tenantID, uploadID, objID).Return(nil)
-
-			resID, err := svc.CompleteMultipart(ctx, tenantID, uploadID, parts)
+			rec, err := svc.CompleteMultipart(ctx, tenantID, uploadID, parts)
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resID).To(Equal(objID))
+			Expect(rec.ID).To(Equal(objID))
 		})
 	})
 })

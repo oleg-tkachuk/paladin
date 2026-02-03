@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 
 	"paladin/internal/utils"
 
@@ -30,10 +31,11 @@ const (
 
 // AppError is the standard error type for the application
 type AppError struct {
-	Code    string
-	Message string
-	Err     error
-	Details map[string]any
+	Code       string
+	Message    string
+	Err        error
+	Details    map[string]any
+	StackTrace string
 }
 
 func (e *AppError) Error() string {
@@ -53,7 +55,25 @@ func New(code, message string, err error) *AppError {
 		Code:    code,
 		Message: message,
 		Err:     err,
+		Details: make(map[string]any),
 	}
+}
+
+// WithContext adds contextual information to the error
+func (e *AppError) WithContext(key string, value interface{}) *AppError {
+	if e.Details == nil {
+		e.Details = make(map[string]any)
+	}
+	e.Details[key] = value
+	return e
+}
+
+// WithStack captures the current stack trace
+func (e *AppError) WithStack() *AppError {
+	if e.StackTrace == "" {
+		e.StackTrace = string(debug.Stack())
+	}
+	return e
 }
 
 // Helper constructors
@@ -68,7 +88,11 @@ func PreconditionFailed(msg string, err error) *AppError {
 }
 func TooLarge(msg string, err error) *AppError    { return New(CodeTooLarge, msg, err) }
 func RateLimited(msg string, err error) *AppError { return New(CodeRateLimited, msg, err) }
-func Internal(msg string, err error) *AppError    { return New(CodeInternal, msg, err) }
+func Timeout(msg string, err error) *AppError     { return New(CodeTimeout, msg, err) }
+func ServiceUnavailable(msg string, err error) *AppError {
+	return New(CodeDependencyUnavailable, msg, err)
+}
+func Internal(msg string, err error) *AppError { return New(CodeInternal, msg, err) }
 
 // ErrorResponse is the unified error structure
 type ErrorResponse struct {

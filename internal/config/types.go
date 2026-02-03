@@ -11,6 +11,9 @@ type Config struct {
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
 	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
+	Cache        Cache        `yaml:"cache" json:"cache"`
+	Timeouts     Timeouts     `yaml:"timeouts" json:"timeouts"`
+	Idempotency  Idempotency  `yaml:"idempotency" json:"idempotency"`
 	OTel         OTel         `yaml:"otel" json:"otel"`
 
 	PodName string `yaml:"-"`
@@ -158,8 +161,11 @@ type Housekeeping struct {
 }
 
 type RateLimit struct {
-	RequestsPerSecond float64 `yaml:"requests_per_second" json:"requests_per_second"`
-	Burst             int     `yaml:"burst" json:"burst"`
+	RequestsPerSecond float64       `yaml:"requests_per_second" json:"requests_per_second"`
+	Burst             int           `yaml:"burst" json:"burst"`
+	MaxTenants        int           `yaml:"max_tenants" json:"max_tenants"`
+	CleanupTTL        time.Duration `yaml:"cleanup_ttl" json:"cleanup_ttl"`
+	CleanupInterval   time.Duration `yaml:"cleanup_interval" json:"cleanup_interval"`
 }
 
 type OTel struct {
@@ -173,4 +179,22 @@ type OTel struct {
 type OTelResource struct {
 	ServiceName           string `yaml:"service.name" json:"service.name"`
 	DeploymentEnvironment string `yaml:"deployment.environment" json:"deployment.environment"`
+}
+
+type Cache struct {
+	Enabled bool          `yaml:"enabled" json:"enabled"`
+	MaxSize int           `yaml:"max_size" json:"max_size"`
+	TTL     time.Duration `yaml:"ttl" json:"ttl"`
+}
+
+type Timeouts struct {
+	FastOperation    time.Duration `yaml:"fast_operation" json:"fast_operation"`
+	DefaultOperation time.Duration `yaml:"default_operation" json:"default_operation"`
+	S3Operation      time.Duration `yaml:"s3_operation" json:"s3_operation"`
+	LongOperation    time.Duration `yaml:"long_operation" json:"long_operation"`
+}
+
+type Idempotency struct {
+	Enabled bool          `yaml:"enabled" json:"enabled"`
+	TTL     time.Duration `yaml:"ttl" json:"ttl"`
 }

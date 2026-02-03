@@ -1,7 +1,7 @@
 # 1. Rich Metadata
 # ----------------
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -13,7 +13,7 @@ X-Tenant-ID: test-tenant
     "special_chars": "!@#$%^&*()_+",
     "unicode": "こんにちは"
   },
-  "external_ref": "ext_ref_1234567890_very_long_reference_string_to_test_storage"
+  "external_ref": "ext-ref-metadata-v110"
 }
 HTTP 200
 [Captures]
@@ -23,7 +23,7 @@ jsonpath "$.object_id" exists
 
 # Verify Rich Metadata via GET Object
 GET {{host}}/v1/objects/{{rich_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -33,32 +33,32 @@ jsonpath "$.labels.project" == "Project X"
 jsonpath "$.labels.owner" == "Team Alpha"
 jsonpath "$.labels.special_chars" == "!@#$%^&*()_+"
 jsonpath "$.labels.unicode" == "こんにちは"
-jsonpath "$.external_ref" == "ext_ref_1234567890_very_long_reference_string_to_test_storage"
-jsonpath "$.download_url" exists
+jsonpath "$.external_ref" == "ext-ref-metadata-v110"
+jsonpath "$.download_url" not exists
 
 # Verify Rich Metadata via GET Meta
 GET {{host}}/v1/objects/{{rich_id}}/meta
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{rich_id}}"
 jsonpath "$.labels.env" == "production"
 jsonpath "$.labels.unicode" == "こんにちは"
-jsonpath "$.external_ref" == "ext_ref_1234567890_very_long_reference_string_to_test_storage"
+jsonpath "$.external_ref" == "ext-ref-metadata-v110"
 jsonpath "$.download_url" not exists
 
 # Cleanup Rich Object
 DELETE {{host}}/v1/objects/{{rich_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
-HTTP 200
+HTTP 204
 
 
 # 2. Empty Metadata
 # -----------------
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -70,7 +70,7 @@ empty_meta_id: jsonpath "$.object_id"
 
 # Verify Empty Metadata
 GET {{host}}/v1/objects/{{empty_meta_id}}/meta
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -81,16 +81,16 @@ jsonpath "$.external_ref" not exists
 
 # Cleanup Empty Meta Object
 DELETE {{host}}/v1/objects/{{empty_meta_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
-HTTP 200
+HTTP 204
 
 
 # 3. Validation Errors
 # --------------------
 # Invalid Labels Type (Array instead of Map)
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -104,7 +104,7 @@ jsonpath "$.error.request_id" exists
 
 # Invalid Labels Type (String instead of Map)
 POST {{host}}/v1/objects
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",

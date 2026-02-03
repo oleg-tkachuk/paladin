@@ -5,16 +5,13 @@ import (
 	"sync/atomic"
 
 	"paladin/internal/config"
-	apperrors "paladin/internal/errors"
 	"paladin/internal/generated/api"
 	"paladin/internal/middleware"
 	"paladin/internal/service"
 
 	"github.com/gin-gonic/gin"
-	validator "github.com/oapi-codegen/gin-middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 type Server struct {
@@ -89,29 +86,10 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 	// Use canonical stack for API routes
 	middleware.SetupHTTPStack(r, cfg, log)
 
-	// Rate Limiting
-	if cfg.RateLimit.RequestsPerSecond > 0 {
-		r.Use(middleware.RateLimitMiddleware(rate.Limit(cfg.RateLimit.RequestsPerSecond), cfg.RateLimit.Burst))
-	} else {
-		r.Use(middleware.RateLimitMiddleware(10, 20))
-	}
-
-	// Load OpenAPI spec for validation
-	swagger, err := api.GetSwagger()
-	if err != nil {
-		log.Fatal("Failed to load OpenAPI spec", zap.Error(err))
-	}
+	// Apply rate limiting middleware
+	r.Use(middleware.RateLimitMiddleware(cfg))
 
 	v1 := r.Group("/v1")
-
-	// Add OpenAPI validation middleware
-	validatorOptions := &validator.Options{
-		ErrorHandler: func(c *gin.Context, message string, statusCode int) {
-			// Map validation errors to our standard error format
-			respondWithError(c, statusCode, apperrors.ValidationFailed(message, nil))
-		},
-	}
-	v1.Use(validator.OapiRequestValidatorWithOptions(swagger, validatorOptions))
 
 	// Register generated handlers
 	adapter := NewOpenAPIAdapter(svc)

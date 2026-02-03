@@ -83,3 +83,31 @@ func (d *DB) Close() {
 		d.Pool.Close()
 	}
 }
+
+// Stats returns connection pool statistics
+func (d *DB) Stats() *pgxpool.Stat {
+	if d == nil || d.Pool == nil {
+		return nil
+	}
+	return d.Pool.Stat()
+}
+
+// HealthWithStats performs a health check and returns detailed pool statistics
+func (d *DB) HealthWithStats(ctx context.Context) (map[string]interface{}, error) {
+	if err := d.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("ping failed: %w", err)
+	}
+
+	stats := d.Pool.Stat()
+	return map[string]interface{}{
+		"healthy":                true,
+		"acquired_conns":         stats.AcquiredConns(),
+		"idle_conns":             stats.IdleConns(),
+		"max_conns":              stats.MaxConns(),
+		"total_conns":            stats.TotalConns(),
+		"acquire_count":          stats.AcquireCount(),
+		"acquire_duration_ms":    stats.AcquireDuration().Milliseconds(),
+		"empty_acquire_count":    stats.EmptyAcquireCount(),
+		"canceled_acquire_count": stats.CanceledAcquireCount(),
+	}, nil
+}

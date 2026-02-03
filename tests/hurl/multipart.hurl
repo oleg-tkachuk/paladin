@@ -1,14 +1,13 @@
 # Initiate Multipart
 POST {{host}}/v1/multipart
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
   "size_bytes": 52428800,
   "labels": {
     "type": "multipart-test"
-  },
-  "external_ref": "mp-ref-run-final"
+  }
 }
 HTTP 200
 [Captures]
@@ -19,15 +18,15 @@ jsonpath "$.part_size" exists
 
 # Sign Part 1
 POST {{host}}/v1/multipart/{{upload_id}}/parts/1/sign
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
-jsonpath "$.upload_url" exists
+jsonpath "$.upload.url" exists
 # Verify TTL (default 15m = 900s)
-jsonpath "$.upload_url" contains "X-Amz-Expires=900"
+jsonpath "$.upload.url" contains "X-Amz-Expires=900"
 [Captures]
-part_url: jsonpath "$.upload_url"
+part_url: jsonpath "$.upload.url"
 
 # Upload Part 1
 PUT {{part_url}}
@@ -39,7 +38,7 @@ etag_1: header "ETag" regex "\"([^\"]+)\""
 
 # Complete Multipart
 POST {{host}}/v1/multipart/{{upload_id}}/complete
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 {
   "parts": [
@@ -51,22 +50,19 @@ X-Tenant-ID: test-tenant
 }
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "active"
+jsonpath "$.status" == "complete"
 
 # Verify Metadata
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "active"
+jsonpath "$.status" == "complete"
 jsonpath "$.labels.type" == "multipart-test"
-jsonpath "$.external_ref" == "mp-ref-run-final"
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin.paladin.svc.cluster.local
+Host: paladin-api.acme
 X-Tenant-ID: test-tenant
-HTTP 200
-[Asserts]
-jsonpath "$.status" == "deleted"
+HTTP 204

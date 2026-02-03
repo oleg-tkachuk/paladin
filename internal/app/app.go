@@ -187,9 +187,22 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	policy := service.NewPolicy(cfg.Policy)
 	objRepo := postgres.NewObjectsRepo(db)
 	mpRepo := postgres.NewMultipartRepo(db)
+	idemRepo := postgres.NewIdempotencyRepo(db)
 	brk := breaker.NewFactory(cfg)
 
-	svc := service.NewObjectsService(policy, s3c, objRepo, mpRepo, brk, cfg.Datastores.S3.PartSizeBytes)
+	svc := service.NewObjectsService(
+		objRepo,
+		mpRepo,
+		s3c,
+		policy,
+		idemRepo,
+		cfg.Datastores.S3.PartSizeBytes,
+		cfg.Timeouts.FastOperation,
+		cfg.Timeouts.DefaultOperation,
+		cfg.Timeouts.S3Operation,
+		cfg.Timeouts.LongOperation,
+		cfg.Idempotency.TTL,
+	)
 	hs := service.NewHealthService(db, s3c, brk)
 
 	app := &App{

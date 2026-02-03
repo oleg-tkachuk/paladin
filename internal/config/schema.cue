@@ -117,6 +117,27 @@ security: {
 rate_limit: {
   requests_per_second: number | *100
   burst: int | *100
+  max_tenants: int | *10000
+  cleanup_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"
+  cleanup_interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
+}
+
+cache: {
+  enabled: bool | *true
+  max_size: int & >= 1 | *1000
+  ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
+}
+
+timeouts: {
+  fast_operation: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+  default_operation: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  s3_operation: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
+  long_operation: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2m"
+}
+
+idempotency: {
+  enabled: bool | *true
+  ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
 }
 
 housekeeping: {

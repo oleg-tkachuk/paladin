@@ -117,6 +117,24 @@ housekeeping:
 rate_limit:
   requests_per_second: 300
   burst: 500
+  max_tenants: 10000
+  cleanup_ttl: 10m
+  cleanup_interval: 5m
+
+cache:
+  enabled: true
+  max_size: 1000
+  ttl: 5m
+
+timeouts:
+  fast_operation: 5s      # Get, GetMeta, Delete, PatchMeta, GetMultipart
+  default_operation: 30s  # CreateSingle, List
+  s3_operation: 60s       # S3 operations (SignUpload, SignDownload, InitiateMultipart, SignPart, SignPartsBatch, AbortMultipart)
+  long_operation: 2m      # CompleteMultipart
+
+idempotency:
+  enabled: true
+  ttl: 24h
 
 otel:
   enabled: false

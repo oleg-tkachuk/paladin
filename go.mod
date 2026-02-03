@@ -13,6 +13,7 @@ require (
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
+	github.com/go-pkgz/expirable-cache/v3 v3.1.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/oapi-codegen/gin-middleware v1.0.2
