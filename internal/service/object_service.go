@@ -440,6 +440,29 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		return err
 	}
 
+	// Get object record to retrieve S3 key
+	obj, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// Delete from S3 first (fail fast if S3 delete fails)
+	if err := s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+		logger.FromContext(ctx).Error("Failed to delete object from S3",
+			zap.String("tenant_id", tenantID),
+			zap.String("object_id", id.String()),
+			zap.String("object_key", obj.ObjectKey),
+			zap.Error(err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return fmt.Errorf("failed to delete from S3: %w", err)
+	}
+
+	// Mark as deleted in database
 	updated, err := s.objRepo.MarkDeleted(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
