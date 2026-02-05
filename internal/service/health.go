@@ -3,13 +3,22 @@ package service
 import (
 	"context"
 	"paladin/internal/breaker"
+	"time"
 )
 
+// DetailedDependencyStatus provides detailed health information for a single dependency
+type DetailedDependencyStatus struct {
+	Status    string `json:"status"`               // ok, degraded, down
+	LatencyMs *int64 `json:"latency_ms,omitempty"` // Response time in milliseconds
+	Message   string `json:"message,omitempty"`    // Additional context if not ok
+}
+
+// DependencyStatus represents the overall health status of all dependencies
 type DependencyStatus struct {
-	PostgreSQL string                 `json:"postgresql"`
-	SeaweedFS  string                 `json:"seaweedfs"`
-	Breakers   map[string]string      `json:"breakers,omitempty"`
-	PoolStats  map[string]interface{} `json:"pool_stats,omitempty"`
+	PostgreSQL DetailedDependencyStatus `json:"postgresql"`
+	SeaweedFS  DetailedDependencyStatus `json:"seaweedfs"`
+	Breakers   map[string]string        `json:"breakers,omitempty"`
+	PoolStats  map[string]interface{}   `json:"pool_stats,omitempty"`
 }
 
 type Pinger interface {
@@ -48,25 +57,39 @@ func NewHealthService(db Pinger, s3 S3HealthChecker, breaker breaker.Factory) *H
 
 func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus) {
 	status := DependencyStatus{
-		PostgreSQL: "ok",
-		SeaweedFS:  "ok",
+		PostgreSQL: DetailedDependencyStatus{Status: "ok"},
+		SeaweedFS:  DetailedDependencyStatus{Status: "ok"},
 		Breakers:   s.breaker.CheckHealth(),
 	}
 	ready := true
 
+	// Check PostgreSQL with latency tracking
+	start := time.Now()
 	if err := s.db.Ping(ctx); err != nil {
-		status.PostgreSQL = err.Error()
+		status.PostgreSQL.Status = "down"
+		status.PostgreSQL.Message = err.Error()
 		ready = false
-	} else if s.poolDB != nil {
+	} else {
+		latency := time.Since(start).Milliseconds()
+		status.PostgreSQL.LatencyMs = &latency
+
 		// Get detailed pool stats if available
-		if stats, err := s.poolDB.HealthWithStats(ctx); err == nil {
-			status.PoolStats = stats
+		if s.poolDB != nil {
+			if stats, err := s.poolDB.HealthWithStats(ctx); err == nil {
+				status.PoolStats = stats
+			}
 		}
 	}
 
+	// Check SeaweedFS with latency tracking
+	start = time.Now()
 	if err := s.s3.Health(ctx); err != nil {
-		status.SeaweedFS = err.Error()
+		status.SeaweedFS.Status = "down"
+		status.SeaweedFS.Message = err.Error()
 		ready = false
+	} else {
+		latency := time.Since(start).Milliseconds()
+		status.SeaweedFS.LatencyMs = &latency
 	}
 
 	// Check if any breakers are open

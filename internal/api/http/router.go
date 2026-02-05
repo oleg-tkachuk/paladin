@@ -30,6 +30,9 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 		_ = r.SetTrustedProxies(nil)
 	}
 
+	// Add API version header to ALL responses (including /version, /health/*, etc.)
+	r.Use(middleware.APIVersionMiddleware(version))
+
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	r.GET("/version", func(c *gin.Context) {
@@ -90,6 +93,9 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, 
 	r.Use(middleware.RateLimitMiddleware(cfg))
 
 	v1 := r.Group("/v1")
+
+	// Add rate limiting headers (placeholder for future implementation)
+	v1.Use(middleware.RateLimitHeadersMiddleware())
 
 	// Register generated handlers
 	adapter := NewOpenAPIAdapter(svc)

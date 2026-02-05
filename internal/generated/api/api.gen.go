@@ -24,6 +24,29 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CreateObjectRequestContentType.
+const (
+	ApplicationoctetStream CreateObjectRequestContentType = "application/octet-stream"
+	Applicationpdf         CreateObjectRequestContentType = "application/pdf"
+	Imagegif               CreateObjectRequestContentType = "image/gif"
+	Imagejpeg              CreateObjectRequestContentType = "image/jpeg"
+	Imagepng               CreateObjectRequestContentType = "image/png"
+	Imagewebp              CreateObjectRequestContentType = "image/webp"
+	Textplain              CreateObjectRequestContentType = "text/plain"
+)
+
+// Defines values for ErrorDetailsCode.
+const (
+	ErrorDetailsCodeConflict           ErrorDetailsCode = "conflict"
+	ErrorDetailsCodeForbidden          ErrorDetailsCode = "forbidden"
+	ErrorDetailsCodeInternalError      ErrorDetailsCode = "internal_error"
+	ErrorDetailsCodeInvalidArgument    ErrorDetailsCode = "invalid_argument"
+	ErrorDetailsCodeNotFound           ErrorDetailsCode = "not_found"
+	ErrorDetailsCodeServiceUnavailable ErrorDetailsCode = "service_unavailable"
+	ErrorDetailsCodeUnauthorized       ErrorDetailsCode = "unauthorized"
+	ErrorDetailsCodeValidationFailed   ErrorDetailsCode = "validation_failed"
+)
+
 // Defines values for ObjectStatus.
 const (
 	Aborted   ObjectStatus = "aborted"
@@ -85,37 +108,74 @@ type CompletePart struct {
 
 // CreateObjectRequest defines model for CreateObjectRequest.
 type CreateObjectRequest struct {
-	ContentType string  `json:"content_type"`
+	// ContentType MIME type of the object to be uploaded
+	ContentType CreateObjectRequestContentType `json:"content_type"`
+
+	// ExternalRef Optional external reference ID for idempotency and correlation.
+	// Must be unique per tenant. Use this to prevent duplicate uploads.
 	ExternalRef *string `json:"external_ref,omitempty"`
 	Labels      *Labels `json:"labels,omitempty"`
-	SizeBytes   int64   `json:"size_bytes"`
 
-	// UploadExpiresInSeconds Optional override for signed URL lifetime (server may cap).
+	// SizeBytes Size of the object in bytes (max 5GB for single upload)
+	SizeBytes int64 `json:"size_bytes"`
+
+	// UploadExpiresInSeconds Optional TTL for the signed upload URL in seconds.
+	// Server may enforce a lower maximum. Default: 900 (15 minutes).
 	UploadExpiresInSeconds *int `json:"upload_expires_in_seconds,omitempty"`
 }
 
+// CreateObjectRequestContentType MIME type of the object to be uploaded
+type CreateObjectRequestContentType string
+
 // CreateObjectResponse defines model for CreateObjectResponse.
 type CreateObjectResponse struct {
-	Bucket    string             `json:"bucket"`
-	ObjectId  openapi_types.UUID `json:"object_id"`
-	ObjectKey string             `json:"object_key"`
-	Status    ObjectStatus       `json:"status"`
-	Upload    SignedAction       `json:"upload"`
+	// Bucket S3 bucket name where object will be stored
+	Bucket string `json:"bucket"`
+
+	// ObjectId Unique identifier for this object
+	ObjectId openapi_types.UUID `json:"object_id"`
+
+	// ObjectKey S3 object key (path in bucket)
+	ObjectKey string       `json:"object_key"`
+	Status    ObjectStatus `json:"status"`
+	Upload    SignedAction `json:"upload"`
 }
 
 // ErrorDetails defines model for ErrorDetails.
 type ErrorDetails struct {
-	// Code Machine-readable error code (e.g., invalid_argument, not_found, conflict).
-	Code string `json:"code"`
+	// Code Machine-readable error code for programmatic handling
+	Code ErrorDetailsCode `json:"code"`
 
-	// Details Optional structured details.
+	// Details Additional structured context about the error
 	Details *map[string]interface{} `json:"details,omitempty"`
 
-	// Message Human-readable message.
-	Message   string  `json:"message"`
-	RequestId *string `json:"request_id,omitempty"`
-	TraceId   *string `json:"trace_id,omitempty"`
+	// FieldErrors Validation errors for specific request fields
+	FieldErrors *[]struct {
+		// Code Error code specific to this field
+		Code string `json:"code"`
+
+		// Field JSON path to the invalid field
+		Field string `json:"field"`
+
+		// Message Human-readable error for this field
+		Message string `json:"message"`
+	} `json:"field_errors,omitempty"`
+
+	// HelpUrl Link to documentation for this error
+	HelpUrl *string `json:"help_url,omitempty"`
+
+	// Message Human-readable error message
+	Message string `json:"message"`
+
+	// RequestId Unique identifier for this request (for support/debugging)
+	RequestId openapi_types.UUID `json:"request_id"`
+
+	// TraceId Distributed tracing identifier
+	TraceId *string `json:"trace_id,omitempty"`
 }
+
+// ErrorDetailsCode Machine-readable error code for programmatic handling
+type ErrorDetailsCode string
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
@@ -168,7 +228,13 @@ type Labels map[string]string
 // ListObjectsResponse defines model for ListObjectsResponse.
 type ListObjectsResponse struct {
 	Items      []ObjectCommon `json:"items"`
-	NextCursor *string        `json:"next_cursor,omitempty"`
+	Pagination struct {
+		// HasMore Whether more results exist beyond this page
+		HasMore bool `json:"has_more"`
+
+		// NextCursor Cursor for next page (null if no more results)
+		NextCursor *string `json:"next_cursor"`
+	} `json:"pagination"`
 }
 
 // ObjectCommon defines model for ObjectCommon.
@@ -301,6 +367,20 @@ type UnprocessableEntity = ErrorResponse
 
 // InitiateMultipartParams defines parameters for InitiateMultipart.
 type InitiateMultipartParams struct {
+	// IdempotencyKey Optional idempotency key for safe retries of create operations.
+	//
+	// **Behavior:**
+	// - Duplicate requests with the same key return the cached response (24h TTL)
+	// - Key must be unique per tenant
+	// - Recommended format: UUIDv4
+	// - Server returns `Idempotency-Replayed: true` header for cached responses
+	//
+	// **Use Cases:**
+	// - Retry failed requests without creating duplicates
+	// - Ensure exactly-once semantics in distributed systems
+	// - Prevent double-uploads from client errors
+	//
+	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -316,6 +396,20 @@ type ListObjectsParams struct {
 
 // CreateObjectParams defines parameters for CreateObject.
 type CreateObjectParams struct {
+	// IdempotencyKey Optional idempotency key for safe retries of create operations.
+	//
+	// **Behavior:**
+	// - Duplicate requests with the same key return the cached response (24h TTL)
+	// - Key must be unique per tenant
+	// - Recommended format: UUIDv4
+	// - Server returns `Idempotency-Replayed: true` header for cached responses
+	//
+	// **Use Cases:**
+	// - Retry failed requests without creating duplicates
+	// - Ensure exactly-once semantics in distributed systems
+	// - Prevent double-uploads from client errors
+	//
+	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -1000,56 +1094,87 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"lzfL/wUAAP//LgcliPhVAAA=",
+	"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",
+	"an5s2t5nAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
