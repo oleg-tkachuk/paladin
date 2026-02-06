@@ -9,6 +9,7 @@ type Config struct {
 	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
 	Policy       Policy       `yaml:"policy" json:"policy"`
 	Security     Security     `yaml:"security" json:"security"`
+	Auth         Auth         `yaml:"auth" json:"auth"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
 	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
 	Cache        Cache        `yaml:"cache" json:"cache"`
@@ -197,4 +198,28 @@ type Timeouts struct {
 type Idempotency struct {
 	Enabled bool          `yaml:"enabled" json:"enabled"`
 	TTL     time.Duration `yaml:"ttl" json:"ttl"`
+}
+
+type Auth struct {
+	Mode                string        `yaml:"mode" json:"mode"`
+	DevPrincipalEnabled bool          `yaml:"dev_principal_enabled" json:"dev_principal_enabled"`
+	OIDC                OIDCConfig    `yaml:"oidc" json:"oidc"`
+	ClockSkew           time.Duration `yaml:"clock_skew" json:"clock_skew"`
+	DevPrincipal        DevPrincipal  `yaml:"dev_principal" json:"dev_principal"`
+}
+
+type OIDCConfig struct {
+	IssuerURL      string   `yaml:"issuer_url" json:"issuer_url"`
+	Audience       string   `yaml:"audience" json:"audience"`
+	JWKSURL        string   `yaml:"jwks_url" json:"jwks_url"`
+	RequiredScopes []string `yaml:"required_scopes" json:"required_scopes"`
+	TenantClaim    string   `yaml:"tenant_claim" json:"tenant_claim"`
+	EmailClaim     string   `yaml:"email_claim" json:"email_claim"`
+	SubjectClaim   string   `yaml:"subject_claim" json:"subject_claim"`
+}
+
+type DevPrincipal struct {
+	TenantID string `yaml:"tenant_id" json:"tenant_id"`
+	Email    string `yaml:"email" json:"email"`
+	Subject  string `yaml:"subject" json:"subject"`
 }

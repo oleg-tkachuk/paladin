@@ -127,10 +127,10 @@ cache:
   ttl: 5m
 
 timeouts:
-  fast_operation: 5s      # Get, GetMeta, Delete, PatchMeta, GetMultipart
-  default_operation: 30s  # CreateSingle, List
-  s3_operation: 60s       # S3 operations (SignUpload, SignDownload, InitiateMultipart, SignPart, SignPartsBatch, AbortMultipart)
-  long_operation: 2m      # CompleteMultipart
+  fast_operation: 5s # Get, GetMeta, Delete, PatchMeta, GetMultipart
+  default_operation: 30s # CreateSingle, List
+  s3_operation: 60s # S3 operations (SignUpload, SignDownload, InitiateMultipart, SignPart, SignPartsBatch, AbortMultipart)
+  long_operation: 2m # CompleteMultipart
 
 idempotency:
   enabled: true
@@ -144,3 +144,20 @@ otel:
   resource:
     service.name: paladin
     deployment.environment: local
+
+auth:
+  mode: "disabled"
+  dev_principal_enabled: true
+  oidc:
+    issuer_url: "http://authentik-server.iam.svc.cluster.local/application/o/acme-paladin/"
+    audience: "paladin-api"
+    jwks_url: ""
+    required_scopes: []
+    tenant_claim: "tenant_id"
+    email_claim: "email"
+    subject_claim: "sub"
+  clock_skew: 30s
+  dev_principal:
+    tenant_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+    email: "dev@example.com"
+    subject: "dev-user"
