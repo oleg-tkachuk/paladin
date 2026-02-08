@@ -3,9 +3,9 @@ package grpcapi
 import (
 	"context"
 
-	"paladin/internal/logger"
-	"paladin/internal/service"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"

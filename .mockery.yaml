@@ -1,10 +1,10 @@
 packages:
-  paladin/internal/auth:
+  github.com/oleg-tkachuk/paladin/internal/auth:
     config:
       all: true
       dir: internal/auth/mocks
       filename: "{{.InterfaceName | snakecase}}.go"
-  paladin/internal/service:
+  github.com/oleg-tkachuk/paladin/internal/service:
     config:
       all: true
       dir: internal/service/mocks

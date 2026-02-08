@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"paladin/internal/metrics"
-	"paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"

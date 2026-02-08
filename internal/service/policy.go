@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"paladin/internal/config"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 type policyImpl struct {

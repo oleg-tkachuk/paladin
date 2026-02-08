@@ -1,4 +1,4 @@
-module paladin
+module github.com/oleg-tkachuk/paladin
 
 go 1.25.5
 

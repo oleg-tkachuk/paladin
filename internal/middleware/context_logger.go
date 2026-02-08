@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"paladin/internal/logger"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

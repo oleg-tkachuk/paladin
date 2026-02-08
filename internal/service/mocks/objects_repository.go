@@ -6,10 +6,10 @@ package service
 
 import (
 	"context"
-	"paladin/internal/store/postgres"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"net/http"
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"sync"
 	"time"
 

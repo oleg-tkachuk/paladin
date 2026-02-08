@@ -6,10 +6,10 @@ package service
 
 import (
 	"context"
-	"paladin/internal/storage/s3"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 	mock "github.com/stretchr/testify/mock"
 )
 

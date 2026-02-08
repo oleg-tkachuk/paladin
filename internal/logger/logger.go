@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"

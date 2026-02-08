@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	_ "embed"
 

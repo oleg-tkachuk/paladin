@@ -4,9 +4,9 @@ import (
 	stdErrors "errors"
 	"net/http"
 
-	"paladin/internal/errors"
-	"paladin/internal/logger"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

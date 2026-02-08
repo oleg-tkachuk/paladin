@@ -6,8 +6,8 @@ package service
 
 import (
 	"context"
-	"paladin/internal/service"
 
+	"github.com/oleg-tkachuk/paladin/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
 

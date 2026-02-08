@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	apperrors "paladin/internal/errors"
-	"paladin/internal/metrics"
-	"paladin/internal/store/postgres"
-	"paladin/internal/utils"
+	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"

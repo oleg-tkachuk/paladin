@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"paladin/internal/logger"
-	"paladin/internal/metrics"
-	"paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"

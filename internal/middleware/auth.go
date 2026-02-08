@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"paladin/internal/auth"
-	"paladin/internal/config"
-	"paladin/internal/errors"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

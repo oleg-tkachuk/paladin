@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"paladin/internal/storage/s3"
-	"paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/uuid"

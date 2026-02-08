@@ -7,8 +7,8 @@ package auth
 import (
 	"context"
 	"net/http"
-	"paladin/internal/auth"
 
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	mock "github.com/stretchr/testify/mock"
 )
 

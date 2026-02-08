@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"paladin/internal/app"
-	"paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

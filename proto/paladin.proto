@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package paladin.v1;
 
-option go_package = "paladin/internal/api/grpc;grpcapi";
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
 
 service Paladin {
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"paladin/internal/config"
-	"paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"go.uber.org/zap"
 )

@@ -1305,7 +1305,7 @@ const file_paladin_proto_rawDesc = "" +
 	"\x11InitiateMultipart\x12 .paladin.v1.InitiateMultipartRequest\x1a!.paladin.v1.InitiateMultipartResponse\x12=\n" +
 	"\bSignPart\x12\x17.paladin.v1.SignPartRequest\x1a\x18.paladin.v1.SignPartResponse\x12X\n" +
 	"\x11CompleteMultipart\x12 .paladin.v1.CompleteMultipartRequest\x1a!.paladin.v1.CompleteMultipartResponse\x12O\n" +
-	"\x0eAbortMultipart\x12\x1d.paladin.v1.AbortMultipartRequest\x1a\x1e.paladin.v1.AbortMultipartResponseB0Z.paladin/internal/api/grpc;grpcapib\x06proto3"
+	"\x0eAbortMultipart\x12\x1d.paladin.v1.AbortMultipartRequest\x1a\x1e.paladin.v1.AbortMultipartResponseBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
 
 var (
 	file_paladin_proto_rawDescOnce sync.Once

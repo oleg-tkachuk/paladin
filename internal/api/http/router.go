@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"paladin/internal/config"
-	"paladin/internal/generated/api"
-	"paladin/internal/middleware"
-	"paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/generated/api"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

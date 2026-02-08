@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"paladin/internal/breaker"
+	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"time"
 )
 

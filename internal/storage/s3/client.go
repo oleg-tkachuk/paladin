@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"

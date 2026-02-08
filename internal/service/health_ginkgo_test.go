@@ -3,7 +3,8 @@ package service_test
 import (
 	"context"
 	"errors"
-	"paladin/internal/service"
+
+	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -48,8 +49,8 @@ var _ = Describe("HealthService", func() {
 		ready, status := svc.CheckReady(ctx)
 
 		Expect(ready).To(BeTrue())
-		Expect(status.PostgreSQL).To(Equal("ok"))
-		Expect(status.SeaweedFS).To(Equal("ok"))
+		Expect(status.PostgreSQL.Status).To(Equal("ok"))
+		Expect(status.SeaweedFS.Status).To(Equal("ok"))
 	})
 
 	It("should report not ready when postgres fails", func() {
@@ -59,7 +60,7 @@ var _ = Describe("HealthService", func() {
 		ready, status := svc.CheckReady(ctx)
 
 		Expect(ready).To(BeFalse())
-		Expect(status.PostgreSQL).To(Equal("db error"))
+		Expect(status.PostgreSQL.Message).To(Equal("db error"))
 	})
 
 	It("should report not ready when a circuit breaker is open", func() {

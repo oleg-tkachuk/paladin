@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"paladin/internal/metrics"
-	"paladin/internal/storage/s3"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
