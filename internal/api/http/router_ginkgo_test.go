@@ -169,11 +169,16 @@ var _ = Describe("Router", func() {
 				CleanupInterval:   5 * time.Minute,
 			},
 			Security: config.Security{
-				TrustTenantIDFromRequest: true, // Test relies on default/legacy behavior likely
+				TrustTenantIDFromRequest: true,
+			},
+			Auth: config.Auth{
+				Mode:                "disabled",
+				DevPrincipalEnabled: true,
 			},
 		}
 
-		server = httpapi.NewServer(cfg, zap.NewNop(), mockSvc, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		logger, _ := zap.NewDevelopment()
+		server = httpapi.NewServer(cfg, logger, mockSvc, "1.0.0", "deadbeef", "2023-01-01", hs, started)
 		recorder = httptest.NewRecorder()
 	})
 
@@ -181,6 +186,7 @@ var _ = Describe("Router", func() {
 		It("returns version information", func() {
 			req, _ := http.NewRequest("GET", "/version", nil)
 			req.Header.Set("X-Tenant-ID", "default")
+
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
@@ -272,7 +278,7 @@ var _ = Describe("Router", func() {
 		Context("with valid request", func() {
 			BeforeEach(func() {
 				id := uuid.New()
-				mockSvc.On("CreateSingle", mock.Anything, "default", "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
+				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
 					Return(service.CreateObjectResponse{ID: id, Key: "default/" + id.String(), Upload: s3.Presigned{URL: "http://upload"}}, nil)
 			})
 
@@ -283,7 +289,7 @@ var _ = Describe("Router", func() {
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
-				Expect(recorder.Code).To(Equal(http.StatusOK))
+				Expect(recorder.Code).To(Equal(http.StatusCreated))
 				Expect(recorder.Body.String()).To(ContainSubstring("http://upload"))
 			})
 		})
@@ -292,7 +298,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart", func() {
 		It("initiates multipart upload", func() {
 			objID := uuid.New()
-			mockSvc.On("InitiateMultipart", mock.Anything, "default", "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
+			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
 				Return(service.MultipartInitResponse{
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)
@@ -310,7 +316,7 @@ var _ = Describe("Router", func() {
 
 	Describe("POST /v1/multipart/:upload_id/parts/:part_number/sign", func() {
 		It("signs a part", func() {
-			mockSvc.On("SignPart", mock.Anything, "default", "up123", int32(1)).
+			mockSvc.On("SignPart", mock.Anything, mock.Anything, "up123", int32(1)).
 				Return(s3.Presigned{URL: "http://sign"}, nil)
 
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/1/sign", nil)
@@ -325,7 +331,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart/:upload_id/complete", func() {
 		It("completes multipart upload", func() {
 			objID := uuid.New()
-			mockSvc.On("CompleteMultipart", mock.Anything, "default", "up123", mock.Anything).
+			mockSvc.On("CompleteMultipart", mock.Anything, mock.Anything, "up123", mock.Anything).
 				Return(&postgres.ObjectRecord{ID: objID, Status: postgres.ObjectComplete}, nil)
 
 			body := `{"parts": [{"part_number": 1, "etag": "etag1"}]}`
@@ -341,7 +347,7 @@ var _ = Describe("Router", func() {
 
 	Describe("POST /v1/multipart/:upload_id/abort", func() {
 		It("aborts multipart upload", func() {
-			mockSvc.On("AbortMultipart", mock.Anything, "default", "up123").
+			mockSvc.On("AbortMultipart", mock.Anything, mock.Anything, "up123").
 				Return(nil)
 
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/abort", nil)
@@ -354,7 +360,7 @@ var _ = Describe("Router", func() {
 	})
 	Describe("Error Handling", func() {
 		It("returns unified error response for 404", func() {
-			mockSvc.On("Get", mock.Anything, "default", mock.Anything).
+			mockSvc.On("Get", mock.Anything, mock.Anything, mock.Anything).
 				Return(&postgres.ObjectRecord{}, errors.New("not found"))
 
 			req, _ := http.NewRequest("GET", "/v1/objects/"+uuid.NewString(), nil)

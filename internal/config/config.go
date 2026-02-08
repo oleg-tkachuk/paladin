@@ -43,14 +43,14 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	}
 
 	var cfg Config
-	// Encode back to YAML to apply defaults and luego unmarshal with goyaml
-	// to support time.Duration and other types goyaml handles better.
-	finalYAML, err := cueyaml.Encode(combined)
+	// Use JSON intermediate to apply defaults and support time.Duration.
+	// MarshalJSON is more reliable than cueyaml.Encode when dealing with CUE AST nodes.
+	jsonBytes, err := combined.MarshalJSON()
 	if err != nil {
-		return Config{}, fmt.Errorf("CUE -> YAML encoding failed: %w", err)
+		return Config{}, fmt.Errorf("CUE -> JSON marshaling failed: %w", err)
 	}
 
-	if err := goyaml.Unmarshal(finalYAML, &cfg); err != nil {
+	if err := goyaml.Unmarshal(jsonBytes, &cfg); err != nil {
 		return Config{}, fmt.Errorf("YAML unmarshal failed: %w", err)
 	}
 

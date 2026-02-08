@@ -1171,7 +1171,7 @@ components:
         code:
           type: string
           description: Machine-readable error code for programmatic handling
-          example: "invalid_external_ref"
+          example: "conflict"
           enum:
             - invalid_argument
             - validation_failed

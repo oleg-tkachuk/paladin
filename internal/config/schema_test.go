@@ -40,6 +40,10 @@ otel:
   resource:
     service.name: "test"
     deployment.environment: "test"
+auth:
+  oidc:
+    issuer_url: "http://issuer"
+    audience: "aud"
 `)
 
 	yamlFile, err := cueyaml.Extract("test.yaml", yamlInput)
@@ -54,18 +58,14 @@ otel:
 	}
 
 	var cfg Config
-	// Use same logic as config.Load
-	finalYAML, err := cueyaml.Encode(combined)
+	// Use JSON intermediate to support time.Duration and avoid CUE encoding issues
+	jsonBytes, err := combined.MarshalJSON()
 	if err != nil {
-		t.Fatalf("CUE -> YAML encoding failed: %v", err)
+		t.Fatalf("CUE -> JSON marshaling failed: %v", err)
 	}
 
-	if err := goyaml.Unmarshal(finalYAML, &cfg); err != nil {
-		t.Fatalf("YAML unmarshal failed: %v", err)
-	}
-
-	if err := goyaml.Unmarshal(finalYAML, &cfg); err != nil {
-		t.Fatalf("YAML unmarshal failed: %v", err)
+	if err := goyaml.Unmarshal(jsonBytes, &cfg); err != nil {
+		t.Fatalf("JSON -> YAML unmarshal failed: %v", err)
 	}
 
 	if cfg.Datastores.Postgres.Pool.MaxConns != 20 {
