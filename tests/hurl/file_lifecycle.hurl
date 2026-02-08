@@ -9,7 +9,7 @@ X-Tenant-ID: test-tenant
   "content_type": "text/plain",
   "size_bytes": 96
 }
-HTTP 200
+HTTP 201
 [Captures]
 object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"

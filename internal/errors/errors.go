@@ -31,11 +31,19 @@ const (
 
 // AppError is the standard error type for the application
 type AppError struct {
-	Code       string
-	Message    string
-	Err        error
-	Details    map[string]any
-	StackTrace string
+	Code        string
+	Message     string
+	Err         error
+	Details     map[string]any
+	FieldErrors []FieldError
+	StackTrace  string
+}
+
+// FieldError represents a validation error for a specific field
+type FieldError struct {
+	Field   string
+	Code    string
+	Message string
 }
 
 func (e *AppError) Error() string {
@@ -76,6 +84,19 @@ func (e *AppError) WithStack() *AppError {
 	return e
 }
 
+// WithFieldError adds a field-level validation error
+func (e *AppError) WithFieldError(field, code, message string) *AppError {
+	if e.FieldErrors == nil {
+		e.FieldErrors = []FieldError{}
+	}
+	e.FieldErrors = append(e.FieldErrors, FieldError{
+		Field:   field,
+		Code:    code,
+		Message: message,
+	})
+	return e
+}
+
 // Helper constructors
 func BadRequest(msg string, err error) *AppError       { return New(CodeBadRequest, msg, err) }
 func ValidationFailed(msg string, err error) *AppError { return New(CodeValidationFailed, msg, err) }
@@ -94,32 +115,20 @@ func ServiceUnavailable(msg string, err error) *AppError {
 }
 func Internal(msg string, err error) *AppError { return New(CodeInternal, msg, err) }
 
-// ErrorResponse is the unified error structure
-type ErrorResponse struct {
-	Error ErrorDetails `json:"error"`
-}
-
-// ErrorDetails contains the error information
-type ErrorDetails struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Details   string `json:"details,omitempty"`
-	RequestID string `json:"request_id"`
-	TraceID   string `json:"trace_id"`
-}
-
 // MapToHTTP maps an error to an HTTP status code and response body
-func MapToHTTP(ctx context.Context, err error) (int, ErrorResponse) {
+func MapToHTTP(ctx context.Context, err error) (int, any) {
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
 		// Default to internal error if unknown
-		// Log the actual error in the caller, here we just return the generic response
-		return http.StatusInternalServerError, ErrorResponse{
-			Error: ErrorDetails{
-				Code:      CodeInternal,
-				Message:   "Internal server error",
-				RequestID: utils.RequestIDFromContext(ctx, ""),
-				TraceID:   utils.TraceIDFromContext(ctx, ""),
+		reqID := utils.RequestIDFromContext(ctx, "")
+		traceID := utils.TraceIDFromContext(ctx, "")
+
+		return http.StatusInternalServerError, map[string]any{
+			"error": map[string]any{
+				"code":       CodeInternal,
+				"message":    "Internal server error",
+				"request_id": reqID,
+				"trace_id":   traceID,
 			},
 		}
 	}
@@ -153,33 +162,38 @@ func MapToHTTP(ctx context.Context, err error) (int, ErrorResponse) {
 	traceID := utils.TraceIDFromContext(ctx, "")
 	reqID := utils.RequestIDFromContext(ctx, "")
 
-	// If Details map is present, we might want to convert it to string or pick a specific message.
-	// For now, consistent with requirements, we keep 'details' as optional string.
-	// We'll use appErr.Message for 'details' if it differs from the standard message?
-	// Or just put appErr.Message in 'message'.
-	// Requirement: message = short human readable. details = optional context.
-
-	// Let's use appErr.Message as the main message.
-	// If appErr.Err (wrapped error) is present, maybe use that as details?
-	// But requirements say "no stack traces". appErr.Err.Error() might be safe or might be technical.
-	// Let's stick to simple mapping for now. `appErr.Message` -> `message`.
-
-	details := ""
-	if appErr.Err != nil {
-		// Be careful not to expose sensitive info, but typically appErr.Err is the cause.
-		// For internal errors, we might mask this. For 4xx, it might be useful.
-		// Requirement 4: details is OPTIONAL and MUST contain additional context only (no stack traces).
-		details = appErr.Err.Error()
+	// Build error response
+	errorResp := map[string]any{
+		"code":       appErr.Code,
+		"message":    appErr.Message,
+		"request_id": reqID,
 	}
 
-	return statusCode, ErrorResponse{
-		Error: ErrorDetails{
-			Code:      appErr.Code,
-			Message:   appErr.Message,
-			Details:   details,
-			RequestID: reqID,
-			TraceID:   traceID,
-		},
+	// Add trace_id if present
+	if traceID != "" {
+		errorResp["trace_id"] = traceID
+	}
+
+	// Add details if present
+	if len(appErr.Details) > 0 {
+		errorResp["details"] = appErr.Details
+	}
+
+	// Add field_errors if present
+	if len(appErr.FieldErrors) > 0 {
+		fieldErrors := make([]map[string]string, len(appErr.FieldErrors))
+		for i, fe := range appErr.FieldErrors {
+			fieldErrors[i] = map[string]string{
+				"field":   fe.Field,
+				"code":    fe.Code,
+				"message": fe.Message,
+			}
+		}
+		errorResp["field_errors"] = fieldErrors
+	}
+
+	return statusCode, map[string]any{
+		"error": errorResp,
 	}
 }
 

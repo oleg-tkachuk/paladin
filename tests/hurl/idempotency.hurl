@@ -7,7 +7,7 @@ X-Tenant-ID: test-tenant
   "size_bytes": 500,
   "external_ref": "idem-key-run-unique"
 }
-HTTP 200
+HTTP 201
 [Captures]
 id_1: jsonpath "$.object_id"
 [Asserts]
@@ -22,7 +22,7 @@ X-Tenant-ID: test-tenant
   "size_bytes": 500,
   "external_ref": "idem-key-run-unique"
 }
-HTTP 200
+HTTP 201
 [Captures]
 id_2: jsonpath "$.object_id"
 [Asserts]
@@ -59,7 +59,7 @@ Idempotency-Key: unique-key-12345678
   "content_type": "text/plain",
   "size_bytes": 100
 }
-HTTP 200
+HTTP 201
 [Captures]
 idem_header_id: jsonpath "$.object_id"
 
@@ -72,7 +72,7 @@ Idempotency-Key: unique-key-12345678
   "content_type": "text/plain",
   "size_bytes": 100
 }
-HTTP 200
+HTTP 201
 [Asserts]
 jsonpath "$.object_id" == "{{idem_header_id}}"
 

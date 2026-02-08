@@ -51,7 +51,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
 		return
@@ -164,10 +164,20 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		out[i] = mapObjectCommon(&item)
 	}
 
-	c.JSON(http.StatusOK, api.ListObjectsResponse{
-		Items:      out,
-		NextCursor: &next,
-	})
+	// Determine if there are more results
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
+	resp := api.ListObjectsResponse{
+		Items: out,
+	}
+	resp.Pagination.NextCursor = nextCursor
+	resp.Pagination.HasMore = hasMore
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id openapi_types.UUID) {
@@ -224,7 +234,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), req.ContentType, req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
 		return

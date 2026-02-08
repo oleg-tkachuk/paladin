@@ -1,0 +1,60 @@
+package service
+
+import (
+	"context"
+	"time"
+
+	"paladin/internal/metrics"
+	"paladin/internal/storage/s3"
+
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+)
+
+// signUpload generates a presigned URL for uploading to an existing object
+func (s *objectsService) signUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (s3.Presigned, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "SignUpload")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("sign_upload", status, time.Since(start).Seconds()) }()
+
+	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
+	defer cancel()
+
+	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return s3.Presigned{}, err
+	}
+
+	rec, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return s3.Presigned{}, err
+	}
+
+	ttl := time.Duration(uploadTTL) * time.Second
+	if ttl == 0 {
+		ttl = s.s3.PresignTTLDuration()
+	}
+
+	presigned, err := s.s3.PresignPutObject(ctx, rec.ObjectKey, rec.ContentType, rec.SizeBytes, ttl)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return s3.Presigned{}, err
+	}
+
+	status = "success"
+	span.SetStatus(codes.Ok, "")
+	return presigned, nil
+}

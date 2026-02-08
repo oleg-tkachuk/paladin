@@ -15,7 +15,7 @@ X-Tenant-ID: test-tenant
   },
   "external_ref": "ext-ref-metadata-v110"
 }
-HTTP 200
+HTTP 201
 [Captures]
 rich_id: jsonpath "$.object_id"
 [Asserts]
@@ -64,7 +64,7 @@ X-Tenant-ID: test-tenant
   "content_type": "text/plain",
   "size_bytes": 50
 }
-HTTP 200
+HTTP 201
 [Captures]
 empty_meta_id: jsonpath "$.object_id"
 

@@ -2,9 +2,33 @@ openapi: 3.0.3
 info:
   title: Paladin API
   version: 1.1.0
-  description: >
+  description: |
     S3-compatible control plane for managing object metadata and issuing pre-signed URLs
     for single PUT and multipart uploads. Includes explicit commit (complete) step.
+
+    ## Features
+    - **Metadata Management**: Track objects with labels and external references
+    - **Pre-signed URLs**: Secure, time-limited upload/download URLs
+    - **Multipart Uploads**: Support for large files (>5GB)
+    - **Idempotency**: Safe retries with idempotency keys
+    - **Multi-tenancy**: Tenant isolation via JWT claims
+
+    ## Versioning
+    - **URL Versioning**: Major version in path (`/v1`, `/v2`)
+    - **Backward Compatibility**: Minor/patch versions are backward compatible
+    - **Deprecation Policy**: 6 months notice before removing deprecated features
+    - **Version Header**: All responses include `X-API-Version` header
+
+    ## CORS
+    API supports CORS for browser-based clients:
+    - Allowed origins configured per environment
+    - Credentials supported via `Access-Control-Allow-Credentials`
+    - Preflight cache: 86400 seconds (24 hours)
+
+    ## Rate Limiting
+    - Default: 1000 requests per minute per tenant
+    - Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+    - Exceeded: HTTP 429 with `Retry-After` header
 
 servers:
   - url: /v1
@@ -350,7 +374,7 @@ paths:
             schema:
               $ref: "#/components/schemas/InitiateMultipartRequest"
       responses:
-        "201":
+        "200":
           description: Multipart upload initiated
           headers:
             Location:
@@ -575,6 +599,56 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT bearer token authentication required for all endpoints except health checks and version.
+
+        **Token Requirements:**
+        - `sub`: User ID (subject)
+        - `tenant_id`: Tenant identifier for multi-tenancy
+        - `exp`: Expiration timestamp
+        - `iat`: Issued at timestamp
+
+        **Header Format:**
+        ```
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        ```
+
+        **Unauthenticated Endpoints:**
+        - `GET /healthz`
+        - `GET /readyz`
+        - `GET /version`
+
+  headers:
+    X-RateLimit-Limit:
+      description: Maximum number of requests allowed in the current time window
+      schema:
+        type: integer
+        example: 1000
+
+    X-RateLimit-Remaining:
+      description: Number of requests remaining in the current time window
+      schema:
+        type: integer
+        example: 950
+
+    X-RateLimit-Reset:
+      description: Unix timestamp (seconds) when the rate limit window resets
+      schema:
+        type: integer
+        format: int64
+        example: 1675891200
+
+    Idempotency-Replayed:
+      description: Indicates whether this response was replayed from idempotency cache
+      schema:
+        type: boolean
+        example: false
+
+    X-API-Version:
+      description: API version used to process this request
+      schema:
+        type: string
+        example: "1.1.0"
 
   parameters:
     ObjectID:
@@ -606,10 +680,26 @@ components:
       name: Idempotency-Key
       in: header
       required: false
+      description: |
+        Optional idempotency key for safe retries of create operations.
+
+        **Behavior:**
+        - Duplicate requests with the same key return the cached response (24h TTL)
+        - Key must be unique per tenant
+        - Recommended format: UUIDv4
+        - Server returns `Idempotency-Replayed: true` header for cached responses
+
+        **Use Cases:**
+        - Retry failed requests without creating duplicates
+        - Ensure exactly-once semantics in distributed systems
+        - Prevent double-uploads from client errors
+
+        **Example:** `550e8400-e29b-41d4-a716-446655440000`
       schema:
         type: string
         minLength: 8
         maxLength: 128
+        example: "550e8400-e29b-41d4-a716-446655440000"
 
     Limit:
       name: limit
@@ -662,20 +752,50 @@ components:
         content_type:
           type: string
           minLength: 1
+          description: MIME type of the object to be uploaded
+          example: "image/jpeg"
+          enum:
+            - image/jpeg
+            - image/png
+            - image/gif
+            - image/webp
+            - application/pdf
+            - application/octet-stream
+            - text/plain
         size_bytes:
           type: integer
           format: int64
           minimum: 1
+          maximum: 5368709120 # 5GB
+          description: Size of the object in bytes (max 5GB for single upload)
+          example: 1048576
         labels:
           $ref: "#/components/schemas/Labels"
+          description: |
+            Optional key-value metadata for filtering and organization.
+            - Maximum 50 labels per object
+            - Key max length: 128 characters
+            - Value max length: 256 characters
+          example:
+            env: "production"
+            team: "backend"
+            document_type: "invoice"
         external_ref:
           type: string
           maxLength: 512
+          description: |
+            Optional external reference ID for idempotency and correlation.
+            Must be unique per tenant. Use this to prevent duplicate uploads.
+          example: "invoice-2024-001"
         upload_expires_in_seconds:
           type: integer
           minimum: 60
           maximum: 3600
-          description: Optional override for signed URL lifetime (server may cap).
+          default: 900
+          description: |
+            Optional TTL for the signed upload URL in seconds.
+            Server may enforce a lower maximum. Default: 900 (15 minutes).
+          example: 1800
 
     CreateObjectResponse:
       type: object
@@ -684,14 +804,21 @@ components:
         object_id:
           type: string
           format: uuid
+          description: Unique identifier for this object
+          example: "550e8400-e29b-41d4-a716-446655440000"
         object_key:
           type: string
+          description: S3 object key (path in bucket)
+          example: "tenant-123/objects/550e8400-e29b-41d4-a716-446655440000"
         bucket:
           type: string
+          description: S3 bucket name where object will be stored
+          example: "acme-objects"
         status:
           $ref: "#/components/schemas/ObjectStatus"
         upload:
           $ref: "#/components/schemas/SignedAction"
+          description: Pre-signed URL for uploading the object content
 
     ObjectCommon:
       type: object
@@ -997,14 +1124,25 @@ components:
 
     ListObjectsResponse:
       type: object
-      required: [items]
+      required: [items, pagination]
       properties:
         items:
           type: array
           items:
             $ref: "#/components/schemas/ObjectCommon"
-        next_cursor:
-          type: string
+        pagination:
+          type: object
+          required: [has_more]
+          properties:
+            next_cursor:
+              type: string
+              nullable: true
+              description: Cursor for next page (null if no more results)
+              example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
+            has_more:
+              type: boolean
+              description: Whether more results exist beyond this page
+              example: true
 
     VersionResponse:
       type: object
@@ -1028,22 +1166,158 @@ components:
 
     ErrorDetails:
       type: object
-      required: [code, message]
+      required: [code, message, request_id]
       properties:
         code:
           type: string
-          description: Machine-readable error code (e.g., invalid_argument, not_found, conflict).
+          description: Machine-readable error code for programmatic handling
+          example: "invalid_external_ref"
+          enum:
+            - invalid_argument
+            - validation_failed
+            - not_found
+            - conflict
+            - unauthorized
+            - forbidden
+            - internal_error
+            - service_unavailable
         message:
           type: string
-          description: Human-readable message.
+          description: Human-readable error message
+          example: "External reference 'doc-123' already exists for another object"
+        field_errors:
+          type: array
+          description: Validation errors for specific request fields
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field:
+                type: string
+                description: JSON path to the invalid field
+                example: "size_bytes"
+              code:
+                type: string
+                description: Error code specific to this field
+                example: "out_of_range"
+              message:
+                type: string
+                description: Human-readable error for this field
+                example: "Must be between 1 and 5368709120 bytes (5GB)"
         details:
           type: object
           additionalProperties: true
-          description: Optional structured details.
+          description: Additional structured context about the error
+          example:
+            existing_object_id: "550e8400-e29b-41d4-a716-446655440000"
+            allowed_content_types:
+              ["image/jpeg", "image/png", "application/pdf"]
         request_id:
           type: string
+          format: uuid
+          description: Unique identifier for this request (for support/debugging)
+          example: "019c2d3f-b1cc-7039-bd0b-4ff918d667a3"
         trace_id:
           type: string
+          description: Distributed tracing identifier
+          example: "019c2d3f-b1cc-7039-bd0b-4ff918d667a3"
+        help_url:
+          type: string
+          format: uri
+          description: Link to documentation for this error
+          example: "https://docs.acme.io/errors/invalid_external_ref"
+
+    # Future Feature: Webhook Support
+    # Documented for future implementation - not currently active
+    WebhookConfig:
+      type: object
+      description: |
+        FUTURE FEATURE: Webhook configuration for async notifications.
+        Not currently implemented.
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+          description: URL to receive webhook notifications
+          example: "https://api.example.com/webhooks/objects"
+        webhook_secret:
+          type: string
+          format: password
+          description: Secret for HMAC-SHA256 signature verification
+          minLength: 32
+          maxLength: 128
+
+    WebhookPayload:
+      type: object
+      description: |
+        FUTURE FEATURE: Payload sent to webhook URL.
+        Not currently implemented.
+      required: [event, object_id, timestamp]
+      properties:
+        event:
+          type: string
+          enum: [object.completed, object.failed, object.deleted]
+          description: Event type
+        object_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          description: Event-specific data
+
+    # Future Feature: Batch Operations
+    # Documented for future implementation - not currently active
+    BatchCreateRequest:
+      type: object
+      description: |
+        FUTURE FEATURE: Batch object creation.
+        Not currently implemented.
+      required: [objects]
+      properties:
+        objects:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/CreateObjectRequest"
+
+    BatchOperationResult:
+      type: object
+      description: |
+        FUTURE FEATURE: Result for single item in batch operation.
+        Not currently implemented.
+      required: [index, status]
+      properties:
+        index:
+          type: integer
+          description: Index in request array
+        status:
+          type: integer
+          description: HTTP status code for this item
+          example: 201
+        data:
+          description: Response data if successful
+          oneOf:
+            - $ref: "#/components/schemas/CreateObjectResponse"
+        error:
+          $ref: "#/components/schemas/ErrorDetails"
+
+    BatchCreateResponse:
+      type: object
+      description: |
+        FUTURE FEATURE: Batch creation response.
+        Not currently implemented.
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchOperationResult"
 
   responses:
     BadRequest:

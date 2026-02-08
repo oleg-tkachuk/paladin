@@ -9,7 +9,7 @@ X-Tenant-ID: test-tenant
   "content_type": "image/jpeg",
   "size_bytes": 13
 }
-HTTP 200
+HTTP 201
 [Captures]
 object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"
@@ -77,7 +77,7 @@ X-Tenant-ID: test-tenant
   },
   "external_ref": "ref-objects-{{object_id}}"
 }
-HTTP 200
+HTTP 201
 [Captures]
 meta_object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"

@@ -44,3 +44,7 @@ func TraceIDFromContext(ctx context.Context, fallback string) string {
 	}
 	return fallback
 }
+
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, TenantIDKey, tenantID)
+}
