@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"

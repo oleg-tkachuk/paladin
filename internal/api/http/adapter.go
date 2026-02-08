@@ -3,10 +3,10 @@ package httpapi
 import (
 	"net/http"
 
-	"paladin/internal/generated/api"
-	"paladin/internal/service"
-	"paladin/internal/storage/s3"
-	"paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/generated/api"
+	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/gin-gonic/gin"
 	openapi_types "github.com/oapi-codegen/runtime/types"

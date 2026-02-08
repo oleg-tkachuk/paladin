@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

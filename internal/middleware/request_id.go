@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

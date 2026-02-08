@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"paladin/internal/auth"
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

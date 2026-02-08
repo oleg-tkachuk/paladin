@@ -10,12 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	httpapi "paladin/internal/api/http"
-	"paladin/internal/config"
-	"paladin/internal/fault"
-	"paladin/internal/service"
-	"paladin/internal/storage/s3"
-	"paladin/internal/store/postgres"
+	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/fault"
+	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"

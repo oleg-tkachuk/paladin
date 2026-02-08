@@ -2,11 +2,11 @@ package service_test
 
 import (
 	"context"
-	"paladin/internal/config"
-	"paladin/internal/fault"
-	"paladin/internal/service"
-	"paladin/internal/storage/s3"
-	"paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/fault"
+	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"

@@ -1,0 +1,11 @@
+packages:
+  github.com/oleg-tkachuk/paladin/internal/auth:
+    config:
+      all: true
+      dir: internal/auth/mocks
+      filename: "{{.InterfaceName | snakecase}}.go"
+  github.com/oleg-tkachuk/paladin/internal/service:
+    config:
+      all: true
+      dir: internal/service/mocks
+      filename: "{{.InterfaceName | snakecase}}.go"

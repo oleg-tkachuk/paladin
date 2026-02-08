@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"paladin/internal/config"
-	"paladin/internal/fault"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/fault"
 )
 
 type Factory interface {

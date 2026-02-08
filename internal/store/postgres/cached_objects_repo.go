@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"paladin/internal/cache"
-	"paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/cache"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	"github.com/google/uuid"
 )

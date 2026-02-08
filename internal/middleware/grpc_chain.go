@@ -3,9 +3,9 @@ package middleware
 import (
 	"context"
 
-	"paladin/internal/config"
-	"paladin/internal/logger"
-	"paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

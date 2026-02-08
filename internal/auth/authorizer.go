@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
