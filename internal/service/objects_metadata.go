@@ -7,14 +7,14 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 // patchMeta updates object metadata (labels and external_ref)
-func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "PatchMeta")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))

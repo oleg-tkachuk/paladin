@@ -8,7 +8,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -16,7 +16,7 @@ import (
 )
 
 // deleteObject removes an object from both S3 and the database
-func (s *objectsService) deleteObject(ctx context.Context, tenantID string, id uuid.UUID) error {
+func (s *objectsService) deleteObject(ctx context.Context, tenantID string, id openapi_types.UUID) error {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "Delete")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
