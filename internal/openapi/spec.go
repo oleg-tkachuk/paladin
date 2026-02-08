@@ -1,11 +1,11 @@
 package openapi
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 )
 
 var (
@@ -14,23 +14,13 @@ var (
 	initErr  error
 )
 
-// LoadSpec loads and validates the OpenAPI 3.0 specification from the given path.
-// It resolves all references and validates the structure.
+// LoadSpec returns the validated OpenAPI 3.0 specification from the generated code.
 // The result is cached, so subsequent calls return the same object (or error).
-func LoadSpec(path string) (*openapi3.T, error) {
+func LoadSpec() (*openapi3.T, error) {
 	initOnce.Do(func() {
-		ctx := context.Background()
-		loader := openapi3.NewLoader()
-		loader.IsExternalRefsAllowed = true
-
-		doc, err := loader.LoadFromFile(path)
+		doc, err := api.GetSwagger()
 		if err != nil {
-			initErr = fmt.Errorf("failed to load openapi spec from %s: %w", path, err)
-			return
-		}
-
-		if err = doc.Validate(ctx); err != nil {
-			initErr = fmt.Errorf("failed to validate openapi spec: %w", err)
+			initErr = fmt.Errorf("failed to get swagger spec: %w", err)
 			return
 		}
 
