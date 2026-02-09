@@ -246,7 +246,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		UploadId:  out.UploadID,
 		PartSize:  out.PartSize,
 		ExpiresAt: out.ExpiresAt,
-		Bucket:    out.Bucket, // Added Bucket to out struct previously? Let's check objects_service.go
+		Bucket:    out.Bucket,
 		Status:    api.Uploading,
 	})
 }
@@ -264,7 +264,7 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 		UploadId:  multi.UploadID,
 		PartSize:  multi.PartSize,
 		Bucket:    multi.Bucket,
-		Status:    mapStatus(postgres.ObjectStatus(multi.Status)), // Multi status is roughly same
+		Status:    mapStatus(postgres.ObjectStatus(multi.Status)),
 		CreatedAt: multi.CreatedAt,
 		UpdatedAt: multi.UpdatedAt,
 	})

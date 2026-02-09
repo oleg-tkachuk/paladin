@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 type ListObjectsFilter struct {
@@ -30,7 +30,7 @@ const (
 )
 
 type ObjectRecord struct {
-	ID              uuid.UUID
+	ID              openapi_types.UUID
 	TenantID        string
 	ObjectKey       string
 	Bucket          string
@@ -90,7 +90,7 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 	return out, rows.Err()
 }
 
-func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*ObjectRecord, error) {
+func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*ObjectRecord, error) {
 	row := r.db.Pool.QueryRow(ctx, `
         SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at
         FROM objects
@@ -105,7 +105,7 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*
 	return &rec, nil
 }
 
-func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error) {
+func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id openapi_types.UUID, etag string, sizeBytes int64) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
         UPDATE objects 
         SET status='complete', stored_etag=$3, stored_size_bytes=$4, completed_at=now(), updated_at=now()
@@ -118,7 +118,7 @@ func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
         UPDATE objects SET status='deleted', deleted_at=now(), updated_at=now()
         WHERE tenant_id=$1 AND id=$2 AND status != 'deleted'
@@ -217,7 +217,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter ListObje
 	return out, nextCursor, rows.Err()
 }
 
-func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*ObjectRecord, error) {
+func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*ObjectRecord, error) {
 	// Simple implementation: fetch, update, save. For atomicity, use a single UPDATE with COALESCE or similar.
 	// But labels is a map, so we might want to merge. The spec says "Update object metadata (labels/external_ref)".
 	// Usually PATCH means partial update.

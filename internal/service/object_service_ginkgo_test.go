@@ -2,12 +2,14 @@ package service_test
 
 import (
 	"context"
+	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/uuid"
@@ -178,11 +180,11 @@ func (m *MockBreakerFactory) CheckHealth() map[string]string {
 
 var _ = Describe("ObjectsService", func() {
 	var (
-		mockRepo    *MockObjectsRepo
-		mockMPRepo  *MockMultipartRepo
-		mockS3      *MockS3Client
-		svc         service.ObjectsService
-		ctx         context.Context
+		mockRepo   *MockObjectsRepo
+		mockMPRepo *MockMultipartRepo
+		mockS3     *MockS3Client
+		svc        service.ObjectsService
+		ctx        context.Context
 	)
 
 	BeforeEach(func() {
@@ -315,6 +317,78 @@ var _ = Describe("ObjectsService", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(rec.ID).To(Equal(objID))
+		})
+	})
+
+	Describe("SignUpload", func() {
+		It("should successfully generate a presigned upload URL", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&postgres.ObjectRecord{
+				ID:          objID,
+				ObjectKey:   "test-key",
+				ContentType: "application/json",
+				SizeBytes:   100,
+			}, nil)
+			mockS3.On("PresignPutObject", mock.Anything, "test-key", "application/json", int64(100), mock.Anything).Return(s3.Presigned{URL: "http://example.com/upload"}, nil)
+
+			p, err := svc.SignUpload(ctx, tenantID, objID, 0)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.URL).To(Equal("http://example.com/upload"))
+		})
+	})
+
+	Describe("SignDownload", func() {
+		It("should successfully generate a presigned download URL for complete objects", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&postgres.ObjectRecord{
+				ID:        objID,
+				ObjectKey: "test-key",
+				Status:    postgres.ObjectComplete,
+			}, nil)
+			mockS3.On("PresignGetObject", mock.Anything, "test-key", mock.Anything).Return(s3.Presigned{URL: "http://example.com/download"}, nil)
+
+			p, err := svc.SignDownload(ctx, tenantID, objID, 0)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.URL).To(Equal("http://example.com/download"))
+		})
+
+		It("should fail for non-complete objects", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&postgres.ObjectRecord{
+				ID:     objID,
+				Status: postgres.ObjectPending,
+			}, nil)
+
+			_, err := svc.SignDownload(ctx, tenantID, objID, 0)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not complete"))
+		})
+	})
+
+	Describe("Delete", func() {
+		It("should successfully mark object as deleted and delete from S3", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&postgres.ObjectRecord{
+				ID:        objID,
+				ObjectKey: "test-key",
+			}, nil)
+			mockRepo.On("MarkDeleted", mock.Anything, tenantID, objID).Return(true, nil)
+			mockS3.On("DeleteObject", mock.Anything, "test-key").Return(nil)
+
+			err := svc.Delete(ctx, tenantID, openapi_types.UUID(objID))
+
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

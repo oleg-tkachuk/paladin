@@ -9,14 +9,14 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 // signDownload generates a presigned URL for downloading a completed object
-func (s *objectsService) signDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (s3.Presigned, error) {
+func (s *objectsService) signDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (s3.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignDownload")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))

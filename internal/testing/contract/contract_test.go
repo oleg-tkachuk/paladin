@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,10 +19,7 @@ import (
 
 func TestContract(t *testing.T) {
 	// 1. Load the existing OpenAPI 3.x YAML spec
-	absPath, err := filepath.Abs("../../../api/openapi.yaml")
-	require.NoError(t, err)
-
-	spec, err := openapi.LoadSpec(absPath)
+	spec, err := openapi.LoadSpec()
 	require.NoError(t, err, "failed to load spec")
 
 	// Adjust spec servers for local testing if needed, or handle prefix.

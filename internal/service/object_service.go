@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Operation timeouts
@@ -88,14 +89,14 @@ type SignPartResponse struct {
 
 type ObjectsService interface {
 	CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
-	Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)
-	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)
-	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error)
-	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
+	Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error)
+	GetMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error)
+	CompleteObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error)
+	Delete(ctx context.Context, tenantID string, id openapi_types.UUID) error
 	List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error)
-	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)
-	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (s3.Presigned, error)
-	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (s3.Presigned, error)
+	PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)
+	SignUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (s3.Presigned, error)
+	SignDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (s3.Presigned, error)
 
 	InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error)
 	GetMultipart(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error)
@@ -150,19 +151,19 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cont
 	return s.createSingle(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 }
 
-func (s *objectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error) {
+func (s *objectsService) Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
 	return s.get(ctx, tenantID, id)
 }
 
-func (s *objectsService) GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error) {
+func (s *objectsService) GetMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
 	return s.getMeta(ctx, tenantID, id)
 }
 
-func (s *objectsService) CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
+func (s *objectsService) CompleteObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
 	return s.completeObject(ctx, tenantID, id, etag, sizeBytes)
 }
 
-func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+func (s *objectsService) Delete(ctx context.Context, tenantID string, id openapi_types.UUID) error {
 	return s.deleteObject(ctx, tenantID, id)
 }
 
@@ -170,15 +171,15 @@ func (s *objectsService) List(ctx context.Context, tenantID string, filter postg
 	return s.listObjects(ctx, tenantID, filter, limit, cursor)
 }
 
-func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
 	return s.patchMeta(ctx, tenantID, id, labels, externalRef)
 }
 
-func (s *objectsService) SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (s3.Presigned, error) {
+func (s *objectsService) SignUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (s3.Presigned, error) {
 	return s.signUpload(ctx, tenantID, id, uploadTTL)
 }
 
-func (s *objectsService) SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (s3.Presigned, error) {
+func (s *objectsService) SignDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (s3.Presigned, error) {
 	return s.signDownload(ctx, tenantID, id, downloadTTL)
 }
 

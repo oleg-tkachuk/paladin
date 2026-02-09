@@ -9,7 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -17,7 +17,7 @@ import (
 )
 
 // completeObject marks an object as complete after upload verification
-func (s *objectsService) completeObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
+func (s *objectsService) completeObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "CompleteObject")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))

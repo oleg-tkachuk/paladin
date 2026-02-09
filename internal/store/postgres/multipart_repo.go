@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 type MultipartStatus string
@@ -19,9 +19,9 @@ const (
 )
 
 type MultipartRecord struct {
-	ID          uuid.UUID
+	ID          openapi_types.UUID
 	TenantID    string
-	ObjectID    uuid.UUID
+	ObjectID    openapi_types.UUID
 	UploadID    string
 	Bucket      string
 	ObjectKey   string
@@ -34,7 +34,7 @@ type MultipartRecord struct {
 }
 
 type MultipartPartRecord struct {
-	MultipartID uuid.UUID
+	MultipartID openapi_types.UUID
 	PartNumber  int
 	ETag        *string
 	SizeBytes   *int64
@@ -73,7 +73,7 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 	return &rec, nil
 }
 
-func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUID, partNumber int, etag string, sizeBytes *int64) error {
+func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID openapi_types.UUID, partNumber int, etag string, sizeBytes *int64) error {
 	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO multipart_parts (multipart_id, part_number, etag, size_bytes)
         VALUES ($1,$2,$3,$4)
@@ -86,7 +86,7 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUI
 	return nil
 }
 
-func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]MultipartPartRecord, error) {
+func (r *MultipartRepo) ListParts(ctx context.Context, multipartID openapi_types.UUID) ([]MultipartPartRecord, error) {
 	rows, err := r.db.Pool.Query(ctx, `
         SELECT multipart_id, part_number, etag, size_bytes, created_at
         FROM multipart_parts
@@ -138,7 +138,7 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 	return nil
 }
 
-func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
+func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID openapi_types.UUID) error {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)

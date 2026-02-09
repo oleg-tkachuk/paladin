@@ -7,14 +7,14 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 
-	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 // signUpload generates a presigned URL for uploading to an existing object
-func (s *objectsService) signUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (s3.Presigned, error) {
+func (s *objectsService) signUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (s3.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignUpload")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
