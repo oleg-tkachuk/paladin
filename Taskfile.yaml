@@ -52,8 +52,17 @@ tasks:
         docker buildx use desktop-linux
         docker context ls
         docker buildx ls
+
+        # Auto-increment version
+        if [ ! -f VERSION ]; then echo "0.1.0" > VERSION; fi
+        check_version=$(cat VERSION)
+        next_version=$(echo $check_version | awk -F. -v OFS=. '{$NF += 1 ; print}')
+        echo $next_version > VERSION
+        echo "INFO: Bumped version from $check_version to $next_version"
+
         echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" > {{.ENV_FILE_SERVICE}}
         echo "BUILD_TIME=$(TZ=${TIMEZONE} date +%Y-%m-%dT%H:%M:%S%z)" >> {{.ENV_FILE_SERVICE}}
+        echo "APP_VERSION=$next_version" >> {{.ENV_FILE_SERVICE}}
         eval $(minikube docker-env) && docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} --env-file {{.ENV_FILE_SERVICE}} build --no-cache
 
   kubectl:set-context:
