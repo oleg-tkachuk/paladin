@@ -217,22 +217,44 @@ Marks an upload as complete and the object as `active`. This tells the system th
 | :--- | :--- | :--- |
 | `status` | string | The new status of the object (typically `active`). |
 
-#### Delete Object
+#### Hard Delete Object
 
-Soft-deletes an object. The object data remains in storage until cleaned up by a lifecycle policy, but the object is marked `deleted` in the database and is no longer accessible via the API.
+Hard-deletes an object. This operation is **irreversible**. The object data is removed from the storage backend, and the metadata is marked as `hard_deleted` (tombstone).
 
 - **Method**: `DELETE`
 - **Endpoint**: `/objects/:id`
 - **Path Parameters**:
   - `id`: Object UUID
-- **Success Code**: `200 OK`
+- **Query Parameters**: None (removed `mode` parameter)
+- **Success Code**: `204 No Content`
 - **Error Codes**: `400 Bad Request`, `500 Internal Server Error`
+
+#### Soft Delete Object
+
+Soft-deletes an object by updating its status to `soft_deleted`.
+
+- **Method**: `PATCH`
+- **Endpoint**: `/objects/:id`
+- **Path Parameters**:
+  - `id`: Object UUID
+- **Header**:
+  - `Content-Type`: `application/json`
+- **Success Code**: `200 OK`
+- **Error Codes**: `400 Bad Request`, `409 Conflict` (if state transition is invalid)
+
+**Request Body**:
+
+```json
+{
+  "status": "soft_deleted"
+}
+```
 
 **Response Body**:
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `status` | string | The new status of the object (`deleted`). |
+| `status` | string | The new status of the object (`soft_deleted`). |
 
 ---
 
@@ -417,7 +439,7 @@ Finalizes an object.
 
 #### `DeleteObject`
 
-Soft deletes an object.
+Hard deletes an object.
 
 - **Request**: `DeleteObjectRequest`
   - `tenant_id` (string)

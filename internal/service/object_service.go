@@ -32,6 +32,8 @@ type ObjectsRepository interface {
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)
 	GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*postgres.ObjectRecord, error)
 	MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error)
+	MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
+	MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error)
 	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)
@@ -92,7 +94,9 @@ type ObjectsService interface {
 	Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error)
 	GetMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error)
 	CompleteObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error)
-	Delete(ctx context.Context, tenantID string, id openapi_types.UUID) error
+	HardDelete(ctx context.Context, tenantID string, id openapi_types.UUID, idempotencyKey *string) error
+	// UpdateStatus updates the status of an object (e.g. for soft deletion)
+	UpdateStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error
 	List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error)
 	PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)
 	SignUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (s3.Presigned, error)
@@ -163,8 +167,12 @@ func (s *objectsService) CompleteObject(ctx context.Context, tenantID string, id
 	return s.completeObject(ctx, tenantID, id, etag, sizeBytes)
 }
 
-func (s *objectsService) Delete(ctx context.Context, tenantID string, id openapi_types.UUID) error {
-	return s.deleteObject(ctx, tenantID, id)
+func (s *objectsService) HardDelete(ctx context.Context, tenantID string, id openapi_types.UUID, idempotencyKey *string) error {
+	return s.hardDeleteObject(ctx, tenantID, id, idempotencyKey)
+}
+
+func (s *objectsService) UpdateStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error {
+	return s.updateObjectStatus(ctx, tenantID, id, status, idempotencyKey)
 }
 
 func (s *objectsService) List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {

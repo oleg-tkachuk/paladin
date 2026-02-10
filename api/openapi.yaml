@@ -180,17 +180,57 @@ paths:
 
     delete:
       tags: [Objects]
-      summary: Delete an object (idempotent, synchronous)
-      operationId: deleteObject
+      summary: Hard delete an object (irreversible)
+      description: |
+        Permanently removes the object data from storage and metadata from the database.
+        This operation is irreversible.
+      operationId: hardDeleteObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "204":
-          description: Deleted (or already absent)
+          description: Object deleted (or already absent)
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [Objects]
+      summary: Update object status (e.g. soft delete)
+      description: |
+        Update the lifecycle state of an object.
+        Used primarily for soft deletion (`status` = `soft_deleted`).
+      operationId: updateObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchObjectRequest"
+      responses:
+        "200":
+          description: Object updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObjectCommon"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -888,6 +928,15 @@ components:
         external_ref:
           type: string
           maxLength: 512
+
+    PatchObjectRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/ObjectStatus"
+          description: New status for the object (e.g. `soft_deleted`)
+          enum: [soft_deleted] # Currently only soft_delete transition is exposed via this endpoint
 
     SignObjectUploadRequest:
       type: object

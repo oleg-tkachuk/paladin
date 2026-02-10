@@ -237,7 +237,7 @@ func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*D
 		return nil, status.Error(codes.InvalidArgument, "invalid object id")
 	}
 
-	if err := s.svc.Delete(ctx, tenant, id); err != nil {
+	if err := s.svc.HardDelete(ctx, tenant, id, nil); err != nil {
 		logger.FromContext(ctx).Error("DeleteObject failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	}

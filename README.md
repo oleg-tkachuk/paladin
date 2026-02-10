@@ -63,7 +63,8 @@ Tracks the lifecycle of each object with the following states:
 
 - **pending** - Object created, awaiting upload completion
 - **active** - Upload completed and verified
-- **deleted** - Soft-deleted (marked for cleanup)
+- **soft_deleted** - Soft-deleted (marked for cleanup)
+- **hard_deleted** - Hard-deleted (tombstone)
 
 Key fields:
 
@@ -411,7 +412,7 @@ curl -s http://localhost:8080/health/readyz | jq .
 
 ## API Endpoints
 
-For detailed API documentation, see [API.md](API.md).
+For detailed API documentation, see [API.md](./docs/API.md).
 
 ### HTTP API
 
@@ -428,7 +429,8 @@ For detailed API documentation, see [API.md](API.md).
 - `POST /v1/objects` - Create single object upload (returns presigned PUT URL)
 - `GET /v1/objects/:id` - Get object metadata (returns presigned GET URL)
 - `POST /v1/objects/:id/complete` - Mark object as active after upload
-- `DELETE /v1/objects/:id` - Soft-delete object (marks as deleted)
+- `PATCH /v1/objects/:id` - Soft-delete object (update status to `soft_deleted`)
+- `DELETE /v1/objects/:id` - Hard-delete object (irreversible)
 
 **Multipart Uploads (v1):**
 

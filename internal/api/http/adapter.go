@@ -85,13 +85,47 @@ func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id openapi_types.UUID) {
 	c.Status(http.StatusOK)
 }
 
-func (s *OpenAPIAdapter) DeleteObject(c *gin.Context, id openapi_types.UUID) {
-	if err := s.svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
+func (s *OpenAPIAdapter) HardDeleteObject(c *gin.Context, id openapi_types.UUID, params api.HardDeleteObjectParams) {
+	var idempotencyKey *string
+	if params.IdempotencyKey != nil {
+		k := string(*params.IdempotencyKey)
+		idempotencyKey = &k
+	}
+
+	if err := s.svc.HardDelete(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
 		respondWithError(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, params api.UpdateObjectParams) {
+	var req api.PatchObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	var idempotencyKey *string
+	if params.IdempotencyKey != nil {
+		k := string(*params.IdempotencyKey)
+		idempotencyKey = &k
+	}
+
+	if err := s.svc.UpdateStatus(c.Request.Context(), tenantID(c), id, string(req.Status), idempotencyKey); err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Fetch updated object to return
+	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, mapObjectCommon(rec))
 }
 
 func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {

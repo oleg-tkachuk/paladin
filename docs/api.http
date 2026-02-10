@@ -16,7 +16,16 @@ X-Tenant-ID: demo
 POST http://localhost:8080/v1/objects/{{object_id}}/complete
 X-Tenant-ID: demo
 
-### Delete object (mark deleted)
+### Soft delete object (mark soft_deleted)
+PATCH http://localhost:8080/v1/objects/{{object_id}}
+Content-Type: application/json
+X-Tenant-ID: demo
+
+{
+  "status": "soft_deleted"
+}
+
+### Hard delete object (irreversible)
 DELETE http://localhost:8080/v1/objects/{{object_id}}
 X-Tenant-ID: demo
 

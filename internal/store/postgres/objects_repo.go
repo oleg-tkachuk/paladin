@@ -20,13 +20,14 @@ type ListObjectsFilter struct {
 type ObjectStatus string
 
 const (
-	ObjectPending   ObjectStatus = "pending"
-	ObjectUploading ObjectStatus = "uploading"
-	ObjectUploaded  ObjectStatus = "uploaded"
-	ObjectComplete  ObjectStatus = "complete"
-	ObjectAborted   ObjectStatus = "aborted"
-	ObjectDeleted   ObjectStatus = "deleted"
-	ObjectError     ObjectStatus = "error"
+	ObjectPending     ObjectStatus = "pending"
+	ObjectUploading   ObjectStatus = "uploading"
+	ObjectUploaded    ObjectStatus = "uploaded"
+	ObjectComplete    ObjectStatus = "complete"
+	ObjectAborted     ObjectStatus = "aborted"
+	ObjectDeleted     ObjectStatus = "deleted"
+	ObjectSoftDeleted ObjectStatus = "soft_deleted"
+	ObjectHardDeleted ObjectStatus = "hard_deleted"
 )
 
 type ObjectRecord struct {
@@ -118,16 +119,36 @@ func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id open
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
+func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
-        UPDATE objects SET status='deleted', deleted_at=now(), updated_at=now()
-        WHERE tenant_id=$1 AND id=$2 AND status != 'deleted'
+        UPDATE objects SET status='soft_deleted', deleted_at=now(), updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 AND status != 'soft_deleted' AND status != 'hard_deleted'
     `, tenantID, id)
 	if err != nil {
-		return false, fmt.Errorf("mark object deleted: %w", err)
+		return false, fmt.Errorf("mark object soft deleted: %w", err)
 	}
 
 	return tag.RowsAffected() > 0, nil
+}
+
+func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
+	// If already hard_deleted, it's a no-op (idempotent).
+	// If soft_deleted, we update to hard_deleted.
+	// If active, we update to hard_deleted.
+	tag, err := r.db.Pool.Exec(ctx, `
+        UPDATE objects SET status='hard_deleted', deleted_at=COALESCE(deleted_at, now()), updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 AND status != 'hard_deleted'
+    `, tenantID, id)
+	if err != nil {
+		return false, fmt.Errorf("mark object hard deleted: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
+	// Deprecated: Alias for MarkHardDeleted
+	return r.MarkHardDeleted(ctx, tenantID, id)
 }
 
 func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*ObjectRecord, error) {
