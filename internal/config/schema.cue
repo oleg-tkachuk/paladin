@@ -108,7 +108,7 @@ policy: {
 }
 
 security: {
-  trust_tenant_id_from_request: bool | *false
+  trust_tenant_id_from_request: bool | *true
   reject_tenant_mismatch: bool | *true
   enable_rls: bool | *false
   log_sensitive: bool | *false
@@ -159,25 +159,4 @@ otel: {
   }
 }
 
-auth: {
-  mode: "disabled" | *"oidc"
-  dev_principal_enabled: bool | *false
 
-  oidc: {
-    issuer_url: string
-    audience: string
-    jwks_url: string | *""
-    required_scopes: [...string] | *[]
-    tenant_claim: string | *"tenant_id"
-    email_claim: string | *"email"
-    subject_claim: string | *"sub"
-  }
-
-  clock_skew: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-
-  dev_principal: {
-    tenant_id: string | *"00000000-0000-0000-0000-000000000000"
-    email: string | *"dev@example.com"
-    subject: string | *"dev-user"
-  }
-}

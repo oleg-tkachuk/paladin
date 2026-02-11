@@ -1,10 +1,8 @@
 package middleware
 
 import (
-	"context"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/gin-contrib/cors"
@@ -14,11 +12,6 @@ import (
 
 // SetupHTTPStack configures the canonical middleware stack for Gin
 func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
-	// Initialize authorizer
-	authorizer, err := auth.NewJWTAuthorizer(context.Background(), *cfg)
-	if err != nil {
-		log.Fatal("failed to create authorizer", zap.Error(err))
-	}
 
 	// 1. Recovery (Panic -> 500)
 	r.Use(gin.Recovery())
@@ -53,8 +46,8 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	// 7. Logger (Structured Zap)
 	r.Use(RequestLogger(log, cfg.Server.LogProbes))
 
-	// 8. Auth & Tenant Derivation
-	r.Use(Auth(authorizer, cfg.Security, log))
+	// 8. Auth & Tenant Derivation (Legacy: Removed, relies on trusted headers now)
+	// r.Use(Auth(authorizer, cfg.Security, log))
 
 	// 9. Enforce Tenant & Limits
 	r.Use(EnforceTenant(cfg.Security))
