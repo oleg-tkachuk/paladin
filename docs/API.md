@@ -113,6 +113,15 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 - **Success Code**: `200 OK`
 - **Error Codes**: `400 Bad Request`
 
+**Query Parameters**:
+
+- `limit`: (int) Max items to return (default 50, max 200).
+- `cursor`: (string) Pagination cursor.
+- `status`: (string) Filter by status (e.g., `active`, `pending`, `soft_deleted`).
+- `external_ref`: (string) Filter by external reference.
+- `created_after`: (string) Filter by creation time (RFC3339).
+- `created_before`: (string) Filter by creation time (RFC3339).
+
 **Request Body** (`application/json`):
 
 | Field | Type | Required | Description |
@@ -200,6 +209,31 @@ Retrieves metadata for an existing object **without** generating a download URL.
 | `external_ref` | string | External reference ID. |
 | `expires_at` | string (ISO8601) | Optional expiration timestamp (if set). |
 
+#### Update Object Metadata
+
+Updates permissible metadata fields (labels, external_ref) without affecting object content or status.
+
+- **Method**: `PATCH`
+- **Endpoint**: `/objects/:id/meta`
+- **Body**: `{ "labels": {...}, "external_ref": "..." }`
+- **Success Code**: `200 OK`
+
+#### Sign Object Upload
+
+Re-issues a signed URL for uploading the file content (single PUT). Useful if the original upload URL expired or failed.
+
+- **Method**: `POST`
+- **Endpoint**: `/objects/:id/sign-upload`
+- **Success Code**: `200 OK`
+
+#### Sign Object Download
+
+Generates a ephemeral signed URL for downloading the object content.
+
+- **Method**: `POST`
+- **Endpoint**: `/objects/:id/sign-download`
+- **Success Code**: `200 OK`
+
 #### Complete Object
 
 Marks an upload as complete and the object as `active`. This tells the system that the client has successfully uploaded the file to the presigned URL.
@@ -217,22 +251,44 @@ Marks an upload as complete and the object as `active`. This tells the system th
 | :--- | :--- | :--- |
 | `status` | string | The new status of the object (typically `active`). |
 
-#### Delete Object
+#### Hard Delete Object
 
-Soft-deletes an object. The object data remains in storage until cleaned up by a lifecycle policy, but the object is marked `deleted` in the database and is no longer accessible via the API.
+**Permanently** removes the object (data + metadata). This operation is **irreversible**. The object data is removed from the storage backend, and the metadata is marked with a tombstone or removed.
 
 - **Method**: `DELETE`
 - **Endpoint**: `/objects/:id`
 - **Path Parameters**:
   - `id`: Object UUID
-- **Success Code**: `200 OK`
+- **Query Parameters**: None (removed `mode` parameter)
+- **Success Code**: `204 No Content`
 - **Error Codes**: `400 Bad Request`, `500 Internal Server Error`
+
+#### Soft Delete Object
+
+Marks an object as `soft_deleted`. The data remains in storage, but the object is logically deleted and hidden from standard listings.
+
+- **Method**: `PATCH`
+- **Endpoint**: `/objects/:id`
+- **Path Parameters**:
+  - `id`: Object UUID
+- **Header**:
+  - `Content-Type`: `application/json`
+- **Success Code**: `200 OK`
+- **Error Codes**: `400 Bad Request`, `409 Conflict` (if state transition is invalid)
+
+**Request Body**:
+
+```json
+{
+  "status": "soft_deleted"
+}
+```
 
 **Response Body**:
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `status` | string | The new status of the object (`deleted`). |
+| `status` | string | The new status of the object (`soft_deleted`). |
 
 ---
 
@@ -291,6 +347,24 @@ Generates a presigned URL for uploading a specific part number of a multipart up
 | `upload_url` | string | Presigned URL for `PUT`ing this specific part. |
 | `method` | string | HTTP method (always `PUT`). |
 | `expires_at` | string (ISO8601) | Expiration for this specific part's URL. |
+
+#### Batch Sign Parts
+
+Generates presigned URLs for multiple parts in a single request.
+
+- **Method**: `POST`
+- **Endpoint**: `/multipart/:upload_id/parts/sign`
+- **Body**: `{ "part_numbers": [1, 2, 3] }`
+- **Success Code**: `200 OK`
+- **Response**: Map of part number to signed URL info.
+
+#### Get Multipart Upload
+
+Retrieves details about an active multipart upload session.
+
+- **Method**: `GET`
+- **Endpoint**: `/multipart/:upload_id`
+- **Success Code**: `200 OK`
 
 #### Complete Multipart Upload
 
@@ -417,7 +491,7 @@ Finalizes an object.
 
 #### `DeleteObject`
 
-Soft deletes an object.
+Hard deletes an object.
 
 - **Request**: `DeleteObjectRequest`
   - `tenant_id` (string)

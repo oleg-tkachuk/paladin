@@ -48,6 +48,16 @@ func (m *MockObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id u
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
 func (m *MockObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error) {
 	args := m.Called(ctx, tenantID, id, etag, sizeBytes)
 	return args.Bool(0), args.Error(1)
@@ -383,10 +393,10 @@ var _ = Describe("ObjectsService", func() {
 				ID:        objID,
 				ObjectKey: "test-key",
 			}, nil)
-			mockRepo.On("MarkDeleted", mock.Anything, tenantID, objID).Return(true, nil)
+			mockRepo.On("MarkHardDeleted", mock.Anything, tenantID, objID).Return(true, nil)
 			mockS3.On("DeleteObject", mock.Anything, "test-key").Return(nil)
 
-			err := svc.Delete(ctx, tenantID, openapi_types.UUID(objID))
+			err := svc.HardDelete(ctx, tenantID, openapi_types.UUID(objID), nil)
 
 			Expect(err).NotTo(HaveOccurred())
 		})

@@ -7,24 +7,37 @@ ARG BUILD_TIME
 ARG HTTP_PORT
 ARG GRPC_PORT
 
+ARG PROTOC_GEN_GO_VERSION=latest
+ARG PROTOC_GEN_GO_GRPC_VERSION=latest
+
 ENV APP_VERSION=${APP_VERSION:-undefined}
 ENV GIT_COMMIT_HASH=${GIT_COMMIT_HASH:-undefined}
 ENV BUILD_TIME=${BUILD_TIME:-undefined}
 
-RUN apt-get update && \
+ENV GOCACHE=/root/.cache/go-build
+ENV GOMODCACHE=/go/pkg/mod
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt-get update && \
   apt-get install -y protobuf-compiler && \
   apt autoremove && \
   apt clean
 
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
-  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
+  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
   go install github.com/vektra/mockery/v3@latest
 
 WORKDIR /app
 
 COPY ./go.mod ./go.mod
 COPY ./go.sum ./go.sum
-RUN go mod download -x
+RUN --mount=type=cache,target=/go/pkg/mod \
+  go mod download -x
 
 COPY ./cmd ./cmd
 COPY ./internal ./internal
@@ -33,9 +46,13 @@ COPY ./migrations ./migrations
 COPY ./api ./api
 COPY ./proto ./proto
 
-RUN go generate ./...
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go generate ./...
 
-RUN cd ./cmd/server && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  cd ./cmd/server && \
   CGO_ENABLED=0 go build -trimpath -tags=go_json -ldflags="-w -s \
   -X 'main.version=${APP_VERSION}' \
   -X 'main.commit=${GIT_COMMIT_HASH}' \

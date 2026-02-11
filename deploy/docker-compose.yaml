@@ -60,7 +60,7 @@ services:
       context: ..
       dockerfile: ./deploy/Dockerfile
       args:
-        APP_VERSION: 0.1.0
+        APP_VERSION: ${APP_VERSION}
         GIT_COMMIT_HASH: ${GIT_COMMIT_HASH}
         BUILD_TIME: ${BUILD_TIME}
         HTTP_PORT: 8080

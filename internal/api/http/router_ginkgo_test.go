@@ -60,8 +60,13 @@ func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id 
 	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
 }
 
-func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id openapi_types.UUID) error {
-	args := m.Called(ctx, tenantID, id)
+func (m *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id openapi_types.UUID, idempotencyKey *string) error {
+	args := m.Called(ctx, tenantID, id, idempotencyKey)
+	return args.Error(0)
+}
+
+func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error {
+	args := m.Called(ctx, tenantID, id, status, idempotencyKey)
 	return args.Error(0)
 }
 
@@ -379,7 +384,7 @@ var _ = Describe("Router", func() {
 	Describe("DELETE /v1/objects/:id", func() {
 		It("deletes the object", func() {
 			id := uuid.New()
-			mockSvc.On("Delete", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(nil)
+			mockSvc.On("HardDelete", mock.Anything, mock.Anything, openapi_types.UUID(id), (*string)(nil)).Return(nil)
 
 			req, _ := http.NewRequest("DELETE", "/v1/objects/"+id.String(), nil)
 			req.Header.Set("X-Tenant-ID", "default")
@@ -401,6 +406,25 @@ var _ = Describe("Router", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 			Expect(recorder.Body.String()).To(ContainSubstring("http://upload"))
+		})
+	})
+
+	Describe("PATCH /v1/objects/:id", func() {
+		It("updates the object status", func() {
+			id := uuid.New()
+			mockSvc.On("UpdateStatus", mock.Anything, mock.Anything, openapi_types.UUID(id), "soft_deleted", (*string)(nil)).Return(nil)
+			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&postgres.ObjectRecord{
+				ID: openapi_types.UUID(id), Status: postgres.ObjectSoftDeleted,
+			}, nil)
+
+			body := `{"status": "soft_deleted"}`
+			req, _ := http.NewRequest("PATCH", "/v1/objects/"+id.String(), strings.NewReader(body))
+			req.Header.Set("X-Tenant-ID", "default")
+			req.Header.Set("Content-Type", "application/json")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring("soft_deleted"))
 		})
 	})
 
