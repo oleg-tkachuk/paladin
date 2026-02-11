@@ -6,7 +6,7 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 
 - **Metadata Management**: Atomically tracks object metadata and multipart upload states in PostgreSQL.
 - **Secure Access**: Generates time-limited presigned URLs for single-part and multipart uploads/downloads.
-- **Multi-Tenancy**: Built-in tenant isolation with Row-Level Security (RLS) support.
+- **Multi-Tenancy**: Built-in tenant isolation driven by `X-Tenant-ID` header, with optional Row-Level Security (RLS) support.
 - **Rate Limiting**: Configurable per-tenant rate limits with automatic cleanup and memory bounds.
 - **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads via background Reaper.
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
@@ -258,7 +258,7 @@ Enforces tenant isolation and authentication policies:
 
 ```yaml
 security:
-  trust_tenant_id_from_request: false # If true, trust X-Tenant-ID header (e.g. from gateway)
+  trust_tenant_id_from_request: true  # If true, trust X-Tenant-ID header (e.g. from gateway)
   reject_tenant_mismatch: true        # Reject if path param tenant != auth context tenant
   enable_rls: false                   # Enable Row Level Security in DB (requires migration 003)
   log_sensitive: false                # Mask sensitive fields in logs

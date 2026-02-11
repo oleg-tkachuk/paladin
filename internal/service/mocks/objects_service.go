@@ -372,81 +372,6 @@ func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
-// Delete provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) Delete(ctx context.Context, tenantID string, id types.UUID, mode string, idempotencyKey *string) error {
-	ret := _mock.Called(ctx, tenantID, id, mode, idempotencyKey)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Delete")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, string, *string) error); ok {
-		r0 = returnFunc(ctx, tenantID, id, mode, idempotencyKey)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockObjectsService_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
-type MockObjectsService_Delete_Call struct {
-	*mock.Call
-}
-
-// Delete is a helper method to define mock.On call
-//   - ctx context.Context
-//   - tenantID string
-//   - id types.UUID
-//   - mode string
-//   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) Delete(ctx interface{}, tenantID interface{}, id interface{}, mode interface{}, idempotencyKey interface{}) *MockObjectsService_Delete_Call {
-	return &MockObjectsService_Delete_Call{Call: _e.mock.On("Delete", ctx, tenantID, id, mode, idempotencyKey)}
-}
-
-func (_c *MockObjectsService_Delete_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, mode string, idempotencyKey *string)) *MockObjectsService_Delete_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 types.UUID
-		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 *string
-		if args[4] != nil {
-			arg4 = args[4].(*string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-			arg4,
-		)
-	})
-	return _c
-}
-
-func (_c *MockObjectsService_Delete_Call) Return(err error) *MockObjectsService_Delete_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockObjectsService_Delete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, mode string, idempotencyKey *string) error) *MockObjectsService_Delete_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Get provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) Get(ctx context.Context, tenantID string, id types.UUID) (*postgres.ObjectRecord, error) {
 	ret := _mock.Called(ctx, tenantID, id)
@@ -665,6 +590,75 @@ func (_c *MockObjectsService_GetMultipart_Call) Return(multipartRecord *postgres
 }
 
 func (_c *MockObjectsService_GetMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error)) *MockObjectsService_GetMultipart_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// HardDelete provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string) error {
+	ret := _mock.Called(ctx, tenantID, id, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for HardDelete")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, *string) error); ok {
+		r0 = returnFunc(ctx, tenantID, id, idempotencyKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_HardDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HardDelete'
+type MockObjectsService_HardDelete_Call struct {
+	*mock.Call
+}
+
+// HardDelete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id types.UUID
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) HardDelete(ctx interface{}, tenantID interface{}, id interface{}, idempotencyKey interface{}) *MockObjectsService_HardDelete_Call {
+	return &MockObjectsService_HardDelete_Call{Call: _e.mock.On("HardDelete", ctx, tenantID, id, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_HardDelete_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string)) *MockObjectsService_HardDelete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 types.UUID
+		if args[2] != nil {
+			arg2 = args[2].(types.UUID)
+		}
+		var arg3 *string
+		if args[3] != nil {
+			arg3 = args[3].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_HardDelete_Call) Return(err error) *MockObjectsService_HardDelete_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_HardDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string) error) *MockObjectsService_HardDelete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1259,6 +1253,81 @@ func (_c *MockObjectsService_SignUpload_Call) Return(presigned s3.Presigned, err
 }
 
 func (_c *MockObjectsService_SignUpload_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, uploadTTL int) (s3.Presigned, error)) *MockObjectsService_SignUpload_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateStatus provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string) error {
+	ret := _mock.Called(ctx, tenantID, id, status, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, string, *string) error); ok {
+		r0 = returnFunc(ctx, tenantID, id, status, idempotencyKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_UpdateStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateStatus'
+type MockObjectsService_UpdateStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id types.UUID
+//   - status string
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) UpdateStatus(ctx interface{}, tenantID interface{}, id interface{}, status interface{}, idempotencyKey interface{}) *MockObjectsService_UpdateStatus_Call {
+	return &MockObjectsService_UpdateStatus_Call{Call: _e.mock.On("UpdateStatus", ctx, tenantID, id, status, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_UpdateStatus_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string)) *MockObjectsService_UpdateStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 types.UUID
+		if args[2] != nil {
+			arg2 = args[2].(types.UUID)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 *string
+		if args[4] != nil {
+			arg4 = args[4].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_UpdateStatus_Call) Return(err error) *MockObjectsService_UpdateStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_UpdateStatus_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string) error) *MockObjectsService_UpdateStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

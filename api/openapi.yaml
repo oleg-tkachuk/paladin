@@ -33,9 +33,6 @@ info:
 servers:
   - url: /v1
 
-security:
-  - bearerAuth: []
-
 tags:
   - name: Objects
   - name: Multipart
@@ -634,30 +631,6 @@ paths:
                 $ref: "#/components/schemas/VersionResponse"
 
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: |
-        JWT bearer token authentication required for all endpoints except health checks and version.
-
-        **Token Requirements:**
-        - `sub`: User ID (subject)
-        - `tenant_id`: Tenant identifier for multi-tenancy
-        - `exp`: Expiration timestamp
-        - `iat`: Issued at timestamp
-
-        **Header Format:**
-        ```
-        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-        ```
-
-        **Unauthenticated Endpoints:**
-        - `GET /healthz`
-        - `GET /readyz`
-        - `GET /version`
-
   headers:
     X-RateLimit-Limit:
       description: Maximum number of requests allowed in the current time window

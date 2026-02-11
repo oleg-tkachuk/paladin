@@ -63,7 +63,7 @@ tasks:
         echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" > {{.ENV_FILE_SERVICE}}
         echo "BUILD_TIME=$(TZ=${TIMEZONE} date +%Y-%m-%dT%H:%M:%S%z)" >> {{.ENV_FILE_SERVICE}}
         echo "APP_VERSION=$next_version" >> {{.ENV_FILE_SERVICE}}
-        eval $(minikube docker-env) && docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} --env-file {{.ENV_FILE_SERVICE}} build --no-cache
+        eval $(minikube docker-env) && time docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} --env-file {{.ENV_FILE_SERVICE}} build --no-cache
 
   kubectl:set-context:
     desc: "Set the current kubectl context to the common namespace"
@@ -78,7 +78,7 @@ tasks:
   test:
     desc: "Run unit tests"
     cmds:
-      - go test -v ./...
+      - time go test -v ./...
 
   test:hurl:
     desc: "Run Hurl integration tests"

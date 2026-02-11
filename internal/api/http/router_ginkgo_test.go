@@ -177,10 +177,6 @@ var _ = Describe("Router", func() {
 			Security: config.Security{
 				TrustTenantIDFromRequest: true,
 			},
-			Auth: config.Auth{
-				Mode:                "disabled",
-				DevPrincipalEnabled: true,
-			},
 		}
 
 		logger, _ := zap.NewDevelopment()

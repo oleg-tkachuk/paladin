@@ -10,7 +10,7 @@ header "X-RateLimit-Remaining" exists
 
 # Test headers on API endpoint
 GET {{host}}/v1/objects
-Authorization: Bearer {{token}}
+X-Tenant-ID: default
 HTTP 200
 [Asserts]
 header "X-API-Version" exists
