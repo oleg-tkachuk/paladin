@@ -46,7 +46,7 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 	// 7. Logger (Structured Zap)
 	r.Use(RequestLogger(log, cfg.Server.LogProbes))
 
-	// 8. Auth & Tenant Derivation (Legacy: Removed, relies on trusted headers now)
+	// 8. Legacy: Removed, relies on trusted headers (X-Tenant-ID) established by Linkerd mTLS mesh.
 	// r.Use(Auth(authorizer, cfg.Security, log))
 
 	// 9. Enforce Tenant & Limits
