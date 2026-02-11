@@ -9,7 +9,7 @@ import (
 )
 
 // EnforceTenant rejects requests that require a tenant context but don't have one.
-// It also ensures that if a stored object is requested with an explicit tenant mismatch, we block it.
+// The tenant context is typically established by the RequestID middleware (from headers).
 func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()

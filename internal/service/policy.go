@@ -35,8 +35,8 @@ func NewPolicy(cfg config.Policy) Policy {
 }
 
 func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action Action) error {
-	// Basic authorization placeholder.
-	// In a real app, this would check RBAC/ABAC.
+	// Tenant validation.
+	// In a real app, this would check RBAC/ABAC if needed.
 	if tenantID == "" {
 		return errors.New("unauthorized: tenant_id required")
 	}

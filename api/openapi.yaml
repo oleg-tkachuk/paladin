@@ -11,7 +11,7 @@ info:
     - **Pre-signed URLs**: Secure, time-limited upload/download URLs
     - **Multipart Uploads**: Support for large files (>5GB)
     - **Idempotency**: Safe retries with idempotency keys
-    - **Multi-tenancy**: Tenant isolation via JWT claims
+    - **Multi-tenancy**: Tenant isolation via X-Tenant-ID header
 
     ## Versioning
     - **URL Versioning**: Major version in path (`/v1`, `/v2`)

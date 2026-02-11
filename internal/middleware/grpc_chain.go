@@ -107,8 +107,8 @@ func LoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 
 func AuthInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		// Extract tenant from metadata x-tenant-id if trusted
-		// Or parse JWT from authorization metadata
+		// Extract tenant from metadata x-tenant-id if trusted.
+		// Security middleware (EnforceTenant) will reject requests without tenant if configured.
 
 		md, _ := metadata.FromIncomingContext(ctx)
 
@@ -116,13 +116,6 @@ func AuthInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
 		if cfg.TrustTenantIDFromRequest {
 			if vals := md.Get("x-tenant-id"); len(vals) > 0 {
 				tenant = vals[0]
-			}
-		}
-
-		// If not found, simulate JWT extraction from "authorization"
-		if tenant == "" {
-			if vals := md.Get("authorization"); len(vals) > 0 {
-				// parse...
 			}
 		}
 

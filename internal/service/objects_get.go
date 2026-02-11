@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-// get retrieves an object by ID with authorization
+// get retrieves an object by ID with tenant validation
 func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "Get")
 	defer span.End()
