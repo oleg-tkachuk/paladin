@@ -37,15 +37,16 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 │   ├── app/            # Application wire-up logic
 │   ├── breaker/        # Circuit breaker implementations
 │   ├── config/         # CUE-powered configuration parsing
+│   ├── domain/         # Core models and interfaces (Architecture Core)
 │   ├── fault/          # Fault injection for testing
 │   ├── generated/      # Generated code (API, etc.)
 │   │   └── api/        # Generated OpenAPI code
 │   ├── logger/         # Structured logger initialization
 │   ├── middleware/     # HTTP/gRPC middleware
 │   ├── observability/  # OpenTelemetry instrumentation (traces/metrics)
-│   ├── service/        # Core business logic (presigning, state management)
+│   ├── service/        # Business logic implementation
 │   ├── storage/        # S3 client and storage abstractions
-│   ├── store/          # PostgreSQL repository implementations
+│   ├── store/          # Repository implementations (PostgreSQL)
 │   └── utils/          # Shared utilities
 ├── migrations/         # SQL migration files
 └── tools.go            # Tool dependencies (oapi-codegen, etc.)
@@ -62,9 +63,12 @@ The service uses PostgreSQL to track object metadata and multipart upload state.
 Tracks the lifecycle of each object with the following states:
 
 - **pending** - Object created, awaiting upload completion
-- **active** - Upload completed and verified
-- **soft_deleted** - Soft-deleted (marked for cleanup)
-- **hard_deleted** - Hard-deleted (tombstone)
+- **uploading** - Multipart upload in progress
+- **uploaded** - Data uploaded to S3, awaiting commit
+- **complete** - Upload committed and verified (Active state)
+- **aborted** - Creation process cancelled
+- **soft_deleted** - Mark as deleted (logical)
+- **hard_deleted** - Irreversibly removed
 
 Key fields:
 
@@ -92,9 +96,10 @@ Indexes:
 Manages multipart upload sessions with states:
 
 - **initiated** - Upload session started
-- **completed** - All parts uploaded and finalized
-- **aborted** - Upload cancelled
-- **expired** - Upload session timed out
+- **uploaded** - All parts sent to S3
+- **completed** - Session finalized and object committed
+- **aborted** - Upload session cancelled
+- **expired** - Session timed out
 
 Key fields:
 
@@ -429,7 +434,7 @@ For detailed API documentation, see [API.md](./docs/API.md).
 - `POST /v1/objects` - Create single object upload (returns presigned PUT URL)
 - `GET /v1/objects/:id` - Get object metadata (returns presigned GET URL)
 - `POST /v1/objects/:id/complete` - Mark object as active after upload
-- `PATCH /v1/objects/:id` - Soft-delete object (update status to `soft_deleted`)
+- `PATCH /v1/objects/:id` - Logically delete object (update status to `soft_deleted`)
 - `DELETE /v1/objects/:id` - Hard-delete object (irreversible)
 
 **Multipart Uploads (v1):**

@@ -2,15 +2,13 @@
 // github.com/vektra/mockery
 // template: testify
 
-package service
+package domain
 
 import (
 	"context"
 
-	"github.com/oapi-codegen/runtime/types"
-	"github.com/oleg-tkachuk/paladin/internal/service"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -105,26 +103,26 @@ func (_c *MockObjectsService_AbortMultipart_Call) RunAndReturn(run func(ctx cont
 }
 
 // CompleteMultipart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []service.CompletePart) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, uploadID, parts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CompleteMultipart")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []service.CompletePart) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []domain.CompletePart) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, uploadID, parts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []service.CompletePart) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []domain.CompletePart) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, uploadID, parts)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []service.CompletePart) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []domain.CompletePart) error); ok {
 		r1 = returnFunc(ctx, tenantID, uploadID, parts)
 	} else {
 		r1 = ret.Error(1)
@@ -141,12 +139,12 @@ type MockObjectsService_CompleteMultipart_Call struct {
 //   - ctx context.Context
 //   - tenantID string
 //   - uploadID string
-//   - parts []service.CompletePart
+//   - parts []domain.CompletePart
 func (_e *MockObjectsService_Expecter) CompleteMultipart(ctx interface{}, tenantID interface{}, uploadID interface{}, parts interface{}) *MockObjectsService_CompleteMultipart_Call {
 	return &MockObjectsService_CompleteMultipart_Call{Call: _e.mock.On("CompleteMultipart", ctx, tenantID, uploadID, parts)}
 }
 
-func (_c *MockObjectsService_CompleteMultipart_Call) Run(run func(ctx context.Context, tenantID string, uploadID string, parts []service.CompletePart)) *MockObjectsService_CompleteMultipart_Call {
+func (_c *MockObjectsService_CompleteMultipart_Call) Run(run func(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart)) *MockObjectsService_CompleteMultipart_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -160,9 +158,9 @@ func (_c *MockObjectsService_CompleteMultipart_Call) Run(run func(ctx context.Co
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 []service.CompletePart
+		var arg3 []domain.CompletePart
 		if args[3] != nil {
-			arg3 = args[3].([]service.CompletePart)
+			arg3 = args[3].([]domain.CompletePart)
 		}
 		run(
 			arg0,
@@ -174,37 +172,37 @@ func (_c *MockObjectsService_CompleteMultipart_Call) Run(run func(ctx context.Co
 	return _c
 }
 
-func (_c *MockObjectsService_CompleteMultipart_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsService_CompleteMultipart_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsService_CompleteMultipart_Call) Return(object *domain.Object, err error) *MockObjectsService_CompleteMultipart_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsService_CompleteMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, parts []service.CompletePart) (*postgres.ObjectRecord, error)) *MockObjectsService_CompleteMultipart_Call {
+func (_c *MockObjectsService_CompleteMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error)) *MockObjectsService_CompleteMultipart_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CompleteObject provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) CompleteObject(ctx context.Context, tenantID string, id types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsService) CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id, etag, sizeBytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CompleteObject")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, *string, *int64) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, *string, *int64) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id, etag, sizeBytes)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, *string, *int64) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, *string, *int64) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id, etag, sizeBytes)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID, *string, *int64) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, *string, *int64) error); ok {
 		r1 = returnFunc(ctx, tenantID, id, etag, sizeBytes)
 	} else {
 		r1 = ret.Error(1)
@@ -220,14 +218,14 @@ type MockObjectsService_CompleteObject_Call struct {
 // CompleteObject is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - etag *string
 //   - sizeBytes *int64
 func (_e *MockObjectsService_Expecter) CompleteObject(ctx interface{}, tenantID interface{}, id interface{}, etag interface{}, sizeBytes interface{}) *MockObjectsService_CompleteObject_Call {
 	return &MockObjectsService_CompleteObject_Call{Call: _e.mock.On("CompleteObject", ctx, tenantID, id, etag, sizeBytes)}
 }
 
-func (_c *MockObjectsService_CompleteObject_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, etag *string, sizeBytes *int64)) *MockObjectsService_CompleteObject_Call {
+func (_c *MockObjectsService_CompleteObject_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64)) *MockObjectsService_CompleteObject_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -237,9 +235,9 @@ func (_c *MockObjectsService_CompleteObject_Call) Run(run func(ctx context.Conte
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 *string
 		if args[3] != nil {
@@ -260,33 +258,33 @@ func (_c *MockObjectsService_CompleteObject_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockObjectsService_CompleteObject_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsService_CompleteObject_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsService_CompleteObject_Call) Return(object *domain.Object, err error) *MockObjectsService_CompleteObject_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsService_CompleteObject_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error)) *MockObjectsService_CompleteObject_Call {
+func (_c *MockObjectsService_CompleteObject_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*domain.Object, error)) *MockObjectsService_CompleteObject_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CreateSingle provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.CreateObjectResponse, error) {
+func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
 	ret := _mock.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateSingle")
 	}
 
-	var r0 service.CreateObjectResponse
+	var r0 domain.CreateObjectResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (service.CreateObjectResponse, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (domain.CreateObjectResponse, error)); ok {
 		return returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) service.CreateObjectResponse); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) domain.CreateObjectResponse); ok {
 		r0 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
-		r0 = ret.Get(0).(service.CreateObjectResponse)
+		r0 = ret.Get(0).(domain.CreateObjectResponse)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) error); ok {
 		r1 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
@@ -362,37 +360,37 @@ func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) Return(createObjectResponse service.CreateObjectResponse, err error) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) Return(createObjectResponse domain.CreateObjectResponse, err error) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Return(createObjectResponse, err)
 	return _c
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Get provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) Get(ctx context.Context, tenantID string, id types.UUID) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID) error); ok {
 		r1 = returnFunc(ctx, tenantID, id)
 	} else {
 		r1 = ret.Error(1)
@@ -408,12 +406,12 @@ type MockObjectsService_Get_Call struct {
 // Get is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 func (_e *MockObjectsService_Expecter) Get(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsService_Get_Call {
 	return &MockObjectsService_Get_Call{Call: _e.mock.On("Get", ctx, tenantID, id)}
 }
 
-func (_c *MockObjectsService_Get_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID)) *MockObjectsService_Get_Call {
+func (_c *MockObjectsService_Get_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsService_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -423,9 +421,9 @@ func (_c *MockObjectsService_Get_Call) Run(run func(ctx context.Context, tenantI
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		run(
 			arg0,
@@ -436,37 +434,37 @@ func (_c *MockObjectsService_Get_Call) Run(run func(ctx context.Context, tenantI
 	return _c
 }
 
-func (_c *MockObjectsService_Get_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsService_Get_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsService_Get_Call) Return(object *domain.Object, err error) *MockObjectsService_Get_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsService_Get_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID) (*postgres.ObjectRecord, error)) *MockObjectsService_Get_Call {
+func (_c *MockObjectsService_Get_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error)) *MockObjectsService_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetMeta provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id types.UUID) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMeta")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID) error); ok {
 		r1 = returnFunc(ctx, tenantID, id)
 	} else {
 		r1 = ret.Error(1)
@@ -482,12 +480,12 @@ type MockObjectsService_GetMeta_Call struct {
 // GetMeta is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 func (_e *MockObjectsService_Expecter) GetMeta(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsService_GetMeta_Call {
 	return &MockObjectsService_GetMeta_Call{Call: _e.mock.On("GetMeta", ctx, tenantID, id)}
 }
 
-func (_c *MockObjectsService_GetMeta_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID)) *MockObjectsService_GetMeta_Call {
+func (_c *MockObjectsService_GetMeta_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsService_GetMeta_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -497,9 +495,9 @@ func (_c *MockObjectsService_GetMeta_Call) Run(run func(ctx context.Context, ten
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		run(
 			arg0,
@@ -510,34 +508,34 @@ func (_c *MockObjectsService_GetMeta_Call) Run(run func(ctx context.Context, ten
 	return _c
 }
 
-func (_c *MockObjectsService_GetMeta_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsService_GetMeta_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsService_GetMeta_Call) Return(object *domain.Object, err error) *MockObjectsService_GetMeta_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsService_GetMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID) (*postgres.ObjectRecord, error)) *MockObjectsService_GetMeta_Call {
+func (_c *MockObjectsService_GetMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error)) *MockObjectsService_GetMeta_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetMultipart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error) {
+func (_mock *MockObjectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
 	ret := _mock.Called(ctx, tenantID, uploadID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMultipart")
 	}
 
-	var r0 *postgres.MultipartRecord
+	var r0 *domain.Multipart
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*postgres.MultipartRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*domain.Multipart, error)); ok {
 		return returnFunc(ctx, tenantID, uploadID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *postgres.MultipartRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *domain.Multipart); ok {
 		r0 = returnFunc(ctx, tenantID, uploadID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.MultipartRecord)
+			r0 = ret.Get(0).(*domain.Multipart)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
@@ -584,18 +582,18 @@ func (_c *MockObjectsService_GetMultipart_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockObjectsService_GetMultipart_Call) Return(multipartRecord *postgres.MultipartRecord, err error) *MockObjectsService_GetMultipart_Call {
-	_c.Call.Return(multipartRecord, err)
+func (_c *MockObjectsService_GetMultipart_Call) Return(multipart *domain.Multipart, err error) *MockObjectsService_GetMultipart_Call {
+	_c.Call.Return(multipart, err)
 	return _c
 }
 
-func (_c *MockObjectsService_GetMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error)) *MockObjectsService_GetMultipart_Call {
+func (_c *MockObjectsService_GetMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error)) *MockObjectsService_GetMultipart_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // HardDelete provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string) error {
+func (_mock *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	ret := _mock.Called(ctx, tenantID, id, idempotencyKey)
 
 	if len(ret) == 0 {
@@ -603,7 +601,7 @@ func (_mock *MockObjectsService) HardDelete(ctx context.Context, tenantID string
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, *string) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, *string) error); ok {
 		r0 = returnFunc(ctx, tenantID, id, idempotencyKey)
 	} else {
 		r0 = ret.Error(0)
@@ -619,13 +617,13 @@ type MockObjectsService_HardDelete_Call struct {
 // HardDelete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - idempotencyKey *string
 func (_e *MockObjectsService_Expecter) HardDelete(ctx interface{}, tenantID interface{}, id interface{}, idempotencyKey interface{}) *MockObjectsService_HardDelete_Call {
 	return &MockObjectsService_HardDelete_Call{Call: _e.mock.On("HardDelete", ctx, tenantID, id, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_HardDelete_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string)) *MockObjectsService_HardDelete_Call {
+func (_c *MockObjectsService_HardDelete_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string)) *MockObjectsService_HardDelete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -635,9 +633,9 @@ func (_c *MockObjectsService_HardDelete_Call) Run(run func(ctx context.Context, 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 *string
 		if args[3] != nil {
@@ -658,28 +656,28 @@ func (_c *MockObjectsService_HardDelete_Call) Return(err error) *MockObjectsServ
 	return _c
 }
 
-func (_c *MockObjectsService_HardDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, idempotencyKey *string) error) *MockObjectsService_HardDelete_Call {
+func (_c *MockObjectsService_HardDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error) *MockObjectsService_HardDelete_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // InitiateMultipart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.MultipartInitResponse, error) {
+func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	ret := _mock.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for InitiateMultipart")
 	}
 
-	var r0 service.MultipartInitResponse
+	var r0 domain.MultipartInitResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (service.MultipartInitResponse, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (domain.MultipartInitResponse, error)); ok {
 		return returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) service.MultipartInitResponse); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) domain.MultipartInitResponse); ok {
 		r0 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
-		r0 = ret.Get(0).(service.MultipartInitResponse)
+		r0 = ret.Get(0).(domain.MultipartInitResponse)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) error); ok {
 		r1 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
@@ -755,43 +753,43 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Co
 	return _c
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) Return(multipartInitResponse service.MultipartInitResponse, err error) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) Return(multipartInitResponse domain.MultipartInitResponse, err error) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Return(multipartInitResponse, err)
 	return _c
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // List provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {
+func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []postgres.ObjectRecord
+	var r0 []domain.Object
 	var r1 string
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, postgres.ListObjectsFilter, int, string) ([]postgres.ObjectRecord, string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, error)); ok {
 		return returnFunc(ctx, tenantID, filter, limit, cursor)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, postgres.ListObjectsFilter, int, string) []postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) []domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]postgres.ObjectRecord)
+			r0 = ret.Get(0).([]domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, postgres.ListObjectsFilter, int, string) string); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListObjectsFilter, int, string) string); ok {
 		r1 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, postgres.ListObjectsFilter, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
 		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		r2 = ret.Error(2)
@@ -807,14 +805,14 @@ type MockObjectsService_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - filter postgres.ListObjectsFilter
+//   - filter domain.ListObjectsFilter
 //   - limit int
 //   - cursor string
 func (_e *MockObjectsService_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}, limit interface{}, cursor interface{}) *MockObjectsService_List_Call {
 	return &MockObjectsService_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter, limit, cursor)}
 }
 
-func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string)) *MockObjectsService_List_Call {
+func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string)) *MockObjectsService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -824,9 +822,9 @@ func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenant
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 postgres.ListObjectsFilter
+		var arg2 domain.ListObjectsFilter
 		if args[2] != nil {
-			arg2 = args[2].(postgres.ListObjectsFilter)
+			arg2 = args[2].(domain.ListObjectsFilter)
 		}
 		var arg3 int
 		if args[3] != nil {
@@ -847,37 +845,37 @@ func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenant
 	return _c
 }
 
-func (_c *MockObjectsService_List_Call) Return(objectRecords []postgres.ObjectRecord, s string, err error) *MockObjectsService_List_Call {
-	_c.Call.Return(objectRecords, s, err)
+func (_c *MockObjectsService_List_Call) Return(objects []domain.Object, s string, err error) *MockObjectsService_List_Call {
+	_c.Call.Return(objects, s, err)
 	return _c
 }
 
-func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error)) *MockObjectsService_List_Call {
+func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error)) *MockObjectsService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PatchMeta provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id, labels, externalRef)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PatchMeta")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, map[string]string, *string) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id, labels, externalRef)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, map[string]string, *string) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id, labels, externalRef)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID, map[string]string, *string) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, *string) error); ok {
 		r1 = returnFunc(ctx, tenantID, id, labels, externalRef)
 	} else {
 		r1 = ret.Error(1)
@@ -893,14 +891,14 @@ type MockObjectsService_PatchMeta_Call struct {
 // PatchMeta is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - labels map[string]string
 //   - externalRef *string
 func (_e *MockObjectsService_Expecter) PatchMeta(ctx interface{}, tenantID interface{}, id interface{}, labels interface{}, externalRef interface{}) *MockObjectsService_PatchMeta_Call {
 	return &MockObjectsService_PatchMeta_Call{Call: _e.mock.On("PatchMeta", ctx, tenantID, id, labels, externalRef)}
 }
 
-func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, labels map[string]string, externalRef *string)) *MockObjectsService_PatchMeta_Call {
+func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string)) *MockObjectsService_PatchMeta_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -910,9 +908,9 @@ func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, t
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 map[string]string
 		if args[3] != nil {
@@ -933,35 +931,35 @@ func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, t
 	return _c
 }
 
-func (_c *MockObjectsService_PatchMeta_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsService_PatchMeta_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsService_PatchMeta_Call) Return(object *domain.Object, err error) *MockObjectsService_PatchMeta_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsService_PatchMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)) *MockObjectsService_PatchMeta_Call {
+func (_c *MockObjectsService_PatchMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsService_PatchMeta_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // SignDownload provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id types.UUID, downloadTTL int) (s3.Presigned, error) {
+func (_mock *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (domain.Presigned, error) {
 	ret := _mock.Called(ctx, tenantID, id, downloadTTL)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SignDownload")
 	}
 
-	var r0 s3.Presigned
+	var r0 domain.Presigned
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, int) (s3.Presigned, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, int) (domain.Presigned, error)); ok {
 		return returnFunc(ctx, tenantID, id, downloadTTL)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, int) s3.Presigned); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, int) domain.Presigned); ok {
 		r0 = returnFunc(ctx, tenantID, id, downloadTTL)
 	} else {
-		r0 = ret.Get(0).(s3.Presigned)
+		r0 = ret.Get(0).(domain.Presigned)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID, int) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, int) error); ok {
 		r1 = returnFunc(ctx, tenantID, id, downloadTTL)
 	} else {
 		r1 = ret.Error(1)
@@ -977,13 +975,13 @@ type MockObjectsService_SignDownload_Call struct {
 // SignDownload is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - downloadTTL int
 func (_e *MockObjectsService_Expecter) SignDownload(ctx interface{}, tenantID interface{}, id interface{}, downloadTTL interface{}) *MockObjectsService_SignDownload_Call {
 	return &MockObjectsService_SignDownload_Call{Call: _e.mock.On("SignDownload", ctx, tenantID, id, downloadTTL)}
 }
 
-func (_c *MockObjectsService_SignDownload_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, downloadTTL int)) *MockObjectsService_SignDownload_Call {
+func (_c *MockObjectsService_SignDownload_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int)) *MockObjectsService_SignDownload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -993,9 +991,9 @@ func (_c *MockObjectsService_SignDownload_Call) Run(run func(ctx context.Context
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 int
 		if args[3] != nil {
@@ -1011,33 +1009,33 @@ func (_c *MockObjectsService_SignDownload_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockObjectsService_SignDownload_Call) Return(presigned s3.Presigned, err error) *MockObjectsService_SignDownload_Call {
+func (_c *MockObjectsService_SignDownload_Call) Return(presigned domain.Presigned, err error) *MockObjectsService_SignDownload_Call {
 	_c.Call.Return(presigned, err)
 	return _c
 }
 
-func (_c *MockObjectsService_SignDownload_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, downloadTTL int) (s3.Presigned, error)) *MockObjectsService_SignDownload_Call {
+func (_c *MockObjectsService_SignDownload_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (domain.Presigned, error)) *MockObjectsService_SignDownload_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // SignPart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error) {
+func (_mock *MockObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	ret := _mock.Called(ctx, tenantID, uploadID, partNumber)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SignPart")
 	}
 
-	var r0 s3.Presigned
+	var r0 domain.Presigned
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int32) (s3.Presigned, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int32) (domain.Presigned, error)); ok {
 		return returnFunc(ctx, tenantID, uploadID, partNumber)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int32) s3.Presigned); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int32) domain.Presigned); ok {
 		r0 = returnFunc(ctx, tenantID, uploadID, partNumber)
 	} else {
-		r0 = ret.Get(0).(s3.Presigned)
+		r0 = ret.Get(0).(domain.Presigned)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int32) error); ok {
 		r1 = returnFunc(ctx, tenantID, uploadID, partNumber)
@@ -1089,34 +1087,34 @@ func (_c *MockObjectsService_SignPart_Call) Run(run func(ctx context.Context, te
 	return _c
 }
 
-func (_c *MockObjectsService_SignPart_Call) Return(presigned s3.Presigned, err error) *MockObjectsService_SignPart_Call {
+func (_c *MockObjectsService_SignPart_Call) Return(presigned domain.Presigned, err error) *MockObjectsService_SignPart_Call {
 	_c.Call.Return(presigned, err)
 	return _c
 }
 
-func (_c *MockObjectsService_SignPart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error)) *MockObjectsService_SignPart_Call {
+func (_c *MockObjectsService_SignPart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error)) *MockObjectsService_SignPart_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // SignPartsBatch provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]service.SignPartResponse, error) {
+func (_mock *MockObjectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
 	ret := _mock.Called(ctx, tenantID, uploadID, partNumbers)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SignPartsBatch")
 	}
 
-	var r0 []service.SignPartResponse
+	var r0 []domain.SignPartResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []int32) ([]service.SignPartResponse, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []int32) ([]domain.SignPartResponse, error)); ok {
 		return returnFunc(ctx, tenantID, uploadID, partNumbers)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []int32) []service.SignPartResponse); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []int32) []domain.SignPartResponse); ok {
 		r0 = returnFunc(ctx, tenantID, uploadID, partNumbers)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]service.SignPartResponse)
+			r0 = ret.Get(0).([]domain.SignPartResponse)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []int32) error); ok {
@@ -1169,35 +1167,35 @@ func (_c *MockObjectsService_SignPartsBatch_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockObjectsService_SignPartsBatch_Call) Return(signPartResponses []service.SignPartResponse, err error) *MockObjectsService_SignPartsBatch_Call {
+func (_c *MockObjectsService_SignPartsBatch_Call) Return(signPartResponses []domain.SignPartResponse, err error) *MockObjectsService_SignPartsBatch_Call {
 	_c.Call.Return(signPartResponses, err)
 	return _c
 }
 
-func (_c *MockObjectsService_SignPartsBatch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]service.SignPartResponse, error)) *MockObjectsService_SignPartsBatch_Call {
+func (_c *MockObjectsService_SignPartsBatch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error)) *MockObjectsService_SignPartsBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // SignUpload provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) SignUpload(ctx context.Context, tenantID string, id types.UUID, uploadTTL int) (s3.Presigned, error) {
+func (_mock *MockObjectsService) SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (domain.Presigned, error) {
 	ret := _mock.Called(ctx, tenantID, id, uploadTTL)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SignUpload")
 	}
 
-	var r0 s3.Presigned
+	var r0 domain.Presigned
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, int) (s3.Presigned, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, int) (domain.Presigned, error)); ok {
 		return returnFunc(ctx, tenantID, id, uploadTTL)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, int) s3.Presigned); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, int) domain.Presigned); ok {
 		r0 = returnFunc(ctx, tenantID, id, uploadTTL)
 	} else {
-		r0 = ret.Get(0).(s3.Presigned)
+		r0 = ret.Get(0).(domain.Presigned)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, types.UUID, int) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, int) error); ok {
 		r1 = returnFunc(ctx, tenantID, id, uploadTTL)
 	} else {
 		r1 = ret.Error(1)
@@ -1213,13 +1211,13 @@ type MockObjectsService_SignUpload_Call struct {
 // SignUpload is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - uploadTTL int
 func (_e *MockObjectsService_Expecter) SignUpload(ctx interface{}, tenantID interface{}, id interface{}, uploadTTL interface{}) *MockObjectsService_SignUpload_Call {
 	return &MockObjectsService_SignUpload_Call{Call: _e.mock.On("SignUpload", ctx, tenantID, id, uploadTTL)}
 }
 
-func (_c *MockObjectsService_SignUpload_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, uploadTTL int)) *MockObjectsService_SignUpload_Call {
+func (_c *MockObjectsService_SignUpload_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int)) *MockObjectsService_SignUpload_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1229,9 +1227,9 @@ func (_c *MockObjectsService_SignUpload_Call) Run(run func(ctx context.Context, 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 int
 		if args[3] != nil {
@@ -1247,18 +1245,18 @@ func (_c *MockObjectsService_SignUpload_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *MockObjectsService_SignUpload_Call) Return(presigned s3.Presigned, err error) *MockObjectsService_SignUpload_Call {
+func (_c *MockObjectsService_SignUpload_Call) Return(presigned domain.Presigned, err error) *MockObjectsService_SignUpload_Call {
 	_c.Call.Return(presigned, err)
 	return _c
 }
 
-func (_c *MockObjectsService_SignUpload_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, uploadTTL int) (s3.Presigned, error)) *MockObjectsService_SignUpload_Call {
+func (_c *MockObjectsService_SignUpload_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (domain.Presigned, error)) *MockObjectsService_SignUpload_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // UpdateStatus provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string) error {
+func (_mock *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
 	ret := _mock.Called(ctx, tenantID, id, status, idempotencyKey)
 
 	if len(ret) == 0 {
@@ -1266,7 +1264,7 @@ func (_mock *MockObjectsService) UpdateStatus(ctx context.Context, tenantID stri
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, types.UUID, string, *string) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, string, *string) error); ok {
 		r0 = returnFunc(ctx, tenantID, id, status, idempotencyKey)
 	} else {
 		r0 = ret.Error(0)
@@ -1282,14 +1280,14 @@ type MockObjectsService_UpdateStatus_Call struct {
 // UpdateStatus is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - id types.UUID
+//   - id uuid.UUID
 //   - status string
 //   - idempotencyKey *string
 func (_e *MockObjectsService_Expecter) UpdateStatus(ctx interface{}, tenantID interface{}, id interface{}, status interface{}, idempotencyKey interface{}) *MockObjectsService_UpdateStatus_Call {
 	return &MockObjectsService_UpdateStatus_Call{Call: _e.mock.On("UpdateStatus", ctx, tenantID, id, status, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_UpdateStatus_Call) Run(run func(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string)) *MockObjectsService_UpdateStatus_Call {
+func (_c *MockObjectsService_UpdateStatus_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string)) *MockObjectsService_UpdateStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1299,9 +1297,9 @@ func (_c *MockObjectsService_UpdateStatus_Call) Run(run func(ctx context.Context
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 types.UUID
+		var arg2 uuid.UUID
 		if args[2] != nil {
-			arg2 = args[2].(types.UUID)
+			arg2 = args[2].(uuid.UUID)
 		}
 		var arg3 string
 		if args[3] != nil {
@@ -1327,7 +1325,7 @@ func (_c *MockObjectsService_UpdateStatus_Call) Return(err error) *MockObjectsSe
 	return _c
 }
 
-func (_c *MockObjectsService_UpdateStatus_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id types.UUID, status string, idempotencyKey *string) error) *MockObjectsService_UpdateStatus_Call {
+func (_c *MockObjectsService_UpdateStatus_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error) *MockObjectsService_UpdateStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

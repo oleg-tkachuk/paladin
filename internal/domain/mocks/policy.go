@@ -2,12 +2,12 @@
 // github.com/vektra/mockery
 // template: testify
 
-package service
+package domain
 
 import (
 	"context"
 
-	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,7 +39,7 @@ func (_m *MockPolicy) EXPECT() *MockPolicy_Expecter {
 }
 
 // Authorize provides a mock function for the type MockPolicy
-func (_mock *MockPolicy) Authorize(ctx context.Context, tenantID string, action service.Action) error {
+func (_mock *MockPolicy) Authorize(ctx context.Context, tenantID string, action domain.Action) error {
 	ret := _mock.Called(ctx, tenantID, action)
 
 	if len(ret) == 0 {
@@ -47,7 +47,7 @@ func (_mock *MockPolicy) Authorize(ctx context.Context, tenantID string, action 
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, service.Action) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.Action) error); ok {
 		r0 = returnFunc(ctx, tenantID, action)
 	} else {
 		r0 = ret.Error(0)
@@ -63,12 +63,12 @@ type MockPolicy_Authorize_Call struct {
 // Authorize is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - action service.Action
+//   - action domain.Action
 func (_e *MockPolicy_Expecter) Authorize(ctx interface{}, tenantID interface{}, action interface{}) *MockPolicy_Authorize_Call {
 	return &MockPolicy_Authorize_Call{Call: _e.mock.On("Authorize", ctx, tenantID, action)}
 }
 
-func (_c *MockPolicy_Authorize_Call) Run(run func(ctx context.Context, tenantID string, action service.Action)) *MockPolicy_Authorize_Call {
+func (_c *MockPolicy_Authorize_Call) Run(run func(ctx context.Context, tenantID string, action domain.Action)) *MockPolicy_Authorize_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -78,9 +78,9 @@ func (_c *MockPolicy_Authorize_Call) Run(run func(ctx context.Context, tenantID 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 service.Action
+		var arg2 domain.Action
 		if args[2] != nil {
-			arg2 = args[2].(service.Action)
+			arg2 = args[2].(domain.Action)
 		}
 		run(
 			arg0,
@@ -96,7 +96,7 @@ func (_c *MockPolicy_Authorize_Call) Return(err error) *MockPolicy_Authorize_Cal
 	return _c
 }
 
-func (_c *MockPolicy_Authorize_Call) RunAndReturn(run func(ctx context.Context, tenantID string, action service.Action) error) *MockPolicy_Authorize_Call {
+func (_c *MockPolicy_Authorize_Call) RunAndReturn(run func(ctx context.Context, tenantID string, action domain.Action) error) *MockPolicy_Authorize_Call {
 	_c.Call.Return(run)
 	return _c
 }

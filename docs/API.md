@@ -115,7 +115,7 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 
 - `limit`: (int) Max items to return (default 50, max 200).
 - `cursor`: (string) Pagination cursor.
-- `status`: (string) Filter by status (e.g., `active`, `pending`, `soft_deleted`).
+- `status`: (string) Filter by status (e.g., `complete`, `pending`, `soft_deleted`).
 - `external_ref`: (string) Filter by external reference.
 - `created_after`: (string) Filter by creation time (RFC3339).
 - `created_before`: (string) Filter by creation time (RFC3339).
@@ -176,7 +176,7 @@ Retrieves metadata for an existing object and generates a presigned URL for down
 | `bucket` | string | Name of the S3 bucket where the object is stored. |
 | `content_type` | string | MIME type of the object. |
 | `size_bytes` | int64 | Size of the object in bytes. |
-| `status` | string | Current state: `pending`, `active`, or `deleted`. |
+| `status` | string | Current state: `pending`, `complete`, or `deleted`. |
 | `download_url` | string | Presigned URL to download the file. |
 | `expires_at` | string (ISO8601) | Timestamp when the download URL expires. |
 | `labels` | map[string]string | Custom key-value tags. |
@@ -202,7 +202,7 @@ Retrieves metadata for an existing object **without** generating a download URL.
 | `bucket` | string | Name of the S3 bucket where the object is stored. |
 | `content_type` | string | MIME type of the object. |
 | `size_bytes` | int64 | Size of the object in bytes. |
-| `status` | string | Current state: `pending`, `active`, or `deleted`. |
+| `status` | string | Current state: `pending`, `complete`, or `deleted`. |
 | `labels` | map[string]string | Custom key-value tags. |
 | `external_ref` | string | External reference ID. |
 | `expires_at` | string (ISO8601) | Optional expiration timestamp (if set). |
@@ -234,7 +234,7 @@ Generates a ephemeral signed URL for downloading the object content.
 
 #### Complete Object
 
-Marks an upload as complete and the object as `active`. This tells the system that the client has successfully uploaded the file to the presigned URL.
+Marks an upload as complete and the object as `complete`. This tells the system that the client has successfully uploaded the file to the presigned URL.
 
 - **Method**: `POST`
 - **Endpoint**: `/objects/:id/complete`
@@ -247,7 +247,7 @@ Marks an upload as complete and the object as `active`. This tells the system th
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `status` | string | The new status of the object (typically `active`). |
+| `status` | string | The new status of the object (typically `complete`). |
 
 #### Hard Delete Object
 
@@ -388,7 +388,7 @@ Finalizes a multipart upload. Requires a list of all uploaded parts and their ET
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `object_id` | string (UUID) | The ID of the completed object. |
-| `status` | string | New status (`active`). |
+| `status` | string | New status (`complete`). |
 
 #### Abort Multipart Upload
 

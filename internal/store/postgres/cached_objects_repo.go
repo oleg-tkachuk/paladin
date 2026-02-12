@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/cache"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ import (
 // CachedObjectsRepo wraps ObjectsRepo with an LRU cache
 type CachedObjectsRepo struct {
 	repo  *ObjectsRepo
-	cache *cache.Cache[string, *ObjectRecord]
+	cache *cache.Cache[string, *domain.Object]
 	ttl   time.Duration
 }
 
@@ -22,13 +23,13 @@ type CachedObjectsRepo struct {
 func NewCachedObjectsRepo(repo *ObjectsRepo, cacheSize int, ttl time.Duration) *CachedObjectsRepo {
 	return &CachedObjectsRepo{
 		repo:  repo,
-		cache: cache.NewCache[string, *ObjectRecord](cacheSize, ttl),
+		cache: cache.NewCache[string, *domain.Object](cacheSize, ttl),
 		ttl:   ttl,
 	}
 }
 
 // Get retrieves an object with caching
-func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*ObjectRecord, error) {
+func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
 
 	// Try cache first
@@ -52,7 +53,7 @@ func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UU
 }
 
 // GetByExternalRef retrieves an object by external ref with caching
-func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*ObjectRecord, error) {
+func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*domain.Object, error) {
 	cacheKey := fmt.Sprintf("obj:ext:%s:%s", tenantID, externalRef)
 
 	// Try cache first
@@ -81,7 +82,7 @@ func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID strin
 }
 
 // Create creates an object and caches it
-func (r *CachedObjectsRepo) Create(ctx context.Context, rec ObjectRecord) error {
+func (r *CachedObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	err := r.repo.Create(ctx, rec)
 	if err != nil {
 		return err
@@ -108,6 +109,32 @@ func (r *CachedObjectsRepo) MarkComplete(ctx context.Context, tenantID string, i
 	return updated, nil
 }
 
+func (r *CachedObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	updated, err := r.repo.MarkSoftDeleted(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
+func (r *CachedObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	updated, err := r.repo.MarkHardDeleted(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
 // MarkDeleted marks object as deleted and invalidates cache
 func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	updated, err := r.repo.MarkDeleted(ctx, tenantID, id)
@@ -123,7 +150,7 @@ func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id
 }
 
 // Patch updates object metadata and invalidates cache
-func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*ObjectRecord, error) {
+func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	rec, err := r.repo.Patch(ctx, tenantID, id, labels, externalRef)
 	if err != nil {
 		return nil, err
@@ -143,12 +170,12 @@ func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.
 }
 
 // List delegates to underlying repo (no caching for list operations)
-func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]ObjectRecord, string, error) {
+func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	return r.repo.List(ctx, tenantID, filter, limit, cursor)
 }
 
 // ListExpiredPending delegates to underlying repo
-func (r *CachedObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]ObjectRecord, error) {
+func (r *CachedObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error) {
 	return r.repo.ListExpiredPending(ctx, cutoff, limit)
 }
 

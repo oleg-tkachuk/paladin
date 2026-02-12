@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -14,7 +14,7 @@ import (
 )
 
 // get retrieves an object by ID with tenant validation
-func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
+func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_types.UUID) (*domain.Object, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "Get")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
@@ -26,7 +26,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionRead); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -47,7 +47,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 }
 
 // getMeta retrieves object metadata (delegates to get)
-func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
+func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*domain.Object, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "GetMeta")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))

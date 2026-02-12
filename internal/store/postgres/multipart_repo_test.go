@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/pashagolub/pgxmock/v3"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ func TestMultipartRepo_Create(t *testing.T) {
 	ctx := context.Background()
 
 	id := uuid.New()
-	rec := MultipartRecord{
+	rec := domain.Multipart{
 		ID:          id,
 		TenantID:    "test-tenant",
 		ObjectID:    uuid.New(),
@@ -30,7 +31,7 @@ func TestMultipartRepo_Create(t *testing.T) {
 		ObjectKey:   "test-key",
 		ContentType: "application/json",
 		PartSize:    5 * 1024 * 1024,
-		Status:      MultipartInitiated,
+		Status:      domain.MultipartInitiated,
 		ExpiresAt:   time.Now().Add(24 * time.Hour),
 	}
 

@@ -12,10 +12,9 @@ import (
 
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/service"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -30,79 +29,79 @@ type MockObjectsService struct {
 	mock.Mock
 }
 
-func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.CreateObjectResponse, error) {
+func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
 	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
-	return args.Get(0).(service.CreateObjectResponse), args.Error(1)
+	return args.Get(0).(domain.CreateObjectResponse), args.Error(1)
 }
 
-func (m *MockObjectsService) Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
+func (m *MockObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id)
-	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id openapi_types.UUID) (*postgres.ObjectRecord, error) {
+func (m *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id)
-	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
+func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id, etag, sizeBytes)
-	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {
+func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]postgres.ObjectRecord), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Object), args.String(1), args.Error(2)
 }
 
-func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id, labels, externalRef)
-	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id openapi_types.UUID, idempotencyKey *string) error {
+func (m *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
 	return args.Error(0)
 }
 
-func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error {
+func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, status, idempotencyKey)
 	return args.Error(0)
 }
 
-func (m *MockObjectsService) SignUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (s3.Presigned, error) {
+func (m *MockObjectsService) SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, id, uploadTTL)
-	return args.Get(0).(s3.Presigned), args.Error(1)
+	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
-func (m *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (s3.Presigned, error) {
+func (m *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, id, downloadTTL)
-	return args.Get(0).(s3.Presigned), args.Error(1)
+	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
-func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (service.MultipartInitResponse, error) {
+func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
-	return args.Get(0).(service.MultipartInitResponse), args.Error(1)
+	return args.Get(0).(domain.MultipartInitResponse), args.Error(1)
 }
 
-func (m *MockObjectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error) {
+func (m *MockObjectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
 	args := m.Called(ctx, tenantID, uploadID)
-	return args.Get(0).(*postgres.MultipartRecord), args.Error(1)
+	return args.Get(0).(*domain.Multipart), args.Error(1)
 }
 
-func (m *MockObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error) {
+func (m *MockObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, uploadID, partNumber)
-	return args.Get(0).(s3.Presigned), args.Error(1)
+	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
-func (m *MockObjectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]service.SignPartResponse, error) {
+func (m *MockObjectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
 	args := m.Called(ctx, tenantID, uploadID, partNumbers)
-	return args.Get(0).([]service.SignPartResponse), args.Error(1)
+	return args.Get(0).([]domain.SignPartResponse), args.Error(1)
 }
 
-func (m *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []service.CompletePart) (*postgres.ObjectRecord, error) {
+func (m *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, uploadID, parts)
-	return args.Get(0).(*postgres.ObjectRecord), args.Error(1)
+	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string, uploadID string) error {
@@ -281,7 +280,7 @@ var _ = Describe("Router", func() {
 			BeforeEach(func() {
 				id := uuid.New()
 				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
-					Return(service.CreateObjectResponse{ID: id, Key: "default/" + id.String(), Upload: s3.Presigned{URL: "http://upload"}}, nil)
+					Return(domain.CreateObjectResponse{ID: id, Key: "default/" + id.String(), Upload: domain.Presigned{URL: "http://upload"}}, nil)
 			})
 
 			It("returns 200 and upload URL", func() {
@@ -301,7 +300,7 @@ var _ = Describe("Router", func() {
 		It("initiates multipart upload", func() {
 			objID := uuid.New()
 			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
-				Return(service.MultipartInitResponse{
+				Return(domain.MultipartInitResponse{
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)
 
@@ -319,7 +318,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart/:upload_id/parts/:part_number/sign", func() {
 		It("signs a part", func() {
 			mockSvc.On("SignPart", mock.Anything, mock.Anything, "up123", int32(1)).
-				Return(s3.Presigned{URL: "http://sign"}, nil)
+				Return(domain.Presigned{URL: "http://sign"}, nil)
 
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/1/sign", nil)
 			req.Header.Set("X-Tenant-ID", "default")
@@ -334,7 +333,7 @@ var _ = Describe("Router", func() {
 		It("completes multipart upload", func() {
 			objID := uuid.New()
 			mockSvc.On("CompleteMultipart", mock.Anything, mock.Anything, "up123", mock.Anything).
-				Return(&postgres.ObjectRecord{ID: objID, Status: postgres.ObjectComplete}, nil)
+				Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
 
 			body := `{"parts": [{"part_number": 1, "etag": "etag1"}]}`
 			req, _ := http.NewRequest("POST", "/v1/multipart/up123/complete", strings.NewReader(body))
@@ -364,8 +363,8 @@ var _ = Describe("Router", func() {
 	Describe("GET /v1/objects/:id", func() {
 		It("returns object details", func() {
 			id := uuid.New()
-			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&postgres.ObjectRecord{
-				ID: openapi_types.UUID(id), Status: postgres.ObjectComplete,
+			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
+				ID: openapi_types.UUID(id), Status: domain.ObjectComplete,
 			}, nil)
 
 			req, _ := http.NewRequest("GET", "/v1/objects/"+id.String(), nil)
@@ -393,7 +392,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/objects/:id/sign-upload", func() {
 		It("returns presigned upload URL", func() {
 			id := uuid.New()
-			mockSvc.On("SignUpload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(s3.Presigned{URL: "http://upload"}, nil)
+			mockSvc.On("SignUpload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Presigned{URL: "http://upload"}, nil)
 
 			req, _ := http.NewRequest("POST", "/v1/objects/"+id.String()+"/sign-upload", strings.NewReader("{}"))
 			req.Header.Set("Content-Type", "application/json")
@@ -409,8 +408,8 @@ var _ = Describe("Router", func() {
 		It("updates the object status", func() {
 			id := uuid.New()
 			mockSvc.On("UpdateStatus", mock.Anything, mock.Anything, openapi_types.UUID(id), "soft_deleted", (*string)(nil)).Return(nil)
-			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&postgres.ObjectRecord{
-				ID: openapi_types.UUID(id), Status: postgres.ObjectSoftDeleted,
+			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
+				ID: openapi_types.UUID(id), Status: domain.ObjectSoftDeleted,
 			}, nil)
 
 			body := `{"status": "soft_deleted"}`
@@ -427,7 +426,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/objects/:id/sign-download", func() {
 		It("returns presigned download URL", func() {
 			id := uuid.New()
-			mockSvc.On("SignDownload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(s3.Presigned{URL: "http://download"}, nil)
+			mockSvc.On("SignDownload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Presigned{URL: "http://download"}, nil)
 
 			req, _ := http.NewRequest("POST", "/v1/objects/"+id.String()+"/sign-download", strings.NewReader("{}"))
 			req.Header.Set("Content-Type", "application/json")
@@ -441,7 +440,7 @@ var _ = Describe("Router", func() {
 	Describe("Error Handling", func() {
 		It("returns unified error response for 404", func() {
 			mockSvc.On("Get", mock.Anything, mock.Anything, mock.Anything).
-				Return(&postgres.ObjectRecord{}, errors.New("not found"))
+				Return(&domain.Object{}, errors.New("not found"))
 
 			req, _ := http.NewRequest("GET", "/v1/objects/"+uuid.NewString(), nil)
 			req.Header.Set("X-Tenant-ID", "default")

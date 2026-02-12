@@ -12,7 +12,7 @@ X-Tenant-ID: demo
 GET http://localhost:8080/v1/objects/{{object_id}}
 X-Tenant-ID: demo
 
-### Complete object (mark active)
+### Complete object (mark complete)
 POST http://localhost:8080/v1/objects/{{object_id}}/complete
 X-Tenant-ID: demo
 

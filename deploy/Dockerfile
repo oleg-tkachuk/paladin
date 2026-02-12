@@ -53,11 +53,18 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
   cd ./cmd/server && \
-  CGO_ENABLED=0 go build -trimpath -tags=go_json -ldflags="-w -s \
-  -X 'main.version=${APP_VERSION}' \
-  -X 'main.commit=${GIT_COMMIT_HASH}' \
-  -X 'main.buildTime=${BUILD_TIME}'" \
-  -o /app/paladin .
+  CGO_ENABLED=0 \
+  go build \
+    -a \
+    -installsuffix cgo \
+    -buildvcs=false \
+    -trimpath \
+    -tags=go_json \
+    -ldflags="-w -s \
+      -X 'main.version=${APP_VERSION}' \
+      -X 'main.commit=${GIT_COMMIT_HASH}' \
+      -X 'main.buildTime=${BUILD_TIME}'" \
+    -o /app/paladin .
 
 FROM gcr.io/distroless/static:nonroot
 

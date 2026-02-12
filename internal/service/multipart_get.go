@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,7 +13,7 @@ import (
 )
 
 // getMultipart retrieves multipart upload metadata
-func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uploadID string) (*postgres.MultipartRecord, error) {
+func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "GetMultipart")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID))
@@ -25,7 +25,7 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionRead); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

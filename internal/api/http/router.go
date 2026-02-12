@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/service"
@@ -18,7 +19,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc service.ObjectsService, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
@@ -18,7 +18,7 @@ import (
 )
 
 // initiateMultipart initiates a multipart upload
-func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error) {
+func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "InitiateMultipart")
 	defer span.End()
 	span.SetAttributes(
@@ -34,33 +34,33 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionCreate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return MultipartInitResponse{}, err
+		return domain.MultipartInitResponse{}, err
 	}
 
 	if err := s.policy.Validate(contentType, sizeBytes); err != nil {
-		return MultipartInitResponse{}, apperrors.ValidationFailed("validation failed", err)
+		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("validation failed", err)
 	}
 
 	// Validate external_ref for security
 	if externalRef != nil {
 		if err := utils.ValidateExternalRef(*externalRef); err != nil {
-			return MultipartInitResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
+			return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
 	// Validate labels
 	if err := utils.ValidateLabels(labels); err != nil {
-		return MultipartInitResponse{}, apperrors.ValidationFailed("invalid labels", err)
+		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
 	// 1. Check Idempotency-Key header
 	if idempotencyKey != nil && s.idemRepo != nil {
 		if cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey); err == nil && cached != nil {
-			var res MultipartInitResponse
+			var res domain.MultipartInitResponse
 			if err := json.Unmarshal(cached.ResponseBody, &res); err == nil {
 				return res, nil
 			}
@@ -71,7 +71,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if externalRef != nil {
 		existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef)
 		if err == nil && existing != nil {
-			return MultipartInitResponse{}, apperrors.Conflict("object with this external_ref already exists", nil)
+			return domain.MultipartInitResponse{}, apperrors.Conflict("object with this external_ref already exists", nil)
 		}
 	}
 
@@ -80,7 +80,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 
 	init, err := s.s3.CreateMultipartUpload(ctx, key, contentType)
 	if err != nil {
-		return MultipartInitResponse{}, err
+		return domain.MultipartInitResponse{}, err
 	}
 
 	ttl := time.Duration(uploadTTL) * time.Second
@@ -89,26 +89,26 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	}
 	expiresAt := time.Now().Add(ttl)
 
-	objRec := postgres.ObjectRecord{
+	objRec := domain.Object{
 		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: s.s3.BucketName(),
 		ContentType: contentType, SizeBytes: sizeBytes,
-		Status: postgres.ObjectUploading, Labels: labels, ExternalRef: externalRef,
+		Status: domain.ObjectUploading, Labels: labels, ExternalRef: externalRef,
 		ExpiresAt: &expiresAt,
 	}
 	if err := s.objRepo.Create(ctx, objRec); err != nil {
-		return MultipartInitResponse{}, err
+		return domain.MultipartInitResponse{}, err
 	}
 
-	multiRec := postgres.MultipartRecord{
+	multiRec := domain.Multipart{
 		ID: id, TenantID: tenantID, ObjectID: id, ObjectKey: key, UploadID: init.UploadID,
-		Status: postgres.MultipartInitiated, ExpiresAt: expiresAt,
-		Bucket: init.Bucket, ContentType: contentType, PartSize: s.partSize,
+		Status: domain.MultipartInitiated, ExpiresAt: expiresAt,
+		Bucket: s.s3.BucketName(), ContentType: contentType, PartSize: s.partSize,
 	}
 	if err := s.multiRepo.Create(ctx, multiRec); err != nil {
-		return MultipartInitResponse{}, err
+		return domain.MultipartInitResponse{}, err
 	}
 
-	res := MultipartInitResponse{
+	res := domain.MultipartInitResponse{
 		ObjectID:  id,
 		ObjectKey: key,
 		UploadID:  init.UploadID,
@@ -120,7 +120,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	// 4. Save response for Idempotency-Key
 	if idempotencyKey != nil && s.idemRepo != nil {
 		body, _ := json.Marshal(res)
-		_ = s.idemRepo.Save(ctx, postgres.IdempotencyRecord{
+		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 			TenantID:     tenantID,
 			Key:          *idempotencyKey,
 			RequestPath:  "/v1/multipart",

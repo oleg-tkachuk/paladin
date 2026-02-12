@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/pashagolub/pgxmock/v3"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -19,7 +20,7 @@ func TestIdempotencyRepo_Save(t *testing.T) {
 	repo := NewIdempotencyRepo(db)
 	ctx := context.Background()
 
-	rec := IdempotencyRecord{
+	rec := domain.IdempotencyRecord{
 		TenantID:     "test-tenant",
 		Key:          "key-123",
 		RequestPath:  "/v1/test",

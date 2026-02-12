@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,12 +13,12 @@ func TestPolicy_Authorize(t *testing.T) {
 	p := NewPolicy(config.Policy{})
 
 	t.Run("Valid Tenant", func(t *testing.T) {
-		err := p.Authorize(context.Background(), "test-tenant", ActionCreate)
+		err := p.Authorize(context.Background(), "test-tenant", domain.ActionCreate)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Empty Tenant", func(t *testing.T) {
-		err := p.Authorize(context.Background(), "", ActionCreate)
+		err := p.Authorize(context.Background(), "", domain.ActionCreate)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "tenant_id required")
 	})

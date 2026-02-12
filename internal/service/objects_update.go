@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -60,7 +60,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 				// Since we return generic error, we can't be perfect without custom error types.
 			}
 			// Store result (best effort)
-			_ = s.idemRepo.Save(ctx, postgres.IdempotencyRecord{
+			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 				TenantID:     tenantID,
 				Key:          *idempotencyKey,
 				RequestPath:  "PATCH",
@@ -77,10 +77,10 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	// But soft-delete is conceptually a delete.
 	// Let's require 'delete' permission for soft-delete status, and 'write' for others?
 	// For simplicity, let's use ActionWrite as it modifies the object.
-	// OR ActionDelete if status is soft_deleted.
-	action := ActionUpdate
-	if status == "soft_deleted" {
-		action = ActionDelete
+	// OR domain.ActionDelete if status is soft_deleted.
+	action := domain.ActionUpdate
+	if status == string(domain.ObjectSoftDeleted) {
+		action = domain.ActionDelete
 	}
 
 	if err = s.policy.Authorize(ctx, tenantID, action); err != nil {
@@ -108,12 +108,12 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		// hard_deleted -> soft_deleted (conflict)
 
 		switch obj.Status {
-		case postgres.ObjectHardDeleted, postgres.ObjectDeleted:
+		case domain.ObjectHardDeleted, domain.ObjectDeleted:
 			err = fmt.Errorf("cannot soft-delete a hard-deleted object")
 			// TODO: Use custom error type for 409
 			opStatus = "conflict"
 			return err
-		case postgres.ObjectSoftDeleted:
+		case domain.ObjectSoftDeleted:
 			// No-op
 			opStatus = "success"
 			return nil

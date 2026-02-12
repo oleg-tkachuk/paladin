@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -60,7 +60,7 @@ func (s *objectsService) hardDeleteObject(ctx context.Context, tenantID string, 
 				respCode = 500
 			}
 			// Store result (best effort)
-			_ = s.idemRepo.Save(ctx, postgres.IdempotencyRecord{
+			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 				TenantID:     tenantID,
 				Key:          *idempotencyKey,
 				RequestPath:  "DELETE",
@@ -73,7 +73,7 @@ func (s *objectsService) hardDeleteObject(ctx context.Context, tenantID string, 
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()
 
-	if err = s.policy.Authorize(ctx, tenantID, ActionDelete); err != nil {
+	if err = s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -97,7 +97,7 @@ func (s *objectsService) hardDeleteObject(ctx context.Context, tenantID string, 
 	// soft_deleted -> hard_deleted (S3 delete + DB update)
 	// hard_deleted -> hard_deleted (no-op)
 
-	if obj.Status == postgres.ObjectHardDeleted || obj.Status == postgres.ObjectDeleted {
+	if obj.Status == domain.ObjectHardDeleted || obj.Status == domain.ObjectDeleted {
 		status = "success"
 		return nil
 	}

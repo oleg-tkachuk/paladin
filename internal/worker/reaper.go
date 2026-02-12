@@ -5,16 +5,16 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/service"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 
 	"go.uber.org/zap"
 )
 
 type Reaper struct {
 	cfg     config.Housekeeping
-	objRepo service.ObjectsRepository // Using service interface which should include list methods
-	mpRepo  service.MultipartRepository
-	s3      service.S3Client // We need S3 client to abort/delete
+	objRepo domain.ObjectsRepository
+	mpRepo  domain.MultipartRepository
+	s3      domain.StorageClient
 	log     *zap.Logger
 }
 
@@ -26,7 +26,7 @@ type Reaper struct {
 // The Reaper likely interacts with Repos directly or via a specific interface.
 // Since repos are passed as dependencies to service, we can pass them to Reaper too.
 
-func NewReaper(cfg config.Housekeeping, objRepo service.ObjectsRepository, mpRepo service.MultipartRepository, s3c service.S3Client, log *zap.Logger) *Reaper {
+func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c domain.StorageClient, log *zap.Logger) *Reaper {
 	return &Reaper{
 		cfg:     cfg,
 		objRepo: objRepo,
