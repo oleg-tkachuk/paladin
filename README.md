@@ -141,9 +141,11 @@ objects (1) ──< (N) multipart_uploads ──< (N) multipart_parts
 
 ## Configuration
 
-The service uses a CUE schema (`internal/config/schema.cue`) for validation. Configuration is loaded from [`configs/paladin.yaml`](configs/paladin.yaml).
+The service uses a CUE schema (`internal/config/schema.cue`) for validation.
 
-> **Note**: All configuration values can be overridden by environment variables (e.g., `S3_BUCKET`, `DB_DSN`). See `internal/app/app.go` for the full list of supported environment overrides.
+For a detailed guide on all configuration options, see **[configuration.md](./docs/configuration.md)**.
+
+Configuration is loaded from [`configs/paladin.yaml`](configs/paladin.yaml).
 
 ### Logger
 
