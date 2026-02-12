@@ -3,8 +3,8 @@ package grpcapi
 import (
 	"context"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/service"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
@@ -16,10 +16,10 @@ import (
 type Server struct {
 	UnimplementedPaladinServer
 	log *zap.Logger
-	svc service.ObjectsService
+	svc domain.ObjectsService
 }
 
-func NewServer(log *zap.Logger, svc service.ObjectsService) *Server {
+func NewServer(log *zap.Logger, svc domain.ObjectsService) *Server {
 	return &Server{log: log, svc: svc}
 }
 
@@ -197,9 +197,9 @@ func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRe
 		tenant = utils.TenantIDFromContext(ctx, "default")
 	}
 
-	parts := make([]service.CompletePart, 0, len(req.Parts))
+	parts := make([]domain.CompletePart, 0, len(req.Parts))
 	for _, p := range req.Parts {
-		parts = append(parts, service.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
+		parts = append(parts, domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
 	}
 
 	rec, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)

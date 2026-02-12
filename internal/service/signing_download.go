@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -16,7 +15,7 @@ import (
 )
 
 // signDownload generates a presigned URL for downloading a completed object
-func (s *objectsService) signDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (s3.Presigned, error) {
+func (s *objectsService) signDownload(ctx context.Context, tenantID string, id openapi_types.UUID, downloadTTL int) (domain.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignDownload")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
@@ -28,11 +27,11 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionRead); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	rec, err := s.objRepo.Get(ctx, tenantID, id)
@@ -40,15 +39,15 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
-	if rec.Status != postgres.ObjectComplete {
+	if rec.Status != domain.ObjectComplete {
 		err := fmt.Errorf("object not complete")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	ttl := time.Duration(downloadTTL) * time.Second
@@ -61,10 +60,15 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
-	return presigned, nil
+	return domain.Presigned{
+		URL:       presigned.URL,
+		Method:    presigned.Method,
+		Headers:   presigned.Headers,
+		ExpiresAt: presigned.ExpiresAt,
+	}, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -26,7 +27,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

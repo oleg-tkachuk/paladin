@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,7 +13,7 @@ import (
 )
 
 // signPart generates a presigned URL for uploading a single multipart part
-func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (s3.Presigned, error) {
+func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPart")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", int(partNumber)))
@@ -25,11 +25,11 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	multi, err := s.multiRepo.GetByUploadID(ctx, tenantID, uploadID)
@@ -37,7 +37,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	presigned, err := s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, partNumber, s.s3.PresignTTLDuration())
@@ -45,16 +45,21 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return s3.Presigned{}, err
+		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
-	return presigned, nil
+	return domain.Presigned{
+		URL:       presigned.URL,
+		Method:    presigned.Method,
+		Headers:   presigned.Headers,
+		ExpiresAt: presigned.ExpiresAt,
+	}, nil
 }
 
 // signPartsBatch generates presigned URLs for uploading multiple multipart parts
-func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]SignPartResponse, error) {
+func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPartsBatch")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_count", len(partNumbers)))
@@ -66,7 +71,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -81,7 +86,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		return nil, err
 	}
 
-	out := make([]SignPartResponse, len(partNumbers))
+	out := make([]domain.SignPartResponse, len(partNumbers))
 	for i, pn := range partNumbers {
 		signed, err := s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, pn, s.s3.PresignTTLDuration())
 		if err != nil {
@@ -90,7 +95,15 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 			status = "error"
 			return nil, err
 		}
-		out[i] = SignPartResponse{PartNumber: pn, Upload: signed}
+		out[i] = domain.SignPartResponse{
+			PartNumber: pn,
+			Upload: domain.Presigned{
+				URL:       signed.URL,
+				Method:    signed.Method,
+				Headers:   signed.Headers,
+				ExpiresAt: signed.ExpiresAt,
+			},
+		}
 	}
 
 	status = "success"

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,7 +13,7 @@ import (
 )
 
 // listObjects retrieves a paginated list of objects
-func (s *objectsService) listObjects(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {
+func (s *objectsService) listObjects(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "List")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("limit", limit))
@@ -25,7 +25,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 	ctx, cancel := context.WithTimeout(ctx, s.defaultOperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionRead); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

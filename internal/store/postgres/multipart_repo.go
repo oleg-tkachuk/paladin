@@ -3,43 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"time"
 
-	openapi_types "github.com/oapi-codegen/runtime/types"
+	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 )
-
-type MultipartStatus string
-
-const (
-	MultipartInitiated MultipartStatus = "initiated"
-	MultipartCompleted MultipartStatus = "completed"
-	MultipartAborted   MultipartStatus = "aborted"
-	MultipartExpired   MultipartStatus = "expired"
-	MultipartUploaded  MultipartStatus = "uploaded"
-)
-
-type MultipartRecord struct {
-	ID          openapi_types.UUID
-	TenantID    string
-	ObjectID    openapi_types.UUID
-	UploadID    string
-	Bucket      string
-	ObjectKey   string
-	ContentType string
-	PartSize    int64
-	Status      MultipartStatus
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	ExpiresAt   time.Time
-}
-
-type MultipartPartRecord struct {
-	MultipartID openapi_types.UUID
-	PartNumber  int
-	ETag        *string
-	SizeBytes   *int64
-	CreatedAt   time.Time
-}
 
 type MultipartRepo struct {
 	db *DB
@@ -47,7 +14,7 @@ type MultipartRepo struct {
 
 func NewMultipartRepo(db *DB) *MultipartRepo { return &MultipartRepo{db: db} }
 
-func (r *MultipartRepo) Create(ctx context.Context, rec MultipartRecord) error {
+func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error {
 	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO multipart_uploads (id, tenant_id, object_id, upload_id, bucket, object_key, content_type, part_size_bytes, status, expires_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
@@ -58,14 +25,14 @@ func (r *MultipartRepo) Create(ctx context.Context, rec MultipartRecord) error {
 	return nil
 }
 
-func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*MultipartRecord, error) {
+func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
 	row := r.db.Pool.QueryRow(ctx, `
         SELECT id, tenant_id, object_id, upload_id, bucket, object_key, content_type, part_size_bytes, status, created_at, updated_at, expires_at
         FROM multipart_uploads
         WHERE tenant_id=$1 AND upload_id=$2
     `, tenantID, uploadID)
 
-	var rec MultipartRecord
+	var rec domain.Multipart
 	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectID, &rec.UploadID, &rec.Bucket, &rec.ObjectKey, &rec.ContentType, &rec.PartSize, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt); err != nil {
 		return nil, fmt.Errorf("scan multipart: %w", err)
 	}
@@ -73,7 +40,7 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 	return &rec, nil
 }
 
-func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID openapi_types.UUID, partNumber int, etag string, sizeBytes *int64) error {
+func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUID, partNumber int, etag string, sizeBytes *int64) error {
 	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO multipart_parts (multipart_id, part_number, etag, size_bytes)
         VALUES ($1,$2,$3,$4)
@@ -86,7 +53,7 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID openapi_
 	return nil
 }
 
-func (r *MultipartRepo) ListParts(ctx context.Context, multipartID openapi_types.UUID) ([]MultipartPartRecord, error) {
+func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]domain.MultipartPart, error) {
 	rows, err := r.db.Pool.Query(ctx, `
         SELECT multipart_id, part_number, etag, size_bytes, created_at
         FROM multipart_parts
@@ -98,10 +65,10 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID openapi_types
 	}
 	defer rows.Close()
 
-	var out []MultipartPartRecord
+	var out []domain.MultipartPart
 
 	for rows.Next() {
-		var p MultipartPartRecord
+		var p domain.MultipartPart
 		if err := rows.Scan(&p.MultipartID, &p.PartNumber, &p.ETag, &p.SizeBytes, &p.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan multipart part: %w", err)
 		}
@@ -138,7 +105,7 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 	return nil
 }
 
-func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID openapi_types.UUID) error {
+func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -181,7 +148,7 @@ func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, upl
 	return nil
 }
 
-func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]MultipartRecord, error) {
+func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Multipart, error) {
 	rows, err := r.db.Pool.Query(ctx, `
         SELECT id, tenant_id, object_id, upload_id, bucket, object_key, content_type, part_size_bytes, status, created_at, updated_at, expires_at
         FROM multipart_uploads
@@ -193,9 +160,9 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]Multipart
 	}
 	defer rows.Close()
 
-	var out []MultipartRecord
+	var out []domain.Multipart
 	for rows.Next() {
-		var rec MultipartRecord
+		var rec domain.Multipart
 		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.ObjectID, &rec.UploadID, &rec.Bucket, &rec.ObjectKey, &rec.ContentType, &rec.PartSize, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("scan multipart: %w", err)
 		}

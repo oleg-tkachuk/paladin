@@ -3,21 +3,19 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
-	"github.com/oleg-tkachuk/paladin/internal/service"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	"github.com/gin-gonic/gin"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 type OpenAPIAdapter struct {
-	svc service.ObjectsService
+	svc domain.ObjectsService
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(svc service.ObjectsService) *OpenAPIAdapter {
+func NewOpenAPIAdapter(svc domain.ObjectsService) *OpenAPIAdapter {
 	return &OpenAPIAdapter{svc: svc}
 }
 
@@ -182,8 +180,8 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		cursor = *params.Cursor
 	}
 
-	filter := postgres.ListObjectsFilter{
-		Status:      (*postgres.ObjectStatus)(params.Status),
+	filter := domain.ListObjectsFilter{
+		Status:      (*domain.ObjectStatus)(params.Status),
 		ExternalRef: params.ExternalRef,
 	}
 
@@ -298,7 +296,7 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 		UploadId:  multi.UploadID,
 		PartSize:  multi.PartSize,
 		Bucket:    multi.Bucket,
-		Status:    mapStatus(postgres.ObjectStatus(multi.Status)),
+		Status:    mapStatus(domain.ObjectStatus(multi.Status)),
 		CreatedAt: multi.CreatedAt,
 		UpdatedAt: multi.UpdatedAt,
 	})
@@ -320,9 +318,9 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId string) {
 		return
 	}
 
-	parts := make([]service.CompletePart, len(req.Parts))
+	parts := make([]domain.CompletePart, len(req.Parts))
 	for i, p := range req.Parts {
-		parts[i] = service.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag}
+		parts[i] = domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag}
 	}
 
 	rec, err := s.svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadId, parts)
@@ -382,7 +380,7 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber in
 
 // Helpers
 
-func mapSignedAction(p s3.Presigned) api.SignedAction {
+func mapSignedAction(p domain.Presigned) api.SignedAction {
 	return api.SignedAction{
 		Url:       p.URL,
 		Method:    api.SignedActionMethod(p.Method),
@@ -391,7 +389,7 @@ func mapSignedAction(p s3.Presigned) api.SignedAction {
 	}
 }
 
-func mapStatus(s postgres.ObjectStatus) api.ObjectStatus {
+func mapStatus(s domain.ObjectStatus) api.ObjectStatus {
 	return api.ObjectStatus(s)
 }
 
@@ -402,7 +400,7 @@ func mapLabels(l *api.Labels) map[string]string {
 	return (map[string]string)(*l)
 }
 
-func mapObjectCommon(rec *postgres.ObjectRecord) api.ObjectCommon {
+func mapObjectCommon(rec *domain.Object) api.ObjectCommon {
 	labels := api.Labels(rec.Labels)
 	return api.ObjectCommon{
 		ObjectId:        rec.ID,

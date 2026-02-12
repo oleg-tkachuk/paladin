@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/pashagolub/pgxmock/v3"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -21,14 +22,14 @@ func TestObjectsRepo_Create(t *testing.T) {
 	ctx := context.Background()
 
 	id := uuid.New()
-	rec := ObjectRecord{
+	rec := domain.Object{
 		ID:          id,
 		TenantID:    "test-tenant",
 		ObjectKey:   "test-key",
 		Bucket:      "test-bucket",
 		ContentType: "application/json",
 		SizeBytes:   100,
-		Status:      ObjectPending,
+		Status:      domain.ObjectPending,
 	}
 
 	mock.ExpectExec("INSERT INTO objects").
@@ -57,7 +58,7 @@ func TestObjectsRepo_Get(t *testing.T) {
 	mock.ExpectQuery(`SELECT (.+) FROM objects WHERE tenant_id=\$1 AND id=\$2`).
 		WithArgs(tenantID, id).
 		WillReturnRows(pgxmock.NewRows(columns).
-			AddRow(id, tenantID, "test-key", "test-bucket", "application/json", int64(100), nil, ObjectPending, now, now, nil, nil, nil, nil, nil, nil, nil))
+			AddRow(id, tenantID, "test-key", "test-bucket", "application/json", int64(100), nil, domain.ObjectPending, now, now, nil, nil, nil, nil, nil, nil, nil))
 
 	rec, err := repo.Get(ctx, tenantID, id)
 	assert.NoError(t, err)

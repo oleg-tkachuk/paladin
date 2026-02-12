@@ -6,49 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	openapi_types "github.com/oapi-codegen/runtime/types"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 )
-
-type ListObjectsFilter struct {
-	Status        *ObjectStatus
-	ExternalRef   *string
-	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
-}
-
-type ObjectStatus string
-
-const (
-	ObjectPending     ObjectStatus = "pending"
-	ObjectUploading   ObjectStatus = "uploading"
-	ObjectUploaded    ObjectStatus = "uploaded"
-	ObjectComplete    ObjectStatus = "complete"
-	ObjectAborted     ObjectStatus = "aborted"
-	ObjectDeleted     ObjectStatus = "deleted"
-	ObjectSoftDeleted ObjectStatus = "soft_deleted"
-	ObjectHardDeleted ObjectStatus = "hard_deleted"
-)
-
-type ObjectRecord struct {
-	ID              openapi_types.UUID
-	TenantID        string
-	ObjectKey       string
-	Bucket          string
-	ContentType     string
-	SizeBytes       int64
-	ChecksumSHA256  *string
-	Status          ObjectStatus
-	Labels          map[string]string
-	ExternalRef     *string
-	StoredETag      *string
-	StoredSizeBytes *int64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	ExpiresAt       *time.Time
-	CompletedAt     *time.Time
-	DeletedAt       *time.Time
-}
 
 type ObjectsRepo struct {
 	db *DB
@@ -56,7 +17,7 @@ type ObjectsRepo struct {
 
 func NewObjectsRepo(db *DB) *ObjectsRepo { return &ObjectsRepo{db: db} }
 
-func (r *ObjectsRepo) Create(ctx context.Context, rec ObjectRecord) error {
+func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	if _, err := r.db.Pool.Exec(ctx, `
         INSERT INTO objects (id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, expires_at, labels, external_ref)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -67,7 +28,7 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec ObjectRecord) error {
 	return nil
 }
 
-func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]ObjectRecord, error) {
+func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error) {
 	rows, err := r.db.Pool.Query(ctx, `
         SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at
         FROM objects
@@ -79,9 +40,9 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 	}
 	defer rows.Close()
 
-	var out []ObjectRecord
+	var out []domain.Object
 	for rows.Next() {
-		var rec ObjectRecord
+		var rec domain.Object
 		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef, &rec.StoredETag, &rec.StoredSizeBytes, &rec.CompletedAt, &rec.DeletedAt); err != nil {
 			return nil, fmt.Errorf("scan object: %w", err)
 		}
@@ -91,14 +52,14 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 	return out, rows.Err()
 }
 
-func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id openapi_types.UUID) (*ObjectRecord, error) {
+func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	row := r.db.Pool.QueryRow(ctx, `
         SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at
         FROM objects
         WHERE tenant_id=$1 AND id=$2
     `, tenantID, id)
 
-	var rec ObjectRecord
+	var rec domain.Object
 	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef, &rec.StoredETag, &rec.StoredSizeBytes, &rec.CompletedAt, &rec.DeletedAt); err != nil {
 		return nil, fmt.Errorf("scan object: %w", err)
 	}
@@ -106,7 +67,7 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id openapi_types
 	return &rec, nil
 }
 
-func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id openapi_types.UUID, etag string, sizeBytes int64) (bool, error) {
+func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
         UPDATE objects 
         SET status='complete', stored_etag=$3, stored_size_bytes=$4, completed_at=now(), updated_at=now()
@@ -119,7 +80,7 @@ func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id open
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
+func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
         UPDATE objects SET status='soft_deleted', deleted_at=now(), updated_at=now()
         WHERE tenant_id=$1 AND id=$2 AND status != 'soft_deleted' AND status != 'hard_deleted'
@@ -131,10 +92,7 @@ func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id o
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
-	// If already hard_deleted, it's a no-op (idempotent).
-	// If soft_deleted, we update to hard_deleted.
-	// If active, we update to hard_deleted.
+func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	tag, err := r.db.Pool.Exec(ctx, `
         UPDATE objects SET status='hard_deleted', deleted_at=COALESCE(deleted_at, now()), updated_at=now()
         WHERE tenant_id=$1 AND id=$2 AND status != 'hard_deleted'
@@ -146,19 +104,18 @@ func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id o
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id openapi_types.UUID) (bool, error) {
-	// Deprecated: Alias for MarkHardDeleted
+func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	return r.MarkHardDeleted(ctx, tenantID, id)
 }
 
-func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*ObjectRecord, error) {
+func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*domain.Object, error) {
 	row := r.db.Pool.QueryRow(ctx, `
         SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at
         FROM objects
         WHERE tenant_id=$1 AND external_ref=$2
     `, tenantID, externalRef)
 
-	var rec ObjectRecord
+	var rec domain.Object
 	if err := row.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef, &rec.StoredETag, &rec.StoredSizeBytes, &rec.CompletedAt, &rec.DeletedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -169,7 +126,7 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 	return &rec, nil
 }
 
-func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]ObjectRecord, string, error) {
+func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	query := `
         SELECT id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at
         FROM objects
@@ -200,9 +157,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter ListObje
 	}
 
 	if cursor != "" {
-		// Simple cursor: CreatedAt. For production, use (CreatedAt, ID) for stable sort.
 		query += fmt.Sprintf(" AND created_at < $%d", argIdx)
-		// We'd need to parse the cursor here. For now, let's assume it's an RFC3339 string.
 		t, err := time.Parse(time.RFC3339, cursor)
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid cursor: %w", err)
@@ -220,9 +175,9 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter ListObje
 	}
 	defer rows.Close()
 
-	var out []ObjectRecord
+	var out []domain.Object
 	for rows.Next() {
-		var rec ObjectRecord
+		var rec domain.Object
 		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef, &rec.StoredETag, &rec.StoredSizeBytes, &rec.CompletedAt, &rec.DeletedAt); err != nil {
 			return nil, "", fmt.Errorf("scan object: %w", err)
 		}
@@ -238,17 +193,12 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter ListObje
 	return out, nextCursor, rows.Err()
 }
 
-func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*ObjectRecord, error) {
-	// Simple implementation: fetch, update, save. For atomicity, use a single UPDATE with COALESCE or similar.
-	// But labels is a map, so we might want to merge. The spec says "Update object metadata (labels/external_ref)".
-	// Usually PATCH means partial update.
-
+func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	query := `UPDATE objects SET updated_at=now()`
 	args := []interface{}{tenantID, id}
 	argIdx := 3
 
 	if labels != nil {
-		// Postgres JSONB merge: labels = labels || $3
 		query += fmt.Sprintf(", labels = labels || $%d", argIdx)
 		args = append(args, labels)
 		argIdx++
@@ -261,7 +211,7 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id openapi_typ
 
 	query += " WHERE tenant_id=$1 AND id=$2 RETURNING id, tenant_id, object_key, bucket, content_type, size_bytes, checksum_sha256, status, created_at, updated_at, expires_at, labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at"
 
-	var rec ObjectRecord
+	var rec domain.Object
 	err := r.db.Pool.QueryRow(ctx, query, args...).Scan(&rec.ID, &rec.TenantID, &rec.ObjectKey, &rec.Bucket, &rec.ContentType, &rec.SizeBytes, &rec.ChecksumSHA256, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.ExpiresAt, &rec.Labels, &rec.ExternalRef, &rec.StoredETag, &rec.StoredSizeBytes, &rec.CompletedAt, &rec.DeletedAt)
 	if err != nil {
 		return nil, fmt.Errorf("patch object: %w", err)

@@ -14,6 +14,7 @@ import (
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
@@ -190,7 +191,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	idemRepo := postgres.NewIdempotencyRepo(db)
 	brk := breaker.NewFactory(cfg)
 
-	svc := service.NewObjectsService(
+	var svc domain.ObjectsService = service.NewObjectsService(
 		objRepo,
 		mpRepo,
 		s3c,

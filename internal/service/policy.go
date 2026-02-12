@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
@@ -19,7 +20,7 @@ type policyImpl struct {
 	presignPartTTL      time.Duration
 }
 
-func NewPolicy(cfg config.Policy) Policy {
+func NewPolicy(cfg config.Policy) domain.Policy {
 	m := make(map[string]struct{}, len(cfg.AllowedContentTypes))
 	for _, ct := range cfg.AllowedContentTypes {
 		m[strings.ToLower(strings.TrimSpace(ct))] = struct{}{}
@@ -34,7 +35,7 @@ func NewPolicy(cfg config.Policy) Policy {
 	}
 }
 
-func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action Action) error {
+func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action domain.Action) error {
 	// Tenant validation.
 	// In a real app, this would check RBAC/ABAC if needed.
 	if tenantID == "" {

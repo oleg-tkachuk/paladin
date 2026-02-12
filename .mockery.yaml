@@ -9,3 +9,8 @@ packages:
       all: true
       dir: internal/service/mocks
       filename: "{{.InterfaceName | snakecase}}.go"
+  github.com/oleg-tkachuk/paladin/internal/domain:
+    config:
+      all: true
+      dir: internal/domain/mocks
+      filename: "{{.InterfaceName | snakecase}}.go"

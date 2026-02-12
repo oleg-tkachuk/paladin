@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"go.uber.org/zap"
 )
 
@@ -91,21 +92,7 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	}, nil
 }
 
-type Presigned struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Headers   map[string]string `json:"headers,omitempty"`
-	ExpiresAt time.Time         `json:"expires_at"`
-}
-
-type HeadRecord struct {
-	Key          string
-	ETag         string
-	SizeBytes    int64
-	ContentType  string
-	LastModified time.Time
-	Metadata     map[string]string
-}
+// Presigned and HeadRecord are now used from domain package
 
 func (c *Client) EnsureBucket(ctx context.Context) error {
 	// Best-effort bucket creation for local S3 gateways; ignore errors if exists.
@@ -131,7 +118,7 @@ func (c *Client) Health(ctx context.Context) error {
 	return err
 }
 
-func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (Presigned, error) {
+func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (domain.Presigned, error) {
 	in := &s3.PutObjectInput{
 		Bucket:      aws.String(c.Bucket),
 		Key:         aws.String(key),
@@ -154,7 +141,7 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
-		return Presigned{}, fmt.Errorf("presign put object: %w", err)
+		return domain.Presigned{}, fmt.Errorf("presign put object: %w", err)
 	}
 
 	c.log.Debug("S3 presign PUT success", zap.String("key", key), zap.String("content_type", contentType))
@@ -167,7 +154,7 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 		}
 	}
 
-	return Presigned{
+	return domain.Presigned{
 		URL:       out.URL,
 		Method:    "PUT",
 		Headers:   headers,
@@ -175,7 +162,7 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 	}, nil
 }
 
-func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Duration) (Presigned, error) {
+func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Duration) (domain.Presigned, error) {
 	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),
@@ -189,26 +176,21 @@ func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Dura
 	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
-		return Presigned{}, fmt.Errorf("presign get object: %w", err)
+		return domain.Presigned{}, fmt.Errorf("presign get object: %w", err)
 	}
 
 	c.log.Debug("S3 presign GET success", zap.String("key", key))
 
-	return Presigned{
+	return domain.Presigned{
 		URL:       out.URL,
 		Method:    "GET",
 		ExpiresAt: time.Now().Add(expiry),
 	}, nil
 }
 
-type MultipartInit struct {
-	UploadID  string    `json:"upload_id"`
-	Key       string    `json:"key"`
-	Bucket    string    `json:"bucket"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
+// MultipartInit is now used from domain package
 
-func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentType string) (MultipartInit, error) {
+func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentType string) (domain.MultipartInit, error) {
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:      aws.String(c.Bucket),
 		Key:         aws.String(key),
@@ -225,13 +207,13 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
-		return MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
+		return domain.MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
 
 	uploadID := aws.ToString(out.UploadId)
 	c.log.Info("S3 multipart upload initiated", zap.String("key", key), zap.String("upload_id", uploadID))
 
-	return MultipartInit{
+	return domain.MultipartInit{
 		UploadID:  aws.ToString(out.UploadId),
 		Key:       key,
 		Bucket:    c.Bucket,
@@ -239,7 +221,7 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	}, nil
 }
 
-func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32, ttl time.Duration) (Presigned, error) {
+func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, partNumber int32, ttl time.Duration) (domain.Presigned, error) {
 	expiry := c.PresignTTL
 	if ttl > 0 {
 		expiry = ttl
@@ -252,23 +234,31 @@ func (c *Client) PresignUploadPart(ctx context.Context, key, uploadID string, pa
 		PartNumber: aws.Int32(partNumber),
 	}, s3.WithPresignExpires(expiry))
 	if err != nil {
-		return Presigned{}, fmt.Errorf("presign upload part: %w", err)
+		return domain.Presigned{}, fmt.Errorf("presign upload part: %w", err)
 	}
 
-	return Presigned{
+	return domain.Presigned{
 		URL:       out.URL,
 		Method:    "PUT",
 		ExpiresAt: time.Now().Add(expiry),
 	}, nil
 }
 
-func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []types.CompletedPart) error {
+func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []domain.CompletePart) error {
+	s3Parts := make([]types.CompletedPart, len(parts))
+	for i, p := range parts {
+		s3Parts[i] = types.CompletedPart{
+			ETag:       aws.String(p.ETag),
+			PartNumber: aws.Int32(p.PartNumber),
+		}
+	}
+
 	_, err := c.s3.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(c.Bucket),
 		Key:      aws.String(key),
 		UploadId: aws.String(uploadID),
 		MultipartUpload: &types.CompletedMultipartUpload{
-			Parts: parts,
+			Parts: s3Parts,
 		},
 	})
 
@@ -299,7 +289,7 @@ func (c *Client) PresignTTLDuration() time.Duration {
 	return c.PresignTTL
 }
 
-func (c *Client) HeadObject(ctx context.Context, key string) (*HeadRecord, error) {
+func (c *Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord, error) {
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),
@@ -308,7 +298,7 @@ func (c *Client) HeadObject(ctx context.Context, key string) (*HeadRecord, error
 		return nil, err
 	}
 
-	return &HeadRecord{
+	return &domain.HeadRecord{
 		Key:          key,
 		ETag:         aws.ToString(out.ETag),
 		SizeBytes:    aws.ToInt64(out.ContentLength),

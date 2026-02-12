@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -17,7 +17,7 @@ import (
 )
 
 // completeObject marks an object as complete after upload verification
-func (s *objectsService) completeObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*postgres.ObjectRecord, error) {
+func (s *objectsService) completeObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*domain.Object, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "CompleteObject")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
@@ -29,7 +29,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -44,7 +44,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		return nil, err
 	}
 
-	if rec.Status == postgres.ObjectComplete {
+	if rec.Status == domain.ObjectComplete {
 		status = "success"
 		span.SetStatus(codes.Ok, "already_complete")
 		return rec, nil

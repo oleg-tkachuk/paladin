@@ -5,18 +5,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
 // completeMultipart completes a multipart upload
-func (s *objectsService) completeMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (*postgres.ObjectRecord, error) {
+func (s *objectsService) completeMultipart(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "CompleteMultipart")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("parts_count", len(parts)))
@@ -28,7 +26,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	ctx, cancel := context.WithTimeout(ctx, s.longOperationTimeout)
 	defer cancel()
 
-	if err := s.policy.Authorize(ctx, tenantID, ActionUpdate); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -43,15 +41,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, err
 	}
 
-	s3Parts := make([]types.CompletedPart, len(parts))
-	for i, p := range parts {
-		s3Parts[i] = types.CompletedPart{
-			ETag:       aws.String(p.ETag),
-			PartNumber: aws.Int32(p.PartNumber),
-		}
-	}
-
-	if err := s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, s3Parts); err != nil {
+	if err := s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

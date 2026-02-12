@@ -2,14 +2,14 @@
 // github.com/vektra/mockery
 // template: testify
 
-package service
+package domain
 
 import (
 	"context"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -41,7 +41,7 @@ func (_m *MockObjectsRepository) EXPECT() *MockObjectsRepository_Expecter {
 }
 
 // Create provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) Create(ctx context.Context, rec postgres.ObjectRecord) error {
+func (_mock *MockObjectsRepository) Create(ctx context.Context, rec domain.Object) error {
 	ret := _mock.Called(ctx, rec)
 
 	if len(ret) == 0 {
@@ -49,7 +49,7 @@ func (_mock *MockObjectsRepository) Create(ctx context.Context, rec postgres.Obj
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, postgres.ObjectRecord) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.Object) error); ok {
 		r0 = returnFunc(ctx, rec)
 	} else {
 		r0 = ret.Error(0)
@@ -64,20 +64,20 @@ type MockObjectsRepository_Create_Call struct {
 
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
-//   - rec postgres.ObjectRecord
+//   - rec domain.Object
 func (_e *MockObjectsRepository_Expecter) Create(ctx interface{}, rec interface{}) *MockObjectsRepository_Create_Call {
 	return &MockObjectsRepository_Create_Call{Call: _e.mock.On("Create", ctx, rec)}
 }
 
-func (_c *MockObjectsRepository_Create_Call) Run(run func(ctx context.Context, rec postgres.ObjectRecord)) *MockObjectsRepository_Create_Call {
+func (_c *MockObjectsRepository_Create_Call) Run(run func(ctx context.Context, rec domain.Object)) *MockObjectsRepository_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 postgres.ObjectRecord
+		var arg1 domain.Object
 		if args[1] != nil {
-			arg1 = args[1].(postgres.ObjectRecord)
+			arg1 = args[1].(domain.Object)
 		}
 		run(
 			arg0,
@@ -92,29 +92,29 @@ func (_c *MockObjectsRepository_Create_Call) Return(err error) *MockObjectsRepos
 	return _c
 }
 
-func (_c *MockObjectsRepository_Create_Call) RunAndReturn(run func(ctx context.Context, rec postgres.ObjectRecord) error) *MockObjectsRepository_Create_Call {
+func (_c *MockObjectsRepository_Create_Call) RunAndReturn(run func(ctx context.Context, rec domain.Object) error) *MockObjectsRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Get provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) Get(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsRepository) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID) error); ok {
@@ -161,34 +161,34 @@ func (_c *MockObjectsRepository_Get_Call) Run(run func(ctx context.Context, tena
 	return _c
 }
 
-func (_c *MockObjectsRepository_Get_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsRepository_Get_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsRepository_Get_Call) Return(object *domain.Object, err error) *MockObjectsRepository_Get_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_Get_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) (*postgres.ObjectRecord, error)) *MockObjectsRepository_Get_Call {
+func (_c *MockObjectsRepository_Get_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error)) *MockObjectsRepository_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetByExternalRef provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsRepository) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, externalRef)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByExternalRef")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, externalRef)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, externalRef)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
@@ -235,43 +235,43 @@ func (_c *MockObjectsRepository_GetByExternalRef_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockObjectsRepository_GetByExternalRef_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsRepository_GetByExternalRef_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsRepository_GetByExternalRef_Call) Return(object *domain.Object, err error) *MockObjectsRepository_GetByExternalRef_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_GetByExternalRef_Call) RunAndReturn(run func(ctx context.Context, tenantID string, externalRef string) (*postgres.ObjectRecord, error)) *MockObjectsRepository_GetByExternalRef_Call {
+func (_c *MockObjectsRepository_GetByExternalRef_Call) RunAndReturn(run func(ctx context.Context, tenantID string, externalRef string) (*domain.Object, error)) *MockObjectsRepository_GetByExternalRef_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // List provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error) {
+func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
 	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []postgres.ObjectRecord
+	var r0 []domain.Object
 	var r1 string
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, postgres.ListObjectsFilter, int, string) ([]postgres.ObjectRecord, string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, error)); ok {
 		return returnFunc(ctx, tenantID, filter, limit, cursor)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, postgres.ListObjectsFilter, int, string) []postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) []domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]postgres.ObjectRecord)
+			r0 = ret.Get(0).([]domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, postgres.ListObjectsFilter, int, string) string); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListObjectsFilter, int, string) string); ok {
 		r1 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, postgres.ListObjectsFilter, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
 		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
 		r2 = ret.Error(2)
@@ -287,14 +287,14 @@ type MockObjectsRepository_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - filter postgres.ListObjectsFilter
+//   - filter domain.ListObjectsFilter
 //   - limit int
 //   - cursor string
 func (_e *MockObjectsRepository_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}, limit interface{}, cursor interface{}) *MockObjectsRepository_List_Call {
 	return &MockObjectsRepository_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter, limit, cursor)}
 }
 
-func (_c *MockObjectsRepository_List_Call) Run(run func(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string)) *MockObjectsRepository_List_Call {
+func (_c *MockObjectsRepository_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string)) *MockObjectsRepository_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -304,9 +304,9 @@ func (_c *MockObjectsRepository_List_Call) Run(run func(ctx context.Context, ten
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 postgres.ListObjectsFilter
+		var arg2 domain.ListObjectsFilter
 		if args[2] != nil {
-			arg2 = args[2].(postgres.ListObjectsFilter)
+			arg2 = args[2].(domain.ListObjectsFilter)
 		}
 		var arg3 int
 		if args[3] != nil {
@@ -327,34 +327,34 @@ func (_c *MockObjectsRepository_List_Call) Run(run func(ctx context.Context, ten
 	return _c
 }
 
-func (_c *MockObjectsRepository_List_Call) Return(objectRecords []postgres.ObjectRecord, s string, err error) *MockObjectsRepository_List_Call {
-	_c.Call.Return(objectRecords, s, err)
+func (_c *MockObjectsRepository_List_Call) Return(objects []domain.Object, s string, err error) *MockObjectsRepository_List_Call {
+	_c.Call.Return(objects, s, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter postgres.ListObjectsFilter, limit int, cursor string) ([]postgres.ObjectRecord, string, error)) *MockObjectsRepository_List_Call {
+func (_c *MockObjectsRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error)) *MockObjectsRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ListExpiredPending provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]postgres.ObjectRecord, error) {
+func (_mock *MockObjectsRepository) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error) {
 	ret := _mock.Called(ctx, cutoff, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListExpiredPending")
 	}
 
-	var r0 []postgres.ObjectRecord
+	var r0 []domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) ([]domain.Object, error)); ok {
 		return returnFunc(ctx, cutoff, limit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) []postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Time, int) []domain.Object); ok {
 		r0 = returnFunc(ctx, cutoff, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]postgres.ObjectRecord)
+			r0 = ret.Get(0).([]domain.Object)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, time.Time, int) error); ok {
@@ -401,12 +401,12 @@ func (_c *MockObjectsRepository_ListExpiredPending_Call) Run(run func(ctx contex
 	return _c
 }
 
-func (_c *MockObjectsRepository_ListExpiredPending_Call) Return(objectRecords []postgres.ObjectRecord, err error) *MockObjectsRepository_ListExpiredPending_Call {
-	_c.Call.Return(objectRecords, err)
+func (_c *MockObjectsRepository_ListExpiredPending_Call) Return(objects []domain.Object, err error) *MockObjectsRepository_ListExpiredPending_Call {
+	_c.Call.Return(objects, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_ListExpiredPending_Call) RunAndReturn(run func(ctx context.Context, cutoff time.Time, limit int) ([]postgres.ObjectRecord, error)) *MockObjectsRepository_ListExpiredPending_Call {
+func (_c *MockObjectsRepository_ListExpiredPending_Call) RunAndReturn(run func(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error)) *MockObjectsRepository_ListExpiredPending_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -712,23 +712,23 @@ func (_c *MockObjectsRepository_MarkSoftDeleted_Call) RunAndReturn(run func(ctx 
 }
 
 // Patch provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error) {
+func (_mock *MockObjectsRepository) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id, labels, externalRef)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Patch")
 	}
 
-	var r0 *postgres.ObjectRecord
+	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) (*postgres.ObjectRecord, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) (*domain.Object, error)); ok {
 		return returnFunc(ctx, tenantID, id, labels, externalRef)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) *postgres.ObjectRecord); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) *domain.Object); ok {
 		r0 = returnFunc(ctx, tenantID, id, labels, externalRef)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*postgres.ObjectRecord)
+			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, *string) error); ok {
@@ -787,12 +787,12 @@ func (_c *MockObjectsRepository_Patch_Call) Run(run func(ctx context.Context, te
 	return _c
 }
 
-func (_c *MockObjectsRepository_Patch_Call) Return(objectRecord *postgres.ObjectRecord, err error) *MockObjectsRepository_Patch_Call {
-	_c.Call.Return(objectRecord, err)
+func (_c *MockObjectsRepository_Patch_Call) Return(object *domain.Object, err error) *MockObjectsRepository_Patch_Call {
+	_c.Call.Return(object, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*postgres.ObjectRecord, error)) *MockObjectsRepository_Patch_Call {
+func (_c *MockObjectsRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsRepository_Patch_Call {
 	_c.Call.Return(run)
 	return _c
 }
