@@ -3,7 +3,7 @@
 
 # Create Single PNG Object
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -20,7 +20,7 @@ jsonpath "$.upload.url" exists
 
 # Get Object Metadata
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -38,7 +38,7 @@ HTTP 200
 
 # Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -46,7 +46,7 @@ jsonpath "$.status" == "complete"
 
 # Verify Final State
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -55,13 +55,13 @@ jsonpath "$.content_type" == "image/png"
 
 # Delete Object
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
 # Verify Object is Deleted
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]

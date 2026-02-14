@@ -1,19 +1,19 @@
 GET {{host}}/health/livez
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: default
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "alive"
 
 GET {{host}}/health/startupz
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: default
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "started"
 
 GET {{host}}/health/readyz
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: default
 HTTP 200
 [Asserts]

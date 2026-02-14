@@ -3,7 +3,7 @@
 
 # Setup: Create test object
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/jpeg",
@@ -16,7 +16,7 @@ original_upload_url: jsonpath "$.upload.url"
 
 # Test 1: Re-sign upload for pending object
 POST {{host}}/v1/objects/{{object_id}}/sign-upload
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {}
 HTTP 200
@@ -30,7 +30,7 @@ new_upload_url: jsonpath "$.upload.url"
 
 # Test 2: Re-sign with custom TTL
 POST {{host}}/v1/objects/{{object_id}}/sign-upload
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "upload_expires_in_seconds": 300
@@ -49,12 +49,12 @@ HTTP 200
 
 # Complete the object
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

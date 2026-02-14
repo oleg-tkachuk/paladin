@@ -1,6 +1,6 @@
 # Initiate Multipart
 POST {{host}}/v1/multipart
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -18,7 +18,7 @@ jsonpath "$.part_size" exists
 
 # Sign Part 1
 POST {{host}}/v1/multipart/{{upload_id}}/parts/1/sign
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -38,7 +38,7 @@ etag_1: header "ETag" regex "\"([^\"]+)\""
 
 # Complete Multipart
 POST {{host}}/v1/multipart/{{upload_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "parts": [
@@ -54,7 +54,7 @@ jsonpath "$.status" == "complete"
 
 # Verify Metadata
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -63,6 +63,6 @@ jsonpath "$.labels.type" == "multipart-test"
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

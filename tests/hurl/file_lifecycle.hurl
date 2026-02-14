@@ -3,7 +3,7 @@
 
 # 1. Create Object Entry
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -24,7 +24,7 @@ HTTP 200
 
 # 3. Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -32,7 +32,7 @@ jsonpath "$.status" == "complete"
 
 # 4. Retrieve (Sign Download URL)
 POST {{host}}/v1/objects/{{object_id}}/sign-download
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {}
 HTTP 200
@@ -49,7 +49,7 @@ bytes == file,fixtures/hello.txt;
 
 # 6. List This File (Get Metadata)
 GET {{host}}/v1/objects/{{object_id}}/meta
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -60,6 +60,6 @@ jsonpath "$.size_bytes" == 96
 
 # 7. Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
