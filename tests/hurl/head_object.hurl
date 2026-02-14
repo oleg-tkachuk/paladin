@@ -3,7 +3,7 @@
 
 # Setup: Create test object
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "application/pdf",
@@ -16,7 +16,7 @@ upload_url: jsonpath "$.upload.url"
 
 # Test 1: HEAD request for pending object
 HEAD {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 
@@ -29,30 +29,30 @@ HTTP 200
 
 # Complete object
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 
 # Test 2: HEAD request for completed object
 HEAD {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 
 # Test 3: HEAD request for non-existent object
 HEAD {{host}}/v1/objects/00000000-0000-0000-0000-000000000000
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 404
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
 # Test 4: HEAD request for deleted object
 HEAD {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200

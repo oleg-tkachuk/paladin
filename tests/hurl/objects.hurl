@@ -3,7 +3,7 @@
 
 # Create Single Object (Minimal)
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/jpeg",
@@ -30,7 +30,7 @@ HTTP 200
 
 # Mark Complete
 POST {{host}}/v1/objects/{{object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -38,7 +38,7 @@ jsonpath "$.status" == "complete"
 
 # Verify Final State
 GET {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -47,7 +47,7 @@ jsonpath "$.download_url" not exists
 
 # Sign Download
 POST {{host}}/v1/objects/{{object_id}}/sign-download
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {}
 HTTP 200
@@ -56,7 +56,7 @@ jsonpath "$.download.url" exists
 
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
@@ -66,7 +66,7 @@ HTTP 204
 
 # Create Object with Metadata
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -86,7 +86,7 @@ jsonpath "$.object_key" exists
 
 # Get Object (Standard) - Check Metadata Preserved
 GET {{host}}/v1/objects/{{meta_object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -98,7 +98,7 @@ jsonpath "$.download_url" not exists
 
 # Get Object via Meta Endpoint (New) - Check No Download URL
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -117,7 +117,7 @@ HTTP 200
 
 # Mark Complete
 POST {{host}}/v1/objects/{{meta_object_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -125,7 +125,7 @@ jsonpath "$.status" == "complete"
 
 # Verify Final Meta
 GET {{host}}/v1/objects/{{meta_object_id}}/meta
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -133,6 +133,6 @@ jsonpath "$.status" == "complete"
 
 # Cleanup (Delete)
 DELETE {{host}}/v1/objects/{{meta_object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

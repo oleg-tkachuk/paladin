@@ -3,7 +3,7 @@
 
 # Setup: Create test objects with different statuses and metadata
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -20,7 +20,7 @@ obj1_id: jsonpath "$.object_id"
 upload1_url: jsonpath "$.upload.url"
 
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "image/png",
@@ -44,13 +44,13 @@ x-amz-server-side-encryption: AES256
 HTTP 200
 
 POST {{host}}/v1/objects/{{obj1_id}}/complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 
 # Test 1: List all objects (default pagination)
 GET {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -59,7 +59,7 @@ jsonpath "$.items" isCollection
 
 # Test 2: List with limit
 GET {{host}}/v1/objects?limit=10
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -68,7 +68,7 @@ jsonpath "$.items" count <= 10
 
 # Test 3: Filter by status - complete
 GET {{host}}/v1/objects?status=complete
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -78,7 +78,7 @@ jsonpath "$.items[?(@.object_id == '{{obj1_id}}')]" exists
 
 # Test 4: Filter by status - pending
 GET {{host}}/v1/objects?status=pending
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -87,7 +87,7 @@ jsonpath "$.items[?(@.object_id == '{{obj2_id}}')]" exists
 
 # Test 5: Filter by external_ref
 GET {{host}}/v1/objects?external_ref=list-test-1
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -98,7 +98,7 @@ jsonpath "$.items[0].object_id" == "{{obj1_id}}"
 
 # Test 6: Pagination with cursor
 GET {{host}}/v1/objects?limit=1
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -108,7 +108,7 @@ jsonpath "$.next_cursor" exists
 cursor: jsonpath "$.next_cursor"
 
 GET {{host}}/v1/objects?limit=1&cursor={{cursor}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -116,7 +116,7 @@ jsonpath "$.items" exists
 
 # Test 7: Filter by non-existent external_ref (empty result)
 GET {{host}}/v1/objects?external_ref=non-existent-ref
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
@@ -124,11 +124,11 @@ jsonpath "$.items" count == 0
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{obj1_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
 DELETE {{host}}/v1/objects/{{obj2_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

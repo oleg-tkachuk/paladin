@@ -3,7 +3,7 @@
 
 # Setup: Create test object
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -20,7 +20,7 @@ object_id: jsonpath "$.object_id"
 
 # Test 1: Update labels only
 PATCH {{host}}/v1/objects/{{object_id}}/meta
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "labels": {
@@ -38,7 +38,7 @@ jsonpath "$.external_ref" == "patch-test-original"
 
 # Test 2: Create another object for conflict test
 POST {{host}}/v1/objects
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
@@ -51,7 +51,7 @@ conflict_obj_id: jsonpath "$.object_id"
 
 # Test 6: Attempt to change external_ref to existing value (conflict)
 PATCH {{host}}/v1/objects/{{object_id}}/meta
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "external_ref": "conflict-ref"
@@ -63,11 +63,11 @@ jsonpath "$.error.message" exists
 
 # Cleanup
 DELETE {{host}}/v1/objects/{{object_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
 DELETE {{host}}/v1/objects/{{conflict_obj_id}}
-Host: paladin-api.acme
+Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
