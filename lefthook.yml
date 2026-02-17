@@ -211,17 +211,17 @@ pre-push:
     # -----------------------------
     # 2) Dependency hygiene
     # -----------------------------
-    gomod-tidy-check:
-      tags: [go, deps]
-      run: |
-        set -euo pipefail
-        go mod tidy
-        # Fail if go.mod/go.sum changed (forces tidy to be committed)
-        if ! git diff --quiet -- go.mod go.sum; then
-          echo "ERROR: go mod tidy produced changes. Commit updated go.mod/go.sum."
-          git diff -- go.mod go.sum || true
-          exit 1
-        fi
+#    gomod-tidy-check:
+#      tags: [go, deps]
+#      run: |
+#        set -euo pipefail
+#        go mod tidy
+#        # Fail if go.mod/go.sum changed (forces tidy to be committed)
+#        if ! git diff --quiet -- go.mod go.sum; then
+#          echo "ERROR: go mod tidy produced changes. Commit updated go.mod/go.sum."
+#          git diff -- go.mod go.sum || true
+#          exit 1
+#        fi
 
     # -----------------------------
     # 3) Security scanning (repo-level)

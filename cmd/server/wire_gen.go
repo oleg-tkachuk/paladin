@@ -56,7 +56,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 		cleanup()
 		return nil, nil, err
 	}
-	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, client, logger)
+	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, auditLogRepository, client, logger)
 	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool)
 	return appApp, func() {
 		cleanup2()

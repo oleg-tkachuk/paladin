@@ -11,11 +11,12 @@ import (
 )
 
 type Reaper struct {
-	cfg     config.Housekeeping
-	objRepo domain.ObjectsRepository
-	mpRepo  domain.MultipartRepository
-	s3      domain.StorageClient
-	log     *zap.Logger
+	cfg       config.Housekeeping
+	objRepo   domain.ObjectsRepository
+	mpRepo    domain.MultipartRepository
+	auditRepo domain.AuditLogRepository
+	s3        domain.StorageClient
+	log       *zap.Logger
 }
 
 // Note: We need to extend Repository interfaces in service package to include ListExpired methods.
@@ -26,13 +27,14 @@ type Reaper struct {
 // The Reaper likely interacts with Repos directly or via a specific interface.
 // Since repos are passed as dependencies to service, we can pass them to Reaper too.
 
-func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c domain.StorageClient, log *zap.Logger) *Reaper {
+func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, auditRepo domain.AuditLogRepository, s3c domain.StorageClient, log *zap.Logger) *Reaper {
 	return &Reaper{
-		cfg:     cfg,
-		objRepo: objRepo,
-		mpRepo:  mpRepo,
-		s3:      s3c,
-		log:     log,
+		cfg:       cfg,
+		objRepo:   objRepo,
+		mpRepo:    mpRepo,
+		auditRepo: auditRepo,
+		s3:        s3c,
+		log:       log,
 	}
 }
 
@@ -61,6 +63,26 @@ func (r *Reaper) Start(ctx context.Context) {
 func (r *Reaper) runCleanup(ctx context.Context) {
 	r.cleanupPending(ctx)
 	r.cleanupMultipart(ctx)
+	r.cleanupAuditLogs(ctx)
+}
+
+func (r *Reaper) cleanupAuditLogs(ctx context.Context) {
+	if r.cfg.AuditLogTTL <= 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-r.cfg.AuditLogTTL)
+	limit := 1000
+
+	count, err := r.auditRepo.Prune(ctx, cutoff, limit)
+	if err != nil {
+		r.log.Error("Failed to prune audit logs", zap.Error(err))
+		return
+	}
+
+	if count > 0 {
+		r.log.Info("Pruned expired audit logs", zap.Int64("count", count))
+	}
 }
 
 func (r *Reaper) cleanupPending(ctx context.Context) {
