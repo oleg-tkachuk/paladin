@@ -61,7 +61,47 @@ pre-commit:
         gitleaks protect --staged --redact --verbose=true
 
     # -----------------------------
-    # 3) Go formatting (staged-aware)
+    # 3) Prevent edit generated SQLC files
+    # -----------------------------
+#    forbid-generated-edit:
+#      tags: [go, sqlc]
+#      run: |
+#        set -euo pipefail
+#        files="$(git diff --cached --name-only --diff-filter=ACM || true)"
+#        echo "$files" | grep -qE '\.gen\.go$' && {
+#          echo "ERROR: Do not edit generated files manually."
+#          exit 1
+#        }
+
+    # -----------------------------
+    # 4) Go SQLC 
+    # -----------------------------
+
+    sqlc-generate:
+      tags: [go, sqlc]
+      run: |
+        set -euo pipefail
+        command -v sqlc >/dev/null 2>&1 || exit 0
+
+        # знайти всі sqlc.yaml / sqlc.json
+        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
+        [ -z "$configs" ] && exit 0
+
+        for cfg in $configs; do
+          dir="$(dirname "$cfg")"
+          echo "sqlc generate: $dir"
+          (cd "$dir" && sqlc generate)
+        done
+
+        # fail
+        if ! git diff --quiet; then
+          echo "ERROR: sqlc generated files are out of date. Run sqlc generate and commit."
+          git diff
+          exit 1
+        fi
+
+    # -----------------------------
+    # 5) Go formatting (staged-aware)
     # -----------------------------
     gofmt:
       tags: [go, fmt]
@@ -88,7 +128,7 @@ pre-commit:
         git add ${files}
 
     # -----------------------------
-    # 4) Fast static checks
+    # 7) Fast static checks
     # -----------------------------
     govet:
       tags: [go, lint]
@@ -196,6 +236,23 @@ pre-commit:
 pre-push:
   parallel: true
   commands:
+    # -----------------------------
+    # 0) Go SQLC verify
+    # -----------------------------
+    sqlc-verify:
+      tags: [go, sqlc]
+      run: |
+        set -euo pipefail
+        command -v sqlc >/dev/null 2>&1 || exit 0
+
+        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
+        [ -z "$configs" ] && exit 0
+
+        for cfg in $configs; do
+          dir="$(dirname "$cfg")"
+          echo "sqlc verify: $dir"
+          (cd "$dir" && sqlc verify)
+        done
     # -----------------------------
     # 1) Tests (production defaults)
     # -----------------------------
