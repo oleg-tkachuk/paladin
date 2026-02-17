@@ -59,6 +59,7 @@ services:
     build:
       context: ..
       dockerfile: ./deploy/Dockerfile
+      network: host
       args:
         APP_VERSION: ${APP_VERSION}
         GIT_COMMIT_HASH: ${GIT_COMMIT_HASH}

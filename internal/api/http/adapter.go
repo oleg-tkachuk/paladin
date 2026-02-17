@@ -2,33 +2,84 @@ package httpapi
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
+	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"github.com/gin-gonic/gin"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 type OpenAPIAdapter struct {
-	svc domain.ObjectsService
+	svc     domain.ObjectsService
+	hs      *service.HealthService
+	started *atomic.Bool
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(svc domain.ObjectsService) *OpenAPIAdapter {
-	return &OpenAPIAdapter{svc: svc}
+func NewOpenAPIAdapter(svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool) *OpenAPIAdapter {
+	return &OpenAPIAdapter{svc: svc, hs: hs, started: started}
 }
 
 // Ensure OpenAPIAdapter implements api.ServerInterface
 var _ api.ServerInterface = (*OpenAPIAdapter)(nil)
 
-func (s *OpenAPIAdapter) Healthz(c *gin.Context) {
-	c.Status(http.StatusOK)
+func (s *OpenAPIAdapter) HealthLivez(c *gin.Context) {
+	c.JSON(http.StatusOK, api.HealthResponse{Status: "alive"})
 }
 
-func (s *OpenAPIAdapter) Readyz(c *gin.Context) {
-	c.Status(http.StatusOK)
+func (s *OpenAPIAdapter) HealthReadyz(c *gin.Context) {
+	ready, status := s.hs.CheckReady(c.Request.Context())
+	healthResp := api.HealthResponse{
+		Dependencies: mapDependencyStatus(status),
+	}
+
+	if !ready {
+		healthResp.Status = "not_ready"
+		healthResp.Reason = ptr("dependency_unavailable")
+		c.JSON(http.StatusServiceUnavailable, healthResp)
+		return
+	}
+
+	healthResp.Status = "ready"
+	c.JSON(http.StatusOK, healthResp)
 }
+
+func (s *OpenAPIAdapter) HealthStartupz(c *gin.Context) {
+	if !s.started.Load() {
+		c.JSON(http.StatusServiceUnavailable, api.HealthResponse{
+			Status: "starting",
+			Reason: ptr("initialization_in_progress"),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, api.HealthResponse{Status: "started"})
+}
+
+func mapDetailedStatus(s service.DetailedDependencyStatus) *api.DetailedDependencyStatus {
+	var msg *string
+	if s.Message != "" {
+		msg = &s.Message
+	}
+	return &api.DetailedDependencyStatus{
+		Status:    api.DetailedDependencyStatusStatus(s.Status),
+		LatencyMs: s.LatencyMs,
+		Message:   msg,
+	}
+}
+
+func mapDependencyStatus(s service.DependencyStatus) *api.DependencyStatus {
+	return &api.DependencyStatus{
+		Postgresql: mapDetailedStatus(s.PostgreSQL),
+		Seaweedfs:  mapDetailedStatus(s.SeaweedFS),
+		Breakers:   &s.Breakers,
+		PoolStats:  &s.PoolStats,
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
 
 func (s *OpenAPIAdapter) Version(c *gin.Context) {
 	c.JSON(http.StatusOK, api.VersionResponse{

@@ -200,9 +200,9 @@ var _ = Describe("Router", func() {
 		})
 	})
 
-	Describe("GET /health/livez", func() {
+	Describe("GET /v1/health/livez", func() {
 		It("returns 200 alive", func() {
-			req, _ := http.NewRequest("GET", "/health/livez", nil)
+			req, _ := http.NewRequest("GET", "/v1/health/livez", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -211,14 +211,14 @@ var _ = Describe("Router", func() {
 		})
 	})
 
-	Describe("GET /health/startupz", func() {
+	Describe("GET /v1/health/startupz", func() {
 		Context("when not started", func() {
 			BeforeEach(func() {
 				started.Store(false)
 			})
 
 			It("returns 503 starting", func() {
-				req, _ := http.NewRequest("GET", "/health/startupz", nil)
+				req, _ := http.NewRequest("GET", "/v1/health/startupz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -229,7 +229,7 @@ var _ = Describe("Router", func() {
 
 		Context("when started", func() {
 			It("returns 200 started", func() {
-				req, _ := http.NewRequest("GET", "/health/startupz", nil)
+				req, _ := http.NewRequest("GET", "/v1/health/startupz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -239,7 +239,7 @@ var _ = Describe("Router", func() {
 		})
 	})
 
-	Describe("GET /health/readyz", func() {
+	Describe("GET /v1/health/readyz", func() {
 		Context("when dependencies are healthy", func() {
 			BeforeEach(func() {
 				mockPing.On("Ping", mock.Anything).Return(nil)
@@ -248,7 +248,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 200 ready", func() {
-				req, _ := http.NewRequest("GET", "/health/readyz", nil)
+				req, _ := http.NewRequest("GET", "/v1/health/readyz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -265,7 +265,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 503 not_ready", func() {
-				req, _ := http.NewRequest("GET", "/health/readyz", nil)
+				req, _ := http.NewRequest("GET", "/v1/health/readyz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -435,6 +435,103 @@ var _ = Describe("Router", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 			Expect(recorder.Body.String()).To(ContainSubstring("http://download"))
+		})
+	})
+	Describe("GET /v1/objects/:id/meta", func() {
+		It("returns object metadata", func() {
+			id := uuid.New()
+			mockSvc.On("GetMeta", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
+				ID: openapi_types.UUID(id), Status: domain.ObjectComplete,
+			}, nil)
+
+			req, _ := http.NewRequest("GET", "/v1/objects/"+id.String()+"/meta", nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring(id.String()))
+		})
+	})
+
+	Describe("PATCH /v1/objects/:id/meta", func() {
+		It("updates object metadata", func() {
+			id := uuid.New()
+			labels := map[string]string{"foo": "bar"}
+			mockSvc.On("PatchMeta", mock.Anything, mock.Anything, openapi_types.UUID(id), labels, (*string)(nil)).Return(&domain.Object{
+				ID: openapi_types.UUID(id), Labels: labels,
+			}, nil)
+
+			body := `{"labels": {"foo": "bar"}}`
+			req, _ := http.NewRequest("PATCH", "/v1/objects/"+id.String()+"/meta", strings.NewReader(body))
+			req.Header.Set("X-Tenant-ID", "default")
+			req.Header.Set("Content-Type", "application/json")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring("foo"))
+		})
+	})
+
+	Describe("POST /v1/multipart/:upload_id/parts/sign", func() {
+		It("signs a batch of parts", func() {
+			mockSvc.On("SignPartsBatch", mock.Anything, mock.Anything, "up123", []int32{1, 2}).
+				Return([]domain.SignPartResponse{
+					{PartNumber: 1, Upload: domain.Presigned{URL: "url1"}},
+					{PartNumber: 2, Upload: domain.Presigned{URL: "url2"}},
+				}, nil)
+
+			body := `{"part_numbers": [1, 2]}`
+			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/sign", strings.NewReader(body))
+			req.Header.Set("X-Tenant-ID", "default")
+			req.Header.Set("Content-Type", "application/json")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring("url1"))
+			Expect(recorder.Body.String()).To(ContainSubstring("url2"))
+		})
+	})
+
+	Describe("GET /v1/objects", func() {
+		It("lists objects", func() {
+			mockSvc.On("List", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", nil)
+
+			req, _ := http.NewRequest("GET", "/v1/objects?limit=10", nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring("items"))
+			Expect(recorder.Body.String()).To(ContainSubstring("next_cursor"))
+		})
+	})
+
+	Describe("HEAD /v1/objects/:id", func() {
+		It("returns 200 if object exists", func() {
+			id := uuid.New()
+			mockSvc.On("GetMeta", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{ID: openapi_types.UUID(id)}, nil)
+
+			req, _ := http.NewRequest("HEAD", "/v1/objects/"+id.String(), nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+		})
+	})
+
+	Describe("GET /v1/multipart/:upload_id", func() {
+		It("returns multipart details", func() {
+			mockSvc.On("GetMultipart", mock.Anything, mock.Anything, "up123").Return(&domain.Multipart{
+				UploadID: "up123", ObjectID: uuid.New(),
+			}, nil)
+
+			req, _ := http.NewRequest("GET", "/v1/multipart/up123", nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusOK))
+			Expect(recorder.Body.String()).To(ContainSubstring("up123"))
 		})
 	})
 	Describe("Error Handling", func() {
