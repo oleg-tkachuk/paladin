@@ -684,6 +684,94 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /admin/audit-logs:
+    get:
+      tags: [Ops]
+      summary: List audit logs
+      operationId: listAuditLogs
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: path_prefix
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: method
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: http_status
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: request_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: idempotency_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit logs list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAuditLogsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/audit-logs/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Ops]
+      summary: Get audit log by ID
+      operationId: getAuditLog
+      responses:
+        "200":
+          description: Audit log details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   headers:
     X-RateLimit-Limit:
@@ -1460,6 +1548,84 @@ components:
           format: uri
           description: Link to documentation for this error
           example: "https://docs.acme.io/errors/invalid_external_ref"
+
+    AuditLog:
+      type: object
+      required: [id, tenant_id, actor_type, method, path, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        request_id:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        actor_subject:
+          type: string
+          nullable: true
+        actor_type:
+          type: string
+          enum: [user, service, system]
+        client_ip:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        method:
+          type: string
+        path:
+          type: string
+        query_params:
+          type: object
+          additionalProperties: true
+        request_headers:
+          type: object
+          additionalProperties: true
+        request_body_sha256:
+          type: string
+          nullable: true
+        request_size_bytes:
+          type: integer
+          format: int64
+          nullable: true
+        http_status:
+          type: integer
+          nullable: true
+        response_code:
+          type: string
+          nullable: true
+        response_status:
+          type: string
+          nullable: true
+        response_time_ms:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ListAuditLogsResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        pagination:
+          type: object
+          required: [has_more]
+          properties:
+            next_cursor:
+              type: string
+              nullable: true
+            has_more:
+              type: boolean
 
     # Future Feature: Webhook Support
     # Documented for future implementation - not currently active

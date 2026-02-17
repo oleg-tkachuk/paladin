@@ -99,6 +99,9 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	if v := utils.GetEnvOrDefault("DB_DSN", ""); v != "" {
 		cfg.Datastores.Postgres.DSN = v
 	}
+	if v := utils.GetEnvOrDefault("DB_REAPER_DSN", ""); v != "" {
+		cfg.Datastores.Postgres.ReaperDSN = v
+	}
 
 	if v := utils.GetEnvOrDefault("S3_BUCKET", ""); v != "" {
 		cfg.Datastores.S3.Bucket = v
@@ -204,6 +207,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 		cfg.Timeouts.LongOperation,
 		cfg.Idempotency.TTL,
 	)
+	auditRepo := postgres.NewAuditLogRepo(db)
 	hs := service.NewHealthService(db, s3c, brk)
 
 	app := &App{
@@ -221,7 +225,7 @@ func New(version, commit, buildTime, configPath string) (*App, error) {
 	// Wait, I can just use paladin/internal/middleware if it's already imported?
 	// It is NOT imported in app.go yet.
 
-	httpSrv := httpapi.NewServer(&cfg, l, svc, version, commit, buildTime, hs, &app.started)
+	httpSrv := httpapi.NewServer(&cfg, l, svc, auditRepo, version, commit, buildTime, hs, &app.started)
 
 	// HTTP server
 	app.httpSrv = &http.Server{
