@@ -58,7 +58,7 @@ pre-commit:
         set -euo pipefail
         command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not found"; exit 1; }
         # Staged-only scan; fast and effective
-        gitleaks protect --staged --redact --verbose=false
+        gitleaks protect --staged --redact --verbose=true
 
     # -----------------------------
     # 3) Go formatting (staged-aware)
@@ -240,7 +240,7 @@ pre-push:
         set -euo pipefail
         command -v gitleaks >/dev/null 2>&1 || exit 0
         # Full scan before push (stronger than staged)
-        gitleaks detect --redact --verbose=false
+        gitleaks detect --redact --verbose=true
 
 commit-msg:
   commands:
