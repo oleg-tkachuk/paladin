@@ -53,6 +53,11 @@ var _ = Describe("API Integration Tests", func() {
 				CleanupTTL:        10 * time.Minute,
 				CleanupInterval:   5 * time.Minute,
 			},
+			Datastores: config.Datastores{
+				Postgres: config.Postgres{
+					DSN: "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable",
+				},
+			},
 		}
 		mockObjSvc = &MockObjectsService{}
 
@@ -124,6 +129,20 @@ var _ = Describe("API Integration Tests", func() {
 			Expect(cfgResp.App).NotTo(BeNil())
 			Expect(cfgResp.App.Name).NotTo(BeNil())
 			Expect(*cfgResp.App.Name).To(Equal("paladin"))
+
+			// Verify Postgres details are parsed from DSN
+			Expect(cfgResp.Datastores).NotTo(BeNil())
+			Expect(cfgResp.Datastores.Postgres).NotTo(BeNil())
+			Expect(cfgResp.Datastores.Postgres.Host).NotTo(BeNil())
+			Expect(*cfgResp.Datastores.Postgres.Host).To(Equal("localhost"))
+			Expect(cfgResp.Datastores.Postgres.Port).NotTo(BeNil())
+			Expect(*cfgResp.Datastores.Postgres.Port).To(Equal("5432"))
+			Expect(cfgResp.Datastores.Postgres.User).NotTo(BeNil())
+			Expect(*cfgResp.Datastores.Postgres.User).To(Equal("testuser"))
+			Expect(cfgResp.Datastores.Postgres.Dbname).NotTo(BeNil())
+			Expect(*cfgResp.Datastores.Postgres.Dbname).To(Equal("testdb"))
+			Expect(cfgResp.Datastores.Postgres.SslMode).NotTo(BeNil())
+			Expect(*cfgResp.Datastores.Postgres.SslMode).To(Equal("disable"))
 		})
 	})
 

@@ -864,6 +864,11 @@ components:
             postgres:
               type: object
               properties:
+                host: { type: string }
+                port: { type: string }
+                user: { type: string }
+                dbname: { type: string }
+                ssl_mode: { type: string }
                 pool:
                   type: object
                   properties:

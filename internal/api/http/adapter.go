@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"sync/atomic"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/generated/api"
+	api "github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -47,7 +49,18 @@ func (s *OpenAPIAdapter) HealthLivez(c *gin.Context) {
 	c.JSON(http.StatusOK, api.HealthResponse{Status: "alive"})
 }
 
+// HealthReadyz implements the generated ServerInterface.
 func (s *OpenAPIAdapter) HealthReadyz(c *gin.Context) {
+	s.getHealthReadyz(c)
+}
+
+// Readyz implements the generated ServerInterface (compatibility).
+func (s *OpenAPIAdapter) Readyz(c *gin.Context) {
+	s.getHealthReadyz(c)
+}
+
+// getHealthReadyz contains the common logic for HealthReadyz and Readyz
+func (s *OpenAPIAdapter) getHealthReadyz(c *gin.Context) {
 	ready, status := s.hs.CheckReady(c.Request.Context())
 	healthResp := api.HealthResponse{
 		Dependencies: mapDependencyStatus(status),
@@ -456,6 +469,27 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber in
 }
 
 func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
+	// Parse Postgres DSN to extract connectivity details
+	pgConfig, err := pgx.ParseConfig(s.cfg.Datastores.Postgres.DSN)
+	var pgHost, pgPort, pgUser, pgDB, pgSSLMode string
+	if err == nil {
+		pgHost = pgConfig.Host
+		pgPort = fmt.Sprintf("%d", pgConfig.Port)
+		pgUser = pgConfig.User
+		pgDB = pgConfig.Database
+		// Basic extraction for SSL Mode (it might be in RuntimeParams)
+		if val, ok := pgConfig.RuntimeParams["sslmode"]; ok {
+			pgSSLMode = val
+		} else if pgConfig.TLSConfig == nil {
+			pgSSLMode = "disable"
+		} else {
+			pgSSLMode = "enable" // Simplified, actual mode (require, verify-full) lost in tls.Config
+		}
+	} else {
+		// Fallback for logging or partial info if needed, but for now just leave empty
+		// or log error
+	}
+
 	// Redact sensitive fields
 	resp := api.ConfigResponse{
 		App: &struct {
@@ -494,16 +528,21 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 		},
 		Datastores: &struct {
 			Postgres *struct {
-				Pool *struct {
+				Dbname *string `json:"dbname,omitempty"`
+				Host   *string `json:"host,omitempty"`
+				Pool   *struct {
 					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
 					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
 					MaxConns        *int    `json:"max_conns,omitempty"`
 					MinConns        *int    `json:"min_conns,omitempty"`
 				} `json:"pool,omitempty"`
+				Port     *string `json:"port,omitempty"`
+				SslMode  *string `json:"ssl_mode,omitempty"`
 				Timeouts *struct {
 					Connect   *string `json:"connect,omitempty"`
 					Statement *string `json:"statement,omitempty"`
 				} `json:"timeouts,omitempty"`
+				User *string `json:"user,omitempty"`
 			} `json:"postgres,omitempty"`
 			S3 *struct {
 				Bucket         *string `json:"bucket,omitempty"`
@@ -517,17 +556,27 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 			} `json:"s3,omitempty"`
 		}{
 			Postgres: &struct {
-				Pool *struct {
+				Dbname *string `json:"dbname,omitempty"`
+				Host   *string `json:"host,omitempty"`
+				Pool   *struct {
 					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
 					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
 					MaxConns        *int    `json:"max_conns,omitempty"`
 					MinConns        *int    `json:"min_conns,omitempty"`
 				} `json:"pool,omitempty"`
+				Port     *string `json:"port,omitempty"`
+				SslMode  *string `json:"ssl_mode,omitempty"`
 				Timeouts *struct {
 					Connect   *string `json:"connect,omitempty"`
 					Statement *string `json:"statement,omitempty"`
 				} `json:"timeouts,omitempty"`
+				User *string `json:"user,omitempty"`
 			}{
+				Dbname:  ptr(pgDB),
+				Host:    ptr(pgHost),
+				Port:    ptr(pgPort),
+				SslMode: ptr(pgSSLMode),
+				User:    ptr(pgUser),
 				Pool: &struct {
 					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
 					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
