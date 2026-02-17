@@ -94,7 +94,15 @@ pre-commit:
       tags: [go, lint]
       run: |
         set -euo pipefail
-        go vet ./...
+
+        # Find all Go modules (go.mod) excluding vendor
+        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
+        [ -z "$mods" ] && exit 0
+
+        for m in $mods; do
+          echo "go vet: $m"
+          (cd "$m" && go vet ./...)
+        done
 
 #    golangci:
 #      tags: [go, lint]
@@ -195,19 +203,33 @@ pre-push:
       tags: [go, test]
       run: |
         set -euo pipefail
-        # Tune as needed: -race can be expensive on large repos
-        go test ./... -count=1
 
-    # Optional: race (enable if you want strictness)
+        # Find all Go modules (go.mod) excluding vendor
+        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
+        [ -z "$mods" ] && exit 0
+
+        for m in $mods; do
+          echo "go test: $m"
+          (cd "$m" && go test ./... -count=1)
+        done
+
     gotest-race:
       tags: [go, test]
       run: |
         set -euo pipefail
-        # Skip on CI or slow machines by setting env:
-        # LEFTHOOK_SKIP_RACE=1
-        [ "${LEFTHOOK_SKIP_RACE:-0}" = "1" ] && exit 0
-        go test ./... -race -count=1
 
+        # Skip on CI or slow machines by setting env:
+        LEFTHOOK_SKIP_RACE=1
+        [ "${LEFTHOOK_SKIP_RACE:-0}" = "1" ] && exit 0
+
+        # Find all Go modules (go.mod) excluding vendor
+        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
+        [ -z "$mods" ] && exit 0
+
+        for m in $mods; do
+          echo "go test -race: $m"
+          (cd "$m" && go test ./... -race -count=1)
+        done
     # -----------------------------
     # 2) Dependency hygiene
     # -----------------------------
