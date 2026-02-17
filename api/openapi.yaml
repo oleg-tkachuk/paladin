@@ -662,6 +662,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/VersionResponse"
 
+  /admin/config:
+    get:
+      tags: [Ops]
+      summary: Get runtime configuration (redacted)
+      description: |
+        Returns the current effective runtime configuration.
+        Sensitive values (passwords, keys, tokens) are redacted.
+      operationId: getAdminConfig
+      responses:
+        "200":
+          description: Runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   headers:
     X-RateLimit-Limit:
@@ -808,11 +830,123 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: State of circuit breakers
         pool_stats:
           type: object
-          additionalProperties: true
+          additionalProperties:
+            type: object
           description: Database connection pool statistics
+
+    ConfigResponse:
+      type: object
+      description: Redacted runtime configuration
+      properties:
+        app:
+          type: object
+          properties:
+            name: { type: string }
+            env: { type: string }
+        server:
+          type: object
+          properties:
+            mode: { type: string }
+            name: { type: string }
+            http:
+              type: object
+              properties:
+                addr: { type: string }
+                read_timeout: { type: string }
+                write_timeout: { type: string }
+                request_id_header: { type: string }
+                cors_allowed_origins: { type: array, items: { type: string } }
+        datastores:
+          type: object
+          properties:
+            postgres:
+              type: object
+              properties:
+                host: { type: string }
+                port: { type: string }
+                user: { type: string }
+                dbname: { type: string }
+                ssl_mode: { type: string }
+                pool:
+                  type: object
+                  properties:
+                    max_conns: { type: integer }
+                    min_conns: { type: integer }
+                    max_conn_lifetime: { type: string }
+                    max_conn_idle_time: { type: string }
+                timeouts:
+                  type: object
+                  properties:
+                    connect: { type: string }
+                    statement: { type: string }
+            s3:
+              type: object
+              properties:
+                bucket: { type: string }
+                region: { type: string }
+                endpoint: { type: string }
+                public_endpoint: { type: string }
+                force_path_style: { type: boolean }
+                presign_ttl: { type: string }
+                part_size: { type: string }
+                sse_type: { type: string }
+                # Secrets redacted: access_key, secret_key, sse_key_id
+        policy:
+          type: object
+          properties:
+            max_object_size: { type: string }
+            max_multipart_size: { type: string }
+            min_part_size: { type: string }
+            max_part_size: { type: string }
+            presign_put_ttl: { type: string }
+            presign_get_ttl: { type: string }
+            allowed_content_types: { type: array, items: { type: string } }
+        security:
+          type: object
+          properties:
+            trust_tenant_id_from_request: { type: boolean }
+            reject_tenant_mismatch: { type: boolean }
+            enable_rls: { type: boolean }
+        housekeeping:
+          type: object
+          properties:
+            enable_reaper: { type: boolean }
+            pending_ttl: { type: string }
+            multipart_ttl: { type: string }
+            gc_interval: { type: string }
+        rate_limit:
+          type: object
+          properties:
+            requests_per_second: { type: number }
+            burst: { type: integer }
+            max_tenants: { type: integer }
+        cache:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            max_size: { type: integer }
+            ttl: { type: string }
+        timeouts:
+          type: object
+          properties:
+            fast_operation: { type: string }
+            default_operation: { type: string }
+            s3_operation: { type: string }
+            long_operation: { type: string }
+        idempotency:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            ttl: { type: string }
+        otel:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            endpoint: { type: string }
+            protocol: { type: string }
+            insecure: { type: boolean }
 
     Labels:
       type: object

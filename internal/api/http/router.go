@@ -36,15 +36,6 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, v
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	r.GET("/version", func(c *gin.Context) {
-		c.JSON(http.StatusOK, VersionResponse{
-			Service:   "paladin",
-			Version:   version,
-			Commit:    commit,
-			BuildTime: buildTime,
-		})
-	})
-
 	r.GET("/health/livez", func(c *gin.Context) {
 		if cfg.Server.LogProbes {
 			log.Debug("Liveness check called")
@@ -99,7 +90,8 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, v
 	v1.Use(middleware.RateLimitHeadersMiddleware())
 
 	// Register generated handlers
-	adapter := NewOpenAPIAdapter(svc, hs, started)
+	// Register generated handlers
+	adapter := NewOpenAPIAdapter(cfg, svc, hs, started, version, commit, buildTime)
 	api.RegisterHandlers(v1, adapter)
 
 	return &Server{engine: r}

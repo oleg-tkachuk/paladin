@@ -183,20 +183,21 @@ var _ = Describe("Router", func() {
 		recorder = httptest.NewRecorder()
 	})
 
-	Describe("GET /version", func() {
+	Describe("GET /v1/version", func() {
 		It("returns version information", func() {
-			req, _ := http.NewRequest("GET", "/version", nil)
+			req, _ := http.NewRequest("GET", "/v1/version", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 
 			server.Handler().ServeHTTP(recorder, req)
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 
-			var resp map[string]string
+			var resp map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp["version"]).To(Equal("1.0.0"))
-			Expect(resp["commit"]).To(Equal("deadbeef"))
+			Expect(resp["git_sha"]).To(Equal("deadbeef"))
+			Expect(resp["build_time"]).To(Equal("2023-01-01"))
 		})
 	})
 
