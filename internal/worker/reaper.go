@@ -49,10 +49,13 @@ func (r *Reaper) Start(ctx context.Context) {
 	ticker := time.NewTicker(r.cfg.GCInterval)
 	defer ticker.Stop()
 
+	// Run once on start
+	r.runCleanup(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
-			r.log.Info("Reaper stopping")
+			r.log.Info("Reaper stopping", zap.Error(ctx.Err()))
 			return
 		case <-ticker.C:
 			r.runCleanup(ctx)
