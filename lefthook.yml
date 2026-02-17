@@ -289,7 +289,7 @@ commit-msg:
         fi
 
         # 4) Conventional Commits rule
-        cc_re='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?(!)?: .+'
+        cc_re='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security)(\([a-z0-9._-]+\))?(!)?: .+'
 
         if ! echo "$first_line" | grep -Eq "$cc_re"; then
           echo "ERROR: invalid commit message format (Conventional Commits required)."
