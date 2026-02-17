@@ -13,14 +13,24 @@ import (
 )
 
 type OpenAPIAdapter struct {
-	svc     domain.ObjectsService
-	hs      *service.HealthService
-	started *atomic.Bool
+	svc       domain.ObjectsService
+	hs        *service.HealthService
+	started   *atomic.Bool
+	version   string
+	commit    string
+	buildTime string
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool) *OpenAPIAdapter {
-	return &OpenAPIAdapter{svc: svc, hs: hs, started: started}
+func NewOpenAPIAdapter(svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+	return &OpenAPIAdapter{
+		svc:       svc,
+		hs:        hs,
+		started:   started,
+		version:   version,
+		commit:    commit,
+		buildTime: buildTime,
+	}
 }
 
 // Ensure OpenAPIAdapter implements api.ServerInterface
@@ -83,8 +93,10 @@ func ptr[T any](v T) *T { return &v }
 
 func (s *OpenAPIAdapter) Version(c *gin.Context) {
 	c.JSON(http.StatusOK, api.VersionResponse{
-		Service: "paladin",
-		Version: "v1.1.0",
+		Service:   "paladin",
+		Version:   s.version,
+		GitSha:    &s.commit,
+		BuildTime: &s.buildTime,
 	})
 }
 

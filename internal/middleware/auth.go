@@ -25,6 +25,14 @@ func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 			}
 		}
 
+		// Skip tenant enforcement for health and version endpoints
+		path := c.Request.URL.Path
+		if path == "/health/livez" || path == "/health/readyz" || path == "/health/startupz" || path == "/version" ||
+			path == "/v1/health/livez" || path == "/v1/health/readyz" || path == "/v1/health/startupz" || path == "/v1/version" {
+			c.Next()
+			return
+		}
+
 		if derivedTenant == "" {
 			c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 				errors.Unauthorized("missing tenant context", nil)))
