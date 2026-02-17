@@ -99,7 +99,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, v
 	v1.Use(middleware.RateLimitHeadersMiddleware())
 
 	// Register generated handlers
-	adapter := NewOpenAPIAdapter(svc)
+	adapter := NewOpenAPIAdapter(svc, hs, started)
 	api.RegisterHandlers(v1, adapter)
 
 	return &Server{engine: r}

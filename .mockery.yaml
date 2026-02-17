@@ -14,3 +14,8 @@ packages:
       all: true
       dir: internal/domain/mocks
       filename: "{{.InterfaceName | snakecase}}.go"
+  github.com/oleg-tkachuk/paladin/internal/store/postgres:
+    config:
+      all: true
+      dir: internal/store/postgres/mocks
+      filename: "{{.InterfaceName | snakecase}}.go"

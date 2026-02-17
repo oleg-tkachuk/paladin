@@ -14,13 +14,13 @@ import (
 
 // CachedObjectsRepo wraps ObjectsRepo with an LRU cache
 type CachedObjectsRepo struct {
-	repo  *ObjectsRepo
+	repo  domain.ObjectsRepository
 	cache *cache.Cache[string, *domain.Object]
 	ttl   time.Duration
 }
 
 // NewCachedObjectsRepo creates a cached repository wrapper
-func NewCachedObjectsRepo(repo *ObjectsRepo, cacheSize int, ttl time.Duration) *CachedObjectsRepo {
+func NewCachedObjectsRepo(repo domain.ObjectsRepository, cacheSize int, ttl time.Duration) *CachedObjectsRepo {
 	return &CachedObjectsRepo{
 		repo:  repo,
 		cache: cache.NewCache[string, *domain.Object](cacheSize, ttl),

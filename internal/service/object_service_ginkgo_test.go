@@ -2,10 +2,11 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/service"
@@ -191,11 +192,48 @@ func (m *MockBreakerFactory) CheckHealth() map[string]string {
 	return args.Get(0).(map[string]string)
 }
 
+type MockIdempotencyRepo struct {
+	mock.Mock
+}
+
+func (m *MockIdempotencyRepo) Get(ctx context.Context, tenantID, key string) (*domain.IdempotencyRecord, error) {
+	args := m.Called(ctx, tenantID, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.IdempotencyRecord), args.Error(1)
+}
+
+func (m *MockIdempotencyRepo) Save(ctx context.Context, rec domain.IdempotencyRecord) error {
+	args := m.Called(ctx, rec)
+	return args.Error(0)
+}
+
+func (m *MockIdempotencyRepo) Delete(ctx context.Context, tenantID, key string) error {
+	args := m.Called(ctx, tenantID, key)
+	return args.Error(0)
+}
+
+type MockPolicy struct {
+	mock.Mock
+}
+
+func (m *MockPolicy) Authorize(ctx context.Context, tenantID string, action domain.Action) error {
+	args := m.Called(ctx, tenantID, action)
+	return args.Error(0)
+}
+
+func (m *MockPolicy) Validate(contentType string, sizeBytes int64) error {
+	args := m.Called(contentType, sizeBytes)
+	return args.Error(0)
+}
+
 var _ = Describe("ObjectsService", func() {
 	var (
 		mockRepo   *MockObjectsRepo
 		mockMPRepo *MockMultipartRepo
 		mockS3     *MockS3Client
+		mockPolicy *MockPolicy
 		svc        domain.ObjectsService
 		ctx        context.Context
 	)
@@ -204,15 +242,13 @@ var _ = Describe("ObjectsService", func() {
 		mockRepo = new(MockObjectsRepo)
 		mockMPRepo = new(MockMultipartRepo)
 		mockS3 = new(MockS3Client)
-		policy := service.NewPolicy(config.Policy{
-			MaxObjectSizeBytes:  100 * 1024 * 1024,
-			AllowedContentTypes: []string{"application/json"},
-		})
+		mockPolicy = new(MockPolicy)
+
 		svc = service.NewObjectsService(
 			mockRepo,
 			mockMPRepo,
 			mockS3,
-			policy,
+			mockPolicy,
 			nil,            // idempotency repo
 			5*1024*1024,    // part size
 			5*time.Second,  // fast timeout
@@ -226,6 +262,8 @@ var _ = Describe("ObjectsService", func() {
 		// Default expectations for common calls
 		mockS3.On("PresignTTLDuration").Return(15 * time.Minute).Maybe()
 		mockS3.On("BucketName").Return("test-bucket").Maybe()
+		mockPolicy.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+		mockPolicy.On("Validate", mock.Anything, mock.Anything).Return(nil).Maybe()
 	})
 
 	Describe("CreateSingle", func() {
@@ -252,13 +290,65 @@ var _ = Describe("ObjectsService", func() {
 
 		It("should fail if policy validation fails", func() {
 			tenantID := "test-tenant"
-			contentType := "text/plain" // Not allowed
+			contentType := "text/plain"
 			sizeBytes := int64(100)
+
+			// Overwrite the default Validate expectation
+			mockPolicy.ExpectedCalls = nil // Reset expectations for this specific test
+			mockPolicy.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			mockPolicy.On("Validate", contentType, sizeBytes).Return(fmt.Errorf("content_type not allowed"))
 
 			_, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("content_type not allowed"))
+		})
+
+		It("should return cached response for same idempotency key", func() {
+			tenantID := "test-tenant"
+			key := "idem-key"
+			res := domain.CreateObjectResponse{ID: uuid.New(), Key: "cached"}
+			body, _ := json.Marshal(res)
+
+			mockIdem := new(MockIdempotencyRepo)
+			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
+
+			// Re-create service with mockIdem and mockPolicy
+			svcFixed := service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, 5*1024, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Hour)
+
+			out, err := svcFixed.CreateSingle(ctx, tenantID, "image/png", 100, nil, nil, 0, &key)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out.ID).To(Equal(res.ID))
+			Expect(out.Key).To(Equal("cached"))
+		})
+
+		It("should re-presign if object with external_ref exists and parameters match", func() {
+			tenantID := "test-tenant"
+			extRef := "ref123"
+			existing := &domain.Object{ID: uuid.New(), ObjectKey: "key123", ContentType: "image/png", SizeBytes: 100}
+
+			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
+			mockS3.On("PresignPutObject", mock.Anything, "key123", "image/png", int64(100), mock.Anything).Return(domain.Presigned{URL: "http://renewed"}, nil)
+
+			out, err := svc.CreateSingle(ctx, tenantID, "image/png", 100, nil, &extRef, 0, nil)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out.ID).To(Equal(existing.ID))
+			Expect(out.Upload.URL).To(Equal("http://renewed"))
+		})
+
+		It("should fail if external_ref exists with different parameters", func() {
+			tenantID := "test-tenant"
+			extRef := "ref123"
+			existing := &domain.Object{ID: uuid.New(), ObjectKey: "key123", ContentType: "image/png", SizeBytes: 100}
+
+			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
+
+			_, err := svc.CreateSingle(ctx, tenantID, "image/png", 200, nil, &extRef, 0, nil) // Different size
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("conflict"))
 		})
 	})
 

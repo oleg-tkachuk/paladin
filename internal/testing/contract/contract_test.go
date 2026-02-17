@@ -55,9 +55,9 @@ func TestContract(t *testing.T) {
 
 	router.Use(middleware.OAPIValidationMiddleware(spec))
 
-	// Match spec route /v1/healthz
-	router.GET("/v1/healthz", func(c *gin.Context) {
-		c.Status(http.StatusOK)
+	// Match spec route /v1/health/livez
+	router.GET("/v1/health/livez", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "alive"})
 	})
 
 	router.GET("/v1/objects", func(c *gin.Context) {
@@ -73,10 +73,16 @@ func TestContract(t *testing.T) {
 
 	router.POST("/v1/objects", func(c *gin.Context) {
 		// Mock handler for POST
-		c.Header("Location", "http://example.com/v1/objects/123")
 		c.JSON(http.StatusCreated, gin.H{
-			"id":         "123",
-			"signed_url": "http://example.com/upload",
+			"object_id":  "550e8400-e29b-41d4-a716-446655440000",
+			"object_key": "default/550e8400-e29b-41d4-a716-446655440000",
+			"bucket":     "objects",
+			"status":     "pending",
+			"upload": gin.H{
+				"url":        "http://example.com/upload",
+				"method":     "PUT",
+				"expires_at": "2026-02-17T11:14:50Z",
+			},
 		})
 	})
 
@@ -109,8 +115,8 @@ func TestContract(t *testing.T) {
 		assert.NoError(t, err, "response validation failed")
 	}
 
-	t.Run("GET /v1/healthz", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/v1/healthz", nil)
+	t.Run("GET /v1/health/livez", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/health/livez", nil)
 		w := httptest.NewRecorder()
 
 		router.ServeHTTP(w, req)

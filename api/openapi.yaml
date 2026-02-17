@@ -594,27 +594,59 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /healthz:
+  /health/livez:
     get:
       tags: [Ops]
       summary: Liveness probe
-      operationId: healthz
+      operationId: healthLivez
       security: []
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
 
-  /readyz:
+  /health/readyz:
     get:
       tags: [Ops]
       summary: Readiness probe
-      operationId: readyz
+      operationId: healthReadyz
       security: []
       responses:
         "200":
           description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
         "503":
           description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /health/startupz:
+    get:
+      tags: [Ops]
+      summary: Startup probe
+      operationId: healthStartupz
+      security: []
+      responses:
+        "200":
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Starting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
 
   /version:
     get:
@@ -735,6 +767,52 @@ components:
     ObjectStatus:
       type: string
       enum: [pending, uploading, uploaded, complete, aborted, deleted, error]
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: "ready"
+        reason:
+          type: string
+          example: "dependency_unavailable"
+        dependencies:
+          $ref: "#/components/schemas/DependencyStatus"
+
+    DetailedDependencyStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+          example: "ok"
+        latency_ms:
+          type: integer
+          format: int64
+          example: 15
+        message:
+          type: string
+          example: "connection timeout"
+
+    DependencyStatus:
+      type: object
+      properties:
+        postgresql:
+          $ref: "#/components/schemas/DetailedDependencyStatus"
+        seaweedfs:
+          $ref: "#/components/schemas/DetailedDependencyStatus"
+        breakers:
+          type: object
+          additionalProperties:
+            type: string
+          description: State of circuit breakers
+        pool_stats:
+          type: object
+          additionalProperties: true
+          description: Database connection pool statistics
 
     Labels:
       type: object
