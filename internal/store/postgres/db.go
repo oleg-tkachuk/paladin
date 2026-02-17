@@ -3,9 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -43,28 +40,6 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	poolCfg.MaxConnIdleTime = cfg.Pool.MaxConnIdleTime
 	poolCfg.HealthCheckPeriod = cfg.HealthcheckPeriod
 	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
-
-	// Allow overrides via env
-	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			poolCfg.MaxConns = int32(i)
-		}
-	}
-	if v := os.Getenv("DB_MIN_CONNS"); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			poolCfg.MinConns = int32(i)
-		}
-	}
-	if v := os.Getenv("DB_MAX_CONN_LIFETIME"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			poolCfg.MaxConnLifetime = d
-		}
-	}
-	if v := os.Getenv("DB_MAX_CONN_IDLE_TIME"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			poolCfg.MaxConnIdleTime = d
-		}
-	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
