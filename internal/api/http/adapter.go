@@ -18,6 +18,7 @@ import (
 type OpenAPIAdapter struct {
 	cfg       *config.Config
 	svc       domain.ObjectsService
+	auditRepo domain.AuditLogRepository
 	hs        *service.HealthService
 	started   *atomic.Bool
 	version   string
@@ -26,10 +27,11 @@ type OpenAPIAdapter struct {
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
 	return &OpenAPIAdapter{
 		cfg:       cfg,
 		svc:       svc,
+		auditRepo: auditRepo,
 		hs:        hs,
 		started:   started,
 		version:   version,
@@ -723,6 +725,88 @@ func mapLabels(l *api.Labels) map[string]string {
 		return nil
 	}
 	return (map[string]string)(*l)
+}
+
+func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsParams) {
+	limit := 50
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+
+	filter := domain.ListAuditLogsFilter{
+		From:           params.From,
+		To:             params.To,
+		Path:           params.Path,
+		PathPrefix:     params.PathPrefix,
+		Method:         params.Method,
+		HTTPStatus:     params.HttpStatus,
+		RequestID:      params.RequestId,
+		IdempotencyKey: params.IdempotencyKey,
+	}
+
+	logs, next, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	out := make([]api.AuditLog, len(logs))
+	for i, l := range logs {
+		out[i] = mapAuditLog(l)
+	}
+
+	resp := api.ListAuditLogsResponse{
+		Items: out,
+	}
+	resp.Pagination.HasMore = next != ""
+	if next != "" {
+		resp.Pagination.NextCursor = &next
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *OpenAPIAdapter) GetAuditLog(c *gin.Context, id openapi_types.UUID) {
+	l, err := s.auditRepo.Get(c.Request.Context(), tenantID(c), id)
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if l == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	c.JSON(http.StatusOK, mapAuditLog(*l))
+}
+
+func mapAuditLog(l domain.AuditLog) api.AuditLog {
+	actorType := api.AuditLogActorType(l.ActorType)
+	return api.AuditLog{
+		Id:                l.ID,
+		TenantId:          l.TenantID,
+		RequestId:         l.RequestID,
+		IdempotencyKey:    l.IdempotencyKey,
+		ActorSubject:      l.ActorSubject,
+		ActorType:         actorType,
+		ClientIp:          l.ClientIP,
+		UserAgent:         l.UserAgent,
+		Method:            l.Method,
+		Path:              l.Path,
+		QueryParams:       &l.QueryParams,
+		RequestHeaders:    &l.RequestHeaders,
+		RequestBodySha256: l.RequestBodySHA256,
+		RequestSizeBytes:  l.RequestSizeBytes,
+		HttpStatus:        l.HTTPStatus,
+		ResponseCode:      l.ResponseCode,
+		ResponseStatus:    l.ResponseStatus,
+		ResponseTimeMs:    l.ResponseTimeMS,
+		CreatedAt:         l.CreatedAt,
+	}
 }
 
 func mapObjectCommon(rec *domain.Object) api.ObjectCommon {

@@ -109,6 +109,31 @@ func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string
 	return args.Error(0)
 }
 
+// MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
+type MockAuditLogRepository struct {
+	mock.Mock
+}
+
+func (m *MockAuditLogRepository) Create(ctx context.Context, log domain.AuditLog) error {
+	args := m.Called(ctx, log)
+	return args.Error(0)
+}
+
+func (m *MockAuditLogRepository) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.AuditLog, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Get(0).(*domain.AuditLog), args.Error(1)
+}
+
+func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error) {
+	args := m.Called(ctx, tenantID, filter, limit, cursor)
+	return args.Get(0).([]domain.AuditLog), args.String(1), args.Error(2)
+}
+
+func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	args := m.Called(ctx, cutoff, limit)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 // MockPinger
 type MockPinger struct {
 	mock.Mock
@@ -146,6 +171,7 @@ var _ = Describe("Router", func() {
 		mockPing    *MockPinger
 		mockS3      *MockS3Health
 		mockBreaker *MockBreakerFactory
+		mockAudit   *MockAuditLogRepository
 		hs          *service.HealthService
 		started     *atomic.Bool
 		server      *httpapi.Server
@@ -157,6 +183,8 @@ var _ = Describe("Router", func() {
 		mockPing = new(MockPinger)
 		mockS3 = new(MockS3Health)
 		mockBreaker = new(MockBreakerFactory)
+		mockAudit = new(MockAuditLogRepository)
+		mockAudit.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
 		hs = service.NewHealthService(mockPing, mockS3, mockBreaker)
 		started = &atomic.Bool{}
 		started.Store(true)
@@ -179,7 +207,7 @@ var _ = Describe("Router", func() {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		server = httpapi.NewServer(cfg, logger, mockSvc, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
 		recorder = httptest.NewRecorder()
 	})
 

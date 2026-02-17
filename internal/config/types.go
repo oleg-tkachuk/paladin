@@ -93,6 +93,7 @@ type Datastores struct {
 
 type Postgres struct {
 	DSN               string           `yaml:"dsn" json:"dsn"`
+	ReaperDSN         string           `yaml:"reaper_dsn" json:"reaper_dsn"`
 	Pool              PostgresPool     `yaml:"pool" json:"pool"`
 	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
 	HealthcheckPeriod time.Duration    `yaml:"healthcheck_period" json:"healthcheck_period"`

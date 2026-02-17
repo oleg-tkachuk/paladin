@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -11,7 +12,7 @@ import (
 )
 
 // SetupHTTPStack configures the canonical middleware stack for Gin
-func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
+func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRepo domain.AuditLogRepository) {
 
 	// 1. Recovery (Panic -> 500)
 	r.Use(gin.Recovery())
@@ -45,6 +46,9 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger) {
 
 	// 7. Logger (Structured Zap)
 	r.Use(RequestLogger(log, cfg.Server.LogProbes))
+
+	// 8. Audit Logging (captured after logging enrichment)
+	r.Use(AuditLogMiddleware(auditRepo, log))
 
 	// 8. Legacy: Removed, relies on trusted headers (X-Tenant-ID) established by Linkerd mTLS mesh.
 	// r.Use(Auth(authorizer, cfg.Security, log))
