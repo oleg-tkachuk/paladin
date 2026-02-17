@@ -30,6 +30,7 @@ var _ = Describe("API Integration Tests", func() {
 		server     *httpapi.Server
 		ts         *httptest.Server
 		client     *http.Client
+		mockAudit  *MockAuditLogRepository
 	)
 
 	BeforeEach(func() {
@@ -60,6 +61,7 @@ var _ = Describe("API Integration Tests", func() {
 			},
 		}
 		mockObjSvc = &MockObjectsService{}
+		mockAudit = &MockAuditLogRepository{}
 
 		mockPinger := new(MockPinger)
 		mockPinger.On("Ping", mock.Anything).Return(nil)
@@ -70,10 +72,11 @@ var _ = Describe("API Integration Tests", func() {
 		// Mock dependencies for HealthService (or pass nil if safe/ignored)
 		hs = service.NewHealthService(mockPinger, mockS3Health, breaker.NewFactory(*cfg))
 
+		mockAudit.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
+
 		started := atomic.Bool{}
 		started.Store(true)
-
-		server = httpapi.NewServer(cfg, zap.NewNop(), mockObjSvc, "v1.0.0", "HEAD", "now", hs, &started)
+		server = httpapi.NewServer(cfg, zap.NewNop(), mockObjSvc, mockAudit, "v1.0.0", "HEAD", "now", hs, &started)
 		ts = httptest.NewServer(server.Handler())
 		client = ts.Client()
 	})

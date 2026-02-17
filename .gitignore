@@ -36,4 +36,8 @@ go.work.sum
 deploy/env/service.env
 
 # Binary files
+# Ignore only file named "server" in any directory
 server
+
+# But do NOT ignore directory named "server"
+!server/

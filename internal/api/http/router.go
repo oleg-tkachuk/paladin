@@ -19,7 +19,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, auditRepo domain.AuditLogRepository, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
@@ -79,7 +79,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, v
 	})
 
 	// Use canonical stack for API routes
-	middleware.SetupHTTPStack(r, cfg, log)
+	middleware.SetupHTTPStack(r, cfg, log, auditRepo)
 
 	// Apply rate limiting middleware
 	r.Use(middleware.RateLimitMiddleware(cfg))
@@ -91,7 +91,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, v
 
 	// Register generated handlers
 	// Register generated handlers
-	adapter := NewOpenAPIAdapter(cfg, svc, hs, started, version, commit, buildTime)
+	adapter := NewOpenAPIAdapter(cfg, svc, auditRepo, hs, started, version, commit, buildTime)
 	api.RegisterHandlers(v1, adapter)
 
 	return &Server{engine: r}

@@ -2,33 +2,17 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"sync/atomic"
-	"time"
 
-	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
-	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
-	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
-	"github.com/oleg-tkachuk/paladin/internal/observability"
-	"github.com/oleg-tkachuk/paladin/internal/service"
-	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
-
-	"github.com/cenkalti/backoff/v4"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
+
+	"github.com/oleg-tkachuk/paladin/internal/observability"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 type App struct {
@@ -44,221 +28,34 @@ type App struct {
 
 	db           *postgres.DB
 	otelShutdown observability.ShutdownFunc
-	started      atomic.Bool
+	Started      *atomic.Bool
 
 	reaper       *worker.Reaper
 	reaperCtx    context.Context
 	reaperCancel context.CancelFunc
 }
 
-func New(version, commit, buildTime, configPath string) (*App, error) {
-	boot := logger.NewBootstrapLogger()
-
-	// If config file doesn't exist, allow env-only mode (useful for containers)
-	cfg := config.Config{}
-	cfg.Env = utils.GetEnvOrDefault("ENV", "local")
-	cfg.PodName = utils.GetEnvOrDefault("POD_NAME", "paladin")
-
-	// Load YAML if present
-	if configPath != "" {
-		if _, err := os.Stat(configPath); err != nil {
-			return nil, fmt.Errorf("config file stat: %w", err)
-		}
-		var err error
-		cfg, err = config.Load(configPath, boot)
-		if err != nil {
-			return nil, fmt.Errorf("config load: %w", err)
-		}
-		cfg.Env = utils.GetEnvOrDefault("ENV", cfg.Env)
-		cfg.PodName = utils.GetEnvOrDefault("POD_NAME", cfg.PodName)
-	}
-
-	// Initialize Logger
-	l, err := logger.New(cfg.Logger)
-	if err != nil {
-		return nil, fmt.Errorf("logger init: %w", err)
-	}
-	logger.ReplaceGlobals(l)
-
-	l.Info("Service metadata",
-		zap.String("version", version),
-		zap.String("commit", commit),
-		zap.String("build_time", buildTime),
-		zap.String("pod", cfg.PodName),
-		zap.String("env", cfg.Env),
-	)
-
-	ctx := context.Background()
-
-	otelShutdown, err := observability.InitOTel(ctx, cfg.OTel)
-	if err != nil {
-		return nil, err
-	}
-
-	// Environment overrides for technical fields (DB/S3)
-	if v := utils.GetEnvOrDefault("DB_DSN", ""); v != "" {
-		cfg.Datastores.Postgres.DSN = v
-	}
-
-	if v := utils.GetEnvOrDefault("S3_BUCKET", ""); v != "" {
-		cfg.Datastores.S3.Bucket = v
-	}
-	if v := utils.GetEnvOrDefault("S3_REGION", ""); v != "" {
-		cfg.Datastores.S3.Region = v
-	}
-	if v := utils.GetEnvOrDefault("S3_ENDPOINT", ""); v != "" {
-		cfg.Datastores.S3.Endpoint = v
-	}
-	if v := utils.GetEnvOrDefault("S3_PUBLIC_ENDPOINT", ""); v != "" {
-		cfg.Datastores.S3.PublicEndpoint = v
-	}
-	if v := utils.GetEnvOrDefault("S3_ACCESS_KEY", ""); v != "" {
-		cfg.Datastores.S3.AccessKey = v
-	}
-	if v := utils.GetEnvOrDefault("S3_SECRET_KEY", ""); v != "" {
-		cfg.Datastores.S3.SecretKey = v
-	}
-	if v := utils.GetEnvOrDefault("S3_FORCE_PATH_STYLE", ""); v != "" {
-		cfg.Datastores.S3.ForcePathStyle = v == "true" || v == "1"
-	}
-	if v := utils.GetEnvOrDefault("S3_PRESIGN_TTL", ""); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.Datastores.S3.PresignTTL = d
-		}
-	}
-	if v := utils.GetEnvOrDefault("S3_PART_SIZE", ""); v != "" {
-		cfg.Datastores.S3.PartSizeRaw = v
-		if n, err := utils.ParseSizeString(v); err == nil {
-			cfg.Datastores.S3.PartSizeBytes = n
-		}
-	}
-
-	if v := utils.GetEnvOrDefault("POLICY_ALLOWED_CONTENT_TYPES", ""); v != "" {
-		parts := strings.Split(v, ",")
-		var cleaned []string
-		for _, p := range parts {
-			if t := strings.TrimSpace(p); t != "" {
-				cleaned = append(cleaned, t)
-			}
-		}
-		if len(cleaned) > 0 {
-			cfg.Policy.AllowedContentTypes = cleaned
-		}
-	}
-
-	// DB connect with retries (production-friendly)
-	var db *postgres.DB
-
-	op := func() error {
-		l.Debug("Connecting to PostgreSQL", zap.String("dsn", cfg.Datastores.Postgres.DSN))
-		d, err := postgres.New(ctx, cfg.Datastores.Postgres, l)
-		if err != nil {
-			return err
-		}
-		// quick ping
-		if err := d.Pool.Ping(ctx); err != nil {
-			d.Close()
-
-			return err
-		}
-
-		db = d
-
-		return nil
-	}
-	b := backoff.NewExponentialBackOff()
-	b.MaxElapsedTime = 30 * time.Second
-
-	if err := backoff.Retry(op, b); err != nil {
-		return nil, err
-	}
-
-	if err := db.RunMigrations(ctx, "/app/migrations"); err != nil {
-		// In local mode we ship migrations into container; in dev you can mount.
-		l.Warn("Migrations failed (check volume mount if running locally)", zap.Error(err))
-	}
-
-	s3c, err := s3.New(ctx, cfg.Datastores.S3, l)
-	if err != nil {
-		return nil, err
-	}
-
-	_ = s3c.EnsureBucket(ctx)
-
-	policy := service.NewPolicy(cfg.Policy)
-	objRepo := postgres.NewObjectsRepo(db)
-	mpRepo := postgres.NewMultipartRepo(db)
-	idemRepo := postgres.NewIdempotencyRepo(db)
-	brk := breaker.NewFactory(cfg)
-
-	var svc domain.ObjectsService = service.NewObjectsService(
-		objRepo,
-		mpRepo,
-		s3c,
-		policy,
-		idemRepo,
-		cfg.Datastores.S3.PartSizeBytes,
-		cfg.Timeouts.FastOperation,
-		cfg.Timeouts.DefaultOperation,
-		cfg.Timeouts.S3Operation,
-		cfg.Timeouts.LongOperation,
-		cfg.Idempotency.TTL,
-	)
-	hs := service.NewHealthService(db, s3c, brk)
-
-	app := &App{
-		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: l,
-		db:           db,
-		otelShutdown: otelShutdown,
-	}
-
-	// Import middleware for gRPC interceptors
-	// Note: We need to import middleware package.
-	// Since we can't add imports easily without knowing current imports block position,
-	// we will assume we added the import or add it in a separate step if needed.
-	// But ReplaceFileContent doesn't support adding imports easily unless we replace the whole imports block.
-	// Wait, I can just use paladin/internal/middleware if it's already imported?
-	// It is NOT imported in app.go yet.
-
-	httpSrv := httpapi.NewServer(&cfg, l, svc, version, commit, buildTime, hs, &app.started)
-
-	// HTTP server
-	app.httpSrv = &http.Server{
-		Addr:              cfg.Server.HTTP.Addr,
-		Handler:           httpSrv.Handler(),
-		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
-		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
-		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
-		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
-	}
-
-	// gRPC server
-	// Setup interceptor chain
-	// We need 'paladin/internal/middleware' imported.
-	// I will add the import in a separate tool call to be safe, or just use full path if I could (but Go doesn't allow that).
-	// I'll assume I'll add the import first.
-
-	// For now, let's fix the httpSrv call and add the interceptor logic, assuming imports will be fixed.
-	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
-
-	app.grpcSrv = grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.ChainUnaryInterceptor(interceptors...),
-	)
-	grpcapi.RegisterPaladinServer(app.grpcSrv, grpcapi.NewServer(l, svc))
-	reflection.Register(app.grpcSrv)
-
-	// Reaper
-	rpr := worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l)
-	// Context for reaper
+func NewContainer(
+	version, commit, buildTime string,
+	cfg config.Config,
+	l *zap.Logger,
+	httpSrv *http.Server,
+	grpcSrv *grpc.Server,
+	db *postgres.DB,
+	otelShutdown observability.ShutdownFunc,
+	reaper *worker.Reaper,
+	started *atomic.Bool,
+) *App {
 	rCtx, rCancel := context.WithCancel(context.Background())
 
-	app.reaper = rpr
-	app.reaperCtx = rCtx
-	app.reaperCancel = rCancel
-
-	return app, nil
+	return &App{
+		Version: version, Commit: commit, BuildTime: buildTime,
+		Cfg: cfg, Logger: l,
+		httpSrv: httpSrv, grpcSrv: grpcSrv,
+		db: db, otelShutdown: otelShutdown,
+		reaper: reaper, reaperCtx: rCtx, reaperCancel: rCancel,
+		Started: started,
+	}
 }
 
 func (a *App) Run() error {
@@ -299,7 +96,7 @@ func (a *App) Run() error {
 		go a.reaper.Start(a.reaperCtx)
 	}
 
-	a.started.Store(true)
+	a.Started.Store(true)
 
 	return <-errCh
 }
