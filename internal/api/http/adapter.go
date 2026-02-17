@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/service"
@@ -13,6 +14,7 @@ import (
 )
 
 type OpenAPIAdapter struct {
+	cfg       *config.Config
 	svc       domain.ObjectsService
 	hs        *service.HealthService
 	started   *atomic.Bool
@@ -22,8 +24,9 @@ type OpenAPIAdapter struct {
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
 	return &OpenAPIAdapter{
+		cfg:       cfg,
 		svc:       svc,
 		hs:        hs,
 		started:   started,
@@ -35,6 +38,10 @@ func NewOpenAPIAdapter(svc domain.ObjectsService, hs *service.HealthService, sta
 
 // Ensure OpenAPIAdapter implements api.ServerInterface
 var _ api.ServerInterface = (*OpenAPIAdapter)(nil)
+
+func (s *OpenAPIAdapter) Healthz(c *gin.Context) {
+	c.Status(http.StatusOK)
+}
 
 func (s *OpenAPIAdapter) HealthLivez(c *gin.Context) {
 	c.JSON(http.StatusOK, api.HealthResponse{Status: "alive"})
@@ -81,11 +88,18 @@ func mapDetailedStatus(s service.DetailedDependencyStatus) *api.DetailedDependen
 }
 
 func mapDependencyStatus(s service.DependencyStatus) *api.DependencyStatus {
+	poolStats := make(map[string]map[string]interface{})
+	for k, v := range s.PoolStats {
+		if m, ok := v.(map[string]interface{}); ok {
+			poolStats[k] = m
+		}
+	}
+
 	return &api.DependencyStatus{
 		Postgresql: mapDetailedStatus(s.PostgreSQL),
 		Seaweedfs:  mapDetailedStatus(s.SeaweedFS),
 		Breakers:   &s.Breakers,
-		PoolStats:  &s.PoolStats,
+		PoolStats:  &poolStats,
 	}
 }
 
@@ -441,7 +455,206 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber in
 	})
 }
 
-// Helpers
+func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
+	// Redact sensitive fields
+	resp := api.ConfigResponse{
+		App: &struct {
+			Env  *string `json:"env,omitempty"`
+			Name *string `json:"name,omitempty"`
+		}{
+			Name: ptr(s.cfg.App.Name),
+			Env:  ptr(s.cfg.App.Env),
+		},
+		Server: &struct {
+			Http *struct {
+				Addr               *string   `json:"addr,omitempty"`
+				CorsAllowedOrigins *[]string `json:"cors_allowed_origins,omitempty"`
+				ReadTimeout        *string   `json:"read_timeout,omitempty"`
+				RequestIdHeader    *string   `json:"request_id_header,omitempty"`
+				WriteTimeout       *string   `json:"write_timeout,omitempty"`
+			} `json:"http,omitempty"`
+			Mode *string `json:"mode,omitempty"`
+			Name *string `json:"name,omitempty"`
+		}{
+			Mode: ptr(s.cfg.Server.Mode),
+			Name: ptr(s.cfg.Server.Name),
+			Http: &struct {
+				Addr               *string   `json:"addr,omitempty"`
+				CorsAllowedOrigins *[]string `json:"cors_allowed_origins,omitempty"`
+				ReadTimeout        *string   `json:"read_timeout,omitempty"`
+				RequestIdHeader    *string   `json:"request_id_header,omitempty"`
+				WriteTimeout       *string   `json:"write_timeout,omitempty"`
+			}{
+				Addr:               ptr(s.cfg.Server.HTTP.Addr),
+				ReadTimeout:        ptr(s.cfg.Server.HTTP.ReadTimeout.String()),
+				WriteTimeout:       ptr(s.cfg.Server.HTTP.WriteTimeout.String()),
+				RequestIdHeader:    ptr(s.cfg.Server.HTTP.RequestIDHeader),
+				CorsAllowedOrigins: &s.cfg.Server.HTTP.CORSAllowedOrigins,
+			},
+		},
+		Datastores: &struct {
+			Postgres *struct {
+				Pool *struct {
+					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
+					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
+					MaxConns        *int    `json:"max_conns,omitempty"`
+					MinConns        *int    `json:"min_conns,omitempty"`
+				} `json:"pool,omitempty"`
+				Timeouts *struct {
+					Connect   *string `json:"connect,omitempty"`
+					Statement *string `json:"statement,omitempty"`
+				} `json:"timeouts,omitempty"`
+			} `json:"postgres,omitempty"`
+			S3 *struct {
+				Bucket         *string `json:"bucket,omitempty"`
+				Endpoint       *string `json:"endpoint,omitempty"`
+				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
+				PartSize       *string `json:"part_size,omitempty"`
+				PresignTtl     *string `json:"presign_ttl,omitempty"`
+				PublicEndpoint *string `json:"public_endpoint,omitempty"`
+				Region         *string `json:"region,omitempty"`
+				SseType        *string `json:"sse_type,omitempty"`
+			} `json:"s3,omitempty"`
+		}{
+			Postgres: &struct {
+				Pool *struct {
+					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
+					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
+					MaxConns        *int    `json:"max_conns,omitempty"`
+					MinConns        *int    `json:"min_conns,omitempty"`
+				} `json:"pool,omitempty"`
+				Timeouts *struct {
+					Connect   *string `json:"connect,omitempty"`
+					Statement *string `json:"statement,omitempty"`
+				} `json:"timeouts,omitempty"`
+			}{
+				Pool: &struct {
+					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
+					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
+					MaxConns        *int    `json:"max_conns,omitempty"`
+					MinConns        *int    `json:"min_conns,omitempty"`
+				}{
+					MaxConns:        ptr(int(s.cfg.Datastores.Postgres.Pool.MaxConns)),
+					MinConns:        ptr(int(s.cfg.Datastores.Postgres.Pool.MinConns)),
+					MaxConnLifetime: ptr(s.cfg.Datastores.Postgres.Pool.MaxConnLifetime.String()),
+					MaxConnIdleTime: ptr(s.cfg.Datastores.Postgres.Pool.MaxConnIdleTime.String()),
+				},
+				Timeouts: &struct {
+					Connect   *string `json:"connect,omitempty"`
+					Statement *string `json:"statement,omitempty"`
+				}{
+					Connect:   ptr(s.cfg.Datastores.Postgres.Timeouts.Connect.String()),
+					Statement: ptr(s.cfg.Datastores.Postgres.Timeouts.Statement.String()),
+				},
+			},
+			S3: &struct {
+				Bucket         *string `json:"bucket,omitempty"`
+				Endpoint       *string `json:"endpoint,omitempty"`
+				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
+				PartSize       *string `json:"part_size,omitempty"`
+				PresignTtl     *string `json:"presign_ttl,omitempty"`
+				PublicEndpoint *string `json:"public_endpoint,omitempty"`
+				Region         *string `json:"region,omitempty"`
+				SseType        *string `json:"sse_type,omitempty"`
+			}{
+				Bucket:         ptr(s.cfg.Datastores.S3.Bucket),
+				Region:         ptr(s.cfg.Datastores.S3.Region),
+				Endpoint:       ptr(s.cfg.Datastores.S3.Endpoint),
+				PublicEndpoint: ptr(s.cfg.Datastores.S3.PublicEndpoint),
+				ForcePathStyle: ptr(s.cfg.Datastores.S3.ForcePathStyle),
+				PresignTtl:     ptr(s.cfg.Datastores.S3.PresignTTL.String()),
+				PartSize:       ptr(s.cfg.Datastores.S3.PartSizeRaw),
+				SseType:        ptr(s.cfg.Datastores.S3.SSEType),
+			},
+		},
+		Policy: &struct {
+			AllowedContentTypes *[]string `json:"allowed_content_types,omitempty"`
+			MaxMultipartSize    *string   `json:"max_multipart_size,omitempty"`
+			MaxObjectSize       *string   `json:"max_object_size,omitempty"`
+			MaxPartSize         *string   `json:"max_part_size,omitempty"`
+			MinPartSize         *string   `json:"min_part_size,omitempty"`
+			PresignGetTtl       *string   `json:"presign_get_ttl,omitempty"`
+			PresignPutTtl       *string   `json:"presign_put_ttl,omitempty"`
+		}{
+			MaxObjectSize:       ptr(s.cfg.Policy.MaxObjectSizeRaw),
+			MaxMultipartSize:    ptr(s.cfg.Policy.MaxMultipartSizeRaw),
+			MinPartSize:         ptr(s.cfg.Policy.MinPartSizeRaw),
+			MaxPartSize:         ptr(s.cfg.Policy.MaxPartSizeRaw),
+			PresignPutTtl:       ptr(s.cfg.Policy.PresignPutTTL.String()),
+			PresignGetTtl:       ptr(s.cfg.Policy.PresignGetTTL.String()),
+			AllowedContentTypes: &s.cfg.Policy.AllowedContentTypes,
+		},
+		Security: &struct {
+			EnableRls                *bool `json:"enable_rls,omitempty"`
+			RejectTenantMismatch     *bool `json:"reject_tenant_mismatch,omitempty"`
+			TrustTenantIdFromRequest *bool `json:"trust_tenant_id_from_request,omitempty"`
+		}{
+			TrustTenantIdFromRequest: ptr(s.cfg.Security.TrustTenantIDFromRequest),
+			RejectTenantMismatch:     ptr(s.cfg.Security.RejectTenantMismatch),
+			EnableRls:                ptr(s.cfg.Security.EnableRLS),
+		},
+		Housekeeping: &struct {
+			EnableReaper *bool   `json:"enable_reaper,omitempty"`
+			GcInterval   *string `json:"gc_interval,omitempty"`
+			MultipartTtl *string `json:"multipart_ttl,omitempty"`
+			PendingTtl   *string `json:"pending_ttl,omitempty"`
+		}{
+			EnableReaper: ptr(s.cfg.Housekeeping.EnableReaper),
+			PendingTtl:   ptr(s.cfg.Housekeeping.PendingTTL.String()),
+			MultipartTtl: ptr(s.cfg.Housekeeping.MultipartTTL.String()),
+			GcInterval:   ptr(s.cfg.Housekeeping.GCInterval.String()),
+		},
+		RateLimit: &struct {
+			Burst             *int     `json:"burst,omitempty"`
+			MaxTenants        *int     `json:"max_tenants,omitempty"`
+			RequestsPerSecond *float32 `json:"requests_per_second,omitempty"`
+		}{
+			RequestsPerSecond: ptr(float32(s.cfg.RateLimit.RequestsPerSecond)),
+			Burst:             ptr(s.cfg.RateLimit.Burst),
+			MaxTenants:        ptr(s.cfg.RateLimit.MaxTenants),
+		},
+		Cache: &struct {
+			Enabled *bool   `json:"enabled,omitempty"`
+			MaxSize *int    `json:"max_size,omitempty"`
+			Ttl     *string `json:"ttl,omitempty"`
+		}{
+			Enabled: ptr(s.cfg.Cache.Enabled),
+			MaxSize: ptr(s.cfg.Cache.MaxSize),
+			Ttl:     ptr(s.cfg.Cache.TTL.String()),
+		},
+		Timeouts: &struct {
+			DefaultOperation *string `json:"default_operation,omitempty"`
+			FastOperation    *string `json:"fast_operation,omitempty"`
+			LongOperation    *string `json:"long_operation,omitempty"`
+			S3Operation      *string `json:"s3_operation,omitempty"`
+		}{
+			FastOperation:    ptr(s.cfg.Timeouts.FastOperation.String()),
+			DefaultOperation: ptr(s.cfg.Timeouts.DefaultOperation.String()),
+			S3Operation:      ptr(s.cfg.Timeouts.S3Operation.String()),
+			LongOperation:    ptr(s.cfg.Timeouts.LongOperation.String()),
+		},
+		Idempotency: &struct {
+			Enabled *bool   `json:"enabled,omitempty"`
+			Ttl     *string `json:"ttl,omitempty"`
+		}{
+			Enabled: ptr(s.cfg.Idempotency.Enabled),
+			Ttl:     ptr(s.cfg.Idempotency.TTL.String()),
+		},
+		Otel: &struct {
+			Enabled  *bool   `json:"enabled,omitempty"`
+			Endpoint *string `json:"endpoint,omitempty"`
+			Insecure *bool   `json:"insecure,omitempty"`
+			Protocol *string `json:"protocol,omitempty"`
+		}{
+			Enabled:  ptr(s.cfg.OTel.Enabled),
+			Endpoint: ptr(s.cfg.OTel.Endpoint),
+			Protocol: ptr(s.cfg.OTel.Protocol),
+			Insecure: ptr(s.cfg.OTel.Insecure),
+		},
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
 
 func mapSignedAction(p domain.Presigned) api.SignedAction {
 	return api.SignedAction{
