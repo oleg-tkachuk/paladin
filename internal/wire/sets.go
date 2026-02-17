@@ -209,8 +209,8 @@ func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsServi
 	return srv
 }
 
-func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
-	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l)
+func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, auditRepo domain.AuditLogRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
+	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, auditRepo, s3c, l)
 }
 
 func ProvideApp(

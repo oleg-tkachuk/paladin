@@ -157,6 +157,7 @@ type Housekeeping struct {
 	EnableReaper        bool          `yaml:"enable_reaper" json:"enable_reaper"`
 	PendingTTL          time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
 	MultipartTTL        time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
+	AuditLogTTL         time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
 	GCInterval          time.Duration `yaml:"gc_interval" json:"gc_interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
 }

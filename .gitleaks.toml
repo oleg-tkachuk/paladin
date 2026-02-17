@@ -1,0 +1,7 @@
+[allowlist]
+  description = "Ignore specific files"
+  paths = [
+    '''internal/generated/api/api.gen.go''',
+    '''tests/hurl/*.hurl''',
+  ]
+

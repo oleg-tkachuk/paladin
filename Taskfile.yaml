@@ -6,7 +6,7 @@ vars:
   ENV_FILE_SERVICE: ./deploy/env/service.env
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
-  K8S_DEPLOYMENT_NAME: paladin 
+  K8S_DEPLOYMENT_NAME: paladin
 
 tasks:
   default:
@@ -16,85 +16,127 @@ tasks:
 
   ds:prune:
     desc: "Docker system prune"
+    silent: true
     deps:
       - dd:start
     cmds:
-      - docker system prune --volumes --force
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Docker system...\n"
+      - cmd: |-
+          docker system prune --volumes --force
 
   dd:start:
     desc: "Start Docker Desktop"
+    silent: true
     cmds:
-      - docker desktop start
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Starting Docker Desktop...\n"
+      - cmd: |-
+          docker desktop start
 
-  minikube:start:
-    desc: "Start minikube"
-    deps:
-      - dd:start
-    cmds:
-      - minikube start --kubernetes-version=latest
-
-  minikube:stop:
-    desc: "Stop minikube"
-    cmds:
-      - minikube stop
-
-  minikube:addons:enable:
-    desc: "Enable minikube addons"
-    cmds:
-      - minikube addons enable default-storageclass
-      - minikube addons enable storage-provisioner
+  # -------------------------
+  # Build pipeline (subtasks)
+  # -------------------------
 
   build:
     desc: "Build the image"
+    deps:
+      - build:version:bump
+      - build:env:write
     cmds:
-      - |
-        echo "INFO: Building Docker images..."
-        docker context use desktop-linux
-        docker buildx use desktop-linux
-        docker context ls
-        docker buildx ls
-
-        # Auto-increment version
-        if [ ! -f VERSION ]; then echo "0.1.0" > VERSION; fi
-        check_version=$(cat VERSION)
-        next_version=$(echo $check_version | awk -F. -v OFS=. '{$NF += 1 ; print}')
-        echo $next_version > VERSION
-        echo "INFO: Bumped version from $check_version to $next_version"
-
-        echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" > {{.ENV_FILE_SERVICE}}
-        echo "BUILD_TIME=$(TZ=${TIMEZONE} date +%Y-%m-%dT%H:%M:%S%z)" >> {{.ENV_FILE_SERVICE}}
-        echo "APP_VERSION=$next_version" >> {{.ENV_FILE_SERVICE}}
-        eval $(minikube docker-env) && \
-        time docker compose --progress=auto -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} --env-file {{.ENV_FILE_SERVICE}} build
+      - task: build:compose
       - task: restart
 
-  kubectl:set-context:
-    desc: "Set the current kubectl context to the common namespace"
+  build:version:bump:
+    desc: "Auto-increment VERSION (patch)"
+    silent: true
     cmds:
-      - kubectl config set-context --current --namespace={{.K8S_NAMESPACE}}
+      - cmd: |-
+          set -euo pipefail
 
+          if [ ! -f VERSION ]; then printf "0.1.0\n" > VERSION; fi
+          check_version="$(cat VERSION)"
+          next_version="$(printf "%s" "$check_version" | awk -F. -v OFS=. '{$NF += 1 ; print}')"
+          printf "%s\n" "$next_version" > VERSION
+
+          printf "INFO: %s: Bumped version from %s to %s\n" "{{.K8S_DEPLOYMENT_NAME}}" "$check_version" "$next_version"
+
+  build:env:write:
+    desc: "Write build metadata to env file"
+    silent: true
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+          printf "INFO: %s: Writing build metadata to env file...\n" "{{.K8S_DEPLOYMENT_NAME}}"
+
+          next_version="$(cat VERSION)"
+
+          {
+            printf "GIT_COMMIT_HASH=%s\n" "$(git rev-parse --short HEAD)"
+            printf "BUILD_TIME=%s\n" "$(TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z)"
+            printf "APP_VERSION=%s\n" "$next_version"
+          } > {{.ENV_FILE_SERVICE}}
+
+  build:compose:
+    desc: "Run docker compose build in minikube docker-env"
+    silent: true
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+
+          printf "INFO: %s: Building Docker images...\n" "{{.K8S_DEPLOYMENT_NAME}}"
+
+          eval "$(minikube docker-env)"
+
+          time docker -c desktop-linux compose \
+            --progress={{.PROGRESS | default "auto"}} \
+            -f {{.COMPOSE_FILE}} \
+            -p {{.PROJECT_NAME}} \
+            --env-file {{.ENV_FILE_SERVICE}} \
+            build
+
+  # -------------------------
+  # Other tasks
+  # -------------------------
   up:
     desc: "Start the local stack"
+    silent: true
     cmds:
-      - docker-compose -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} up -d --build
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Starting local stack...\n"
+      - cmd: |-
+          time docker compose --progress={{.PROGRESS | default "auto"}} -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} up -d --build
 
   test:
     desc: "Run unit tests"
+    silent: true
     cmds:
-      - time go test -v ./...
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running unit tests...\n"
+      - cmd: |-
+          time go test -v ./...
 
   test:hurl:
     desc: "Run Hurl integration tests"
+    silent: true
     vars:
       HOST: '{{.HOST | default "http://localhost:8080"}}'
     cmds:
-      - hurl --variable host={{.HOST}} --test tests/hurl/*.hurl
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running Hurl tests on {{.HOST}}...\n"
+      - cmd: |-
+          time hurl --variable host={{.HOST}} --test tests/hurl/*.hurl
 
   generate:
     desc: "Generate all code (OpenAPI, Proto, Mocks)"
+    silent: true
     cmds:
-      - go run github.com/vektra/mockery/v3 --config .mockery.yaml
-      - go generate ./...
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, OpenAPI, proto)...\n"
+      - cmd: |-
+          time go run github.com/vektra/mockery/v3 --config .mockery.yaml
+      - cmd: |-
+          time go generate ./...
 
   generate:proto:
     desc: "Generate Go code from proto files (deprecated: use task generate)"
@@ -103,6 +145,9 @@ tasks:
 
   restart:
     desc: "Restart the deployment"
+    silent: true
     cmds:
-      - kubectl -n {{.K8S_NAMESPACE}} rollout restart deployment {{.K8S_DEPLOYMENT_NAME}}
-
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Restarting deployment...\n"
+      - cmd: |-
+          kubectl -n {{.K8S_NAMESPACE}} rollout restart deployment {{.K8S_DEPLOYMENT_NAME}}
