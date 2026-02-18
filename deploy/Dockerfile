@@ -41,16 +41,16 @@ ENV APP_VERSION=$APP_VERSION \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
- && apt-get install -y --no-install-recommends protobuf-compiler ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # ---- Go build tools (cached) ----
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} \
- && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} \
- && go install github.com/google/wire/cmd/wire@${WIRE_VERSION} \
- && go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} \
+    && go install github.com/google/wire/cmd/wire@${WIRE_VERSION} \
+    && go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
 
 WORKDIR /app
 
@@ -78,14 +78,14 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     go build \
-      -buildvcs=false \
-      -trimpath \
-      -tags=go_json \
-      -ldflags="-w -s \
-        -X 'main.version=${APP_VERSION}' \
-        -X 'main.commit=${GIT_COMMIT_HASH}' \
-        -X 'main.buildTime=${BUILD_TIME}'" \
-      -o /app/bin/paladin ./cmd/server
+    -buildvcs=false \
+    -trimpath \
+    -tags=go_json \
+    -ldflags="-w -s \
+    -X 'main.version=${APP_VERSION}' \
+    -X 'main.commit=${GIT_COMMIT_HASH}' \
+    -X 'main.buildTime=${BUILD_TIME}'" \
+    -o /app/bin/paladin ./cmd/server
 
 # ---- runtime ----
 # Distroless: Minimal attack surface (no shell/package manager).  [oai_citation:1‡GitHub](https://github.com/GoogleContainerTools/distroless?utm_source=chatgpt.com)
