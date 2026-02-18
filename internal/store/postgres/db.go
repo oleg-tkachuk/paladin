@@ -43,8 +43,6 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	poolCfg.HealthCheckPeriod = cfg.HealthcheckPeriod
 	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
 
-	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
-
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		log.Error("PostgreSQL pool init failed", zap.Error(err))
