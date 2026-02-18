@@ -53,16 +53,38 @@ func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID s
 const getAuditLog = `-- name: GetAuditLog :one
 SELECT 
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip, user_agent, method, path, query_params, request_headers,
+    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
     response_status, response_time_ms, created_at
 FROM audit_logs
 WHERE tenant_id = $1 AND id = $2
 `
 
-func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (AuditLog, error) {
+type GetAuditLogRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          string             `json:"tenant_id"`
+	RequestID         *string            `json:"request_id"`
+	IdempotencyKey    *string            `json:"idempotency_key"`
+	ActorSubject      *string            `json:"actor_subject"`
+	ActorType         string             `json:"actor_type"`
+	ClientIp          string             `json:"client_ip"`
+	UserAgent         *string            `json:"user_agent"`
+	Method            string             `json:"method"`
+	Path              string             `json:"path"`
+	QueryParams       []byte             `json:"query_params"`
+	RequestHeaders    []byte             `json:"request_headers"`
+	RequestBodySha256 *string            `json:"request_body_sha256"`
+	RequestSizeBytes  *int64             `json:"request_size_bytes"`
+	HttpStatus        *int32             `json:"http_status"`
+	ResponseCode      *string            `json:"response_code"`
+	ResponseStatus    *string            `json:"response_status"`
+	ResponseTimeMs    *int32             `json:"response_time_ms"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error) {
 	row := q.db.QueryRow(ctx, getAuditLog, tenantID, iD)
-	var i AuditLog
+	var i GetAuditLogRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -90,7 +112,7 @@ func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UU
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT 
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip, user_agent, method, path, query_params, request_headers,
+    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
     response_status, response_time_ms, created_at
 FROM audit_logs
@@ -108,7 +130,29 @@ ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
 
-func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]AuditLog, error) {
+type ListAuditLogsRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          string             `json:"tenant_id"`
+	RequestID         *string            `json:"request_id"`
+	IdempotencyKey    *string            `json:"idempotency_key"`
+	ActorSubject      *string            `json:"actor_subject"`
+	ActorType         string             `json:"actor_type"`
+	ClientIp          string             `json:"client_ip"`
+	UserAgent         *string            `json:"user_agent"`
+	Method            string             `json:"method"`
+	Path              string             `json:"path"`
+	QueryParams       []byte             `json:"query_params"`
+	RequestHeaders    []byte             `json:"request_headers"`
+	RequestBodySha256 *string            `json:"request_body_sha256"`
+	RequestSizeBytes  *int64             `json:"request_size_bytes"`
+	HttpStatus        *int32             `json:"http_status"`
+	ResponseCode      *string            `json:"response_code"`
+	ResponseStatus    *string            `json:"response_status"`
+	ResponseTimeMs    *int32             `json:"response_time_ms"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		tenantID,
 		limit,
@@ -126,9 +170,9 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AuditLog
+	var items []ListAuditLogsRow
 	for rows.Next() {
-		var i AuditLog
+		var i ListAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,

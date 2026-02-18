@@ -13,7 +13,7 @@ INSERT INTO audit_logs (
 -- name: GetAuditLog :one
 SELECT 
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip, user_agent, method, path, query_params, request_headers,
+    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
     response_status, response_time_ms, created_at
 FROM audit_logs
@@ -22,7 +22,7 @@ WHERE tenant_id = $1 AND id = $2;
 -- name: ListAuditLogs :many
 SELECT 
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip, user_agent, method, path, query_params, request_headers,
+    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
     response_status, response_time_ms, created_at
 FROM audit_logs

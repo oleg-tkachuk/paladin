@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +42,15 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 		responseTimeMS = &ms
 	}
 
+	// Convert string ClientIP to *netip.Addr for database storage
+	var clientIP *netip.Addr
+	if log.ClientIP != nil {
+		addr, err := netip.ParseAddr(*log.ClientIP)
+		if err == nil {
+			clientIP = &addr
+		}
+	}
+
 	err = r.db.Queries.CreateAuditLog(ctx,
 		uuidToPgtype(log.ID),
 		log.TenantID,
@@ -48,7 +58,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 		log.IdempotencyKey,
 		log.ActorSubject,
 		string(log.ActorType),
-		nil, // ClientIP - TODO: Convert string to netip.Addr if needed
+		clientIP,
 		log.UserAgent,
 		log.Method,
 		log.Path,
@@ -72,7 +82,7 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapAuditLogToDomain(log)
+	result, err := MapGetAuditLogRowToDomain(log)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +125,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	logs := make([]domain.AuditLog, 0, len(rows))
 	for _, row := range rows {
-		log, err := MapAuditLogToDomain(row)
+		log, err := MapListAuditLogsRowToDomain(row)
 		if err != nil {
 			return nil, "", fmt.Errorf("map audit log: %w", err)
 		}

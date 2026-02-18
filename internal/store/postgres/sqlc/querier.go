@@ -19,13 +19,13 @@ type Querier interface {
 	// Objects queries
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string) error
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
-	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (AuditLog, error)
+	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
 	// Idempotency queries
 	GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (IdempotencyKey, error)
 	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (MultipartUpload, error)
 	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (Object, error)
 	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (Object, error)
-	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]AuditLog, error)
+	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]MultipartUpload, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]Object, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error)

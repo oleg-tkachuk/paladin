@@ -102,7 +102,122 @@ func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	}
 }
 
+// MapGetAuditLogRowToDomain converts sqlc.GetAuditLogRow to domain.AuditLog
+func MapGetAuditLogRowToDomain(log sqlc.GetAuditLogRow) (domain.AuditLog, error) {
+	id, err := uuidFromPgtype(log.ID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	queryParams, err := unmarshalJSONB(log.QueryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	requestHeaders, err := unmarshalJSONB(log.RequestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var httpStatus *int
+	if log.HttpStatus != nil {
+		status := int(*log.HttpStatus)
+		httpStatus = &status
+	}
+
+	var responseTimeMS *int
+	if log.ResponseTimeMs != nil {
+		ms := int(*log.ResponseTimeMs)
+		responseTimeMS = &ms
+	}
+
+	var clientIP *string
+	if log.ClientIp != "" {
+		clientIP = &log.ClientIp
+	}
+
+	return domain.AuditLog{
+		ID:                id,
+		TenantID:          log.TenantID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         domain.ActorType(log.ActorType),
+		ClientIP:          clientIP,
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySHA256: log.RequestBodySha256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HTTPStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMS:    responseTimeMS,
+		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+	}, nil
+}
+
+// MapListAuditLogsRowToDomain converts sqlc.ListAuditLogsRow to domain.AuditLog
+func MapListAuditLogsRowToDomain(log sqlc.ListAuditLogsRow) (domain.AuditLog, error) {
+	id, err := uuidFromPgtype(log.ID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	queryParams, err := unmarshalJSONB(log.QueryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	requestHeaders, err := unmarshalJSONB(log.RequestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var httpStatus *int
+	if log.HttpStatus != nil {
+		status := int(*log.HttpStatus)
+		httpStatus = &status
+	}
+
+	var responseTimeMS *int
+	if log.ResponseTimeMs != nil {
+		ms := int(*log.ResponseTimeMs)
+		responseTimeMS = &ms
+	}
+
+	var clientIP *string
+	if log.ClientIp != "" {
+		clientIP = &log.ClientIp
+	}
+
+	return domain.AuditLog{
+		ID:                id,
+		TenantID:          log.TenantID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         domain.ActorType(log.ActorType),
+		ClientIP:          clientIP,
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySHA256: log.RequestBodySha256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HTTPStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMS:    responseTimeMS,
+		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+	}, nil
+}
+
 // MapAuditLogToDomain converts sqlc.AuditLog to domain.AuditLog
+// This is kept for compatibility with Create operations
 func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
 	id, err := uuidFromPgtype(log.ID)
 	if err != nil {
@@ -138,7 +253,7 @@ func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
 		IdempotencyKey:    log.IdempotencyKey,
 		ActorSubject:      log.ActorSubject,
 		ActorType:         domain.ActorType(log.ActorType),
-		ClientIP:          clientIPFromPgtype(log.ClientIp),
+		ClientIP:          clientIPFromNetipAddr(log.ClientIp),
 		UserAgent:         log.UserAgent,
 		Method:            log.Method,
 		Path:              log.Path,
@@ -202,7 +317,7 @@ func timestampPtrToPgtype(t *time.Time) pgtype.Timestamptz {
 	}
 }
 
-func clientIPFromPgtype(ip *netip.Addr) *string {
+func clientIPFromNetipAddr(ip *netip.Addr) *string {
 	if ip == nil {
 		return nil
 	}
