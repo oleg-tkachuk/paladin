@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -42,6 +43,24 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	poolCfg.MaxConnIdleTime = cfg.Pool.MaxConnIdleTime
 	poolCfg.HealthCheckPeriod = cfg.HealthcheckPeriod
 	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
+
+	// Register INET/CIDR types to use text codec instead of binary.
+	// pgx uses binary protocol by default, but the INET type (OID 869)
+	// cannot be scanned into a Go string in binary format.
+	// By registering it with the text codec, pgx will decode it as a plain string.
+	poolCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		conn.TypeMap().RegisterType(&pgtype.Type{
+			Name:  "inet",
+			OID:   pgtype.InetOID,
+			Codec: pgtype.TextCodec{},
+		})
+		conn.TypeMap().RegisterType(&pgtype.Type{
+			Name:  "cidr",
+			OID:   pgtype.CIDROID,
+			Codec: pgtype.TextCodec{},
+		})
+		return nil
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
