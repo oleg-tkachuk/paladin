@@ -1,0 +1,326 @@
+package postgres
+
+import (
+	"fmt"
+	"net/netip"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+)
+
+// MapObjectToDomain converts sqlc.Object to domain.Object
+func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
+	id, err := uuidFromPgtype(obj.ID)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("convert object id: %w", err)
+	}
+
+	labels, err := unmarshalStringMap(obj.Labels)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("unmarshal labels: %w", err)
+	}
+
+	return domain.Object{
+		ID:              id,
+		TenantID:        obj.TenantID,
+		ObjectKey:       obj.ObjectKey,
+		Bucket:          obj.Bucket,
+		ContentType:     obj.ContentType,
+		SizeBytes:       obj.SizeBytes,
+		ChecksumSHA256:  obj.ChecksumSha256,
+		Status:          domain.ObjectStatus(obj.Status),
+		Labels:          labels,
+		ExternalRef:     obj.ExternalRef,
+		StoredETag:      obj.StoredEtag,
+		StoredSizeBytes: obj.StoredSizeBytes,
+		CreatedAt:       timestampFromPgtype(obj.CreatedAt),
+		UpdatedAt:       timestampFromPgtype(obj.UpdatedAt),
+		ExpiresAt:       timestampPtrFromPgtype(obj.ExpiresAt),
+		CompletedAt:     timestampPtrFromPgtype(obj.CompletedAt),
+		DeletedAt:       timestampPtrFromPgtype(obj.DeletedAt),
+	}, nil
+}
+
+// MapMultipartToDomain converts sqlc.MultipartUpload to domain.Multipart
+func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
+	id, err := uuidFromPgtype(mp.ID)
+	if err != nil {
+		return domain.Multipart{}, fmt.Errorf("convert multipart id: %w", err)
+	}
+
+	objectID, err := uuidFromPgtype(mp.ObjectID)
+	if err != nil {
+		return domain.Multipart{}, fmt.Errorf("convert object id: %w", err)
+	}
+
+	return domain.Multipart{
+		ID:          id,
+		TenantID:    mp.TenantID,
+		ObjectID:    objectID,
+		UploadID:    mp.UploadID,
+		Bucket:      mp.Bucket,
+		ObjectKey:   mp.ObjectKey,
+		ContentType: mp.ContentType,
+		PartSize:    mp.PartSizeBytes,
+		Status:      domain.MultipartStatus(mp.Status),
+		CreatedAt:   timestampFromPgtype(mp.CreatedAt),
+		UpdatedAt:   timestampFromPgtype(mp.UpdatedAt),
+		ExpiresAt:   timestampFromPgtype(mp.ExpiresAt),
+	}, nil
+}
+
+// MapMultipartPartToDomain converts sqlc.MultipartPart to domain.MultipartPart
+func MapMultipartPartToDomain(part sqlc.MultipartPart) (domain.MultipartPart, error) {
+	multipartID, err := uuidFromPgtype(part.MultipartID)
+	if err != nil {
+		return domain.MultipartPart{}, fmt.Errorf("convert multipart id: %w", err)
+	}
+
+	return domain.MultipartPart{
+		MultipartID: multipartID,
+		PartNumber:  int(part.PartNumber),
+		ETag:        part.Etag,
+		SizeBytes:   part.SizeBytes,
+		CreatedAt:   timestampFromPgtype(part.CreatedAt),
+	}, nil
+}
+
+// MapIdempotencyToDomain converts sqlc.IdempotencyKey to domain.IdempotencyRecord
+func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
+	return domain.IdempotencyRecord{
+		TenantID:     key.TenantID,
+		Key:          key.IdempotencyKey,
+		RequestPath:  key.RequestPath,
+		RequestHash:  key.RequestHash,
+		ResponseCode: int(key.ResponseCode),
+		ResponseBody: key.ResponseBody,
+		CreatedAt:    timestampFromPgtype(key.CreatedAt),
+		ExpiresAt:    timestampFromPgtype(key.ExpiresAt),
+	}
+}
+
+// MapGetAuditLogRowToDomain converts sqlc.GetAuditLogRow to domain.AuditLog
+func MapGetAuditLogRowToDomain(log sqlc.GetAuditLogRow) (domain.AuditLog, error) {
+	id, err := uuidFromPgtype(log.ID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	queryParams, err := unmarshalJSONB(log.QueryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	requestHeaders, err := unmarshalJSONB(log.RequestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var httpStatus *int
+	if log.HttpStatus != nil {
+		status := int(*log.HttpStatus)
+		httpStatus = &status
+	}
+
+	var responseTimeMS *int
+	if log.ResponseTimeMs != nil {
+		ms := int(*log.ResponseTimeMs)
+		responseTimeMS = &ms
+	}
+
+	var clientIP *string
+	if log.ClientIp != "" {
+		clientIP = &log.ClientIp
+	}
+
+	return domain.AuditLog{
+		ID:                id,
+		TenantID:          log.TenantID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         domain.ActorType(log.ActorType),
+		ClientIP:          clientIP,
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySHA256: log.RequestBodySha256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HTTPStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMS:    responseTimeMS,
+		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+	}, nil
+}
+
+// MapListAuditLogsRowToDomain converts sqlc.ListAuditLogsRow to domain.AuditLog
+func MapListAuditLogsRowToDomain(log sqlc.ListAuditLogsRow) (domain.AuditLog, error) {
+	id, err := uuidFromPgtype(log.ID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	queryParams, err := unmarshalJSONB(log.QueryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	requestHeaders, err := unmarshalJSONB(log.RequestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var httpStatus *int
+	if log.HttpStatus != nil {
+		status := int(*log.HttpStatus)
+		httpStatus = &status
+	}
+
+	var responseTimeMS *int
+	if log.ResponseTimeMs != nil {
+		ms := int(*log.ResponseTimeMs)
+		responseTimeMS = &ms
+	}
+
+	var clientIP *string
+	if log.ClientIp != "" {
+		clientIP = &log.ClientIp
+	}
+
+	return domain.AuditLog{
+		ID:                id,
+		TenantID:          log.TenantID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         domain.ActorType(log.ActorType),
+		ClientIP:          clientIP,
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySHA256: log.RequestBodySha256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HTTPStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMS:    responseTimeMS,
+		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+	}, nil
+}
+
+// MapAuditLogToDomain converts sqlc.AuditLog to domain.AuditLog
+// This is kept for compatibility with Create operations
+func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
+	id, err := uuidFromPgtype(log.ID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	queryParams, err := unmarshalJSONB(log.QueryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	requestHeaders, err := unmarshalJSONB(log.RequestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var httpStatus *int
+	if log.HttpStatus != nil {
+		status := int(*log.HttpStatus)
+		httpStatus = &status
+	}
+
+	var responseTimeMS *int
+	if log.ResponseTimeMs != nil {
+		ms := int(*log.ResponseTimeMs)
+		responseTimeMS = &ms
+	}
+
+	return domain.AuditLog{
+		ID:                id,
+		TenantID:          log.TenantID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         domain.ActorType(log.ActorType),
+		ClientIP:          clientIPFromNetipAddr(log.ClientIp),
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySHA256: log.RequestBodySha256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HTTPStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMS:    responseTimeMS,
+		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+	}, nil
+}
+
+// Helper functions for type conversion
+
+func uuidFromPgtype(u pgtype.UUID) (uuid.UUID, error) {
+	if !u.Valid {
+		return uuid.Nil, fmt.Errorf("invalid uuid")
+	}
+	return uuid.UUID(u.Bytes), nil
+}
+
+func uuidToPgtype(u uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{
+		Bytes: [16]byte(u),
+		Valid: true,
+	}
+}
+
+func timestampFromPgtype(t pgtype.Timestamptz) time.Time {
+	if !t.Valid {
+		return time.Time{}
+	}
+	return t.Time
+}
+
+func timestampPtrFromPgtype(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	result := t.Time
+	return &result
+}
+
+func timestampToPgtype(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:  t,
+		Valid: !t.IsZero(),
+	}
+}
+
+func timestampPtrToPgtype(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{Valid: false}
+	}
+	return pgtype.Timestamptz{
+		Time:  *t,
+		Valid: true,
+	}
+}
+
+func clientIPFromNetipAddr(ip *netip.Addr) *string {
+	if ip == nil {
+		return nil
+	}
+	str := ip.String()
+	return &str
+}

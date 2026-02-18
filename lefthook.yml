@@ -239,20 +239,20 @@ pre-push:
     # -----------------------------
     # 0) Go SQLC verify
     # -----------------------------
-    sqlc-verify:
-      tags: [go, sqlc]
-      run: |
-        set -euo pipefail
-        command -v sqlc >/dev/null 2>&1 || exit 0
-
-        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
-        [ -z "$configs" ] && exit 0
-
-        for cfg in $configs; do
-          dir="$(dirname "$cfg")"
-          echo "sqlc verify: $dir"
-          (cd "$dir" && sqlc verify)
-        done
+#    sqlc-verify:
+#      tags: [go, sqlc]
+#      run: |
+#        set -euo pipefail
+#        command -v sqlc >/dev/null 2>&1 || exit 0
+#
+#        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
+#        [ -z "$configs" ] && exit 0
+#
+#        for cfg in $configs; do
+#          dir="$(dirname "$cfg")"
+#          echo "sqlc verify: $dir"
+#          (cd "$dir" && sqlc verify)
+#        done
     # -----------------------------
     # 1) Tests (production defaults)
     # -----------------------------

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -31,7 +32,11 @@ func TestObjectsRepo_Integration(t *testing.T) {
 	defer pool.Close()
 
 	logger := zap.NewNop()
-	db := &DB{Pool: pool, log: logger}
+	db := &DB{
+		Pool:    pool,
+		Queries: sqlc.New(pool),
+		log:     logger,
+	}
 
 	// 3. Run migrations
 	// We need to find the migrations dir.

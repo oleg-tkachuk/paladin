@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"golang.org/x/sync/errgroup"
 )
 
 // signPart generates a presigned URL for uploading a single multipart part
@@ -58,7 +59,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 	}, nil
 }
 
-// signPartsBatch generates presigned URLs for uploading multiple multipart parts
+// signPartsBatch generates presigned URLs for uploading multiple multipart parts concurrently
 func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPartsBatch")
 	defer span.End()
@@ -86,24 +87,36 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		return nil, err
 	}
 
+	ttl := s.s3.PresignTTLDuration()
 	out := make([]domain.SignPartResponse, len(partNumbers))
+
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(10) // bound concurrency to avoid overwhelming the S3 signer
+
 	for i, pn := range partNumbers {
-		signed, err := s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, pn, s.s3.PresignTTLDuration())
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			status = "error"
-			return nil, err
-		}
-		out[i] = domain.SignPartResponse{
-			PartNumber: pn,
-			Upload: domain.Presigned{
-				URL:       signed.URL,
-				Method:    signed.Method,
-				Headers:   signed.Headers,
-				ExpiresAt: signed.ExpiresAt,
-			},
-		}
+		g.Go(func() error {
+			signed, err := s.s3.PresignUploadPart(gCtx, multi.ObjectKey, uploadID, pn, ttl)
+			if err != nil {
+				return err
+			}
+			out[i] = domain.SignPartResponse{
+				PartNumber: pn,
+				Upload: domain.Presigned{
+					URL:       signed.URL,
+					Method:    signed.Method,
+					Headers:   signed.Headers,
+					ExpiresAt: signed.ExpiresAt,
+				},
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return nil, err
 	}
 
 	status = "success"

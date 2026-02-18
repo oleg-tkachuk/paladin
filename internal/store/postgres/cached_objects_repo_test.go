@@ -64,21 +64,24 @@ func TestCachedObjectsRepo_MarkComplete(t *testing.T) {
 	id := uuid.New()
 	tenantID := "test-tenant"
 	obj := &domain.Object{ID: id, TenantID: tenantID, ObjectKey: "key1"}
+	completedObj := &domain.Object{ID: id, TenantID: tenantID, ObjectKey: "key1", Status: "complete"}
 
 	// Put in cache first
 	mockRepo.On("Get", mock.Anything, tenantID, id).Return(obj, nil).Once()
 	_, _ = repo.Get(ctx, tenantID, id)
 
-	// Mark complete - should invalidate cache
+	// Mark complete - write-through: should re-fetch from underlying repo and cache
 	mockRepo.On("MarkComplete", mock.Anything, tenantID, id, "etag1", int64(100)).Return(true, nil).Once()
+	mockRepo.On("Get", mock.Anything, tenantID, id).Return(completedObj, nil).Once() // write-through re-fetch
 
 	updated, err := repo.MarkComplete(ctx, tenantID, id, "etag1", int64(100))
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
-	// Should be a cache miss now
-	mockRepo.On("Get", mock.Anything, tenantID, id).Return(obj, nil).Once()
-	_, _ = repo.Get(ctx, tenantID, id)
+	// Should be a cache HIT now (write-through cached the completed object)
+	res, err := repo.Get(ctx, tenantID, id)
+	assert.NoError(t, err)
+	assert.Equal(t, completedObj, res)
 
 	mockRepo.AssertExpectations(t)
 }
