@@ -40,10 +40,9 @@ tasks:
 
   build:
     desc: "Build the image"
-    deps:
-      - build:version:bump
-      - build:env:write
     cmds:
+      - task: build:version:bump
+      - task: build:env:write
       - task: build:compose
       - task: restart
 
@@ -54,10 +53,18 @@ tasks:
       - cmd: |-
           set -euo pipefail
 
-          if [ ! -f VERSION ]; then printf "0.1.0\n" > VERSION; fi
-          check_version="$(cat VERSION)"
+          if [ ! -f {{.ENV_FILE_SERVICE}} ]; then touch {{.ENV_FILE_SERVICE}}; fi
+
+          check_version=$(grep "APP_VERSION=" {{.ENV_FILE_SERVICE}} | cut -d'=' -f2 || echo "0.1.0")
+          if [ -z "$check_version" ]; then check_version="0.1.0"; fi
+
           next_version="$(printf "%s" "$check_version" | awk -F. -v OFS=. '{$NF += 1 ; print}')"
-          printf "%s\n" "$next_version" > VERSION
+
+          if grep -q "APP_VERSION=" {{.ENV_FILE_SERVICE}}; then
+            sed -i '' "s/APP_VERSION=.*/APP_VERSION=$next_version/" {{.ENV_FILE_SERVICE}}
+          else
+            echo "APP_VERSION=$next_version" >> {{.ENV_FILE_SERVICE}}
+          fi
 
           printf "INFO: %s: Bumped version from %s to %s\n" "{{.K8S_DEPLOYMENT_NAME}}" "$check_version" "$next_version"
 
@@ -69,7 +76,8 @@ tasks:
           set -euo pipefail
           printf "INFO: %s: Writing build metadata to env file...\n" "{{.K8S_DEPLOYMENT_NAME}}"
 
-          next_version="$(cat VERSION)"
+          # Read the version that was just bumped (or exists)
+          next_version=$(grep "APP_VERSION=" {{.ENV_FILE_SERVICE}} | cut -d'=' -f2)
 
           {
             printf "GIT_COMMIT_HASH=%s\n" "$(git rev-parse --short HEAD)"

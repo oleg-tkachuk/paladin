@@ -95,16 +95,20 @@ func (r *CachedObjectsRepo) Create(ctx context.Context, rec domain.Object) error
 	return nil
 }
 
-// MarkComplete updates object status and invalidates cache
+// MarkComplete updates object status and writes through to cache
 func (r *CachedObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error) {
 	updated, err := r.repo.MarkComplete(ctx, tenantID, id, etag, sizeBytes)
 	if err != nil {
 		return false, err
 	}
 
-	// Invalidate cache
-	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	// Write-through: re-fetch completed object and cache it
+	if updated {
+		if rec, err := r.repo.Get(ctx, tenantID, id); err == nil {
+			cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+			_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+		}
+	}
 
 	return updated, nil
 }
@@ -135,6 +139,19 @@ func (r *CachedObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string
 	return updated, nil
 }
 
+func (r *CachedObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	updated, err := r.repo.Restore(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
 // MarkDeleted marks object as deleted and invalidates cache
 func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	updated, err := r.repo.MarkDeleted(ctx, tenantID, id)
@@ -149,21 +166,21 @@ func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id
 	return updated, nil
 }
 
-// Patch updates object metadata and invalidates cache
+// Patch updates object metadata and writes through to cache
 func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	rec, err := r.repo.Patch(ctx, tenantID, id, labels, externalRef)
 	if err != nil {
 		return nil, err
 	}
 
-	// Invalidate cache
+	// Write-through: cache the updated result
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
 
-	// If external_ref changed, invalidate old external_ref cache
+	// If external_ref changed, update external_ref cache too
 	if externalRef != nil {
 		extKey := fmt.Sprintf("obj:ext:%s:%s", tenantID, *externalRef)
-		_ = r.cache.Delete(ctx, extKey)
+		_ = r.cache.Set(ctx, extKey, rec, r.ttl)
 	}
 
 	return rec, nil

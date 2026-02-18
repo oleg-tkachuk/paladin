@@ -77,6 +77,11 @@ func (m *MockObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Ti
 	return args.Get(0).([]domain.Object), args.Error(1)
 }
 
+func (m *MockObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }

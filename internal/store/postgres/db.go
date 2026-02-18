@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"go.uber.org/zap"
 )
 
@@ -23,8 +24,9 @@ type PgxPool interface {
 }
 
 type DB struct {
-	Pool PgxPool
-	log  *zap.Logger
+	Pool    PgxPool
+	Queries *sqlc.Queries
+	log     *zap.Logger
 }
 
 func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error) {
@@ -54,7 +56,9 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 		zap.Int32("min_conns", poolCfg.MinConns),
 	)
 
-	return &DB{Pool: pool, log: log}, nil
+	queries := sqlc.New(pool)
+
+	return &DB{Pool: pool, Queries: queries, log: log}, nil
 }
 
 func (d *DB) Ping(ctx context.Context) error {
@@ -97,4 +101,28 @@ func (d *DB) HealthWithStats(ctx context.Context) (map[string]interface{}, error
 		"empty_acquire_count":    stats.EmptyAcquireCount(),
 		"canceled_acquire_count": stats.CanceledAcquireCount(),
 	}, nil
+}
+
+// WithTx executes a function within a transaction
+func (d *DB) WithTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
+	if d == nil || d.Pool == nil {
+		return fmt.Errorf("database pool not initialized")
+	}
+
+	tx, err := d.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := d.Queries.WithTx(tx)
+	if err := fn(qtx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }
