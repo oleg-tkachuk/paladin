@@ -9,6 +9,8 @@ ARG GRPC_PORT
 
 ARG PROTOC_GEN_GO_VERSION=latest
 ARG PROTOC_GEN_GO_GRPC_VERSION=latest
+ARG WIRE_VERSION=latest
+ARG OAPI_CODEGEN_VERSION=latest
 
 ENV APP_VERSION=${APP_VERSION:-undefined}
 ENV GIT_COMMIT_HASH=${GIT_COMMIT_HASH:-undefined}
@@ -30,7 +32,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
   go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
-  go install github.com/vektra/mockery/v3@latest
+  go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
+  go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
 
 WORKDIR /app
 
@@ -45,6 +48,7 @@ COPY ./configs ./configs
 COPY ./migrations ./migrations
 COPY ./api ./api
 COPY ./proto ./proto
+COPY ./sqlc.yaml ./sqlc.yaml
 
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
@@ -52,6 +56,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
+  mkdir -p /app/bin && \
   cd ./cmd/server && \
   CGO_ENABLED=0 \
   go build \
@@ -64,7 +69,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -X 'main.version=${APP_VERSION}' \
       -X 'main.commit=${GIT_COMMIT_HASH}' \
       -X 'main.buildTime=${BUILD_TIME}'" \
-    -o /app/paladin .
+    -o /app/bin/paladin .
 
 FROM gcr.io/distroless/static:nonroot
 
@@ -72,7 +77,7 @@ ARG HTTP_PORT
 ARG GRPC_PORT
 
 WORKDIR /app
-COPY --from=builder --chown=nonroot:nonroot /app/paladin /app/paladin
+COPY --from=builder --chown=nonroot:nonroot /app/bin/paladin /app/bin/paladin
 COPY --from=builder --chown=nonroot:nonroot /app/migrations /app/migrations
 COPY --from=builder --chown=nonroot:nonroot /app/configs /app/configs
 
@@ -80,4 +85,4 @@ EXPOSE ${HTTP_PORT}
 EXPOSE ${GRPC_PORT}
 
 USER nonroot:nonroot
-CMD ["/app/paladin"]
+CMD ["/app/bin/paladin"]
