@@ -76,19 +76,167 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	return MapPgError(err)
 }
 
+// netipAddrToString converts a *netip.Addr to *string for the domain model.
+func netipAddrToString(addr *netip.Addr) *string {
+	if addr == nil || !addr.IsValid() {
+		return nil
+	}
+	s := addr.String()
+	return &s
+}
+
+// mapRowToDomain converts raw scan variables into a domain.AuditLog.
+// client_ip is scanned as *netip.Addr — the correct pgx v5 native type for PostgreSQL inet.
+func mapRowToDomain(
+	pgID pgtype.UUID,
+	tenantID string,
+	requestID *string,
+	idempotencyKey *string,
+	actorSubject *string,
+	actorType string,
+	clientIP *netip.Addr,
+	userAgent *string,
+	method string,
+	path string,
+	queryParams []byte,
+	requestHeaders []byte,
+	requestBodySHA256 *string,
+	requestSizeBytes *int64,
+	httpStatus *int32,
+	responseCode *string,
+	responseStatus *string,
+	responseTimeMS *int32,
+	createdAt pgtype.Timestamptz,
+) (domain.AuditLog, error) {
+	domainID, err := uuidFromPgtype(pgID)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
+	}
+
+	qp, err := unmarshalJSONB(queryParams)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal query params: %w", err)
+	}
+
+	rh, err := unmarshalJSONB(requestHeaders)
+	if err != nil {
+		return domain.AuditLog{}, fmt.Errorf("unmarshal request headers: %w", err)
+	}
+
+	var domainHTTPStatus *int
+	if httpStatus != nil {
+		s := int(*httpStatus)
+		domainHTTPStatus = &s
+	}
+
+	var domainResponseTimeMS *int
+	if responseTimeMS != nil {
+		ms := int(*responseTimeMS)
+		domainResponseTimeMS = &ms
+	}
+
+	return domain.AuditLog{
+		ID:                domainID,
+		TenantID:          tenantID,
+		RequestID:         requestID,
+		IdempotencyKey:    idempotencyKey,
+		ActorSubject:      actorSubject,
+		ActorType:         domain.ActorType(actorType),
+		ClientIP:          netipAddrToString(clientIP),
+		UserAgent:         userAgent,
+		Method:            method,
+		Path:              path,
+		QueryParams:       qp,
+		RequestHeaders:    rh,
+		RequestBodySHA256: requestBodySHA256,
+		RequestSizeBytes:  requestSizeBytes,
+		HTTPStatus:        domainHTTPStatus,
+		ResponseCode:      responseCode,
+		ResponseStatus:    responseStatus,
+		ResponseTimeMS:    domainResponseTimeMS,
+		CreatedAt:         timestampFromPgtype(createdAt),
+	}, nil
+}
+
+// getAuditLogSQL selects client_ip as the native inet type.
+// pgx v5 scans inet columns into *netip.Addr natively in binary protocol.
+const getAuditLogSQL = `
+SELECT
+    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
+    client_ip, user_agent, method, path, query_params, request_headers,
+    request_body_sha256, request_size_bytes, http_status, response_code,
+    response_status, response_time_ms, created_at
+FROM audit_logs
+WHERE tenant_id = $1 AND id = $2`
+
 func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.AuditLog, error) {
-	log, err := r.db.Queries.GetAuditLog(ctx, tenantID, uuidToPgtype(id))
+	row := r.db.Pool.QueryRow(ctx, getAuditLogSQL, tenantID, uuidToPgtype(id))
+
+	var (
+		pgID             pgtype.UUID
+		pgTenantID       string
+		pgRequestID      *string
+		pgIdempotencyKey *string
+		pgActorSubject   *string
+		pgActorType      string
+		pgClientIP       *netip.Addr // correct pgx v5 scan type for inet
+		pgUserAgent      *string
+		pgMethod         string
+		pgPath           string
+		pgQueryParams    []byte
+		pgRequestHeaders []byte
+		pgRequestBodySHA *string
+		pgRequestSize    *int64
+		pgHTTPStatus     *int32
+		pgResponseCode   *string
+		pgResponseStatus *string
+		pgResponseTimeMS *int32
+		pgCreatedAt      pgtype.Timestamptz
+	)
+
+	err := row.Scan(
+		&pgID, &pgTenantID, &pgRequestID, &pgIdempotencyKey, &pgActorSubject,
+		&pgActorType, &pgClientIP, &pgUserAgent, &pgMethod, &pgPath,
+		&pgQueryParams, &pgRequestHeaders, &pgRequestBodySHA, &pgRequestSize,
+		&pgHTTPStatus, &pgResponseCode, &pgResponseStatus, &pgResponseTimeMS, &pgCreatedAt,
+	)
 	if err != nil {
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapGetAuditLogRowToDomain(log)
+	result, err := mapRowToDomain(
+		pgID, pgTenantID, pgRequestID, pgIdempotencyKey, pgActorSubject,
+		pgActorType, pgClientIP, pgUserAgent, pgMethod, pgPath,
+		pgQueryParams, pgRequestHeaders, pgRequestBodySHA, pgRequestSize,
+		pgHTTPStatus, pgResponseCode, pgResponseStatus, pgResponseTimeMS, pgCreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &result, nil
 }
+
+// listAuditLogsSQL selects client_ip as the native inet type.
+const listAuditLogsSQL = `
+SELECT
+    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
+    client_ip, user_agent, method, path, query_params, request_headers,
+    request_body_sha256, request_size_bytes, http_status, response_code,
+    response_status, response_time_ms, created_at
+FROM audit_logs
+WHERE tenant_id = $1
+  AND ($3::timestamptz IS NULL OR created_at >= $3)
+  AND ($4::timestamptz IS NULL OR created_at < $4)
+  AND ($5::text IS NULL OR path = $5)
+  AND ($6::text IS NULL OR path LIKE $6 || '%')
+  AND ($7::text IS NULL OR method = $7)
+  AND ($8::int IS NULL OR http_status = $8)
+  AND ($9::text IS NULL OR request_id = $9)
+  AND ($10::text IS NULL OR idempotency_key = $10)
+  AND ($11::timestamptz IS NULL OR created_at < $11)
+ORDER BY created_at DESC, id DESC
+LIMIT $2`
 
 func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error) {
 	var cursorTime pgtype.Timestamptz
@@ -106,7 +254,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		httpStatus = &status
 	}
 
-	rows, err := r.db.Queries.ListAuditLogs(ctx,
+	rows, err := r.db.Pool.Query(ctx, listAuditLogsSQL,
 		tenantID,
 		int32(limit+1), // Fetch one extra to determine if there's a next page
 		timestampPtrToPgtype(filter.From),
@@ -122,14 +270,55 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 	if err != nil {
 		return nil, "", MapPgError(err)
 	}
+	defer rows.Close()
 
-	logs := make([]domain.AuditLog, 0, len(rows))
-	for _, row := range rows {
-		log, err := MapListAuditLogsRowToDomain(row)
+	logs := make([]domain.AuditLog, 0, limit+1)
+	for rows.Next() {
+		var (
+			pgID             pgtype.UUID
+			pgTenantID       string
+			pgRequestID      *string
+			pgIdempotencyKey *string
+			pgActorSubject   *string
+			pgActorType      string
+			pgClientIP       *netip.Addr // correct pgx v5 scan type for inet
+			pgUserAgent      *string
+			pgMethod         string
+			pgPath           string
+			pgQueryParams    []byte
+			pgRequestHeaders []byte
+			pgRequestBodySHA *string
+			pgRequestSize    *int64
+			pgHTTPStatus     *int32
+			pgResponseCode   *string
+			pgResponseStatus *string
+			pgResponseTimeMS *int32
+			pgCreatedAt      pgtype.Timestamptz
+		)
+
+		if err := rows.Scan(
+			&pgID, &pgTenantID, &pgRequestID, &pgIdempotencyKey, &pgActorSubject,
+			&pgActorType, &pgClientIP, &pgUserAgent, &pgMethod, &pgPath,
+			&pgQueryParams, &pgRequestHeaders, &pgRequestBodySHA, &pgRequestSize,
+			&pgHTTPStatus, &pgResponseCode, &pgResponseStatus, &pgResponseTimeMS, &pgCreatedAt,
+		); err != nil {
+			return nil, "", fmt.Errorf("scan audit log: %w", err)
+		}
+
+		log, err := mapRowToDomain(
+			pgID, pgTenantID, pgRequestID, pgIdempotencyKey, pgActorSubject,
+			pgActorType, pgClientIP, pgUserAgent, pgMethod, pgPath,
+			pgQueryParams, pgRequestHeaders, pgRequestBodySHA, pgRequestSize,
+			pgHTTPStatus, pgResponseCode, pgResponseStatus, pgResponseTimeMS, pgCreatedAt,
+		)
 		if err != nil {
 			return nil, "", fmt.Errorf("map audit log: %w", err)
 		}
 		logs = append(logs, log)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, "", MapPgError(err)
 	}
 
 	nextCursor := ""
