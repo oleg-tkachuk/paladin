@@ -139,6 +139,19 @@ func (r *CachedObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string
 	return updated, nil
 }
 
+func (r *CachedObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	updated, err := r.repo.Restore(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
 // MarkDeleted marks object as deleted and invalidates cache
 func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	updated, err := r.repo.MarkDeleted(ctx, tenantID, id)

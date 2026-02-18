@@ -99,6 +99,15 @@ func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id u
 	return rows > 0, nil
 }
 
+func (r *ObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	rows, err := r.db.Queries.RestoreObject(ctx, tenantID, uuidToPgtype(id))
+	if err != nil {
+		return false, MapPgError(err)
+	}
+
+	return rows > 0, nil
+}
+
 func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	return r.MarkHardDeleted(ctx, tenantID, id)
 }

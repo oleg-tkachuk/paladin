@@ -392,3 +392,21 @@ func (q *Queries) PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID 
 	)
 	return i, err
 }
+
+const restoreObject = `-- name: RestoreObject :execrows
+UPDATE objects 
+SET status = 'uploaded', 
+    deleted_at = NULL, 
+    updated_at = now()
+WHERE tenant_id = $1 
+  AND id = $2 
+  AND status = 'soft_deleted'
+`
+
+func (q *Queries) RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreObject, tenantID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

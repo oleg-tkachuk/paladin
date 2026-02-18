@@ -39,6 +39,7 @@ type Querier interface {
 	PatchObjectLabels(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte) (Object, error)
 	PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, externalRef *string) (Object, error)
 	PruneAuditLogs(ctx context.Context, createdAt pgtype.Timestamptz, limit int32) (int64, error)
+	RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	UpdateMultipartStatus(ctx context.Context, tenantID string, uploadID string) (int64, error)
 	UpdateObjectStatusToActive(ctx context.Context, iD pgtype.UUID, tenantID string) (int64, error)
 	UpsertIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string, requestPath string, requestHash string, responseCode int32, responseBody []byte, expiresAt pgtype.Timestamptz) error

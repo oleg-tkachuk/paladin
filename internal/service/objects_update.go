@@ -126,6 +126,29 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 			}
 		}
 
+	case "uploaded", "complete":
+		// Restore Logic
+		// soft_deleted -> uploaded (ok)
+		// hard_deleted -> uploaded (conflict)
+		// active -> uploaded (no-op)
+
+		switch obj.Status {
+		case domain.ObjectHardDeleted, domain.ObjectDeleted:
+			err = fmt.Errorf("cannot restore a hard-deleted object")
+			opStatus = "conflict"
+			return err
+		case domain.ObjectSoftDeleted:
+			if _, err = s.objRepo.Restore(ctx, tenantID, id); err != nil {
+				span.RecordError(err)
+				opStatus = "error"
+				return err
+			}
+		default:
+			// Active -> no-op
+			opStatus = "success"
+			return nil
+		}
+
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
 		opStatus = "error"
