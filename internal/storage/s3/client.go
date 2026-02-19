@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -214,12 +215,18 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 		}
 	}
 
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "create_multipart", status, start) }()
+
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
+		status = "error"
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
 		return domain.MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
 
+	status = "success"
 	uploadID := aws.ToString(out.UploadId)
 	c.log.Info("S3 multipart upload initiated", zap.String("key", key), zap.String("upload_id", uploadID))
 
@@ -263,6 +270,10 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 		}
 	}
 
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "complete_multipart", status, start) }()
+
 	_, err := c.s3.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(c.Bucket),
 		Key:      aws.String(key),
@@ -273,10 +284,12 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 	})
 
 	if err != nil {
+		status = "error"
 		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
+	status = "success"
 	c.log.Info("S3 multipart upload completed", zap.String("key", key), zap.String("upload_id", uploadID))
 	return nil
 }
@@ -300,14 +313,20 @@ func (c *Client) PresignTTLDuration() time.Duration {
 }
 
 func (c *Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "head_object", status, start) }()
+
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 
+	status = "success"
 	return &domain.HeadRecord{
 		Key:          key,
 		ETag:         aws.ToString(out.ETag),
@@ -318,9 +337,18 @@ func (c *Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord
 	}, nil
 }
 func (c *Client) DeleteObject(ctx context.Context, key string) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "delete_object", status, start) }()
+
 	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),
 	})
-	return err
+	if err != nil {
+		status = "error"
+		return err
+	}
+	status = "success"
+	return nil
 }

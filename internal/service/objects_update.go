@@ -48,7 +48,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 
 	// Ensure we capture metrics and store idempotency result
 	defer func() {
-		metrics.RecordObjectOperation("update_status", opStatus, time.Since(start).Seconds())
+		metrics.RecordObjectOp(ctx, "update_status", opStatus, start)
 
 		if idempotencyKey != nil {
 			respCode := 200

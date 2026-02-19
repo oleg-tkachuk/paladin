@@ -22,7 +22,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("sign_download", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "sign_download", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()

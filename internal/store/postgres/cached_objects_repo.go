@@ -34,11 +34,11 @@ func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UU
 
 	// Try cache first
 	if rec, ok := r.cache.Get(ctx, cacheKey); ok {
-		metrics.RecordCacheOperation("get", "hit")
+		metrics.RecordCacheOp(ctx, "get", "hit")
 		return rec, nil
 	}
 
-	metrics.RecordCacheOperation("get", "miss")
+	metrics.RecordCacheOp(ctx, "get", "miss")
 
 	// Cache miss - fetch from database
 	rec, err := r.repo.Get(ctx, tenantID, id)
@@ -58,11 +58,11 @@ func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID strin
 
 	// Try cache first
 	if rec, ok := r.cache.Get(ctx, cacheKey); ok {
-		metrics.RecordCacheOperation("get", "hit")
+		metrics.RecordCacheOp(ctx, "get", "hit")
 		return rec, nil
 	}
 
-	metrics.RecordCacheOperation("get", "miss")
+	metrics.RecordCacheOp(ctx, "get", "miss")
 
 	// Cache miss - fetch from database
 	rec, err := r.repo.GetByExternalRef(ctx, tenantID, externalRef)

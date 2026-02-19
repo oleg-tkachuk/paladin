@@ -21,7 +21,7 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("patch_meta", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "patch_meta", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()

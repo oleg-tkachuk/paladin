@@ -20,7 +20,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("list", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "list", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.defaultOperationTimeout)
 	defer cancel()

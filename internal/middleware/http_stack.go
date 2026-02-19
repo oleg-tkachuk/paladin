@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -56,5 +57,13 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRep
 	// 9. Enforce Tenant & Limits
 	r.Use(EnforceTenant(cfg.Security))
 
-	// Add OTel, Metrics, RateLimit here as needed
+	// 10. OpenTelemetry Tracing & Metrics
+	if cfg.OTel.Enabled {
+		r.Use(func(c *gin.Context) {
+			OTelHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				c.Request = r
+				c.Next()
+			})).ServeHTTP(c.Writer, c.Request)
+		})
+	}
 }

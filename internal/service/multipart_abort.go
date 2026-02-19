@@ -24,7 +24,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("abort_multipart", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "abort_multipart", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()

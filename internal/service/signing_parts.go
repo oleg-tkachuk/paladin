@@ -21,7 +21,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("sign_part", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "sign_part", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
@@ -67,7 +67,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("sign_parts_batch", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "sign_parts_batch", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
