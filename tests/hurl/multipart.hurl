@@ -61,8 +61,8 @@ HTTP 200
 jsonpath "$.status" == "complete"
 jsonpath "$.labels.type" == "multipart-test"
 
-# Cleanup
-DELETE {{host}}/v1/objects/{{object_id}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

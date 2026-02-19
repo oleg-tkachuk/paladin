@@ -46,7 +46,7 @@ X-Tenant-ID: test-tenant
 HTTP 404
 
 # Cleanup
-DELETE {{host}}/v1/objects/{{object_id}}
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

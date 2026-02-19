@@ -2,9 +2,10 @@ package middleware
 
 import (
 	"net/http"
-	"github.com/oleg-tkachuk/paladin/internal/config"
 	"sync"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/config"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
@@ -152,11 +153,17 @@ func RateLimitMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID := c.GetHeader("X-Tenant-ID") // Or derive from auth
 		if tenantID == "" {
-			tenantID = "default"
+			tenantID = "default" // Use default limit for unknown tenants or block?
 		}
 
 		limiter := rl.GetLimiter(tenantID)
+
+		// Set generic rate limit headers (approximate or static for now)
+		c.Header("X-RateLimit-Limit", "100")    // TODO: Get from config
+		c.Header("X-RateLimit-Remaining", "99") // TODO: Calculate
+
 		if !limiter.Allow() {
+			c.Header("X-RateLimit-Remaining", "0")
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": "rate_limit_exceeded",
 			})

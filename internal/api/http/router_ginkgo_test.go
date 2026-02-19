@@ -59,7 +59,12 @@ func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id 
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
+func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
+func (m *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
 	return args.Error(0)
 }
@@ -408,9 +413,22 @@ var _ = Describe("Router", func() {
 	Describe("DELETE /v1/objects/:id", func() {
 		It("deletes the object", func() {
 			id := uuid.New()
-			mockSvc.On("HardDelete", mock.Anything, mock.Anything, openapi_types.UUID(id), (*string)(nil)).Return(nil)
-
+			mockSvc.On("Delete", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(nil)
+			// Ensure we are testing the soft delete endpoint which no longer takes query params
 			req, _ := http.NewRequest("DELETE", "/v1/objects/"+id.String(), nil)
+			req.Header.Set("X-Tenant-ID", "default")
+			server.Handler().ServeHTTP(recorder, req)
+
+			Expect(recorder.Code).To(Equal(http.StatusNoContent))
+		})
+	})
+
+	Describe("DELETE /v1/objects/:id/purge", func() {
+		It("purges the object", func() {
+			id := uuid.New()
+			mockSvc.On("Purge", mock.Anything, mock.Anything, openapi_types.UUID(id), (*string)(nil)).Return(nil)
+
+			req, _ := http.NewRequest("DELETE", "/v1/objects/"+id.String()+"/purge", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 

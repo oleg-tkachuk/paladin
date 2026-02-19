@@ -101,12 +101,12 @@ X-Tenant-ID: test-tenant
 HTTP 200
 
 # Cleanup
-DELETE {{host}}/v1/objects/{{object_id}}
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
-DELETE {{host}}/v1/objects/{{completed_object_id}}
+DELETE {{host}}/v1/objects/{{completed_object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

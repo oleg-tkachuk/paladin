@@ -175,14 +175,23 @@ func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id openapi_types.UUID) {
 	c.Status(http.StatusOK)
 }
 
-func (s *OpenAPIAdapter) HardDeleteObject(c *gin.Context, id openapi_types.UUID, params api.HardDeleteObjectParams) {
+func (s *OpenAPIAdapter) DeleteObject(c *gin.Context, id openapi_types.UUID, params api.DeleteObjectParams) {
+	if err := s.svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (s *OpenAPIAdapter) PurgeObject(c *gin.Context, id openapi_types.UUID, params api.PurgeObjectParams) {
 	var idempotencyKey *string
 	if params.IdempotencyKey != nil {
 		k := string(*params.IdempotencyKey)
 		idempotencyKey = &k
 	}
 
-	if err := s.svc.HardDelete(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
+	if err := s.svc.Purge(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
 		respondWithError(c, http.StatusInternalServerError, err)
 		return
 	}

@@ -70,8 +70,6 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	if n, err := utils.ParseSizeString(cfg.Policy.MaxMultipartSizeRaw); err == nil {
 		cfg.Policy.MaxMultipartSizeBytes = n
 	} else {
-		// optional: default if failure? No, schema validation guarantees format, but we should handle it.
-		// Actually, if CUE validates the regex, the format is correct.
 		return Config{}, fmt.Errorf("failed to parse policy.max_multipart_size (%s): %w", cfg.Policy.MaxMultipartSizeRaw, err)
 	}
 

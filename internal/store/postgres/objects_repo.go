@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -61,6 +63,9 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	obj, err := r.db.Queries.GetObject(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
 		return nil, MapPgError(err)
 	}
 
@@ -110,6 +115,15 @@ func (r *ObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID
 
 func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	return r.MarkHardDeleted(ctx, tenantID, id)
+}
+
+func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
+	rows, err := r.db.Queries.UpdateObjectStatus(ctx, tenantID, uuidToPgtype(id), status)
+	if err != nil {
+		return false, MapPgError(err)
+	}
+	// UpdateObjectStatus is :execrows
+	return rows > 0, nil
 }
 
 func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*domain.Object, error) {

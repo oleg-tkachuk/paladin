@@ -9,7 +9,7 @@ ARG TARGETARCH
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
 
 # ---- Build metadata ----
 ARG APP_VERSION=undefined
@@ -36,13 +36,7 @@ ENV APP_VERSION=$APP_VERSION \
     GOCACHE=/root/.cache/go-build
 
 # ---- System deps (protoc) ----
-# - no-install-recommends: less waste
-# - rm -rf /var/lib/apt/lists/*: clean and stable
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update \
-    && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache protobuf-dev git
 
 # ---- Go build tools (cached) ----
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \

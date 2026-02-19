@@ -175,33 +175,17 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-    delete:
-      tags: [Objects]
-      summary: Hard delete an object (irreversible)
-      description: |
-        Permanently removes the object data from storage and metadata from the database.
-        This operation is irreversible.
-      operationId: hardDeleteObject
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      responses:
-        "204":
-          description: Object deleted (or already absent)
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
     patch:
       tags: [Objects]
-      summary: Update object status (e.g. soft delete)
+      summary: Update object lifecycle status (non-delete transitions)
       description: |
-        Update the lifecycle state of an object.
-        Used primarily for soft deletion (`status` = `soft_deleted`).
+        Updates the lifecycle state of an object for non-delete transitions.
+        Soft deletion MUST be performed via `DELETE /objects/{id}`.
+        Hard purge MUST be performed via `DELETE /objects/{id}:purge`.
+
+        Notes:
+        - This endpoint is for lifecycle/state transitions only (e.g. aborting an upload, marking error).
+        - `soft_deleted` is intentionally not allowed here to avoid ambiguous delete semantics.
       operationId: updateObject
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -218,6 +202,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ObjectCommon"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [Objects]
+      summary: Soft delete an object
+      description: |
+        Performs a soft delete by marking the object status as `soft_deleted`
+        and setting `deleted_at`. The object content is NOT removed from storage.
+
+        This operation is idempotent:
+        - If the object is already soft-deleted, the response is still `204`.
+      operationId: deleteObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Object soft-deleted (or already soft-deleted)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/{id}/purge:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    delete:
+      tags: [Objects]
+      summary: Permanently purge an object (hard delete)
+      description: |
+        Permanently removes object content from storage and deletes its metadata.
+        Intended for privileged/internal use (e.g. reaper/GC).
+
+        This operation is idempotent:
+        - If the object is already absent (previously purged), the response is `204`.
+      operationId: purgeObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Object purged (or already absent)
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

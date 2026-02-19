@@ -30,7 +30,14 @@ type Client struct {
 }
 
 func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
-	staticCreds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
+	var optFns []func(*awsconfig.LoadOptions) error
+
+	// If credentials are provided in config, use them.
+	// Otherwise, LoadDefaultConfig will use the default chain (Env, IAM, etc.)
+	if cfg.AccessKey != "" || cfg.SecretKey != "" {
+		customCreds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
+		optFns = append(optFns, awsconfig.WithCredentialsProvider(customCreds))
+	}
 
 	createClient := func(endpoint string) (*s3.Client, error) {
 		resolved, err := url.Parse(endpoint)
@@ -49,11 +56,14 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 		})
 
-		awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+		// Prepare configuration options
+		currentOptFns := []func(*awsconfig.LoadOptions) error{
 			awsconfig.WithRegion(cfg.Region),
-			awsconfig.WithCredentialsProvider(staticCreds),
 			awsconfig.WithEndpointResolverWithOptions(customResolver),
-		)
+		}
+		currentOptFns = append(currentOptFns, optFns...)
+
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, currentOptFns...)
 		if err != nil {
 			return nil, fmt.Errorf("aws config load: %w", err)
 		}
