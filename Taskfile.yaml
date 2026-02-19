@@ -24,6 +24,10 @@ tasks:
           printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Docker system...\n"
       - cmd: |-
           docker system prune --volumes --force
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Minikube Docker system...\n"
+      - cmd: |-
+          minikube ssh "docker system prune -a --volumes --force" || true
 
   dd:start:
     desc: "Start Docker Desktop"
@@ -96,7 +100,7 @@ tasks:
 
           eval "$(minikube docker-env)"
 
-          time docker -c desktop-linux compose \
+          time docker compose \
             --progress={{.PROGRESS | default "auto"}} \
             -f {{.COMPOSE_FILE}} \
             -p {{.PROJECT_NAME}} \
