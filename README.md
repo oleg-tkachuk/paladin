@@ -12,8 +12,9 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 - **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
 - **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
 - **Advanced Logging**: Standardized structured JSON/Console logging with `zap.ReplaceGlobals` and automatic OpenTelemetry context enrichment (`trace_id`, `span_id`, `request_id`). Follows OTel semantic conventions for field naming.
+- **Audit Logging**: Comprehensive request/response logging for compliance and debugging.
 - **LRU Caching**: Production-grade caching with automatic invalidation and metrics tracking.
-- **Comprehensive Observability**: 100% OpenTelemetry tracing coverage across all 15 service methods, Prometheus metrics, and distributed tracing support.
+- **Comprehensive Observability**: 100% OpenTelemetry tracing coverage across all service methods, Prometheus metrics, and distributed tracing support.
 - **Production-Ready**: Enterprise-grade reliability with configurable timeouts, circuit breakers, input validation, and security hardening.
 
 ## Tech Stack
@@ -54,90 +55,9 @@ Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS 
 
 ## Database Schema
 
-The service uses PostgreSQL to track object metadata and multipart upload state. The schema is defined in `migrations/`.
+The service uses PostgreSQL to track object metadata, multipart upload state, audit logs, and idempotency keys.
 
-### Tables
-
-#### `objects`
-
-Tracks the lifecycle of each object with the following states:
-
-- **pending** - Object created, awaiting upload completion
-- **uploading** - Multipart upload in progress
-- **uploaded** - Data uploaded to S3, awaiting commit
-- **complete** - Upload committed and verified (Active state)
-- **aborted** - Creation process cancelled
-- **soft_deleted** - Mark as deleted (logical)
-- **hard_deleted** - Irreversibly removed
-
-Key fields:
-
-- `id` (UUID) - Primary key
-- `tenant_id` - Multi-tenancy isolation
-- `object_key` - S3 object key (unique per tenant)
-- `bucket` - S3 bucket name
-- `content_type` - MIME type
-- `size_bytes` - Object size
-- `checksum_sha256` - Optional integrity checksum
-- `status` - Lifecycle state
-- `expires_at` - Optional expiration timestamp
-- `labels` (JSONB) - Custom key-value tags
-- `external_ref` (Text) - Optional external reference ID (unique per tenant)
-
-Indexes:
-
-- `idx_objects_tenant_created_at` - Query objects by tenant and creation time
-- `uq_objects_tenant_key` - Enforce unique object keys per tenant
-- `idx_objects_labels` - GIN index for label filtering
-- `uq_objects_tenant_external_ref` - Enforce unique external ref per tenant
-
-#### `multipart_uploads`
-
-Manages multipart upload sessions with states:
-
-- **initiated** - Upload session started
-- **uploaded** - All parts sent to S3
-- **completed** - Session finalized and object committed
-- **aborted** - Upload session cancelled
-- **expired** - Session timed out
-
-Key fields:
-
-- `id` (UUID) - Primary key
-- `tenant_id` - Multi-tenancy isolation
-- `object_id` - References `objects.id` (CASCADE delete)
-- `upload_id` - S3 multipart upload ID
-- `part_size_bytes` - Size of each part
-- `status` - Upload session state
-- `expires_at` - Session expiration time
-
-Indexes:
-
-- `idx_mpu_tenant_created_at` - Query uploads by tenant and creation time
-- `uq_mpu_tenant_upload` - Enforce unique upload IDs per tenant
-
-#### `multipart_parts`
-
-Tracks individual parts within a multipart upload (optional tracking):
-
-Key fields:
-
-- `multipart_id` - References `multipart_uploads.id` (CASCADE delete)
-- `part_number` - Part sequence number
-- `etag` - S3 ETag for verification
-- `size_bytes` - Part size
-
-Primary key: `(multipart_id, part_number)`
-
-### Relationships
-
-```text
-objects (1) ──< (N) multipart_uploads ──< (N) multipart_parts
-```
-
-- One object can have multiple multipart upload sessions (e.g., retries)
-- One multipart upload consists of multiple parts
-- Cascade deletes ensure referential integrity
+Detailed schema information can be found in **[database.md](./docs/database.md)**.
 
 ## Configuration
 
@@ -436,8 +356,9 @@ For detailed API documentation, see [API.md](./docs/API.md).
 - `POST /v1/objects` - Create single object upload (returns presigned PUT URL)
 - `GET /v1/objects/:id` - Get object metadata (returns presigned GET URL)
 - `POST /v1/objects/:id/complete` - Mark object as active after upload
-- `PATCH /v1/objects/:id` - Logically delete object (update status to `soft_deleted`)
-- `DELETE /v1/objects/:id` - Hard-delete object (irreversible)
+- `PATCH /v1/objects/:id` - General object updates
+- `DELETE /v1/objects/:id` - Soft-delete object (logical)
+- `DELETE /v1/objects/:id/purge` - Hard-delete object (irreversible)
 
 **Multipart Uploads (v1):**
 
@@ -445,6 +366,12 @@ For detailed API documentation, see [API.md](./docs/API.md).
 - `POST /v1/multipart/:upload_id/parts/:part_number/sign` - Sign individual part
 - `POST /v1/multipart/:upload_id/complete` - Complete multipart upload
 - `POST /v1/multipart/:upload_id/abort` - Abort multipart upload
+
+**Operations & Admin:**
+
+- `GET /admin/config` - Get runtime configuration (redacted)
+- `GET /admin/audit-logs` - List audit logs
+- `GET /admin/audit-logs/:id` - Get audit log detail
 
 ### gRPC API
 

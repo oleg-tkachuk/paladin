@@ -60,6 +60,14 @@ cache:        # Metadata caching
 timeouts:     # Operation-specific timeouts
 idempotency:  # Request idempotency settings
 otel:         # OpenTelemetry configuration
+policy:       # Global object policies
+security:     # Multi-tenancy and RLS
+housekeeping: # Background cleanup tasks
+rate_limit:   # Per-tenant request limits
+cache:        # Metadata caching
+timeouts:     # Operation-specific timeouts
+idempotency:  # Request idempotency settings
+otel:         # OpenTelemetry configuration
 ```
 
 ---

@@ -249,44 +249,33 @@ Marks an upload as complete and the object as `complete`. This tells the system 
 | :--- | :--- | :--- |
 | `status` | string | The new status of the object (typically `complete`). |
 
-#### Hard Delete Object
+#### Soft Delete Object
 
-**Permanently** removes the object (data + metadata). This operation is **irreversible**. The object data is removed from the storage backend, and the metadata is marked with a tombstone or removed.
+Performs a soft delete by marking the object status as `soft_deleted` and setting `deleted_at`. The object content is NOT removed from storage.
+
+This operation is idempotent.
 
 - **Method**: `DELETE`
 - **Endpoint**: `/objects/:id`
 - **Path Parameters**:
   - `id`: Object UUID
-- **Query Parameters**: None (removed `mode` parameter)
-- **Success Code**: `204 No Content`
-- **Error Codes**: `400 Bad Request`, `500 Internal Server Error`
-
-#### Soft Delete Object
-
-Marks an object as `soft_deleted`. The data remains in storage, but the object is logically deleted and hidden from standard listings.
-
-- **Method**: `PATCH`
-- **Endpoint**: `/objects/:id`
-- **Path Parameters**:
-  - `id`: Object UUID
 - **Header**:
   - `Content-Type`: `application/json`
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`, `409 Conflict` (if state transition is invalid)
+- **Success Code**: `204 No Content`
+- **Error Codes**: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `500 Internal Server Error`
 
-**Request Body**:
+#### Hard Purge Object (Hard Delete)
 
-```json
-{
-  "status": "soft_deleted"
-}
-```
+Permanently removes object content from storage and deletes its metadata. Intended for privileged/internal use (e.g. reaper/GC).
 
-**Response Body**:
+This operation is idempotent.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `status` | string | The new status of the object (`soft_deleted`). |
+- **Method**: `DELETE`
+- **Endpoint**: `/objects/:id/purge`
+- **Path Parameters**:
+  - `id`: Object UUID
+- **Success Code**: `204 No Content`
+- **Error Codes**: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `500 Internal Server Error`
 
 ---
 
@@ -406,6 +395,44 @@ Cancels a multipart upload session and instructs the storage backend to relinqui
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `status` | string | New status (`aborted`). |
+
+---
+
+### Operations & Admin
+
+#### Get Admin Config
+
+Returns the current effective runtime configuration. Sensitive values (passwords, keys, tokens) are redacted.
+
+- **Method**: `GET`
+- **Endpoint**: `/admin/config`
+- **Success Code**: `200 OK`
+
+#### List Audit Logs
+
+Lists audit logs for the current tenant.
+
+- **Method**: `GET`
+- **Endpoint**: `/admin/audit-logs`
+- **Query Parameters**:
+  - `limit`: (int) Max items.
+  - `cursor`: (string) Pagination cursor.
+  - `from`: (string) ISO8601 creation time from.
+  - `to`: (string) ISO8601 creation time to.
+  - `path`: (string) Filter by path.
+  - `method`: (string) Filter by method.
+  - `http_status`: (int) Filter by status code.
+- **Success Code**: `200 OK`
+
+#### Get Audit Log
+
+Retrieves details of a specific audit log.
+
+- **Method**: `GET`
+- **Endpoint**: `/admin/audit-logs/:id`
+- **Path Parameters**:
+  - `id`: Audit log UUID.
+- **Success Code**: `200 OK`
 
 ---
 
