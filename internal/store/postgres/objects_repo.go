@@ -265,14 +265,16 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 
 	// Determine which query to use based on what's being patched
 	if labels != nil && externalRef != nil {
-		labelsJSON, err := marshalStringMap(labels)
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
 		obj, err = r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
 	} else if labels != nil {
-		labelsJSON, err := marshalStringMap(labels)
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)

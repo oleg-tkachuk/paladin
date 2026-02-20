@@ -15,7 +15,7 @@ func isHealthPath(path string) bool {
 
 func isTechPath(path string) bool {
 	switch path {
-	case "/health/livez", "/health/readyz", "/metrics", "/version":
+	case "/health/livez", "/health/readyz", "/health/startupz", "/metrics", "/version":
 		return true
 	default:
 		return false

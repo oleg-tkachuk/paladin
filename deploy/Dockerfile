@@ -58,7 +58,7 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # ---- deps first (best cache hit rate) ----
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    go mod download
+    go mod download -x
 
 # ---- source ----
 COPY cmd/ cmd/

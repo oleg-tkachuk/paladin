@@ -46,7 +46,7 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 			return nil, fmt.Errorf("invalid s3 endpoint: %w", err)
 		}
 
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
 			if strings.EqualFold(service, s3.ServiceID) {
 				return aws.Endpoint{
 					URL:               resolved.String(),
@@ -60,7 +60,7 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 		// Prepare configuration options
 		currentOptFns := []func(*awsconfig.LoadOptions) error{
 			awsconfig.WithRegion(cfg.Region),
-			awsconfig.WithEndpointResolverWithOptions(customResolver),
+			awsconfig.WithEndpointResolver(customResolver),
 		}
 		currentOptFns = append(currentOptFns, optFns...)
 
