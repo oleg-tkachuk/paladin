@@ -146,7 +146,7 @@ S3-compatible storage configuration (AWS S3, SeaweedFS, MinIO):
 s3:
   bucket: paladin               # Default bucket name
   region: us-east-1         # AWS region
-  endpoint: "http://seaweedfs-s3.storage.svc.cluster.local:8333" # S3 endpoint URL
+  endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333" # S3 endpoint URL
   public_endpoint: "http://s3.localhost" # Publicly accessible S3 endpoint (for browser direct uploads)
   force_path_style: true    # Use path-style URLs (required for MinIO/SeaweedFS)
   access_key: dummy         # S3 access key
