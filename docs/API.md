@@ -257,25 +257,17 @@ This operation is idempotent.
 
 - **Method**: `DELETE`
 - **Endpoint**: `/objects/:id`
-- **Path Parameters**:
-  - `id`: Object UUID
-- **Header**:
-  - `Content-Type`: `application/json`
 - **Success Code**: `204 No Content`
-- **Error Codes**: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `500 Internal Server Error`
 
 #### Hard Purge Object (Hard Delete)
 
-Permanently removes object content from storage and deletes its metadata. Intended for privileged/internal use (e.g. reaper/GC).
+Permanently removes object content from storage and deletes its metadata. Marks object as `hard_deleted`.
 
-This operation is idempotent.
+This operation is idempotent and supports an optional `Idempotency-Key` header.
 
 - **Method**: `DELETE`
 - **Endpoint**: `/objects/:id/purge`
-- **Path Parameters**:
-  - `id`: Object UUID
 - **Success Code**: `204 No Content`
-- **Error Codes**: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `500 Internal Server Error`
 
 ---
 

@@ -156,6 +156,7 @@ housekeeping:
   enable_reaper: true
   pending_ttl: "24h" # Clean up pending objects after 24h
   multipart_ttl: "72h" # Clean up multipart sessions after 72h
+  audit_log_ttl: "30d" # Clean up audit logs after 30 days
   gc_interval: "1h" # Run cleanup every hour
   delete_orphaned_parts: false # Delete files from S3 without metadata
 ```
