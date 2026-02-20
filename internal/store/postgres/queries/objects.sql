@@ -78,6 +78,11 @@ WHERE tenant_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
 
+-- name: UpdateObjectStatus :execrows
+UPDATE objects
+SET status = $3, updated_at = NOW()
+WHERE tenant_id = $1 AND id = $2;
+
 -- name: PatchObjectLabels :one
 UPDATE objects 
 SET labels = labels || $3, 

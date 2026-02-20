@@ -410,3 +410,17 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID string, iD pgtype.
 	}
 	return result.RowsAffected(), nil
 }
+
+const updateObjectStatus = `-- name: UpdateObjectStatus :execrows
+UPDATE objects
+SET status = $3, updated_at = NOW()
+WHERE tenant_id = $1 AND id = $2
+`
+
+func (q *Queries) UpdateObjectStatus(ctx context.Context, tenantID string, iD pgtype.UUID, status string) (int64, error) {
+	result, err := q.db.Exec(ctx, updateObjectStatus, tenantID, iD, status)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

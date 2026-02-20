@@ -84,6 +84,14 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, a
 	// Apply rate limiting middleware
 	r.Use(middleware.RateLimitMiddleware(cfg))
 
+	r.GET("/version", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"version":    version,
+			"commit":     commit,
+			"build_time": buildTime,
+		})
+	})
+
 	v1 := r.Group("/v1")
 
 	// Add rate limiting headers (placeholder for future implementation)

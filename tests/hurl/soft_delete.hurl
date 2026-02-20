@@ -51,13 +51,14 @@ HTTP 409
 [Asserts]
 jsonpath "$.error.code" == "conflict"
 
-# 5. Hard Delete (Cleanup)
-DELETE {{host}}/v1/objects/{{object_id}}
+# 5. Hard Delete (Purge)
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-soft-delete
 HTTP 204
 
-# 6. Verify Hard Deleted
+# 6. Verify Hard Deleted (status is hard_deleted)
+# After purge, the object's status is hard_deleted but still returned by GET
 GET {{host}}/v1/objects/{{object_id}}
 Host: api.paladin.local
 X-Tenant-ID: test-soft-delete
@@ -112,7 +113,8 @@ HTTP 200
 jsonpath "$.status" == "soft_deleted"
 
 # Cleanup
-DELETE {{host}}/v1/objects/{{object_id_2}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{object_id_2}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-soft-delete
 HTTP 204

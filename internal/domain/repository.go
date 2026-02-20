@@ -14,6 +14,7 @@ type ObjectsRepository interface {
 	MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error)
 	MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
+	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error)
 	Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, error)

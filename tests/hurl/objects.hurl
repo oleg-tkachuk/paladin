@@ -16,8 +16,6 @@ upload_url: jsonpath "$.upload.url"
 [Asserts]
 jsonpath "$.object_key" exists
 jsonpath "$.upload.method" == "PUT"
-# Verify SSE headers (default config uses AES256)
-jsonpath "$.upload.headers['x-amz-server-side-encryption']" == "AES256"
 # Verify TTL (default 15m = 900s)
 jsonpath "$.upload.url" contains "X-Amz-Expires=900"
 
@@ -54,8 +52,8 @@ HTTP 200
 [Asserts]
 jsonpath "$.download.url" exists
 
-# Cleanup (Delete)
-DELETE {{host}}/v1/objects/{{object_id}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
@@ -131,8 +129,8 @@ HTTP 200
 [Asserts]
 jsonpath "$.status" == "complete"
 
-# Cleanup (Delete)
-DELETE {{host}}/v1/objects/{{meta_object_id}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{meta_object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

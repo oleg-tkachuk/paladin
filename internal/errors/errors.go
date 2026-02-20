@@ -232,3 +232,12 @@ func MapToGRPC(err error) error {
 
 	return status.Error(code, appErr.Message)
 }
+
+// IsNotFound checks if the error is a NotFound error
+func IsNotFound(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Code == CodeNotFound
+	}
+	return false
+}

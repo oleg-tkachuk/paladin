@@ -54,7 +54,7 @@ jsonpath "$.status" == "complete"
 jsonpath "$.content_type" == "image/png"
 
 # Delete Object
-DELETE {{host}}/v1/objects/{{object_id}}
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
@@ -65,4 +65,4 @@ Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "deleted"
+jsonpath "$.status" == "hard_deleted"

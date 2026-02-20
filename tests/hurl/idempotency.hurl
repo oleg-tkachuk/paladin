@@ -45,7 +45,7 @@ jsonpath "$.error.request_id" exists
 jsonpath "$.error.trace_id" exists
 
 # Cleanup
-DELETE {{host}}/v1/objects/{{id_1}}
+DELETE {{host}}/v1/objects/{{id_1}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
@@ -77,7 +77,7 @@ HTTP 201
 jsonpath "$.object_id" == "{{idem_header_id}}"
 
 # Cleanup
-DELETE {{host}}/v1/objects/{{idem_header_id}}
+DELETE {{host}}/v1/objects/{{idem_header_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

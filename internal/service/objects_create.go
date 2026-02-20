@@ -32,8 +32,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cont
 	start := time.Now()
 	var status string
 	defer func() {
-		duration := time.Since(start).Seconds()
-		metrics.RecordObjectOperation("create_single", status, duration)
+		metrics.RecordObjectOp(ctx, "create_single", status, start)
 	}()
 
 	// Enforce operation timeout

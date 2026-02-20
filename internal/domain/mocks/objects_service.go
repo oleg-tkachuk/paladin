@@ -370,6 +370,69 @@ func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// Delete provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+	ret := _mock.Called(ctx, tenantID, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Delete")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, tenantID, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
+type MockObjectsService_Delete_Call struct {
+	*mock.Call
+}
+
+// Delete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id uuid.UUID
+func (_e *MockObjectsService_Expecter) Delete(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsService_Delete_Call {
+	return &MockObjectsService_Delete_Call{Call: _e.mock.On("Delete", ctx, tenantID, id)}
+}
+
+func (_c *MockObjectsService_Delete_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsService_Delete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_Delete_Call) Return(err error) *MockObjectsService_Delete_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_Delete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) error) *MockObjectsService_Delete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, id)
@@ -588,75 +651,6 @@ func (_c *MockObjectsService_GetMultipart_Call) Return(multipart *domain.Multipa
 }
 
 func (_c *MockObjectsService_GetMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error)) *MockObjectsService_GetMultipart_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// HardDelete provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) HardDelete(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
-	ret := _mock.Called(ctx, tenantID, id, idempotencyKey)
-
-	if len(ret) == 0 {
-		panic("no return value specified for HardDelete")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, *string) error); ok {
-		r0 = returnFunc(ctx, tenantID, id, idempotencyKey)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockObjectsService_HardDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HardDelete'
-type MockObjectsService_HardDelete_Call struct {
-	*mock.Call
-}
-
-// HardDelete is a helper method to define mock.On call
-//   - ctx context.Context
-//   - tenantID string
-//   - id uuid.UUID
-//   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) HardDelete(ctx interface{}, tenantID interface{}, id interface{}, idempotencyKey interface{}) *MockObjectsService_HardDelete_Call {
-	return &MockObjectsService_HardDelete_Call{Call: _e.mock.On("HardDelete", ctx, tenantID, id, idempotencyKey)}
-}
-
-func (_c *MockObjectsService_HardDelete_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string)) *MockObjectsService_HardDelete_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 uuid.UUID
-		if args[2] != nil {
-			arg2 = args[2].(uuid.UUID)
-		}
-		var arg3 *string
-		if args[3] != nil {
-			arg3 = args[3].(*string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-		)
-	})
-	return _c
-}
-
-func (_c *MockObjectsService_HardDelete_Call) Return(err error) *MockObjectsService_HardDelete_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockObjectsService_HardDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error) *MockObjectsService_HardDelete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -937,6 +931,75 @@ func (_c *MockObjectsService_PatchMeta_Call) Return(object *domain.Object, err e
 }
 
 func (_c *MockObjectsService_PatchMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsService_PatchMeta_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Purge provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
+	ret := _mock.Called(ctx, tenantID, id, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Purge")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, *string) error); ok {
+		r0 = returnFunc(ctx, tenantID, id, idempotencyKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_Purge_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Purge'
+type MockObjectsService_Purge_Call struct {
+	*mock.Call
+}
+
+// Purge is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id uuid.UUID
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) Purge(ctx interface{}, tenantID interface{}, id interface{}, idempotencyKey interface{}) *MockObjectsService_Purge_Call {
+	return &MockObjectsService_Purge_Call{Call: _e.mock.On("Purge", ctx, tenantID, id, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_Purge_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string)) *MockObjectsService_Purge_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		var arg3 *string
+		if args[3] != nil {
+			arg3 = args[3].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_Purge_Call) Return(err error) *MockObjectsService_Purge_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_Purge_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error) *MockObjectsService_Purge_Call {
 	_c.Call.Return(run)
 	return _c
 }

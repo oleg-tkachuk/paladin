@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -22,7 +24,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("abort_multipart", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "abort_multipart", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
@@ -39,7 +41,16 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return err
+		// Return BadRequest for invalid/unknown upload IDs (API contract)
+		return errors.BadRequest("invalid upload_id", err)
+	}
+
+	if multi == nil {
+		err := fmt.Errorf("multipart upload not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return errors.BadRequest("invalid upload_id", err)
 	}
 
 	if err := s.s3.AbortMultipartUpload(ctx, multi.ObjectKey, uploadID); err != nil {

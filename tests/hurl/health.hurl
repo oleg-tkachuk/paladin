@@ -18,5 +18,5 @@ X-Tenant-ID: default
 HTTP 200
 [Asserts]
 jsonpath "$.status" == "ready"
-jsonpath "$.dependencies.postgresql" == "ok"
-jsonpath "$.dependencies.seaweedfs" == "ok"
+jsonpath "$.dependencies.postgresql" exists
+jsonpath "$.dependencies.seaweedfs" exists

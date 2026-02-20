@@ -49,7 +49,7 @@ jsonpath "$.external_ref" == "ext-ref-metadata-v110"
 jsonpath "$.download_url" not exists
 
 # Cleanup Rich Object
-DELETE {{host}}/v1/objects/{{rich_id}}
+DELETE {{host}}/v1/objects/{{rich_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
@@ -76,11 +76,11 @@ HTTP 200
 [Asserts]
 jsonpath "$.object_id" == "{{empty_meta_id}}"
 # labels might be null or missing
-jsonpath "$.labels" not exists
+jsonpath "$.labels" isEmpty
 jsonpath "$.external_ref" not exists
 
 # Cleanup Empty Meta Object
-DELETE {{host}}/v1/objects/{{empty_meta_id}}
+DELETE {{host}}/v1/objects/{{empty_meta_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

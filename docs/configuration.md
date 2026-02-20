@@ -60,6 +60,14 @@ cache:        # Metadata caching
 timeouts:     # Operation-specific timeouts
 idempotency:  # Request idempotency settings
 otel:         # OpenTelemetry configuration
+policy:       # Global object policies
+security:     # Multi-tenancy and RLS
+housekeeping: # Background cleanup tasks
+rate_limit:   # Per-tenant request limits
+cache:        # Metadata caching
+timeouts:     # Operation-specific timeouts
+idempotency:  # Request idempotency settings
+otel:         # OpenTelemetry configuration
 ```
 
 ---
@@ -148,6 +156,7 @@ housekeeping:
   enable_reaper: true
   pending_ttl: "24h" # Clean up pending objects after 24h
   multipart_ttl: "72h" # Clean up multipart sessions after 72h
+  audit_log_ttl: "30d" # Clean up audit logs after 30 days
   gc_interval: "1h" # Run cleanup every hour
   delete_orphaned_parts: false # Delete files from S3 without metadata
 ```

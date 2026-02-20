@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
-	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/breaker"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // DetailedDependencyStatus provides detailed health information for a single dependency
@@ -66,10 +68,12 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 	// Check PostgreSQL with latency tracking
 	start := time.Now()
 	if err := s.db.Ping(ctx); err != nil {
+		metrics.RecordDbQuery(ctx, "ping", "error", start)
 		status.PostgreSQL.Status = "down"
 		status.PostgreSQL.Message = err.Error()
 		ready = false
 	} else {
+		metrics.RecordDbQuery(ctx, "ping", "success", start)
 		latency := time.Since(start).Milliseconds()
 		status.PostgreSQL.LatencyMs = &latency
 
@@ -84,10 +88,12 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 	// Check SeaweedFS with latency tracking
 	start = time.Now()
 	if err := s.s3.Health(ctx); err != nil {
+		metrics.RecordS3Op(ctx, "health", "error", start)
 		status.SeaweedFS.Status = "down"
 		status.SeaweedFS.Message = err.Error()
 		ready = false
 	} else {
+		metrics.RecordS3Op(ctx, "health", "success", start)
 		latency := time.Since(start).Milliseconds()
 		status.SeaweedFS.LatencyMs = &latency
 	}

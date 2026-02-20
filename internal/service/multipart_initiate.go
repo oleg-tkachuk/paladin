@@ -29,7 +29,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("initiate_multipart", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "initiate_multipart", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()

@@ -20,7 +20,7 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("get_multipart", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "get_multipart", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()

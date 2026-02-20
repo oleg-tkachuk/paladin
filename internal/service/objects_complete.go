@@ -24,7 +24,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("complete_object", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "complete_object", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()

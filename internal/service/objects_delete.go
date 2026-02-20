@@ -49,7 +49,7 @@ func (s *objectsService) hardDeleteObject(ctx context.Context, tenantID string, 
 
 	// Ensure we capture metrics and store idempotency result
 	defer func() {
-		metrics.RecordObjectOperation("hard_delete", status, time.Since(start).Seconds())
+		metrics.RecordObjectOp(ctx, "hard_delete", status, start)
 
 		if idempotencyKey != nil {
 			respCode := 204

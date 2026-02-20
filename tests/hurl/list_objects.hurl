@@ -103,9 +103,9 @@ X-Tenant-ID: test-tenant
 HTTP 200
 [Asserts]
 jsonpath "$.items" count == 1
-jsonpath "$.next_cursor" exists
+jsonpath "$.pagination.next_cursor" exists
 [Captures]
-cursor: jsonpath "$.next_cursor"
+cursor: jsonpath "$.pagination.next_cursor"
 
 GET {{host}}/v1/objects?limit=1&cursor={{cursor}}
 Host: api.paladin.local
@@ -122,13 +122,14 @@ HTTP 200
 [Asserts]
 jsonpath "$.items" count == 0
 
-# Cleanup
-DELETE {{host}}/v1/objects/{{obj1_id}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{obj1_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204
 
-DELETE {{host}}/v1/objects/{{obj2_id}}
+# Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{obj2_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

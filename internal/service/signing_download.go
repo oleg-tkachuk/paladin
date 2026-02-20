@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -22,7 +22,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("sign_download", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "sign_download", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
@@ -43,7 +43,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 	}
 
 	if rec.Status != domain.ObjectComplete {
-		err := fmt.Errorf("object not complete")
+		err := errors.Conflict("object not complete", nil)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

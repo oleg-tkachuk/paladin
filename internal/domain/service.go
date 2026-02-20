@@ -11,7 +11,10 @@ type ObjectsService interface {
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*Object, error)
-	HardDelete(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error
+	// Delete performs a soft delete
+	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
+	// Purge performs a hard delete (removes from storage)
+	Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error
 	// UpdateStatus updates the status of an object (e.g. for soft deletion)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, error)

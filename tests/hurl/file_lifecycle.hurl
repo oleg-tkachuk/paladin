@@ -58,8 +58,8 @@ jsonpath "$.status" == "complete"
 jsonpath "$.content_type" == "text/plain"
 jsonpath "$.size_bytes" == 96
 
-# 7. Cleanup
-DELETE {{host}}/v1/objects/{{object_id}}
+# 7. Cleanup (Purge)
+DELETE {{host}}/v1/objects/{{object_id}}/purge
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 204

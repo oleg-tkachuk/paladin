@@ -21,7 +21,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("complete_multipart", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "complete_multipart", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.longOperationTimeout)
 	defer cancel()

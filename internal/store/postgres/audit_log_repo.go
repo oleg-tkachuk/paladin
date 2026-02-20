@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 type AuditLogRepo struct {
@@ -20,8 +21,13 @@ func NewAuditLogRepo(db *DB) *AuditLogRepo {
 }
 
 func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "CreateAuditLog", status, start) }()
+
 	queryParams, err := marshalJSONB(log.QueryParams)
 	if err != nil {
+		status = "error"
 		return fmt.Errorf("marshal query params: %w", err)
 	}
 
@@ -170,6 +176,10 @@ FROM audit_logs
 WHERE tenant_id = $1 AND id = $2`
 
 func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.AuditLog, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "GetAuditLog", status, start) }()
+
 	row := r.db.Pool.QueryRow(ctx, getAuditLogSQL, tenantID, uuidToPgtype(id))
 
 	var (
@@ -201,6 +211,7 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 		&pgHTTPStatus, &pgResponseCode, &pgResponseStatus, &pgResponseTimeMS, &pgCreatedAt,
 	)
 	if err != nil {
+		status = "error"
 		return nil, MapPgError(err)
 	}
 
@@ -211,9 +222,11 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 		pgHTTPStatus, pgResponseCode, pgResponseStatus, pgResponseTimeMS, pgCreatedAt,
 	)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 
+	status = "success"
 	return &result, nil
 }
 
@@ -254,6 +267,10 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		httpStatus = &status
 	}
 
+	start := time.Now()
+	var opStatus string
+	defer func() { metrics.RecordDbQuery(ctx, "ListAuditLogs", opStatus, start) }()
+
 	rows, err := r.db.Pool.Query(ctx, listAuditLogsSQL,
 		tenantID,
 		int32(limit+1), // Fetch one extra to determine if there's a next page
@@ -268,6 +285,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		cursorTime,
 	)
 	if err != nil {
+		opStatus = "error"
 		return nil, "", MapPgError(err)
 	}
 	defer rows.Close()
@@ -318,8 +336,11 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 	}
 
 	if err := rows.Err(); err != nil {
+		opStatus = "error"
 		return nil, "", MapPgError(err)
 	}
+
+	opStatus = "success"
 
 	nextCursor := ""
 	if len(logs) > limit {
@@ -331,10 +352,16 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 }
 
 func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "PruneAuditLogs", status, start) }()
+
 	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), int32(limit))
 	if err != nil {
+		status = "error"
 		return 0, MapPgError(err)
 	}
 
+	status = "success"
 	return rows, nil
 }

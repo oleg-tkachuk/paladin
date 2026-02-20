@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -16,6 +18,10 @@ type MultipartRepo struct {
 func NewMultipartRepo(db *DB) *MultipartRepo { return &MultipartRepo{db: db} }
 
 func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "CreateMultipart", status, start) }()
+
 	err := r.db.Queries.CreateMultipart(ctx,
 		uuidToPgtype(rec.ID),
 		rec.TenantID,
@@ -29,31 +35,57 @@ func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error 
 		timestampToPgtype(rec.ExpiresAt),
 	)
 
+	if err != nil {
+		status = "error"
+	} else {
+		status = "success"
+	}
 	return MapPgError(err)
 }
 
 func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "GetMultipartByUploadID", status, start) }()
+
 	mp, err := r.db.Queries.GetMultipartByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
+		status = "error"
 		return nil, MapPgError(err)
 	}
 
 	result, err := MapMultipartToDomain(mp)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 
+	status = "success"
 	return &result, nil
 }
 
 func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUID, partNumber int, etag string, sizeBytes *int64) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "UpsertMultipartPart", status, start) }()
+
 	err := r.db.Queries.UpsertMultipartPart(ctx, uuidToPgtype(multipartID), int32(partNumber), &etag, sizeBytes)
+	if err != nil {
+		status = "error"
+	} else {
+		status = "success"
+	}
 	return MapPgError(err)
 }
 
 func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]domain.MultipartPart, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "ListMultipartParts", status, start) }()
+
 	rows, err := r.db.Queries.ListMultipartParts(ctx, uuidToPgtype(multipartID))
 	if err != nil {
+		status = "error"
 		return nil, MapPgError(err)
 	}
 
@@ -61,27 +93,51 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 	for _, row := range rows {
 		part, err := MapMultipartPartToDomain(row)
 		if err != nil {
+			status = "error"
 			return nil, fmt.Errorf("map multipart part: %w", err)
 		}
 		out = append(out, part)
 	}
 
+	status = "success"
 	return out, nil
 }
 
 func (r *MultipartRepo) MarkCompleted(ctx context.Context, tenantID string, uploadID string) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "MarkMultipartCompleted", status, start) }()
+
 	err := r.db.Queries.MarkMultipartCompleted(ctx, tenantID, uploadID)
+	if err != nil {
+		status = "error"
+	} else {
+		status = "success"
+	}
 	return MapPgError(err)
 }
 
 func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, uploadID string) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "MarkMultipartAborted", status, start) }()
+
 	err := r.db.Queries.MarkMultipartAborted(ctx, tenantID, uploadID)
+	if err != nil {
+		status = "error"
+	} else {
+		status = "success"
+	}
 	return MapPgError(err)
 }
 
 func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "CompleteUpload_Tx", status, start) }()
+
 	// Use WithTx for transaction support
-	return r.db.WithTx(ctx, func(q *sqlc.Queries) error {
+	err := r.db.WithTx(ctx, func(q *sqlc.Queries) error {
 		// Set local tenant_id for RLS if configured
 		if _, err := r.db.Pool.Exec(ctx, fmt.Sprintf("SELECT set_config('app.tenant_id', '%s', true)", tenantID)); err != nil {
 			return fmt.Errorf("set tenant_id: %w", err)
@@ -107,11 +163,23 @@ func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, upl
 
 		return nil
 	})
+
+	if err != nil {
+		status = "error"
+	} else {
+		status = "success"
+	}
+	return err
 }
 
 func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Multipart, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "ListExpiredMultiparts", status, start) }()
+
 	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, int32(limit))
 	if err != nil {
+		status = "error"
 		return nil, MapPgError(err)
 	}
 
@@ -119,10 +187,12 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 	for _, row := range rows {
 		mp, err := MapMultipartToDomain(row)
 		if err != nil {
+			status = "error"
 			return nil, fmt.Errorf("map multipart: %w", err)
 		}
 		out = append(out, mp)
 	}
 
+	status = "success"
 	return out, nil
 }

@@ -21,7 +21,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("get", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "get", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()
@@ -54,7 +54,7 @@ func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openap
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("get_meta", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOp(ctx, "get_meta", status, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
 	defer cancel()

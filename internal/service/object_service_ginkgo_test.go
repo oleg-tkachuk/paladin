@@ -82,6 +82,11 @@ func (m *MockObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
+	args := m.Called(ctx, tenantID, id, status)
+	return args.Bool(0), args.Error(1)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }
@@ -319,9 +324,10 @@ var _ = Describe("ObjectsService", func() {
 			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
 
 			// Re-create service with mockIdem and mockPolicy
-			svcFixed := service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, 5*1024, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Hour)
+			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, 1024*1024,
+				time.Second, time.Second, time.Second, time.Second, time.Hour)
 
-			out, err := svcFixed.CreateSingle(ctx, tenantID, "image/png", 100, nil, nil, 0, &key)
+			out, err := svc.CreateSingle(ctx, tenantID, "image/png", 100, nil, nil, 0, &key)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).To(Equal(res.ID))
@@ -483,19 +489,31 @@ var _ = Describe("ObjectsService", func() {
 	})
 
 	Describe("Delete", func() {
-		It("should successfully mark object as deleted and delete from S3", func() {
+		It("should successfully mark object as deleted (soft delete)", func() {
 			tenantID := "test-tenant"
 			objID := uuid.New()
 
-			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{
-				ID:        objID,
-				ObjectKey: "test-key",
-			}, nil)
-			mockRepo.On("MarkHardDeleted", mock.Anything, tenantID, objID).Return(true, nil)
-			mockS3.On("DeleteObject", mock.Anything, "test-key").Return(nil)
+			// Expect only MarkDeleted, no S3 delete
+			mockRepo.On("MarkDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
 
-			err := svc.HardDelete(ctx, tenantID, openapi_types.UUID(objID), nil)
+			err := svc.Delete(ctx, tenantID, openapi_types.UUID(objID))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 
+	Describe("Purge", func() {
+		It("should successfully mark object as deleted and delete from S3", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+			id := openapi_types.UUID(objID)
+
+			// Expect MarkHardDeleted (and Get before it)
+			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ObjectKey: "some-key"}, nil)
+			mockS3.On("DeleteObject", mock.Anything, "some-key").Return(nil)
+			mockRepo.On("MarkHardDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
+
+			// We are testing service method Purge
+			err := svc.Purge(ctx, tenantID, id, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
