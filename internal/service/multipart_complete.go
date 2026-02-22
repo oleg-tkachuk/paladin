@@ -41,6 +41,24 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, err
 	}
 
+	// FSM State Transition Check
+	sm := domain.NewMultipartFSM(multi.Status)
+	err = sm.Fire(domain.EventMultipartComplete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return nil, fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == multi.Status { // Idempotent completion
+		status = "success"
+		span.SetStatus(codes.Ok, "already_completed")
+		rec, _ := s.objRepo.Get(ctx, tenantID, multi.ObjectID)
+		return rec, nil
+	}
+
 	if err := s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

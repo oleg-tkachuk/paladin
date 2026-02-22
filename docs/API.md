@@ -124,6 +124,7 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
+| `category` | string | No | Category slug to logically group the uploaded object. Defaults to `"objects"`. Must match an existing category created via Admin APIs. |
 | `content_type` | string | **Yes** | MIME type of the object (e.g., `image/jpeg`). Must be allowed by server policy. |
 | `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must be > 0 and not exceed server limits. |
 | `labels` | map[string]string | No | Optional key-value tags to attach to the object. |
@@ -151,7 +152,13 @@ Initiates a single-object upload session. Returns a presigned URL that the clien
 ```bash
 curl -X POST http://localhost:8080/v1/objects \
   -H "Content-Type: application/json" \
-  -d '{"content_type": "image/png", "size_bytes": 1024, "labels": {"type": "invoice"}}'
+  -H "X-Tenant-ID: my-tenant" \
+  -d '{
+    "category": "invoices",
+    "content_type": "image/png", 
+    "size_bytes": 1024, 
+    "labels": {"type": "invoice"}
+  }'
 ```
 
 > **Note**: If Server-Side Encryption (SSE) is enabled, the `headers` field in the response will contain the required encryption headers (e.g., `x-amz-server-side-encryption`). These headers **must** be included in your `PUT` request to S3, or the upload will fail.
@@ -286,6 +293,7 @@ Starts a multipart upload session. This is required for large files or when the 
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
+| `category` | string | No | Category slug to logically group the uploaded object. Defaults to `"objects"`. |
 | `content_type` | string | **Yes** | MIME type of the file. |
 | `size_bytes` | int64 | **Yes** | Total size of the file. Used to calculate part sizing. |
 | `labels` | map[string]string | No | Optional key-value tags. |
@@ -451,6 +459,7 @@ Initiates a single object upload.
   - `size_bytes` (int64): Object size.
   - `labels` (map<string, string>): Optional tags.
   - `external_ref` (string): Optional external reference.
+  - `category` (string): Optional category for object grouping. Defaults to `"objects"`.
 - **Response**: `CreateObjectResponse`
   - `object_id` (string): UUID.
   - `object_key` (string): Storage key.
@@ -526,6 +535,7 @@ Starts a multipart session.
   - `size_bytes` (int64)
   - `labels` (map<string, string>)
   - `external_ref` (string)
+  - `category` (string): Category for the resulting object. Defaults to `"objects"`.
 - **Response**: `InitiateMultipartResponse`
   - `object_id` (string)
   - `object_key` (string)

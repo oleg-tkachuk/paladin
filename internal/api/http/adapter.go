@@ -141,7 +141,12 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	category := "objects"
+	if req.Category != nil && *req.Category != "" {
+		category = *req.Category
+	}
+
+	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
 		return
@@ -367,7 +372,12 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	category := "objects"
+	if req.Category != nil && *req.Category != "" {
+		category = *req.Category
+	}
+
+	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
 		return

@@ -25,6 +25,7 @@ type objectsService struct {
 	s3        domain.StorageClient
 	policy    domain.Policy
 	idemRepo  domain.IdempotencyRepository
+	catRepo   domain.CategoryRepository
 	partSize  int64
 
 	// Configurable timeouts
@@ -41,6 +42,7 @@ func NewObjectsService(
 	s3Client domain.StorageClient,
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
+	catRepo domain.CategoryRepository,
 	partSize int64,
 	fastTimeout, defaultTimeout, s3Timeout, longTimeout time.Duration,
 	idempotencyTTL time.Duration,
@@ -51,6 +53,7 @@ func NewObjectsService(
 		s3:                      s3Client,
 		policy:                  policy,
 		idemRepo:                idemRepo,
+		catRepo:                 catRepo,
 		partSize:                partSize,
 		fastOperationTimeout:    fastTimeout,
 		defaultOperationTimeout: defaultTimeout,
@@ -60,8 +63,8 @@ func NewObjectsService(
 	}
 }
 
-func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	return s.createSingle(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	return s.createSingle(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 }
 
 // Delete performs a soft delete
@@ -129,7 +132,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		}
 	}
 
-	// Get object record to retrieve S3 key
+	// Get object record to retrieve S3 key and check state
 	obj, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
 		// If object not found, treat as success (idempotent)
@@ -142,6 +145,23 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 		return err
+	}
+
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectHardDelete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent hard-delete
+		status = "success"
+		span.SetStatus(codes.Ok, "already_hard_deleted")
+		return nil
 	}
 
 	// Delete from S3
@@ -218,8 +238,8 @@ func (s *objectsService) SignDownload(ctx context.Context, tenantID string, id o
 	return s.signDownload(ctx, tenantID, id, downloadTTL)
 }
 
-func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	return s.initiateMultipart(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	return s.initiateMultipart(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 }
 
 func (s *objectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {

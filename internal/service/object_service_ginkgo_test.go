@@ -87,6 +87,56 @@ func (m *MockObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id 
 	return args.Bool(0), args.Error(1)
 }
 
+type MockCategoryRepo struct {
+	mock.Mock
+}
+
+func (m *MockCategoryRepo) Create(ctx context.Context, cat domain.Category) error {
+	args := m.Called(ctx, cat)
+	return args.Error(0)
+}
+
+func (m *MockCategoryRepo) Get(ctx context.Context, tenantID, id string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryRepo) GetBySlug(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryRepo) Exists(ctx context.Context, tenantID, slug string) (bool, error) {
+	args := m.Called(ctx, tenantID, slug)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+	args := m.Called(ctx, tenantID, limit, cursor)
+	return args.Get(0).([]domain.Category), args.String(1), args.Error(2)
+}
+
+func (m *MockCategoryRepo) Delete(ctx context.Context, tenantID, id string) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockCategoryRepo) HasObjects(ctx context.Context, tenantID, id string) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockCategoryRepo) ObjectCount(ctx context.Context, tenantID, id string) (int64, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }
@@ -240,12 +290,13 @@ func (m *MockPolicy) Validate(contentType string, sizeBytes int64) error {
 
 var _ = Describe("ObjectsService", func() {
 	var (
-		mockRepo   *MockObjectsRepo
-		mockMPRepo *MockMultipartRepo
-		mockS3     *MockS3Client
-		mockPolicy *MockPolicy
-		svc        domain.ObjectsService
-		ctx        context.Context
+		mockRepo    *MockObjectsRepo
+		mockMPRepo  *MockMultipartRepo
+		mockS3      *MockS3Client
+		mockPolicy  *MockPolicy
+		mockCatRepo *MockCategoryRepo
+		svc         domain.ObjectsService
+		ctx         context.Context
 	)
 
 	BeforeEach(func() {
@@ -253,13 +304,15 @@ var _ = Describe("ObjectsService", func() {
 		mockMPRepo = new(MockMultipartRepo)
 		mockS3 = new(MockS3Client)
 		mockPolicy = new(MockPolicy)
+		mockCatRepo = new(MockCategoryRepo)
 
 		svc = service.NewObjectsService(
 			mockRepo,
 			mockMPRepo,
 			mockS3,
 			mockPolicy,
-			nil,            // idempotency repo
+			nil, // idempotency repo
+			mockCatRepo,
 			5*1024*1024,    // part size
 			5*time.Second,  // fast timeout
 			30*time.Second, // default timeout
@@ -274,6 +327,7 @@ var _ = Describe("ObjectsService", func() {
 		mockS3.On("BucketName").Return("test-bucket").Maybe()
 		mockPolicy.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		mockPolicy.On("Validate", mock.Anything, mock.Anything).Return(nil).Maybe()
+		mockCatRepo.On("Exists", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
 	})
 
 	Describe("CreateSingle", func() {
@@ -287,7 +341,7 @@ var _ = Describe("ObjectsService", func() {
 			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes, mock.Anything).Return(domain.Presigned{URL: "http://example.com"}, nil)
 
-			out, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).NotTo(Equal(uuid.Nil))
@@ -308,7 +362,7 @@ var _ = Describe("ObjectsService", func() {
 			mockPolicy.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mockPolicy.On("Validate", contentType, sizeBytes).Return(fmt.Errorf("content_type not allowed"))
 
-			_, err := svc.CreateSingle(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
+			_, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("content_type not allowed"))
@@ -324,10 +378,10 @@ var _ = Describe("ObjectsService", func() {
 			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
 
 			// Re-create service with mockIdem and mockPolicy
-			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, 1024*1024,
+			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, mockCatRepo, 1024*1024,
 				time.Second, time.Second, time.Second, time.Second, time.Hour)
 
-			out, err := svc.CreateSingle(ctx, tenantID, "image/png", 100, nil, nil, 0, &key)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, 0, &key)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).To(Equal(res.ID))
@@ -342,7 +396,7 @@ var _ = Describe("ObjectsService", func() {
 			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
 			mockS3.On("PresignPutObject", mock.Anything, "key123", "image/png", int64(100), mock.Anything).Return(domain.Presigned{URL: "http://renewed"}, nil)
 
-			out, err := svc.CreateSingle(ctx, tenantID, "image/png", 100, nil, &extRef, 0, nil)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, &extRef, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).To(Equal(existing.ID))
@@ -356,7 +410,7 @@ var _ = Describe("ObjectsService", func() {
 
 			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
 
-			_, err := svc.CreateSingle(ctx, tenantID, "image/png", 200, nil, &extRef, 0, nil) // Different size
+			_, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 200, nil, &extRef, 0, nil) // Different size
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("conflict"))
@@ -379,7 +433,7 @@ var _ = Describe("ObjectsService", func() {
 			}, nil)
 			mockS3.On("PresignTTLDuration").Return(1 * time.Hour)
 
-			resp, err := svc.InitiateMultipart(ctx, tenantID, contentType, sizeBytes, nil, nil, 0, nil)
+			resp, err := svc.InitiateMultipart(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.UploadID).To(Equal("test-upload-id"))
@@ -508,7 +562,7 @@ var _ = Describe("ObjectsService", func() {
 			id := openapi_types.UUID(objID)
 
 			// Expect MarkHardDeleted (and Get before it)
-			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ObjectKey: "some-key"}, nil)
+			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ObjectKey: "some-key", Status: domain.ObjectSoftDeleted}, nil)
 			mockS3.On("DeleteObject", mock.Anything, "some-key").Return(nil)
 			mockRepo.On("MarkHardDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
 

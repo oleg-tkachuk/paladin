@@ -41,6 +41,8 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 		ExpiresAt:       timestampPtrFromPgtype(obj.ExpiresAt),
 		CompletedAt:     timestampPtrFromPgtype(obj.CompletedAt),
 		DeletedAt:       timestampPtrFromPgtype(obj.DeletedAt),
+		Category:        obj.Category,
+		Subpath:         obj.Subpath,
 	}, nil
 }
 

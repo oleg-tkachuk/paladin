@@ -43,6 +43,8 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 		timestampPtrToPgtype(rec.ExpiresAt),
 		labels,
 		rec.ExternalRef,
+		rec.Category,
+		rec.Subpath,
 	)
 
 	if err != nil {
@@ -230,6 +232,8 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		timestampPtrToPgtype(filter.CreatedAfter),
 		timestampPtrToPgtype(filter.CreatedBefore),
 		cursorTime,
+		filter.Category,
+		filter.KeyPrefix,
 	)
 	if err != nil {
 		opStatus = "error"

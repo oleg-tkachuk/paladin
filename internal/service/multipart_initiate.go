@@ -17,19 +17,21 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-// initiateMultipart initiates a multipart upload
-func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+// initiateMultipart initiates a multipart upload.
+// category must be the slug of an existing tenant category.
+func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "InitiateMultipart")
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("tenant_id", tenantID),
+		attribute.String("category", category),
 		attribute.String("content_type", contentType),
 		attribute.Int64("size_bytes", sizeBytes),
 	)
 
 	start := time.Now()
-	var status string
-	defer func() { metrics.RecordObjectOp(ctx, "initiate_multipart", status, start) }()
+	var opStatus string
+	defer func() { metrics.RecordObjectOp(ctx, "initiate_multipart", opStatus, start) }()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
@@ -37,7 +39,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		opStatus = "error"
 		return domain.MultipartInitResponse{}, err
 	}
 
@@ -45,19 +47,21 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("validation failed", err)
 	}
 
-	// Validate external_ref for security
+	if err := utils.ValidateCategorySlug(category); err != nil {
+		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid category", err)
+	}
+
 	if externalRef != nil {
 		if err := utils.ValidateExternalRef(*externalRef); err != nil {
 			return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
-	// Validate labels
 	if err := utils.ValidateLabels(labels); err != nil {
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
-	// 1. Check Idempotency-Key header
+	// Idempotency-Key cache check
 	if idempotencyKey != nil && s.idemRepo != nil {
 		if cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey); err == nil && cached != nil {
 			var res domain.MultipartInitResponse
@@ -67,7 +71,6 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		}
 	}
 
-	// 2. Check external_ref
 	if externalRef != nil {
 		existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef)
 		if err == nil && existing != nil {
@@ -75,8 +78,17 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		}
 	}
 
+	// Verify the category exists for this tenant
+	exists, err := s.catRepo.Exists(ctx, tenantID, category)
+	if err != nil {
+		return domain.MultipartInitResponse{}, fmt.Errorf("check category: %w", err)
+	}
+	if !exists {
+		return domain.MultipartInitResponse{}, apperrors.NotFound(fmt.Sprintf("category %q not found", category), nil)
+	}
+
 	id := uuid.New()
-	key := fmt.Sprintf("%s/%s", tenantID, id.String())
+	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
 
 	init, err := s.s3.CreateMultipartUpload(ctx, key, contentType)
 	if err != nil {
@@ -93,7 +105,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: s.s3.BucketName(),
 		ContentType: contentType, SizeBytes: sizeBytes,
 		Status: domain.ObjectUploading, Labels: labels, ExternalRef: externalRef,
-		ExpiresAt: &expiresAt,
+		ExpiresAt: &expiresAt, Category: category,
 	}
 	if err := s.objRepo.Create(ctx, objRec); err != nil {
 		return domain.MultipartInitResponse{}, err
@@ -109,26 +121,21 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	}
 
 	res := domain.MultipartInitResponse{
-		ObjectID:  id,
-		ObjectKey: key,
-		UploadID:  init.UploadID,
-		Bucket:    s.s3.BucketName(),
-		PartSize:  s.partSize,
-		ExpiresAt: expiresAt,
+		ObjectID: id, ObjectKey: key, UploadID: init.UploadID,
+		Bucket: s.s3.BucketName(), PartSize: s.partSize, ExpiresAt: expiresAt,
+		Category: category,
 	}
 
-	// 4. Save response for Idempotency-Key
 	if idempotencyKey != nil && s.idemRepo != nil {
 		body, _ := json.Marshal(res)
 		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
-			TenantID:     tenantID,
-			Key:          *idempotencyKey,
-			RequestPath:  "/v1/multipart",
-			ResponseBody: body,
-			ResponseCode: 200,
-			ExpiresAt:    time.Now().Add(s.idempotencyTTL),
+			TenantID: tenantID, Key: *idempotencyKey,
+			RequestPath: "/v1/multipart", ResponseBody: body, ResponseCode: 200,
+			ExpiresAt: time.Now().Add(s.idempotencyTTL),
 		})
 	}
 
+	opStatus = "success"
+	span.SetStatus(codes.Ok, "")
 	return res, nil
 }

@@ -53,6 +53,7 @@ var ProviderSet = wire.NewSet(
 	ProvideObjectsRepo,
 	ProvideMultipartRepo,
 	ProvideIdempotencyRepo,
+	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideBreakerFactory,
 	ProvideObjectsService,
@@ -151,6 +152,10 @@ func ProvideIdempotencyRepo(db *postgres.DB) domain.IdempotencyRepository {
 	return postgres.NewIdempotencyRepo(db)
 }
 
+func ProvideCategoryRepo(db *postgres.DB) domain.CategoryRepository {
+	return postgres.NewCategoryRepo(db)
+}
+
 func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
 	return postgres.NewAuditLogRepo(db)
 }
@@ -165,6 +170,7 @@ func ProvideObjectsService(
 	s3c *s3.Client,
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
+	catRepo domain.CategoryRepository,
 	cfg config.Config,
 ) domain.ObjectsService {
 	return service.NewObjectsService(
@@ -173,6 +179,7 @@ func ProvideObjectsService(
 		s3c,
 		policy,
 		idemRepo,
+		catRepo,
 		cfg.Datastores.S3.PartSizeBytes,
 		cfg.Timeouts.FastOperation,
 		cfg.Timeouts.DefaultOperation,

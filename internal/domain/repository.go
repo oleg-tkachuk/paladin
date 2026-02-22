@@ -7,6 +7,47 @@ import (
 	"github.com/google/uuid"
 )
 
+// CategoryRepository manages the lifecycle of tenant-scoped object categories.
+type CategoryRepository interface {
+	// Create persists a new category. Returns error on duplicate slug.
+	Create(ctx context.Context, rec Category) error
+	// Get retrieves a category by tenant + slug. Returns ErrNotFound if absent.
+	Get(ctx context.Context, tenantID, slug string) (*Category, error)
+	// List returns categories for a tenant, paginated by cursor (created_at).
+	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, error)
+	// Delete removes a category. Returns (false, nil) if it did not exist.
+	Delete(ctx context.Context, tenantID, slug string) (bool, error)
+	// Exists returns true if the slug is registered for the tenant.
+	Exists(ctx context.Context, tenantID, slug string) (bool, error)
+	// ObjectCount returns the number of non-hard-deleted objects in the category.
+	// Used to guard deletion (returns 409 if count > 0).
+	ObjectCount(ctx context.Context, tenantID, slug string) (int64, error)
+}
+
+// CategoryService defines the business logic for managing categories.
+type CategoryService interface {
+	Create(ctx context.Context, tenantID, slug, name string, description *string) (*Category, error)
+	Get(ctx context.Context, tenantID, slug string) (*Category, error)
+	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, error)
+	// Delete returns ErrConflict if any active objects still reference the category.
+	Delete(ctx context.Context, tenantID, slug string) error
+}
+
+// CreateCategoryRequest carries validated input for CategoryService.Create.
+type CreateCategoryRequest struct {
+	TenantID    string
+	Slug        string
+	Name        string
+	Description *string
+}
+
+// ListCategoriesFilter holds pagination state for listing categories.
+type ListCategoriesFilter struct {
+	Limit  int
+	Cursor string
+}
+
+// ObjectsRepository defines persistent object operations.
 type ObjectsRepository interface {
 	Create(ctx context.Context, rec Object) error
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
@@ -22,6 +63,7 @@ type ObjectsRepository interface {
 	ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]Object, error)
 }
 
+// MultipartRepository manages multipart upload state.
 type MultipartRepository interface {
 	Create(ctx context.Context, rec Multipart) error
 	GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*Multipart, error)
@@ -33,6 +75,7 @@ type MultipartRepository interface {
 	ListParts(ctx context.Context, multipartID uuid.UUID) ([]MultipartPart, error)
 }
 
+// IdempotencyRepository provides safe retry semantics for mutating operations.
 type IdempotencyRepository interface {
 	Get(ctx context.Context, tenantID string, key string) (*IdempotencyRecord, error)
 	Save(ctx context.Context, rec IdempotencyRecord) error

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v6.33.4
-// source: paladin.proto
+// source: proto/paladin.proto
 
 package grpcapi
 
@@ -35,7 +35,7 @@ type CreateObjectRequest struct {
 
 func (x *CreateObjectRequest) Reset() {
 	*x = CreateObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[0]
+	mi := &file_proto_paladin_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +47,7 @@ func (x *CreateObjectRequest) String() string {
 func (*CreateObjectRequest) ProtoMessage() {}
 
 func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[0]
+	mi := &file_proto_paladin_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +60,7 @@ func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{0}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CreateObjectRequest) GetTenantId() string {
@@ -119,7 +119,7 @@ type CreateObjectResponse struct {
 
 func (x *CreateObjectResponse) Reset() {
 	*x = CreateObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[1]
+	mi := &file_proto_paladin_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -131,7 +131,7 @@ func (x *CreateObjectResponse) String() string {
 func (*CreateObjectResponse) ProtoMessage() {}
 
 func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[1]
+	mi := &file_proto_paladin_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -144,7 +144,7 @@ func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectResponse.ProtoReflect.Descriptor instead.
 func (*CreateObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{1}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateObjectResponse) GetObjectId() string {
@@ -199,7 +199,7 @@ type GetObjectRequest struct {
 
 func (x *GetObjectRequest) Reset() {
 	*x = GetObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[2]
+	mi := &file_proto_paladin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -211,7 +211,7 @@ func (x *GetObjectRequest) String() string {
 func (*GetObjectRequest) ProtoMessage() {}
 
 func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[2]
+	mi := &file_proto_paladin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -224,7 +224,7 @@ func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{2}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetObjectRequest) GetTenantId() string {
@@ -259,7 +259,7 @@ type GetObjectResponse struct {
 
 func (x *GetObjectResponse) Reset() {
 	*x = GetObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[3]
+	mi := &file_proto_paladin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +271,7 @@ func (x *GetObjectResponse) String() string {
 func (*GetObjectResponse) ProtoMessage() {}
 
 func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[3]
+	mi := &file_proto_paladin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +284,7 @@ func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{3}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetObjectResponse) GetObjectId() string {
@@ -374,7 +374,7 @@ type GetObjectMetaResponse struct {
 
 func (x *GetObjectMetaResponse) Reset() {
 	*x = GetObjectMetaResponse{}
-	mi := &file_paladin_proto_msgTypes[4]
+	mi := &file_proto_paladin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +386,7 @@ func (x *GetObjectMetaResponse) String() string {
 func (*GetObjectMetaResponse) ProtoMessage() {}
 
 func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[4]
+	mi := &file_proto_paladin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +399,7 @@ func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectMetaResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectMetaResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{4}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetObjectMetaResponse) GetObjectId() string {
@@ -475,7 +475,7 @@ type CompleteObjectRequest struct {
 
 func (x *CompleteObjectRequest) Reset() {
 	*x = CompleteObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[5]
+	mi := &file_proto_paladin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -487,7 +487,7 @@ func (x *CompleteObjectRequest) String() string {
 func (*CompleteObjectRequest) ProtoMessage() {}
 
 func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[5]
+	mi := &file_proto_paladin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -500,7 +500,7 @@ func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*CompleteObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{5}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CompleteObjectRequest) GetTenantId() string {
@@ -526,7 +526,7 @@ type CompleteObjectResponse struct {
 
 func (x *CompleteObjectResponse) Reset() {
 	*x = CompleteObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[6]
+	mi := &file_proto_paladin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +538,7 @@ func (x *CompleteObjectResponse) String() string {
 func (*CompleteObjectResponse) ProtoMessage() {}
 
 func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[6]
+	mi := &file_proto_paladin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +551,7 @@ func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*CompleteObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{6}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CompleteObjectResponse) GetStatus() string {
@@ -571,7 +571,7 @@ type DeleteObjectRequest struct {
 
 func (x *DeleteObjectRequest) Reset() {
 	*x = DeleteObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[7]
+	mi := &file_proto_paladin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -583,7 +583,7 @@ func (x *DeleteObjectRequest) String() string {
 func (*DeleteObjectRequest) ProtoMessage() {}
 
 func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[7]
+	mi := &file_proto_paladin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -596,7 +596,7 @@ func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{7}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeleteObjectRequest) GetTenantId() string {
@@ -622,7 +622,7 @@ type DeleteObjectResponse struct {
 
 func (x *DeleteObjectResponse) Reset() {
 	*x = DeleteObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[8]
+	mi := &file_proto_paladin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -634,7 +634,7 @@ func (x *DeleteObjectResponse) String() string {
 func (*DeleteObjectResponse) ProtoMessage() {}
 
 func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[8]
+	mi := &file_proto_paladin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -647,7 +647,7 @@ func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{8}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteObjectResponse) GetStatus() string {
@@ -671,7 +671,7 @@ type InitiateMultipartRequest struct {
 
 func (x *InitiateMultipartRequest) Reset() {
 	*x = InitiateMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[9]
+	mi := &file_proto_paladin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +683,7 @@ func (x *InitiateMultipartRequest) String() string {
 func (*InitiateMultipartRequest) ProtoMessage() {}
 
 func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[9]
+	mi := &file_proto_paladin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +696,7 @@ func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartRequest.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{9}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *InitiateMultipartRequest) GetTenantId() string {
@@ -754,7 +754,7 @@ type InitiateMultipartResponse struct {
 
 func (x *InitiateMultipartResponse) Reset() {
 	*x = InitiateMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[10]
+	mi := &file_proto_paladin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -766,7 +766,7 @@ func (x *InitiateMultipartResponse) String() string {
 func (*InitiateMultipartResponse) ProtoMessage() {}
 
 func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[10]
+	mi := &file_proto_paladin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -779,7 +779,7 @@ func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartResponse.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{10}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *InitiateMultipartResponse) GetObjectId() string {
@@ -828,7 +828,7 @@ type SignPartRequest struct {
 
 func (x *SignPartRequest) Reset() {
 	*x = SignPartRequest{}
-	mi := &file_paladin_proto_msgTypes[11]
+	mi := &file_proto_paladin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +840,7 @@ func (x *SignPartRequest) String() string {
 func (*SignPartRequest) ProtoMessage() {}
 
 func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[11]
+	mi := &file_proto_paladin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +853,7 @@ func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartRequest.ProtoReflect.Descriptor instead.
 func (*SignPartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{11}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SignPartRequest) GetTenantId() string {
@@ -888,7 +888,7 @@ type SignPartResponse struct {
 
 func (x *SignPartResponse) Reset() {
 	*x = SignPartResponse{}
-	mi := &file_paladin_proto_msgTypes[12]
+	mi := &file_proto_paladin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +900,7 @@ func (x *SignPartResponse) String() string {
 func (*SignPartResponse) ProtoMessage() {}
 
 func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[12]
+	mi := &file_proto_paladin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +913,7 @@ func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartResponse.ProtoReflect.Descriptor instead.
 func (*SignPartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{12}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SignPartResponse) GetUploadUrl() string {
@@ -948,7 +948,7 @@ type CompleteMultipartRequest struct {
 
 func (x *CompleteMultipartRequest) Reset() {
 	*x = CompleteMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[13]
+	mi := &file_proto_paladin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -960,7 +960,7 @@ func (x *CompleteMultipartRequest) String() string {
 func (*CompleteMultipartRequest) ProtoMessage() {}
 
 func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[13]
+	mi := &file_proto_paladin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -973,7 +973,7 @@ func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartRequest.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{13}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CompleteMultipartRequest) GetTenantId() string {
@@ -1007,7 +1007,7 @@ type CompleteMultipartPart struct {
 
 func (x *CompleteMultipartPart) Reset() {
 	*x = CompleteMultipartPart{}
-	mi := &file_paladin_proto_msgTypes[14]
+	mi := &file_proto_paladin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1019,7 +1019,7 @@ func (x *CompleteMultipartPart) String() string {
 func (*CompleteMultipartPart) ProtoMessage() {}
 
 func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[14]
+	mi := &file_proto_paladin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1032,7 +1032,7 @@ func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartPart.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartPart) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{14}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompleteMultipartPart) GetPartNumber() int32 {
@@ -1059,7 +1059,7 @@ type CompleteMultipartResponse struct {
 
 func (x *CompleteMultipartResponse) Reset() {
 	*x = CompleteMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[15]
+	mi := &file_proto_paladin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1071,7 @@ func (x *CompleteMultipartResponse) String() string {
 func (*CompleteMultipartResponse) ProtoMessage() {}
 
 func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[15]
+	mi := &file_proto_paladin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1084,7 @@ func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartResponse.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{15}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CompleteMultipartResponse) GetObjectId() string {
@@ -1111,7 +1111,7 @@ type AbortMultipartRequest struct {
 
 func (x *AbortMultipartRequest) Reset() {
 	*x = AbortMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[16]
+	mi := &file_proto_paladin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1123,7 +1123,7 @@ func (x *AbortMultipartRequest) String() string {
 func (*AbortMultipartRequest) ProtoMessage() {}
 
 func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[16]
+	mi := &file_proto_paladin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1136,7 +1136,7 @@ func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartRequest.ProtoReflect.Descriptor instead.
 func (*AbortMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{16}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AbortMultipartRequest) GetTenantId() string {
@@ -1162,7 +1162,7 @@ type AbortMultipartResponse struct {
 
 func (x *AbortMultipartResponse) Reset() {
 	*x = AbortMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[17]
+	mi := &file_proto_paladin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1174,7 +1174,7 @@ func (x *AbortMultipartResponse) String() string {
 func (*AbortMultipartResponse) ProtoMessage() {}
 
 func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[17]
+	mi := &file_proto_paladin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1187,7 @@ func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartResponse.ProtoReflect.Descriptor instead.
 func (*AbortMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{17}
+	return file_proto_paladin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AbortMultipartResponse) GetStatus() string {
@@ -1197,11 +1197,11 @@ func (x *AbortMultipartResponse) GetStatus() string {
 	return ""
 }
 
-var File_paladin_proto protoreflect.FileDescriptor
+var File_proto_paladin_proto protoreflect.FileDescriptor
 
-const file_paladin_proto_rawDesc = "" +
+const file_proto_paladin_proto_rawDesc = "" +
 	"\n" +
-	"\tocp.proto\x12\x06ocp.v1\"\xaf\x02\n" +
+	"\x0fproto/paladin.proto\x12\x06ocp.v1\"\xaf\x02\n" +
 	"\x13CreateObjectRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1d\n" +
@@ -1326,19 +1326,19 @@ const file_paladin_proto_rawDesc = "" +
 	"\x0eAbortMultipart\x12\x1d.paladin.v1.AbortMultipartRequest\x1a\x1e.paladin.v1.AbortMultipartResponseBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
 
 var (
-	file_paladin_proto_rawDescOnce sync.Once
-	file_paladin_proto_rawDescData []byte
+	file_proto_paladin_proto_rawDescOnce sync.Once
+	file_proto_paladin_proto_rawDescData []byte
 )
 
-func file_paladin_proto_rawDescGZIP() []byte {
-	file_paladin_proto_rawDescOnce.Do(func() {
-		file_paladin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_paladin_proto_rawDesc), len(file_paladin_proto_rawDesc)))
+func file_proto_paladin_proto_rawDescGZIP() []byte {
+	file_proto_paladin_proto_rawDescOnce.Do(func() {
+		file_proto_paladin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_paladin_proto_rawDesc), len(file_proto_paladin_proto_rawDesc)))
 	})
-	return file_paladin_proto_rawDescData
+	return file_proto_paladin_proto_rawDescData
 }
 
-var file_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
-var file_paladin_proto_goTypes = []any{
+var file_proto_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_proto_paladin_proto_goTypes = []any{
 	(*CreateObjectRequest)(nil),       // 0: paladin.v1.CreateObjectRequest
 	(*CreateObjectResponse)(nil),      // 1: paladin.v1.CreateObjectResponse
 	(*GetObjectRequest)(nil),          // 2: paladin.v1.GetObjectRequest
@@ -1363,7 +1363,7 @@ var file_paladin_proto_goTypes = []any{
 	nil,                               // 21: paladin.v1.GetObjectMetaResponse.LabelsEntry
 	nil,                               // 22: paladin.v1.InitiateMultipartRequest.LabelsEntry
 }
-var file_paladin_proto_depIdxs = []int32{
+var file_proto_paladin_proto_depIdxs = []int32{
 	18, // 0: paladin.v1.CreateObjectRequest.labels:type_name -> paladin.v1.CreateObjectRequest.LabelsEntry
 	19, // 1: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
 	20, // 2: paladin.v1.GetObjectResponse.labels:type_name -> paladin.v1.GetObjectResponse.LabelsEntry
@@ -1395,26 +1395,26 @@ var file_paladin_proto_depIdxs = []int32{
 	0,  // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_paladin_proto_init() }
-func file_paladin_proto_init() {
-	if File_paladin_proto != nil {
+func init() { file_proto_paladin_proto_init() }
+func file_proto_paladin_proto_init() {
+	if File_proto_paladin_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_proto_rawDesc), len(file_paladin_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_paladin_proto_rawDesc), len(file_proto_paladin_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_paladin_proto_goTypes,
-		DependencyIndexes: file_paladin_proto_depIdxs,
-		MessageInfos:      file_paladin_proto_msgTypes,
+		GoTypes:           file_proto_paladin_proto_goTypes,
+		DependencyIndexes: file_proto_paladin_proto_depIdxs,
+		MessageInfos:      file_proto_paladin_proto_msgTypes,
 	}.Build()
-	File_paladin_proto = out.File
-	file_paladin_proto_goTypes = nil
-	file_paladin_proto_depIdxs = nil
+	File_proto_paladin_proto = out.File
+	file_proto_paladin_proto_goTypes = nil
+	file_proto_paladin_proto_depIdxs = nil
 }

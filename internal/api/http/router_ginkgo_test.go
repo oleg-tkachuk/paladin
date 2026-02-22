@@ -29,8 +29,8 @@ type MockObjectsService struct {
 	mock.Mock
 }
 
-func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	return args.Get(0).(domain.CreateObjectResponse), args.Error(1)
 }
 
@@ -84,8 +84,8 @@ func (m *MockObjectsService) SignDownload(ctx context.Context, tenantID string, 
 	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
-func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	return args.Get(0).(domain.MultipartInitResponse), args.Error(1)
 }
 
@@ -313,7 +313,7 @@ var _ = Describe("Router", func() {
 		Context("with valid request", func() {
 			BeforeEach(func() {
 				id := uuid.New()
-				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
+				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
 					Return(domain.CreateObjectResponse{ID: id, Key: "default/" + id.String(), Upload: domain.Presigned{URL: "http://upload"}}, nil)
 			})
 
@@ -333,7 +333,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart", func() {
 		It("initiates multipart upload", func() {
 			objID := uuid.New()
-			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
+			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
 				Return(domain.MultipartInitResponse{
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)

@@ -1106,6 +1106,10 @@ components:
       type: object
       required: [content_type, size_bytes]
       properties:
+        category:
+          type: string
+          description: Category slug (must match an existing tenant category). Defaults to 'objects'.
+          example: "invoices"
         content_type:
           type: string
           minLength: 1
@@ -1322,6 +1326,10 @@ components:
       type: object
       required: [content_type, size_bytes]
       properties:
+        category:
+          type: string
+          description: Category slug (must match an existing tenant category). Defaults to 'objects'.
+          example: "medical-records"
         content_type:
           type: string
           minLength: 1
