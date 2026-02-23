@@ -12,12 +12,18 @@ import (
 	"go.uber.org/zap"
 )
 
-func respondWithError(c *gin.Context, code int, err error) {
-	// If the error is not an AppError, attempt to wrap it based on the suggested status code.
-	// This ensures generic errors (like binding errors) are mapped correctly to HTTP responses.
+// problemContentType is the MIME type required by RFC 7807.
+const problemContentType = "application/problem+json"
+
+// respondWithError writes an RFC 7807 Problem Details response.
+// The hint parameter is the caller's suggested HTTP status code; it is only
+// used when the error cannot be mapped from an AppError (e.g. raw bind errors).
+// Pass 0 to let the error code fully determine the status.
+func respondWithError(c *gin.Context, hint int, err error) {
+	// Ensure we always have an AppError so the status is derived from its code.
 	var appErr *errors.AppError
 	if !stdErrors.As(err, &appErr) {
-		switch code {
+		switch hint {
 		case http.StatusBadRequest:
 			err = errors.BadRequest(err.Error(), nil)
 		case http.StatusNotFound:
@@ -35,23 +41,33 @@ func respondWithError(c *gin.Context, code int, err error) {
 		case http.StatusTooManyRequests:
 			err = errors.RateLimited(err.Error(), nil)
 		default:
-			// If code is 5xx or unknown, fallback to Internal
 			err = errors.Internal(err.Error(), nil)
 		}
 	}
 
-	status, body := errors.MapToHTTP(c.Request.Context(), err)
-
-	// Log based on severity
-	log := logger.FromContext(c.Request.Context())
-	if status >= 500 {
-		log.Error("Request failed", zap.Error(err), zap.Int("status", status), zap.String("path", c.Request.URL.Path))
-	} else if status >= 400 {
-		// Warn for client errors
-		log.Warn("Request failed", zap.Error(err), zap.Int("status", status), zap.String("path", c.Request.URL.Path))
+	instance := c.Request.RequestURI
+	if instance == "" {
+		instance = c.Request.URL.Path
 	}
 
-	c.JSON(status, body)
+	ctx := c.Request.Context()
+	status, pd := errors.MapToHTTPProblem(ctx, err, instance)
+
+	// Log based on severity.
+	log := logger.FromContext(ctx)
+	fields := []zap.Field{
+		zap.Int("status", status),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("request_id", utils.RequestIDFromContext(ctx, "")),
+	}
+	if status >= 500 {
+		log.Error("request failed", append(fields, zap.Error(err))...)
+	} else if status >= 400 {
+		log.Warn("request rejected", fields...)
+	}
+
+	c.Header("Content-Type", problemContentType)
+	c.JSON(status, pd)
 }
 
 func tenantID(c *gin.Context) string {

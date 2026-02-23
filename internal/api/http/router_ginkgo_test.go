@@ -582,7 +582,7 @@ var _ = Describe("Router", func() {
 		})
 	})
 	Describe("Error Handling", func() {
-		It("returns unified error response for 404", func() {
+		It("returns RFC 7807 problem details response for errors", func() {
 			mockSvc.On("Get", mock.Anything, mock.Anything, mock.Anything).
 				Return(&domain.Object{}, errors.New("not found"))
 
@@ -590,20 +590,21 @@ var _ = Describe("Router", func() {
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
-			Expect(recorder.Code).To(Equal(http.StatusNotFound))
+			Expect(recorder.Code).To(Equal(http.StatusInternalServerError)) // raw errors.New → internal
+
+			// RFC 7807: Content-Type must be application/problem+json
+			Expect(recorder.Header().Get("Content-Type")).To(ContainSubstring("application/problem+json"))
 
 			var resp map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify structure: {"error": {"code": "...", "message": "...", "request_id": "..."}}
-			Expect(resp).To(HaveKey("error"))
-			errObj, ok := resp["error"].(map[string]interface{})
-			Expect(ok).To(BeTrue())
-			Expect(errObj).To(HaveKey("code"))
-			Expect(errObj).To(HaveKey("message"))
-			Expect(errObj).To(HaveKey("request_id"))
-			Expect(errObj).To(HaveKey("trace_id"))
+			// Verify RFC 7807 top-level fields (no nested "error" envelope)
+			Expect(resp).To(HaveKey("type"))
+			Expect(resp).To(HaveKey("title"))
+			Expect(resp).To(HaveKey("status"))
+			Expect(resp).To(HaveKey("detail"))
+			Expect(resp).NotTo(HaveKey("error")) // old format must be gone
 		})
 	})
 })

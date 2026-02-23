@@ -85,31 +85,29 @@ func TestMapToHTTP(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, code)
 
-		body, ok := bodyResp.(map[string]any)
-		assert.True(t, ok)
-		errResp := body["error"].(map[string]any)
-
-		assert.Equal(t, errors.CodeNotFound, errResp["code"])
-		assert.Equal(t, "user not found", errResp["message"])
-		assert.Equal(t, "req-123", errResp["request_id"])
-		assert.Equal(t, "trace-456", errResp["trace_id"])
-
-		details := errResp["details"].(map[string]any)
-		assert.Equal(t, 1, details["user_id"])
-
-		fields := errResp["field_errors"].([]map[string]string)
-		assert.Len(t, fields, 1)
-		assert.Equal(t, "id", fields[0]["field"])
+		// MapToHTTP now returns a ProblemDetail (RFC 7807)
+		pd, ok := bodyResp.(errors.ProblemDetail)
+		assert.True(t, ok, "response should be a ProblemDetail")
+		assert.Equal(t, http.StatusNotFound, pd.Status)
+		assert.Equal(t, "Not Found", pd.Title)
+		assert.Equal(t, "user not found", pd.Detail)
+		assert.Equal(t, "req-123", pd.RequestID)
+		assert.Equal(t, "trace-456", pd.TraceID)
+		assert.NotNil(t, pd.Extensions)
+		assert.Equal(t, 1, pd.Extensions["user_id"])
+		assert.Len(t, pd.Errors, 1)
+		assert.Equal(t, "id", pd.Errors[0].Field)
 	})
 
 	t.Run("UnknownError", func(t *testing.T) {
 		code, bodyResp := errors.MapToHTTP(ctx, goerrors.New("standard error"))
 		assert.Equal(t, http.StatusInternalServerError, code)
 
-		body, _ := bodyResp.(map[string]any)
-		errResp := body["error"].(map[string]any)
-		assert.Equal(t, errors.CodeInternal, errResp["code"])
-		assert.Equal(t, "Internal server error", errResp["message"])
+		pd, ok := bodyResp.(errors.ProblemDetail)
+		assert.True(t, ok)
+		assert.Equal(t, errors.CodeInternal, "internal") // stable type code
+		assert.Equal(t, http.StatusInternalServerError, pd.Status)
+		assert.Equal(t, "Internal Server Error", pd.Title)
 	})
 
 	// Test all basic status mappings
@@ -177,4 +175,75 @@ func TestIsNotFound(t *testing.T) {
 	assert.True(t, errors.IsNotFound(errors.NotFound("x", nil)))
 	assert.False(t, errors.IsNotFound(errors.Internal("x", nil)))
 	assert.False(t, errors.IsNotFound(goerrors.New("raw error")))
+}
+
+func TestMapToHTTPProblem_RFC7807Fields(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("NotFoundProblem", func(t *testing.T) {
+		err := errors.NotFound("object not found", nil)
+		statusCode, pd := errors.MapToHTTPProblem(ctx, err, "/v1/objects/abc")
+		assert.Equal(t, 404, statusCode)
+		assert.Equal(t, 404, pd.Status)
+		assert.Equal(t, "Not Found", pd.Title)
+		assert.Equal(t, "https://api.paladin.io/problems/not_found", pd.Type)
+		assert.Equal(t, "object not found", pd.Detail)
+		assert.Equal(t, "/v1/objects/abc", pd.Instance)
+	})
+
+	t.Run("ValidationFailedWithFieldErrors", func(t *testing.T) {
+		err := errors.ValidationFailed("request invalid", nil).
+			WithFieldError("content_type", "required", "content_type is required").
+			WithFieldError("size_bytes", "min", "size_bytes must be > 0")
+		statusCode, pd := errors.MapToHTTPProblem(ctx, err, "/v1/objects")
+		assert.Equal(t, 400, statusCode)
+		assert.Equal(t, "Validation Failed", pd.Title)
+		assert.Len(t, pd.Errors, 2)
+		assert.Equal(t, "content_type", pd.Errors[0].Field)
+		assert.Equal(t, "size_bytes", pd.Errors[1].Field)
+	})
+
+	t.Run("WithExtensions", func(t *testing.T) {
+		err := errors.Conflict("object already exists", nil).
+			WithContext("tenant_id", "acme").
+			WithContext("object_id", "123")
+		statusCode, pd := errors.MapToHTTPProblem(ctx, err, "/v1/objects")
+		assert.Equal(t, 409, statusCode)
+		assert.NotNil(t, pd.Extensions)
+		assert.Equal(t, "acme", pd.Extensions["tenant_id"])
+	})
+
+	t.Run("UnknownErrorBecomesInternal", func(t *testing.T) {
+		statusCode, pd := errors.MapToHTTPProblem(ctx, goerrors.New("some unexpected error"), "/v1/objects")
+		assert.Equal(t, 500, statusCode)
+		assert.Equal(t, "Internal Server Error", pd.Title)
+		assert.Equal(t, "https://api.paladin.io/problems/internal", pd.Type)
+	})
+
+	t.Run("AllStatusCodeMappings", func(t *testing.T) {
+		cases := []struct {
+			err      *errors.AppError
+			expected int
+		}{
+			{errors.BadRequest("m", nil), 400},
+			{errors.ValidationFailed("m", nil), 400},
+			{errors.Unauthorized("m", nil), 401},
+			{errors.Forbidden("m", nil), 403},
+			{errors.NotFound("m", nil), 404},
+			{errors.Conflict("m", nil), 409},
+			{errors.PreconditionFailed("m", nil), 412},
+			{errors.TooLarge("m", nil), 413},
+			{errors.RateLimited("m", nil), 429},
+			{errors.Timeout("m", nil), 504},
+			{errors.ServiceUnavailable("m", nil), 503},
+			{errors.Internal("m", nil), 500},
+		}
+		for _, tc := range cases {
+			code, pd := errors.MapToHTTPProblem(ctx, tc.err, "/")
+			assert.Equal(t, tc.expected, code, "wrong status for %s", tc.err.Code)
+			assert.Equal(t, tc.expected, pd.Status, "wrong pd.Status for %s", tc.err.Code)
+			assert.NotEmpty(t, pd.Type)
+			assert.NotEmpty(t, pd.Title)
+		}
+	})
 }

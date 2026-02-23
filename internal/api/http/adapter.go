@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	api "github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
@@ -148,7 +149,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 
 	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -164,7 +165,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 func (s *OpenAPIAdapter) GetObject(c *gin.Context, id openapi_types.UUID) {
 	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -182,7 +183,7 @@ func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id openapi_types.UUID) {
 
 func (s *OpenAPIAdapter) DeleteObject(c *gin.Context, id openapi_types.UUID, params api.DeleteObjectParams) {
 	if err := s.svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -197,7 +198,7 @@ func (s *OpenAPIAdapter) PurgeObject(c *gin.Context, id openapi_types.UUID, para
 	}
 
 	if err := s.svc.Purge(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -218,14 +219,14 @@ func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, par
 	}
 
 	if err := s.svc.UpdateStatus(c.Request.Context(), tenantID(c), id, string(req.Status), idempotencyKey); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
 	// Fetch updated object to return
 	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -238,7 +239,7 @@ func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 
 	rec, err := s.svc.CompleteObject(c.Request.Context(), tenantID(c), id, req.Etag, req.SizeBytes)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -253,7 +254,7 @@ func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 func (s *OpenAPIAdapter) GetObjectMeta(c *gin.Context, id openapi_types.UUID) {
 	rec, err := s.svc.GetMeta(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -269,7 +270,7 @@ func (s *OpenAPIAdapter) PatchObjectMeta(c *gin.Context, id openapi_types.UUID) 
 
 	rec, err := s.svc.PatchMeta(c.Request.Context(), tenantID(c), id, mapLabels(req.Labels), req.ExternalRef)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -293,7 +294,7 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 
 	items, next, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -329,7 +330,7 @@ func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id openapi_types.UUI
 
 	p, err := s.svc.SignDownload(c.Request.Context(), tenantID(c), id, ttl)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -350,7 +351,7 @@ func (s *OpenAPIAdapter) SignObjectUpload(c *gin.Context, id openapi_types.UUID)
 
 	p, err := s.svc.SignUpload(c.Request.Context(), tenantID(c), id, ttl)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -379,7 +380,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 
 	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -397,7 +398,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 	multi, err := s.svc.GetMultipart(c.Request.Context(), tenantID(c), uploadId)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -415,7 +416,7 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 
 func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId string) {
 	if err := s.svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadId); err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -436,7 +437,7 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId string) {
 
 	rec, err := s.svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadId, parts)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -458,7 +459,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
 
 	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, req.PartNumbers)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -479,7 +480,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
 func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber int32) {
 	p, err := s.svc.SignPart(c.Request.Context(), tenantID(c), uploadId, partNumber)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -769,7 +770,7 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 
 	logs, next, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -792,11 +793,11 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 func (s *OpenAPIAdapter) GetAuditLog(c *gin.Context, id openapi_types.UUID) {
 	l, err := s.auditRepo.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 	if l == nil {
-		c.Status(http.StatusNotFound)
+		respondWithError(c, 0, errors.NotFound("audit log not found", nil))
 		return
 	}
 
