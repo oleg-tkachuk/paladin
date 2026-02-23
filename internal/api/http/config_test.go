@@ -75,6 +75,7 @@ func TestGetAdminConfig(t *testing.T) {
 
 	// Mocks
 	mockSvc := domainmocks.NewMockObjectsService(t)
+	mockCat := domainmocks.NewMockCategoryService(t)
 	mockAuditRepo := domainmocks.NewMockAuditLogRepository(t)
 	mockS3Checker := servicemocks.NewMockS3HealthChecker(t)
 	mockPinger := servicemocks.NewMockPinger(t)
@@ -90,7 +91,7 @@ func TestGetAdminConfig(t *testing.T) {
 	started.Store(true)
 
 	// Initialize adapter
-	adapter := NewOpenAPIAdapter(cfg, mockSvc, mockAuditRepo, hs, &started, "v1.0.0", "sha", "now")
+	adapter := NewOpenAPIAdapter(cfg, mockSvc, mockCat, mockAuditRepo, hs, &started, "v1.0.0", "sha", "now")
 
 	// Setup router
 	r := gin.New()

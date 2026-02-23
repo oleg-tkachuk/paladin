@@ -19,6 +19,7 @@ import (
 type OpenAPIAdapter struct {
 	cfg       *config.Config
 	svc       domain.ObjectsService
+	catSvc    domain.CategoryService
 	auditRepo domain.AuditLogRepository
 	hs        *service.HealthService
 	started   *atomic.Bool
@@ -28,10 +29,11 @@ type OpenAPIAdapter struct {
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
 	return &OpenAPIAdapter{
 		cfg:       cfg,
 		svc:       svc,
+		catSvc:    catSvc,
 		auditRepo: auditRepo,
 		hs:        hs,
 		started:   started,
@@ -832,19 +834,91 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 func mapObjectCommon(rec *domain.Object) api.ObjectCommon {
 	labels := api.Labels(rec.Labels)
 	return api.ObjectCommon{
-		ObjectId:        rec.ID,
-		ObjectKey:       rec.ObjectKey,
-		Bucket:          rec.Bucket,
-		ContentType:     rec.ContentType,
-		SizeBytes:       rec.SizeBytes,
-		Status:          mapStatus(rec.Status),
-		Labels:          &labels,
-		ExternalRef:     rec.ExternalRef,
-		CreatedAt:       rec.CreatedAt,
-		UpdatedAt:       rec.UpdatedAt,
-		CompletedAt:     rec.CompletedAt,
-		DeletedAt:       rec.DeletedAt,
-		StoredEtag:      rec.StoredETag,
-		StoredSizeBytes: rec.StoredSizeBytes,
+		ObjectId:    rec.ID,
+		ObjectKey:   rec.ObjectKey,
+		Bucket:      rec.Bucket,
+		ContentType: rec.ContentType,
+		SizeBytes:   rec.SizeBytes,
+		Status:      mapStatus(rec.Status),
+		Labels:      &labels,
+		ExternalRef: rec.ExternalRef,
+		CreatedAt:   rec.CreatedAt,
+		UpdatedAt:   rec.UpdatedAt,
+		CompletedAt: rec.CompletedAt,
+		DeletedAt:   rec.DeletedAt,
+		StoredEtag:  rec.StoredETag,
+	}
+}
+
+func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategoriesParams) {
+	limit := 100
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+
+	items, next, err := s.catSvc.List(c.Request.Context(), tenantID(c), limit, cursor)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	out := make([]api.Category, len(items))
+	for i, item := range items {
+		out[i] = mapCategory(item)
+	}
+
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
+	resp := api.ListCategoriesResponse{
+		Items: out,
+	}
+	resp.Pagination.NextCursor = nextCursor
+	resp.Pagination.HasMore = hasMore
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *OpenAPIAdapter) CreateCategory(c *gin.Context) {
+	var req api.CreateCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	cat, err := s.catSvc.Create(c.Request.Context(), tenantID(c), req.Slug, req.Name, req.Description)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, mapCategory(*cat))
+}
+
+func (s *OpenAPIAdapter) DeleteCategory(c *gin.Context, slug string) {
+	err := s.catSvc.Delete(c.Request.Context(), tenantID(c), slug)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func mapCategory(c domain.Category) api.Category {
+	return api.Category{
+		Id:          c.ID,
+		TenantId:    c.TenantID,
+		Slug:        c.Slug,
+		Name:        c.Name,
+		Description: c.Description,
+		CreatedAt:   c.CreatedAt,
+		UpdatedAt:   c.UpdatedAt,
 	}
 }

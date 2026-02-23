@@ -47,11 +47,12 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	categoryRepository := wire.ProvideCategoryRepo(db)
 	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, idempotencyRepository, categoryRepository, config)
 	server := wire.ProvideGRPCServer(config, logger, objectsService)
+	categoryService := wire.ProvideCategoryService(categoryRepository)
 	auditLogRepository := wire.ProvideAuditRepo(db)
 	factory := wire.ProvideBreakerFactory(config)
 	healthService := wire.ProvideHealthService(db, client, factory)
 	atomicBool := provideStartedBool()
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, auditLogRepository, healthService, atomicBool, appMetadata)
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, auditLogRepository, healthService, atomicBool, appMetadata)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()

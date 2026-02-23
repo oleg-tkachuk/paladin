@@ -728,6 +728,77 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /categories:
+    get:
+      tags: [Objects]
+      summary: List categories
+      operationId: listCategories
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Categories list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCategoriesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Objects]
+      summary: Create a category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /categories/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Unique category slug
+
+    delete:
+      tags: [Objects]
+      summary: Delete a category
+      operationId: deleteCategory
+      description: |
+        Deletes a category if it has no active objects. Returns 204 if successful or already deleted.
+      responses:
+        "204":
+          description: Category deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /admin/audit-logs:
     get:
       tags: [Ops]
@@ -1517,6 +1588,65 @@ components:
               type: boolean
               description: Whether more results exist beyond this page
               example: true
+
+    Category:
+      type: object
+      required: [id, tenant_id, slug, name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          description: Unique URL-friendly identifier
+          example: "invoices"
+        name:
+          type: string
+          description: Human-readable category name
+          example: "Invoices"
+        description:
+          type: string
+          nullable: true
+
+    ListCategoriesResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        pagination:
+          type: object
+          required: [has_more]
+          properties:
+            next_cursor:
+              type: string
+              nullable: true
+            has_more:
+              type: boolean
 
     VersionResponse:
       type: object

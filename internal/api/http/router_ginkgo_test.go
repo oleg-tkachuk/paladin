@@ -114,6 +114,37 @@ func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string
 	return args.Error(0)
 }
 
+// MockCategoryService is a mock implementation of the CategoryService interface
+type MockCategoryService struct {
+	mock.Mock
+}
+
+func (m *MockCategoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug, name, description)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+	args := m.Called(ctx, tenantID, limit, cursor)
+	return args.Get(0).([]domain.Category), args.String(1), args.Error(2)
+}
+
+func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string) error {
+	args := m.Called(ctx, tenantID, slug)
+	return args.Error(0)
+}
+
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
 type MockAuditLogRepository struct {
 	mock.Mock
@@ -173,6 +204,7 @@ func (m *MockBreakerFactory) CheckHealth() map[string]string {
 var _ = Describe("Router", func() {
 	var (
 		mockSvc     *MockObjectsService
+		mockCat     *MockCategoryService
 		mockPing    *MockPinger
 		mockS3      *MockS3Health
 		mockBreaker *MockBreakerFactory
@@ -185,6 +217,7 @@ var _ = Describe("Router", func() {
 
 	BeforeEach(func() {
 		mockSvc = new(MockObjectsService)
+		mockCat = new(MockCategoryService)
 		mockPing = new(MockPinger)
 		mockS3 = new(MockS3Health)
 		mockBreaker = new(MockBreakerFactory)
@@ -212,7 +245,7 @@ var _ = Describe("Router", func() {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		server = httpapi.NewServer(cfg, logger, mockSvc, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
 		recorder = httptest.NewRecorder()
 	})
 

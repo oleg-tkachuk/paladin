@@ -56,6 +56,7 @@ var ProviderSet = wire.NewSet(
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideBreakerFactory,
+	ProvideCategoryService,
 	ProvideObjectsService,
 	ProvideHealthService,
 	ProvideHTTPServer,
@@ -164,6 +165,10 @@ func ProvideBreakerFactory(cfg config.Config) breaker.Factory {
 	return breaker.NewFactory(cfg)
 }
 
+func ProvideCategoryService(catRepo domain.CategoryRepository) domain.CategoryService {
+	return service.NewCategoryService(catRepo)
+}
+
 func ProvideObjectsService(
 	objRepo domain.ObjectsRepository,
 	mpRepo domain.MultipartRepository,
@@ -197,12 +202,13 @@ func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
 	svc domain.ObjectsService,
+	catSvc domain.CategoryService,
 	auditRepo domain.AuditLogRepository,
 	hs *service.HealthService,
 	appStarted *atomic.Bool,
 	meta AppMetadata,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, auditRepo, meta.Version, meta.Commit, meta.BuildTime, hs, appStarted)
+	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta.Version, meta.Commit, meta.BuildTime, hs, appStarted)
 }
 
 func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService) *grpc.Server {
