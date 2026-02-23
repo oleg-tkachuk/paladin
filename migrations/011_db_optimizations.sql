@@ -1,3 +1,4 @@
+-- +goose NO TRANSACTION
 -- +goose Up
 -- 1. Redundant Index Removal
 -- These indexes are either unused, duplicate coverage of other indexes, or enforce rules already handled by unique constraints.
