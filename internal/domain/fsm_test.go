@@ -21,7 +21,7 @@ func TestObjectFSM(t *testing.T) {
 		expectError   bool
 	}{
 		// Completion
-		{"Pending -> Complete", domain.ObjectPending, domain.EventObjectUploadComplete, domain.ObjectComplete, true}, // Pending -> Complete is NOT configured
+		{"Pending -> Complete", domain.ObjectPending, domain.EventObjectUploadComplete, domain.ObjectComplete, false},
 		{"Uploaded -> Complete", domain.ObjectUploaded, domain.EventObjectUploadComplete, domain.ObjectComplete, false},
 		{"Complete -> Complete (Idempotent)", domain.ObjectComplete, domain.EventObjectUploadComplete, domain.ObjectComplete, false},
 
@@ -34,6 +34,8 @@ func TestObjectFSM(t *testing.T) {
 		{"SoftDeleted -> Restore", domain.ObjectSoftDeleted, domain.EventObjectRestore, domain.ObjectComplete, false},
 
 		// Hard Delete
+		{"Pending -> HardDelete", domain.ObjectPending, domain.EventObjectHardDelete, domain.ObjectHardDeleted, false},
+		{"Complete -> HardDelete", domain.ObjectComplete, domain.EventObjectHardDelete, domain.ObjectHardDeleted, false},
 		{"SoftDeleted -> HardDelete", domain.ObjectSoftDeleted, domain.EventObjectHardDelete, domain.ObjectHardDeleted, false},
 		{"HardDeleted -> HardDelete (Idempotent)", domain.ObjectHardDeleted, domain.EventObjectHardDelete, domain.ObjectHardDeleted, false},
 
@@ -76,10 +78,10 @@ func TestMultipartFSM(t *testing.T) {
 		{"Initiated -> Complete", domain.MultipartInitiated, domain.EventMultipartComplete, domain.MultipartCompleted, false},
 		{"Initiated -> Abort", domain.MultipartInitiated, domain.EventMultipartAbort, domain.MultipartAborted, false},
 		{"Initiated -> Expire", domain.MultipartInitiated, domain.EventMultipartExpire, domain.MultipartExpired, false},
-		
+
 		{"Completed -> Complete (Idempotent)", domain.MultipartCompleted, domain.EventMultipartComplete, domain.MultipartCompleted, false},
 		{"Aborted -> Abort (Idempotent)", domain.MultipartAborted, domain.EventMultipartAbort, domain.MultipartAborted, false},
-		
+
 		{"Completed -> Abort (Error)", domain.MultipartCompleted, domain.EventMultipartAbort, domain.MultipartCompleted, true},
 		{"Aborted -> Complete (Error)", domain.MultipartAborted, domain.EventMultipartComplete, domain.MultipartAborted, true},
 	}

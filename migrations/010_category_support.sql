@@ -31,6 +31,13 @@ CREATE TRIGGER trg_object_categories_updated_at
   BEFORE UPDATE ON object_categories
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Seed default categories for testing and common usage
+INSERT INTO object_categories (tenant_id, slug, name, description)
+VALUES 
+  ('test-tenant', 'objects', 'Default Objects', 'Default fallback category'),
+  ('default', 'objects', 'Default Objects', 'Default fallback category')
+ON CONFLICT DO NOTHING;
+
 -- 2. Add category + subpath columns to objects
 ALTER TABLE objects
   ADD COLUMN category TEXT NOT NULL DEFAULT 'objects',

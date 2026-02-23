@@ -6,6 +6,7 @@ services:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
       POSTGRES_PASSWORD: paladin
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports:
       - "5433:5432"
     healthcheck:
@@ -15,6 +16,7 @@ services:
       retries: 30
     volumes:
       - paladin_pg_data:/var/lib/postgresql/data
+      - ./postgres-custom.conf:/etc/postgresql/postgresql.conf:ro
 
   seaweedfs:
     image: chrislusf/seaweedfs:latest

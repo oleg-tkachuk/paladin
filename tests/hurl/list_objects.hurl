@@ -7,7 +7,7 @@ Host: api.paladin.local
 X-Tenant-ID: test-tenant
 {
   "content_type": "text/plain",
-  "size_bytes": 100,
+  "size_bytes": 12,
   "labels": {
     "env": "test",
     "type": "list-test"

@@ -14,29 +14,32 @@ const (
 	EventObjectHardDelete     ObjectEvent = "hard_delete"
 )
 
-// NewObjectFSM creates a stateless machine for Object state transitions.
-// It uses ObjectStatus as the state type and ObjectEvent as the trigger.
 func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 	sm := stateless.NewStateMachine(initialState)
 
 	// Pending
 	sm.Configure(ObjectPending).
-		Permit(EventObjectSoftDelete, ObjectSoftDeleted)
+		Permit(EventObjectUploadComplete, ObjectComplete).
+		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
 
 	// Uploading (Reserved for iterative uploads, unused in v1 CreateSingle, but defined just in case)
 	sm.Configure(ObjectUploading).
 		Permit(EventObjectUploadComplete, ObjectComplete).
-		Permit(EventObjectSoftDelete, ObjectSoftDeleted)
+		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
 
 	// Uploaded (If tracking intermediate state before verification, same as pending/uploading for now)
 	sm.Configure(ObjectUploaded).
 		Permit(EventObjectUploadComplete, ObjectComplete).
-		Permit(EventObjectSoftDelete, ObjectSoftDeleted)
+		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
 
 	// Complete
 	sm.Configure(ObjectComplete).
 		Ignore(EventObjectUploadComplete). // Idempotent completion
-		Permit(EventObjectSoftDelete, ObjectSoftDeleted)
+		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
 
 	// SoftDeleted
 	sm.Configure(ObjectSoftDeleted).
@@ -53,9 +56,7 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 	// HardDeleted
 	sm.Configure(ObjectHardDeleted).
 		Ignore(EventObjectHardDelete) // Idempotent hard-delete
-		// If we don't map it, Fire() will return an error, which is correct (conflict).
 
-	// Let's remove the Ignored soft-delete on HardDeleted so it explicitly fails.
 	return sm
 }
 
