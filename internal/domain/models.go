@@ -51,7 +51,7 @@ type Object struct {
 	DeletedAt       *time.Time
 	// Category is the slug of the tenant-scoped category this object belongs to.
 	// The value is validated at create time against the object_categories table.
-	// Default: "objects"
+	// Default: None (must be validated against object_categories table)
 	Category string
 	// Subpath is an optional forward-slash-separated path within the category
 	// (e.g. "2024/01"). Reserved for future use; not exposed in v1 API.

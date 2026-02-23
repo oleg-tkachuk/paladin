@@ -144,8 +144,8 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	category := "objects"
-	if req.Category != nil && *req.Category != "" {
+	var category string
+	if req.Category != nil {
 		category = *req.Category
 	}
 
@@ -394,8 +394,8 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	category := "objects"
-	if req.Category != nil && *req.Category != "" {
+	var category string
+	if req.Category != nil {
 		category = *req.Category
 	}
 

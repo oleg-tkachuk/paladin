@@ -34,9 +34,7 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 		externalRef = &req.ExternalRef
 	}
 
-	// gRPC proto does not yet carry category; default to "objects".
-	// Update the proto and regenerate when category routing is needed over gRPC.
-	const category = "objects"
+	category := req.Category
 
 	out, err := s.svc.CreateSingle(ctx, tenant, category, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
 	if err != nil {
@@ -156,10 +154,8 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 		tenant = utils.TenantIDFromContext(ctx, "default")
 	}
 
-	category := "objects"
-	if req.Category != "" {
-		category = req.Category
-	}
+	category := req.Category
+	// category will be validated in the service layer
 
 	var extRef *string
 	if req.ExternalRef != "" {
