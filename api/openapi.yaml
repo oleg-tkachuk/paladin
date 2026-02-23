@@ -1309,6 +1309,7 @@ components:
           status,
           created_at,
           updated_at,
+          category,
         ]
       properties:
         object_id:
@@ -1325,6 +1326,9 @@ components:
           format: int64
         status:
           $ref: "#/components/schemas/ObjectStatus"
+        category:
+          type: string
+          description: Category slug the object belongs to
         labels:
           $ref: "#/components/schemas/Labels"
         external_ref:

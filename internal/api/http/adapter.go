@@ -859,6 +859,7 @@ func mapObjectCommon(rec *domain.Object) api.ObjectCommon {
 		ContentType: rec.ContentType,
 		SizeBytes:   rec.SizeBytes,
 		Status:      mapStatus(rec.Status),
+		Category:    rec.Category,
 		Labels:      &labels,
 		ExternalRef: rec.ExternalRef,
 		CreatedAt:   rec.CreatedAt,
