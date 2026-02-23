@@ -547,10 +547,23 @@ var _ = Describe("ObjectsService", func() {
 			tenantID := "test-tenant"
 			objID := uuid.New()
 
-			// Expect only MarkDeleted, no S3 delete
-			mockRepo.On("MarkDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
+			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
+			mockRepo.On("MarkSoftDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
 
 			err := svc.Delete(ctx, tenantID, openapi_types.UUID(objID))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("Restore", func() {
+		It("should successfully restore a soft-deleted object", func() {
+			tenantID := "test-tenant"
+			objID := uuid.New()
+
+			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ID: objID, Status: domain.ObjectSoftDeleted}, nil)
+			mockRepo.On("Restore", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
+
+			err := svc.Restore(ctx, tenantID, openapi_types.UUID(objID))
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})

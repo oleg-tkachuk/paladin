@@ -64,6 +64,11 @@ func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uui
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
 func (m *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
 	return args.Error(0)

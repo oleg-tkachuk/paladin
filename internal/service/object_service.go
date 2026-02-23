@@ -87,8 +87,37 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		return err
 	}
 
-	// Soft Delete: Only mark as deleted in database
-	updated, err := s.objRepo.MarkDeleted(ctx, tenantID, id)
+	// Get object to check current status
+	obj, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		if apperrors.IsNotFound(err) {
+			status = "success"
+			return nil
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectSoftDelete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent
+		status = "success"
+		return nil
+	}
+
+	// Soft Delete: Only mark as soft deleted in database
+	updated, err := s.objRepo.MarkSoftDeleted(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -98,6 +127,69 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	if updated {
 		logger.FromContext(ctx).Info("Object Soft Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	}
+
+	status = "success"
+	span.SetStatus(codes.Ok, "")
+	return nil
+}
+
+// Restore brings back a soft-deleted object
+func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "Restore")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("restore", status, time.Since(start).Seconds()) }()
+
+	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
+	defer cancel()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// Get object to check current status
+	obj, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectRestore)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent
+		status = "success"
+		return nil
+	}
+
+	// Restore in database
+	updated, err := s.objRepo.Restore(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	if updated {
+		logger.FromContext(ctx).Info("Object Restored", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
 	status = "success"

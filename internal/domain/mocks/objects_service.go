@@ -1016,6 +1016,69 @@ func (_c *MockObjectsService_Purge_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// Restore provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	ret := _mock.Called(ctx, tenantID, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Restore")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, tenantID, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_Restore_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Restore'
+type MockObjectsService_Restore_Call struct {
+	*mock.Call
+}
+
+// Restore is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id uuid.UUID
+func (_e *MockObjectsService_Expecter) Restore(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsService_Restore_Call {
+	return &MockObjectsService_Restore_Call{Call: _e.mock.On("Restore", ctx, tenantID, id)}
+}
+
+func (_c *MockObjectsService_Restore_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsService_Restore_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_Restore_Call) Return(err error) *MockObjectsService_Restore_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_Restore_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) error) *MockObjectsService_Restore_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SignDownload provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (domain.Presigned, error) {
 	ret := _mock.Called(ctx, tenantID, id, downloadTTL)

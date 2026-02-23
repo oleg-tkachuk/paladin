@@ -207,6 +207,21 @@ func (s *OpenAPIAdapter) PurgeObject(c *gin.Context, id openapi_types.UUID, para
 	c.Status(http.StatusNoContent)
 }
 
+func (s *OpenAPIAdapter) RestoreObject(c *gin.Context, id openapi_types.UUID, params api.RestoreObjectParams) {
+	if err := s.svc.Restore(c.Request.Context(), tenantID(c), id); err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	obj, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, mapObjectCommon(obj))
+}
+
 func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, params api.UpdateObjectParams) {
 	var req api.PatchObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -420,7 +435,7 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 	})
 }
 
-func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId string) {
+func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId api.UploadID) {
 	if err := s.svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadId); err != nil {
 		respondWithError(c, 0, err)
 		return

@@ -16,6 +16,8 @@ type ObjectsService interface {
 	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*Object, error)
 	// Delete performs a soft delete
 	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
+	// Restore brings back a soft-deleted object
+	Restore(ctx context.Context, tenantID string, id uuid.UUID) error
 	// Purge performs a hard delete (removes from storage)
 	Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error
 	// UpdateStatus updates the status of an object (non-delete transitions only)

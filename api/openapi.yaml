@@ -255,6 +255,39 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /objects/{id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    post:
+      tags: [Objects]
+      summary: Restore a soft-deleted object
+      description: |
+        Restores a soft-deleted object by transitioning its status back to `complete`.
+        If the object is already in a non-deleted state, the response is `200 OK`.
+      operationId: restoreObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Object restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObjectCommon"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /objects/{id}/purge:
     parameters:
       - $ref: "#/components/parameters/ObjectID"
