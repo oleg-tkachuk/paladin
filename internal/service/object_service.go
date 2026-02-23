@@ -165,7 +165,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	}
 
 	// Delete from S3
-	if err := s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+	if err = s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
 		logger.FromContext(ctx).Error("Failed to delete object from S3",
 			zap.String("tenant_id", tenantID),
 			zap.String("object_id", id.String()),

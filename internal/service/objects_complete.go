@@ -72,7 +72,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 
 	// Validate ETag if provided
 	if etag != nil && *etag != head.ETag {
-		err := fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
+		err = fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -80,7 +80,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	}
 	// Validate Size if provided
 	if sizeBytes != nil && *sizeBytes != head.SizeBytes {
-		err := fmt.Errorf("size mismatch: expected %d, got %d", *sizeBytes, head.SizeBytes)
+		err = fmt.Errorf("size mismatch: expected %d, got %d", *sizeBytes, head.SizeBytes)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

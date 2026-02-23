@@ -53,7 +53,7 @@ auth:
 
 	concreteVal := ctx.BuildFile(yamlFile)
 	combined := schemaVal.Unify(concreteVal)
-	if err := combined.Validate(); err != nil {
+	if err = combined.Validate(); err != nil {
 		t.Fatalf("CUE validation failed: %v", err)
 	}
 

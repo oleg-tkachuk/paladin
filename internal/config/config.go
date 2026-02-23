@@ -38,7 +38,7 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	yamlVal := ctx.BuildFile(yamlFile)
 
 	combined := schemaVal.Unify(yamlVal)
-	if err := combined.Validate(); err != nil {
+	if err = combined.Validate(); err != nil {
 		return Config{}, fmt.Errorf("YAML validation failed (%s): %w", path, err)
 	}
 

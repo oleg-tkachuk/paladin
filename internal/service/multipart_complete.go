@@ -59,7 +59,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return rec, nil
 	}
 
-	if err := s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
+	if err = s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -75,14 +75,14 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
 
-	if _, err := s.objRepo.MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
+	if _, err = s.objRepo.MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 		return nil, err
 	}
 
-	if err := s.multiRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
+	if err = s.multiRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

@@ -46,7 +46,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	}
 
 	if multi == nil {
-		err := fmt.Errorf("multipart upload not found")
+		err = fmt.Errorf("multipart upload not found")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -70,7 +70,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		return nil
 	}
 
-	if err := s.s3.AbortMultipartUpload(ctx, multi.ObjectKey, uploadID); err != nil {
+	if err = s.s3.AbortMultipartUpload(ctx, multi.ObjectKey, uploadID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

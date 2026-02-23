@@ -51,8 +51,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	// Convert string ClientIP to *netip.Addr for database storage
 	var clientIP *netip.Addr
 	if log.ClientIP != nil {
-		addr, err := netip.ParseAddr(*log.ClientIP)
-		if err == nil {
+		if addr, parseErr := netip.ParseAddr(*log.ClientIP); parseErr == nil {
 			clientIP = &addr
 		}
 	}
