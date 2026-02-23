@@ -33,7 +33,7 @@ func TestReaper(t *testing.T) {
 			{ID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), TenantID: "t1", ObjectKey: "key1"},
 		}, nil).Maybe()
 
-	objRepo.On("MarkDeleted", mock.Anything, "t1", uuid.MustParse("00000000-0000-0000-0000-000000000001")).
+	objRepo.On("Delete", mock.Anything, "t1", uuid.MustParse("00000000-0000-0000-0000-000000000001")).
 		Return(true, nil).Maybe()
 
 	mpRepo.On("ListExpired", mock.Anything, 100).

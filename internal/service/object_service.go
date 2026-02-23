@@ -269,8 +269,8 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 
-	// Mark as hard deleted in database
-	_, err = s.objRepo.MarkHardDeleted(ctx, tenantID, id)
+	// Permanently delete record from database
+	_, err = s.objRepo.Delete(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

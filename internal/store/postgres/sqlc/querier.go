@@ -24,6 +24,7 @@ type Querier interface {
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string) error
 	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
+	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
 	GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error)
 	// Idempotency queries

@@ -41,6 +41,19 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID str
 	return err
 }
 
+const deleteObject = `-- name: DeleteObject :execrows
+DELETE FROM objects
+WHERE tenant_id = $1 AND id = $2
+`
+
+func (q *Queries) DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteObject, tenantID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getObject = `-- name: GetObject :one
 SELECT
     id, tenant_id, object_key, bucket, content_type, size_bytes,

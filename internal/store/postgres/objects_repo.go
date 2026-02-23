@@ -168,6 +168,22 @@ func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.
 	return r.MarkHardDeleted(ctx, tenantID, id)
 }
 
+func (r *ObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "DeleteObject", status, start) }()
+
+	rows, err := r.db.Queries.DeleteObject(ctx, tenantID, uuidToPgtype(id))
+	if err != nil {
+		status = "error"
+		return false, MapPgError(err)
+	}
+
+	status = "success"
+	return rows > 0, nil
+
+}
+
 func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
 	start := time.Now()
 	var opStatus string

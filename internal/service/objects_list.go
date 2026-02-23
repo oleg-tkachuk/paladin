@@ -40,8 +40,17 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 		return nil, "", err
 	}
 
+	// Filter out hard_deleted objects
+	filtered := make([]domain.Object, 0, len(recs))
+	for _, r := range recs {
+		if r.Status != domain.ObjectHardDeleted {
+			filtered = append(filtered, r)
+		}
+	}
+
 	status = "success"
 	span.SetStatus(codes.Ok, "")
-	span.SetAttributes(attribute.Int("result_count", len(recs)))
-	return recs, nextCursor, nil
+	span.SetAttributes(attribute.Int("result_count", len(filtered)))
+	return filtered, nextCursor, nil
+
 }

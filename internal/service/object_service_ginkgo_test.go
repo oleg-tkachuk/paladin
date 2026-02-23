@@ -82,6 +82,11 @@ func (m *MockObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+	return args.Bool(0), args.Error(1)
+}
+
 func (m *MockObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
 	args := m.Called(ctx, tenantID, id, status)
 	return args.Bool(0), args.Error(1)
@@ -569,19 +574,20 @@ var _ = Describe("ObjectsService", func() {
 	})
 
 	Describe("Purge", func() {
-		It("should successfully mark object as deleted and delete from S3", func() {
+		It("should successfully delete object record and content from S3", func() {
 			tenantID := "test-tenant"
 			objID := uuid.New()
 			id := openapi_types.UUID(objID)
 
-			// Expect MarkHardDeleted (and Get before it)
+			// Expect Delete (and Get before it)
 			mockRepo.On("Get", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(&domain.Object{ObjectKey: "some-key", Status: domain.ObjectSoftDeleted}, nil)
 			mockS3.On("DeleteObject", mock.Anything, "some-key").Return(nil)
-			mockRepo.On("MarkHardDeleted", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
+			mockRepo.On("Delete", mock.Anything, tenantID, openapi_types.UUID(objID)).Return(true, nil)
 
 			// We are testing service method Purge
 			err := svc.Purge(ctx, tenantID, id, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
 })

@@ -196,6 +196,20 @@ func (r *CachedObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.
 	return r.repo.ListExpiredPending(ctx, cutoff, limit)
 }
 
+// Delete removes an object and invalidates cache
+func (r *CachedObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	updated, err := r.repo.Delete(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
 // CacheStats returns cache statistics
 func (r *CachedObjectsRepo) CacheStats() cache.CacheStats {
 	return r.cache.Stats()

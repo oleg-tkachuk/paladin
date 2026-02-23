@@ -58,7 +58,9 @@ type ObjectsRepository interface {
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error)
 	Restore(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	MarkDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
+	Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, error)
+
 	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]Object, error)
 }

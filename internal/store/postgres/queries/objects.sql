@@ -131,3 +131,8 @@ SELECT
 FROM objects
 WHERE status = 'pending' AND expires_at < $1
 LIMIT $2;
+
+-- name: DeleteObject :execrows
+DELETE FROM objects
+WHERE tenant_id = $1 AND id = $2;
+
