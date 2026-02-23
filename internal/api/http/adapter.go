@@ -290,8 +290,12 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 	}
 
 	filter := domain.ListObjectsFilter{
-		Status:      (*domain.ObjectStatus)(params.Status),
-		ExternalRef: params.ExternalRef,
+		Status:        (*domain.ObjectStatus)(params.Status),
+		ExternalRef:   params.ExternalRef,
+		Category:      params.Category,
+		KeyPrefix:     params.Prefix,
+		CreatedAfter:  params.CreatedAfter,
+		CreatedBefore: params.CreatedBefore,
 	}
 
 	items, next, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)

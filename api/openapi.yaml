@@ -69,6 +69,18 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter objects by category slug
+        - name: prefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter objects by key prefix (simulates folder structure)
       responses:
         "200":
           description: Objects list
