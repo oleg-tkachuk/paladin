@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -26,6 +28,7 @@ type objectsService struct {
 	policy    domain.Policy
 	idemRepo  domain.IdempotencyRepository
 	catRepo   domain.CategoryRepository
+	brk       breaker.Factory
 	partSize  int64
 
 	// Configurable timeouts
@@ -43,6 +46,7 @@ func NewObjectsService(
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
+	brk breaker.Factory,
 	partSize int64,
 	fastTimeout, defaultTimeout, s3Timeout, longTimeout time.Duration,
 	idempotencyTTL time.Duration,
@@ -54,6 +58,7 @@ func NewObjectsService(
 		policy:                  policy,
 		idemRepo:                idemRepo,
 		catRepo:                 catRepo,
+		brk:                     brk,
 		partSize:                partSize,
 		fastOperationTimeout:    fastTimeout,
 		defaultOperationTimeout: defaultTimeout,
@@ -257,7 +262,10 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	}
 
 	// Delete from S3
-	if err = s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+	err = s.executeWithBreaker(ctx, "s3_delete", func() error {
+		return s.s3.DeleteObject(ctx, obj.ObjectKey)
+	})
+	if err != nil {
 		logger.FromContext(ctx).Error("Failed to delete object from S3",
 			zap.String("tenant_id", tenantID),
 			zap.String("object_id", id.String()),
@@ -352,4 +360,24 @@ func (s *objectsService) CompleteMultipart(ctx context.Context, tenantID string,
 
 func (s *objectsService) AbortMultipart(ctx context.Context, tenantID string, uploadID string) error {
 	return s.abortMultipart(ctx, tenantID, uploadID)
+}
+
+func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn func() error) error {
+	w := s.brk.Get(name)
+	_, err := fault.Execute(w, func() (interface{}, error) {
+		return nil, fn()
+	})
+	return err
+}
+
+func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name string, fn func() (T, error)) (T, error) {
+	w := brk.Get(name)
+	res, err := fault.Execute(w, func() (interface{}, error) {
+		return fn()
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return res.(T), nil
 }

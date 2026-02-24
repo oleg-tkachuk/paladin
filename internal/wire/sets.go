@@ -141,8 +141,12 @@ func ProvidePolicy(cfg config.Config) domain.Policy {
 	return service.NewPolicy(cfg.Policy)
 }
 
-func ProvideObjectsRepo(db *postgres.DB) domain.ObjectsRepository {
-	return postgres.NewObjectsRepo(db)
+func ProvideObjectsRepo(db *postgres.DB, cfg config.Config) domain.ObjectsRepository {
+	repo := postgres.NewObjectsRepo(db)
+	if cfg.Cache.Enabled {
+		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+	}
+	return repo
 }
 
 func ProvideMultipartRepo(db *postgres.DB) domain.MultipartRepository {
@@ -153,8 +157,12 @@ func ProvideIdempotencyRepo(db *postgres.DB) domain.IdempotencyRepository {
 	return postgres.NewIdempotencyRepo(db)
 }
 
-func ProvideCategoryRepo(db *postgres.DB) domain.CategoryRepository {
-	return postgres.NewCategoryRepo(db)
+func ProvideCategoryRepo(db *postgres.DB, cfg config.Config) domain.CategoryRepository {
+	repo := postgres.NewCategoryRepo(db)
+	if cfg.Cache.Enabled {
+		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+	}
+	return repo
 }
 
 func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
@@ -176,6 +184,7 @@ func ProvideObjectsService(
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
+	brk breaker.Factory,
 	cfg config.Config,
 ) domain.ObjectsService {
 	return service.NewObjectsService(
@@ -185,6 +194,7 @@ func ProvideObjectsService(
 		policy,
 		idemRepo,
 		catRepo,
+		brk,
 		cfg.Datastores.S3.PartSizeBytes,
 		cfg.Timeouts.FastOperation,
 		cfg.Timeouts.DefaultOperation,

@@ -35,7 +35,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	if err != nil {
 		return nil, nil, err
 	}
-	objectsRepository := wire.ProvideObjectsRepo(db)
+	objectsRepository := wire.ProvideObjectsRepo(db, config)
 	multipartRepository := wire.ProvideMultipartRepo(db)
 	client, err := wire.ProvideS3(ctx, config, logger)
 	if err != nil {
@@ -44,12 +44,12 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	}
 	policy := wire.ProvidePolicy(config)
 	idempotencyRepository := wire.ProvideIdempotencyRepo(db)
-	categoryRepository := wire.ProvideCategoryRepo(db)
-	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, idempotencyRepository, categoryRepository, config)
+	categoryRepository := wire.ProvideCategoryRepo(db, config)
+	factory := wire.ProvideBreakerFactory(config)
+	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, idempotencyRepository, categoryRepository, factory, config)
 	server := wire.ProvideGRPCServer(config, logger, objectsService)
 	categoryService := wire.ProvideCategoryService(categoryRepository)
 	auditLogRepository := wire.ProvideAuditRepo(db)
-	factory := wire.ProvideBreakerFactory(config)
 	healthService := wire.ProvideHealthService(db, client, factory)
 	atomicBool := provideStartedBool()
 	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, auditLogRepository, healthService, atomicBool, appMetadata)

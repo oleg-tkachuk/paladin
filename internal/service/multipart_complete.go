@@ -59,7 +59,9 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return rec, nil
 	}
 
-	if err = s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
+	if err = s.executeWithBreaker(ctx, "s3_complete_multipart", func() error {
+		return s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts)
+	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -67,7 +69,9 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	}
 
 	// Double check S3 for final ETag/Size
-	head, err := s.s3.HeadObject(ctx, multi.ObjectKey)
+	head, err := executeWithBreakerRet(ctx, s.brk, "s3_head", func() (*domain.HeadRecord, error) {
+		return s.s3.HeadObject(ctx, multi.ObjectKey)
+	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

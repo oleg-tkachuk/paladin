@@ -70,7 +70,9 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		return nil
 	}
 
-	if err = s.s3.AbortMultipartUpload(ctx, multi.ObjectKey, uploadID); err != nil {
+	if err = s.executeWithBreaker(ctx, "s3_abort_multipart", func() error {
+		return s.s3.AbortMultipartUpload(ctx, multi.ObjectKey, uploadID)
+	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

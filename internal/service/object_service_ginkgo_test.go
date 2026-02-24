@@ -300,6 +300,7 @@ var _ = Describe("ObjectsService", func() {
 		mockS3      *MockS3Client
 		mockPolicy  *MockPolicy
 		mockCatRepo *MockCategoryRepo
+		mockBreaker *MockBreakerFactory
 		svc         domain.ObjectsService
 		ctx         context.Context
 	)
@@ -310,6 +311,16 @@ var _ = Describe("ObjectsService", func() {
 		mockS3 = new(MockS3Client)
 		mockPolicy = new(MockPolicy)
 		mockCatRepo = new(MockCategoryRepo)
+		mockBreaker = new(MockBreakerFactory)
+
+		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{
+			Name:                "test",
+			Timeout:             10 * time.Second,
+			MaxConsecutiveFails: 10,
+			FailureRatio:        0.9,
+			WindowDuration:      1 * time.Minute,
+			Persistent:          false,
+		})).Maybe()
 
 		svc = service.NewObjectsService(
 			mockRepo,
@@ -318,6 +329,7 @@ var _ = Describe("ObjectsService", func() {
 			mockPolicy,
 			nil, // idempotency repo
 			mockCatRepo,
+			mockBreaker,
 			5*1024*1024,    // part size
 			5*time.Second,  // fast timeout
 			30*time.Second, // default timeout
@@ -383,7 +395,7 @@ var _ = Describe("ObjectsService", func() {
 			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
 
 			// Re-create service with mockIdem and mockPolicy
-			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, mockCatRepo, 1024*1024,
+			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
 				time.Second, time.Second, time.Second, time.Second, time.Hour)
 
 			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, 0, &key)

@@ -166,6 +166,19 @@ func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id
 	return updated, nil
 }
 
+func (r *CachedObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
+	updated, err := r.repo.UpdateStatus(ctx, tenantID, id, status)
+	if err != nil {
+		return false, err
+	}
+
+	// Invalidate cache
+	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+	_ = r.cache.Delete(ctx, cacheKey)
+
+	return updated, nil
+}
+
 // Patch updates object metadata and writes through to cache
 func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	rec, err := r.repo.Patch(ctx, tenantID, id, labels, externalRef)

@@ -90,7 +90,9 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	id := uuid.New()
 	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
 
-	init, err := s.s3.CreateMultipartUpload(ctx, key, contentType)
+	init, err := executeWithBreakerRet(ctx, s.brk, "s3_initiate_multipart", func() (domain.MultipartInit, error) {
+		return s.s3.CreateMultipartUpload(ctx, key, contentType)
+	})
 	if err != nil {
 		return domain.MultipartInitResponse{}, err
 	}

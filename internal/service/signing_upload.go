@@ -46,7 +46,9 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 		ttl = s.s3.PresignTTLDuration()
 	}
 
-	presigned, err := s.s3.PresignPutObject(ctx, rec.ObjectKey, rec.ContentType, rec.SizeBytes, ttl)
+	presigned, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+		return s.s3.PresignPutObject(ctx, rec.ObjectKey, rec.ContentType, rec.SizeBytes, ttl)
+	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
