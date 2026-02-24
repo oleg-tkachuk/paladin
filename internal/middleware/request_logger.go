@@ -10,7 +10,7 @@ import (
 )
 
 func isHealthPath(path string) bool {
-	return path == "/health/livez" || path == "/health/readyz"
+	return path == "/health/livez" || path == "/health/readyz" || path == "/health/startupz"
 }
 
 func isTechPath(path string) bool {
