@@ -107,11 +107,11 @@ paladin/
 stateDiagram-v2
     [*] --> pending : POST /v1/objects
     pending --> uploaded : Client PUT to S3
-    uploaded --> complete : POST /objects/:id/complete
-    complete --> soft_deleted : DELETE /objects/:id
-    soft_deleted --> complete : POST /objects/:id/restore
-    soft_deleted --> hard_deleted : DELETE /objects/:id/purge
-    complete --> hard_deleted : DELETE /objects/:id/purge
+    uploaded --> complete : POST /objects/{id}/complete
+    complete --> soft_deleted : DELETE /objects/{id}
+    soft_deleted --> complete : POST /objects/{id}/restore
+    soft_deleted --> hard_deleted : DELETE /objects/{id}/purge
+    complete --> hard_deleted : DELETE /objects/{id}/purge
     pending --> aborted : Reaper TTL
     aborted --> [*]
     hard_deleted --> [*]
@@ -235,6 +235,15 @@ task migrate:down
 - **Graceful shutdown**: 20 s drain period for in-flight requests on SIGTERM/SIGINT.
 - **Health probes**: `readyz` performs `HeadBucket` on S3 — if S3 is unreachable, the pod is removed from load balancer rotation.
 
+See [docs/architecture.md](./docs/architecture.md) for the full layered architecture with diagrams.
+
 ---
 
-*For detailed documentation see the [docs/](./docs/) directory.*
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [docs/architecture.md](./docs/architecture.md) | Layered architecture, middleware stack, FSMs, DI graph, Reaper |
+| [docs/API.md](./docs/API.md) | REST + gRPC API reference with sequence diagrams |
+| [docs/database.md](./docs/database.md) | Database schema, ERD, migrations, RLS |
+| [docs/configuration.md](./docs/configuration.md) | All configuration settings with examples |
