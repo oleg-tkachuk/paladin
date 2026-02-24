@@ -43,6 +43,8 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 		timestampPtrToPgtype(rec.ExpiresAt),
 		labels,
 		rec.ExternalRef,
+		rec.Category,
+		rec.Subpath,
 	)
 
 	if err != nil {
@@ -166,6 +168,22 @@ func (r *ObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id uuid.
 	return r.MarkHardDeleted(ctx, tenantID, id)
 }
 
+func (r *ObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "DeleteObject", status, start) }()
+
+	rows, err := r.db.Queries.DeleteObject(ctx, tenantID, uuidToPgtype(id))
+	if err != nil {
+		status = "error"
+		return false, MapPgError(err)
+	}
+
+	status = "success"
+	return rows > 0, nil
+
+}
+
 func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
 	start := time.Now()
 	var opStatus string
@@ -202,12 +220,12 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 	return &result, nil
 }
 
-func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	var cursorTime pgtype.Timestamptz
 	if cursor != "" {
 		t, err := time.Parse(time.RFC3339, cursor)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid cursor: %w", err)
+			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
 		}
 		cursorTime = timestampToPgtype(t)
 	}
@@ -230,17 +248,24 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		timestampPtrToPgtype(filter.CreatedAfter),
 		timestampPtrToPgtype(filter.CreatedBefore),
 		cursorTime,
+		filter.Category,
+		filter.KeyPrefix,
 	)
 	if err != nil {
 		opStatus = "error"
-		return nil, "", MapPgError(err)
+		return nil, "", 0, MapPgError(err)
+	}
+
+	var totalCount int64
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
 	}
 
 	out := make([]domain.Object, 0, len(rows))
 	for _, row := range rows {
-		obj, err := MapObjectToDomain(row)
+		obj, err := MapListObjectsRowToDomain(row)
 		if err != nil {
-			return nil, "", fmt.Errorf("map object: %w", err)
+			return nil, "", 0, fmt.Errorf("map object: %w", err)
 		}
 		out = append(out, obj)
 	}
@@ -252,7 +277,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 	}
 
 	opStatus = "success"
-	return out, nextCursor, nil
+	return out, nextCursor, totalCount, nil
 }
 
 func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
@@ -265,14 +290,16 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 
 	// Determine which query to use based on what's being patched
 	if labels != nil && externalRef != nil {
-		labelsJSON, err := marshalStringMap(labels)
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
 		obj, err = r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
 	} else if labels != nil {
-		labelsJSON, err := marshalStringMap(labels)
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)
@@ -297,4 +324,86 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 	}
 
 	return &result, nil
+}
+func (r *ObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkMarkObjectSoftDeleted", status, start) }()
+
+	pgIds := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIds[i] = uuidToPgtype(id)
+	}
+
+	rows, err := r.db.Queries.BulkMarkObjectSoftDeleted(ctx, tenantID, pgIds)
+	if err != nil {
+		status = "error"
+		return 0, MapPgError(err)
+	}
+
+	status = "success"
+	return rows, nil
+}
+
+func (r *ObjectsRepo) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkRestoreObject", status, start) }()
+
+	pgIds := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIds[i] = uuidToPgtype(id)
+	}
+
+	rows, err := r.db.Queries.BulkRestoreObject(ctx, tenantID, pgIds)
+	if err != nil {
+		status = "error"
+		return 0, MapPgError(err)
+	}
+
+	status = "success"
+	return rows, nil
+}
+
+func (r *ObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkDeleteObject", status, start) }()
+
+	pgIds := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIds[i] = uuidToPgtype(id)
+	}
+
+	rows, err := r.db.Queries.BulkDeleteObject(ctx, tenantID, pgIds)
+	if err != nil {
+		status = "error"
+		return 0, MapPgError(err)
+	}
+
+	status = "success"
+	return rows, nil
+}
+
+func (r *ObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "GetObjectStats", status, start) }()
+
+	row, err := r.db.Queries.GetObjectStats(ctx, tenantID)
+	if err != nil {
+		status = "error"
+		return nil, MapPgError(err)
+	}
+
+	status = "success"
+	return &domain.ObjectStats{
+		TotalCount:       row.TotalCount,
+		TotalSize:        row.TotalSize,
+		PendingCount:     row.PendingCount,
+		UploadingCount:   row.UploadingCount,
+		UploadedCount:    row.UploadedCount,
+		CompleteCount:    row.CompleteCount,
+		SoftDeletedCount: row.SoftDeletedCount,
+	}, nil
 }

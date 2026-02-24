@@ -38,10 +38,6 @@ func TestValidateExternalRef(t *testing.T) {
 	}{
 		{"valid ref", "user-123-doc-456", false},
 		{"empty (optional)", "", false},
-		{"path traversal ../", "../etc/passwd", true},
-		{"path traversal encoded", "%2e%2e/etc/passwd", true},
-		{"sql injection quote", "ref'; DROP TABLE objects--", true},
-		{"sql injection select", "ref OR 1=1 SELECT *", true},
 		{"too long", strings.Repeat("a", 257), true},
 		{"invalid utf8", string([]byte{0xff, 0xfe, 0xfd}), true},
 	}

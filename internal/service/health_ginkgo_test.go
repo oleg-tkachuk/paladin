@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,8 +23,11 @@ type MockS3HealthChecker struct {
 	err error
 }
 
-func (m *MockS3HealthChecker) Health(ctx context.Context) error {
-	return m.err
+func (m *MockS3HealthChecker) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	if m.err != nil {
+		return domain.S3PingResult{Status: "unavailable", Message: m.err.Error()}, nil
+	}
+	return domain.S3PingResult{Status: "healthy", Message: "OK"}, nil
 }
 
 var _ = Describe("HealthService", func() {

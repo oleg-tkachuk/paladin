@@ -113,10 +113,11 @@ func (r *Reaper) cleanupPending(ctx context.Context) {
 		// But for pending objects that never completed, we should probably hard delete to save space?
 		// If I can't delete from S3, I just mark deleted in DB?
 
-		// 2. Mark deleted in DB
-		if _, err := r.objRepo.MarkDeleted(ctx, rec.TenantID, rec.ID); err != nil {
-			r.log.Error("Failed to mark object deleted", zap.String("id", rec.ID.String()), zap.Error(err))
+		// 2. Physically delete from DB
+		if _, err := r.objRepo.Delete(ctx, rec.TenantID, rec.ID); err != nil {
+			r.log.Error("Failed to physically delete object", zap.String("id", rec.ID.String()), zap.Error(err))
 		}
+
 	}
 }
 

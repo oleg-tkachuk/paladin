@@ -69,7 +69,7 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 	defer rl.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if entry, exists := rl.visitors[tenantID]; exists {
+	if entry, exists = rl.visitors[tenantID]; exists {
 		entry.lastAccess = time.Now()
 		return entry.limiter
 	}

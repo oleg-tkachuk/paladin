@@ -28,6 +28,7 @@ type CreateObjectRequest struct {
 	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExternalRef   string                 `protobuf:"bytes,5,opt,name=external_ref,json=externalRef,proto3" json:"external_ref,omitempty"`
+	Category      string                 `protobuf:"bytes,6,opt,name=category,proto3" json:"category,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -93,6 +94,13 @@ func (x *CreateObjectRequest) GetLabels() map[string]string {
 func (x *CreateObjectRequest) GetExternalRef() string {
 	if x != nil {
 		return x.ExternalRef
+	}
+	return ""
+}
+
+func (x *CreateObjectRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
 	}
 	return ""
 }
@@ -656,6 +664,7 @@ type InitiateMultipartRequest struct {
 	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	Labels        map[string]string      `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExternalRef   string                 `protobuf:"bytes,5,opt,name=external_ref,json=externalRef,proto3" json:"external_ref,omitempty"`
+	Category      string                 `protobuf:"bytes,6,opt,name=category,proto3" json:"category,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -721,6 +730,13 @@ func (x *InitiateMultipartRequest) GetLabels() map[string]string {
 func (x *InitiateMultipartRequest) GetExternalRef() string {
 	if x != nil {
 		return x.ExternalRef
+	}
+	return ""
+}
+
+func (x *InitiateMultipartRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
 	}
 	return ""
 }
@@ -1185,14 +1201,15 @@ var File_paladin_proto protoreflect.FileDescriptor
 
 const file_paladin_proto_rawDesc = "" +
 	"\n" +
-	"\tocp.proto\x12\x06ocp.v1\"\x93\x02\n" +
+	"\tocp.proto\x12\x06ocp.v1\"\xaf\x02\n" +
 	"\x13CreateObjectRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12?\n" +
 	"\x06labels\x18\x04 \x03(\v2'.paladin.v1.CreateObjectRequest.LabelsEntryR\x06labels\x12!\n" +
-	"\fexternal_ref\x18\x05 \x01(\tR\vexternalRef\x1a9\n" +
+	"\fexternal_ref\x18\x05 \x01(\tR\vexternalRef\x12\x1a\n" +
+	"\bcategory\x18\x06 \x01(\tR\bcategory\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x02\n" +
@@ -1252,14 +1269,15 @@ const file_paladin_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
 	"\tobject_id\x18\x02 \x01(\tR\bobjectId\".\n" +
 	"\x14DeleteObjectResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\x9d\x02\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xb9\x02\n" +
 	"\x18InitiateMultipartRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12D\n" +
 	"\x06labels\x18\x04 \x03(\v2,.paladin.v1.InitiateMultipartRequest.LabelsEntryR\x06labels\x12!\n" +
-	"\fexternal_ref\x18\x05 \x01(\tR\vexternalRef\x1a9\n" +
+	"\fexternal_ref\x18\x05 \x01(\tR\vexternalRef\x12\x1a\n" +
+	"\bcategory\x18\x06 \x01(\tR\bcategory\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb9\x01\n" +

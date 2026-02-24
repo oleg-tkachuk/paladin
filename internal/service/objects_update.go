@@ -99,60 +99,51 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		return err
 	}
 
-	// State Machine
+	// FSM State Transition
+	sm := domain.NewObjectFSM(obj.Status)
+	var event domain.ObjectEvent
+
 	switch status {
 	case "soft_deleted":
-		// Transitions:
-		// active -> soft_deleted (ok)
-		// soft_deleted -> soft_deleted (ok, no-op)
-		// hard_deleted -> soft_deleted (conflict)
-
-		switch obj.Status {
-		case domain.ObjectHardDeleted, domain.ObjectDeleted:
-			err = fmt.Errorf("cannot soft-delete a hard-deleted object")
-			// TODO: Use custom error type for 409
-			opStatus = "conflict"
-			return err
-		case domain.ObjectSoftDeleted:
-			// No-op
-			opStatus = "success"
-			return nil
-		default:
-			// Active/Pending/etc -> Soft Delete
-			if _, err = s.objRepo.MarkSoftDeleted(ctx, tenantID, id); err != nil {
-				span.RecordError(err)
-				opStatus = "error"
-				return err
-			}
-		}
-
+		event = domain.EventObjectSoftDelete
 	case "uploaded", "complete":
-		// Restore Logic
-		// soft_deleted -> uploaded (ok)
-		// hard_deleted -> uploaded (conflict)
-		// active -> uploaded (no-op)
-
-		switch obj.Status {
-		case domain.ObjectHardDeleted, domain.ObjectDeleted:
-			err = fmt.Errorf("cannot restore a hard-deleted object")
-			opStatus = "conflict"
-			return err
-		case domain.ObjectSoftDeleted:
-			if _, err = s.objRepo.Restore(ctx, tenantID, id); err != nil {
-				span.RecordError(err)
-				opStatus = "error"
-				return err
-			}
-		default:
-			// Active -> no-op
-			opStatus = "success"
-			return nil
-		}
-
+		event = domain.EventObjectRestore
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
 		opStatus = "error"
 		return err
+	}
+
+	if err = sm.Fire(event); err != nil {
+		opStatus = "conflict"
+		// If statemachine conflict occurs, it translates directly to 409 conflict.
+		// Keep the detailed error.
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+
+	// If the FSM fired but the state is unchanged, it means the operation was ignored (idempotent).
+	// We check if the expected final status matches the object's current status.
+	// E.g. restoring a complete object, or soft-deleting a soft-deleted object.
+	if state == obj.Status {
+		opStatus = "success"
+		return nil
+	}
+
+	// Actually apply changes
+	if event == domain.EventObjectSoftDelete {
+		if _, err = s.objRepo.MarkSoftDeleted(ctx, tenantID, id); err != nil {
+			span.RecordError(err)
+			opStatus = "error"
+			return err
+		}
+	} else if event == domain.EventObjectRestore {
+		if _, err = s.objRepo.Restore(ctx, tenantID, id); err != nil {
+			span.RecordError(err)
+			opStatus = "error"
+			return err
+		}
 	}
 
 	logger.FromContext(ctx).Info("Object Status Updated",

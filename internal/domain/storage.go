@@ -16,4 +16,5 @@ type StorageClient interface {
 	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
 	HeadObject(ctx context.Context, key string) (*HeadRecord, error)
 	DeleteObject(ctx context.Context, key string) error
+	Ping(ctx context.Context) (S3PingResult, error)
 }

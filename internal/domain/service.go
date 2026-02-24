@@ -6,28 +6,40 @@ import (
 	"github.com/google/uuid"
 )
 
+// ObjectsService defines business operations on objects.
 type ObjectsService interface {
-	CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
+	// CreateSingle creates a single-PUT object and returns a presigned upload URL.
+	// category must be a slug of an existing tenant category.
+	CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*Object, error)
 	// Delete performs a soft delete
 	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
+	// Restore brings back a soft-deleted object
+	Restore(ctx context.Context, tenantID string, id uuid.UUID) error
 	// Purge performs a hard delete (removes from storage)
 	Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error
-	// UpdateStatus updates the status of an object (e.g. for soft deletion)
+	// Bulk operations
+	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
+	BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
+	BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error)
+	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
-	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, error)
+	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
 	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (Presigned, error)
 	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (Presigned, error)
 
-	InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error)
+	// InitiateMultipart starts a multipart upload.
+	// category must be a slug of an existing tenant category.
+	InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error)
 	GetMultipart(ctx context.Context, tenantID string, uploadID string) (*Multipart, error)
 	SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (Presigned, error)
 	SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]SignPartResponse, error)
 	CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (*Object, error)
 	AbortMultipart(ctx context.Context, tenantID string, uploadID string) error
+	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
 }
 
 // Operation timeouts

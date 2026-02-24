@@ -67,6 +67,7 @@ func TestContract(t *testing.T) {
 			"pagination": gin.H{
 				"has_more":    false,
 				"next_cursor": nil,
+				"total_count": 0,
 			},
 		})
 	})

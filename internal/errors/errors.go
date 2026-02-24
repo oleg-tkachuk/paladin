@@ -13,6 +13,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// problemTypeBase is the base URI for RFC 7807 problem types.
+const problemTypeBase = "https://api.paladin.io/problems/"
+
 // Canonical Error Codes
 const (
 	CodeBadRequest            = "bad_request"
@@ -29,7 +32,7 @@ const (
 	CodeInternal              = "internal"
 )
 
-// AppError is the standard error type for the application
+// AppError is the standard error type for the application.
 type AppError struct {
 	Code        string
 	Message     string
@@ -39,11 +42,34 @@ type AppError struct {
 	StackTrace  string
 }
 
-// FieldError represents a validation error for a specific field
+// FieldError represents a validation error for a specific field.
 type FieldError struct {
-	Field   string
-	Code    string
-	Message string
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ProblemDetail is the RFC 7807 Problem Details response body.
+// Content-Type must be "application/problem+json".
+type ProblemDetail struct {
+	// Type is a URI reference that identifies the problem type. Stable per error code.
+	Type string `json:"type"`
+	// Title is a short, human-readable summary of the problem type.
+	Title string `json:"title"`
+	// Status is the HTTP status code.
+	Status int `json:"status"`
+	// Detail is a human-readable explanation specific to this occurrence.
+	Detail string `json:"detail"`
+	// Instance is a URI reference that identifies this specific occurrence (e.g. the request path).
+	Instance string `json:"instance,omitempty"`
+	// RequestID correlates this error to a specific request.
+	RequestID string `json:"request_id,omitempty"`
+	// TraceID links to distributed trace if available.
+	TraceID string `json:"trace_id,omitempty"`
+	// Errors holds per-field validation errors (extension beyond RFC 7807).
+	Errors []FieldError `json:"errors,omitempty"`
+	// Extensions holds any extra context key/value pairs.
+	Extensions map[string]any `json:"extensions,omitempty"`
 }
 
 func (e *AppError) Error() string {
@@ -57,7 +83,7 @@ func (e *AppError) Unwrap() error {
 	return e.Err
 }
 
-// New creates a new AppError
+// New creates a new AppError.
 func New(code, message string, err error) *AppError {
 	return &AppError{
 		Code:    code,
@@ -67,7 +93,7 @@ func New(code, message string, err error) *AppError {
 	}
 }
 
-// WithContext adds contextual information to the error
+// WithContext adds contextual information to the error.
 func (e *AppError) WithContext(key string, value interface{}) *AppError {
 	if e.Details == nil {
 		e.Details = make(map[string]any)
@@ -76,7 +102,7 @@ func (e *AppError) WithContext(key string, value interface{}) *AppError {
 	return e
 }
 
-// WithStack captures the current stack trace
+// WithStack captures the current stack trace (for internal errors only).
 func (e *AppError) WithStack() *AppError {
 	if e.StackTrace == "" {
 		e.StackTrace = string(debug.Stack())
@@ -84,7 +110,7 @@ func (e *AppError) WithStack() *AppError {
 	return e
 }
 
-// WithFieldError adds a field-level validation error
+// WithFieldError adds a field-level validation error.
 func (e *AppError) WithFieldError(field, code, message string) *AppError {
 	if e.FieldErrors == nil {
 		e.FieldErrors = []FieldError{}
@@ -115,93 +141,111 @@ func ServiceUnavailable(msg string, err error) *AppError {
 }
 func Internal(msg string, err error) *AppError { return New(CodeInternal, msg, err) }
 
-// MapToHTTP maps an error to an HTTP status code and response body
-func MapToHTTP(ctx context.Context, err error) (int, any) {
-	var appErr *AppError
-	if !errors.As(err, &appErr) {
-		// Default to internal error if unknown
-		reqID := utils.RequestIDFromContext(ctx, "")
-		traceID := utils.TraceIDFromContext(ctx, "")
-
-		return http.StatusInternalServerError, map[string]any{
-			"error": map[string]any{
-				"code":       CodeInternal,
-				"message":    "Internal server error",
-				"request_id": reqID,
-				"trace_id":   traceID,
-			},
-		}
-	}
-
-	statusCode := http.StatusInternalServerError
-	switch appErr.Code {
+// statusCodeForAppError maps an AppError code to its HTTP status code.
+func statusCodeForAppError(code string) int {
+	switch code {
 	case CodeBadRequest, CodeValidationFailed:
-		statusCode = http.StatusBadRequest
+		return http.StatusBadRequest
 	case CodeUnauthorized:
-		statusCode = http.StatusUnauthorized
+		return http.StatusUnauthorized
 	case CodeForbidden:
-		statusCode = http.StatusForbidden
+		return http.StatusForbidden
 	case CodeNotFound:
-		statusCode = http.StatusNotFound
+		return http.StatusNotFound
 	case CodeConflict:
-		statusCode = http.StatusConflict
+		return http.StatusConflict
 	case CodePreconditionFailed:
-		statusCode = http.StatusPreconditionFailed
+		return http.StatusPreconditionFailed
 	case CodeTooLarge:
-		statusCode = http.StatusRequestEntityTooLarge
+		return http.StatusRequestEntityTooLarge
 	case CodeRateLimited:
-		statusCode = http.StatusTooManyRequests
+		return http.StatusTooManyRequests
 	case CodeTimeout:
-		statusCode = http.StatusGatewayTimeout
+		return http.StatusGatewayTimeout
 	case CodeDependencyUnavailable:
-		statusCode = http.StatusServiceUnavailable
-	case CodeInternal:
-		statusCode = http.StatusInternalServerError
-	}
-
-	traceID := utils.TraceIDFromContext(ctx, "")
-	reqID := utils.RequestIDFromContext(ctx, "")
-
-	// Build error response
-	errorResp := map[string]any{
-		"code":       appErr.Code,
-		"message":    appErr.Message,
-		"request_id": reqID,
-	}
-
-	// Add trace_id if present
-	if traceID != "" {
-		errorResp["trace_id"] = traceID
-	}
-
-	// Add details if present
-	if len(appErr.Details) > 0 {
-		errorResp["details"] = appErr.Details
-	}
-
-	// Add field_errors if present
-	if len(appErr.FieldErrors) > 0 {
-		fieldErrors := make([]map[string]string, len(appErr.FieldErrors))
-		for i, fe := range appErr.FieldErrors {
-			fieldErrors[i] = map[string]string{
-				"field":   fe.Field,
-				"code":    fe.Code,
-				"message": fe.Message,
-			}
-		}
-		errorResp["field_errors"] = fieldErrors
-	}
-
-	return statusCode, map[string]any{
-		"error": errorResp,
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
 	}
 }
 
-// MapToGRPC maps an error to a gRPC status error
+// titleForCode returns a short, stable, human-readable title for a given error code.
+func titleForCode(code string) string {
+	switch code {
+	case CodeBadRequest:
+		return "Bad Request"
+	case CodeValidationFailed:
+		return "Validation Failed"
+	case CodeUnauthorized:
+		return "Unauthorized"
+	case CodeForbidden:
+		return "Forbidden"
+	case CodeNotFound:
+		return "Not Found"
+	case CodeConflict:
+		return "Conflict"
+	case CodePreconditionFailed:
+		return "Precondition Failed"
+	case CodeTooLarge:
+		return "Payload Too Large"
+	case CodeRateLimited:
+		return "Too Many Requests"
+	case CodeTimeout:
+		return "Gateway Timeout"
+	case CodeDependencyUnavailable:
+		return "Service Unavailable"
+	default:
+		return "Internal Server Error"
+	}
+}
+
+// MapToHTTPProblem maps an error to an RFC 7807 ProblemDetail and HTTP status code.
+// instance should be the request URI (e.g. c.Request.RequestURI).
+func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, ProblemDetail) {
+	reqID := utils.RequestIDFromContext(ctx, "")
+	traceID := utils.TraceIDFromContext(ctx, "")
+
+	var appErr *AppError
+	if !errors.As(err, &appErr) {
+		// Wrap unknown errors as internal.
+		appErr = Internal("an unexpected error occurred", err)
+	}
+
+	httpStatus := statusCodeForAppError(appErr.Code)
+
+	pd := ProblemDetail{
+		Type:      problemTypeBase + appErr.Code,
+		Title:     titleForCode(appErr.Code),
+		Status:    httpStatus,
+		Detail:    appErr.Message,
+		Instance:  instance,
+		RequestID: reqID,
+		TraceID:   traceID,
+	}
+
+	if len(appErr.FieldErrors) > 0 {
+		pd.Errors = appErr.FieldErrors
+	}
+
+	if len(appErr.Details) > 0 {
+		pd.Extensions = appErr.Details
+	}
+
+	return httpStatus, pd
+}
+
+// MapToHTTP maps an error to an HTTP status code and response body (legacy; prefer MapToHTTPProblem).
+// Kept for backward compatibility with non-HTTP layers.
+func MapToHTTP(ctx context.Context, err error) (int, any) {
+	status, pd := MapToHTTPProblem(ctx, err, "")
+	return status, pd
+}
+
+// MapToGRPC maps an error to a gRPC status error.
 func MapToGRPC(err error) error {
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
-		return status.Error(codes.Internal, "Internal server error")
+		return status.Error(codes.Internal, "internal server error")
 	}
 
 	var code codes.Code
@@ -215,7 +259,7 @@ func MapToGRPC(err error) error {
 	case CodeNotFound:
 		code = codes.NotFound
 	case CodeConflict:
-		code = codes.Aborted // Or AlreadyExists, but Aborted is better for concurrency issues
+		code = codes.Aborted
 	case CodePreconditionFailed:
 		code = codes.FailedPrecondition
 	case CodeTooLarge, CodeRateLimited:
@@ -224,8 +268,6 @@ func MapToGRPC(err error) error {
 		code = codes.DeadlineExceeded
 	case CodeDependencyUnavailable:
 		code = codes.Unavailable
-	case CodeInternal:
-		code = codes.Internal
 	default:
 		code = codes.Internal
 	}
@@ -233,7 +275,7 @@ func MapToGRPC(err error) error {
 	return status.Error(code, appErr.Message)
 }
 
-// IsNotFound checks if the error is a NotFound error
+// IsNotFound checks if the error is a NotFound error.
 func IsNotFound(err error) bool {
 	var appErr *AppError
 	if errors.As(err, &appErr) {

@@ -41,9 +41,15 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 		return nil, err
 	}
 
+	if rec.Status == domain.ObjectHardDeleted {
+		status = "error"
+		return nil, domain.ErrNotFound
+	}
+
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 	return rec, nil
+
 }
 
 // getMeta retrieves object metadata (delegates to get)

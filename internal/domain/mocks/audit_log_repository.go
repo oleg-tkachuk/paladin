@@ -172,7 +172,7 @@ func (_c *MockAuditLogRepository_Get_Call) RunAndReturn(run func(ctx context.Con
 }
 
 // List provides a mock function for the type MockAuditLogRepository
-func (_mock *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error) {
+func (_mock *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, int64, error) {
 	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
 
 	if len(ret) == 0 {
@@ -181,8 +181,9 @@ func (_mock *MockAuditLogRepository) List(ctx context.Context, tenantID string, 
 
 	var r0 []domain.AuditLog
 	var r1 string
-	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) ([]domain.AuditLog, string, error)); ok {
+	var r2 int64
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) ([]domain.AuditLog, string, int64, error)); ok {
 		return returnFunc(ctx, tenantID, filter, limit, cursor)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) []domain.AuditLog); ok {
@@ -197,12 +198,17 @@ func (_mock *MockAuditLogRepository) List(ctx context.Context, tenantID string, 
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) int64); ok {
 		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(int64)
 	}
-	return r0, r1, r2
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListAuditLogsFilter, int, string) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
 }
 
 // MockAuditLogRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
@@ -253,12 +259,12 @@ func (_c *MockAuditLogRepository_List_Call) Run(run func(ctx context.Context, te
 	return _c
 }
 
-func (_c *MockAuditLogRepository_List_Call) Return(auditLogs []domain.AuditLog, s string, err error) *MockAuditLogRepository_List_Call {
-	_c.Call.Return(auditLogs, s, err)
+func (_c *MockAuditLogRepository_List_Call) Return(auditLogs []domain.AuditLog, s string, n int64, err error) *MockAuditLogRepository_List_Call {
+	_c.Call.Return(auditLogs, s, n, err)
 	return _c
 }
 
-func (_c *MockAuditLogRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error)) *MockAuditLogRepository_List_Call {
+func (_c *MockAuditLogRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, int64, error)) *MockAuditLogRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

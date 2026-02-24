@@ -98,11 +98,6 @@ func (w *auditBatchWriter) flush(batch []domain.AuditLog) {
 	}
 }
 
-func (w *auditBatchWriter) stop() {
-	close(w.ch)
-	w.wg.Wait()
-}
-
 // errorBodyWriter captures response body only for error responses (status >= 400).
 type errorBodyWriter struct {
 	gin.ResponseWriter

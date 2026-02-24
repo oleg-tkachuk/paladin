@@ -40,6 +40,222 @@ func (_m *MockObjectsRepository) EXPECT() *MockObjectsRepository_Expecter {
 	return &MockObjectsRepository_Expecter{mock: &_m.Mock}
 }
 
+// BulkDelete provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkDelete")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_BulkDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkDelete'
+type MockObjectsRepository_BulkDelete_Call struct {
+	*mock.Call
+}
+
+// BulkDelete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsRepository_Expecter) BulkDelete(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsRepository_BulkDelete_Call {
+	return &MockObjectsRepository_BulkDelete_Call{Call: _e.mock.On("BulkDelete", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsRepository_BulkDelete_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsRepository_BulkDelete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkDelete_Call) Return(n int64, err error) *MockObjectsRepository_BulkDelete_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsRepository_BulkDelete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkMarkSoftDeleted provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkMarkSoftDeleted")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_BulkMarkSoftDeleted_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkMarkSoftDeleted'
+type MockObjectsRepository_BulkMarkSoftDeleted_Call struct {
+	*mock.Call
+}
+
+// BulkMarkSoftDeleted is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsRepository_Expecter) BulkMarkSoftDeleted(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsRepository_BulkMarkSoftDeleted_Call {
+	return &MockObjectsRepository_BulkMarkSoftDeleted_Call{Call: _e.mock.On("BulkMarkSoftDeleted", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsRepository_BulkMarkSoftDeleted_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsRepository_BulkMarkSoftDeleted_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkMarkSoftDeleted_Call) Return(n int64, err error) *MockObjectsRepository_BulkMarkSoftDeleted_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkMarkSoftDeleted_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsRepository_BulkMarkSoftDeleted_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkRestore provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkRestore")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_BulkRestore_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkRestore'
+type MockObjectsRepository_BulkRestore_Call struct {
+	*mock.Call
+}
+
+// BulkRestore is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsRepository_Expecter) BulkRestore(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsRepository_BulkRestore_Call {
+	return &MockObjectsRepository_BulkRestore_Call{Call: _e.mock.On("BulkRestore", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsRepository_BulkRestore_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsRepository_BulkRestore_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkRestore_Call) Return(n int64, err error) *MockObjectsRepository_BulkRestore_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkRestore_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsRepository_BulkRestore_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockObjectsRepository
 func (_mock *MockObjectsRepository) Create(ctx context.Context, rec domain.Object) error {
 	ret := _mock.Called(ctx, rec)
@@ -93,6 +309,78 @@ func (_c *MockObjectsRepository_Create_Call) Return(err error) *MockObjectsRepos
 }
 
 func (_c *MockObjectsRepository_Create_Call) RunAndReturn(run func(ctx context.Context, rec domain.Object) error) *MockObjectsRepository_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Delete provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	ret := _mock.Called(ctx, tenantID, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Delete")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) (bool, error)); ok {
+		return returnFunc(ctx, tenantID, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) bool); ok {
+		r0 = returnFunc(ctx, tenantID, id)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
+type MockObjectsRepository_Delete_Call struct {
+	*mock.Call
+}
+
+// Delete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id uuid.UUID
+func (_e *MockObjectsRepository_Expecter) Delete(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsRepository_Delete_Call {
+	return &MockObjectsRepository_Delete_Call{Call: _e.mock.On("Delete", ctx, tenantID, id)}
+}
+
+func (_c *MockObjectsRepository_Delete_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsRepository_Delete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_Delete_Call) Return(b bool, err error) *MockObjectsRepository_Delete_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)) *MockObjectsRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -245,8 +533,76 @@ func (_c *MockObjectsRepository_GetByExternalRef_Call) RunAndReturn(run func(ctx
 	return _c
 }
 
+// GetStats provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	ret := _mock.Called(ctx, tenantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStats")
+	}
+
+	var r0 *domain.ObjectStats
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.ObjectStats, error)); ok {
+		return returnFunc(ctx, tenantID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.ObjectStats); ok {
+		r0 = returnFunc(ctx, tenantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.ObjectStats)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, tenantID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_GetStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStats'
+type MockObjectsRepository_GetStats_Call struct {
+	*mock.Call
+}
+
+// GetStats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+func (_e *MockObjectsRepository_Expecter) GetStats(ctx interface{}, tenantID interface{}) *MockObjectsRepository_GetStats_Call {
+	return &MockObjectsRepository_GetStats_Call{Call: _e.mock.On("GetStats", ctx, tenantID)}
+}
+
+func (_c *MockObjectsRepository_GetStats_Call) Run(run func(ctx context.Context, tenantID string)) *MockObjectsRepository_GetStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_GetStats_Call) Return(objectStats *domain.ObjectStats, err error) *MockObjectsRepository_GetStats_Call {
+	_c.Call.Return(objectStats, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_GetStats_Call) RunAndReturn(run func(ctx context.Context, tenantID string) (*domain.ObjectStats, error)) *MockObjectsRepository_GetStats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
 
 	if len(ret) == 0 {
@@ -255,8 +611,9 @@ func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, f
 
 	var r0 []domain.Object
 	var r1 string
-	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, error)); ok {
+	var r2 int64
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, int64, error)); ok {
 		return returnFunc(ctx, tenantID, filter, limit, cursor)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) []domain.Object); ok {
@@ -271,12 +628,17 @@ func (_mock *MockObjectsRepository) List(ctx context.Context, tenantID string, f
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) int64); ok {
 		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(int64)
 	}
-	return r0, r1, r2
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
 }
 
 // MockObjectsRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
@@ -327,12 +689,12 @@ func (_c *MockObjectsRepository_List_Call) Run(run func(ctx context.Context, ten
 	return _c
 }
 
-func (_c *MockObjectsRepository_List_Call) Return(objects []domain.Object, s string, err error) *MockObjectsRepository_List_Call {
-	_c.Call.Return(objects, s, err)
+func (_c *MockObjectsRepository_List_Call) Return(objects []domain.Object, s string, n int64, err error) *MockObjectsRepository_List_Call {
+	_c.Call.Return(objects, s, n, err)
 	return _c
 }
 
-func (_c *MockObjectsRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error)) *MockObjectsRepository_List_Call {
+func (_c *MockObjectsRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error)) *MockObjectsRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

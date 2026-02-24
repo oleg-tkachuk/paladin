@@ -41,7 +41,27 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, err
 	}
 
-	if err := s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts); err != nil {
+	// FSM State Transition Check
+	sm := domain.NewMultipartFSM(multi.Status)
+	err = sm.Fire(domain.EventMultipartComplete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return nil, fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == multi.Status { // Idempotent completion
+		status = "success"
+		span.SetStatus(codes.Ok, "already_completed")
+		rec, _ := s.objRepo.Get(ctx, tenantID, multi.ObjectID)
+		return rec, nil
+	}
+
+	if err = s.executeWithBreaker(ctx, "s3_complete_multipart", func() error {
+		return s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts)
+	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -49,7 +69,9 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	}
 
 	// Double check S3 for final ETag/Size
-	head, err := s.s3.HeadObject(ctx, multi.ObjectKey)
+	head, err := executeWithBreakerRet(ctx, s.brk, "s3_head", func() (*domain.HeadRecord, error) {
+		return s.s3.HeadObject(ctx, multi.ObjectKey)
+	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -57,14 +79,14 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
 
-	if _, err := s.objRepo.MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
+	if _, err = s.objRepo.MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 		return nil, err
 	}
 
-	if err := s.multiRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
+	if err = s.multiRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

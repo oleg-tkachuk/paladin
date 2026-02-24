@@ -412,6 +412,66 @@ func (_c *MockStorageClient_HeadObject_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// Ping provides a mock function for the type MockStorageClient
+func (_mock *MockStorageClient) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Ping")
+	}
+
+	var r0 domain.S3PingResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (domain.S3PingResult, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) domain.S3PingResult); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(domain.S3PingResult)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockStorageClient_Ping_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Ping'
+type MockStorageClient_Ping_Call struct {
+	*mock.Call
+}
+
+// Ping is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockStorageClient_Expecter) Ping(ctx interface{}) *MockStorageClient_Ping_Call {
+	return &MockStorageClient_Ping_Call{Call: _e.mock.On("Ping", ctx)}
+}
+
+func (_c *MockStorageClient_Ping_Call) Run(run func(ctx context.Context)) *MockStorageClient_Ping_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockStorageClient_Ping_Call) Return(s3PingResult domain.S3PingResult, err error) *MockStorageClient_Ping_Call {
+	_c.Call.Return(s3PingResult, err)
+	return _c
+}
+
+func (_c *MockStorageClient_Ping_Call) RunAndReturn(run func(ctx context.Context) (domain.S3PingResult, error)) *MockStorageClient_Ping_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // PresignGetObject provides a mock function for the type MockStorageClient
 func (_mock *MockStorageClient) PresignGetObject(ctx context.Context, key string, ttl time.Duration) (domain.Presigned, error) {
 	ret := _mock.Called(ctx, key, ttl)

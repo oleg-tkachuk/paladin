@@ -102,6 +102,228 @@ func (_c *MockObjectsService_AbortMultipart_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// BulkDelete provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkDelete")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkDelete'
+type MockObjectsService_BulkDelete_Call struct {
+	*mock.Call
+}
+
+// BulkDelete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsService_Expecter) BulkDelete(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsService_BulkDelete_Call {
+	return &MockObjectsService_BulkDelete_Call{Call: _e.mock.On("BulkDelete", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsService_BulkDelete_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsService_BulkDelete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkDelete_Call) Return(n int64, err error) *MockObjectsService_BulkDelete_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsService_BulkDelete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkPurge provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkPurge")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID, *string) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids, idempotencyKey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID, *string) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids, idempotencyKey)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids, idempotencyKey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkPurge_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkPurge'
+type MockObjectsService_BulkPurge_Call struct {
+	*mock.Call
+}
+
+// BulkPurge is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) BulkPurge(ctx interface{}, tenantID interface{}, ids interface{}, idempotencyKey interface{}) *MockObjectsService_BulkPurge_Call {
+	return &MockObjectsService_BulkPurge_Call{Call: _e.mock.On("BulkPurge", ctx, tenantID, ids, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_BulkPurge_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string)) *MockObjectsService_BulkPurge_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		var arg3 *string
+		if args[3] != nil {
+			arg3 = args[3].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkPurge_Call) Return(n int64, err error) *MockObjectsService_BulkPurge_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkPurge_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error)) *MockObjectsService_BulkPurge_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkRestore provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkRestore")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) int64); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkRestore_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkRestore'
+type MockObjectsService_BulkRestore_Call struct {
+	*mock.Call
+}
+
+// BulkRestore is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsService_Expecter) BulkRestore(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsService_BulkRestore_Call {
+	return &MockObjectsService_BulkRestore_Call{Call: _e.mock.On("BulkRestore", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsService_BulkRestore_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsService_BulkRestore_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkRestore_Call) Return(n int64, err error) *MockObjectsService_BulkRestore_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkRestore_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsService_BulkRestore_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CompleteMultipart provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, uploadID, parts)
@@ -269,8 +491,8 @@ func (_c *MockObjectsService_CompleteObject_Call) RunAndReturn(run func(ctx cont
 }
 
 // CreateSingle provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	ret := _mock.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateSingle")
@@ -278,16 +500,16 @@ func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID stri
 
 	var r0 domain.CreateObjectResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (domain.CreateObjectResponse, error)); ok {
-		return returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) (domain.CreateObjectResponse, error)); ok {
+		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) domain.CreateObjectResponse); ok {
-		r0 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) domain.CreateObjectResponse); ok {
+		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r0 = ret.Get(0).(domain.CreateObjectResponse)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -302,17 +524,18 @@ type MockObjectsService_CreateSingle_Call struct {
 // CreateSingle is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
+//   - category string
 //   - contentType string
 //   - sizeBytes int64
 //   - labels map[string]string
 //   - externalRef *string
 //   - uploadTTL int
 //   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) CreateSingle(ctx interface{}, tenantID interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_CreateSingle_Call {
-	return &MockObjectsService_CreateSingle_Call{Call: _e.mock.On("CreateSingle", ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
+func (_e *MockObjectsService_Expecter) CreateSingle(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_CreateSingle_Call {
+	return &MockObjectsService_CreateSingle_Call{Call: _e.mock.On("CreateSingle", ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -326,25 +549,29 @@ func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 int64
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(int64)
+			arg3 = args[3].(string)
 		}
-		var arg4 map[string]string
+		var arg4 int64
 		if args[4] != nil {
-			arg4 = args[4].(map[string]string)
+			arg4 = args[4].(int64)
 		}
-		var arg5 *string
+		var arg5 map[string]string
 		if args[5] != nil {
-			arg5 = args[5].(*string)
+			arg5 = args[5].(map[string]string)
 		}
-		var arg6 int
+		var arg6 *string
 		if args[6] != nil {
-			arg6 = args[6].(int)
+			arg6 = args[6].(*string)
 		}
-		var arg7 *string
+		var arg7 int
 		if args[7] != nil {
-			arg7 = args[7].(*string)
+			arg7 = args[7].(int)
+		}
+		var arg8 *string
+		if args[8] != nil {
+			arg8 = args[8].(*string)
 		}
 		run(
 			arg0,
@@ -355,6 +582,7 @@ func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context
 			arg5,
 			arg6,
 			arg7,
+			arg8,
 		)
 	})
 	return _c
@@ -365,7 +593,7 @@ func (_c *MockObjectsService_CreateSingle_Call) Return(createObjectResponse doma
 	return _c
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -655,9 +883,77 @@ func (_c *MockObjectsService_GetMultipart_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// GetStats provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	ret := _mock.Called(ctx, tenantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStats")
+	}
+
+	var r0 *domain.ObjectStats
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.ObjectStats, error)); ok {
+		return returnFunc(ctx, tenantID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.ObjectStats); ok {
+		r0 = returnFunc(ctx, tenantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.ObjectStats)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, tenantID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_GetStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStats'
+type MockObjectsService_GetStats_Call struct {
+	*mock.Call
+}
+
+// GetStats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+func (_e *MockObjectsService_Expecter) GetStats(ctx interface{}, tenantID interface{}) *MockObjectsService_GetStats_Call {
+	return &MockObjectsService_GetStats_Call{Call: _e.mock.On("GetStats", ctx, tenantID)}
+}
+
+func (_c *MockObjectsService_GetStats_Call) Run(run func(ctx context.Context, tenantID string)) *MockObjectsService_GetStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_GetStats_Call) Return(objectStats *domain.ObjectStats, err error) *MockObjectsService_GetStats_Call {
+	_c.Call.Return(objectStats, err)
+	return _c
+}
+
+func (_c *MockObjectsService_GetStats_Call) RunAndReturn(run func(ctx context.Context, tenantID string) (*domain.ObjectStats, error)) *MockObjectsService_GetStats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InitiateMultipart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	ret := _mock.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for InitiateMultipart")
@@ -665,16 +961,16 @@ func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID
 
 	var r0 domain.MultipartInitResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) (domain.MultipartInitResponse, error)); ok {
-		return returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) (domain.MultipartInitResponse, error)); ok {
+		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) domain.MultipartInitResponse); ok {
-		r0 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) domain.MultipartInitResponse); ok {
+		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r0 = ret.Get(0).(domain.MultipartInitResponse)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int64, map[string]string, *string, int, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -689,17 +985,18 @@ type MockObjectsService_InitiateMultipart_Call struct {
 // InitiateMultipart is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
+//   - category string
 //   - contentType string
 //   - sizeBytes int64
 //   - labels map[string]string
 //   - externalRef *string
 //   - uploadTTL int
 //   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) InitiateMultipart(ctx interface{}, tenantID interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_InitiateMultipart_Call {
-	return &MockObjectsService_InitiateMultipart_Call{Call: _e.mock.On("InitiateMultipart", ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
+func (_e *MockObjectsService_Expecter) InitiateMultipart(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_InitiateMultipart_Call {
+	return &MockObjectsService_InitiateMultipart_Call{Call: _e.mock.On("InitiateMultipart", ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -713,25 +1010,29 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Co
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 int64
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(int64)
+			arg3 = args[3].(string)
 		}
-		var arg4 map[string]string
+		var arg4 int64
 		if args[4] != nil {
-			arg4 = args[4].(map[string]string)
+			arg4 = args[4].(int64)
 		}
-		var arg5 *string
+		var arg5 map[string]string
 		if args[5] != nil {
-			arg5 = args[5].(*string)
+			arg5 = args[5].(map[string]string)
 		}
-		var arg6 int
+		var arg6 *string
 		if args[6] != nil {
-			arg6 = args[6].(int)
+			arg6 = args[6].(*string)
 		}
-		var arg7 *string
+		var arg7 int
 		if args[7] != nil {
-			arg7 = args[7].(*string)
+			arg7 = args[7].(int)
+		}
+		var arg8 *string
+		if args[8] != nil {
+			arg8 = args[8].(*string)
 		}
 		run(
 			arg0,
@@ -742,6 +1043,7 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Co
 			arg5,
 			arg6,
 			arg7,
+			arg8,
 		)
 	})
 	return _c
@@ -752,13 +1054,13 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Return(multipartInitRespons
 	return _c
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // List provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
 
 	if len(ret) == 0 {
@@ -767,8 +1069,9 @@ func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filt
 
 	var r0 []domain.Object
 	var r1 string
-	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, error)); ok {
+	var r2 int64
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, int64, error)); ok {
 		return returnFunc(ctx, tenantID, filter, limit, cursor)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) []domain.Object); ok {
@@ -783,12 +1086,17 @@ func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filt
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) int64); ok {
 		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(int64)
 	}
-	return r0, r1, r2
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
 }
 
 // MockObjectsService_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
@@ -839,12 +1147,12 @@ func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenant
 	return _c
 }
 
-func (_c *MockObjectsService_List_Call) Return(objects []domain.Object, s string, err error) *MockObjectsService_List_Call {
-	_c.Call.Return(objects, s, err)
+func (_c *MockObjectsService_List_Call) Return(objects []domain.Object, s string, n int64, err error) *MockObjectsService_List_Call {
+	_c.Call.Return(objects, s, n, err)
 	return _c
 }
 
-func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error)) *MockObjectsService_List_Call {
+func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error)) *MockObjectsService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1000,6 +1308,69 @@ func (_c *MockObjectsService_Purge_Call) Return(err error) *MockObjectsService_P
 }
 
 func (_c *MockObjectsService_Purge_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error) *MockObjectsService_Purge_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Restore provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	ret := _mock.Called(ctx, tenantID, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Restore")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID) error); ok {
+		r0 = returnFunc(ctx, tenantID, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsService_Restore_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Restore'
+type MockObjectsService_Restore_Call struct {
+	*mock.Call
+}
+
+// Restore is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - id uuid.UUID
+func (_e *MockObjectsService_Expecter) Restore(ctx interface{}, tenantID interface{}, id interface{}) *MockObjectsService_Restore_Call {
+	return &MockObjectsService_Restore_Call{Call: _e.mock.On("Restore", ctx, tenantID, id)}
+}
+
+func (_c *MockObjectsService_Restore_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID)) *MockObjectsService_Restore_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].(uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_Restore_Call) Return(err error) *MockObjectsService_Restore_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsService_Restore_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID) error) *MockObjectsService_Restore_Call {
 	_c.Call.Return(run)
 	return _c
 }

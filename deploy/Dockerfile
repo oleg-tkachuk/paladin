@@ -9,85 +9,107 @@ ARG TARGETARCH
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+# -----------------------------
+# Tools stage (build platform)
+# -----------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS tools
 
-# ---- Build metadata ----
-ARG APP_VERSION=undefined
-ARG GIT_COMMIT_HASH=undefined
-ARG BUILD_TIME=undefined
-
-# ---- Ports (it's better to have defaults so that EXPOSE doesn't break if args aren't passed) ----
-ARG HTTP_PORT=8080
-ARG GRPC_PORT=9090
-
-# ---- Tool versions: Should be PINNING (not latest) for reproducibility ----
+# Tool versions MUST be pinned for reproducible builds
 ARG PROTOC_GEN_GO_VERSION=latest
 ARG PROTOC_GEN_GO_GRPC_VERSION=latest
 ARG WIRE_VERSION=latest
 ARG OAPI_CODEGEN_VERSION=latest
 
-# Relocate GOPATH and caches to /go_workspace (outside /app) to avoid space issues AND go generate ./... collisions
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
     GOCACHE=/go_workspace/cache/go-build \
     GOTMPDIR=/go_workspace/tmp \
-    PATH=$PATH:/go_workspace/bin \
-    APP_VERSION=$APP_VERSION \
-    GIT_COMMIT_HASH=$GIT_COMMIT_HASH \
-    BUILD_TIME=$BUILD_TIME \
-    CGO_ENABLED=0 \
-    GOOS=$TARGETOS \
-    GOARCH=$TARGETARCH
+    GOBIN=/go_workspace/bin \
+    PATH=/go_workspace/bin:$PATH
 
-# ---- System deps (protoc) ----
-RUN apk add --no-cache protobuf-dev git
+RUN apk add --no-cache git
 
-# Ensure workspace exists
-RUN mkdir -p /go_workspace/pkg /go_workspace/cache /go_workspace/tmp
+RUN mkdir -p /go_workspace/pkg /go_workspace/cache /go_workspace/tmp /go_workspace/bin
+
+# Install Go build tools for the BUILDPLATFORM (do NOT set GOOS/GOARCH here)
+RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
+    go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
+    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
+
+# -----------------------------
+# Builder stage (target binary)
+# -----------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
+
+# Build metadata
+ARG APP_VERSION=undefined
+ARG GIT_COMMIT_HASH=undefined
+ARG BUILD_TIME=undefined
+
+# Runtime ports (documentation only)
+ARG HTTP_PORT=8080
+ARG GRPC_PORT=9090
+
+ENV GOPATH=/go_workspace \
+    GOMODCACHE=/go_workspace/pkg/mod \
+    GOCACHE=/go_workspace/cache/go-build \
+    GOTMPDIR=/go_workspace/tmp \
+    PATH=/go_workspace/bin:$PATH \
+    CGO_ENABLED=0
+
+# protoc is needed for .proto codegen; git might be needed by generators
+RUN apk add --no-cache protobuf git
+
+RUN mkdir -p /go_workspace/pkg /go_workspace/cache /go_workspace/tmp /go_workspace/bin
+
+# Bring tools from tools stage
+COPY --from=tools /go_workspace/bin/ /go_workspace/bin/
 
 WORKDIR /app
 
-# ---- Go build tools (cached) ----
+# Copy module files first for better cache hits
+COPY --link go.mod go.sum ./
+
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
-    go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} \
-    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} \
-    && go install github.com/google/wire/cmd/wire@${WIRE_VERSION} \
-    && go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
+    go mod download -x
 
-# ---- deps first (best cache hit rate) ----
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
-    go mod download
+# Copy source
+COPY --link cmd/ cmd/
+COPY --link internal/ internal/
+COPY --link configs/ configs/
+COPY --link migrations/ migrations/
+COPY --link api/ api/
+COPY --link proto/ proto/
+COPY --link sqlc.yaml ./
 
-# ---- source ----
-COPY cmd/ cmd/
-COPY internal/ internal/
-COPY configs/ configs/
-COPY migrations/ migrations/
-COPY api/ api/
-COPY proto/ proto/
-COPY sqlc.yaml ./
-
-# ---- codegen ----
+# Code generation
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     go generate ./...
 
-# ---- build ----
+# Build (set GOOS/GOARCH only here)
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build \
-    -buildvcs=false \
-    -trimpath \
-    -tags=go_json \
-    -ldflags="-w -s \
-    -X 'main.version=${APP_VERSION}' \
-    -X 'main.commit=${GIT_COMMIT_HASH}' \
-    -X 'main.buildTime=${BUILD_TIME}'" \
-    -o /app/bin/paladin ./cmd/server
+      -buildvcs=false \
+      -trimpath \
+      -tags=go_json \
+      -ldflags="-w -s \
+        -X 'main.version=${APP_VERSION}' \
+        -X 'main.commit=${GIT_COMMIT_HASH}' \
+        -X 'main.buildTime=${BUILD_TIME}'" \
+      -o /out/paladin ./cmd/server
 
-# ---- runtime ----
+# -----------------------------
+# Runtime stage
+# -----------------------------
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
 
 ARG HTTP_PORT=8080
@@ -95,12 +117,12 @@ ARG GRPC_PORT=9090
 
 WORKDIR /app
 
-COPY --from=builder --chown=nonroot:nonroot /app/bin/paladin /app/bin/paladin
+COPY --from=builder --chown=nonroot:nonroot /out/paladin /app/bin/paladin
 COPY --from=builder --chown=nonroot:nonroot /app/migrations /app/migrations
 COPY --from=builder --chown=nonroot:nonroot /app/configs /app/configs
 
-EXPOSE 8080
-EXPOSE 9090
+# EXPOSE is documentation; you may keep constants or use args
+EXPOSE 8080 9090
 
 USER nonroot:nonroot
 ENTRYPOINT ["/app/bin/paladin"]

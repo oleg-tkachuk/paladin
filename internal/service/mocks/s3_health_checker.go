@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -37,35 +38,44 @@ func (_m *MockS3HealthChecker) EXPECT() *MockS3HealthChecker_Expecter {
 	return &MockS3HealthChecker_Expecter{mock: &_m.Mock}
 }
 
-// Health provides a mock function for the type MockS3HealthChecker
-func (_mock *MockS3HealthChecker) Health(ctx context.Context) error {
+// Ping provides a mock function for the type MockS3HealthChecker
+func (_mock *MockS3HealthChecker) Ping(ctx context.Context) (domain.S3PingResult, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Health")
+		panic("no return value specified for Ping")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+	var r0 domain.S3PingResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (domain.S3PingResult, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) domain.S3PingResult); ok {
 		r0 = returnFunc(ctx)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(domain.S3PingResult)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
-// MockS3HealthChecker_Health_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Health'
-type MockS3HealthChecker_Health_Call struct {
+// MockS3HealthChecker_Ping_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Ping'
+type MockS3HealthChecker_Ping_Call struct {
 	*mock.Call
 }
 
-// Health is a helper method to define mock.On call
+// Ping is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockS3HealthChecker_Expecter) Health(ctx interface{}) *MockS3HealthChecker_Health_Call {
-	return &MockS3HealthChecker_Health_Call{Call: _e.mock.On("Health", ctx)}
+func (_e *MockS3HealthChecker_Expecter) Ping(ctx interface{}) *MockS3HealthChecker_Ping_Call {
+	return &MockS3HealthChecker_Ping_Call{Call: _e.mock.On("Ping", ctx)}
 }
 
-func (_c *MockS3HealthChecker_Health_Call) Run(run func(ctx context.Context)) *MockS3HealthChecker_Health_Call {
+func (_c *MockS3HealthChecker_Ping_Call) Run(run func(ctx context.Context)) *MockS3HealthChecker_Ping_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -78,12 +88,12 @@ func (_c *MockS3HealthChecker_Health_Call) Run(run func(ctx context.Context)) *M
 	return _c
 }
 
-func (_c *MockS3HealthChecker_Health_Call) Return(err error) *MockS3HealthChecker_Health_Call {
-	_c.Call.Return(err)
+func (_c *MockS3HealthChecker_Ping_Call) Return(s3PingResult domain.S3PingResult, err error) *MockS3HealthChecker_Ping_Call {
+	_c.Call.Return(s3PingResult, err)
 	return _c
 }
 
-func (_c *MockS3HealthChecker_Health_Call) RunAndReturn(run func(ctx context.Context) error) *MockS3HealthChecker_Health_Call {
+func (_c *MockS3HealthChecker_Ping_Call) RunAndReturn(run func(ctx context.Context) (domain.S3PingResult, error)) *MockS3HealthChecker_Ping_Call {
 	_c.Call.Return(run)
 	return _c
 }

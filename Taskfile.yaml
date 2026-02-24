@@ -126,7 +126,7 @@ tasks:
       - cmd: |-
           printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running unit tests...\n"
       - cmd: |-
-          time go test -v ./...
+          eval "$(minikube docker-env)" && time go test -v ./...
 
   test:hurl:
     desc: "Run Hurl integration tests"

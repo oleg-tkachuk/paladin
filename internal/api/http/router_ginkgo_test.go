@@ -29,8 +29,8 @@ type MockObjectsService struct {
 	mock.Mock
 }
 
-func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	return args.Get(0).(domain.CreateObjectResponse), args.Error(1)
 }
 
@@ -49,9 +49,9 @@ func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]domain.Object), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
@@ -64,9 +64,29 @@ func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uui
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	args := m.Called(ctx, tenantID, id)
+	return args.Error(0)
+}
+
+func (m *MockObjectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
 	return args.Error(0)
+}
+
+func (m *MockObjectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
+	args := m.Called(ctx, tenantID, ids, idempotencyKey)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
@@ -84,8 +104,8 @@ func (m *MockObjectsService) SignDownload(ctx context.Context, tenantID string, 
 	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
-func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	args := m.Called(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 	return args.Get(0).(domain.MultipartInitResponse), args.Error(1)
 }
 
@@ -114,6 +134,53 @@ func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	args := m.Called(ctx, tenantID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ObjectStats), args.Error(1)
+}
+
+// MockCategoryService is a mock implementation of the CategoryService interface
+type MockCategoryService struct {
+	mock.Mock
+}
+
+func (m *MockCategoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug, name, description)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
+func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
+	args := m.Called(ctx, tenantID, limit, cursor)
+	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
+}
+
+func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string) error {
+	args := m.Called(ctx, tenantID, slug)
+	return args.Error(0)
+}
+
+func (m *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	args := m.Called(ctx, limit, cursor)
+	if args.Get(0) == nil {
+		return nil, "", 0, args.Error(3)
+	}
+	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
+}
+
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
 type MockAuditLogRepository struct {
 	mock.Mock
@@ -129,9 +196,9 @@ func (m *MockAuditLogRepository) Get(ctx context.Context, tenantID string, id uu
 	return args.Get(0).(*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error) {
+func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]domain.AuditLog), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.AuditLog), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
@@ -153,8 +220,9 @@ type MockS3Health struct {
 	mock.Mock
 }
 
-func (m *MockS3Health) Health(ctx context.Context) error {
-	return m.Called(ctx).Error(0)
+func (m *MockS3Health) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(domain.S3PingResult), args.Error(1)
 }
 
 // MockBreakerFactory
@@ -173,6 +241,7 @@ func (m *MockBreakerFactory) CheckHealth() map[string]string {
 var _ = Describe("Router", func() {
 	var (
 		mockSvc     *MockObjectsService
+		mockCat     *MockCategoryService
 		mockPing    *MockPinger
 		mockS3      *MockS3Health
 		mockBreaker *MockBreakerFactory
@@ -185,6 +254,7 @@ var _ = Describe("Router", func() {
 
 	BeforeEach(func() {
 		mockSvc = new(MockObjectsService)
+		mockCat = new(MockCategoryService)
 		mockPing = new(MockPinger)
 		mockS3 = new(MockS3Health)
 		mockBreaker = new(MockBreakerFactory)
@@ -212,7 +282,7 @@ var _ = Describe("Router", func() {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		server = httpapi.NewServer(cfg, logger, mockSvc, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
 		recorder = httptest.NewRecorder()
 	})
 
@@ -277,7 +347,7 @@ var _ = Describe("Router", func() {
 		Context("when dependencies are healthy", func() {
 			BeforeEach(func() {
 				mockPing.On("Ping", mock.Anything).Return(nil)
-				mockS3.On("Health", mock.Anything).Return(nil)
+				mockS3.On("Ping", mock.Anything).Return(domain.S3PingResult{Status: "healthy"}, nil)
 				mockBreaker.On("CheckHealth").Return(map[string]string{"s3": "closed"})
 			})
 
@@ -294,7 +364,7 @@ var _ = Describe("Router", func() {
 		Context("when a dependency fails", func() {
 			BeforeEach(func() {
 				mockPing.On("Ping", mock.Anything).Return(nil)
-				mockS3.On("Health", mock.Anything).Return(http.ErrHandlerTimeout)
+				mockS3.On("Ping", mock.Anything).Return(domain.S3PingResult{Status: "unavailable"}, errors.New("timeout"))
 				mockBreaker.On("CheckHealth").Return(map[string]string{"s3": "closed"})
 			})
 
@@ -313,7 +383,7 @@ var _ = Describe("Router", func() {
 		Context("with valid request", func() {
 			BeforeEach(func() {
 				id := uuid.New()
-				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
+				mockSvc.On("CreateSingle", mock.Anything, mock.Anything, mock.Anything, "image/png", int64(1024), mock.Anything, mock.Anything, 0, mock.Anything).
 					Return(domain.CreateObjectResponse{ID: id, Key: "default/" + id.String(), Upload: domain.Presigned{URL: "http://upload"}}, nil)
 			})
 
@@ -333,7 +403,7 @@ var _ = Describe("Router", func() {
 	Describe("POST /v1/multipart", func() {
 		It("initiates multipart upload", func() {
 			objID := uuid.New()
-			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
+			mockSvc.On("InitiateMultipart", mock.Anything, mock.Anything, mock.Anything, "application/octet-stream", int64(100*1024*1024), mock.Anything, mock.Anything, 0, mock.Anything).
 				Return(domain.MultipartInitResponse{
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)
@@ -542,7 +612,7 @@ var _ = Describe("Router", func() {
 	Describe("GET /v1/objects", func() {
 		It("lists objects", func() {
 			mockSvc.On("List", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", nil)
+				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", int64(1), nil)
 
 			req, _ := http.NewRequest("GET", "/v1/objects?limit=10", nil)
 			req.Header.Set("X-Tenant-ID", "default")
@@ -582,7 +652,7 @@ var _ = Describe("Router", func() {
 		})
 	})
 	Describe("Error Handling", func() {
-		It("returns unified error response for 404", func() {
+		It("returns RFC 7807 problem details response for errors", func() {
 			mockSvc.On("Get", mock.Anything, mock.Anything, mock.Anything).
 				Return(&domain.Object{}, errors.New("not found"))
 
@@ -590,20 +660,21 @@ var _ = Describe("Router", func() {
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
-			Expect(recorder.Code).To(Equal(http.StatusNotFound))
+			Expect(recorder.Code).To(Equal(http.StatusInternalServerError)) // raw errors.New → internal
+
+			// RFC 7807: Content-Type must be application/problem+json
+			Expect(recorder.Header().Get("Content-Type")).To(ContainSubstring("application/problem+json"))
 
 			var resp map[string]interface{}
 			err := json.Unmarshal(recorder.Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify structure: {"error": {"code": "...", "message": "...", "request_id": "..."}}
-			Expect(resp).To(HaveKey("error"))
-			errObj, ok := resp["error"].(map[string]interface{})
-			Expect(ok).To(BeTrue())
-			Expect(errObj).To(HaveKey("code"))
-			Expect(errObj).To(HaveKey("message"))
-			Expect(errObj).To(HaveKey("request_id"))
-			Expect(errObj).To(HaveKey("trace_id"))
+			// Verify RFC 7807 top-level fields (no nested "error" envelope)
+			Expect(resp).To(HaveKey("type"))
+			Expect(resp).To(HaveKey("title"))
+			Expect(resp).To(HaveKey("status"))
+			Expect(resp).To(HaveKey("detail"))
+			Expect(resp).NotTo(HaveKey("error")) // old format must be gone
 		})
 	})
 })
