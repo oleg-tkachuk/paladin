@@ -84,4 +84,16 @@ type Object struct {
 	StoredSizeBytes *int64             `json:"stored_size_bytes"`
 	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	Category        string             `json:"category"`
+	Subpath         *string            `json:"subpath"`
+}
+
+type ObjectCategory struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    string             `json:"tenant_id"`
+	Slug        string             `json:"slug"`
+	Name        string             `json:"name"`
+	Description *string            `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }

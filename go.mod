@@ -23,6 +23,7 @@ require (
 	github.com/onsi/gomega v1.38.3
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/prometheus/client_golang v1.23.2
+	github.com/qmuntal/stateless v1.8.0
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/sqlc-dev/sqlc v1.30.0

@@ -19,6 +19,18 @@ const (
 	ObjectHardDeleted ObjectStatus = "hard_deleted"
 )
 
+// Category represents a tenant-scoped object category.
+// Category slugs are user-defined and managed via the /categories API.
+type Category struct {
+	ID          uuid.UUID
+	TenantID    string
+	Slug        string
+	Name        string
+	Description *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type Object struct {
 	ID              uuid.UUID
 	TenantID        string
@@ -37,6 +49,13 @@ type Object struct {
 	ExpiresAt       *time.Time
 	CompletedAt     *time.Time
 	DeletedAt       *time.Time
+	// Category is the slug of the tenant-scoped category this object belongs to.
+	// The value is validated at create time against the object_categories table.
+	// Default: None (must be validated against object_categories table)
+	Category string
+	// Subpath is an optional forward-slash-separated path within the category
+	// (e.g. "2024/01"). Reserved for future use; not exposed in v1 API.
+	Subpath *string
 }
 
 type MultipartStatus string
@@ -85,18 +104,25 @@ type IdempotencyRecord struct {
 	ExpiresAt    time.Time
 }
 
+// ListObjectsFilter holds optional filters for listing objects.
 type ListObjectsFilter struct {
 	Status        *ObjectStatus
 	ExternalRef   *string
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
+	// Category filters objects to a specific category slug. If nil, all categories are returned.
+	Category *string
+	// KeyPrefix is an optional prefix filter within tenant/category scope.
+	// The server validates that it cannot escape the tenant+category boundary.
+	KeyPrefix *string
 }
 
 type CreateObjectResponse struct {
-	ID     uuid.UUID
-	Key    string
-	Bucket string
-	Upload Presigned
+	ID       uuid.UUID
+	Key      string
+	Bucket   string
+	Upload   Presigned
+	Category string
 }
 
 type MultipartInitResponse struct {
@@ -106,6 +132,7 @@ type MultipartInitResponse struct {
 	Bucket    string
 	PartSize  int64
 	ExpiresAt time.Time
+	Category  string
 }
 
 type MultipartInit struct {
@@ -122,6 +149,14 @@ type HeadRecord struct {
 	ContentType  string
 	LastModified time.Time
 	Metadata     map[string]string
+}
+
+type S3PingResult struct {
+	Status     string
+	HttpStatus int
+	Message    string
+	Bucket     string
+	Region     string
 }
 
 type CompletePart struct {

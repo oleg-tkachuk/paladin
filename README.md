@@ -1,400 +1,240 @@
 # paladin
 
-Presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS / MinIO-compatible).
+A presign-only control plane for S3-compatible object storage (AWS S3 / SeaweedFS / MinIO). The service manages object metadata and lifecycle in PostgreSQL and issues time-limited presigned URLs — it never proxies or streams object data.
+
+---
+
+## How It Works
+
+```mermaid
+graph LR
+    Client["Client\n(Browser / Service)"]
+    PALADIN["Paladin\n(REST + gRPC)"]
+    PG[("PostgreSQL\nMetadata")]
+    S3[("S3-compatible\nStorage")]
+
+    Client -->|"1. POST /v1/objects"| PALADIN
+    PALADIN -->|"2. INSERT metadata"| PG
+    PALADIN -->|"3. GeneratePresignedURL"| S3
+    PALADIN -->|"4. Return presigned URL"| Client
+    Client -->|"5. PUT file (direct)"| S3
+    Client -->|"6. POST /v1/objects/:id/complete"| PALADIN
+    PALADIN -->|"7. UPDATE status → complete"| PG
+```
+
+---
 
 ## Features
 
-- **Metadata Management**: Atomically tracks object metadata and multipart upload states in PostgreSQL.
-- **Secure Access**: Generates time-limited presigned URLs for single-part and multipart uploads/downloads.
-- **Multi-Tenancy**: Built-in tenant isolation driven by `X-Tenant-ID` header, with optional Row-Level Security (RLS) support.
-- **Rate Limiting**: Configurable per-tenant rate limits with automatic cleanup and memory bounds.
-- **Lifecycle Management**: Soft-delete objects and auto-cleanup of expired/aborted uploads and old audit logs via background Reaper.
-- **High Performance**: Built with Gin (HTTP) and gRPC for low-latency control plane operations.
-- **Schema-first Config**: Uses CUE for strict configuration validation and smart defaulting.
-- **Advanced Logging**: Standardized structured JSON/Console logging with `zap.ReplaceGlobals` and automatic OpenTelemetry context enrichment (`trace_id`, `span_id`, `request_id`). Follows OTel semantic conventions for field naming.
-- **Audit Logging**: Comprehensive request/response logging for compliance and debugging, with automatic pruning.
-- **LRU Caching**: Production-grade metadata caching with 70-90% hit rate, automatic invalidation, and Prometheus metrics tracking.
-- **Comprehensive Observability**: 100% OpenTelemetry tracing coverage across all service methods, Prometheus metrics, and distributed tracing support.
-- **Production-Ready**: Enterprise-grade reliability with configurable timeouts, circuit breakers, input validation, and security hardening.
+| Feature | Description |
+|---------|-------------|
+| **REST & gRPC APIs** | Dual transport: OpenAPI 3.0 (Gin) and Protocol Buffers |
+| **Presigned URLs** | Time-limited upload/download URLs — no data proxying |
+| **Multipart Uploads** | First-class support for large files (Part sign, Batch sign, Complete, Abort) |
+| **Categories** | Server-side object grouping with CRUD management |
+| **Multi-Tenancy** | Strict tenant isolation via `X-Tenant-ID` header; optional PostgreSQL RLS |
+| **Rate Limiting** | Per-tenant token-bucket with automatic LRU cleanup |
+| **Idempotency** | Safe retries via `Idempotency-Key` header (CREATE operations) |
+| **Lifecycle GC** | Background Reaper for pending TTL cleanup, multipart abort, audit pruning |
+| **LRU Cache** | 70–90% cache hit rate for read-heavy object metadata |
+| **Observability** | 100% OTel tracing coverage, Prometheus metrics, structured Zap logging |
+| **Schema-first Config** | CUE schema validation with smart defaults — bad config = hard exit |
+| **Audit Logging** | Every API request logged with method, path, status, latency, actor |
+
+---
 
 ## Tech Stack
 
-- **Server**: [Gin](https://gin-gonic.com/) (HTTP), [gRPC](https://grpc.io/)
-- **API Contract**: [OpenAPI 3.0](https://www.openapis.org/) with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen)
-- **Database**: [PostgreSQL](https://www.postgresql.org/) with [pgx](https://github.com/jackc/pgx)
-- **Config**: [CUE](https://cuelang.org/)
-- **Logging**: [Zap](https://github.com/uber-go/zap)
-- **Observability**: [OpenTelemetry](https://opentelemetry.io/)
+| Layer | Technology |
+|-------|-----------|
+| HTTP Server | [Gin](https://gin-gonic.com/) |
+| gRPC Server | [gRPC-Go](https://grpc.io/) |
+| API Contract | [OpenAPI 3.0](https://www.openapis.org/) + [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) |
+| Database | [PostgreSQL](https://www.postgresql.org/) via [pgx/v5](https://github.com/jackc/pgx) |
+| Migrations | [golang-migrate](https://github.com/golang-migrate/migrate) |
+| Config | [CUE](https://cuelang.org/) schema validation |
+| Logging | [Zap](https://github.com/uber-go/zap) |
+| Observability | [OpenTelemetry](https://opentelemetry.io/) + Prometheus |
+| DI | [Wire](https://github.com/google/wire) |
+| CLI | [Cobra](https://github.com/spf13/cobra) |
+| Tests | [Ginkgo](https://onsi.github.io/ginkgo/) + [Gomega](https://onsi.github.io/gomega/), [Hurl](https://hurl.dev/) |
+
+---
 
 ## Project Structure
 
 ```text
-├── api/                # OpenAPI specification
-├── cmd/server          # Application entrypoint (Cobra CLI)
-├── configs/            # Configuration files
-├── deploy/             # Docker and Kubernetes deployment manifests
+paladin/
+├── api/                        # OpenAPI 3.0 specification (source of truth)
+├── proto/paladin/v1/               # Protocol Buffer definitions
+├── cmd/server/                 # Application entrypoint (Cobra CLI)
+├── configs/                    # YAML configuration files
+│   └── paladin.yaml
+├── deploy/
+│   ├── Dockerfile
+│   └── kubernetes/
+├── docs/
+│   ├── API.md                  # REST + gRPC API reference
+│   ├── configuration.md        # Configuration guide
+│   └── database.md             # Schema, ERD, migrations
 ├── internal/
-│   ├── api/            # HTTP and gRPC transport layers
-│   ├── app/            # Application wire-up logic
-│   ├── breaker/        # Circuit breaker implementations
-│   ├── config/         # CUE-powered configuration parsing
-│   ├── domain/         # Core models and interfaces (Architecture Core)
-│   ├── fault/          # Fault injection for testing
-│   ├── generated/      # Generated code (API, etc.)
-│   │   └── api/        # Generated OpenAPI code
-│   ├── logger/         # Structured logger initialization
-│   ├── middleware/     # HTTP/gRPC middleware
-│   ├── observability/  # OpenTelemetry instrumentation (traces/metrics)
-│   ├── service/        # Business logic implementation
-│   ├── storage/        # S3 client and storage abstractions
-│   ├── store/          # Repository implementations (PostgreSQL)
-│   └── utils/          # Shared utilities
-├── migrations/         # SQL migration files
-└── tools.go            # Tool dependencies (oapi-codegen, etc.)
+│   ├── api/
+│   │   ├── http/               # HTTP handlers, middleware wiring, adapter
+│   │   └── grpc/               # gRPC handlers and server setup
+│   ├── app/                    # Wire-generated dependency injection
+│   ├── breaker/                # Circuit breaker factory
+│   ├── config/                 # CUE-powered config loading
+│   │   ├── config.go
+│   │   └── schema.cue          # CUE validation schema
+│   ├── domain/                 # Core models and service interfaces
+│   ├── generated/api/          # Auto-generated OpenAPI Go code
+│   ├── logger/                 # Zap logger initialization
+│   ├── middleware/             # HTTP middleware (auth, rate limit, audit, OTEL)
+│   ├── observability/          # OTel trace/metric instrumentation
+│   ├── service/                # Business logic implementation
+│   ├── storage/                # S3 client abstraction
+│   ├── store/                  # PostgreSQL repository implementations
+│   └── utils/                  # Shared utilities
+├── migrations/                 # SQL migration files (up + down)
+└── tools.go                    # Tool dependencies (oapi-codegen, wire, etc.)
 ```
 
-## Database Schema
+---
 
-The service uses PostgreSQL to track object metadata, multipart upload state, audit logs, and idempotency keys.
+## Object Lifecycle
 
-Detailed schema information can be found in **[database.md](./docs/database.md)**.
-
-## Configuration
-
-The service uses a CUE schema (`internal/config/schema.cue`) for validation.
-
-For a detailed guide on all configuration options, see **[configuration.md](./docs/configuration.md)**.
-
-Configuration is loaded from [`configs/paladin.yaml`](configs/paladin.yaml).
-
-### Logger
-
-Controls structured logging output:
-
-```yaml
-logger:
-  level: debug              # Log level: debug, info, warn, error, dpanic, panic, fatal
-  format: json              # Output format: json (production) or console (development)
-  development: false        # Enable development mode (DPanic causes panic)
-  disable_caller: false     # Disable file/line number in logs
-  disable_stacktrace: false # Disable stack traces on error logs
+```mermaid
+stateDiagram-v2
+    [*] --> pending : POST /v1/objects
+    pending --> uploaded : Client PUT to S3
+    uploaded --> complete : POST /objects/:id/complete
+    complete --> soft_deleted : DELETE /objects/:id
+    soft_deleted --> complete : POST /objects/:id/restore
+    soft_deleted --> hard_deleted : DELETE /objects/:id/purge
+    complete --> hard_deleted : DELETE /objects/:id/purge
+    pending --> aborted : Reaper TTL
+    aborted --> [*]
+    hard_deleted --> [*]
 ```
 
-The service logs include fields for improved traceability and OTel compliance, such as:
+---
 
-```json
-{
-  "error": "string",      // Short error code (e.g., "bad_request", "not_found")
-  "details": "string",    // Human-readable error message
-  "request_id": "string", // Unique ID for this specific request
-  "trace_id": "string"    // Distributed trace identifier (OTel compatible)
-}
-```
+## Quick Start
 
-### Server
+### Prerequisites
 
-HTTP and gRPC server configuration:
+- Go 1.24+
+- [Task](https://taskfile.dev/) (`brew install go-task`)
+- Docker & Docker Compose
+- PostgreSQL 15+
 
-```yaml
-server:
-  mode: release             # Gin mode: release, debug, test
-  name: paladin # Service name
-  http:
-    addr: "0.0.0.0:8080"    # HTTP server bind address
-    # List of trusted proxies (CIDRs) for correct client IP resolution
-    trusted_proxies: [] 
-    # TLS Configuration (optional)
-    tls:
-      enabled: false
-      cert_path: ""
-      key_path: ""
-      ca_path: ""
-      server_name: ""
-      insecure_skip_verify: false
-  grpc:
-    addr: "0.0.0.0:9090"    # gRPC server bind address
-  shutdown_timeout: 20s     # Graceful shutdown timeout
-  log_probes: false         # Log health check probe requests
-
-```
-
-### PostgreSQL
-
-Database connection settings:
-
-```yaml
-postgres:
-  dsn: "postgres://user:pass@host:5432/dbname?sslmode=disable"
-  max_conns: 20             # Max connections in pool
-  min_conns: 2              # Min connections in pool
-  max_conn_lifetime: 30m    # Max connection lifetime
-  max_conn_idle_time: 5m    # Max connection idle time
-```
-
-The DSN (Data Source Name) includes:
-
-- Username and password
-- Host and port
-- Database name
-- SSL mode (disable for local dev, require for production)
-
-### S3 Storage
-
-S3-compatible storage configuration (AWS S3, SeaweedFS, MinIO):
-
-```yaml
-s3:
-  bucket: paladin               # Default bucket name
-  region: us-east-1         # AWS region
-  endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333" # S3 endpoint URL
-  public_endpoint: "http://s3.localhost" # Publicly accessible S3 endpoint (for browser direct uploads)
-  force_path_style: true    # Use path-style URLs (required for MinIO/SeaweedFS)
-  access_key: dummy         # S3 access key
-  secret_key: dummy         # S3 secret key
-  presign_ttl: 15m          # Presigned URL expiration time
-  part_size: "8MB"          # Multipart upload part size
-  sse_type: "AES256"        # Server-side encryption type (AES256 or aws:kms)
-  # sse_key_id: "alias/key" # Optional KMS Key ID
-```
-
-**Notes:**
-
-- `s3.public_endpoint` is critical for ensuring that presigned URLs generated by the service are reachable by the client browser.
-- `force_path_style: true` is required for non-AWS S3 implementations
-- `presign_ttl` determines how long upload/download URLs remain valid
-- `part_size` affects multipart upload performance (larger = fewer parts, smaller = more parallelism)
-
-### Policy
-
-Upload validation and restrictions:
-
-```yaml
-policy:
-  max_object_size: "100MB"  # Maximum allowed object size
-  allowed_content_types:    # Whitelist of allowed MIME types. Can be overridden by POLICY_ALLOWED_CONTENT_TYPES env var (comma-separated).
-    - "image/jpeg"
-    - "image/png"
-    - "application/pdf"
-```
-
-Objects exceeding `max_object_size` or with disallowed content types will be rejected.
-
-### Security
-
-Enforces tenant isolation and authentication policies:
-
-```yaml
-security:
-  trust_tenant_id_from_request: true  # If true, trust X-Tenant-ID header (e.g. from gateway)
-  reject_tenant_mismatch: true        # Reject if path param tenant != auth context tenant
-  enable_rls: false                   # Enable Row Level Security in DB (requires migration 003)
-  log_sensitive: false                # Mask sensitive fields in logs
-```
-
-### Housekeeping (Reaper)
-
-Background worker to clean up expired pending objects and orphaned multipart uploads:
-
-```yaml
-housekeeping:
-  enable_reaper: true
-  pending_ttl: "24h"    # Time until pending objects are hard deleted
-  multipart_ttl: "72h"  # Time until incomplete multipart uploads are aborted
-  audit_log_ttl: "30d"  # Time until audit logs are pruned
-  gc_interval: "1h"     # Cleanup job frequency
-```
-
-### OpenTelemetry (Optional)
-
-Distributed tracing and observability:
-
-```yaml
-otel:
-  enabled: false                # Enable/disable OpenTelemetry
-  endpoint: "otel-collector:4317" # OTLP collector endpoint
-  protocol: grpc                # Protocol: grpc or http
-  insecure: true                # Use insecure connection (disable TLS)
-  resource:
-    service.name: paladin
-    deployment.environment: local
-```
-
-Set `enabled: true` to export traces to an OpenTelemetry collector.
-
-**Tracing Coverage**: 100% of service methods (15/15) instrumented with:
-
-- Span creation with operation names
-- Contextual attributes (tenant_id, object_id, upload_id, etc.)
-- Error recording and status tracking
-- Duration metrics integration
-
-**Available Metrics**:
-
-- `paladin_object_operation_duration_seconds` - Operation latency
-- `paladin_s3_operation_duration_seconds` - S3 operation latency
-- `paladin_db_query_duration_seconds` - Database query latency
-- `paladin_cache_operations_total` - Cache hit/miss rates
-- `paladin_rate_limiter_tenants` - Active rate limiters
-- And more at `/metrics` endpoint
-
-### Rate Limiting
-
-Controls API rate limits per tenant with automatic cleanup:
-
-```yaml
-rate_limit:
-  requests_per_second: 300  # Tokens added per second per tenant
-  burst: 500                # Maximum burst size
-  max_tenants: 10000        # Maximum concurrent tenant rate limiters
-  cleanup_ttl: 10m          # Remove inactive limiters after this duration
-  cleanup_interval: 5m      # Cleanup job frequency
-```
-
-### Cache
-
-LRU cache for object metadata with automatic invalidation:
-
-```yaml
-cache:
-  enabled: true             # Enable/disable caching
-  max_size: 1000            # Maximum number of cached entries
-  ttl: 5m                   # Time-to-live for cache entries
-```
-
-**Benefits**:
-
-- 70-90% cache hit rate for read-heavy workloads
-- 10-50ms → <1ms latency for cached reads
-- Automatic invalidation on updates
-- Metrics tracking for cache effectiveness
-
-### Operation Timeouts
-
-Configurable timeouts for different operation types:
-
-```yaml
-timeouts:
-  fast_operation: 5s        # Get, GetMeta, Delete, PatchMeta, GetMultipart
-  default_operation: 30s    # CreateSingle, List
-  s3_operation: 60s         # S3 operations (SignUpload, SignDownload, etc.)
-  long_operation: 2m        # CompleteMultipart
-```
-
-**Operation Categories**:
-
-- **Fast**: Metadata-only operations
-- **Default**: Standard operations with database writes
-- **S3**: Operations involving S3 API calls
-- **Long**: Complex operations like multipart completion
-
-### Idempotency
-
-Idempotency key support for safe retries:
-
-```yaml
-idempotency:
-  enabled: true             # Enable idempotency key support
-  ttl: 24h                  # How long to remember idempotency keys
-```
-
-**Usage**: Include `Idempotency-Key` header in requests to ensure safe retries.
-
-### Health Probes
-
-Exposes standard endpoints following Kubernetes best practices:
-
-- `GET /health/livez` - Liveness probe (Restart logic). Checks if process is responsive.
-- `GET /health/startupz` - Startup probe (Initialization). Checks if config and clients are ready.
-- `GET /health/readyz` - Readiness probe (Traffic). Checks connectivity to Postgres and SeaweedFS (S3).
-
-## Testing
-
-The project uses [Ginkgo](https://onsi.github.io/ginkgo/) and [Gomega](https://onsi.github.io/gomega/) for BDD-style unit testing, and [Hurl](https://hurl.dev/) for integration testing.
+### Local Development
 
 ```bash
-# Run all unit tests
-task test
-
-# Run Hurl integration tests
-task test:hurl
-
-# Or using go test directly
-go test -v ./internal/service/...
-```
-
-## Local Development
-
-```bash
-# Build the server binary and Docker image
-task build
-
-# Start the full stack (Postgres + SeaweedFS + PALADIN)
+# Start dependencies (Postgres + SeaweedFS)
 task up
 
-# Run unit tests
-task test
+# Apply database migrations
+task migrate:up
 
-# Verify the service is ready
+# Run the service
+task run
+
+# Verify health
 curl -s http://localhost:8080/health/readyz | jq .
 ```
 
+### Testing
+
+```bash
+# Unit tests (Ginkgo)
+task test
+
+# Integration tests (Hurl)
+task test:hurl
+
+# Or directly
+go test -v ./internal/...
+```
+
+### Build
+
+```bash
+# Build binary
+task build
+
+# Build Docker image
+task docker:build
+```
+
+---
+
 ## API Endpoints
 
-For detailed API documentation, see [API.md](./docs/API.md).
+See [docs/API.md](./docs/API.md) for the full reference.
 
-### HTTP API
+| Group | Endpoints |
+|-------|-----------|
+| **Health** | `GET /health/livez`, `/health/startupz`, `/health/readyz`, `/version`, `/metrics` |
+| **Objects** | `POST /v1/objects`, `GET /v1/objects`, `GET /v1/objects/:id`, `PATCH /v1/objects/:id/meta`, `DELETE /v1/objects/:id`, `DELETE /v1/objects/:id/purge`, `POST /v1/objects/:id/complete`, `POST /v1/objects/:id/restore` |
+| **Multipart** | `POST /v1/multipart`, `POST /v1/multipart/:id/parts/:n/sign`, `POST /v1/multipart/:id/complete`, `POST /v1/multipart/:id/abort` |
+| **Categories** | `GET /v1/categories`, `POST /v1/categories`, `DELETE /v1/categories/:slug` |
+| **Admin** | `GET /admin/config`, `GET /admin/audit-logs`, `GET /admin/audit-logs/:id` |
+| **Ops** | `GET /v1/ops/stats`, `GET /v1/ops/s3/ping` |
 
-**Health & Monitoring:**
+---
 
-- `GET /health/livez` - Liveness probe
-- `GET /health/startupz` - Startup probe
-- `GET /health/readyz` - Readiness probe
-- `GET /version` - Version information
-- `GET /metrics` - Prometheus metrics
+## Configuration
 
-**Object Management (v1):**
+Configuration is loaded from `configs/paladin.yaml` and validated against `internal/config/schema.cue`.
 
-- `POST /v1/objects` - Create single object upload (returns presigned PUT URL)
-- `GET /v1/objects/:id` - Get object metadata (returns presigned GET URL)
-- `POST /v1/objects/:id/complete` - Mark object as active after upload
-- `PATCH /v1/objects/:id` - General object updates
-- `DELETE /v1/objects/:id` - Soft-delete object (logical)
-- `DELETE /v1/objects/:id/purge` - Hard-delete object (irreversible)
+See [docs/configuration.md](./docs/configuration.md) for the full guide.
 
-**Multipart Uploads (v1):**
+Key settings:
 
-- `POST /v1/multipart` - Initiate multipart upload
-- `POST /v1/multipart/:upload_id/parts/:part_number/sign` - Sign individual part
-- `POST /v1/multipart/:upload_id/complete` - Complete multipart upload
-- `POST /v1/multipart/:upload_id/abort` - Abort multipart upload
+```yaml
+app:
+  name: paladin
+  env: local
 
-**Operations & Admin:**
+datastores:
+  postgres:
+    dsn: "postgres://user:pass@host:5432/db"
+  s3:
+    bucket: my-bucket
+    endpoint: "https://s3.amazonaws.com"
 
-- `GET /admin/config` - Get runtime configuration (redacted)
-- `GET /admin/audit-logs` - List audit logs
-- `GET /admin/audit-logs/:id` - Get audit log detail
+policy:
+  max_object_size: "100MB"
+  min_part_size: "5MB"
+```
 
-### gRPC API
+---
 
-- `Paladin/CreateObject`
-- `Paladin/GetObject`
-- `Paladin/GetObjectMeta`
-- `Paladin/CompleteObject`
-- `Paladin/DeleteObject`
-- `Paladin/InitiateMultipart`
-- `Paladin/SignPart`
-- `Paladin/CompleteMultipart`
-- `Paladin/AbortMultipart`
+## Database
 
-## Architecture
+See [docs/database.md](./docs/database.md) for the full schema reference.
 
-The service follows an interface-first design to ensure testability and maintainability:
+Tables: `objects`, `multipart_uploads`, `multipart_parts`, `categories`, `audit_logs`, `idempotency_keys`
 
-- **Service Layer**: Decoupled from storage and database using Go interfaces.
-- **Circuit Breakers**: Distributed via a central factory for consistent fault tolerance.
-- **State Management**: Atomic state transitions for multipart uploads.
+```bash
+# Apply migrations
+task migrate:up
 
-## Notes
+# Rollback one step
+task migrate:down
+```
 
-- **Data Flow**: This service intentionally does not proxy or stream object data. It only manages metadata and signs access URLs.
-- **S3 Connectivity**: The `readyz` probe performs a `HeadBucket` operation to verify S3 connectivity.
+---
+
+## Architecture Notes
+
+- **No data proxying**: The service only manages metadata and presigned URLs. Object data flows directly between the client and S3.
+- **Interface-first**: All service methods are defined as Go interfaces in `internal/domain/`, keeping business logic testable.
+- **Circuit breakers**: Applied on all S3 and database operations via a central factory.
+- **Graceful shutdown**: 20 s drain period for in-flight requests on SIGTERM/SIGINT.
+- **Health probes**: `readyz` performs `HeadBucket` on S3 — if S3 is unreachable, the pod is removed from load balancer rotation.
+
+---
+
+*For detailed documentation see the [docs/](./docs/) directory.*

@@ -1,571 +1,442 @@
-# Paladin API Documentation
+# Paladin — API Documentation
 
-This document provides detailed information about the REST and gRPC APIs exposed by the Paladin service.
+> **Source of truth**: [`api/openapi.yaml`](../api/openapi.yaml) and [`proto/paladin/v1/paladin.proto`](../proto/paladin/v1/paladin.proto).
+> This document is a human-readable companion. Always verify against the spec files.
 
-## REST API
+---
 
-**Base URL**: `/v1`
+## Table of Contents
 
-The REST API is driven by an [OpenAPI 3.0 specification](./api/openapi.yaml). It is built using [Gin](https://gin-gonic.com/) and provides endpoints for managing objects and multipart uploads. It uses standard HTTP status codes and JSON for request/response bodies.
+- [Overview](#overview)
+- [Authentication & Multi-Tenancy](#authentication--multi-tenancy)
+- [Rate Limiting](#rate-limiting)
+- [Idempotency](#idempotency)
+- [Error Format](#error-format)
+- [Object Lifecycle](#object-lifecycle)
+- [REST API — Objects](#rest-api--objects)
+- [REST API — Multipart Uploads](#rest-api--multipart-uploads)
+- [REST API — Categories](#rest-api--categories)
+- [REST API — Operations & Admin](#rest-api--operations--admin)
+- [REST API — Health & Version](#rest-api--health--version)
+- [gRPC API](#grpc-api)
 
-**Contract-First Development**:
-The API follows a contract-first approach. Go types, server interfaces, and request validation are automatically generated from the OpenAPI spec. Documentation below describes the current contract, but the `openapi.yaml` file remains the absolute source of truth.
+---
 
-### Authentication & Multi-Tenancy
+## Overview
 
-The service enforces tenant isolation. Tenant identity is derived from the authentication context.
+**Base URL**: `/v1`  
+**Protocol**: REST (HTTP/JSON) and gRPC  
+**Format**: `application/json` for all REST request/response bodies
 
-- **Trusted Gateway**: The service relies on the `X-Tenant-ID` header for tenant identification (default behavior).
+The service is a **presign-only control plane** — it never streams object data. It creates metadata records, manages lifecycle state transitions, and issues time-limited presigned URLs that clients use to upload/download directly to/from S3-compatible storage.
 
-**Strict Enforcement**:
+```mermaid
+graph LR
+    Client["Client\n(Browser / Service)"]
+    PALADIN["Paladin\n(REST / gRPC)"]
+    PG[("PostgreSQL\nMetadata")]
+    S3[("S3-compatible\nStorage")]
 
-- The service strictly enforces tenant isolation. Every request must have a valid tenant context.
-- The `X-Tenant-ID` header is **required**.
-- **Requests without a valid tenant context will be rejected with `401 Unauthorized`.**
-
-### Transport Security
-
-All API endpoints can be served over **HTTPS** with full TLS support (configurable via server settings). In production environments, it is recommended to enable TLS to ensure secure communication.
-
-### Rate Limiting
-
-The API implements a token-bucket rate limiter per tenant with automatic cleanup:
-
-- **Limit**: 300 requests per second (default, configurable)
-- **Burst**: 500 requests (default, configurable)
-- **Max Tenants**: 10,000 concurrent rate limiters (configurable)
-- **Cleanup**: Inactive limiters removed after 10 minutes (configurable)
-
-Exceeding the limit results in `429 Too Many Requests`.
-
-**Configuration**:
-
-```yaml
-rate_limit:
-  requests_per_second: 300
-  burst: 500
-  max_tenants: 10000
-  cleanup_ttl: 10m
-  cleanup_interval: 5m
+    Client -->|"1. POST /objects"| PALADIN
+    PALADIN -->|"2. Insert metadata"| PG
+    PALADIN -->|"3. Generate presigned URL"| S3
+    PALADIN -->|"4. Return presigned PUT URL"| Client
+    Client -->|"5. PUT object (direct)"| S3
+    Client -->|"6. POST /objects/:id/complete"| PALADIN
+    PALADIN -->|"7. Update status → complete"| PG
 ```
 
-### Idempotency
+---
 
-The API supports idempotency keys for safe retries of create operations:
+## Authentication & Multi-Tenancy
+
+Every request must carry a tenant identity. The service derives it from the `X-Tenant-ID` request header (set by an upstream API gateway or trusted proxy).
+
+```mermaid
+sequenceDiagram
+    participant GW as API Gateway
+    participant PALADIN as Paladin
+    participant DB as PostgreSQL
+
+    GW->>PALADIN: Request + X-Tenant-ID: acme-corp
+    PALADIN->>PALADIN: Validate X-Tenant-ID present
+    alt trust_tenant_id_from_request: true
+        PALADIN->>PALADIN: Accept header as tenant context
+    else
+        PALADIN->>PALADIN: Derive tenant from OIDC claims
+        PALADIN->>PALADIN: Reject if mismatch
+    end
+    PALADIN->>DB: Query scoped to tenant_id = "acme-corp"
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `trust_tenant_id_from_request` | `true` | Accept `X-Tenant-ID` header directly |
+| `reject_tenant_mismatch` | `true` | Reject if header and auth context differ |
+
+Requests without a valid tenant context are rejected with **`401 Unauthorized`**.
+
+---
+
+## Rate Limiting
+
+Per-tenant token-bucket limiter with automatic cleanup of inactive tenants.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `requests_per_second` | 300 | Sustained throughput |
+| `burst` | 500 | Burst capacity |
+| `max_tenants` | 10 000 | Max concurrent rate limiters |
+| `cleanup_ttl` | 10 m | Remove idle limiter after |
+
+Exceeding the limit returns **`429 Too Many Requests`**.
+
+---
+
+## Idempotency
+
+Safe retries for mutation operations.
 
 - **Header**: `Idempotency-Key: <unique-string>`
-- **TTL**: 24 hours (default, configurable)
-- **Supported Operations**: `CreateObject`, `InitiateMultipart`
+- **TTL**: 24 h (configurable)
+- **Supported**: `POST /objects`, `POST /multipart`
 
-**Usage**:
+If the same key is reused within the TTL, the original response is replayed without creating a duplicate.
 
 ```bash
 curl -X POST http://localhost:8080/v1/objects \
+  -H "X-Tenant-ID: acme-corp" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: unique-request-id-123" \
-  -d '{"content_type": "image/png", "size_bytes": 1024}'
+  -H "Idempotency-Key: upload-session-abc123" \
+  -d '{"content_type": "image/png", "size_bytes": 204800}'
 ```
 
-If the same idempotency key is used within the TTL window, the original response is returned without creating a duplicate resource.
+---
 
-### Common Error Response
+## Error Format
 
-All API endpoints may return the following error structure in case of 4xx or 5xx status codes:
+All 4xx/5xx responses use [RFC 7807 Problem Details](https://datatracker.ietf.org/doc/html/rfc7807):
 
 ```json
 {
-  "error": {
-    "code": "string",
-    "message": "string",
-    "details": "string",
-    "request_id": "string",
-    "trace_id": "string"
-  }
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "object not found",
+  "instance": "/v1/objects/abc",
+  "request_id": "req-xyz",
+  "trace_id": "4bf92f3577b34da6"
 }
 ```
 
-**Common Error Codes:**
-
-| Code | HTTP Status | Description |
-| :--- | :--- | :--- |
-| `bad_request` | 400 | Malformed input |
-| `validation_failed` | 400 | Logic validation failed |
-| `unauthorized` | 401 | Missing/Invalid credentials |
-| `forbidden` | 403 | Valid credentials, incomplete rights |
-| `not_found` | 404 | Resource does not exist |
-| `conflict` | 409 | Conflict with current state |
-| `too_large` | 413 | Payload or object size exceeded |
-| `too_many_requests` | 429 | Rate limit exceeded |
-| `internal` | 500 | Unhandled exception/bug |
+| HTTP Status | Meaning |
+|-------------|---------|
+| 400 | Malformed input or validation failure |
+| 401 | Missing or invalid tenant context |
+| 403 | Valid identity, insufficient rights |
+| 404 | Resource does not exist |
+| 409 | State conflict (e.g., completing an already-complete object) |
+| 413 | Payload or object size exceeded policy limit |
+| 429 | Rate limit exceeded |
+| 500 | Unhandled internal error |
 
 ---
 
-### Object Management
+## Object Lifecycle
 
-#### Create Object
+Objects move through states via explicit API calls and background housekeeping:
 
-Initiates a single-object upload session. Returns a presigned URL that the client should use to `PUT` the file content directly to storage.
-
-- **Method**: `POST`
-- **Endpoint**: `/objects`
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`
-
-**Query Parameters**:
-
-- `limit`: (int) Max items to return (default 50, max 200).
-- `cursor`: (string) Pagination cursor.
-- `status`: (string) Filter by status (e.g., `complete`, `pending`, `soft_deleted`).
-- `external_ref`: (string) Filter by external reference.
-- `created_after`: (string) Filter by creation time (RFC3339).
-- `created_before`: (string) Filter by creation time (RFC3339).
-
-**Request Body** (`application/json`):
-
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `content_type` | string | **Yes** | MIME type of the object (e.g., `image/jpeg`). Must be allowed by server policy. |
-| `size_bytes` | int64 | **Yes** | Total size of the object in bytes. Must be > 0 and not exceed server limits. |
-| `labels` | map[string]string | No | Optional key-value tags to attach to the object. |
-| `external_ref` | string | No | Optional external reference ID (must be unique per tenant if provided). |
-
-**Request Headers** (Optional):
-
-| Header | Description |
-| :--- | :--- |
-| `Idempotency-Key` | Unique string to ensure safe retries. If provided, duplicate requests with the same key within 24h will return the original response. |
-
-**Response Body**:
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `object_id` | string (UUID) | Unique identifier for the created object. |
-| `object_key` | string | Internal storage key (typically `tenant/uuid`). |
-| `upload_url` | string | Presigned URL for the `PUT` request. |
-| `method` | string | HTTP method to use for upload (always `PUT`). |
-| `headers` | map[string]string | Optional headers to include in the upload request (e.g., `Content-Type`). |
-| `expires_at` | string (ISO8601) | Timestamp when the presigned URL expires. |
-
-**Example**:
-
-```bash
-curl -X POST http://localhost:8080/v1/objects \
-  -H "Content-Type: application/json" \
-  -d '{"content_type": "image/png", "size_bytes": 1024, "labels": {"type": "invoice"}}'
+```mermaid
+stateDiagram-v2
+    [*] --> pending : POST /objects
+    pending --> uploading : PUT to S3 (direct)
+    uploading --> uploaded : S3 upload complete
+    uploaded --> complete : POST /objects/:id/complete
+    complete --> soft_deleted : DELETE /objects/:id
+    soft_deleted --> complete : POST /objects/:id/restore
+    soft_deleted --> hard_deleted : DELETE /objects/:id/purge
+    complete --> hard_deleted : DELETE /objects/:id/purge
+    pending --> aborted : Reaper TTL expired
+    uploading --> aborted : Reaper TTL expired
+    aborted --> [*]
+    hard_deleted --> [*]
+    pending --> error : Upload failed
+    error --> [*]
 ```
 
-> **Note**: If Server-Side Encryption (SSE) is enabled, the `headers` field in the response will contain the required encryption headers (e.g., `x-amz-server-side-encryption`). These headers **must** be included in your `PUT` request to S3, or the upload will fail.
+---
 
-#### Get Object
+## REST API — Objects
 
-Retrieves metadata for an existing object and generates a presigned URL for downloading.
+### Single-Object Upload Flow
 
-- **Method**: `GET`
-- **Endpoint**: `/objects/:id`
-- **Path Parameters**:
-  - `id`: Object UUID
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`, `404 Not Found`
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant PALADIN as PALADIN API
+    participant DB as PostgreSQL
+    participant S3 as S3 Storage
 
-**Response Body**:
+    C->>PALADIN: POST /v1/objects\n{content_type, size_bytes, category}
+    PALADIN->>DB: INSERT object (status=pending)
+    PALADIN->>S3: GeneratePresignedPutURL
+    S3-->>PALADIN: presigned URL (TTL: 15m)
+    PALADIN-->>C: {object_id, upload_url, expires_at}
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `object_id` | string (UUID) | Unique identifier of the object. |
-| `object_key` | string | Internal storage key. |
-| `bucket` | string | Name of the S3 bucket where the object is stored. |
-| `content_type` | string | MIME type of the object. |
-| `size_bytes` | int64 | Size of the object in bytes. |
-| `status` | string | Current state: `pending`, `complete`, or `deleted`. |
-| `download_url` | string | Presigned URL to download the file. |
-| `expires_at` | string (ISO8601) | Timestamp when the download URL expires. |
-| `labels` | map[string]string | Custom key-value tags. |
-| `external_ref` | string | External reference ID. |
+    C->>S3: PUT <object_data> to upload_url
+    S3-->>C: 200 OK + ETag
 
-#### Get Object Metadata
+    C->>PALADIN: POST /v1/objects/:id/complete
+    PALADIN->>DB: UPDATE status → complete
+    PALADIN-->>C: {status: "complete"}
+```
 
-Retrieves metadata for an existing object **without** generating a download URL. Useful for checking status or headers.
+### `POST /v1/objects` — Create Object
 
-- **Method**: `GET`
-- **Endpoint**: `/objects/:id/meta`
-- **Path Parameters**:
-  - `id`: Object UUID
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`, `404 Not Found`
+Initiates a single-object upload session.
 
-**Response Body**:
+**Headers**: `X-Tenant-ID` (required), `Idempotency-Key` (optional)
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `object_id` | string (UUID) | Unique identifier of the object. |
-| `object_key` | string | Internal storage key. |
-| `bucket` | string | Name of the S3 bucket where the object is stored. |
-| `content_type` | string | MIME type of the object. |
-| `size_bytes` | int64 | Size of the object in bytes. |
-| `status` | string | Current state: `pending`, `complete`, or `deleted`. |
-| `labels` | map[string]string | Custom key-value tags. |
-| `external_ref` | string | External reference ID. |
-| `expires_at` | string (ISO8601) | Optional expiration timestamp (if set). |
+**Request body**:
 
-#### Update Object Metadata
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `content_type` | string | ✅ | MIME type (must be in allowed list) |
+| `size_bytes` | int64 | ✅ | Total size (must be ≤ `max_object_size`) |
+| `category` | string | — | Category slug; defaults to `objects` |
+| `labels` | map[string]string | — | Key-value tags (max 10 keys, 4 KiB total) |
+| `external_ref` | string | — | Opaque client ID (unique per tenant) |
 
-Updates permissible metadata fields (labels, external_ref) without affecting object content or status.
-
-- **Method**: `PATCH`
-- **Endpoint**: `/objects/:id/meta`
-- **Body**: `{ "labels": {...}, "external_ref": "..." }`
-- **Success Code**: `200 OK`
-
-#### Sign Object Upload
-
-Re-issues a signed URL for uploading the file content (single PUT). Useful if the original upload URL expired or failed.
-
-- **Method**: `POST`
-- **Endpoint**: `/objects/:id/sign-upload`
-- **Success Code**: `200 OK`
-
-#### Sign Object Download
-
-Generates a ephemeral signed URL for downloading the object content.
-
-- **Method**: `POST`
-- **Endpoint**: `/objects/:id/sign-download`
-- **Success Code**: `200 OK`
-
-#### Complete Object
-
-Marks an upload as complete and the object as `complete`. This tells the system that the client has successfully uploaded the file to the presigned URL.
-
-- **Method**: `POST`
-- **Endpoint**: `/objects/:id/complete`
-- **Path Parameters**:
-  - `id`: Object UUID
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`, `500 Internal Server Error`
-
-**Response Body**:
+**Response** `200 OK`:
 
 | Field | Type | Description |
-| :--- | :--- | :--- |
-| `status` | string | The new status of the object (typically `complete`). |
+|-------|------|-------------|
+| `object_id` | UUID | Assigned object identifier |
+| `object_key` | string | Internal S3 key |
+| `upload_url` | string | Presigned PUT URL |
+| `method` | string | Always `PUT` |
+| `headers` | map[string]string | Headers required on the PUT request (e.g. SSE headers) |
+| `expires_at` | ISO8601 | URL expiry time |
 
-#### Soft Delete Object
+### `GET /v1/objects` — List Objects
 
-Performs a soft delete by marking the object status as `soft_deleted` and setting `deleted_at`. The object content is NOT removed from storage.
+**Query params**: `limit`, `cursor`, `status`, `category`, `external_ref`, `labels`, `created_after`, `created_before`
 
-This operation is idempotent.
+### `GET /v1/objects/:id` — Get Object
 
-- **Method**: `DELETE`
-- **Endpoint**: `/objects/:id`
-- **Success Code**: `204 No Content`
+Returns metadata + a fresh presigned download URL.
 
-#### Hard Purge Object (Hard Delete)
+### `HEAD /v1/objects/:id` — Head Object
 
-Permanently removes object content from storage and deletes its metadata. Marks object as `hard_deleted`.
+Returns only headers (no body). Useful for existence checks.
 
-This operation is idempotent and supports an optional `Idempotency-Key` header.
+### `GET /v1/objects/:id/meta` — Get Metadata
 
-- **Method**: `DELETE`
-- **Endpoint**: `/objects/:id/purge`
-- **Success Code**: `204 No Content`
+Returns metadata without generating a download URL.
+
+### `PATCH /v1/objects/:id/meta` — Update Metadata
+
+Updates `labels` and/or `external_ref`. Object content and status are unaffected.
+
+```json
+{ "labels": {"env": "prod"}, "external_ref": "ext-456" }
+```
+
+### `POST /v1/objects/:id/sign-upload` — Re-sign Upload URL
+
+Re-issues a presigned PUT URL. Use if the original URL expired before the upload was completed.
+
+### `POST /v1/objects/:id/sign-download` — Sign Download URL
+
+Generates a short-lived presigned GET URL.
+
+### `POST /v1/objects/:id/complete` — Complete Object
+
+Marks the object as `complete`. Must be called after the client finishes the PUT to S3.
+
+### `POST /v1/objects/:id/restore` — Restore Object
+
+Reverts a `soft_deleted` object back to `complete`.
+
+### `DELETE /v1/objects/:id` — Soft Delete
+
+Sets `status = soft_deleted`, records `deleted_at`. Object content remains in S3. Idempotent.
+
+### `DELETE /v1/objects/:id/purge` — Hard Purge
+
+Permanently removes object content from S3 and set `status = hard_deleted`. **Irreversible.**
+
+### Bulk Operations
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/objects/bulk/delete` | POST | Soft-delete multiple objects |
+| `/v1/objects/bulk/restore` | POST | Restore multiple soft-deleted objects |
+| `/v1/objects/bulk/purge` | DELETE | Hard-purge multiple objects |
 
 ---
 
-### Multipart Uploads
+## REST API — Multipart Uploads
 
-#### Initiate Multipart Upload
+For files too large for a single PUT (recommended above 100 MB).
 
-Starts a multipart upload session. This is required for large files or when the size is unknown (though size is currently required by policy).
+### Multipart Upload Flow
 
-- **Method**: `POST`
-- **Endpoint**: `/multipart`
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant PALADIN as PALADIN API
+    participant DB as PostgreSQL
+    participant S3 as S3 Storage
 
-**Request Body** (`application/json`):
+    C->>PALADIN: POST /v1/multipart\n{content_type, size_bytes}
+    PALADIN->>DB: INSERT object (status=pending)\nINSERT multipart_upload
+    PALADIN->>S3: CreateMultipartUpload
+    S3-->>PALADIN: upload_id
+    PALADIN-->>C: {object_id, upload_id, part_size}
 
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `content_type` | string | **Yes** | MIME type of the file. |
-| `size_bytes` | int64 | **Yes** | Total size of the file. Used to calculate part sizing. |
-| `labels` | map[string]string | No | Optional key-value tags. |
-| `external_ref` | string | No | Optional external reference ID. |
+    loop For each part
+        C->>PALADIN: POST /v1/multipart/:upload_id/parts/:n/sign
+        PALADIN->>S3: GeneratePresignedPartURL
+        S3-->>PALADIN: presigned URL
+        PALADIN-->>C: {upload_url, expires_at}
+        C->>S3: PUT <part_data>
+        S3-->>C: ETag header
+    end
 
-**Request Headers** (Optional):
+    C->>PALADIN: POST /v1/multipart/:upload_id/complete\n{parts: [{part_number, etag}]}
+    PALADIN->>S3: CompleteMultipartUpload
+    S3-->>PALADIN: final ETag
+    PALADIN->>DB: UPDATE object status → complete
+    PALADIN-->>C: {object_id, status: "complete"}
+```
 
-| Header | Description |
-| :--- | :--- |
-| `Idempotency-Key` | Unique string to ensure safe retries. If provided, duplicate requests with the same key within 24h will return the original response. |
-
-**Response Body**:
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `object_id` | string (UUID) | Unique identifier for the object. |
-| `object_key` | string | Internal storage key. |
-| `upload_id` | string | S3 multipart upload ID. Service-generated. |
-| `part_size` | int64 | Recommended size for each part (e.g., 8MB). |
-| `expires_at` | string (ISO8601) | Timestamp when this upload session expires. |
-
-#### Sign Part
-
-Generates a presigned URL for uploading a specific part number of a multipart upload.
-
-- **Method**: `POST`
-- **Endpoint**: `/multipart/:upload_id/parts/:part_number/sign`
-- **Path Parameters**:
-  - `upload_id`: The S3 multipart upload ID returned by `InitiateMultipart`.
-  - `part_number`: The sequential number of the part (1-indexed).
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`, `404 Not Found` (if upload session invalid)
-
-**Response Body**:
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `upload_url` | string | Presigned URL for `PUT`ing this specific part. |
-| `method` | string | HTTP method (always `PUT`). |
-| `expires_at` | string (ISO8601) | Expiration for this specific part's URL. |
-
-#### Batch Sign Parts
-
-Generates presigned URLs for multiple parts in a single request.
-
-- **Method**: `POST`
-- **Endpoint**: `/multipart/:upload_id/parts/sign`
-- **Body**: `{ "part_numbers": [1, 2, 3] }`
-- **Success Code**: `200 OK`
-- **Response**: Map of part number to signed URL info.
-
-#### Get Multipart Upload
-
-Retrieves details about an active multipart upload session.
-
-- **Method**: `GET`
-- **Endpoint**: `/multipart/:upload_id`
-- **Success Code**: `200 OK`
-
-#### Complete Multipart Upload
-
-Finalizes a multipart upload. Requires a list of all uploaded parts and their ETags (returned by S3 in the response headers of each part upload).
-
-- **Method**: `POST`
-- **Endpoint**: `/multipart/:upload_id/complete`
-- **Path Parameters**:
-  - `upload_id`: The S3 multipart upload ID.
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`
-
-**Request Body** (`application/json`):
+### `POST /v1/multipart` — Initiate
 
 | Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `parts` | array | **Yes** | List of part information. |
-| `parts[].part_number` | int32 | **Yes** | Part number (1-based). |
-| `parts[].etag` | string | **Yes** | The ETag header value returned by S3 for this part. |
+|-------|------|----------|-------------|
+| `content_type` | string | ✅ | MIME type |
+| `size_bytes` | int64 | ✅ | Total file size |
+| `category` | string | — | Category slug |
+| `labels` | map | — | Key-value tags |
+| `external_ref` | string | — | Opaque client ID |
 
-**Response Body**:
+**Response**: `{object_id, upload_id, part_size, expires_at}`
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `object_id` | string (UUID) | The ID of the completed object. |
-| `status` | string | New status (`complete`). |
+### `POST /v1/multipart/:upload_id/parts/:part_number/sign` — Sign Part
 
-#### Abort Multipart Upload
+Returns a presigned URL for a single part. Part numbers are 1-indexed.
 
-Cancels a multipart upload session and instructs the storage backend to relinquish resources.
+### `POST /v1/multipart/:upload_id/parts/sign` — Batch Sign Parts
 
-- **Method**: `POST`
-- **Endpoint**: `/multipart/:upload_id/abort`
-- **Path Parameters**:
-  - `upload_id`: The S3 multipart upload ID.
-- **Success Code**: `200 OK`
-- **Error Codes**: `400 Bad Request`
+Sign multiple parts at once: `{"part_numbers": [1,2,3]}` → map of part number to URL.
 
-**Response Body**:
+### `GET /v1/multipart/:upload_id` — Get Session
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `status` | string | New status (`aborted`). |
+Returns current upload session details and status.
+
+### `POST /v1/multipart/:upload_id/complete` — Complete
+
+```json
+{
+  "parts": [
+    {"part_number": 1, "etag": "\"abc123\""},
+    {"part_number": 2, "etag": "\"def456\""}
+  ]
+}
+```
+
+ETags are returned by S3 in the response headers of each part PUT.
+
+### `POST /v1/multipart/:upload_id/abort` — Abort
+
+Cancels the session and instructs S3 to release the incomplete upload resources.
 
 ---
 
-### Operations & Admin
+## REST API — Categories
 
-#### Get Admin Config
+Categories are server-side named groups. The `category` slug is set on objects at upload time.
 
-Returns the current effective runtime configuration. Sensitive values (passwords, keys, tokens) are redacted.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/categories` | List all categories |
+| POST | `/v1/categories` | Create a category |
+| DELETE | `/v1/categories/:slug` | Delete a category (fails if objects are assigned) |
 
-- **Method**: `GET`
-- **Endpoint**: `/admin/config`
-- **Success Code**: `200 OK`
+**Create request**: `{"slug": "lab-results", "name": "Lab Results", "description": "Optional"}`
 
-#### List Audit Logs
+---
 
-Lists audit logs for the current tenant.
+## REST API — Operations & Admin
 
-- **Method**: `GET`
-- **Endpoint**: `/admin/audit-logs`
-- **Query Parameters**:
-  - `limit`: (int) Max items.
-  - `cursor`: (string) Pagination cursor.
-  - `from`: (string) ISO8601 creation time from.
-  - `to`: (string) ISO8601 creation time to.
-  - `path`: (string) Filter by path.
-  - `method`: (string) Filter by method.
-  - `http_status`: (int) Filter by status code.
-- **Success Code**: `200 OK`
+### `GET /v1/ops/stats` — Object Statistics
 
-#### Get Audit Log
+Returns aggregate counts by status and total storage used.
 
-Retrieves details of a specific audit log.
+```json
+{
+  "total_count": 1024,
+  "complete_count": 900,
+  "soft_deleted_count": 50,
+  "total_size": 10737418240
+}
+```
 
-- **Method**: `GET`
-- **Endpoint**: `/admin/audit-logs/:id`
-- **Path Parameters**:
-  - `id`: Audit log UUID.
-- **Success Code**: `200 OK`
+### `GET /v1/ops/s3/ping` — S3 Connectivity Probe
+
+Performs a `HeadBucket` against the configured S3 backend and reports latency.
+
+### `GET /v1/admin/config` — Runtime Configuration
+
+Returns the effective configuration with sensitive fields (passwords, keys) redacted.
+
+### `GET /v1/admin/audit-logs` — List Audit Logs
+
+**Query params**: `limit`, `cursor`, `from`, `to`, `path`, `method`, `http_status`, `request_id`, `client_ip`
+
+### `GET /v1/admin/audit-logs/:id` — Get Audit Log
+
+Returns the full record for a single audit event.
+
+---
+
+## REST API — Health & Version
+
+| Endpoint | Purpose | Auth |
+|----------|---------|------|
+| `GET /health/livez` | Liveness probe — is the process alive? | None |
+| `GET /health/startupz` | Startup probe — is init complete? | None |
+| `GET /health/readyz` | Readiness probe — are dependencies healthy? | None |
+| `GET /version` | Service version info | None |
+| `GET /metrics` | Prometheus metrics | None |
 
 ---
 
 ## gRPC API
 
-**Service**: `Paladin`
-**Package**: `paladin.v1`
+**Package**: `paladin.v1`  
+**Service**: `Paladin`  
+**Proto**: [`proto/paladin/v1/paladin.proto`](../proto/paladin/v1/paladin.proto)
 
-The gRPC API acts as a mirror to the REST API. Clients should use the Generated Go Client (`internal/api/grpc/grpcapi`) to interact with it.
-
-### Common Types
-
-- **`int64 expires_at_unix`**: Timestamps in gRPC responses are Unix epoch seconds.
+gRPC mirrors the REST API. All timestamps are Unix epoch seconds (`int64 expires_at_unix`).
 
 ### Methods
 
-#### `CreateObject`
+| RPC | Request | Response |
+|-----|---------|----------|
+| `CreateObject` | `CreateObjectRequest` | `CreateObjectResponse` |
+| `GetObject` | `GetObjectRequest` | `GetObjectResponse` |
+| `GetObjectMeta` | `GetObjectRequest` | `GetObjectMetaResponse` |
+| `CompleteObject` | `CompleteObjectRequest` | `CompleteObjectResponse` |
+| `DeleteObject` | `DeleteObjectRequest` | `DeleteObjectResponse` |
+| `InitiateMultipart` | `InitiateMultipartRequest` | `InitiateMultipartResponse` |
+| `SignPart` | `SignPartRequest` | `SignPartResponse` |
+| `CompleteMultipart` | `CompleteMultipartRequest` | `CompleteMultipartResponse` |
+| `AbortMultipart` | `AbortMultipartRequest` | `AbortMultipartResponse` |
 
-Initiates a single object upload.
+All requests include `tenant_id string` and all responses include the relevant identifiers.
 
-- **Request**: `CreateObjectRequest`
-  - `tenant_id` (string): Tenant identifier.
-  - `content_type` (string): MIME type.
-  - `size_bytes` (int64): Object size.
-  - `labels` (map<string, string>): Optional tags.
-  - `external_ref` (string): Optional external reference.
-- **Response**: `CreateObjectResponse`
-  - `object_id` (string): UUID.
-  - `object_key` (string): Storage key.
-  - `upload_url` (string): Presigned PUT URL.
-  - `method` (string): "PUT".
-  - `headers` (map<string, string>): Required headers.
-  - `expires_at_unix` (int64): URL expiration time.
+---
 
-#### `GetObject`
-
-Gets object metadata and download URL.
-
-- **Request**: `GetObjectRequest`
-  - `tenant_id` (string)
-  - `object_id` (string)
-- **Response**: `GetObjectResponse`
-  - `object_id` (string)
-  - `object_key` (string)
-  - `bucket` (string)
-  - `content_type` (string)
-  - `size_bytes` (int64)
-  - `status` (string)
-  - `download_url` (string)
-  - `expires_at_unix` (int64)
-  - `labels` (map<string, string>)
-  - `external_ref` (string)
-
-#### `GetObjectMeta`
-
-Gets object metadata without download URL.
-
-- **Request**: `GetObjectRequest`
-  - `tenant_id` (string)
-  - `object_id` (string)
-- **Response**: `GetObjectMetaResponse`
-  - `object_id` (string)
-  - `object_key` (string)
-  - `bucket` (string)
-  - `content_type` (string)
-  - `size_bytes` (int64)
-  - `status` (string)
-  - `expires_at_unix` (int64)
-  - `labels` (map<string, string>)
-  - `external_ref` (string)
-
-#### `CompleteObject`
-
-Finalizes an object.
-
-- **Request**: `CompleteObjectRequest`
-  - `tenant_id` (string)
-  - `object_id` (string)
-- **Response**: `CompleteObjectResponse`
-  - `status` (string)
-
-#### `DeleteObject`
-
-Hard deletes an object.
-
-- **Request**: `DeleteObjectRequest`
-  - `tenant_id` (string)
-  - `object_id` (string)
-- **Response**: `DeleteObjectResponse`
-  - `status` (string)
-
-#### `InitiateMultipart`
-
-Starts a multipart session.
-
-- **Request**: `InitiateMultipartRequest`
-  - `tenant_id` (string)
-  - `content_type` (string)
-  - `size_bytes` (int64)
-  - `labels` (map<string, string>)
-  - `external_ref` (string)
-- **Response**: `InitiateMultipartResponse`
-  - `object_id` (string)
-  - `object_key` (string)
-  - `upload_id` (string)
-  - `part_size` (int64)
-  - `expires_at_unix` (int64)
-
-#### `SignPart`
-
-Signs a single part.
-
-- **Request**: `SignPartRequest`
-  - `tenant_id` (string)
-  - `upload_id` (string)
-  - `part_number` (int32)
-- **Response**: `SignPartResponse`
-  - `upload_url` (string)
-  - `method` (string)
-  - `expires_at_unix` (int64)
-
-#### `CompleteMultipart`
-
-Completes a multipart session.
-
-- **Request**: `CompleteMultipartRequest`
-  - `tenant_id` (string)
-  - `upload_id` (string)
-  - `parts` (repeated `CompleteMultipartPart`)
-    - `part_number` (int32)
-    - `etag` (string)
-- **Response**: `CompleteMultipartResponse`
-  - `object_id` (string)
-  - `status` (string)
-
-#### `AbortMultipart`
-
-Cancels a session.
-
-- **Request**: `AbortMultipartRequest`
-  - `tenant_id` (string)
-  - `upload_id` (string)
-- **Response**: `AbortMultipartResponse`
-  - `status` (string)
+*Last updated: 2026-02-24 · API version: v1*

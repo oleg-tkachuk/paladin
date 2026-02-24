@@ -44,7 +44,18 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		return nil, err
 	}
 
-	if rec.Status == domain.ObjectComplete {
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(rec.Status)
+	err = sm.Fire(domain.EventObjectUploadComplete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return nil, fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == domain.ObjectComplete && rec.Status == domain.ObjectComplete {
 		status = "success"
 		span.SetStatus(codes.Ok, "already_complete")
 		return rec, nil
@@ -61,7 +72,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 
 	// Validate ETag if provided
 	if etag != nil && *etag != head.ETag {
-		err := fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
+		err = fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -69,7 +80,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	}
 	// Validate Size if provided
 	if sizeBytes != nil && *sizeBytes != head.SizeBytes {
-		err := fmt.Errorf("size mismatch: expected %d, got %d", *sizeBytes, head.SizeBytes)
+		err = fmt.Errorf("size mismatch: expected %d, got %d", *sizeBytes, head.SizeBytes)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"

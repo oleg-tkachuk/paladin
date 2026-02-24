@@ -12,24 +12,37 @@ import (
 )
 
 type Querier interface {
+	BulkDeleteObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
+	BulkMarkObjectSoftDeleted(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
+	BulkRestoreObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
+	CategoryExists(ctx context.Context, tenantID string, slug string) (bool, error)
+	CategoryObjectCount(ctx context.Context, tenantID string, category string) (int64, error)
 	// Audit log queries
 	CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz) error
+	// Category queries
+	CreateCategory(ctx context.Context, iD pgtype.UUID, tenantID string, slug string, name string, description *string) error
 	// Multipart queries
 	CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID string, objectID pgtype.UUID, uploadID string, bucket string, objectKey string, contentType string, partSizeBytes int64, status string, expiresAt pgtype.Timestamptz) error
 	// Objects queries
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string) error
+	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
+	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
+	GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error)
 	// Idempotency queries
 	GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (IdempotencyKey, error)
 	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (MultipartUpload, error)
 	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (Object, error)
 	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (Object, error)
+	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
+	ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]MultipartUpload, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]Object, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error)
-	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz) ([]Object, error)
+	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string) ([]ListObjectsRow, error)
+	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
 	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)

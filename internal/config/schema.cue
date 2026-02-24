@@ -1,8 +1,3 @@
-
-
-
-
-
 app: {
   name: string
   env:  "local" | "staging" | "prod" | *"local"
@@ -38,8 +33,8 @@ server: {
     max_body_bytes: int | *10485760
     request_id_header: string | *"X-Request-Id"
     real_ip_header: string | *"X-Forwarded-For"
-//    trusted_proxies: [...string] | *[]
-//    cors_allowed_origins: [...string] | *["*"]
+    trusted_proxies: [...string] | *[]
+    cors_allowed_origins: [...string] | *["*"]
     tls: {
        enabled:              bool | *false
        cert_path:            string | *""
@@ -92,15 +87,15 @@ datastores: {
 
 
 policy: {
-  max_object_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"100MB"
-  max_multipart_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"1TB"
+  max_object_size: =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"100MB"
+  max_multipart_size: =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"1TB"
   min_part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"5MB"
   max_part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"5GB"
   max_parts: int | *10000
   presign_put_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   presign_get_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   presign_part_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-//  allowed_content_types: [...string] | *[]
+  allowed_content_types: [...string] | *[]
   labels_max_bytes: int | *4096
   labels_max_keys: int | *10
   external_ref_max_len: int | *256

@@ -53,8 +53,10 @@ var ProviderSet = wire.NewSet(
 	ProvideObjectsRepo,
 	ProvideMultipartRepo,
 	ProvideIdempotencyRepo,
+	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideBreakerFactory,
+	ProvideCategoryService,
 	ProvideObjectsService,
 	ProvideHealthService,
 	ProvideHTTPServer,
@@ -139,8 +141,12 @@ func ProvidePolicy(cfg config.Config) domain.Policy {
 	return service.NewPolicy(cfg.Policy)
 }
 
-func ProvideObjectsRepo(db *postgres.DB) domain.ObjectsRepository {
-	return postgres.NewObjectsRepo(db)
+func ProvideObjectsRepo(db *postgres.DB, cfg config.Config) domain.ObjectsRepository {
+	repo := postgres.NewObjectsRepo(db)
+	if cfg.Cache.Enabled {
+		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+	}
+	return repo
 }
 
 func ProvideMultipartRepo(db *postgres.DB) domain.MultipartRepository {
@@ -151,6 +157,14 @@ func ProvideIdempotencyRepo(db *postgres.DB) domain.IdempotencyRepository {
 	return postgres.NewIdempotencyRepo(db)
 }
 
+func ProvideCategoryRepo(db *postgres.DB, cfg config.Config) domain.CategoryRepository {
+	repo := postgres.NewCategoryRepo(db)
+	if cfg.Cache.Enabled {
+		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+	}
+	return repo
+}
+
 func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
 	return postgres.NewAuditLogRepo(db)
 }
@@ -159,12 +173,18 @@ func ProvideBreakerFactory(cfg config.Config) breaker.Factory {
 	return breaker.NewFactory(cfg)
 }
 
+func ProvideCategoryService(catRepo domain.CategoryRepository) domain.CategoryService {
+	return service.NewCategoryService(catRepo)
+}
+
 func ProvideObjectsService(
 	objRepo domain.ObjectsRepository,
 	mpRepo domain.MultipartRepository,
 	s3c *s3.Client,
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
+	catRepo domain.CategoryRepository,
+	brk breaker.Factory,
 	cfg config.Config,
 ) domain.ObjectsService {
 	return service.NewObjectsService(
@@ -173,6 +193,8 @@ func ProvideObjectsService(
 		s3c,
 		policy,
 		idemRepo,
+		catRepo,
+		brk,
 		cfg.Datastores.S3.PartSizeBytes,
 		cfg.Timeouts.FastOperation,
 		cfg.Timeouts.DefaultOperation,
@@ -190,12 +212,13 @@ func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
 	svc domain.ObjectsService,
+	catSvc domain.CategoryService,
 	auditRepo domain.AuditLogRepository,
 	hs *service.HealthService,
 	appStarted *atomic.Bool,
 	meta AppMetadata,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, auditRepo, meta.Version, meta.Commit, meta.BuildTime, hs, appStarted)
+	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta.Version, meta.Commit, meta.BuildTime, hs, appStarted)
 }
 
 func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService) *grpc.Server {

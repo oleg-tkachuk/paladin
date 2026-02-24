@@ -69,6 +69,18 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter objects by category slug
+        - name: prefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter objects by key prefix (simulates folder structure)
       responses:
         "200":
           description: Objects list
@@ -243,6 +255,39 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /objects/{id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ObjectID"
+
+    post:
+      tags: [Objects]
+      summary: Restore a soft-deleted object
+      description: |
+        Restores a soft-deleted object by transitioning its status back to `complete`.
+        If the object is already in a non-deleted state, the response is `200 OK`.
+      operationId: restoreObject
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Object restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObjectCommon"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /objects/{id}/purge:
     parameters:
       - $ref: "#/components/parameters/ObjectID"
@@ -272,6 +317,135 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/bulk/delete:
+    post:
+      tags: [Objects]
+      summary: Bulk soft delete objects
+      operationId: bulkDeleteObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk delete result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/bulk/restore:
+    post:
+      tags: [Objects]
+      summary: Bulk restore soft-deleted objects
+      operationId: bulkRestoreObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk restore result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/bulk/purge:
+    delete:
+      tags: [Objects]
+      summary: Bulk permanently purge objects (hard delete)
+      operationId: bulkPurgeObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk purge result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ops/stats:
+    get:
+      tags: [Ops]
+      summary: Get object statistics for analytics
+      operationId: getObjectStats
+      responses:
+        "200":
+          description: Object statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObjectStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ops/s3/ping:
+    get:
+      tags: [Ops]
+      summary: S3 Ping
+      description: |
+        Perform an official HEAD Bucket S3 API call to verify connectivity and bucket status.
+
+        Returns:
+        - `healthy` (200): Bucket exists and is accessible.
+        - `degraded` (404): Bucket does not exist.
+        - `unavailable` (403): Access denied.
+      operationId: pingS3
+      security: []
+      responses:
+        "200":
+          description: S3 Ping result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3PingResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -728,6 +902,77 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /categories:
+    get:
+      tags: [Objects]
+      summary: List categories
+      operationId: listCategories
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Categories list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCategoriesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Objects]
+      summary: Create a category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /categories/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Unique category slug
+
+    delete:
+      tags: [Objects]
+      summary: Delete a category
+      operationId: deleteCategory
+      description: |
+        Deletes a category if it has no active objects. Returns 204 if successful or already deleted.
+      responses:
+        "204":
+          description: Category deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /admin/audit-logs:
     get:
       tags: [Ops]
@@ -813,6 +1058,26 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /tenants:
+    get:
+      tags: [Tenants]
+      summary: List available tenants
+      description: Returns a list of all active tenant IDs discovered in the system.
+      operationId: ListTenants
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      security: []
+      responses:
+        "200":
+          description: Successfully retrieved tenants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTenantsResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -950,6 +1215,8 @@ components:
         message:
           type: string
           example: "connection timeout"
+        s3_ping:
+          $ref: "#/components/schemas/S3PingResponse"
 
     DependencyStatus:
       type: object
@@ -1106,6 +1373,10 @@ components:
       type: object
       required: [content_type, size_bytes]
       properties:
+        category:
+          type: string
+          description: Category slug (must match an existing tenant category). Defaults to 'objects'.
+          example: "invoices"
         content_type:
           type: string
           minLength: 1
@@ -1177,6 +1448,86 @@ components:
           $ref: "#/components/schemas/SignedAction"
           description: Pre-signed URL for uploading the object content
 
+    BulkActionRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example:
+            [
+              "550e8400-e29b-41d4-a716-446655440000",
+              "771e8400-e29b-41d4-a716-446655440011",
+            ]
+
+    BulkActionResponse:
+      type: object
+      properties:
+        affected_count:
+          type: integer
+          example: 2
+
+    ObjectStats:
+      type: object
+      required:
+        [
+          total_count,
+          total_size,
+          pending_count,
+          uploading_count,
+          uploaded_count,
+          complete_count,
+          soft_deleted_count,
+        ]
+      properties:
+        total_count:
+          type: integer
+          example: 100
+        total_size:
+          type: integer
+          format: int64
+          example: 104857600
+        pending_count:
+          type: integer
+          example: 5
+        uploading_count:
+          type: integer
+          example: 2
+        uploaded_count:
+          type: integer
+          example: 10
+        complete_count:
+          type: integer
+          example: 80
+        soft_deleted_count:
+          type: integer
+          example: 3
+
+    S3PingResponse:
+      type: object
+      required: [status, http_status, bucket]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unavailable, unknown]
+          description: Normalized health status
+        http_status:
+          type: integer
+          description: HTTP status code from S3 API
+          example: 200
+        message:
+          type: string
+          description: Descriptive message or error detail
+        bucket:
+          type: string
+          description: The bucket that was pinged
+        region:
+          type: string
+          description: S3 region
+
     ObjectCommon:
       type: object
       required:
@@ -1189,6 +1540,7 @@ components:
           status,
           created_at,
           updated_at,
+          category,
         ]
       properties:
         object_id:
@@ -1205,6 +1557,9 @@ components:
           format: int64
         status:
           $ref: "#/components/schemas/ObjectStatus"
+        category:
+          type: string
+          description: Category slug the object belongs to
         labels:
           $ref: "#/components/schemas/Labels"
         external_ref:
@@ -1322,6 +1677,10 @@ components:
       type: object
       required: [content_type, size_bytes]
       properties:
+        category:
+          type: string
+          description: Category slug (must match an existing tenant category). Defaults to 'objects'.
+          example: "medical-records"
         content_type:
           type: string
           minLength: 1
@@ -1497,18 +1856,78 @@ components:
           items:
             $ref: "#/components/schemas/ObjectCommon"
         pagination:
-          type: object
-          required: [has_more]
-          properties:
-            next_cursor:
-              type: string
-              nullable: true
-              description: Cursor for next page (null if no more results)
-              example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
-            has_more:
-              type: boolean
-              description: Whether more results exist beyond this page
-              example: true
+          $ref: "#/components/schemas/Pagination"
+
+    Pagination:
+      type: object
+      required: [has_more, total_count]
+      properties:
+        next_cursor:
+          type: string
+          nullable: true
+          description: Cursor for next page (null if no more results)
+          example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
+        has_more:
+          type: boolean
+          description: Whether more results exist beyond this page
+          example: true
+        total_count:
+          type: integer
+          format: int64
+          description: Total number of records matching the filters
+          example: 1250
+
+    Category:
+      type: object
+      required: [id, tenant_id, slug, name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          description: Unique URL-friendly identifier
+          example: "invoices"
+        name:
+          type: string
+          description: Human-readable category name
+          example: "Invoices"
+        description:
+          type: string
+          nullable: true
+
+    ListCategoriesResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
 
     VersionResponse:
       type: object
@@ -1662,14 +2081,7 @@ components:
           items:
             $ref: "#/components/schemas/AuditLog"
         pagination:
-          type: object
-          required: [has_more]
-          properties:
-            next_cursor:
-              type: string
-              nullable: true
-            has_more:
-              type: boolean
+          $ref: "#/components/schemas/Pagination"
 
     # Future Feature: Webhook Support
     # Documented for future implementation - not currently active
@@ -1762,6 +2174,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BatchOperationResult"
+
+    ListTenantsResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+            description: Tenant ID
+        pagination:
+          $ref: "#/components/schemas/Pagination"
 
   responses:
     BadRequest:

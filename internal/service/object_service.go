@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -25,6 +27,8 @@ type objectsService struct {
 	s3        domain.StorageClient
 	policy    domain.Policy
 	idemRepo  domain.IdempotencyRepository
+	catRepo   domain.CategoryRepository
+	brk       breaker.Factory
 	partSize  int64
 
 	// Configurable timeouts
@@ -41,6 +45,8 @@ func NewObjectsService(
 	s3Client domain.StorageClient,
 	policy domain.Policy,
 	idemRepo domain.IdempotencyRepository,
+	catRepo domain.CategoryRepository,
+	brk breaker.Factory,
 	partSize int64,
 	fastTimeout, defaultTimeout, s3Timeout, longTimeout time.Duration,
 	idempotencyTTL time.Duration,
@@ -51,6 +57,8 @@ func NewObjectsService(
 		s3:                      s3Client,
 		policy:                  policy,
 		idemRepo:                idemRepo,
+		catRepo:                 catRepo,
+		brk:                     brk,
 		partSize:                partSize,
 		fastOperationTimeout:    fastTimeout,
 		defaultOperationTimeout: defaultTimeout,
@@ -60,8 +68,8 @@ func NewObjectsService(
 	}
 }
 
-func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	return s.createSingle(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	return s.createSingle(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 }
 
 // Delete performs a soft delete
@@ -84,8 +92,37 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		return err
 	}
 
-	// Soft Delete: Only mark as deleted in database
-	updated, err := s.objRepo.MarkDeleted(ctx, tenantID, id)
+	// Get object to check current status
+	obj, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		if apperrors.IsNotFound(err) {
+			status = "success"
+			return nil
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectSoftDelete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent
+		status = "success"
+		return nil
+	}
+
+	// Soft Delete: Only mark as soft deleted in database
+	updated, err := s.objRepo.MarkSoftDeleted(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -95,6 +132,69 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	if updated {
 		logger.FromContext(ctx).Info("Object Soft Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	}
+
+	status = "success"
+	span.SetStatus(codes.Ok, "")
+	return nil
+}
+
+// Restore brings back a soft-deleted object
+func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "Restore")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("restore", status, time.Since(start).Seconds()) }()
+
+	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
+	defer cancel()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// Get object to check current status
+	obj, err := s.objRepo.Get(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectRestore)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent
+		status = "success"
+		return nil
+	}
+
+	// Restore in database
+	updated, err := s.objRepo.Restore(ctx, tenantID, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return err
+	}
+
+	if updated {
+		logger.FromContext(ctx).Info("Object Restored", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
 	status = "success"
@@ -129,7 +229,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		}
 	}
 
-	// Get object record to retrieve S3 key
+	// Get object record to retrieve S3 key and check state
 	obj, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
 		// If object not found, treat as success (idempotent)
@@ -144,8 +244,28 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		return err
 	}
 
+	// FSM State Transition Check
+	sm := domain.NewObjectFSM(obj.Status)
+	err = sm.Fire(domain.EventObjectHardDelete)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "conflict"
+		return fmt.Errorf("invalid transition: %w", err)
+	}
+
+	state, _ := sm.State(ctx)
+	if state == obj.Status { // Idempotent hard-delete
+		status = "success"
+		span.SetStatus(codes.Ok, "already_hard_deleted")
+		return nil
+	}
+
 	// Delete from S3
-	if err := s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+	err = s.executeWithBreaker(ctx, "s3_delete", func() error {
+		return s.s3.DeleteObject(ctx, obj.ObjectKey)
+	})
+	if err != nil {
 		logger.FromContext(ctx).Error("Failed to delete object from S3",
 			zap.String("tenant_id", tenantID),
 			zap.String("object_id", id.String()),
@@ -157,8 +277,8 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 
-	// Mark as hard deleted in database
-	_, err = s.objRepo.MarkHardDeleted(ctx, tenantID, id)
+	// Permanently delete record from database
+	_, err = s.objRepo.Delete(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -202,7 +322,7 @@ func (s *objectsService) HardDelete(ctx context.Context, tenantID string, id ope
 	return s.Purge(ctx, tenantID, id, idempotencyKey)
 }
 
-func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	return s.listObjects(ctx, tenantID, filter, limit, cursor)
 }
 
@@ -218,8 +338,8 @@ func (s *objectsService) SignDownload(ctx context.Context, tenantID string, id o
 	return s.signDownload(ctx, tenantID, id, downloadTTL)
 }
 
-func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	return s.initiateMultipart(ctx, tenantID, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	return s.initiateMultipart(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
 }
 
 func (s *objectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
@@ -240,4 +360,114 @@ func (s *objectsService) CompleteMultipart(ctx context.Context, tenantID string,
 
 func (s *objectsService) AbortMultipart(ctx context.Context, tenantID string, uploadID string) error {
 	return s.abortMultipart(ctx, tenantID, uploadID)
+}
+
+func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn func() error) error {
+	w := s.brk.Get(name)
+	_, err := fault.Execute(w, func() (interface{}, error) {
+		return nil, fn()
+	})
+	return err
+}
+
+func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name string, fn func() (T, error)) (T, error) {
+	w := brk.Get(name)
+	res, err := fault.Execute(w, func() (interface{}, error) {
+		return fn()
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return res.(T), nil
+}
+func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkDelete")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_delete", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkRestore")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_restore", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	count, err := s.objRepo.BulkRestore(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkPurge")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_purge", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	// For purge, we need to delete from S3 first.
+	for _, id := range ids {
+		obj, err := s.objRepo.Get(ctx, tenantID, id)
+		if err != nil {
+			continue // Skip if not found
+		}
+
+		// Delete from S3
+		if err := s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+			logger.FromContext(ctx).Error("Failed to delete object from S3 during bulk purge",
+				zap.String("object_id", id.String()), zap.Error(err))
+		}
+	}
+
+	// Bulk hard delete from DB
+	count, err := s.objRepo.BulkDelete(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	return s.objRepo.GetStats(ctx, tenantID)
 }

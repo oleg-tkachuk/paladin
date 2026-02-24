@@ -19,7 +19,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, auditRepo domain.AuditLogRepository, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
@@ -99,7 +99,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, a
 
 	// Register generated handlers
 	// Register generated handlers
-	adapter := NewOpenAPIAdapter(cfg, svc, auditRepo, hs, started, version, commit, buildTime)
+	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, started, version, commit, buildTime)
 	api.RegisterHandlers(v1, adapter)
 
 	return &Server{engine: r}

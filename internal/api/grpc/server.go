@@ -34,7 +34,9 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 		externalRef = &req.ExternalRef
 	}
 
-	out, err := s.svc.CreateSingle(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
+	category := req.Category
+
+	out, err := s.svc.CreateSingle(ctx, tenant, category, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("CreateObject failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -152,12 +154,15 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 		tenant = utils.TenantIDFromContext(ctx, "default")
 	}
 
-	var externalRef *string
+	category := req.Category
+	// category will be validated in the service layer
+
+	var extRef *string
 	if req.ExternalRef != "" {
-		externalRef = &req.ExternalRef
+		extRef = &req.ExternalRef
 	}
 
-	out, err := s.svc.InitiateMultipart(ctx, tenant, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
+	out, err := s.svc.InitiateMultipart(ctx, tenant, category, req.ContentType, req.SizeBytes, req.Labels, extRef, 0, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("InitiateMultipart failed", zap.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())

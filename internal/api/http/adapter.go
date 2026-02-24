@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	api "github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
@@ -18,6 +19,7 @@ import (
 type OpenAPIAdapter struct {
 	cfg       *config.Config
 	svc       domain.ObjectsService
+	catSvc    domain.CategoryService
 	auditRepo domain.AuditLogRepository
 	hs        *service.HealthService
 	started   *atomic.Bool
@@ -27,10 +29,11 @@ type OpenAPIAdapter struct {
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
 	return &OpenAPIAdapter{
 		cfg:       cfg,
 		svc:       svc,
+		catSvc:    catSvc,
 		auditRepo: auditRepo,
 		hs:        hs,
 		started:   started,
@@ -95,18 +98,46 @@ func mapDetailedStatus(s service.DetailedDependencyStatus) *api.DetailedDependen
 	if s.Message != "" {
 		msg = &s.Message
 	}
+	var s3Ping *api.S3PingResponse
+	if s.S3Ping != nil {
+		s3Ping = &api.S3PingResponse{
+			Status:     api.S3PingResponseStatus(s.S3Ping.Status),
+			HttpStatus: s.S3Ping.HttpStatus,
+			Message:    &s.S3Ping.Message,
+			Bucket:     s.S3Ping.Bucket,
+			Region:     &s.S3Ping.Region,
+		}
+	}
+
 	return &api.DetailedDependencyStatus{
 		Status:    api.DetailedDependencyStatusStatus(s.Status),
 		LatencyMs: s.LatencyMs,
 		Message:   msg,
+		S3Ping:    s3Ping,
 	}
 }
 
 func mapDependencyStatus(s service.DependencyStatus) *api.DependencyStatus {
 	poolStats := make(map[string]map[string]interface{})
-	for k, v := range s.PoolStats {
-		if m, ok := v.(map[string]interface{}); ok {
-			poolStats[k] = m
+
+	// Check if s.PoolStats is already a map of maps or a flat map
+	isFlat := true
+	for _, v := range s.PoolStats {
+		if _, ok := v.(map[string]interface{}); ok {
+			isFlat = false
+			break
+		}
+	}
+
+	if isFlat && len(s.PoolStats) > 0 {
+		// Wrap flat stats in "primary" to match OpenAPI schema expectations
+		poolStats["primary"] = s.PoolStats
+	} else {
+		// Already nested or mixed (fallback to existing logic)
+		for k, v := range s.PoolStats {
+			if m, ok := v.(map[string]interface{}); ok {
+				poolStats[k] = m
+			}
 		}
 	}
 
@@ -129,6 +160,22 @@ func (s *OpenAPIAdapter) Version(c *gin.Context) {
 	})
 }
 
+func (s *OpenAPIAdapter) PingS3(c *gin.Context) {
+	res, err := s.hs.PingS3(c.Request.Context())
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.S3PingResponse{
+		Status:     api.S3PingResponseStatus(res.Status),
+		HttpStatus: res.HttpStatus,
+		Message:    &res.Message,
+		Bucket:     res.Bucket,
+		Region:     ptr(s.cfg.Datastores.S3.Region),
+	})
+}
+
 func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectParams) {
 	var req api.CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -141,9 +188,14 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	var category string
+	if req.Category != nil {
+		category = *req.Category
+	}
+
+	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -159,7 +211,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 func (s *OpenAPIAdapter) GetObject(c *gin.Context, id openapi_types.UUID) {
 	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -177,7 +229,7 @@ func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id openapi_types.UUID) {
 
 func (s *OpenAPIAdapter) DeleteObject(c *gin.Context, id openapi_types.UUID, params api.DeleteObjectParams) {
 	if err := s.svc.Delete(c.Request.Context(), tenantID(c), id); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -192,11 +244,26 @@ func (s *OpenAPIAdapter) PurgeObject(c *gin.Context, id openapi_types.UUID, para
 	}
 
 	if err := s.svc.Purge(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (s *OpenAPIAdapter) RestoreObject(c *gin.Context, id openapi_types.UUID, params api.RestoreObjectParams) {
+	if err := s.svc.Restore(c.Request.Context(), tenantID(c), id); err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	obj, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, mapObjectCommon(obj))
 }
 
 func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, params api.UpdateObjectParams) {
@@ -213,18 +280,90 @@ func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, par
 	}
 
 	if err := s.svc.UpdateStatus(c.Request.Context(), tenantID(c), id, string(req.Status), idempotencyKey); err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
 	// Fetch updated object to return
 	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, mapObjectCommon(rec))
+}
+
+func (s *OpenAPIAdapter) BulkDeleteObjects(c *gin.Context, params api.BulkDeleteObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := s.svc.BulkDelete(c.Request.Context(), tenantID(c), req.Ids)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) BulkRestoreObjects(c *gin.Context, params api.BulkRestoreObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := s.svc.BulkRestore(c.Request.Context(), tenantID(c), req.Ids)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	var idempotencyKey *string
+	if params.IdempotencyKey != nil {
+		k := string(*params.IdempotencyKey)
+		idempotencyKey = &k
+	}
+
+	count, err := s.svc.BulkPurge(c.Request.Context(), tenantID(c), req.Ids, idempotencyKey)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
+	stats, err := s.svc.GetStats(c.Request.Context(), tenantID(c))
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.ObjectStats{
+		TotalCount:       int(stats.TotalCount),
+		TotalSize:        stats.TotalSize,
+		PendingCount:     int(stats.PendingCount),
+		UploadingCount:   int(stats.UploadingCount),
+		UploadedCount:    int(stats.UploadedCount),
+		CompleteCount:    int(stats.CompleteCount),
+		SoftDeletedCount: int(stats.SoftDeletedCount),
+	})
 }
 
 func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
@@ -233,7 +372,7 @@ func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 
 	rec, err := s.svc.CompleteObject(c.Request.Context(), tenantID(c), id, req.Etag, req.SizeBytes)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -248,7 +387,7 @@ func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 func (s *OpenAPIAdapter) GetObjectMeta(c *gin.Context, id openapi_types.UUID) {
 	rec, err := s.svc.GetMeta(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -264,7 +403,7 @@ func (s *OpenAPIAdapter) PatchObjectMeta(c *gin.Context, id openapi_types.UUID) 
 
 	rec, err := s.svc.PatchMeta(c.Request.Context(), tenantID(c), id, mapLabels(req.Labels), req.ExternalRef)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -282,13 +421,17 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 	}
 
 	filter := domain.ListObjectsFilter{
-		Status:      (*domain.ObjectStatus)(params.Status),
-		ExternalRef: params.ExternalRef,
+		Status:        (*domain.ObjectStatus)(params.Status),
+		ExternalRef:   params.ExternalRef,
+		Category:      params.Category,
+		KeyPrefix:     params.Prefix,
+		CreatedAfter:  params.CreatedAfter,
+		CreatedBefore: params.CreatedBefore,
 	}
 
-	items, next, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	items, next, totalCount, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -306,9 +449,12 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 
 	resp := api.ListObjectsResponse{
 		Items: out,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	}
-	resp.Pagination.NextCursor = nextCursor
-	resp.Pagination.HasMore = hasMore
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -324,7 +470,7 @@ func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id openapi_types.UUI
 
 	p, err := s.svc.SignDownload(c.Request.Context(), tenantID(c), id, ttl)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -345,7 +491,7 @@ func (s *OpenAPIAdapter) SignObjectUpload(c *gin.Context, id openapi_types.UUID)
 
 	p, err := s.svc.SignUpload(c.Request.Context(), tenantID(c), id, ttl)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -367,9 +513,14 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		ttl = *req.UploadExpiresInSeconds
 	}
 
-	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	var category string
+	if req.Category != nil {
+		category = *req.Category
+	}
+
+	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -387,7 +538,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 	multi, err := s.svc.GetMultipart(c.Request.Context(), tenantID(c), uploadId)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -403,9 +554,9 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 	})
 }
 
-func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId string) {
+func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId api.UploadID) {
 	if err := s.svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadId); err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -426,7 +577,7 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId string) {
 
 	rec, err := s.svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadId, parts)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -448,7 +599,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
 
 	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, req.PartNumbers)
 	if err != nil {
-		respondWithError(c, http.StatusBadRequest, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -469,7 +620,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
 func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber int32) {
 	p, err := s.svc.SignPart(c.Request.Context(), tenantID(c), uploadId, partNumber)
 	if err != nil {
-		respondWithError(c, http.StatusNotFound, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -716,6 +867,38 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (s *OpenAPIAdapter) ListTenants(c *gin.Context, params api.ListTenantsParams) {
+	limit := 100
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+
+	tenants, next, totalCount, err := s.catSvc.ListTenants(c.Request.Context(), limit, cursor)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
+	c.JSON(http.StatusOK, api.ListTenantsResponse{
+		Items: tenants,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
+	})
+}
+
 func mapSignedAction(p domain.Presigned) api.SignedAction {
 	return api.SignedAction{
 		Url:       p.URL,
@@ -757,9 +940,9 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		IdempotencyKey: params.IdempotencyKey,
 	}
 
-	logs, next, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	logs, next, totalCount, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 
@@ -768,12 +951,19 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		out[i] = mapAuditLog(l)
 	}
 
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
 	resp := api.ListAuditLogsResponse{
 		Items: out,
-	}
-	resp.Pagination.HasMore = next != ""
-	if next != "" {
-		resp.Pagination.NextCursor = &next
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -782,11 +972,11 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 func (s *OpenAPIAdapter) GetAuditLog(c *gin.Context, id openapi_types.UUID) {
 	l, err := s.auditRepo.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		respondWithError(c, http.StatusInternalServerError, err)
+		respondWithError(c, 0, err)
 		return
 	}
 	if l == nil {
-		c.Status(http.StatusNotFound)
+		respondWithError(c, 0, errors.NotFound("audit log not found", nil))
 		return
 	}
 
@@ -821,19 +1011,95 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 func mapObjectCommon(rec *domain.Object) api.ObjectCommon {
 	labels := api.Labels(rec.Labels)
 	return api.ObjectCommon{
-		ObjectId:        rec.ID,
-		ObjectKey:       rec.ObjectKey,
-		Bucket:          rec.Bucket,
-		ContentType:     rec.ContentType,
-		SizeBytes:       rec.SizeBytes,
-		Status:          mapStatus(rec.Status),
-		Labels:          &labels,
-		ExternalRef:     rec.ExternalRef,
-		CreatedAt:       rec.CreatedAt,
-		UpdatedAt:       rec.UpdatedAt,
-		CompletedAt:     rec.CompletedAt,
-		DeletedAt:       rec.DeletedAt,
-		StoredEtag:      rec.StoredETag,
-		StoredSizeBytes: rec.StoredSizeBytes,
+		ObjectId:    rec.ID,
+		ObjectKey:   rec.ObjectKey,
+		Bucket:      rec.Bucket,
+		ContentType: rec.ContentType,
+		SizeBytes:   rec.SizeBytes,
+		Status:      mapStatus(rec.Status),
+		Category:    rec.Category,
+		Labels:      &labels,
+		ExternalRef: rec.ExternalRef,
+		CreatedAt:   rec.CreatedAt,
+		UpdatedAt:   rec.UpdatedAt,
+		CompletedAt: rec.CompletedAt,
+		DeletedAt:   rec.DeletedAt,
+		StoredEtag:  rec.StoredETag,
+	}
+}
+
+func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategoriesParams) {
+	limit := 100
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+
+	items, next, totalCount, err := s.catSvc.List(c.Request.Context(), tenantID(c), limit, cursor)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	out := make([]api.Category, len(items))
+	for i, item := range items {
+		out[i] = mapCategory(item)
+	}
+
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
+	resp := api.ListCategoriesResponse{
+		Items: out,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *OpenAPIAdapter) CreateCategory(c *gin.Context) {
+	var req api.CreateCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	cat, err := s.catSvc.Create(c.Request.Context(), tenantID(c), req.Slug, req.Name, req.Description)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, mapCategory(*cat))
+}
+
+func (s *OpenAPIAdapter) DeleteCategory(c *gin.Context, slug string) {
+	err := s.catSvc.Delete(c.Request.Context(), tenantID(c), slug)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func mapCategory(c domain.Category) api.Category {
+	return api.Category{
+		Id:          c.ID,
+		TenantId:    c.TenantID,
+		Slug:        c.Slug,
+		Name:        c.Name,
+		Description: c.Description,
+		CreatedAt:   c.CreatedAt,
+		UpdatedAt:   c.UpdatedAt,
 	}
 }
