@@ -151,6 +151,14 @@ type HeadRecord struct {
 	Metadata     map[string]string
 }
 
+type S3PingResult struct {
+	Status     string
+	HttpStatus int
+	Message    string
+	Bucket     string
+	Region     string
+}
+
 type CompletePart struct {
 	PartNumber int32
 	ETag       string

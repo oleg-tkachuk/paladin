@@ -70,7 +70,8 @@ SELECT
     id, tenant_id, object_key, bucket, content_type, size_bytes,
     checksum_sha256, status, created_at, updated_at, expires_at,
     labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath
+    category, subpath,
+    COUNT(*) OVER() AS total_count
 FROM objects
 WHERE tenant_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
@@ -136,3 +137,37 @@ LIMIT $2;
 DELETE FROM objects
 WHERE tenant_id = $1 AND id = $2;
 
+-- name: BulkMarkObjectSoftDeleted :execrows
+UPDATE objects
+SET status = 'soft_deleted',
+    deleted_at = now(),
+    updated_at = now()
+WHERE tenant_id = $1
+  AND id = ANY($2::uuid[])
+  AND status != 'soft_deleted'
+  AND status != 'hard_deleted';
+
+-- name: BulkRestoreObject :execrows
+UPDATE objects
+SET status = 'uploaded',
+    deleted_at = NULL,
+    updated_at = now()
+WHERE tenant_id = $1
+  AND id = ANY($2::uuid[])
+  AND status = 'soft_deleted';
+
+-- name: BulkDeleteObject :execrows
+DELETE FROM objects
+WHERE tenant_id = $1 AND id = ANY($2::uuid[]);
+
+-- name: GetObjectStats :one
+SELECT 
+    COUNT(*)::bigint as total_count,
+    COALESCE(SUM(size_bytes), 0)::bigint as total_size,
+    COUNT(*) FILTER (WHERE status = 'pending')::bigint as pending_count,
+    COUNT(*) FILTER (WHERE status = 'uploading')::bigint as uploading_count,
+    COUNT(*) FILTER (WHERE status = 'uploaded')::bigint as uploaded_count,
+    COUNT(*) FILTER (WHERE status = 'complete')::bigint as complete_count,
+    COUNT(*) FILTER (WHERE status = 'soft_deleted')::bigint as soft_deleted_count
+FROM objects
+WHERE tenant_id = $1;

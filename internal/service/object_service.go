@@ -322,7 +322,7 @@ func (s *objectsService) HardDelete(ctx context.Context, tenantID string, id ope
 	return s.Purge(ctx, tenantID, id, idempotencyKey)
 }
 
-func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	return s.listObjects(ctx, tenantID, filter, limit, cursor)
 }
 
@@ -380,4 +380,94 @@ func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name
 		return zero, err
 	}
 	return res.(T), nil
+}
+func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkDelete")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_delete", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkRestore")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_restore", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	count, err := s.objRepo.BulkRestore(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkPurge")
+	defer span.End()
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOperation("bulk_purge", status, time.Since(start).Seconds()) }()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	// For purge, we need to delete from S3 first.
+	for _, id := range ids {
+		obj, err := s.objRepo.Get(ctx, tenantID, id)
+		if err != nil {
+			continue // Skip if not found
+		}
+
+		// Delete from S3
+		if err := s.s3.DeleteObject(ctx, obj.ObjectKey); err != nil {
+			logger.FromContext(ctx).Error("Failed to delete object from S3 during bulk purge",
+				zap.String("object_id", id.String()), zap.Error(err))
+		}
+	}
+
+	// Bulk hard delete from DB
+	count, err := s.objRepo.BulkDelete(ctx, tenantID, ids)
+	if err != nil {
+		status = "error"
+		return 0, err
+	}
+
+	status = "success"
+	return count, nil
+}
+
+func (s *objectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	return s.objRepo.GetStats(ctx, tenantID)
 }

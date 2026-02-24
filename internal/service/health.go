@@ -5,14 +5,16 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // DetailedDependencyStatus provides detailed health information for a single dependency
 type DetailedDependencyStatus struct {
-	Status    string `json:"status"`               // ok, degraded, down
-	LatencyMs *int64 `json:"latency_ms,omitempty"` // Response time in milliseconds
-	Message   string `json:"message,omitempty"`    // Additional context if not ok
+	Status    string               `json:"status"`               // ok, degraded, down
+	LatencyMs *int64               `json:"latency_ms,omitempty"` // Response time in milliseconds
+	Message   string               `json:"message,omitempty"`    // Additional context if not ok
+	S3Ping    *domain.S3PingResult `json:"s3_ping,omitempty"`    // Detailed S3 ping result
 }
 
 // DependencyStatus represents the overall health status of all dependencies
@@ -28,7 +30,7 @@ type Pinger interface {
 }
 
 type S3HealthChecker interface {
-	Health(ctx context.Context) error
+	Ping(ctx context.Context) (domain.S3PingResult, error)
 }
 
 type PoolStatsProvider interface {
@@ -85,17 +87,40 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 		}
 	}
 
-	// Check SeaweedFS with latency tracking
+	// Check SeaweedFS with detailed ping logic
 	start = time.Now()
-	if err := s.s3.Health(ctx); err != nil {
+	pingResult, err := s.s3.Ping(ctx)
+	latency := time.Since(start).Milliseconds()
+	status.SeaweedFS.LatencyMs = &latency
+
+	if err != nil {
 		metrics.RecordS3Op(ctx, "health", "error", start)
 		status.SeaweedFS.Status = "down"
 		status.SeaweedFS.Message = err.Error()
 		ready = false
 	} else {
 		metrics.RecordS3Op(ctx, "health", "success", start)
-		latency := time.Since(start).Milliseconds()
-		status.SeaweedFS.LatencyMs = &latency
+
+		// Map S3PingResult status to DetailedDependencyStatus status
+		switch pingResult.Status {
+		case "healthy":
+			status.SeaweedFS.Status = "ok"
+		case "degraded":
+			status.SeaweedFS.Status = "degraded"
+			// Degraded S3 (e.g. bucket missing) means not ready
+			ready = false
+		case "unavailable":
+			status.SeaweedFS.Status = "down"
+			ready = false
+		default:
+			status.SeaweedFS.Status = "down"
+			ready = false
+		}
+
+		if pingResult.Message != "" {
+			status.SeaweedFS.Message = pingResult.Message
+		}
+		status.SeaweedFS.S3Ping = &pingResult
 	}
 
 	// Check if any breakers are open
@@ -107,4 +132,8 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 	}
 
 	return ready, status
+}
+
+func (s *HealthService) PingS3(ctx context.Context) (domain.S3PingResult, error) {
+	return s.s3.Ping(ctx)
 }

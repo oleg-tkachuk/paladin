@@ -38,7 +38,7 @@ func (s *categoryService) Get(ctx context.Context, tenantID, slug string) (*doma
 	return s.repo.Get(ctx, tenantID, slug)
 }
 
-func (s *categoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (s *categoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	return s.repo.List(ctx, tenantID, limit, cursor)
 }
 
@@ -55,6 +55,6 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 	return err
 }
 
-func (s *categoryService) ListTenants(ctx context.Context) ([]string, error) {
-	return s.repo.ListTenants(ctx)
+func (s *categoryService) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	return s.repo.ListTenants(ctx, limit, cursor)
 }

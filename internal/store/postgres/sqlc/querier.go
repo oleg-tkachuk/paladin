@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	BulkDeleteObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
+	BulkMarkObjectSoftDeleted(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
+	BulkRestoreObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
 	CategoryExists(ctx context.Context, tenantID string, slug string) (bool, error)
 	CategoryObjectCount(ctx context.Context, tenantID string, category string) (int64, error)
 	// Audit log queries
@@ -32,13 +35,14 @@ type Querier interface {
 	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (MultipartUpload, error)
 	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (Object, error)
 	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (Object, error)
+	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
-	ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ObjectCategory, error)
+	ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]MultipartUpload, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]Object, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error)
-	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string) ([]Object, error)
-	ListTenants(ctx context.Context) ([]string, error)
+	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string) ([]ListObjectsRow, error)
+	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
 	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)

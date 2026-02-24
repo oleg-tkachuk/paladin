@@ -114,7 +114,8 @@ SELECT
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
     client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at
+    response_status, response_time_ms, created_at,
+    COUNT(*) OVER() AS total_count
 FROM audit_logs
 WHERE tenant_id = $1
   AND ($3::timestamptz IS NULL OR created_at >= $3)
@@ -150,6 +151,7 @@ type ListAuditLogsRow struct {
 	ResponseStatus    *string            `json:"response_status"`
 	ResponseTimeMs    *int32             `json:"response_time_ms"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	TotalCount        int64              `json:"total_count"`
 }
 
 func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
@@ -193,6 +195,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 			&i.ResponseStatus,
 			&i.ResponseTimeMs,
 			&i.CreatedAt,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

@@ -98,18 +98,46 @@ func mapDetailedStatus(s service.DetailedDependencyStatus) *api.DetailedDependen
 	if s.Message != "" {
 		msg = &s.Message
 	}
+	var s3Ping *api.S3PingResponse
+	if s.S3Ping != nil {
+		s3Ping = &api.S3PingResponse{
+			Status:     api.S3PingResponseStatus(s.S3Ping.Status),
+			HttpStatus: s.S3Ping.HttpStatus,
+			Message:    &s.S3Ping.Message,
+			Bucket:     s.S3Ping.Bucket,
+			Region:     &s.S3Ping.Region,
+		}
+	}
+
 	return &api.DetailedDependencyStatus{
 		Status:    api.DetailedDependencyStatusStatus(s.Status),
 		LatencyMs: s.LatencyMs,
 		Message:   msg,
+		S3Ping:    s3Ping,
 	}
 }
 
 func mapDependencyStatus(s service.DependencyStatus) *api.DependencyStatus {
 	poolStats := make(map[string]map[string]interface{})
-	for k, v := range s.PoolStats {
-		if m, ok := v.(map[string]interface{}); ok {
-			poolStats[k] = m
+
+	// Check if s.PoolStats is already a map of maps or a flat map
+	isFlat := true
+	for _, v := range s.PoolStats {
+		if _, ok := v.(map[string]interface{}); ok {
+			isFlat = false
+			break
+		}
+	}
+
+	if isFlat && len(s.PoolStats) > 0 {
+		// Wrap flat stats in "primary" to match OpenAPI schema expectations
+		poolStats["primary"] = s.PoolStats
+	} else {
+		// Already nested or mixed (fallback to existing logic)
+		for k, v := range s.PoolStats {
+			if m, ok := v.(map[string]interface{}); ok {
+				poolStats[k] = m
+			}
 		}
 	}
 
@@ -129,6 +157,22 @@ func (s *OpenAPIAdapter) Version(c *gin.Context) {
 		Version:   s.version,
 		GitSha:    &s.commit,
 		BuildTime: &s.buildTime,
+	})
+}
+
+func (s *OpenAPIAdapter) PingS3(c *gin.Context) {
+	res, err := s.hs.PingS3(c.Request.Context())
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.S3PingResponse{
+		Status:     api.S3PingResponseStatus(res.Status),
+		HttpStatus: res.HttpStatus,
+		Message:    &res.Message,
+		Bucket:     res.Bucket,
+		Region:     ptr(s.cfg.Datastores.S3.Region),
 	})
 }
 
@@ -250,6 +294,78 @@ func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, par
 	c.JSON(http.StatusOK, mapObjectCommon(rec))
 }
 
+func (s *OpenAPIAdapter) BulkDeleteObjects(c *gin.Context, params api.BulkDeleteObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := s.svc.BulkDelete(c.Request.Context(), tenantID(c), req.Ids)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) BulkRestoreObjects(c *gin.Context, params api.BulkRestoreObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	count, err := s.svc.BulkRestore(c.Request.Context(), tenantID(c), req.Ids)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeObjectsParams) {
+	var req api.BulkActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondWithError(c, http.StatusBadRequest, err)
+		return
+	}
+
+	var idempotencyKey *string
+	if params.IdempotencyKey != nil {
+		k := string(*params.IdempotencyKey)
+		idempotencyKey = &k
+	}
+
+	count, err := s.svc.BulkPurge(c.Request.Context(), tenantID(c), req.Ids, idempotencyKey)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+}
+
+func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
+	stats, err := s.svc.GetStats(c.Request.Context(), tenantID(c))
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.ObjectStats{
+		TotalCount:       int(stats.TotalCount),
+		TotalSize:        stats.TotalSize,
+		PendingCount:     int(stats.PendingCount),
+		UploadingCount:   int(stats.UploadingCount),
+		UploadedCount:    int(stats.UploadedCount),
+		CompleteCount:    int(stats.CompleteCount),
+		SoftDeletedCount: int(stats.SoftDeletedCount),
+	})
+}
+
 func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 	var req api.CompleteObjectRequest
 	_ = c.ShouldBindJSON(&req) // Optional body
@@ -313,7 +429,7 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		CreatedBefore: params.CreatedBefore,
 	}
 
-	items, next, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	items, next, totalCount, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
 		respondWithError(c, 0, err)
 		return
@@ -333,9 +449,12 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 
 	resp := api.ListObjectsResponse{
 		Items: out,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	}
-	resp.Pagination.NextCursor = nextCursor
-	resp.Pagination.HasMore = hasMore
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -748,15 +867,35 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *OpenAPIAdapter) ListTenants(c *gin.Context) {
-	tenants, err := s.catSvc.ListTenants(c.Request.Context())
+func (s *OpenAPIAdapter) ListTenants(c *gin.Context, params api.ListTenantsParams) {
+	limit := 100
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = *params.Cursor
+	}
+
+	tenants, next, totalCount, err := s.catSvc.ListTenants(c.Request.Context(), limit, cursor)
 	if err != nil {
 		respondWithError(c, 0, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, api.TenantList{
-		Tenants: &tenants,
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
+	c.JSON(http.StatusOK, api.ListTenantsResponse{
+		Items: tenants,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	})
 }
 
@@ -801,7 +940,7 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		IdempotencyKey: params.IdempotencyKey,
 	}
 
-	logs, next, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	logs, next, totalCount, err := s.auditRepo.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
 	if err != nil {
 		respondWithError(c, 0, err)
 		return
@@ -812,12 +951,19 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		out[i] = mapAuditLog(l)
 	}
 
+	hasMore := next != ""
+	var nextCursor *string
+	if hasMore {
+		nextCursor = &next
+	}
+
 	resp := api.ListAuditLogsResponse{
 		Items: out,
-	}
-	resp.Pagination.HasMore = next != ""
-	if next != "" {
-		resp.Pagination.NextCursor = &next
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -892,7 +1038,7 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 		cursor = *params.Cursor
 	}
 
-	items, next, err := s.catSvc.List(c.Request.Context(), tenantID(c), limit, cursor)
+	items, next, totalCount, err := s.catSvc.List(c.Request.Context(), tenantID(c), limit, cursor)
 	if err != nil {
 		respondWithError(c, 0, err)
 		return
@@ -911,9 +1057,12 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 
 	resp := api.ListCategoriesResponse{
 		Items: out,
+		Pagination: api.Pagination{
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+			TotalCount: totalCount,
+		},
 	}
-	resp.Pagination.NextCursor = nextCursor
-	resp.Pagination.HasMore = hasMore
 
 	c.JSON(http.StatusOK, resp)
 }

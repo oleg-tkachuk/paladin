@@ -20,9 +20,13 @@ type ObjectsService interface {
 	Restore(ctx context.Context, tenantID string, id uuid.UUID) error
 	// Purge performs a hard delete (removes from storage)
 	Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error
+	// Bulk operations
+	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
+	BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
+	BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error)
 	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
-	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, error)
+	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
 	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (Presigned, error)
 	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (Presigned, error)
@@ -35,6 +39,7 @@ type ObjectsService interface {
 	SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]SignPartResponse, error)
 	CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (*Object, error)
 	AbortMultipart(ctx context.Context, tenantID string, uploadID string) error
+	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
 }
 
 // Operation timeouts

@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"go.uber.org/zap"
 )
@@ -115,18 +117,6 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	c.log.Info("S3 bucket created", zap.String("bucket", c.Bucket))
 
 	return nil
-}
-
-func (c *Client) Health(ctx context.Context) error {
-	if c == nil || c.s3 == nil {
-		return fmt.Errorf("s3 client not initialized")
-	}
-
-	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String(c.Bucket),
-	})
-
-	return err
 }
 
 func (c *Client) PresignPutObject(ctx context.Context, key string, contentType string, sizeBytes int64, ttl time.Duration) (domain.Presigned, error) {
@@ -351,4 +341,56 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 	}
 	status = "success"
 	return nil
+}
+
+func (c *Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	if c == nil || c.s3 == nil {
+		return domain.S3PingResult{
+			Status:  "unavailable",
+			Message: "s3 client not initialized",
+		}, nil
+	}
+
+	start := time.Now()
+	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(c.Bucket),
+	})
+	latency := time.Since(start)
+
+	result := domain.S3PingResult{
+		Bucket: c.Bucket,
+	}
+
+	if err == nil {
+		result.Status = "healthy"
+		result.HttpStatus = 200
+		result.Message = fmt.Sprintf("OK (latency: %v)", latency.Round(time.Millisecond))
+		return result, nil
+	}
+
+	// Process S3 error responses
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		result.Message = apiErr.ErrorMessage()
+		switch apiErr.ErrorCode() {
+		case "NotFound", "NoSuchBucket":
+			result.Status = "degraded"
+			result.HttpStatus = 404
+		case "Forbidden", "AccessDenied":
+			result.Status = "unavailable"
+			result.HttpStatus = 403
+		default:
+			result.Status = "unavailable"
+		}
+	} else {
+		result.Status = "unavailable"
+		result.Message = err.Error()
+	}
+
+	// Extract HTTP status code if available
+	if apiErr, ok := err.(interface{ HTTPStatusCode() int }); ok {
+		result.HttpStatus = apiErr.HTTPStatusCode()
+	}
+
+	return result, nil
 }

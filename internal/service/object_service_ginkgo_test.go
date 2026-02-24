@@ -52,6 +52,11 @@ func (m *MockObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, 
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	args := m.Called(ctx, tenantID, id)
 	return args.Bool(0), args.Error(1)
@@ -62,9 +67,9 @@ func (m *MockObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]domain.Object), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
@@ -82,14 +87,32 @@ func (m *MockObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	args := m.Called(ctx, tenantID, id)
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string) (bool, error) {
 	args := m.Called(ctx, tenantID, id, status)
 	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	args := m.Called(ctx, tenantID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ObjectStats), args.Error(1)
 }
 
 type MockCategoryRepo struct {
@@ -122,9 +145,9 @@ func (m *MockCategoryRepo) Exists(ctx context.Context, tenantID, slug string) (b
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (m *MockCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	args := m.Called(ctx, tenantID, limit, cursor)
-	return args.Get(0).([]domain.Category), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockCategoryRepo) Delete(ctx context.Context, tenantID, id string) (bool, error) {
@@ -142,12 +165,12 @@ func (m *MockCategoryRepo) ObjectCount(ctx context.Context, tenantID, id string)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockCategoryRepo) ListTenants(ctx context.Context) ([]string, error) {
-	args := m.Called(ctx)
+func (m *MockCategoryRepo) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	args := m.Called(ctx, limit, cursor)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil, "", 0, args.Error(3)
 	}
-	return args.Get(0).([]string), args.Error(1)
+	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 type MockMultipartRepo struct {
@@ -249,6 +272,11 @@ func (m *MockS3Client) HeadObject(ctx context.Context, key string) (*domain.Head
 func (m *MockS3Client) DeleteObject(ctx context.Context, key string) error {
 	args := m.Called(ctx, key)
 	return args.Error(0)
+}
+
+func (m *MockS3Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(domain.S3PingResult), args.Error(1)
 }
 
 type MockBreakerFactory struct {

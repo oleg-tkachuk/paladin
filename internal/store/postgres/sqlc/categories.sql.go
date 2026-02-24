@@ -92,7 +92,8 @@ func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string)
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, tenant_id, slug, name, description, created_at, updated_at
+SELECT id, tenant_id, slug, name, description, created_at, updated_at,
+       COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1
   AND ($3::timestamptz IS NULL OR created_at < $3)
@@ -100,15 +101,26 @@ ORDER BY created_at DESC
 LIMIT $2
 `
 
-func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ObjectCategory, error) {
+type ListCategoriesRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    string             `json:"tenant_id"`
+	Slug        string             `json:"slug"`
+	Name        string             `json:"name"`
+	Description *string            `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	TotalCount  int64              `json:"total_count"`
+}
+
+func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error) {
 	rows, err := q.db.Query(ctx, listCategories, tenantID, limit, cursor)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ObjectCategory
+	var items []ListCategoriesRow
 	for rows.Next() {
-		var i ObjectCategory
+		var i ListCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -117,6 +129,7 @@ func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int
 			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -129,24 +142,38 @@ func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT DISTINCT tenant_id
-FROM object_categories
-ORDER BY tenant_id ASC
+SELECT tenant_id,
+       first_created_at,
+       COUNT(*) OVER() AS total_count
+FROM (
+    SELECT tenant_id, MIN(created_at)::timestamptz as first_created_at
+    FROM object_categories
+    GROUP BY tenant_id
+) t
+WHERE ($2::timestamptz IS NULL OR first_created_at < $2)
+ORDER BY first_created_at DESC
+LIMIT $1
 `
 
-func (q *Queries) ListTenants(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listTenants)
+type ListTenantsRow struct {
+	TenantID       string             `json:"tenant_id"`
+	FirstCreatedAt pgtype.Timestamptz `json:"first_created_at"`
+	TotalCount     int64              `json:"total_count"`
+}
+
+func (q *Queries) ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error) {
+	rows, err := q.db.Query(ctx, listTenants, limit, cursor)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListTenantsRow
 	for rows.Next() {
-		var tenant_id string
-		if err := rows.Scan(&tenant_id); err != nil {
+		var i ListTenantsRow
+		if err := rows.Scan(&i.TenantID, &i.FirstCreatedAt, &i.TotalCount); err != nil {
 			return nil, err
 		}
-		items = append(items, tenant_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

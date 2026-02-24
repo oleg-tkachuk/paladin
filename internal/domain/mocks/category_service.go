@@ -262,7 +262,7 @@ func (_c *MockCategoryService_Get_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // List provides a mock function for the type MockCategoryService
-func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	ret := _mock.Called(ctx, tenantID, limit, cursor)
 
 	if len(ret) == 0 {
@@ -271,8 +271,9 @@ func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, lim
 
 	var r0 []domain.Category
 	var r1 string
-	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) ([]domain.Category, string, error)); ok {
+	var r2 int64
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) ([]domain.Category, string, int64, error)); ok {
 		return returnFunc(ctx, tenantID, limit, cursor)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) []domain.Category); ok {
@@ -287,12 +288,17 @@ func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, lim
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, int, string) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, int, string) int64); ok {
 		r2 = returnFunc(ctx, tenantID, limit, cursor)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(int64)
 	}
-	return r0, r1, r2
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, int, string) error); ok {
+		r3 = returnFunc(ctx, tenantID, limit, cursor)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
 }
 
 // MockCategoryService_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
@@ -337,42 +343,54 @@ func (_c *MockCategoryService_List_Call) Run(run func(ctx context.Context, tenan
 	return _c
 }
 
-func (_c *MockCategoryService_List_Call) Return(categorys []domain.Category, s string, err error) *MockCategoryService_List_Call {
-	_c.Call.Return(categorys, s, err)
+func (_c *MockCategoryService_List_Call) Return(categorys []domain.Category, s string, n int64, err error) *MockCategoryService_List_Call {
+	_c.Call.Return(categorys, s, n, err)
 	return _c
 }
 
-func (_c *MockCategoryService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error)) *MockCategoryService_List_Call {
+func (_c *MockCategoryService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error)) *MockCategoryService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ListTenants provides a mock function for the type MockCategoryService
-func (_mock *MockCategoryService) ListTenants(ctx context.Context) ([]string, error) {
-	ret := _mock.Called(ctx)
+func (_mock *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	ret := _mock.Called(ctx, limit, cursor)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListTenants")
 	}
 
 	var r0 []string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]string, error)); ok {
-		return returnFunc(ctx)
+	var r1 string
+	var r2 int64
+	var r3 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, string) ([]string, string, int64, error)); ok {
+		return returnFunc(ctx, limit, cursor)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []string); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int, string) []string); ok {
+		r0 = returnFunc(ctx, limit, cursor)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]string)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int, string) string); ok {
+		r1 = returnFunc(ctx, limit, cursor)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(string)
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func(context.Context, int, string) int64); ok {
+		r2 = returnFunc(ctx, limit, cursor)
+	} else {
+		r2 = ret.Get(2).(int64)
+	}
+	if returnFunc, ok := ret.Get(3).(func(context.Context, int, string) error); ok {
+		r3 = returnFunc(ctx, limit, cursor)
+	} else {
+		r3 = ret.Error(3)
+	}
+	return r0, r1, r2, r3
 }
 
 // MockCategoryService_ListTenants_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTenants'
@@ -382,29 +400,41 @@ type MockCategoryService_ListTenants_Call struct {
 
 // ListTenants is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockCategoryService_Expecter) ListTenants(ctx interface{}) *MockCategoryService_ListTenants_Call {
-	return &MockCategoryService_ListTenants_Call{Call: _e.mock.On("ListTenants", ctx)}
+//   - limit int
+//   - cursor string
+func (_e *MockCategoryService_Expecter) ListTenants(ctx interface{}, limit interface{}, cursor interface{}) *MockCategoryService_ListTenants_Call {
+	return &MockCategoryService_ListTenants_Call{Call: _e.mock.On("ListTenants", ctx, limit, cursor)}
 }
 
-func (_c *MockCategoryService_ListTenants_Call) Run(run func(ctx context.Context)) *MockCategoryService_ListTenants_Call {
+func (_c *MockCategoryService_ListTenants_Call) Run(run func(ctx context.Context, limit int, cursor string)) *MockCategoryService_ListTenants_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
 		run(
 			arg0,
+			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockCategoryService_ListTenants_Call) Return(strings []string, err error) *MockCategoryService_ListTenants_Call {
-	_c.Call.Return(strings, err)
+func (_c *MockCategoryService_ListTenants_Call) Return(strings []string, s string, n int64, err error) *MockCategoryService_ListTenants_Call {
+	_c.Call.Return(strings, s, n, err)
 	return _c
 }
 
-func (_c *MockCategoryService_ListTenants_Call) RunAndReturn(run func(ctx context.Context) ([]string, error)) *MockCategoryService_ListTenants_Call {
+func (_c *MockCategoryService_ListTenants_Call) RunAndReturn(run func(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)) *MockCategoryService_ListTenants_Call {
 	_c.Call.Return(run)
 	return _c
 }

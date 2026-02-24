@@ -63,7 +63,7 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 }
 
 // List delegates to underlying repo (no caching for list)
-func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	return r.repo.List(ctx, tenantID, limit, cursor)
 }
 
@@ -113,8 +113,8 @@ func (r *CachedCategoryRepo) ObjectCount(ctx context.Context, tenantID, slug str
 }
 
 // ListTenants delegates to underlying repo
-func (r *CachedCategoryRepo) ListTenants(ctx context.Context) ([]string, error) {
-	return r.repo.ListTenants(ctx)
+func (r *CachedCategoryRepo) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	return r.repo.ListTenants(ctx, limit, cursor)
 }
 
 // CacheStats returns cache statistics

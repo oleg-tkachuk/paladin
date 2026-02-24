@@ -10,7 +10,8 @@ FROM object_categories
 WHERE tenant_id = $1 AND slug = $2;
 
 -- name: ListCategories :many
-SELECT id, tenant_id, slug, name, description, created_at, updated_at
+SELECT id, tenant_id, slug, name, description, created_at, updated_at,
+       COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1
   AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
@@ -34,6 +35,14 @@ WHERE tenant_id = $1 AND category = $2
   AND status NOT IN ('hard_deleted');
 
 -- name: ListTenants :many
-SELECT DISTINCT tenant_id
-FROM object_categories
-ORDER BY tenant_id ASC;
+SELECT tenant_id,
+       first_created_at,
+       COUNT(*) OVER() AS total_count
+FROM (
+    SELECT tenant_id, MIN(created_at)::timestamptz as first_created_at
+    FROM object_categories
+    GROUP BY tenant_id
+) t
+WHERE (sqlc.narg('cursor')::timestamptz IS NULL OR first_created_at < sqlc.narg('cursor'))
+ORDER BY first_created_at DESC
+LIMIT $1;

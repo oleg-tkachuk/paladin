@@ -46,6 +46,41 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 	}, nil
 }
 
+// MapListObjectsRowToDomain converts sqlc.ListObjectsRow to domain.Object
+func MapListObjectsRowToDomain(obj sqlc.ListObjectsRow) (domain.Object, error) {
+	id, err := uuidFromPgtype(obj.ID)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("convert object id: %w", err)
+	}
+
+	labels, err := unmarshalStringMap(obj.Labels)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("unmarshal labels: %w", err)
+	}
+
+	return domain.Object{
+		ID:              id,
+		TenantID:        obj.TenantID,
+		ObjectKey:       obj.ObjectKey,
+		Bucket:          obj.Bucket,
+		ContentType:     obj.ContentType,
+		SizeBytes:       obj.SizeBytes,
+		ChecksumSHA256:  obj.ChecksumSha256,
+		Status:          domain.ObjectStatus(obj.Status),
+		Labels:          labels,
+		ExternalRef:     obj.ExternalRef,
+		StoredETag:      obj.StoredEtag,
+		StoredSizeBytes: obj.StoredSizeBytes,
+		CreatedAt:       timestampFromPgtype(obj.CreatedAt),
+		UpdatedAt:       timestampFromPgtype(obj.UpdatedAt),
+		ExpiresAt:       timestampPtrFromPgtype(obj.ExpiresAt),
+		CompletedAt:     timestampPtrFromPgtype(obj.CompletedAt),
+		DeletedAt:       timestampPtrFromPgtype(obj.DeletedAt),
+		Category:        obj.Category,
+		Subpath:         obj.Subpath,
+	}, nil
+}
+
 // MapMultipartToDomain converts sqlc.MultipartUpload to domain.Multipart
 func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
 	id, err := uuidFromPgtype(mp.ID)
@@ -216,6 +251,32 @@ func MapListAuditLogsRowToDomain(log sqlc.ListAuditLogsRow) (domain.AuditLog, er
 		ResponseTimeMS:    responseTimeMS,
 		CreatedAt:         timestampFromPgtype(log.CreatedAt),
 	}, nil
+}
+
+// MapListCategoriesRowToDomain converts sqlc.ListCategoriesRow to domain.Category
+func MapListCategoriesRowToDomain(row sqlc.ListCategoriesRow) domain.Category {
+	return domain.Category{
+		ID:          uuid.UUID(row.ID.Bytes),
+		TenantID:    row.TenantID,
+		Slug:        row.Slug,
+		Name:        row.Name,
+		Description: row.Description,
+		CreatedAt:   timestampFromPgtype(row.CreatedAt),
+		UpdatedAt:   timestampFromPgtype(row.UpdatedAt),
+	}
+}
+
+// MapCategoryToDomain converts sqlc.ObjectCategory to domain.Category
+func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
+	return domain.Category{
+		ID:          uuid.UUID(c.ID.Bytes),
+		TenantID:    c.TenantID,
+		Slug:        c.Slug,
+		Name:        c.Name,
+		Description: c.Description,
+		CreatedAt:   timestampFromPgtype(c.CreatedAt),
+		UpdatedAt:   timestampFromPgtype(c.UpdatedAt),
+	}
 }
 
 // MapAuditLogToDomain converts sqlc.AuditLog to domain.AuditLog

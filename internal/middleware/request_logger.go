@@ -10,12 +10,14 @@ import (
 )
 
 func isHealthPath(path string) bool {
-	return path == "/health/livez" || path == "/health/readyz" || path == "/health/startupz"
+	return path == "/health/livez" || path == "/health/readyz" || path == "/health/startupz" ||
+		path == "/v1/health/livez" || path == "/v1/health/readyz" || path == "/v1/health/startupz"
 }
 
 func isTechPath(path string) bool {
 	switch path {
-	case "/health/livez", "/health/readyz", "/health/startupz", "/metrics", "/version":
+	case "/health/livez", "/health/readyz", "/health/startupz", "/metrics", "/version",
+		"/v1/health/livez", "/v1/health/readyz", "/v1/health/startupz", "/v1/metrics", "/v1/version":
 		return true
 	default:
 		return false

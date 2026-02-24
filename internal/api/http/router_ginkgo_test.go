@@ -49,9 +49,9 @@ func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]domain.Object), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
@@ -64,14 +64,29 @@ func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uui
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
 	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
 	return args.Error(0)
+}
+
+func (m *MockObjectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
+	args := m.Called(ctx, tenantID, ids, idempotencyKey)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
@@ -119,6 +134,14 @@ func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string
 	return args.Error(0)
 }
 
+func (m *MockObjectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	args := m.Called(ctx, tenantID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ObjectStats), args.Error(1)
+}
+
 // MockCategoryService is a mock implementation of the CategoryService interface
 type MockCategoryService struct {
 	mock.Mock
@@ -140,9 +163,9 @@ func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*
 	return args.Get(0).(*domain.Category), args.Error(1)
 }
 
-func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	args := m.Called(ctx, tenantID, limit, cursor)
-	return args.Get(0).([]domain.Category), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string) error {
@@ -150,12 +173,12 @@ func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string)
 	return args.Error(0)
 }
 
-func (m *MockCategoryService) ListTenants(ctx context.Context) ([]string, error) {
-	args := m.Called(ctx)
+func (m *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	args := m.Called(ctx, limit, cursor)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil, "", 0, args.Error(3)
 	}
-	return args.Get(0).([]string), args.Error(1)
+	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
@@ -173,9 +196,9 @@ func (m *MockAuditLogRepository) Get(ctx context.Context, tenantID string, id uu
 	return args.Get(0).(*domain.AuditLog), args.Error(1)
 }
 
-func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, error) {
+func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
-	return args.Get(0).([]domain.AuditLog), args.String(1), args.Error(2)
+	return args.Get(0).([]domain.AuditLog), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
@@ -197,8 +220,9 @@ type MockS3Health struct {
 	mock.Mock
 }
 
-func (m *MockS3Health) Health(ctx context.Context) error {
-	return m.Called(ctx).Error(0)
+func (m *MockS3Health) Ping(ctx context.Context) (domain.S3PingResult, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(domain.S3PingResult), args.Error(1)
 }
 
 // MockBreakerFactory
@@ -323,7 +347,7 @@ var _ = Describe("Router", func() {
 		Context("when dependencies are healthy", func() {
 			BeforeEach(func() {
 				mockPing.On("Ping", mock.Anything).Return(nil)
-				mockS3.On("Health", mock.Anything).Return(nil)
+				mockS3.On("Ping", mock.Anything).Return(domain.S3PingResult{Status: "healthy"}, nil)
 				mockBreaker.On("CheckHealth").Return(map[string]string{"s3": "closed"})
 			})
 
@@ -340,7 +364,7 @@ var _ = Describe("Router", func() {
 		Context("when a dependency fails", func() {
 			BeforeEach(func() {
 				mockPing.On("Ping", mock.Anything).Return(nil)
-				mockS3.On("Health", mock.Anything).Return(http.ErrHandlerTimeout)
+				mockS3.On("Ping", mock.Anything).Return(domain.S3PingResult{Status: "unavailable"}, errors.New("timeout"))
 				mockBreaker.On("CheckHealth").Return(map[string]string{"s3": "closed"})
 			})
 
@@ -588,7 +612,7 @@ var _ = Describe("Router", func() {
 	Describe("GET /v1/objects", func() {
 		It("lists objects", func() {
 			mockSvc.On("List", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", nil)
+				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", int64(1), nil)
 
 			req, _ := http.NewRequest("GET", "/v1/objects?limit=10", nil)
 			req.Header.Set("X-Tenant-ID", "default")

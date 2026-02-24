@@ -320,6 +320,135 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /objects/bulk/delete:
+    post:
+      tags: [Objects]
+      summary: Bulk soft delete objects
+      operationId: bulkDeleteObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk delete result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/bulk/restore:
+    post:
+      tags: [Objects]
+      summary: Bulk restore soft-deleted objects
+      operationId: bulkRestoreObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk restore result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /objects/bulk/purge:
+    delete:
+      tags: [Objects]
+      summary: Bulk permanently purge objects (hard delete)
+      operationId: bulkPurgeObjects
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkActionRequest"
+      responses:
+        "200":
+          description: Bulk purge result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkActionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ops/stats:
+    get:
+      tags: [Ops]
+      summary: Get object statistics for analytics
+      operationId: getObjectStats
+      responses:
+        "200":
+          description: Object statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObjectStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ops/s3/ping:
+    get:
+      tags: [Ops]
+      summary: S3 Ping
+      description: |
+        Perform an official HEAD Bucket S3 API call to verify connectivity and bucket status.
+
+        Returns:
+        - `healthy` (200): Bucket exists and is accessible.
+        - `degraded` (404): Bucket does not exist.
+        - `unavailable` (403): Access denied.
+      operationId: pingS3
+      security: []
+      responses:
+        "200":
+          description: S3 Ping result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3PingResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /objects/{id}/meta:
     parameters:
       - $ref: "#/components/parameters/ObjectID"
@@ -938,6 +1067,9 @@ paths:
       summary: List available tenants
       description: Returns a list of all active tenant IDs discovered in the system.
       operationId: ListTenants
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       security: []
       responses:
         "200":
@@ -945,7 +1077,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TenantList"
+                $ref: "#/components/schemas/ListTenantsResponse"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1083,6 +1215,8 @@ components:
         message:
           type: string
           example: "connection timeout"
+        s3_ping:
+          $ref: "#/components/schemas/S3PingResponse"
 
     DependencyStatus:
       type: object
@@ -1313,6 +1447,86 @@ components:
         upload:
           $ref: "#/components/schemas/SignedAction"
           description: Pre-signed URL for uploading the object content
+
+    BulkActionRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example:
+            [
+              "550e8400-e29b-41d4-a716-446655440000",
+              "771e8400-e29b-41d4-a716-446655440011",
+            ]
+
+    BulkActionResponse:
+      type: object
+      properties:
+        affected_count:
+          type: integer
+          example: 2
+
+    ObjectStats:
+      type: object
+      required:
+        [
+          total_count,
+          total_size,
+          pending_count,
+          uploading_count,
+          uploaded_count,
+          complete_count,
+          soft_deleted_count,
+        ]
+      properties:
+        total_count:
+          type: integer
+          example: 100
+        total_size:
+          type: integer
+          format: int64
+          example: 104857600
+        pending_count:
+          type: integer
+          example: 5
+        uploading_count:
+          type: integer
+          example: 2
+        uploaded_count:
+          type: integer
+          example: 10
+        complete_count:
+          type: integer
+          example: 80
+        soft_deleted_count:
+          type: integer
+          example: 3
+
+    S3PingResponse:
+      type: object
+      required: [status, http_status, bucket]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unavailable, unknown]
+          description: Normalized health status
+        http_status:
+          type: integer
+          description: HTTP status code from S3 API
+          example: 200
+        message:
+          type: string
+          description: Descriptive message or error detail
+        bucket:
+          type: string
+          description: The bucket that was pinged
+        region:
+          type: string
+          description: S3 region
 
     ObjectCommon:
       type: object
@@ -1642,18 +1856,26 @@ components:
           items:
             $ref: "#/components/schemas/ObjectCommon"
         pagination:
-          type: object
-          required: [has_more]
-          properties:
-            next_cursor:
-              type: string
-              nullable: true
-              description: Cursor for next page (null if no more results)
-              example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
-            has_more:
-              type: boolean
-              description: Whether more results exist beyond this page
-              example: true
+          $ref: "#/components/schemas/Pagination"
+
+    Pagination:
+      type: object
+      required: [has_more, total_count]
+      properties:
+        next_cursor:
+          type: string
+          nullable: true
+          description: Cursor for next page (null if no more results)
+          example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
+        has_more:
+          type: boolean
+          description: Whether more results exist beyond this page
+          example: true
+        total_count:
+          type: integer
+          format: int64
+          description: Total number of records matching the filters
+          example: 1250
 
     Category:
       type: object
@@ -1705,14 +1927,7 @@ components:
           items:
             $ref: "#/components/schemas/Category"
         pagination:
-          type: object
-          required: [has_more]
-          properties:
-            next_cursor:
-              type: string
-              nullable: true
-            has_more:
-              type: boolean
+          $ref: "#/components/schemas/Pagination"
 
     VersionResponse:
       type: object
@@ -1866,14 +2081,7 @@ components:
           items:
             $ref: "#/components/schemas/AuditLog"
         pagination:
-          type: object
-          required: [has_more]
-          properties:
-            next_cursor:
-              type: string
-              nullable: true
-            has_more:
-              type: boolean
+          $ref: "#/components/schemas/Pagination"
 
     # Future Feature: Webhook Support
     # Documented for future implementation - not currently active
@@ -1967,16 +2175,17 @@ components:
           items:
             $ref: "#/components/schemas/BatchOperationResult"
 
-    TenantList:
+    ListTenantsResponse:
       type: object
-      description: List of available tenants
+      required: [items, pagination]
       properties:
-        tenants:
+        items:
           type: array
           items:
             type: string
             description: Tenant ID
-          description: Array of active tenant IDs
+        pagination:
+          $ref: "#/components/schemas/Pagination"
 
   responses:
     BadRequest:

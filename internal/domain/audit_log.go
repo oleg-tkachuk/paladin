@@ -51,7 +51,7 @@ type ListAuditLogsFilter struct {
 type AuditLogRepository interface {
 	Create(ctx context.Context, log AuditLog) error
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*AuditLog, error)
-	List(ctx context.Context, tenantID string, filter ListAuditLogsFilter, limit int, cursor string) ([]AuditLog, string, error)
+	List(ctx context.Context, tenantID string, filter ListAuditLogsFilter, limit int, cursor string) ([]AuditLog, string, int64, error)
 	// Prune deletes logs older than the given cutoff time.
 	// Returns the number of rows deleted.
 	Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error)

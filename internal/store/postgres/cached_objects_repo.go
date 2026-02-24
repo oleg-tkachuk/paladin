@@ -200,7 +200,7 @@ func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.
 }
 
 // List delegates to underlying repo (no caching for list operations)
-func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, error) {
+func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	return r.repo.List(ctx, tenantID, filter, limit, cursor)
 }
 
@@ -226,4 +226,52 @@ func (r *CachedObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid
 // CacheStats returns cache statistics
 func (r *CachedObjectsRepo) CacheStats() cache.CacheStats {
 	return r.cache.Stats()
+}
+func (r *CachedObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	rows, err := r.repo.BulkMarkSoftDeleted(ctx, tenantID, ids)
+	if err != nil {
+		return 0, err
+	}
+
+	// Invalidate cache for all affected IDs
+	for _, id := range ids {
+		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+		_ = r.cache.Delete(ctx, cacheKey)
+	}
+
+	return rows, nil
+}
+
+func (r *CachedObjectsRepo) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	rows, err := r.repo.BulkRestore(ctx, tenantID, ids)
+	if err != nil {
+		return 0, err
+	}
+
+	// Invalidate cache for all affected IDs
+	for _, id := range ids {
+		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+		_ = r.cache.Delete(ctx, cacheKey)
+	}
+
+	return rows, nil
+}
+
+func (r *CachedObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
+	rows, err := r.repo.BulkDelete(ctx, tenantID, ids)
+	if err != nil {
+		return 0, err
+	}
+
+	// Invalidate cache for all affected IDs
+	for _, id := range ids {
+		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
+		_ = r.cache.Delete(ctx, cacheKey)
+	}
+
+	return rows, nil
+}
+
+func (r *CachedObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
+	return r.repo.GetStats(ctx, tenantID)
 }

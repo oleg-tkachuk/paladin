@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // CategoryRepo implements domain.CategoryRepository backed by PostgreSQL.
@@ -50,28 +48,33 @@ func (r *CategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.
 		}
 		return nil, fmt.Errorf("get category: %w", err)
 	}
-	cat := mapSqlcCategoryToDomain(row)
+	cat := MapCategoryToDomain(row)
 	return &cat, nil
 }
 
-func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, error) {
+func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	var pgCursor pgtype.Timestamptz
 	if cursor != "" {
 		t, err := time.Parse(time.RFC3339, cursor)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid cursor: %w", err)
+			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
 		}
 		pgCursor = timestampToPgtype(t)
 	}
 
 	rows, err := r.db.Queries.ListCategories(ctx, tenantID, int32(limit+1), pgCursor)
 	if err != nil {
-		return nil, "", fmt.Errorf("list categories: %w", err)
+		return nil, "", 0, fmt.Errorf("list categories: %w", err)
+	}
+
+	var totalCount int64
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
 	}
 
 	cats := make([]domain.Category, 0, len(rows))
 	for _, row := range rows {
-		cats = append(cats, mapSqlcCategoryToDomain(row))
+		cats = append(cats, MapListCategoriesRowToDomain(row))
 	}
 
 	nextCursor := ""
@@ -80,7 +83,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cur
 		cats = cats[:limit]
 	}
 
-	return cats, nextCursor, nil
+	return cats, nextCursor, totalCount, nil
 }
 
 func (r *CategoryRepo) Delete(ctx context.Context, tenantID, slug string) (bool, error) {
@@ -107,24 +110,38 @@ func (r *CategoryRepo) ObjectCount(ctx context.Context, tenantID, slug string) (
 	return count, nil
 }
 
-func (r *CategoryRepo) ListTenants(ctx context.Context) ([]string, error) {
-	tenants, err := r.db.Queries.ListTenants(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list tenants: %w", err)
+func (r *CategoryRepo) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
+	var pgCursor pgtype.Timestamptz
+	if cursor != "" {
+		t, err := time.Parse(time.RFC3339, cursor)
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
+		}
+		pgCursor = timestampToPgtype(t)
 	}
-	return tenants, nil
-}
 
-// mapSqlcCategoryToDomain converts a sqlc.ObjectCategory row to domain.Category.
-func mapSqlcCategoryToDomain(row sqlc.ObjectCategory) domain.Category {
-	id := uuid.UUID(row.ID.Bytes)
-	return domain.Category{
-		ID:          id,
-		TenantID:    row.TenantID,
-		Slug:        row.Slug,
-		Name:        row.Name,
-		Description: row.Description,
-		CreatedAt:   timestampFromPgtype(row.CreatedAt),
-		UpdatedAt:   timestampFromPgtype(row.UpdatedAt),
+	rows, err := r.db.Queries.ListTenants(ctx, int32(limit+1), pgCursor)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
 	}
+
+	var totalCount int64
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
+	}
+
+	tenants := make([]string, 0, len(rows))
+	var lastCreatedAt time.Time
+	for _, row := range rows {
+		tenants = append(tenants, row.TenantID)
+		lastCreatedAt = timestampFromPgtype(row.FirstCreatedAt)
+	}
+
+	nextCursor := ""
+	if len(tenants) > limit {
+		nextCursor = lastCreatedAt.Format(time.RFC3339)
+		tenants = tenants[:limit]
+	}
+
+	return tenants, nextCursor, totalCount, nil
 }
