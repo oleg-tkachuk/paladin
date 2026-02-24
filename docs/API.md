@@ -151,11 +151,11 @@ stateDiagram-v2
     [*] --> pending : POST /objects
     pending --> uploading : PUT to S3 (direct)
     uploading --> uploaded : S3 upload complete
-    uploaded --> complete : POST /objects/:id/complete
-    complete --> soft_deleted : DELETE /objects/:id
-    soft_deleted --> complete : POST /objects/:id/restore
-    soft_deleted --> hard_deleted : DELETE /objects/:id/purge
-    complete --> hard_deleted : DELETE /objects/:id/purge
+    uploaded --> complete : POST /objects/{id}/complete
+    complete --> soft_deleted : DELETE /objects/{id}
+    soft_deleted --> complete : POST /objects/{id}/restore
+    soft_deleted --> hard_deleted : DELETE /objects/{id}/purge
+    complete --> hard_deleted : DELETE /objects/{id}/purge
     pending --> aborted : Reaper TTL expired
     uploading --> aborted : Reaper TTL expired
     aborted --> [*]
@@ -177,7 +177,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant S3 as S3 Storage
 
-    C->>PALADIN: POST /v1/objects\n{content_type, size_bytes, category}
+    C->>PALADIN: POST /v1/objects {content_type, size_bytes, category}
     PALADIN->>DB: INSERT object (status=pending)
     PALADIN->>S3: GeneratePresignedPutURL
     S3-->>PALADIN: presigned URL (TTL: 15m)
@@ -186,7 +186,7 @@ sequenceDiagram
     C->>S3: PUT <object_data> to upload_url
     S3-->>C: 200 OK + ETag
 
-    C->>PALADIN: POST /v1/objects/:id/complete
+    C->>PALADIN: POST /v1/objects/{id}/complete
     PALADIN->>DB: UPDATE status → complete
     PALADIN-->>C: {status: "complete"}
 ```
