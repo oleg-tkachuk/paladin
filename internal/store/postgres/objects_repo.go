@@ -250,6 +250,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		cursorTime,
 		filter.Category,
 		filter.KeyPrefix,
+		filter.SortOrder,
 	)
 	if err != nil {
 		opStatus = "error"

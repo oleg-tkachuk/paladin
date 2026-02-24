@@ -173,6 +173,14 @@ func (m *MockCategoryRepo) ListTenants(ctx context.Context, limit int, cursor st
 	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
+func (m *MockCategoryRepo) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.CategoryStats), args.Error(1)
+}
+
 type MockMultipartRepo struct {
 	mock.Mock
 }

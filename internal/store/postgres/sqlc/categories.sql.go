@@ -91,6 +91,27 @@ func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string)
 	return i, err
 }
 
+const getCategoryStats = `-- name: GetCategoryStats :one
+SELECT 
+    COUNT(*)::bigint AS total_count,
+    COALESCE(SUM(size_bytes), 0)::bigint AS total_size
+FROM objects
+WHERE tenant_id = $1 AND category = $2
+  AND status NOT IN ('hard_deleted')
+`
+
+type GetCategoryStatsRow struct {
+	TotalCount int64 `json:"total_count"`
+	TotalSize  int64 `json:"total_size"`
+}
+
+func (q *Queries) GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error) {
+	row := q.db.QueryRow(ctx, getCategoryStats, tenantID, category)
+	var i GetCategoryStatsRow
+	err := row.Scan(&i.TotalCount, &i.TotalSize)
+	return i, err
+}
+
 const listCategories = `-- name: ListCategories :many
 SELECT id, tenant_id, slug, name, description, created_at, updated_at,
        COUNT(*) OVER() AS total_count

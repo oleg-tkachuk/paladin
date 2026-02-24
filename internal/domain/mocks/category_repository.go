@@ -313,6 +313,80 @@ func (_c *MockCategoryRepository_Get_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// GetStats provides a mock function for the type MockCategoryRepository
+func (_mock *MockCategoryRepository) GetStats(ctx context.Context, tenantID string, slug string) (*domain.CategoryStats, error) {
+	ret := _mock.Called(ctx, tenantID, slug)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStats")
+	}
+
+	var r0 *domain.CategoryStats
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*domain.CategoryStats, error)); ok {
+		return returnFunc(ctx, tenantID, slug)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *domain.CategoryStats); ok {
+		r0 = returnFunc(ctx, tenantID, slug)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.CategoryStats)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, tenantID, slug)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCategoryRepository_GetStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStats'
+type MockCategoryRepository_GetStats_Call struct {
+	*mock.Call
+}
+
+// GetStats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - slug string
+func (_e *MockCategoryRepository_Expecter) GetStats(ctx interface{}, tenantID interface{}, slug interface{}) *MockCategoryRepository_GetStats_Call {
+	return &MockCategoryRepository_GetStats_Call{Call: _e.mock.On("GetStats", ctx, tenantID, slug)}
+}
+
+func (_c *MockCategoryRepository_GetStats_Call) Run(run func(ctx context.Context, tenantID string, slug string)) *MockCategoryRepository_GetStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCategoryRepository_GetStats_Call) Return(categoryStats *domain.CategoryStats, err error) *MockCategoryRepository_GetStats_Call {
+	_c.Call.Return(categoryStats, err)
+	return _c
+}
+
+func (_c *MockCategoryRepository_GetStats_Call) RunAndReturn(run func(ctx context.Context, tenantID string, slug string) (*domain.CategoryStats, error)) *MockCategoryRepository_GetStats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function for the type MockCategoryRepository
 func (_mock *MockCategoryRepository) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	ret := _mock.Called(ctx, tenantID, limit, cursor)

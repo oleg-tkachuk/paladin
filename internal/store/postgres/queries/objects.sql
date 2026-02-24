@@ -81,7 +81,9 @@ WHERE tenant_id = $1
   AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
   AND (sqlc.narg('category')::text IS NULL OR category = sqlc.narg('category'))
   AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
-ORDER BY created_at DESC
+ORDER BY
+    CASE WHEN sqlc.arg('sort_order')::text = 'asc' THEN created_at END ASC,
+    CASE WHEN sqlc.arg('sort_order')::text = 'desc' OR sqlc.arg('sort_order')::text IS NULL THEN created_at END DESC
 LIMIT $2;
 
 -- name: UpdateObjectStatus :execrows

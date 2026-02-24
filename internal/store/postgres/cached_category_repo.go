@@ -107,9 +107,30 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	return exists, nil
 }
 
-// ObjectCount delegates to underlying repo
 func (r *CachedCategoryRepo) ObjectCount(ctx context.Context, tenantID, slug string) (int64, error) {
 	return r.repo.ObjectCount(ctx, tenantID, slug)
+}
+
+// GetStats retrieves category statistics with caching
+func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	cacheKey := fmt.Sprintf("cat:stats:%s:%s", tenantID, slug)
+
+	if val, ok := r.cache.Get(ctx, cacheKey); ok {
+		if stats, ok := val.(*domain.CategoryStats); ok {
+			metrics.RecordCacheOp(ctx, "category_stats", "hit")
+			return stats, nil
+		}
+	}
+
+	metrics.RecordCacheOp(ctx, "category_stats", "miss")
+
+	stats, err := r.repo.GetStats(ctx, tenantID, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = r.cache.Set(ctx, cacheKey, stats, r.ttl)
+	return stats, nil
 }
 
 // ListTenants delegates to underlying repo

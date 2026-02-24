@@ -30,6 +30,7 @@ type Querier interface {
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
 	GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error)
+	GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error)
 	// Idempotency queries
 	GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (IdempotencyKey, error)
 	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (MultipartUpload, error)
@@ -41,7 +42,7 @@ type Querier interface {
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]MultipartUpload, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]Object, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error)
-	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error)
 	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error

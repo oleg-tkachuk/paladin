@@ -181,6 +181,14 @@ func (m *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor
 	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
+func (m *MockCategoryService) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.CategoryStats), args.Error(1)
+}
+
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
 type MockAuditLogRepository struct {
 	mock.Mock

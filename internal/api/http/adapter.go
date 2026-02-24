@@ -355,7 +355,7 @@ func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, api.ObjectStats{
+	resp := api.ObjectStats{
 		TotalCount:       int(stats.TotalCount),
 		TotalSize:        stats.TotalSize,
 		PendingCount:     int(stats.PendingCount),
@@ -363,6 +363,20 @@ func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
 		UploadedCount:    int(stats.UploadedCount),
 		CompleteCount:    int(stats.CompleteCount),
 		SoftDeletedCount: int(stats.SoftDeletedCount),
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string) {
+	stats, err := s.catSvc.GetStats(c.Request.Context(), tenantID(c), slug)
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.CategoryStats{
+		TotalCount: int(stats.TotalCount),
+		TotalSize:  stats.TotalSize,
 	})
 }
 
@@ -427,6 +441,8 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		KeyPrefix:     params.Prefix,
 		CreatedAfter:  params.CreatedAfter,
 		CreatedBefore: params.CreatedBefore,
+		SortBy:        string(safeDeref(params.Sort, api.CreatedAt)),
+		SortOrder:     string(safeDeref(params.Order, api.Desc)),
 	}
 
 	items, next, totalCount, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
@@ -1008,24 +1024,31 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 	}
 }
 
-func mapObjectCommon(rec *domain.Object) api.ObjectCommon {
-	labels := api.Labels(rec.Labels)
+func mapObjectCommon(o *domain.Object) api.ObjectCommon {
 	return api.ObjectCommon{
-		ObjectId:    rec.ID,
-		ObjectKey:   rec.ObjectKey,
-		Bucket:      rec.Bucket,
-		ContentType: rec.ContentType,
-		SizeBytes:   rec.SizeBytes,
-		Status:      mapStatus(rec.Status),
-		Category:    rec.Category,
-		Labels:      &labels,
-		ExternalRef: rec.ExternalRef,
-		CreatedAt:   rec.CreatedAt,
-		UpdatedAt:   rec.UpdatedAt,
-		CompletedAt: rec.CompletedAt,
-		DeletedAt:   rec.DeletedAt,
-		StoredEtag:  rec.StoredETag,
+		ObjectId:        o.ID,
+		ObjectKey:       o.ObjectKey,
+		Bucket:          o.Bucket,
+		ContentType:     o.ContentType,
+		SizeBytes:       o.SizeBytes,
+		Status:          mapStatus(o.Status),
+		Category:        o.Category,
+		Labels:          (*api.Labels)(&o.Labels),
+		ExternalRef:     o.ExternalRef,
+		StoredEtag:      o.StoredETag,
+		StoredSizeBytes: o.StoredSizeBytes,
+		CreatedAt:       o.CreatedAt,
+		UpdatedAt:       o.UpdatedAt,
+		CompletedAt:     o.CompletedAt,
+		DeletedAt:       o.DeletedAt,
 	}
+}
+
+func safeDeref[T any](ptr *T, def T) T {
+	if ptr == nil {
+		return def
+	}
+	return *ptr
 }
 
 func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategoriesParams) {

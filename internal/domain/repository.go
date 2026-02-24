@@ -19,9 +19,10 @@ type CategoryRepository interface {
 	Delete(ctx context.Context, tenantID, slug string) (bool, error)
 	// Exists returns true if the slug is registered for the tenant.
 	Exists(ctx context.Context, tenantID, slug string) (bool, error)
-	// ObjectCount returns the number of non-hard-deleted objects in the category.
-	// Used to guard deletion (returns 409 if count > 0).
+	// CategoryID returns the count of objects in a category.
 	ObjectCount(ctx context.Context, tenantID, slug string) (int64, error)
+	// GetStats returns detailed statistics for a category.
+	GetStats(ctx context.Context, tenantID, slug string) (*CategoryStats, error)
 	// ListTenants returns a list of all distinct tenant IDs, paginated.
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
 }
@@ -33,6 +34,8 @@ type CategoryService interface {
 	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, int64, error)
 	// Delete returns ErrConflict if any active objects still reference the category.
 	Delete(ctx context.Context, tenantID, slug string) error
+	// GetStats returns detailed statistics for a category.
+	GetStats(ctx context.Context, tenantID, slug string) (*CategoryStats, error)
 	// ListTenants returns a list of available tenants in the system.
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
 }

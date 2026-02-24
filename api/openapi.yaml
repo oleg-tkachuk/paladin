@@ -81,6 +81,22 @@ paths:
           schema:
             type: string
           description: Filter objects by key prefix (simulates folder structure)
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [created_at]
+            default: created_at
+          description: Field to sort by
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order
       responses:
         "200":
           description: Objects list
@@ -973,6 +989,33 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /categories/{slug}/stats:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Unique category slug
+
+    get:
+      tags: [Objects]
+      summary: Get category statistics
+      operationId: getCategoryStats
+      responses:
+        "200":
+          description: Category statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /admin/audit-logs:
     get:
       tags: [Ops]
@@ -1505,6 +1548,18 @@ components:
         soft_deleted_count:
           type: integer
           example: 3
+
+    CategoryStats:
+      type: object
+      required: [total_count, total_size]
+      properties:
+        total_count:
+          type: integer
+          example: 42
+        total_size:
+          type: integer
+          format: int64
+          example: 1048576
 
     S3PingResponse:
       type: object
