@@ -32,3 +32,8 @@ SELECT COUNT(*)::bigint AS count
 FROM objects
 WHERE tenant_id = $1 AND category = $2
   AND status NOT IN ('hard_deleted');
+
+-- name: ListTenants :many
+SELECT DISTINCT tenant_id
+FROM object_categories
+ORDER BY tenant_id ASC;

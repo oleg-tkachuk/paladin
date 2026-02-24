@@ -38,6 +38,7 @@ type Querier interface {
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]Object, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error)
 	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string) ([]Object, error)
+	ListTenants(ctx context.Context) ([]string, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
 	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)

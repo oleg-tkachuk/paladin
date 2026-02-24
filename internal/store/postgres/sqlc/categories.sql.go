@@ -127,3 +127,29 @@ func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int
 	}
 	return items, nil
 }
+
+const listTenants = `-- name: ListTenants :many
+SELECT DISTINCT tenant_id
+FROM object_categories
+ORDER BY tenant_id ASC
+`
+
+func (q *Queries) ListTenants(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tenant_id string
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

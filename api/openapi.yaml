@@ -932,6 +932,23 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /tenants:
+    get:
+      tags: [Tenants]
+      summary: List available tenants
+      description: Returns a list of all active tenant IDs discovered in the system.
+      operationId: ListTenants
+      security: []
+      responses:
+        "200":
+          description: Successfully retrieved tenants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantList"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   headers:
     X-RateLimit-Limit:
@@ -1949,6 +1966,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BatchOperationResult"
+
+    TenantList:
+      type: object
+      description: List of available tenants
+      properties:
+        tenants:
+          type: array
+          items:
+            type: string
+            description: Tenant ID
+          description: Array of active tenant IDs
 
   responses:
     BadRequest:

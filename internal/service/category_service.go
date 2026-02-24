@@ -54,3 +54,7 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 	_, err = s.repo.Delete(ctx, tenantID, slug)
 	return err
 }
+
+func (s *categoryService) ListTenants(ctx context.Context) ([]string, error) {
+	return s.repo.ListTenants(ctx)
+}

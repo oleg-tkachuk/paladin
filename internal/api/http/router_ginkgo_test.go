@@ -150,6 +150,14 @@ func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string)
 	return args.Error(0)
 }
 
+func (m *MockCategoryService) ListTenants(ctx context.Context) ([]string, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
 type MockAuditLogRepository struct {
 	mock.Mock

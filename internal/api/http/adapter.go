@@ -748,6 +748,18 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (s *OpenAPIAdapter) ListTenants(c *gin.Context) {
+	tenants, err := s.catSvc.ListTenants(c.Request.Context())
+	if err != nil {
+		respondWithError(c, 0, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, api.TenantList{
+		Tenants: &tenants,
+	})
+}
+
 func mapSignedAction(p domain.Presigned) api.SignedAction {
 	return api.SignedAction{
 		Url:       p.URL,

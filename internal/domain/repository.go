@@ -22,6 +22,8 @@ type CategoryRepository interface {
 	// ObjectCount returns the number of non-hard-deleted objects in the category.
 	// Used to guard deletion (returns 409 if count > 0).
 	ObjectCount(ctx context.Context, tenantID, slug string) (int64, error)
+	// ListTenants returns a list of all distinct tenant IDs that have created categories.
+	ListTenants(ctx context.Context) ([]string, error)
 }
 
 // CategoryService defines the business logic for managing categories.
@@ -31,6 +33,8 @@ type CategoryService interface {
 	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, error)
 	// Delete returns ErrConflict if any active objects still reference the category.
 	Delete(ctx context.Context, tenantID, slug string) error
+	// ListTenants returns a list of available tenants in the system.
+	ListTenants(ctx context.Context) ([]string, error)
 }
 
 // CreateCategoryRequest carries validated input for CategoryService.Create.

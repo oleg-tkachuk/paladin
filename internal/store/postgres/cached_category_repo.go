@@ -112,6 +112,11 @@ func (r *CachedCategoryRepo) ObjectCount(ctx context.Context, tenantID, slug str
 	return r.repo.ObjectCount(ctx, tenantID, slug)
 }
 
+// ListTenants delegates to underlying repo
+func (r *CachedCategoryRepo) ListTenants(ctx context.Context) ([]string, error) {
+	return r.repo.ListTenants(ctx)
+}
+
 // CacheStats returns cache statistics
 func (r *CachedCategoryRepo) CacheStats() cache.CacheStats {
 	return r.cache.Stats()

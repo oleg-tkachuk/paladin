@@ -107,6 +107,14 @@ func (r *CategoryRepo) ObjectCount(ctx context.Context, tenantID, slug string) (
 	return count, nil
 }
 
+func (r *CategoryRepo) ListTenants(ctx context.Context) ([]string, error) {
+	tenants, err := r.db.Queries.ListTenants(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants: %w", err)
+	}
+	return tenants, nil
+}
+
 // mapSqlcCategoryToDomain converts a sqlc.ObjectCategory row to domain.Category.
 func mapSqlcCategoryToDomain(row sqlc.ObjectCategory) domain.Category {
 	id := uuid.UUID(row.ID.Bytes)
