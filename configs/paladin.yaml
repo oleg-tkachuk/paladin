@@ -9,7 +9,7 @@ logger:
   format: json # json, console
   development: false
   disable_caller: false
-  disable_stacktrace: false
+  disable_stacktrace: true
   sampling:
     enabled: true
     initial: 100
