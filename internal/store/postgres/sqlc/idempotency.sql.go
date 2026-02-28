@@ -23,26 +23,28 @@ func (q *Queries) DeleteIdempotencyKey(ctx context.Context, tenantID string, ide
 
 const getIdempotencyKey = `-- name: GetIdempotencyKey :one
 
-SELECT 
-    tenant_id, idempotency_key, request_path, request_hash, 
-    response_code, response_body, created_at, expires_at
+SELECT idempotency_keys.tenant_id, idempotency_keys.idempotency_key, idempotency_keys.request_path, idempotency_keys.request_hash, idempotency_keys.response_code, idempotency_keys.response_body, idempotency_keys.created_at, idempotency_keys.expires_at
 FROM idempotency_keys
 WHERE tenant_id = $1 AND idempotency_key = $2
 `
 
+type GetIdempotencyKeyRow struct {
+	IdempotencyKey IdempotencyKey `json:"idempotency_key"`
+}
+
 // Idempotency queries
-func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (IdempotencyKey, error) {
+func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (GetIdempotencyKeyRow, error) {
 	row := q.db.QueryRow(ctx, getIdempotencyKey, tenantID, idempotencyKey)
-	var i IdempotencyKey
+	var i GetIdempotencyKeyRow
 	err := row.Scan(
-		&i.TenantID,
-		&i.IdempotencyKey,
-		&i.RequestPath,
-		&i.RequestHash,
-		&i.ResponseCode,
-		&i.ResponseBody,
-		&i.CreatedAt,
-		&i.ExpiresAt,
+		&i.IdempotencyKey.TenantID,
+		&i.IdempotencyKey.IdempotencyKey,
+		&i.IdempotencyKey.RequestPath,
+		&i.IdempotencyKey.RequestHash,
+		&i.IdempotencyKey.ResponseCode,
+		&i.IdempotencyKey.ResponseBody,
+		&i.IdempotencyKey.CreatedAt,
+		&i.IdempotencyKey.ExpiresAt,
 	)
 	return i, err
 }

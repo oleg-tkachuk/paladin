@@ -43,10 +43,11 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 		return nil, nil, err
 	}
 	policy := wire.ProvidePolicy(config)
+	uoWFactory := wire.ProvideUoWFactory(db)
 	idempotencyRepository := wire.ProvideIdempotencyRepo(db)
 	categoryRepository := wire.ProvideCategoryRepo(db, config)
 	factory := wire.ProvideBreakerFactory(config)
-	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, idempotencyRepository, categoryRepository, factory, config)
+	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config)
 	server := wire.ProvideGRPCServer(config, logger, objectsService)
 	categoryService := wire.ProvideCategoryService(categoryRepository)
 	auditLogRepository := wire.ProvideAuditRepo(db)

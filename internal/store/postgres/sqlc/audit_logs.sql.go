@@ -51,71 +51,44 @@ func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID s
 }
 
 const getAuditLog = `-- name: GetAuditLog :one
-SELECT 
-    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
-    request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at
 FROM audit_logs
 WHERE tenant_id = $1 AND id = $2
 `
 
 type GetAuditLogRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          string             `json:"tenant_id"`
-	RequestID         *string            `json:"request_id"`
-	IdempotencyKey    *string            `json:"idempotency_key"`
-	ActorSubject      *string            `json:"actor_subject"`
-	ActorType         string             `json:"actor_type"`
-	ClientIp          string             `json:"client_ip"`
-	UserAgent         *string            `json:"user_agent"`
-	Method            string             `json:"method"`
-	Path              string             `json:"path"`
-	QueryParams       []byte             `json:"query_params"`
-	RequestHeaders    []byte             `json:"request_headers"`
-	RequestBodySha256 *string            `json:"request_body_sha256"`
-	RequestSizeBytes  *int64             `json:"request_size_bytes"`
-	HttpStatus        *int32             `json:"http_status"`
-	ResponseCode      *string            `json:"response_code"`
-	ResponseStatus    *string            `json:"response_status"`
-	ResponseTimeMs    *int32             `json:"response_time_ms"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	AuditLog AuditLog `json:"audit_log"`
 }
 
 func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error) {
 	row := q.db.QueryRow(ctx, getAuditLog, tenantID, iD)
 	var i GetAuditLogRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.RequestID,
-		&i.IdempotencyKey,
-		&i.ActorSubject,
-		&i.ActorType,
-		&i.ClientIp,
-		&i.UserAgent,
-		&i.Method,
-		&i.Path,
-		&i.QueryParams,
-		&i.RequestHeaders,
-		&i.RequestBodySha256,
-		&i.RequestSizeBytes,
-		&i.HttpStatus,
-		&i.ResponseCode,
-		&i.ResponseStatus,
-		&i.ResponseTimeMs,
-		&i.CreatedAt,
+		&i.AuditLog.ID,
+		&i.AuditLog.TenantID,
+		&i.AuditLog.RequestID,
+		&i.AuditLog.IdempotencyKey,
+		&i.AuditLog.ActorSubject,
+		&i.AuditLog.ActorType,
+		&i.AuditLog.ClientIp,
+		&i.AuditLog.UserAgent,
+		&i.AuditLog.Method,
+		&i.AuditLog.Path,
+		&i.AuditLog.QueryParams,
+		&i.AuditLog.RequestHeaders,
+		&i.AuditLog.RequestBodySha256,
+		&i.AuditLog.RequestSizeBytes,
+		&i.AuditLog.HttpStatus,
+		&i.AuditLog.ResponseCode,
+		&i.AuditLog.ResponseStatus,
+		&i.AuditLog.ResponseTimeMs,
+		&i.AuditLog.CreatedAt,
 	)
 	return i, err
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT 
-    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
-    request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at,
-    COUNT(*) OVER() AS total_count
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, COUNT(*) OVER() AS total_count
 FROM audit_logs
 WHERE tenant_id = $1
   AND ($3::timestamptz IS NULL OR created_at >= $3)
@@ -132,26 +105,8 @@ LIMIT $2
 `
 
 type ListAuditLogsRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          string             `json:"tenant_id"`
-	RequestID         *string            `json:"request_id"`
-	IdempotencyKey    *string            `json:"idempotency_key"`
-	ActorSubject      *string            `json:"actor_subject"`
-	ActorType         string             `json:"actor_type"`
-	ClientIp          string             `json:"client_ip"`
-	UserAgent         *string            `json:"user_agent"`
-	Method            string             `json:"method"`
-	Path              string             `json:"path"`
-	QueryParams       []byte             `json:"query_params"`
-	RequestHeaders    []byte             `json:"request_headers"`
-	RequestBodySha256 *string            `json:"request_body_sha256"`
-	RequestSizeBytes  *int64             `json:"request_size_bytes"`
-	HttpStatus        *int32             `json:"http_status"`
-	ResponseCode      *string            `json:"response_code"`
-	ResponseStatus    *string            `json:"response_status"`
-	ResponseTimeMs    *int32             `json:"response_time_ms"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	TotalCount        int64              `json:"total_count"`
+	AuditLog   AuditLog `json:"audit_log"`
+	TotalCount int64    `json:"total_count"`
 }
 
 func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
@@ -176,25 +131,25 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 	for rows.Next() {
 		var i ListAuditLogsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.RequestID,
-			&i.IdempotencyKey,
-			&i.ActorSubject,
-			&i.ActorType,
-			&i.ClientIp,
-			&i.UserAgent,
-			&i.Method,
-			&i.Path,
-			&i.QueryParams,
-			&i.RequestHeaders,
-			&i.RequestBodySha256,
-			&i.RequestSizeBytes,
-			&i.HttpStatus,
-			&i.ResponseCode,
-			&i.ResponseStatus,
-			&i.ResponseTimeMs,
-			&i.CreatedAt,
+			&i.AuditLog.ID,
+			&i.AuditLog.TenantID,
+			&i.AuditLog.RequestID,
+			&i.AuditLog.IdempotencyKey,
+			&i.AuditLog.ActorSubject,
+			&i.AuditLog.ActorType,
+			&i.AuditLog.ClientIp,
+			&i.AuditLog.UserAgent,
+			&i.AuditLog.Method,
+			&i.AuditLog.Path,
+			&i.AuditLog.QueryParams,
+			&i.AuditLog.RequestHeaders,
+			&i.AuditLog.RequestBodySha256,
+			&i.AuditLog.RequestSizeBytes,
+			&i.AuditLog.HttpStatus,
+			&i.AuditLog.ResponseCode,
+			&i.AuditLog.ResponseStatus,
+			&i.AuditLog.ResponseTimeMs,
+			&i.AuditLog.CreatedAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

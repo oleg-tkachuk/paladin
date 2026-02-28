@@ -9,9 +9,7 @@ INSERT INTO multipart_uploads (
 );
 
 -- name: GetMultipartByUploadID :one
-SELECT 
-    id, tenant_id, object_id, upload_id, bucket, object_key, 
-    content_type, part_size_bytes, status, created_at, updated_at, expires_at
+SELECT sqlc.embed(multipart_uploads)
 FROM multipart_uploads
 WHERE tenant_id = $1 AND upload_id = $2;
 
@@ -24,7 +22,7 @@ DO UPDATE SET
     size_bytes = EXCLUDED.size_bytes;
 
 -- name: ListMultipartParts :many
-SELECT multipart_id, part_number, etag, size_bytes, created_at
+SELECT sqlc.embed(multipart_parts)
 FROM multipart_parts
 WHERE multipart_id = $1
 ORDER BY part_number ASC;
@@ -50,9 +48,7 @@ SET status = 'active', updated_at = now()
 WHERE id = $1 AND tenant_id = $2;
 
 -- name: ListExpiredMultiparts :many
-SELECT 
-    id, tenant_id, object_id, upload_id, bucket, object_key, 
-    content_type, part_size_bytes, status, created_at, updated_at, expires_at
+SELECT sqlc.embed(multipart_uploads)
 FROM multipart_uploads
 WHERE status = 'initiated' AND expires_at < NOW()
 LIMIT $1;

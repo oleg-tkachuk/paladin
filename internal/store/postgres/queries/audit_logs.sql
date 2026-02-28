@@ -11,21 +11,12 @@ INSERT INTO audit_logs (
 );
 
 -- name: GetAuditLog :one
-SELECT 
-    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
-    request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at
+SELECT sqlc.embed(audit_logs)
 FROM audit_logs
 WHERE tenant_id = $1 AND id = $2;
 
 -- name: ListAuditLogs :many
-SELECT 
-    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
-    client_ip::text as client_ip, user_agent, method, path, query_params, request_headers,
-    request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at,
-    COUNT(*) OVER() AS total_count
+SELECT sqlc.embed(audit_logs), COUNT(*) OVER() AS total_count
 FROM audit_logs
 WHERE tenant_id = $1
   AND (sqlc.narg('from')::timestamptz IS NULL OR created_at >= sqlc.narg('from'))

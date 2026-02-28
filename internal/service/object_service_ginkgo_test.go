@@ -337,12 +337,64 @@ func (m *MockPolicy) Validate(contentType string, sizeBytes int64) error {
 	return args.Error(0)
 }
 
+type MockUoWFactory struct {
+	mock.Mock
+}
+
+func (m *MockUoWFactory) Begin(ctx context.Context) (domain.UnitOfWork, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(domain.UnitOfWork), args.Error(1)
+}
+
+type MockUnitOfWork struct {
+	mock.Mock
+}
+
+func (m *MockUnitOfWork) Objects() domain.ObjectsRepository {
+	args := m.Called()
+	return args.Get(0).(domain.ObjectsRepository)
+}
+
+func (m *MockUnitOfWork) Multipart() domain.MultipartRepository {
+	args := m.Called()
+	return args.Get(0).(domain.MultipartRepository)
+}
+
+func (m *MockUnitOfWork) Idempotency() domain.IdempotencyRepository {
+	args := m.Called()
+	return args.Get(0).(domain.IdempotencyRepository)
+}
+
+func (m *MockUnitOfWork) AuditLogs() domain.AuditLogRepository {
+	args := m.Called()
+	return args.Get(0).(domain.AuditLogRepository)
+}
+
+func (m *MockUnitOfWork) Categories() domain.CategoryRepository {
+	args := m.Called()
+	return args.Get(0).(domain.CategoryRepository)
+}
+
+func (m *MockUnitOfWork) Commit(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *MockUnitOfWork) Rollback(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 var _ = Describe("ObjectsService", func() {
 	var (
 		mockRepo    *MockObjectsRepo
 		mockMPRepo  *MockMultipartRepo
 		mockS3      *MockS3Client
 		mockPolicy  *MockPolicy
+		mockUoWf    *MockUoWFactory
 		mockCatRepo *MockCategoryRepo
 		mockBreaker *MockBreakerFactory
 		svc         domain.ObjectsService
@@ -354,6 +406,7 @@ var _ = Describe("ObjectsService", func() {
 		mockMPRepo = new(MockMultipartRepo)
 		mockS3 = new(MockS3Client)
 		mockPolicy = new(MockPolicy)
+		mockUoWf = new(MockUoWFactory)
 		mockCatRepo = new(MockCategoryRepo)
 		mockBreaker = new(MockBreakerFactory)
 
@@ -371,6 +424,7 @@ var _ = Describe("ObjectsService", func() {
 			mockMPRepo,
 			mockS3,
 			mockPolicy,
+			mockUoWf,
 			nil, // idempotency repo
 			mockCatRepo,
 			mockBreaker,
@@ -439,7 +493,7 @@ var _ = Describe("ObjectsService", func() {
 			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
 
 			// Re-create service with mockIdem and mockPolicy
-			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
+			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockUoWf, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
 				time.Second, time.Second, time.Second, time.Second, time.Hour)
 
 			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, 0, &key)
@@ -486,6 +540,14 @@ var _ = Describe("ObjectsService", func() {
 
 			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockMPRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+
+			mockUoW := new(MockUnitOfWork)
+			mockUoW.On("Objects").Return(mockRepo)
+			mockUoW.On("Multipart").Return(mockMPRepo)
+			mockUoW.On("Commit", mock.Anything).Return(nil)
+			mockUoW.On("Rollback", mock.Anything).Return(nil)
+			mockUoWf.On("Begin", mock.Anything).Return(mockUoW, nil)
+
 			mockS3.On("BucketName").Return("test-bucket")
 			mockS3.On("CreateMultipartUpload", mock.Anything, mock.Anything, contentType).Return(domain.MultipartInit{
 				UploadID: "test-upload-id",
@@ -539,8 +601,16 @@ var _ = Describe("ObjectsService", func() {
 				SizeBytes: 100,
 			}, nil)
 			mockRepo.On("MarkComplete", mock.Anything, tenantID, objID, "etag1", int64(100)).Return(true, nil)
-			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
 			mockMPRepo.On("MarkCompleted", mock.Anything, tenantID, uploadID).Return(nil)
+
+			mockUoW := new(MockUnitOfWork)
+			mockUoW.On("Objects").Return(mockRepo)
+			mockUoW.On("Multipart").Return(mockMPRepo)
+			mockUoW.On("Commit", mock.Anything).Return(nil)
+			mockUoW.On("Rollback", mock.Anything).Return(nil)
+			mockUoWf.On("Begin", mock.Anything).Return(mockUoW, nil)
+
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
 
 			rec, err := svc.CompleteMultipart(ctx, tenantID, uploadID, parts)
 

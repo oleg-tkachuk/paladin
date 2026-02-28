@@ -7,6 +7,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// UnitOfWork groups repositories for cross-entity transactional consistency.
+type UnitOfWork interface {
+	Objects() ObjectsRepository
+	Multipart() MultipartRepository
+	Idempotency() IdempotencyRepository
+	AuditLogs() AuditLogRepository
+	Categories() CategoryRepository
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
+}
+
+// UoWFactory describes how to start a new UnitOfWork.
+type UoWFactory interface {
+	Begin(ctx context.Context) (UnitOfWork, error)
+}
+
 // CategoryRepository manages the lifecycle of tenant-scoped object categories.
 type CategoryRepository interface {
 	// Create persists a new category. Returns error on duplicate slug.

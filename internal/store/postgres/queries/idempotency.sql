@@ -1,9 +1,7 @@
 -- Idempotency queries
 
 -- name: GetIdempotencyKey :one
-SELECT 
-    tenant_id, idempotency_key, request_path, request_hash, 
-    response_code, response_body, created_at, expires_at
+SELECT sqlc.embed(idempotency_keys)
 FROM idempotency_keys
 WHERE tenant_id = $1 AND idempotency_key = $2;
 

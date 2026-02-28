@@ -56,6 +56,7 @@ var ProviderSet = wire.NewSet(
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideBreakerFactory,
+	ProvideUoWFactory,
 	ProvideCategoryService,
 	ProvideObjectsService,
 	ProvideHealthService,
@@ -177,11 +178,16 @@ func ProvideCategoryService(catRepo domain.CategoryRepository) domain.CategorySe
 	return service.NewCategoryService(catRepo)
 }
 
+func ProvideUoWFactory(db *postgres.DB) domain.UoWFactory {
+	return postgres.NewUoWFactory(db)
+}
+
 func ProvideObjectsService(
 	objRepo domain.ObjectsRepository,
 	mpRepo domain.MultipartRepository,
 	s3c *s3.Client,
 	policy domain.Policy,
+	uowf domain.UoWFactory,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
 	brk breaker.Factory,
@@ -192,6 +198,7 @@ func ProvideObjectsService(
 		mpRepo,
 		s3c,
 		policy,
+		uowf,
 		idemRepo,
 		catRepo,
 		brk,

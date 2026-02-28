@@ -26,6 +26,7 @@ type objectsService struct {
 	multiRepo domain.MultipartRepository
 	s3        domain.StorageClient
 	policy    domain.Policy
+	uowf      domain.UoWFactory
 	idemRepo  domain.IdempotencyRepository
 	catRepo   domain.CategoryRepository
 	brk       breaker.Factory
@@ -44,6 +45,7 @@ func NewObjectsService(
 	multiRepo domain.MultipartRepository,
 	s3Client domain.StorageClient,
 	policy domain.Policy,
+	uowf domain.UoWFactory,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
 	brk breaker.Factory,
@@ -56,6 +58,7 @@ func NewObjectsService(
 		multiRepo:               multiRepo,
 		s3:                      s3Client,
 		policy:                  policy,
+		uowf:                    uowf,
 		idemRepo:                idemRepo,
 		catRepo:                 catRepo,
 		brk:                     brk,

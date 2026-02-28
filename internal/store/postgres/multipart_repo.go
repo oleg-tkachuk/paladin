@@ -54,7 +54,7 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapMultipartToDomain(mp)
+	result, err := MapMultipartToDomain(mp.MultipartUpload)
 	if err != nil {
 		status = "error"
 		return nil, err
@@ -91,7 +91,7 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 
 	out := make([]domain.MultipartPart, 0, len(rows))
 	for _, row := range rows {
-		part, err := MapMultipartPartToDomain(row)
+		part, err := MapMultipartPartToDomain(row.MultipartPart)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("map multipart part: %w", err)
@@ -185,7 +185,7 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 
 	out := make([]domain.Multipart, 0, len(rows))
 	for _, row := range rows {
-		mp, err := MapMultipartToDomain(row)
+		mp, err := MapMultipartToDomain(row.MultipartUpload)
 		if err != nil {
 			status = "error"
 			return nil, fmt.Errorf("map multipart: %w", err)
