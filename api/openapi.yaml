@@ -33,6 +33,9 @@ info:
 servers:
   - url: /v1
 
+security:
+  - BearerAuth: []
+
 tags:
   - name: Objects
   - name: Multipart
@@ -40,6 +43,9 @@ tags:
 
 paths:
   /objects:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Objects]
       summary: List objects
@@ -108,6 +114,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
@@ -141,6 +149,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
@@ -152,6 +162,8 @@ paths:
 
   /objects/{id}:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     get:
@@ -169,6 +181,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -196,6 +210,8 @@ paths:
                 type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -234,6 +250,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -262,6 +280,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -273,6 +293,8 @@ paths:
 
   /objects/{id}/restore:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     post:
@@ -295,6 +317,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -306,6 +330,8 @@ paths:
 
   /objects/{id}/purge:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     delete:
@@ -327,6 +353,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -337,6 +365,9 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /objects/bulk/delete:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     post:
       tags: [Objects]
       summary: Bulk soft delete objects
@@ -360,12 +391,17 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /objects/bulk/restore:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     post:
       tags: [Objects]
       summary: Bulk restore soft-deleted objects
@@ -389,12 +425,17 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /objects/bulk/purge:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     delete:
       tags: [Objects]
       summary: Bulk permanently purge objects (hard delete)
@@ -418,12 +459,17 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /ops/stats:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Get object statistics for analytics
@@ -437,12 +483,17 @@ paths:
                 $ref: "#/components/schemas/ObjectStats"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /ops/s3/ping:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: S3 Ping
@@ -467,6 +518,8 @@ paths:
 
   /objects/{id}/meta:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     get:
@@ -484,6 +537,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -512,6 +567,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -525,6 +582,8 @@ paths:
 
   /objects/{id}/sign-upload:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     post:
@@ -548,6 +607,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -561,6 +622,8 @@ paths:
 
   /objects/{id}/sign-download:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     post:
@@ -584,6 +647,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -597,6 +662,8 @@ paths:
 
   /objects/{id}/complete:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/ObjectID"
 
     post:
@@ -620,6 +687,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -632,6 +701,9 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /multipart:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     post:
       tags: [Multipart]
       summary: Initiate multipart upload
@@ -660,6 +732,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
@@ -671,6 +745,8 @@ paths:
 
   /multipart/{upload_id}:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/UploadID"
 
     get:
@@ -688,6 +764,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -697,6 +775,8 @@ paths:
 
   /multipart/{upload_id}/parts/{part_number}/sign:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/UploadID"
       - $ref: "#/components/parameters/PartNumber"
 
@@ -715,6 +795,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -728,6 +810,8 @@ paths:
 
   /multipart/{upload_id}/parts/sign:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/UploadID"
 
     post:
@@ -751,6 +835,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -764,6 +850,8 @@ paths:
 
   /multipart/{upload_id}/complete:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/UploadID"
 
     post:
@@ -787,6 +875,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -800,6 +890,8 @@ paths:
 
   /multipart/{upload_id}/abort:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - $ref: "#/components/parameters/UploadID"
 
     post:
@@ -817,6 +909,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -829,6 +923,9 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /health/livez:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Liveness probe
@@ -843,6 +940,9 @@ paths:
                 $ref: "#/components/schemas/HealthResponse"
 
   /health/readyz:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Readiness probe
@@ -863,6 +963,9 @@ paths:
                 $ref: "#/components/schemas/HealthResponse"
 
   /health/startupz:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Startup probe
@@ -883,6 +986,9 @@ paths:
                 $ref: "#/components/schemas/HealthResponse"
 
   /version:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Build/version info
@@ -897,6 +1003,9 @@ paths:
                 $ref: "#/components/schemas/VersionResponse"
 
   /admin/config:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: Get runtime configuration (redacted)
@@ -913,12 +1022,17 @@ paths:
                 $ref: "#/components/schemas/ConfigResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /categories:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Objects]
       summary: List categories
@@ -935,6 +1049,8 @@ paths:
                 $ref: "#/components/schemas/ListCategoriesResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -959,6 +1075,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "409":
           $ref: "#/components/responses/Conflict"
         "500":
@@ -966,6 +1084,8 @@ paths:
 
   /categories/{slug}:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - name: slug
         in: path
         required: true
@@ -984,6 +1104,8 @@ paths:
           description: Category deleted
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "409":
           $ref: "#/components/responses/Conflict"
         "500":
@@ -991,6 +1113,8 @@ paths:
 
   /categories/{slug}/stats:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - name: slug
         in: path
         required: true
@@ -1011,12 +1135,17 @@ paths:
                 $ref: "#/components/schemas/CategoryStats"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /admin/audit-logs:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Ops]
       summary: List audit logs
@@ -1075,11 +1204,15 @@ paths:
                 $ref: "#/components/schemas/ListAuditLogsResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /admin/audit-logs/{id}:
     parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
       - name: id
         in: path
         required: true
@@ -1099,12 +1232,17 @@ paths:
                 $ref: "#/components/schemas/AuditLog"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /tenants:
+    parameters:
+      - $ref: "#/components/parameters/XRequestID"
+      - $ref: "#/components/parameters/Traceparent"
     get:
       tags: [Tenants]
       summary: List available tenants
@@ -1125,6 +1263,11 @@ paths:
           $ref: "#/components/responses/InternalError"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   headers:
     X-RateLimit-Limit:
       description: Maximum number of requests allowed in the current time window
@@ -1158,6 +1301,23 @@ components:
         example: "1.1.0"
 
   parameters:
+    XRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Unique correlation ID for the request
+      schema:
+        type: string
+        format: uuid
+
+    Traceparent:
+      name: Traceparent
+      in: header
+      required: false
+      description: W3C Trace Context header
+      schema:
+        type: string
+
     ObjectID:
       name: id
       in: path
@@ -1311,23 +1471,10 @@ components:
                 user: { type: string }
                 dbname: { type: string }
                 ssl_mode: { type: string }
-                pool:
-                  type: object
-                  properties:
-                    max_conns: { type: integer }
-                    min_conns: { type: integer }
-                    max_conn_lifetime: { type: string }
-                    max_conn_idle_time: { type: string }
-                timeouts:
-                  type: object
-                  properties:
-                    connect: { type: string }
-                    statement: { type: string }
             s3:
               type: object
               properties:
                 bucket: { type: string }
-                region: { type: string }
                 endpoint: { type: string }
                 public_endpoint: { type: string }
                 force_path_style: { type: boolean }
@@ -1601,6 +1748,7 @@ components:
         object_id:
           type: string
           format: uuid
+          readOnly: true
         object_key:
           type: string
         bucket:
@@ -1621,23 +1769,29 @@ components:
           type: string
         stored_etag:
           type: string
+          readOnly: true
           description: Populated after successful commit/complete.
         stored_size_bytes:
           type: integer
           format: int64
+          readOnly: true
           description: Populated after successful commit/complete.
         created_at:
           type: string
           format: date-time
+          readOnly: true
         updated_at:
           type: string
           format: date-time
+          readOnly: true
         completed_at:
           type: string
           format: date-time
+          readOnly: true
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
 
     GetObjectResponse:
       allOf:
@@ -1662,8 +1816,8 @@ components:
       properties:
         status:
           $ref: "#/components/schemas/ObjectStatus"
-          description: New status for the object (e.g. `soft_deleted`)
-          enum: [soft_deleted] # Currently only soft_delete transition is exposed via this endpoint
+          description: New status for the object (non-delete transitions e.g. `aborted`, `error`)
+          enum: [aborted, error]
 
     SignObjectUploadRequest:
       type: object
@@ -1727,6 +1881,7 @@ components:
         completed_at:
           type: string
           format: date-time
+          readOnly: true
 
     InitiateMultipartRequest:
       type: object
@@ -1769,6 +1924,7 @@ components:
         object_id:
           type: string
           format: uuid
+          readOnly: true
         object_key:
           type: string
         bucket:
@@ -1805,6 +1961,7 @@ components:
         object_id:
           type: string
           format: uuid
+          readOnly: true
         object_key:
           type: string
         bucket:
@@ -1817,9 +1974,11 @@ components:
         created_at:
           type: string
           format: date-time
+          readOnly: true
         updated_at:
           type: string
           format: date-time
+          readOnly: true
 
     SignPartResponse:
       type: object
@@ -1894,6 +2053,7 @@ components:
         completed_at:
           type: string
           format: date-time
+          readOnly: true
 
     AbortMultipartResponse:
       type: object
@@ -1939,6 +2099,7 @@ components:
         id:
           type: string
           format: uuid
+          readOnly: true
         tenant_id:
           type: string
         slug:
@@ -1952,9 +2113,11 @@ components:
         created_at:
           type: string
           format: date-time
+          readOnly: true
         updated_at:
           type: string
           format: date-time
+          readOnly: true
 
     CreateCategoryRequest:
       type: object
@@ -2126,6 +2289,7 @@ components:
         created_at:
           type: string
           format: date-time
+          readOnly: true
 
     ListAuditLogsResponse:
       type: object
@@ -2243,6 +2407,17 @@ components:
           $ref: "#/components/schemas/Pagination"
 
   responses:
+    TooManyRequests:
+      description: Rate limit exceeded (Too Many Requests)
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
     BadRequest:
       description: Bad Request
       content:

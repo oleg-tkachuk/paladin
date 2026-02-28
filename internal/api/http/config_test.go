@@ -112,7 +112,6 @@ func TestGetAdminConfig(t *testing.T) {
 	// Verify non-sensitive fields
 	assert.Equal(t, "test-app", *resp.App.Name)
 	assert.Equal(t, "test-bucket", *resp.Datastores.S3.Bucket)
-	assert.Equal(t, 10, *resp.Datastores.Postgres.Pool.MaxConns)
 
 	// Verify sensitive fields are NOT present (struct should not even have them)
 	// We verify implicitly because they are not in the generated struct.

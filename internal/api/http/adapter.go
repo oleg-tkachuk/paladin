@@ -46,21 +46,19 @@ func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, catSvc dom
 // Ensure OpenAPIAdapter implements api.ServerInterface
 var _ api.ServerInterface = (*OpenAPIAdapter)(nil)
 
-func (s *OpenAPIAdapter) Healthz(c *gin.Context) {
+func (s *OpenAPIAdapter) Healthz(c *gin.Context, params api.HealthLivezParams) {
 	c.Status(http.StatusOK)
 }
 
-func (s *OpenAPIAdapter) HealthLivez(c *gin.Context) {
+func (s *OpenAPIAdapter) HealthLivez(c *gin.Context, params api.HealthLivezParams) {
 	c.JSON(http.StatusOK, api.HealthResponse{Status: "alive"})
 }
 
-// HealthReadyz implements the generated ServerInterface.
-func (s *OpenAPIAdapter) HealthReadyz(c *gin.Context) {
+func (s *OpenAPIAdapter) HealthReadyz(c *gin.Context, params api.HealthReadyzParams) {
 	s.getHealthReadyz(c)
 }
 
-// Readyz implements the generated ServerInterface (compatibility).
-func (s *OpenAPIAdapter) Readyz(c *gin.Context) {
+func (s *OpenAPIAdapter) Readyz(c *gin.Context, params api.HealthReadyzParams) {
 	s.getHealthReadyz(c)
 }
 
@@ -82,7 +80,7 @@ func (s *OpenAPIAdapter) getHealthReadyz(c *gin.Context) {
 	c.JSON(http.StatusOK, healthResp)
 }
 
-func (s *OpenAPIAdapter) HealthStartupz(c *gin.Context) {
+func (s *OpenAPIAdapter) HealthStartupz(c *gin.Context, params api.HealthStartupzParams) {
 	if !s.started.Load() {
 		c.JSON(http.StatusServiceUnavailable, api.HealthResponse{
 			Status: "starting",
@@ -151,7 +149,7 @@ func mapDependencyStatus(s service.DependencyStatus) *api.DependencyStatus {
 
 func ptr[T any](v T) *T { return &v }
 
-func (s *OpenAPIAdapter) Version(c *gin.Context) {
+func (s *OpenAPIAdapter) Version(c *gin.Context, params api.VersionParams) {
 	c.JSON(http.StatusOK, api.VersionResponse{
 		Service:   "paladin",
 		Version:   s.version,
@@ -160,7 +158,7 @@ func (s *OpenAPIAdapter) Version(c *gin.Context) {
 	})
 }
 
-func (s *OpenAPIAdapter) PingS3(c *gin.Context) {
+func (s *OpenAPIAdapter) PingS3(c *gin.Context, params api.PingS3Params) {
 	res, err := s.hs.PingS3(c.Request.Context())
 	if err != nil {
 		respondWithError(c, http.StatusInternalServerError, err)
@@ -208,7 +206,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 	})
 }
 
-func (s *OpenAPIAdapter) GetObject(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) GetObject(c *gin.Context, id api.ObjectID, params api.GetObjectParams) {
 	rec, err := s.svc.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -218,7 +216,7 @@ func (s *OpenAPIAdapter) GetObject(c *gin.Context, id openapi_types.UUID) {
 	c.JSON(http.StatusOK, mapObjectCommon(rec))
 }
 
-func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id api.ObjectID, params api.HeadObjectParams) {
 	_, err := s.svc.GetMeta(c.Request.Context(), tenantID(c), id)
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -348,7 +346,7 @@ func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeOb
 	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
 }
 
-func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
+func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context, params api.GetObjectStatsParams) {
 	stats, err := s.svc.GetStats(c.Request.Context(), tenantID(c))
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -367,7 +365,7 @@ func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string) {
+func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string, params api.GetCategoryStatsParams) {
 	stats, err := s.catSvc.GetStats(c.Request.Context(), tenantID(c), slug)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -380,7 +378,7 @@ func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string) {
 	})
 }
 
-func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id api.ObjectID, params api.CompleteObjectParams) {
 	var req api.CompleteObjectRequest
 	_ = c.ShouldBindJSON(&req) // Optional body
 
@@ -398,7 +396,7 @@ func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id openapi_types.UUID) {
 	})
 }
 
-func (s *OpenAPIAdapter) GetObjectMeta(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) GetObjectMeta(c *gin.Context, id api.ObjectID, params api.GetObjectMetaParams) {
 	rec, err := s.svc.GetMeta(c.Request.Context(), tenantID(c), id)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -408,7 +406,7 @@ func (s *OpenAPIAdapter) GetObjectMeta(c *gin.Context, id openapi_types.UUID) {
 	c.JSON(http.StatusOK, mapObjectCommon(rec))
 }
 
-func (s *OpenAPIAdapter) PatchObjectMeta(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) PatchObjectMeta(c *gin.Context, id api.ObjectID, params api.PatchObjectMetaParams) {
 	var req api.PatchObjectMetaRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
@@ -475,7 +473,7 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id api.ObjectID, params api.SignObjectDownloadParams) {
 	var req api.SignObjectDownloadRequest
 	_ = c.ShouldBindJSON(&req)
 
@@ -496,7 +494,7 @@ func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id openapi_types.UUI
 	})
 }
 
-func (s *OpenAPIAdapter) SignObjectUpload(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) SignObjectUpload(c *gin.Context, id api.ObjectID, params api.SignObjectUploadParams) {
 	var req api.SignObjectUploadRequest
 	_ = c.ShouldBindJSON(&req)
 
@@ -541,7 +539,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 	}
 
 	c.JSON(http.StatusOK, api.InitiateMultipartResponse{
-		ObjectId:  out.ObjectID,
+		ObjectId:  &out.ObjectID,
 		ObjectKey: out.ObjectKey,
 		UploadId:  out.UploadID,
 		PartSize:  out.PartSize,
@@ -551,7 +549,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 	})
 }
 
-func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
+func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId api.UploadID, params api.GetMultipartParams) {
 	multi, err := s.svc.GetMultipart(c.Request.Context(), tenantID(c), uploadId)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -559,18 +557,18 @@ func (s *OpenAPIAdapter) GetMultipart(c *gin.Context, uploadId string) {
 	}
 
 	c.JSON(http.StatusOK, api.GetMultipartResponse{
-		ObjectId:  multi.ObjectID,
+		ObjectId:  &multi.ObjectID,
 		ObjectKey: multi.ObjectKey,
 		UploadId:  multi.UploadID,
 		PartSize:  multi.PartSize,
 		Bucket:    multi.Bucket,
 		Status:    mapStatus(domain.ObjectStatus(multi.Status)),
-		CreatedAt: multi.CreatedAt,
-		UpdatedAt: multi.UpdatedAt,
+		CreatedAt: &multi.CreatedAt,
+		UpdatedAt: &multi.UpdatedAt,
 	})
 }
 
-func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId api.UploadID) {
+func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId api.UploadID, params api.AbortMultipartParams) {
 	if err := s.svc.AbortMultipart(c.Request.Context(), tenantID(c), uploadId); err != nil {
 		respondWithError(c, 0, err)
 		return
@@ -579,7 +577,7 @@ func (s *OpenAPIAdapter) AbortMultipart(c *gin.Context, uploadId api.UploadID) {
 	c.JSON(http.StatusOK, api.AbortMultipartResponse{Status: api.Aborted})
 }
 
-func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId string) {
+func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId api.UploadID, params api.CompleteMultipartParams) {
 	var req api.CompleteMultipartRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
@@ -606,7 +604,7 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId string) {
 	})
 }
 
-func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
+func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId api.UploadID, params api.SignPartsBatchParams) {
 	var req api.SignPartsBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
@@ -633,7 +631,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId string) {
 	})
 }
 
-func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber int32) {
+func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId api.UploadID, partNumber api.PartNumber, params api.SignPartParams) {
 	p, err := s.svc.SignPart(c.Request.Context(), tenantID(c), uploadId, partNumber)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -646,7 +644,7 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId string, partNumber in
 	})
 }
 
-func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
+func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfigParams) {
 	// Parse Postgres DSN to extract connectivity details
 	pgConfig, err := pgx.ParseConfig(s.cfg.Datastores.Postgres.DSN)
 	var pgHost, pgPort, pgUser, pgDB, pgSSLMode string
@@ -706,21 +704,11 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 		},
 		Datastores: &struct {
 			Postgres *struct {
-				Dbname *string `json:"dbname,omitempty"`
-				Host   *string `json:"host,omitempty"`
-				Pool   *struct {
-					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
-					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
-					MaxConns        *int    `json:"max_conns,omitempty"`
-					MinConns        *int    `json:"min_conns,omitempty"`
-				} `json:"pool,omitempty"`
-				Port     *string `json:"port,omitempty"`
-				SslMode  *string `json:"ssl_mode,omitempty"`
-				Timeouts *struct {
-					Connect   *string `json:"connect,omitempty"`
-					Statement *string `json:"statement,omitempty"`
-				} `json:"timeouts,omitempty"`
-				User *string `json:"user,omitempty"`
+				Dbname  *string `json:"dbname,omitempty"`
+				Host    *string `json:"host,omitempty"`
+				Port    *string `json:"port,omitempty"`
+				SslMode *string `json:"ssl_mode,omitempty"`
+				User    *string `json:"user,omitempty"`
 			} `json:"postgres,omitempty"`
 			S3 *struct {
 				Bucket         *string `json:"bucket,omitempty"`
@@ -729,50 +717,21 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 				PartSize       *string `json:"part_size,omitempty"`
 				PresignTtl     *string `json:"presign_ttl,omitempty"`
 				PublicEndpoint *string `json:"public_endpoint,omitempty"`
-				Region         *string `json:"region,omitempty"`
 				SseType        *string `json:"sse_type,omitempty"`
 			} `json:"s3,omitempty"`
 		}{
 			Postgres: &struct {
-				Dbname *string `json:"dbname,omitempty"`
-				Host   *string `json:"host,omitempty"`
-				Pool   *struct {
-					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
-					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
-					MaxConns        *int    `json:"max_conns,omitempty"`
-					MinConns        *int    `json:"min_conns,omitempty"`
-				} `json:"pool,omitempty"`
-				Port     *string `json:"port,omitempty"`
-				SslMode  *string `json:"ssl_mode,omitempty"`
-				Timeouts *struct {
-					Connect   *string `json:"connect,omitempty"`
-					Statement *string `json:"statement,omitempty"`
-				} `json:"timeouts,omitempty"`
-				User *string `json:"user,omitempty"`
+				Dbname  *string `json:"dbname,omitempty"`
+				Host    *string `json:"host,omitempty"`
+				Port    *string `json:"port,omitempty"`
+				SslMode *string `json:"ssl_mode,omitempty"`
+				User    *string `json:"user,omitempty"`
 			}{
 				Dbname:  ptr(pgDB),
 				Host:    ptr(pgHost),
 				Port:    ptr(pgPort),
 				SslMode: ptr(pgSSLMode),
 				User:    ptr(pgUser),
-				Pool: &struct {
-					MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
-					MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
-					MaxConns        *int    `json:"max_conns,omitempty"`
-					MinConns        *int    `json:"min_conns,omitempty"`
-				}{
-					MaxConns:        ptr(int(s.cfg.Datastores.Postgres.Pool.MaxConns)),
-					MinConns:        ptr(int(s.cfg.Datastores.Postgres.Pool.MinConns)),
-					MaxConnLifetime: ptr(s.cfg.Datastores.Postgres.Pool.MaxConnLifetime.String()),
-					MaxConnIdleTime: ptr(s.cfg.Datastores.Postgres.Pool.MaxConnIdleTime.String()),
-				},
-				Timeouts: &struct {
-					Connect   *string `json:"connect,omitempty"`
-					Statement *string `json:"statement,omitempty"`
-				}{
-					Connect:   ptr(s.cfg.Datastores.Postgres.Timeouts.Connect.String()),
-					Statement: ptr(s.cfg.Datastores.Postgres.Timeouts.Statement.String()),
-				},
 			},
 			S3: &struct {
 				Bucket         *string `json:"bucket,omitempty"`
@@ -781,11 +740,9 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context) {
 				PartSize       *string `json:"part_size,omitempty"`
 				PresignTtl     *string `json:"presign_ttl,omitempty"`
 				PublicEndpoint *string `json:"public_endpoint,omitempty"`
-				Region         *string `json:"region,omitempty"`
 				SseType        *string `json:"sse_type,omitempty"`
 			}{
 				Bucket:         ptr(s.cfg.Datastores.S3.Bucket),
-				Region:         ptr(s.cfg.Datastores.S3.Region),
 				Endpoint:       ptr(s.cfg.Datastores.S3.Endpoint),
 				PublicEndpoint: ptr(s.cfg.Datastores.S3.PublicEndpoint),
 				ForcePathStyle: ptr(s.cfg.Datastores.S3.ForcePathStyle),
@@ -985,7 +942,7 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *OpenAPIAdapter) GetAuditLog(c *gin.Context, id openapi_types.UUID) {
+func (s *OpenAPIAdapter) GetAuditLog(c *gin.Context, id openapi_types.UUID, params api.GetAuditLogParams) {
 	l, err := s.auditRepo.Get(c.Request.Context(), tenantID(c), id)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -1020,13 +977,13 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 		ResponseCode:      l.ResponseCode,
 		ResponseStatus:    l.ResponseStatus,
 		ResponseTimeMs:    l.ResponseTimeMS,
-		CreatedAt:         l.CreatedAt,
+		CreatedAt:         &l.CreatedAt,
 	}
 }
 
 func mapObjectCommon(o *domain.Object) api.ObjectCommon {
 	return api.ObjectCommon{
-		ObjectId:        o.ID,
+		ObjectId:        &o.ID,
 		ObjectKey:       o.ObjectKey,
 		Bucket:          o.Bucket,
 		ContentType:     o.ContentType,
@@ -1037,8 +994,8 @@ func mapObjectCommon(o *domain.Object) api.ObjectCommon {
 		ExternalRef:     o.ExternalRef,
 		StoredEtag:      o.StoredETag,
 		StoredSizeBytes: o.StoredSizeBytes,
-		CreatedAt:       o.CreatedAt,
-		UpdatedAt:       o.UpdatedAt,
+		CreatedAt:       &o.CreatedAt,
+		UpdatedAt:       &o.UpdatedAt,
 		CompletedAt:     o.CompletedAt,
 		DeletedAt:       o.DeletedAt,
 	}
@@ -1090,7 +1047,7 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 	c.JSON(http.StatusOK, resp)
 }
 
-func (s *OpenAPIAdapter) CreateCategory(c *gin.Context) {
+func (s *OpenAPIAdapter) CreateCategory(c *gin.Context, params api.CreateCategoryParams) {
 	var req api.CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondWithError(c, http.StatusBadRequest, err)
@@ -1106,7 +1063,7 @@ func (s *OpenAPIAdapter) CreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, mapCategory(*cat))
 }
 
-func (s *OpenAPIAdapter) DeleteCategory(c *gin.Context, slug string) {
+func (s *OpenAPIAdapter) DeleteCategory(c *gin.Context, slug string, params api.DeleteCategoryParams) {
 	err := s.catSvc.Delete(c.Request.Context(), tenantID(c), slug)
 	if err != nil {
 		respondWithError(c, 0, err)
@@ -1117,12 +1074,12 @@ func (s *OpenAPIAdapter) DeleteCategory(c *gin.Context, slug string) {
 
 func mapCategory(c domain.Category) api.Category {
 	return api.Category{
-		Id:          c.ID,
+		Id:          &c.ID,
 		TenantId:    c.TenantID,
 		Slug:        c.Slug,
 		Name:        c.Name,
 		Description: c.Description,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
+		CreatedAt:   &c.CreatedAt,
+		UpdatedAt:   &c.UpdatedAt,
 	}
 }

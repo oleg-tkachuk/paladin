@@ -14,6 +14,7 @@ const (
 	ObjectUploaded    ObjectStatus = "uploaded"
 	ObjectComplete    ObjectStatus = "complete"
 	ObjectAborted     ObjectStatus = "aborted"
+	ObjectError       ObjectStatus = "error"
 	ObjectDeleted     ObjectStatus = "deleted"
 	ObjectSoftDeleted ObjectStatus = "soft_deleted"
 	ObjectHardDeleted ObjectStatus = "hard_deleted"

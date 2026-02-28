@@ -104,10 +104,10 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	var event domain.ObjectEvent
 
 	switch status {
-	case "soft_deleted":
-		event = domain.EventObjectSoftDelete
-	case "uploaded", "complete":
-		event = domain.EventObjectRestore
+	case "aborted":
+		event = domain.EventObjectAbort
+	case "error":
+		event = domain.EventObjectFail
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
 		opStatus = "error"
@@ -132,14 +132,8 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	}
 
 	// Actually apply changes
-	if event == domain.EventObjectSoftDelete {
-		if _, err = s.objRepo.MarkSoftDeleted(ctx, tenantID, id); err != nil {
-			span.RecordError(err)
-			opStatus = "error"
-			return err
-		}
-	} else if event == domain.EventObjectRestore {
-		if _, err = s.objRepo.Restore(ctx, tenantID, id); err != nil {
+	if event == domain.EventObjectAbort || event == domain.EventObjectFail {
+		if _, err = s.objRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 			span.RecordError(err)
 			opStatus = "error"
 			return err
