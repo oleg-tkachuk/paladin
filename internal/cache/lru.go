@@ -2,10 +2,9 @@ package cache
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
-	expirable "github.com/go-pkgz/expirable-cache/v3"
+	"github.com/maypok86/otter"
 )
 
 // CacheStats provides metrics about cache performance
@@ -18,59 +17,57 @@ type CacheStats struct {
 	HitRate   float64
 }
 
-// Cache wraps expirable-cache with a context-aware interface
+// Cache wraps otter with a context-aware interface
 type Cache[K comparable, V any] struct {
-	cache   expirable.Cache[K, V]
+	cache   otter.CacheWithVariableTTL[K, V]
 	maxSize int
-	hits    atomic.Int64
-	misses  atomic.Int64
 }
 
 // NewCache creates a new LRU cache with TTL support
-func NewCache[K comparable, V any](maxSize int, ttl time.Duration) *Cache[K, V] {
+func NewCache[K comparable, V any](maxSize int, _ time.Duration) *Cache[K, V] {
+	// The default TTL parameter is ignored because otter.WithVariableTTL takes per-item TTL,
+	// but keeping the parameter signature matches previous invocations if needed.
+	c, err := otter.MustBuilder[K, V](maxSize).CollectStats().WithVariableTTL().Build()
+	if err != nil {
+		panic(err)
+	}
 	return &Cache[K, V]{
-		cache:   expirable.NewCache[K, V]().WithMaxKeys(maxSize).WithTTL(ttl),
+		cache:   c,
 		maxSize: maxSize,
 	}
 }
 
 // Get retrieves a value from the cache
 func (c *Cache[K, V]) Get(ctx context.Context, key K) (V, bool) {
-	val, ok := c.cache.Get(key)
-	if ok {
-		c.hits.Add(1)
-	} else {
-		c.misses.Add(1)
-	}
-	return val, ok
+	return c.cache.Get(key)
 }
 
 // Set adds or updates a value in the cache
 func (c *Cache[K, V]) Set(ctx context.Context, key K, value V, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = time.Hour * 87600 // 10 years
+	}
 	c.cache.Set(key, value, ttl)
 	return nil
 }
 
 // Delete removes a value from the cache
 func (c *Cache[K, V]) Delete(ctx context.Context, key K) error {
-	c.cache.Invalidate(key)
+	c.cache.Delete(key)
 	return nil
 }
 
 // Clear removes all entries from the cache
 func (c *Cache[K, V]) Clear(ctx context.Context) error {
-	c.cache.Purge()
-	c.hits.Store(0)
-	c.misses.Store(0)
+	c.cache.Clear()
 	return nil
 }
 
 // Stats returns cache performance metrics
 func (c *Cache[K, V]) Stats() CacheStats {
-	stats := c.cache.Stat()
-	keys := c.cache.Keys()
-	hits := c.hits.Load()
-	misses := c.misses.Load()
+	stats := c.cache.Stats()
+	hits := stats.Hits()
+	misses := stats.Misses()
 	total := hits + misses
 	hitRate := 0.0
 	if total > 0 {
@@ -80,8 +77,8 @@ func (c *Cache[K, V]) Stats() CacheStats {
 	return CacheStats{
 		Hits:      hits,
 		Misses:    misses,
-		Evictions: int64(stats.Evicted),
-		Size:      len(keys),
+		Evictions: stats.EvictedCount(),
+		Size:      c.cache.Size(),
 		MaxSize:   c.maxSize,
 		HitRate:   hitRate,
 	}

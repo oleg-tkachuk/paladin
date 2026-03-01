@@ -1,15 +1,19 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
+	"strings"
 
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	_ "embed"
 
 	"cuelang.org/go/cue/cuecontext"
-	cueyaml "cuelang.org/go/encoding/yaml"
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"go.uber.org/zap"
 	goyaml "gopkg.in/yaml.v3"
 )
@@ -25,26 +29,35 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("CUE schema invalid: %w", schemaVal.Err())
 	}
 
-	yamlBytes, err := os.ReadFile(path)
-	if err != nil {
+	// Initialize koanf
+	k := koanf.New(".")
+
+	// Load configuration from YAML file
+	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
 		return Config{}, fmt.Errorf("YAML read error (%s): %w", path, err)
 	}
 
-	yamlFile, err := cueyaml.Extract(path, yamlBytes)
-	if err != nil {
-		return Config{}, fmt.Errorf("YAML -> CUE AST error: %w", err)
+	// Load environment variables prefixed with PALADIN_ and replace _ with .
+	if err := k.Load(env.Provider("PALADIN_", ".", func(s string) string {
+		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "PALADIN_")), "_", ".", -1)
+	}), nil); err != nil {
+		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}
 
-	yamlVal := ctx.BuildFile(yamlFile)
+	// Export merged config back to JSON for CUE validation and default injection
+	configBytes, err := json.Marshal(k.Raw())
+	if err != nil {
+		return Config{}, fmt.Errorf("failed to marshal merged config: %w", err)
+	}
 
-	combined := schemaVal.Unify(yamlVal)
-	if err = combined.Validate(); err != nil {
-		return Config{}, fmt.Errorf("YAML validation failed (%s): %w", path, err)
+	configVal := ctx.CompileBytes(configBytes)
+	combined := schemaVal.Unify(configVal)
+	if err := combined.Validate(); err != nil {
+		return Config{}, fmt.Errorf("config validation failed (%s): %w", path, err)
 	}
 
 	var cfg Config
-	// Use JSON intermediate to apply defaults and support time.Duration.
-	// MarshalJSON is more reliable than cueyaml.Encode when dealing with CUE AST nodes.
+
 	jsonBytes, err := combined.MarshalJSON()
 	if err != nil {
 		return Config{}, fmt.Errorf("CUE -> JSON marshaling failed: %w", err)

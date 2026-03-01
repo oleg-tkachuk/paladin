@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/failsafe-go/failsafe-go"
+	"github.com/failsafe-go/failsafe-go/circuitbreaker"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sony/gobreaker"
 )
 
 var (
@@ -25,7 +26,9 @@ var (
 )
 
 type CircuitBreakerWrapper struct {
-	cb         *gobreaker.CircuitBreaker
+	cb         circuitbreaker.CircuitBreaker[any]
+	exec       failsafe.Executor[any]
+	name       string
 	lastUsedAt time.Time
 	persistent bool
 }
@@ -60,32 +63,35 @@ func GetWithConfig(cfg BreakerConfig) *CircuitBreakerWrapper {
 
 	if w, ok := defaultRegistry.breakers[cfg.Name]; ok {
 		w.lastUsedAt = time.Now()
-
 		return w
 	}
 
-	settings := gobreaker.Settings{
-		Name:        cfg.Name,
-		MaxRequests: 1,
-		Timeout:     cfg.Timeout,
-		OnStateChange: func(name string, from, to gobreaker.State) {
-			breakerStateGauge.WithLabelValues(name).Set(float64(to))
-		},
-		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			if counts.ConsecutiveFailures >= cfg.MaxConsecutiveFails {
-				return true
+	cb := circuitbreaker.NewBuilder[any]().
+		WithFailureThreshold(uint(cfg.MaxConsecutiveFails)).
+		WithDelay(cfg.Timeout).
+		OnStateChanged(func(e circuitbreaker.StateChangedEvent) {
+			var state float64
+			switch e.NewState {
+			case circuitbreaker.ClosedState:
+				state = 0
+			case circuitbreaker.OpenState:
+				state = 1
+			case circuitbreaker.HalfOpenState:
+				state = 2
 			}
-			if counts.Requests < 10 {
-				return false
-			}
-			ratio := float64(counts.TotalFailures) / float64(counts.Requests)
+			breakerStateGauge.WithLabelValues(cfg.Name).Set(state)
+		}).
+		Build()
 
-			return ratio >= cfg.FailureRatio
-		},
+	exec := failsafe.With[any](cb)
+
+	w := &CircuitBreakerWrapper{
+		cb:         cb,
+		exec:       exec,
+		name:       cfg.Name,
+		lastUsedAt: time.Now(),
+		persistent: cfg.Persistent,
 	}
-
-	cb := gobreaker.NewCircuitBreaker(settings)
-	w := &CircuitBreakerWrapper{cb: cb, lastUsedAt: time.Now(), persistent: cfg.Persistent}
 	defaultRegistry.breakers[cfg.Name] = w
 
 	breakerStateGauge.WithLabelValues(cfg.Name).Set(0)
@@ -102,22 +108,29 @@ func Execute(w *CircuitBreakerWrapper, fn func() (interface{}, error)) (interfac
 	w.lastUsedAt = time.Now()
 	defaultRegistry.mu.Unlock()
 
-	res, err := w.cb.Execute(fn)
+	res, err := w.exec.Get(fn)
 	if err != nil {
-		breakerFailures.WithLabelValues(w.cb.Name()).Inc()
+		breakerFailures.WithLabelValues(w.name).Inc()
 	} else {
-		breakerSuccesses.WithLabelValues(w.cb.Name()).Inc()
+		breakerSuccesses.WithLabelValues(w.name).Inc()
 	}
 
 	return res, err
 }
 
-func (w *CircuitBreakerWrapper) State() gobreaker.State {
+func (w *CircuitBreakerWrapper) State() string {
 	if w == nil || w.cb == nil {
-		return gobreaker.StateClosed
+		return "closed"
 	}
-
-	return w.cb.State()
+	state := w.cb.State()
+	switch state {
+	case circuitbreaker.OpenState:
+		return "open"
+	case circuitbreaker.HalfOpenState:
+		return "half-open"
+	default:
+		return "closed"
+	}
 }
 
 func (r *Registry) All() map[string]*CircuitBreakerWrapper {

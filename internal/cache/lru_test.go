@@ -54,12 +54,12 @@ func TestLRUCache(t *testing.T) {
 	assert.Equal(t, int64(0), statsAfterClear.Misses)
 
 	// Test Expiration
-	c.Set(ctx, "expiring_key", "expiring_val", 10*time.Millisecond)
+	c.Set(ctx, "expiring_key", "expiring_val", time.Second)
 	val, ok = c.Get(ctx, "expiring_key")
 	assert.True(t, ok)
 	assert.Equal(t, "expiring_val", val)
 
-	time.Sleep(20 * time.Millisecond) // Wait for expiration
+	time.Sleep(2 * time.Second) // Wait for expiration
 
 	_, ok = c.Get(ctx, "expiring_key")
 	assert.False(t, ok, "key should have expired")
