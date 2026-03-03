@@ -76,7 +76,11 @@ server:
 
 datastores:
   postgres:
-    dsn: "postgres://app_user:change-me@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+    dsn: "postgres://app_user@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+    password_secret:
+      name: paladin-postgresql-app-user
+      key: password
+      namespace: database
     pool:
       max_conns: 20
       min_conns: 2

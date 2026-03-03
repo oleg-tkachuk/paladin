@@ -20,6 +20,13 @@ type Config struct {
 	Env     string `yaml:"-"`
 }
 
+// SecretRef represents a reference to a Kubernetes secret.
+type SecretRef struct {
+	Name      string `yaml:"name" json:"name"`
+	Key       string `yaml:"key" json:"key"` // Defaults to "password" if empty
+	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
 type App struct {
 	Name string `yaml:"name" json:"name"`
 	Env  string `yaml:"env" json:"env"`
@@ -93,6 +100,8 @@ type Datastores struct {
 
 type Postgres struct {
 	DSN               string           `yaml:"dsn" json:"dsn"`
+	Password          string           `yaml:"password" json:"password"`
+	PasswordSecret    *SecretRef       `yaml:"password_secret" json:"password_secret"`
 	ReaperDSN         string           `yaml:"reaper_dsn" json:"reaper_dsn"`
 	Pool              PostgresPool     `yaml:"pool" json:"pool"`
 	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
@@ -112,18 +121,20 @@ type PostgresTimeouts struct {
 }
 
 type S3 struct {
-	Bucket         string        `yaml:"bucket" json:"bucket"`
-	Region         string        `yaml:"region" json:"region"`
-	Endpoint       string        `yaml:"endpoint" json:"endpoint"`
-	PublicEndpoint string        `yaml:"public_endpoint" json:"public_endpoint"`
-	ForcePathStyle bool          `yaml:"force_path_style" json:"force_path_style"`
-	AccessKey      string        `yaml:"access_key" json:"access_key"`
-	SecretKey      string        `yaml:"secret_key" json:"secret_key"`
-	PresignTTL     time.Duration `yaml:"presign_ttl" json:"presign_ttl"`
-	PartSizeRaw    string        `yaml:"part_size" json:"part_size"`
-	PartSizeBytes  int64         `yaml:"-"`
-	SSEType        string        `yaml:"sse_type" json:"sse_type"`     // e.g. "AES256" or "aws:kms"
-	SSEKeyID       string        `yaml:"sse_key_id" json:"sse_key_id"` // Optional KMS Key ID
+	Bucket          string        `yaml:"bucket" json:"bucket"`
+	Region          string        `yaml:"region" json:"region"`
+	Endpoint        string        `yaml:"endpoint" json:"endpoint"`
+	PublicEndpoint  string        `yaml:"public_endpoint" json:"public_endpoint"`
+	ForcePathStyle  bool          `yaml:"force_path_style" json:"force_path_style"`
+	AccessKey       string        `yaml:"access_key" json:"access_key"`
+	AccessKeySecret *SecretRef    `yaml:"access_key_secret" json:"access_key_secret"`
+	SecretKey       string        `yaml:"secret_key" json:"secret_key"`
+	SecretKeySecret *SecretRef    `yaml:"secret_key_secret" json:"secret_key_secret"`
+	PresignTTL      time.Duration `yaml:"presign_ttl" json:"presign_ttl"`
+	PartSizeRaw     string        `yaml:"part_size" json:"part_size"`
+	PartSizeBytes   int64         `yaml:"-"`
+	SSEType         string        `yaml:"sse_type" json:"sse_type"`     // e.g. "AES256" or "aws:kms"
+	SSEKeyID        string        `yaml:"sse_key_id" json:"sse_key_id"` // Optional KMS Key ID
 }
 
 type Policy struct {

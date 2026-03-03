@@ -57,6 +57,8 @@ server: {
 datastores: {
 	postgres: {
 	  dsn: string
+	  password: string | *""
+	  password_secret?: #SecretRef
 	  pool: {
       max_conns: int & >= 1 | *20
       min_conns: int & >= 0 | *2
@@ -76,8 +78,10 @@ datastores: {
 	  endpoint: string
 	  public_endpoint: string | *""
 	  force_path_style: bool | *true
-	  access_key: string
-	  secret_key: string
+	  access_key: string | *""
+	  access_key_secret?: #SecretRef
+	  secret_key: string | *""
+	  secret_key_secret?: #SecretRef
 	  presign_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
 	  part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"8MB"
 	  sse_type: string | *"AES256"
@@ -155,3 +159,8 @@ otel: {
 }
 
 
+#SecretRef: string | {
+  name: string
+  key: string | *"password"
+  namespace: string | *""
+}
