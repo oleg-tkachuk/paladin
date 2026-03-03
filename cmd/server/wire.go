@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	appwire "github.com/oleg-tkachuk/paladin/internal/wire"
 
@@ -26,8 +27,8 @@ func InitializeApp(ctx context.Context, version appwire.Version, commit appwire.
 	return nil, nil, nil
 }
 
-func provideAppMetadata(v appwire.Version, c appwire.Commit, b appwire.BuildTime) appwire.AppMetadata {
-	return appwire.AppMetadata{
+func provideAppMetadata(v appwire.Version, c appwire.Commit, b appwire.BuildTime) domain.AppMetadata {
+	return domain.AppMetadata{
 		Version:   string(v),
 		Commit:    string(c),
 		BuildTime: string(b),

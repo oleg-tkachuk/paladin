@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
 	"sync/atomic"
@@ -52,8 +53,9 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	categoryService := wire.ProvideCategoryService(categoryRepository)
 	auditLogRepository := wire.ProvideAuditRepo(db)
 	healthService := wire.ProvideHealthService(db, client, factory)
+	systemService := wire.ProvideSystemService(config)
 	atomicBool := provideStartedBool()
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, auditLogRepository, healthService, atomicBool, appMetadata)
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, auditLogRepository, healthService, systemService, atomicBool, appMetadata)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
@@ -69,8 +71,8 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 
 // wire.go:
 
-func provideAppMetadata(v wire.Version, c wire.Commit, b wire.BuildTime) wire.AppMetadata {
-	return wire.AppMetadata{
+func provideAppMetadata(v wire.Version, c wire.Commit, b wire.BuildTime) domain.AppMetadata {
+	return domain.AppMetadata{
 		Version:   string(v),
 		Commit:    string(c),
 		BuildTime: string(b),

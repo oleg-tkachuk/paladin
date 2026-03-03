@@ -6,6 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type AppMetadata struct {
+	Version   string
+	Commit    string
+	BuildTime string
+}
+
 type ObjectStatus string
 
 const (

@@ -18,7 +18,7 @@ import (
 
 // updateObjectStatus updates the status of an object (e.g. for soft deletion)
 func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "UpdateStatus")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpUpdateStatus)
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("tenant_id", tenantID),
@@ -116,9 +116,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 
 	if err = sm.Fire(event); err != nil {
 		opStatus = "conflict"
-		// If statemachine conflict occurs, it translates directly to 409 conflict.
-		// Keep the detailed error.
-		return fmt.Errorf("invalid transition: %w", err)
+		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
@@ -140,7 +138,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		}
 	}
 
-	logger.FromContext(ctx).Info("Object Status Updated",
+	logger.FromContext(ctx).Info(LogObjectStatusUpdated,
 		zap.String("tenant_id", tenantID),
 		zap.String("object_id", id.String()),
 		zap.String("status", status))

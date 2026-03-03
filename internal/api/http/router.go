@@ -19,7 +19,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, version, commit, buildTime string, hs *service.HealthService, started *atomic.Bool) *Server {
+func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, metadata domain.AppMetadata, hs *service.HealthService, sysSvc domain.SystemService, started *atomic.Bool) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
@@ -32,7 +32,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	}
 
 	// Add API version header to ALL responses (including /version, /health/*, etc.)
-	r.Use(middleware.APIVersionMiddleware(version))
+	r.Use(middleware.APIVersionMiddleware(metadata.Version))
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -86,9 +86,9 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"version":    version,
-			"commit":     commit,
-			"build_time": buildTime,
+			"version":    metadata.Version,
+			"commit":     metadata.Commit,
+			"build_time": metadata.BuildTime,
 		})
 	})
 
@@ -98,8 +98,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	v1.Use(middleware.RateLimitHeadersMiddleware())
 
 	// Register generated handlers
-	// Register generated handlers
-	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, started, version, commit, buildTime)
+	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, sysSvc, started, metadata)
 	api.RegisterHandlers(v1, adapter)
 
 	return &Server{engine: r}

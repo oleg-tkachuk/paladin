@@ -214,6 +214,16 @@ func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, li
 	return args.Get(0).(int64), args.Error(1)
 }
 
+// MockSystemService
+type MockSystemService struct {
+	mock.Mock
+}
+
+func (m *MockSystemService) GetConfig(ctx context.Context) (domain.SystemConfig, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(domain.SystemConfig), args.Error(1)
+}
+
 // MockPinger
 type MockPinger struct {
 	mock.Mock
@@ -254,6 +264,7 @@ var _ = Describe("Router", func() {
 		mockS3      *MockS3Health
 		mockBreaker *MockBreakerFactory
 		mockAudit   *MockAuditLogRepository
+		mockSys     *MockSystemService
 		hs          *service.HealthService
 		started     *atomic.Bool
 		server      *httpapi.Server
@@ -268,6 +279,8 @@ var _ = Describe("Router", func() {
 		mockBreaker = new(MockBreakerFactory)
 		mockAudit = new(MockAuditLogRepository)
 		mockAudit.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
+		mockSys = new(MockSystemService)
+		mockSys.On("GetConfig", mock.Anything).Return(domain.SystemConfig{}, nil).Maybe()
 		hs = service.NewHealthService(mockPing, mockS3, mockBreaker)
 		started = &atomic.Bool{}
 		started.Store(true)
@@ -290,7 +303,8 @@ var _ = Describe("Router", func() {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		meta := domain.AppMetadata{Version: "1.0.0", Commit: "deadbeef", BuildTime: "2023-01-01"}
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, meta, hs, mockSys, started)
 		recorder = httptest.NewRecorder()
 	})
 

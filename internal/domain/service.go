@@ -42,6 +42,11 @@ type ObjectsService interface {
 	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
 }
 
+// SystemService defines operations for system-level information and management.
+type SystemService interface {
+	GetConfig(ctx context.Context) (SystemConfig, error)
+}
+
 // Operation timeouts
 type Action string
 
@@ -51,6 +56,89 @@ const (
 	ActionUpdate Action = "update"
 	ActionDelete Action = "delete"
 )
+
+// SystemConfig represents the sanitized system configuration for administrative display.
+type SystemConfig struct {
+	App struct {
+		Name string
+		Env  string
+	}
+	Server struct {
+		Name string
+		Mode string
+		HTTP struct {
+			Addr               string
+			CORSAllowedOrigins []string
+			ReadTimeout        string
+			WriteTimeout       string
+			RequestIDHeader    string
+		}
+	}
+	Datastores struct {
+		Postgres struct {
+			Host    string
+			Port    string
+			User    string
+			Dbname  string
+			SslMode string
+		}
+		S3 struct {
+			Bucket         string
+			Endpoint       string
+			PublicEndpoint string
+			ForcePathStyle bool
+			PresignTTL     string
+			PartSize       string
+			SSEType        string
+		}
+	}
+	Policy struct {
+		MaxObjectSize       string
+		MaxMultipartSize    string
+		MinPartSize         string
+		MaxPartSize         string
+		PresignPutTTL       string
+		PresignGetTTL       string
+		AllowedContentTypes []string
+	}
+	Security struct {
+		TrustTenantIDFromRequest bool
+		RejectTenantMismatch     bool
+		EnableRLS                bool
+	}
+	Housekeeping struct {
+		EnableReaper bool
+		PendingTTL   string
+		MultipartTTL string
+		GCInterval   string
+	}
+	RateLimit struct {
+		RequestsPerSecond float32
+		Burst             int
+		MaxTenants        int
+	}
+	Cache struct {
+		Enabled bool
+		MaxSize int
+		TTL     string
+	}
+	Timeouts struct {
+		FastOperation    string
+		DefaultOperation string
+		S3Operation      string
+		LongOperation    string
+	}
+	Idempotency struct {
+		Enabled bool
+		TTL     string
+	}
+	OTel struct {
+		Enabled  bool
+		Endpoint string
+		Protocol string
+		Insecure bool
+	}
+}
 
 type Policy interface {
 	Authorize(ctx context.Context, tenantID string, action Action) error

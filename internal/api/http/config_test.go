@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,12 +11,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	domainmocks "github.com/oleg-tkachuk/paladin/internal/domain/mocks"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 	servicemocks "github.com/oleg-tkachuk/paladin/internal/service/mocks"
 	"github.com/stretchr/testify/assert"
 )
+
+type mockSysSvc struct {
+	cfg domain.SystemConfig
+}
+
+func (m *mockSysSvc) GetConfig(ctx context.Context) (domain.SystemConfig, error) {
+	return m.cfg, nil
+}
 
 func TestGetAdminConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -79,6 +89,7 @@ func TestGetAdminConfig(t *testing.T) {
 	mockAuditRepo := domainmocks.NewMockAuditLogRepository(t)
 	mockS3Checker := servicemocks.NewMockS3HealthChecker(t)
 	mockPinger := servicemocks.NewMockPinger(t)
+	mockSysSvc := &mockSysSvc{cfg: cfg.Sanitize()}
 
 	// Setup health service with mocks
 	hs := service.NewHealthService(
@@ -91,7 +102,8 @@ func TestGetAdminConfig(t *testing.T) {
 	started.Store(true)
 
 	// Initialize adapter
-	adapter := NewOpenAPIAdapter(cfg, mockSvc, mockCat, mockAuditRepo, hs, &started, "v1.0.0", "sha", "now")
+	meta := domain.AppMetadata{Version: "v1.0.0", Commit: "sha", BuildTime: "now"}
+	adapter := NewOpenAPIAdapter(cfg, mockSvc, mockCat, mockAuditRepo, hs, mockSysSvc, &started, meta)
 
 	// Setup router
 	r := gin.New()

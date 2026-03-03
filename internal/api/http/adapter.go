@@ -1,11 +1,9 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/http"
 	"sync/atomic"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/errors"
@@ -22,24 +20,22 @@ type OpenAPIAdapter struct {
 	catSvc    domain.CategoryService
 	auditRepo domain.AuditLogRepository
 	hs        *service.HealthService
+	sysSvc    domain.SystemService
 	started   *atomic.Bool
-	version   string
-	commit    string
-	buildTime string
+	metadata  domain.AppMetadata
 }
 
 // NewOpenAPIAdapter creates a new OpenAPIAdapter
-func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, hs *service.HealthService, started *atomic.Bool, version, commit, buildTime string) *OpenAPIAdapter {
+func NewOpenAPIAdapter(cfg *config.Config, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, hs *service.HealthService, sysSvc domain.SystemService, started *atomic.Bool, metadata domain.AppMetadata) *OpenAPIAdapter {
 	return &OpenAPIAdapter{
 		cfg:       cfg,
 		svc:       svc,
 		catSvc:    catSvc,
 		auditRepo: auditRepo,
 		hs:        hs,
+		sysSvc:    sysSvc,
 		started:   started,
-		version:   version,
-		commit:    commit,
-		buildTime: buildTime,
+		metadata:  metadata,
 	}
 }
 
@@ -152,9 +148,9 @@ func ptr[T any](v T) *T { return &v }
 func (s *OpenAPIAdapter) Version(c *gin.Context, params api.VersionParams) {
 	c.JSON(http.StatusOK, api.VersionResponse{
 		Service:   "paladin",
-		Version:   s.version,
-		GitSha:    &s.commit,
-		BuildTime: &s.buildTime,
+		Version:   s.metadata.Version,
+		GitSha:    &s.metadata.Commit,
+		BuildTime: &s.metadata.BuildTime,
 	})
 }
 
@@ -645,25 +641,10 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId api.UploadID, partNum
 }
 
 func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfigParams) {
-	// Parse Postgres DSN to extract connectivity details
-	pgConfig, err := pgx.ParseConfig(s.cfg.Datastores.Postgres.DSN)
-	var pgHost, pgPort, pgUser, pgDB, pgSSLMode string
-	if err == nil {
-		pgHost = pgConfig.Host
-		pgPort = fmt.Sprintf("%d", pgConfig.Port)
-		pgUser = pgConfig.User
-		pgDB = pgConfig.Database
-		// Basic extraction for SSL Mode (it might be in RuntimeParams)
-		if val, ok := pgConfig.RuntimeParams["sslmode"]; ok {
-			pgSSLMode = val
-		} else if pgConfig.TLSConfig == nil {
-			pgSSLMode = "disable"
-		} else {
-			pgSSLMode = "enable" // Simplified, actual mode (require, verify-full) lost in tls.Config
-		}
-	} else {
-		// Fallback for logging or partial info if needed, but for now just leave empty
-		// or log error
+	cfg, err := s.sysSvc.GetConfig(c.Request.Context())
+	if err != nil {
+		respondWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 
 	// Redact sensitive fields
@@ -672,8 +653,8 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			Env  *string `json:"env,omitempty"`
 			Name *string `json:"name,omitempty"`
 		}{
-			Name: ptr(s.cfg.App.Name),
-			Env:  ptr(s.cfg.App.Env),
+			Name: ptr(cfg.App.Name),
+			Env:  ptr(cfg.App.Env),
 		},
 		Server: &struct {
 			Http *struct {
@@ -686,8 +667,8 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			Mode *string `json:"mode,omitempty"`
 			Name *string `json:"name,omitempty"`
 		}{
-			Mode: ptr(s.cfg.Server.Mode),
-			Name: ptr(s.cfg.Server.Name),
+			Mode: ptr(cfg.Server.Mode),
+			Name: ptr(cfg.Server.Name),
 			Http: &struct {
 				Addr               *string   `json:"addr,omitempty"`
 				CorsAllowedOrigins *[]string `json:"cors_allowed_origins,omitempty"`
@@ -695,11 +676,11 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				RequestIdHeader    *string   `json:"request_id_header,omitempty"`
 				WriteTimeout       *string   `json:"write_timeout,omitempty"`
 			}{
-				Addr:               ptr(s.cfg.Server.HTTP.Addr),
-				ReadTimeout:        ptr(s.cfg.Server.HTTP.ReadTimeout.String()),
-				WriteTimeout:       ptr(s.cfg.Server.HTTP.WriteTimeout.String()),
-				RequestIdHeader:    ptr(s.cfg.Server.HTTP.RequestIDHeader),
-				CorsAllowedOrigins: &s.cfg.Server.HTTP.CORSAllowedOrigins,
+				Addr:               ptr(cfg.Server.HTTP.Addr),
+				ReadTimeout:        ptr(cfg.Server.HTTP.ReadTimeout),
+				WriteTimeout:       ptr(cfg.Server.HTTP.WriteTimeout),
+				RequestIdHeader:    ptr(cfg.Server.HTTP.RequestIDHeader),
+				CorsAllowedOrigins: &cfg.Server.HTTP.CORSAllowedOrigins,
 			},
 		},
 		Datastores: &struct {
@@ -727,11 +708,11 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				SslMode *string `json:"ssl_mode,omitempty"`
 				User    *string `json:"user,omitempty"`
 			}{
-				Dbname:  ptr(pgDB),
-				Host:    ptr(pgHost),
-				Port:    ptr(pgPort),
-				SslMode: ptr(pgSSLMode),
-				User:    ptr(pgUser),
+				Dbname:  ptr(cfg.Datastores.Postgres.Dbname),
+				Host:    ptr(cfg.Datastores.Postgres.Host),
+				Port:    ptr(cfg.Datastores.Postgres.Port),
+				SslMode: ptr(cfg.Datastores.Postgres.SslMode),
+				User:    ptr(cfg.Datastores.Postgres.User),
 			},
 			S3: &struct {
 				Bucket         *string `json:"bucket,omitempty"`
@@ -742,13 +723,13 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				PublicEndpoint *string `json:"public_endpoint,omitempty"`
 				SseType        *string `json:"sse_type,omitempty"`
 			}{
-				Bucket:         ptr(s.cfg.Datastores.S3.Bucket),
-				Endpoint:       ptr(s.cfg.Datastores.S3.Endpoint),
-				PublicEndpoint: ptr(s.cfg.Datastores.S3.PublicEndpoint),
-				ForcePathStyle: ptr(s.cfg.Datastores.S3.ForcePathStyle),
-				PresignTtl:     ptr(s.cfg.Datastores.S3.PresignTTL.String()),
-				PartSize:       ptr(s.cfg.Datastores.S3.PartSizeRaw),
-				SseType:        ptr(s.cfg.Datastores.S3.SSEType),
+				Bucket:         ptr(cfg.Datastores.S3.Bucket),
+				Endpoint:       ptr(cfg.Datastores.S3.Endpoint),
+				PublicEndpoint: ptr(cfg.Datastores.S3.PublicEndpoint),
+				ForcePathStyle: ptr(cfg.Datastores.S3.ForcePathStyle),
+				PresignTtl:     ptr(cfg.Datastores.S3.PresignTTL),
+				PartSize:       ptr(cfg.Datastores.S3.PartSize),
+				SseType:        ptr(cfg.Datastores.S3.SSEType),
 			},
 		},
 		Policy: &struct {
@@ -760,22 +741,22 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			PresignGetTtl       *string   `json:"presign_get_ttl,omitempty"`
 			PresignPutTtl       *string   `json:"presign_put_ttl,omitempty"`
 		}{
-			MaxObjectSize:       ptr(s.cfg.Policy.MaxObjectSizeRaw),
-			MaxMultipartSize:    ptr(s.cfg.Policy.MaxMultipartSizeRaw),
-			MinPartSize:         ptr(s.cfg.Policy.MinPartSizeRaw),
-			MaxPartSize:         ptr(s.cfg.Policy.MaxPartSizeRaw),
-			PresignPutTtl:       ptr(s.cfg.Policy.PresignPutTTL.String()),
-			PresignGetTtl:       ptr(s.cfg.Policy.PresignGetTTL.String()),
-			AllowedContentTypes: &s.cfg.Policy.AllowedContentTypes,
+			MaxObjectSize:       ptr(cfg.Policy.MaxObjectSize),
+			MaxMultipartSize:    ptr(cfg.Policy.MaxMultipartSize),
+			MinPartSize:         ptr(cfg.Policy.MinPartSize),
+			MaxPartSize:         ptr(cfg.Policy.MaxPartSize),
+			PresignPutTtl:       ptr(cfg.Policy.PresignPutTTL),
+			PresignGetTtl:       ptr(cfg.Policy.PresignGetTTL),
+			AllowedContentTypes: &cfg.Policy.AllowedContentTypes,
 		},
 		Security: &struct {
 			EnableRls                *bool `json:"enable_rls,omitempty"`
 			RejectTenantMismatch     *bool `json:"reject_tenant_mismatch,omitempty"`
 			TrustTenantIdFromRequest *bool `json:"trust_tenant_id_from_request,omitempty"`
 		}{
-			TrustTenantIdFromRequest: ptr(s.cfg.Security.TrustTenantIDFromRequest),
-			RejectTenantMismatch:     ptr(s.cfg.Security.RejectTenantMismatch),
-			EnableRls:                ptr(s.cfg.Security.EnableRLS),
+			TrustTenantIdFromRequest: ptr(cfg.Security.TrustTenantIDFromRequest),
+			RejectTenantMismatch:     ptr(cfg.Security.RejectTenantMismatch),
+			EnableRls:                ptr(cfg.Security.EnableRLS),
 		},
 		Housekeeping: &struct {
 			EnableReaper *bool   `json:"enable_reaper,omitempty"`
@@ -783,28 +764,28 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			MultipartTtl *string `json:"multipart_ttl,omitempty"`
 			PendingTtl   *string `json:"pending_ttl,omitempty"`
 		}{
-			EnableReaper: ptr(s.cfg.Housekeeping.EnableReaper),
-			PendingTtl:   ptr(s.cfg.Housekeeping.PendingTTL.String()),
-			MultipartTtl: ptr(s.cfg.Housekeeping.MultipartTTL.String()),
-			GcInterval:   ptr(s.cfg.Housekeeping.GCInterval.String()),
+			EnableReaper: ptr(cfg.Housekeeping.EnableReaper),
+			PendingTtl:   ptr(cfg.Housekeeping.PendingTTL),
+			MultipartTtl: ptr(cfg.Housekeeping.MultipartTTL),
+			GcInterval:   ptr(cfg.Housekeeping.GCInterval),
 		},
 		RateLimit: &struct {
 			Burst             *int     `json:"burst,omitempty"`
 			MaxTenants        *int     `json:"max_tenants,omitempty"`
 			RequestsPerSecond *float32 `json:"requests_per_second,omitempty"`
 		}{
-			RequestsPerSecond: ptr(float32(s.cfg.RateLimit.RequestsPerSecond)),
-			Burst:             ptr(s.cfg.RateLimit.Burst),
-			MaxTenants:        ptr(s.cfg.RateLimit.MaxTenants),
+			RequestsPerSecond: ptr(cfg.RateLimit.RequestsPerSecond),
+			Burst:             ptr(cfg.RateLimit.Burst),
+			MaxTenants:        ptr(cfg.RateLimit.MaxTenants),
 		},
 		Cache: &struct {
 			Enabled *bool   `json:"enabled,omitempty"`
 			MaxSize *int    `json:"max_size,omitempty"`
 			Ttl     *string `json:"ttl,omitempty"`
 		}{
-			Enabled: ptr(s.cfg.Cache.Enabled),
-			MaxSize: ptr(s.cfg.Cache.MaxSize),
-			Ttl:     ptr(s.cfg.Cache.TTL.String()),
+			Enabled: ptr(cfg.Cache.Enabled),
+			MaxSize: ptr(cfg.Cache.MaxSize),
+			Ttl:     ptr(cfg.Cache.TTL),
 		},
 		Timeouts: &struct {
 			DefaultOperation *string `json:"default_operation,omitempty"`
@@ -812,17 +793,17 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			LongOperation    *string `json:"long_operation,omitempty"`
 			S3Operation      *string `json:"s3_operation,omitempty"`
 		}{
-			FastOperation:    ptr(s.cfg.Timeouts.FastOperation.String()),
-			DefaultOperation: ptr(s.cfg.Timeouts.DefaultOperation.String()),
-			S3Operation:      ptr(s.cfg.Timeouts.S3Operation.String()),
-			LongOperation:    ptr(s.cfg.Timeouts.LongOperation.String()),
+			FastOperation:    ptr(cfg.Timeouts.FastOperation),
+			DefaultOperation: ptr(cfg.Timeouts.DefaultOperation),
+			S3Operation:      ptr(cfg.Timeouts.S3Operation),
+			LongOperation:    ptr(cfg.Timeouts.LongOperation),
 		},
 		Idempotency: &struct {
 			Enabled *bool   `json:"enabled,omitempty"`
 			Ttl     *string `json:"ttl,omitempty"`
 		}{
-			Enabled: ptr(s.cfg.Idempotency.Enabled),
-			Ttl:     ptr(s.cfg.Idempotency.TTL.String()),
+			Enabled: ptr(cfg.Idempotency.Enabled),
+			Ttl:     ptr(cfg.Idempotency.TTL),
 		},
 		Otel: &struct {
 			Enabled  *bool   `json:"enabled,omitempty"`
@@ -830,10 +811,10 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			Insecure *bool   `json:"insecure,omitempty"`
 			Protocol *string `json:"protocol,omitempty"`
 		}{
-			Enabled:  ptr(s.cfg.OTel.Enabled),
-			Endpoint: ptr(s.cfg.OTel.Endpoint),
-			Protocol: ptr(s.cfg.OTel.Protocol),
-			Insecure: ptr(s.cfg.OTel.Insecure),
+			Enabled:  ptr(cfg.OTel.Enabled),
+			Endpoint: ptr(cfg.OTel.Endpoint),
+			Protocol: ptr(cfg.OTel.Protocol),
+			Insecure: ptr(cfg.OTel.Insecure),
 		},
 	}
 
