@@ -51,6 +51,7 @@ func NewK8sSecretResolver() *K8sSecretResolver {
 					RootCAs: caCertPool,
 				},
 			},
+			Timeout: defaultHTTPTimeout,
 		},
 		apiBaseURL: defaultK8sAPIBaseURL,
 		tokenPath:  k8sTokenPath,

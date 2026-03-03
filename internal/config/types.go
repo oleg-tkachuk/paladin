@@ -1,6 +1,11 @@
 package config
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+
+	yaml "github.com/oasdiff/yaml3"
+)
 
 type Config struct {
 	App          App          `yaml:"app" json:"app"`
@@ -25,6 +30,43 @@ type SecretRef struct {
 	Name      string `yaml:"name" json:"name"`
 	Key       string `yaml:"key" json:"key"` // Defaults to "password" if empty
 	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+// UnmarshalJSON parses either a string (secret name) or an object (full ref).
+func (s *SecretRef) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		s.Name = str
+		s.Key = "password"
+		return nil
+	}
+
+	type rawSecretRef SecretRef
+	if err := json.Unmarshal(data, (*rawSecretRef)(s)); err != nil {
+		return err
+	}
+	if s.Key == "" {
+		s.Key = "password"
+	}
+	return nil
+}
+
+// UnmarshalYAML parses either a string (secret name) or an object (full ref).
+func (s *SecretRef) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		s.Name = value.Value
+		s.Key = "password"
+		return nil
+	}
+
+	type rawSecretRef SecretRef
+	if err := value.Decode((*rawSecretRef)(s)); err != nil {
+		return err
+	}
+	if s.Key == "" {
+		s.Key = "password"
+	}
+	return nil
 }
 
 type App struct {
