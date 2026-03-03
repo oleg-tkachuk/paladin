@@ -5,9 +5,9 @@ app:
 # ─── Observability ──────────────────────────────────────────────────────────
 
 logger:
-  level: debug # debug, info, warn, error, dpanic, panic, fatal
+  level: error # debug, info, warn, error, dpanic, panic, fatal
   format: json # json, console
-  development: false
+  development: true
   disable_caller: false
   disable_stacktrace: true
   sampling:
