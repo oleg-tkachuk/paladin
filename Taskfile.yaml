@@ -126,7 +126,7 @@ tasks:
       - cmd: |-
           printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running unit tests...\n"
       - cmd: |-
-          eval "$(minikube docker-env)" && time go test -v ./...
+          eval "$(minikube docker-env)" && time go test ./...
 
   test:hurl:
     desc: "Run Hurl integration tests"
@@ -159,7 +159,14 @@ tasks:
     desc: "Restart the deployment"
     silent: true
     cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Restarting deployment...\n"
-      - cmd: |-
+      - |
+        if ! kubectl get namespace {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
+          printf "INFO: %s: Skipping restart (namespace %s not found)\n" "{{.K8S_DEPLOYMENT_NAME}}" "{{.K8S_NAMESPACE}}"
+          exit 0
+        fi
+        if kubectl get deployment/{{.K8S_DEPLOYMENT_NAME}} -n {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
+          printf "INFO: %s: Restarting deployment...\n" "{{.K8S_DEPLOYMENT_NAME}}"
           kubectl -n {{.K8S_NAMESPACE}} rollout restart deployment {{.K8S_DEPLOYMENT_NAME}}
+        else
+          printf "INFO: %s: Skipping restart (deployment not found in %s)\n" "{{.K8S_DEPLOYMENT_NAME}}" "{{.K8S_NAMESPACE}}"
+        fi

@@ -55,7 +55,7 @@ func (f *factory) Get(name string) *fault.CircuitBreakerWrapper {
 func (f *factory) CheckHealth() map[string]string {
 	res := make(map[string]string)
 	for name, w := range fault.AllBreakers() {
-		res[name] = w.State().String()
+		res[name] = w.State()
 	}
 
 	return res

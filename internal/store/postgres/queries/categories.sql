@@ -46,3 +46,11 @@ FROM (
 WHERE (sqlc.narg('cursor')::timestamptz IS NULL OR first_created_at < sqlc.narg('cursor'))
 ORDER BY first_created_at DESC
 LIMIT $1;
+
+-- name: GetCategoryStats :one
+SELECT 
+    COUNT(*)::bigint AS total_count,
+    COALESCE(SUM(size_bytes), 0)::bigint AS total_size
+FROM objects
+WHERE tenant_id = $1 AND category = $2
+  AND status NOT IN ('hard_deleted');

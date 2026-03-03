@@ -109,7 +109,14 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		Status: domain.ObjectUploading, Labels: labels, ExternalRef: externalRef,
 		ExpiresAt: &expiresAt, Category: category,
 	}
-	if err := s.objRepo.Create(ctx, objRec); err != nil {
+	// Start Unit of Work for transactional creation
+	uow, err := s.uowf.Begin(ctx)
+	if err != nil {
+		return domain.MultipartInitResponse{}, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer uow.Rollback(ctx)
+
+	if err := uow.Objects().Create(ctx, objRec); err != nil {
 		return domain.MultipartInitResponse{}, err
 	}
 
@@ -118,8 +125,12 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		Status: domain.MultipartInitiated, ExpiresAt: expiresAt,
 		Bucket: s.s3.BucketName(), ContentType: contentType, PartSize: s.partSize,
 	}
-	if err := s.multiRepo.Create(ctx, multiRec); err != nil {
+	if err := uow.Multipart().Create(ctx, multiRec); err != nil {
 		return domain.MultipartInitResponse{}, err
+	}
+
+	if err := uow.Commit(ctx); err != nil {
+		return domain.MultipartInitResponse{}, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	res := domain.MultipartInitResponse{

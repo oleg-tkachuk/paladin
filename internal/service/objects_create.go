@@ -8,8 +8,10 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -20,7 +22,7 @@ import (
 // createSingle creates a single object upload with a presigned PUT URL.
 // category must be the slug of an existing tenant category.
 func (s *objectsService) createSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "CreateSingle")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpCreateObject)
 	defer span.End()
 
 	span.SetAttributes(
@@ -137,9 +139,10 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	if err := s.objRepo.Create(ctx, rec); err != nil {
-		return domain.CreateObjectResponse{}, err
+		return domain.CreateObjectResponse{}, fmt.Errorf("create object: %w", err)
 	}
 
+	logger.FromContext(ctx).Info(LogObjectCreated, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	res := domain.CreateObjectResponse{
 		ID: id, Key: key, Bucket: bucket, Category: category,
 		Upload: domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},

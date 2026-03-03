@@ -39,64 +39,68 @@ func (q *Queries) CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID 
 }
 
 const getMultipartByUploadID = `-- name: GetMultipartByUploadID :one
-SELECT 
-    id, tenant_id, object_id, upload_id, bucket, object_key, 
-    content_type, part_size_bytes, status, created_at, updated_at, expires_at
+SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.upload_id, multipart_uploads.bucket, multipart_uploads.object_key, multipart_uploads.content_type, multipart_uploads.part_size_bytes, multipart_uploads.status, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.expires_at
 FROM multipart_uploads
 WHERE tenant_id = $1 AND upload_id = $2
 `
 
-func (q *Queries) GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (MultipartUpload, error) {
+type GetMultipartByUploadIDRow struct {
+	MultipartUpload MultipartUpload `json:"multipart_upload"`
+}
+
+func (q *Queries) GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (GetMultipartByUploadIDRow, error) {
 	row := q.db.QueryRow(ctx, getMultipartByUploadID, tenantID, uploadID)
-	var i MultipartUpload
+	var i GetMultipartByUploadIDRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.ObjectID,
-		&i.UploadID,
-		&i.Bucket,
-		&i.ObjectKey,
-		&i.ContentType,
-		&i.PartSizeBytes,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ExpiresAt,
+		&i.MultipartUpload.ID,
+		&i.MultipartUpload.TenantID,
+		&i.MultipartUpload.ObjectID,
+		&i.MultipartUpload.UploadID,
+		&i.MultipartUpload.Bucket,
+		&i.MultipartUpload.ObjectKey,
+		&i.MultipartUpload.ContentType,
+		&i.MultipartUpload.PartSizeBytes,
+		&i.MultipartUpload.Status,
+		&i.MultipartUpload.CreatedAt,
+		&i.MultipartUpload.UpdatedAt,
+		&i.MultipartUpload.ExpiresAt,
 	)
 	return i, err
 }
 
 const listExpiredMultiparts = `-- name: ListExpiredMultiparts :many
-SELECT 
-    id, tenant_id, object_id, upload_id, bucket, object_key, 
-    content_type, part_size_bytes, status, created_at, updated_at, expires_at
+SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.upload_id, multipart_uploads.bucket, multipart_uploads.object_key, multipart_uploads.content_type, multipart_uploads.part_size_bytes, multipart_uploads.status, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.expires_at
 FROM multipart_uploads
 WHERE status = 'initiated' AND expires_at < NOW()
 LIMIT $1
 `
 
-func (q *Queries) ListExpiredMultiparts(ctx context.Context, limit int32) ([]MultipartUpload, error) {
+type ListExpiredMultipartsRow struct {
+	MultipartUpload MultipartUpload `json:"multipart_upload"`
+}
+
+func (q *Queries) ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error) {
 	rows, err := q.db.Query(ctx, listExpiredMultiparts, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MultipartUpload
+	var items []ListExpiredMultipartsRow
 	for rows.Next() {
-		var i MultipartUpload
+		var i ListExpiredMultipartsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.ObjectID,
-			&i.UploadID,
-			&i.Bucket,
-			&i.ObjectKey,
-			&i.ContentType,
-			&i.PartSizeBytes,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ExpiresAt,
+			&i.MultipartUpload.ID,
+			&i.MultipartUpload.TenantID,
+			&i.MultipartUpload.ObjectID,
+			&i.MultipartUpload.UploadID,
+			&i.MultipartUpload.Bucket,
+			&i.MultipartUpload.ObjectKey,
+			&i.MultipartUpload.ContentType,
+			&i.MultipartUpload.PartSizeBytes,
+			&i.MultipartUpload.Status,
+			&i.MultipartUpload.CreatedAt,
+			&i.MultipartUpload.UpdatedAt,
+			&i.MultipartUpload.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -109,27 +113,31 @@ func (q *Queries) ListExpiredMultiparts(ctx context.Context, limit int32) ([]Mul
 }
 
 const listMultipartParts = `-- name: ListMultipartParts :many
-SELECT multipart_id, part_number, etag, size_bytes, created_at
+SELECT multipart_parts.multipart_id, multipart_parts.part_number, multipart_parts.etag, multipart_parts.size_bytes, multipart_parts.created_at
 FROM multipart_parts
 WHERE multipart_id = $1
 ORDER BY part_number ASC
 `
 
-func (q *Queries) ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]MultipartPart, error) {
+type ListMultipartPartsRow struct {
+	MultipartPart MultipartPart `json:"multipart_part"`
+}
+
+func (q *Queries) ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error) {
 	rows, err := q.db.Query(ctx, listMultipartParts, multipartID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MultipartPart
+	var items []ListMultipartPartsRow
 	for rows.Next() {
-		var i MultipartPart
+		var i ListMultipartPartsRow
 		if err := rows.Scan(
-			&i.MultipartID,
-			&i.PartNumber,
-			&i.Etag,
-			&i.SizeBytes,
-			&i.CreatedAt,
+			&i.MultipartPart.MultipartID,
+			&i.MultipartPart.PartNumber,
+			&i.MultipartPart.Etag,
+			&i.MultipartPart.SizeBytes,
+			&i.MultipartPart.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -110,6 +110,20 @@ func (r *CategoryRepo) ObjectCount(ctx context.Context, tenantID, slug string) (
 	return count, nil
 }
 
+func (r *CategoryRepo) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	row, err := r.db.Queries.GetCategoryStats(ctx, tenantID, slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
+		}
+		return nil, fmt.Errorf("get category stats: %w", err)
+	}
+	return &domain.CategoryStats{
+		TotalCount: row.TotalCount,
+		TotalSize:  row.TotalSize,
+	}, nil
+}
+
 func (r *CategoryRepo) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
 	var pgCursor pgtype.Timestamptz
 	if cursor != "" {

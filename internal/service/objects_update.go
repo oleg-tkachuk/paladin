@@ -18,7 +18,7 @@ import (
 
 // updateObjectStatus updates the status of an object (e.g. for soft deletion)
 func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string, id openapi_types.UUID, status string, idempotencyKey *string) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "UpdateStatus")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpUpdateStatus)
 	defer span.End()
 	span.SetAttributes(
 		attribute.String("tenant_id", tenantID),
@@ -104,10 +104,10 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	var event domain.ObjectEvent
 
 	switch status {
-	case "soft_deleted":
-		event = domain.EventObjectSoftDelete
-	case "uploaded", "complete":
-		event = domain.EventObjectRestore
+	case "aborted":
+		event = domain.EventObjectAbort
+	case "error":
+		event = domain.EventObjectFail
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
 		opStatus = "error"
@@ -116,9 +116,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 
 	if err = sm.Fire(event); err != nil {
 		opStatus = "conflict"
-		// If statemachine conflict occurs, it translates directly to 409 conflict.
-		// Keep the detailed error.
-		return fmt.Errorf("invalid transition: %w", err)
+		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
@@ -132,21 +130,15 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	}
 
 	// Actually apply changes
-	if event == domain.EventObjectSoftDelete {
-		if _, err = s.objRepo.MarkSoftDeleted(ctx, tenantID, id); err != nil {
-			span.RecordError(err)
-			opStatus = "error"
-			return err
-		}
-	} else if event == domain.EventObjectRestore {
-		if _, err = s.objRepo.Restore(ctx, tenantID, id); err != nil {
+	if event == domain.EventObjectAbort || event == domain.EventObjectFail {
+		if _, err = s.objRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 			span.RecordError(err)
 			opStatus = "error"
 			return err
 		}
 	}
 
-	logger.FromContext(ctx).Info("Object Status Updated",
+	logger.FromContext(ctx).Info(LogObjectStatusUpdated,
 		zap.String("tenant_id", tenantID),
 		zap.String("object_id", id.String()),
 		zap.String("status", status))

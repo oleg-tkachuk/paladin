@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // Validation constants
@@ -17,51 +18,35 @@ const (
 	MaxKeyPrefixLength   = 256
 )
 
-// Strict segment regex for S3 key path segments:
-// Allowed characters: a-z, 0-9, '-', '_'
-// Must start with a-z or 0-9, max 64 chars total.
 var (
-	// pathSegmentRegex validates a single path segment (tenant, category, or any subpath component)
 	pathSegmentRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
-
-	// Valid content type pattern (type/subtype with optional parameters)
 	contentTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}(;.*)?$`)
+	labelKeyRegex    = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
-	// Valid label key pattern (alphanumeric, dash, underscore, dot)
-	labelKeyRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
-
-	// UUID v4 pattern
-	uuidRegex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	v *validator.Validate
 )
 
+func init() {
+	v = validator.New()
+	_ = v.RegisterValidation("path_segment", func(fl validator.FieldLevel) bool {
+		s := fl.Field().String()
+		if s == ".." || s == "." {
+			return false
+		}
+		return pathSegmentRegex.MatchString(s)
+	})
+	_ = v.RegisterValidation("content_type", func(fl validator.FieldLevel) bool {
+		return contentTypeRegex.MatchString(fl.Field().String())
+	})
+	_ = v.RegisterValidation("label_key", func(fl validator.FieldLevel) bool {
+		return labelKeyRegex.MatchString(fl.Field().String())
+	})
+}
+
 // ValidatePathSegment checks that a single component of an S3 key path is valid.
-//
-// Rules (applied to tenant, category, and each subpath segment individually):
-//   - ASCII lowercase letters, digits, '-', '_' only
-//   - Must start with [a-z0-9]
-//   - 1–64 chars total
-//   - Must not be ".." or "."
-//   - Must not contain control characters or non-ASCII
 func ValidatePathSegment(segment string) error {
-	if segment == "" {
-		return fmt.Errorf("path segment cannot be empty")
-	}
-	if segment == ".." || segment == "." {
-		return fmt.Errorf("path segment %q is not allowed", segment)
-	}
-	if !utf8.ValidString(segment) {
-		return fmt.Errorf("path segment contains invalid UTF-8")
-	}
-	for _, r := range segment {
-		if r > 127 {
-			return fmt.Errorf("path segment must not contain non-ASCII characters")
-		}
-		if r < 32 {
-			return fmt.Errorf("path segment must not contain control characters")
-		}
-	}
-	if !pathSegmentRegex.MatchString(segment) {
-		return fmt.Errorf("invalid path segment %q: must match ^[a-z0-9][a-z0-9_-]{0,63}$", segment)
+	if err := v.Var(segment, "required,printascii,path_segment"); err != nil {
+		return fmt.Errorf("invalid path segment %q", segment)
 	}
 	return nil
 }
@@ -75,27 +60,15 @@ func ValidateCategorySlug(slug string) error {
 }
 
 // ValidateSubpath checks an optional subpath within a category.
-// The subpath may contain '/' to separate its own segments; each segment is validated
-// individually against the strict path segment rules.
-//
-// Rules:
-//   - Empty subpath is allowed (means no subpath)
-//   - Must not start or end with '/'
-//   - Must not contain '//' (empty segments)
-//   - Each segment must pass ValidatePathSegment
-//   - Total length ≤ 256
 func ValidateSubpath(subpath string) error {
 	if subpath == "" {
 		return nil
 	}
-	if len(subpath) > MaxSubpathLength {
-		return fmt.Errorf("subpath too long (max %d characters)", MaxSubpathLength)
+	if err := v.Var(subpath, fmt.Sprintf("max=%d", MaxSubpathLength)); err != nil {
+		return fmt.Errorf("subpath too long")
 	}
-	if strings.HasPrefix(subpath, "/") || strings.HasSuffix(subpath, "/") {
-		return fmt.Errorf("subpath must not start or end with '/'")
-	}
-	if strings.Contains(subpath, "//") {
-		return fmt.Errorf("subpath must not contain consecutive slashes")
+	if strings.HasPrefix(subpath, "/") || strings.HasSuffix(subpath, "/") || strings.Contains(subpath, "//") {
+		return fmt.Errorf("subpath must not start or end with '/' or contain consecutive slashes")
 	}
 	for _, seg := range strings.Split(subpath, "/") {
 		if err := ValidatePathSegment(seg); err != nil {
@@ -106,47 +79,22 @@ func ValidateSubpath(subpath string) error {
 }
 
 // ValidateKeyPrefix validates a client-supplied key_prefix filter.
-// The prefix is relative to tenant_id/category/ and must not escape that scope.
-//
-// Rules:
-//   - Empty prefix means "no filter" (allowed)
-//   - Must not start or end with '/'
-//   - Must not contain '..' or '//'
-//   - Must not contain SQL wildcard characters ('%', '_' are legitimate in slugs, but '%' is not)
-//   - Each segment must satisfy pathSegmentRegex
-//   - Total length ≤ 256
 func ValidateKeyPrefix(prefix string) error {
 	if prefix == "" {
 		return nil
 	}
-	if len(prefix) > MaxKeyPrefixLength {
-		return fmt.Errorf("key_prefix too long (max %d characters)", MaxKeyPrefixLength)
+	if err := v.Var(prefix, fmt.Sprintf("max=%d", MaxKeyPrefixLength)); err != nil {
+		return fmt.Errorf("key_prefix too long")
 	}
-	if strings.HasPrefix(prefix, "/") {
-		return fmt.Errorf("key_prefix must not start with '/'")
-	}
-	if strings.Contains(prefix, "..") {
-		return fmt.Errorf("key_prefix must not contain '..'")
-	}
-	if strings.Contains(prefix, "//") {
-		return fmt.Errorf("key_prefix must not contain consecutive slashes")
-	}
-	// Reject SQL LIKE wildcard '%' (underscore is allowed in path segments but not as a wildcard)
-	if strings.Contains(prefix, "%") {
-		return fmt.Errorf("key_prefix must not contain '%%'")
+	if strings.HasPrefix(prefix, "/") || strings.Contains(prefix, "..") || strings.Contains(prefix, "//") || strings.Contains(prefix, "%") {
+		return fmt.Errorf("invalid key_prefix format")
 	}
 	return nil
 }
 
 // ValidateContentType checks if content type format is valid
 func ValidateContentType(contentType string) error {
-	if contentType == "" {
-		return fmt.Errorf("content type cannot be empty")
-	}
-	if len(contentType) > 255 {
-		return fmt.Errorf("content type too long (max 255 characters)")
-	}
-	if !contentTypeRegex.MatchString(contentType) {
+	if err := v.Var(contentType, "required,max=255,content_type"); err != nil {
 		return fmt.Errorf("invalid content type format")
 	}
 	return nil
@@ -157,11 +105,8 @@ func ValidateExternalRef(externalRef string) error {
 	if externalRef == "" {
 		return nil
 	}
-	if len(externalRef) > MaxExternalRefLength {
-		return fmt.Errorf("external_ref too long (max %d characters)", MaxExternalRefLength)
-	}
-	if !utf8.ValidString(externalRef) {
-		return fmt.Errorf("external_ref contains invalid UTF-8")
+	if err := v.Var(externalRef, fmt.Sprintf("max=%d,printascii", MaxExternalRefLength)); err != nil {
+		return fmt.Errorf("invalid external_ref")
 	}
 	return nil
 }
@@ -175,20 +120,11 @@ func ValidateLabels(labels map[string]string) error {
 		return fmt.Errorf("too many labels (max %d)", MaxLabelsCount)
 	}
 	for key, value := range labels {
-		if key == "" {
-			return fmt.Errorf("label key cannot be empty")
+		if err := v.Var(key, fmt.Sprintf("required,max=%d,label_key", MaxLabelKeyLength)); err != nil {
+			return fmt.Errorf("invalid label key %q", key)
 		}
-		if len(key) > MaxLabelKeyLength {
-			return fmt.Errorf("label key too long (max %d characters)", MaxLabelKeyLength)
-		}
-		if !labelKeyRegex.MatchString(key) {
-			return fmt.Errorf("label key %q contains invalid characters (only alphanumeric, dash, underscore, dot allowed)", key)
-		}
-		if len(value) > MaxLabelValueLength {
-			return fmt.Errorf("label value for key %q too long (max %d characters)", key, MaxLabelValueLength)
-		}
-		if !utf8.ValidString(value) {
-			return fmt.Errorf("label value for key %q contains invalid UTF-8", key)
+		if err := v.Var(value, fmt.Sprintf("max=%d,printascii", MaxLabelValueLength)); err != nil {
+			return fmt.Errorf("invalid label value for key %q", key)
 		}
 	}
 	return nil
@@ -196,10 +132,7 @@ func ValidateLabels(labels map[string]string) error {
 
 // ValidateUUID checks if a string is a valid UUID v4
 func ValidateUUID(id string) error {
-	if id == "" {
-		return fmt.Errorf("UUID cannot be empty")
-	}
-	if !uuidRegex.MatchString(strings.ToLower(id)) {
+	if err := v.Var(strings.ToLower(id), "required,uuid4"); err != nil {
 		return fmt.Errorf("invalid UUID format")
 	}
 	return nil

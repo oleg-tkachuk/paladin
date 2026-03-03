@@ -181,6 +181,14 @@ func (m *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor
 	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
+func (m *MockCategoryService) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	args := m.Called(ctx, tenantID, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.CategoryStats), args.Error(1)
+}
+
 // MockAuditLogRepository is a mock implementation of the AuditLogRepository interface
 type MockAuditLogRepository struct {
 	mock.Mock
@@ -204,6 +212,16 @@ func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filt
 func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
 	args := m.Called(ctx, cutoff, limit)
 	return args.Get(0).(int64), args.Error(1)
+}
+
+// MockSystemService
+type MockSystemService struct {
+	mock.Mock
+}
+
+func (m *MockSystemService) GetConfig(ctx context.Context) (domain.SystemConfig, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(domain.SystemConfig), args.Error(1)
 }
 
 // MockPinger
@@ -246,6 +264,7 @@ var _ = Describe("Router", func() {
 		mockS3      *MockS3Health
 		mockBreaker *MockBreakerFactory
 		mockAudit   *MockAuditLogRepository
+		mockSys     *MockSystemService
 		hs          *service.HealthService
 		started     *atomic.Bool
 		server      *httpapi.Server
@@ -260,6 +279,8 @@ var _ = Describe("Router", func() {
 		mockBreaker = new(MockBreakerFactory)
 		mockAudit = new(MockAuditLogRepository)
 		mockAudit.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
+		mockSys = new(MockSystemService)
+		mockSys.On("GetConfig", mock.Anything).Return(domain.SystemConfig{}, nil).Maybe()
 		hs = service.NewHealthService(mockPing, mockS3, mockBreaker)
 		started = &atomic.Bool{}
 		started.Store(true)
@@ -282,7 +303,8 @@ var _ = Describe("Router", func() {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, "1.0.0", "deadbeef", "2023-01-01", hs, started)
+		meta := domain.AppMetadata{Version: "1.0.0", Commit: "deadbeef", BuildTime: "2023-01-01"}
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, meta, hs, mockSys, started)
 		recorder = httptest.NewRecorder()
 	})
 

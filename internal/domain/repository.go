@@ -7,6 +7,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// UnitOfWork groups repositories for cross-entity transactional consistency.
+type UnitOfWork interface {
+	Objects() ObjectsRepository
+	Multipart() MultipartRepository
+	Idempotency() IdempotencyRepository
+	AuditLogs() AuditLogRepository
+	Categories() CategoryRepository
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
+}
+
+// UoWFactory describes how to start a new UnitOfWork.
+type UoWFactory interface {
+	Begin(ctx context.Context) (UnitOfWork, error)
+}
+
 // CategoryRepository manages the lifecycle of tenant-scoped object categories.
 type CategoryRepository interface {
 	// Create persists a new category. Returns error on duplicate slug.
@@ -19,9 +35,10 @@ type CategoryRepository interface {
 	Delete(ctx context.Context, tenantID, slug string) (bool, error)
 	// Exists returns true if the slug is registered for the tenant.
 	Exists(ctx context.Context, tenantID, slug string) (bool, error)
-	// ObjectCount returns the number of non-hard-deleted objects in the category.
-	// Used to guard deletion (returns 409 if count > 0).
+	// CategoryID returns the count of objects in a category.
 	ObjectCount(ctx context.Context, tenantID, slug string) (int64, error)
+	// GetStats returns detailed statistics for a category.
+	GetStats(ctx context.Context, tenantID, slug string) (*CategoryStats, error)
 	// ListTenants returns a list of all distinct tenant IDs, paginated.
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
 }
@@ -33,6 +50,8 @@ type CategoryService interface {
 	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, int64, error)
 	// Delete returns ErrConflict if any active objects still reference the category.
 	Delete(ctx context.Context, tenantID, slug string) error
+	// GetStats returns detailed statistics for a category.
+	GetStats(ctx context.Context, tenantID, slug string) (*CategoryStats, error)
 	// ListTenants returns a list of available tenants in the system.
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
 }

@@ -9,20 +9,12 @@ INSERT INTO objects (
 );
 
 -- name: GetObject :one
-SELECT
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath
+SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND id = $2;
 
 -- name: GetObjectByExternalRef :one
-SELECT
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath
+SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND external_ref = $2;
 
@@ -66,12 +58,7 @@ WHERE tenant_id = $1
   AND status != 'hard_deleted';
 
 -- name: ListObjects :many
-SELECT
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath,
-    COUNT(*) OVER() AS total_count
+SELECT sqlc.embed(objects), COUNT(*) OVER() AS total_count
 FROM objects
 WHERE tenant_id = $1
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
@@ -81,7 +68,9 @@ WHERE tenant_id = $1
   AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
   AND (sqlc.narg('category')::text IS NULL OR category = sqlc.narg('category'))
   AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
-ORDER BY created_at DESC
+ORDER BY
+    CASE WHEN sqlc.arg('sort_order')::text = 'asc' THEN created_at END ASC,
+    CASE WHEN sqlc.arg('sort_order')::text = 'desc' OR sqlc.arg('sort_order')::text IS NULL THEN created_at END DESC
 LIMIT $2;
 
 -- name: UpdateObjectStatus :execrows
@@ -94,22 +83,14 @@ UPDATE objects
 SET labels = labels || $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath;
+RETURNING sqlc.embed(objects);
 
 -- name: PatchObjectExternalRef :one
 UPDATE objects
 SET external_ref = $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath;
+RETURNING sqlc.embed(objects);
 
 -- name: PatchObjectLabelsAndExternalRef :one
 UPDATE objects
@@ -117,18 +98,10 @@ SET labels = labels || $3,
     external_ref = $4,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath;
+RETURNING sqlc.embed(objects);
 
 -- name: ListExpiredPendingObjects :many
-SELECT
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, created_at, updated_at, expires_at,
-    labels, external_ref, stored_etag, stored_size_bytes, completed_at, deleted_at,
-    category, subpath
+SELECT sqlc.embed(objects)
 FROM objects
 WHERE status = 'pending' AND expires_at < $1
 LIMIT $2;

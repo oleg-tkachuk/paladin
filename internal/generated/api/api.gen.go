@@ -20,6 +20,10 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+const (
+	BearerAuthScopes = "BearerAuth.Scopes"
+)
+
 // Defines values for AuditLogActorType.
 const (
 	Service AuditLogActorType = "service"
@@ -82,6 +86,17 @@ const (
 	PUT SignedActionMethod = "PUT"
 )
 
+// Defines values for ListObjectsParamsSort.
+const (
+	CreatedAt ListObjectsParamsSort = "created_at"
+)
+
+// Defines values for ListObjectsParamsOrder.
+const (
+	Asc  ListObjectsParamsOrder = "asc"
+	Desc ListObjectsParamsOrder = "desc"
+)
+
 // AbortMultipartResponse defines model for AbortMultipartResponse.
 type AbortMultipartResponse struct {
 	Status ObjectStatus `json:"status"`
@@ -92,7 +107,7 @@ type AuditLog struct {
 	ActorSubject      *string                 `json:"actor_subject"`
 	ActorType         AuditLogActorType       `json:"actor_type"`
 	ClientIp          *string                 `json:"client_ip"`
-	CreatedAt         time.Time               `json:"created_at"`
+	CreatedAt         *time.Time              `json:"created_at,omitempty"`
 	HttpStatus        *int                    `json:"http_status"`
 	Id                openapi_types.UUID      `json:"id"`
 	IdempotencyKey    *string                 `json:"idempotency_key"`
@@ -125,13 +140,19 @@ type BulkActionResponse struct {
 
 // Category defines model for Category.
 type Category struct {
-	CreatedAt   time.Time          `json:"created_at"`
-	Description *string            `json:"description"`
-	Id          openapi_types.UUID `json:"id"`
-	Name        string             `json:"name"`
-	Slug        string             `json:"slug"`
-	TenantId    string             `json:"tenant_id"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	Description *string             `json:"description"`
+	Id          *openapi_types.UUID `json:"id,omitempty"`
+	Name        string              `json:"name"`
+	Slug        string              `json:"slug"`
+	TenantId    string              `json:"tenant_id"`
+	UpdatedAt   *time.Time          `json:"updated_at,omitempty"`
+}
+
+// CategoryStats defines model for CategoryStats.
+type CategoryStats struct {
+	TotalCount int   `json:"total_count"`
+	TotalSize  int64 `json:"total_size"`
 }
 
 // CompleteMultipartRequest defines model for CompleteMultipartRequest.
@@ -184,21 +205,11 @@ type ConfigResponse struct {
 	} `json:"cache,omitempty"`
 	Datastores *struct {
 		Postgres *struct {
-			Dbname *string `json:"dbname,omitempty"`
-			Host   *string `json:"host,omitempty"`
-			Pool   *struct {
-				MaxConnIdleTime *string `json:"max_conn_idle_time,omitempty"`
-				MaxConnLifetime *string `json:"max_conn_lifetime,omitempty"`
-				MaxConns        *int    `json:"max_conns,omitempty"`
-				MinConns        *int    `json:"min_conns,omitempty"`
-			} `json:"pool,omitempty"`
-			Port     *string `json:"port,omitempty"`
-			SslMode  *string `json:"ssl_mode,omitempty"`
-			Timeouts *struct {
-				Connect   *string `json:"connect,omitempty"`
-				Statement *string `json:"statement,omitempty"`
-			} `json:"timeouts,omitempty"`
-			User *string `json:"user,omitempty"`
+			Dbname  *string `json:"dbname,omitempty"`
+			Host    *string `json:"host,omitempty"`
+			Port    *string `json:"port,omitempty"`
+			SslMode *string `json:"ssl_mode,omitempty"`
+			User    *string `json:"user,omitempty"`
 		} `json:"postgres,omitempty"`
 		S3 *struct {
 			Bucket         *string `json:"bucket,omitempty"`
@@ -207,7 +218,6 @@ type ConfigResponse struct {
 			PartSize       *string `json:"part_size,omitempty"`
 			PresignTtl     *string `json:"presign_ttl,omitempty"`
 			PublicEndpoint *string `json:"public_endpoint,omitempty"`
-			Region         *string `json:"region,omitempty"`
 			SseType        *string `json:"sse_type,omitempty"`
 		} `json:"s3,omitempty"`
 	} `json:"datastores,omitempty"`
@@ -378,14 +388,14 @@ type ErrorResponse struct {
 
 // GetMultipartResponse defines model for GetMultipartResponse.
 type GetMultipartResponse struct {
-	Bucket    string             `json:"bucket"`
-	CreatedAt time.Time          `json:"created_at"`
-	ObjectId  openapi_types.UUID `json:"object_id"`
-	ObjectKey string             `json:"object_key"`
-	PartSize  int64              `json:"part_size"`
-	Status    ObjectStatus       `json:"status"`
-	UpdatedAt time.Time          `json:"updated_at"`
-	UploadId  string             `json:"upload_id"`
+	Bucket    string              `json:"bucket"`
+	CreatedAt *time.Time          `json:"created_at,omitempty"`
+	ObjectId  *openapi_types.UUID `json:"object_id,omitempty"`
+	ObjectKey string              `json:"object_key"`
+	PartSize  int64               `json:"part_size"`
+	Status    ObjectStatus        `json:"status"`
+	UpdatedAt *time.Time          `json:"updated_at,omitempty"`
+	UploadId  string              `json:"upload_id"`
 }
 
 // GetObjectMetaResponse defines model for GetObjectMetaResponse.
@@ -414,10 +424,10 @@ type InitiateMultipartRequest struct {
 
 // InitiateMultipartResponse defines model for InitiateMultipartResponse.
 type InitiateMultipartResponse struct {
-	Bucket    string             `json:"bucket"`
-	ExpiresAt time.Time          `json:"expires_at"`
-	ObjectId  openapi_types.UUID `json:"object_id"`
-	ObjectKey string             `json:"object_key"`
+	Bucket    string              `json:"bucket"`
+	ExpiresAt time.Time           `json:"expires_at"`
+	ObjectId  *openapi_types.UUID `json:"object_id,omitempty"`
+	ObjectKey string              `json:"object_key"`
 
 	// PartSize Suggested part size (server-defined).
 	PartSize int64        `json:"part_size"`
@@ -457,24 +467,24 @@ type ObjectCommon struct {
 	Bucket string `json:"bucket"`
 
 	// Category Category slug the object belongs to
-	Category    string             `json:"category"`
-	CompletedAt *time.Time         `json:"completed_at,omitempty"`
-	ContentType string             `json:"content_type"`
-	CreatedAt   time.Time          `json:"created_at"`
-	DeletedAt   *time.Time         `json:"deleted_at,omitempty"`
-	ExternalRef *string            `json:"external_ref,omitempty"`
-	Labels      *Labels            `json:"labels,omitempty"`
-	ObjectId    openapi_types.UUID `json:"object_id"`
-	ObjectKey   string             `json:"object_key"`
-	SizeBytes   int64              `json:"size_bytes"`
-	Status      ObjectStatus       `json:"status"`
+	Category    string              `json:"category"`
+	CompletedAt *time.Time          `json:"completed_at,omitempty"`
+	ContentType string              `json:"content_type"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	DeletedAt   *time.Time          `json:"deleted_at,omitempty"`
+	ExternalRef *string             `json:"external_ref,omitempty"`
+	Labels      *Labels             `json:"labels,omitempty"`
+	ObjectId    *openapi_types.UUID `json:"object_id,omitempty"`
+	ObjectKey   string              `json:"object_key"`
+	SizeBytes   int64               `json:"size_bytes"`
+	Status      ObjectStatus        `json:"status"`
 
 	// StoredEtag Populated after successful commit/complete.
 	StoredEtag *string `json:"stored_etag,omitempty"`
 
 	// StoredSizeBytes Populated after successful commit/complete.
-	StoredSizeBytes *int64    `json:"stored_size_bytes,omitempty"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	StoredSizeBytes *int64     `json:"stored_size_bytes,omitempty"`
+	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
 }
 
 // ObjectStats defines model for ObjectStats.
@@ -608,8 +618,14 @@ type ObjectID = openapi_types.UUID
 // PartNumber defines model for PartNumber.
 type PartNumber = int32
 
+// Traceparent defines model for Traceparent.
+type Traceparent = string
+
 // UploadID defines model for UploadID.
 type UploadID = string
+
+// XRequestID defines model for XRequestID.
+type XRequestID = openapi_types.UUID
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -625,6 +641,9 @@ type InternalError = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = ErrorResponse
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = ErrorResponse
@@ -644,12 +663,96 @@ type ListAuditLogsParams struct {
 	HttpStatus     *int       `form:"http_status,omitempty" json:"http_status,omitempty"`
 	RequestId      *string    `form:"request_id,omitempty" json:"request_id,omitempty"`
 	IdempotencyKey *string    `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetAuditLogParams defines parameters for GetAuditLog.
+type GetAuditLogParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetAdminConfigParams defines parameters for GetAdminConfig.
+type GetAdminConfigParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // ListCategoriesParams defines parameters for ListCategories.
 type ListCategoriesParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// CreateCategoryParams defines parameters for CreateCategory.
+type CreateCategoryParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// DeleteCategoryParams defines parameters for DeleteCategory.
+type DeleteCategoryParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetCategoryStatsParams defines parameters for GetCategoryStats.
+type GetCategoryStatsParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// HealthLivezParams defines parameters for HealthLivez.
+type HealthLivezParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// HealthReadyzParams defines parameters for HealthReadyz.
+type HealthReadyzParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// HealthStartupzParams defines parameters for HealthStartupz.
+type HealthStartupzParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // InitiateMultipartParams defines parameters for InitiateMultipart.
@@ -669,6 +772,57 @@ type InitiateMultipartParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetMultipartParams defines parameters for GetMultipart.
+type GetMultipartParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// AbortMultipartParams defines parameters for AbortMultipart.
+type AbortMultipartParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// CompleteMultipartParams defines parameters for CompleteMultipart.
+type CompleteMultipartParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// SignPartsBatchParams defines parameters for SignPartsBatch.
+type SignPartsBatchParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// SignPartParams defines parameters for SignPart.
+type SignPartParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // ListObjectsParams defines parameters for ListObjects.
@@ -685,7 +839,25 @@ type ListObjectsParams struct {
 
 	// Prefix Filter objects by key prefix (simulates folder structure)
 	Prefix *string `form:"prefix,omitempty" json:"prefix,omitempty"`
+
+	// Sort Field to sort by
+	Sort *ListObjectsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order Sort order
+	Order *ListObjectsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
+
+// ListObjectsParamsSort defines parameters for ListObjects.
+type ListObjectsParamsSort string
+
+// ListObjectsParamsOrder defines parameters for ListObjects.
+type ListObjectsParamsOrder string
 
 // CreateObjectParams defines parameters for CreateObject.
 type CreateObjectParams struct {
@@ -704,6 +876,12 @@ type CreateObjectParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // BulkDeleteObjectsParams defines parameters for BulkDeleteObjects.
@@ -723,6 +901,12 @@ type BulkDeleteObjectsParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // BulkPurgeObjectsParams defines parameters for BulkPurgeObjects.
@@ -742,6 +926,12 @@ type BulkPurgeObjectsParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // BulkRestoreObjectsParams defines parameters for BulkRestoreObjects.
@@ -761,6 +951,12 @@ type BulkRestoreObjectsParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // DeleteObjectParams defines parameters for DeleteObject.
@@ -780,6 +976,30 @@ type DeleteObjectParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetObjectParams defines parameters for GetObject.
+type GetObjectParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// HeadObjectParams defines parameters for HeadObject.
+type HeadObjectParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // UpdateObjectParams defines parameters for UpdateObject.
@@ -799,6 +1019,39 @@ type UpdateObjectParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// CompleteObjectParams defines parameters for CompleteObject.
+type CompleteObjectParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetObjectMetaParams defines parameters for GetObjectMeta.
+type GetObjectMetaParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// PatchObjectMetaParams defines parameters for PatchObjectMeta.
+type PatchObjectMetaParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // PurgeObjectParams defines parameters for PurgeObject.
@@ -818,6 +1071,12 @@ type PurgeObjectParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // RestoreObjectParams defines parameters for RestoreObject.
@@ -837,12 +1096,69 @@ type RestoreObjectParams struct {
 	//
 	// **Example:** `550e8400-e29b-41d4-a716-446655440000`
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// SignObjectDownloadParams defines parameters for SignObjectDownload.
+type SignObjectDownloadParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// SignObjectUploadParams defines parameters for SignObjectUpload.
+type SignObjectUploadParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// PingS3Params defines parameters for PingS3.
+type PingS3Params struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// GetObjectStatsParams defines parameters for GetObjectStats.
+type GetObjectStatsParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // ListTenantsParams defines parameters for ListTenants.
 type ListTenantsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
+}
+
+// VersionParams defines parameters for Version.
+type VersionParams struct {
+	// XRequestID Unique correlation ID for the request
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+
+	// Traceparent W3C Trace Context header
+	Traceparent *Traceparent `json:"Traceparent,omitempty"`
 }
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
@@ -891,46 +1207,49 @@ type ServerInterface interface {
 	ListAuditLogs(c *gin.Context, params ListAuditLogsParams)
 	// Get audit log by ID
 	// (GET /admin/audit-logs/{id})
-	GetAuditLog(c *gin.Context, id openapi_types.UUID)
+	GetAuditLog(c *gin.Context, id openapi_types.UUID, params GetAuditLogParams)
 	// Get runtime configuration (redacted)
 	// (GET /admin/config)
-	GetAdminConfig(c *gin.Context)
+	GetAdminConfig(c *gin.Context, params GetAdminConfigParams)
 	// List categories
 	// (GET /categories)
 	ListCategories(c *gin.Context, params ListCategoriesParams)
 	// Create a category
 	// (POST /categories)
-	CreateCategory(c *gin.Context)
+	CreateCategory(c *gin.Context, params CreateCategoryParams)
 	// Delete a category
 	// (DELETE /categories/{slug})
-	DeleteCategory(c *gin.Context, slug string)
+	DeleteCategory(c *gin.Context, slug string, params DeleteCategoryParams)
+	// Get category statistics
+	// (GET /categories/{slug}/stats)
+	GetCategoryStats(c *gin.Context, slug string, params GetCategoryStatsParams)
 	// Liveness probe
 	// (GET /health/livez)
-	HealthLivez(c *gin.Context)
+	HealthLivez(c *gin.Context, params HealthLivezParams)
 	// Readiness probe
 	// (GET /health/readyz)
-	HealthReadyz(c *gin.Context)
+	HealthReadyz(c *gin.Context, params HealthReadyzParams)
 	// Startup probe
 	// (GET /health/startupz)
-	HealthStartupz(c *gin.Context)
+	HealthStartupz(c *gin.Context, params HealthStartupzParams)
 	// Initiate multipart upload
 	// (POST /multipart)
 	InitiateMultipart(c *gin.Context, params InitiateMultipartParams)
 	// Get multipart upload details
 	// (GET /multipart/{upload_id})
-	GetMultipart(c *gin.Context, uploadId UploadID)
+	GetMultipart(c *gin.Context, uploadId UploadID, params GetMultipartParams)
 	// Abort multipart upload
 	// (POST /multipart/{upload_id}/abort)
-	AbortMultipart(c *gin.Context, uploadId UploadID)
+	AbortMultipart(c *gin.Context, uploadId UploadID, params AbortMultipartParams)
 	// Complete multipart upload
 	// (POST /multipart/{upload_id}/complete)
-	CompleteMultipart(c *gin.Context, uploadId UploadID)
+	CompleteMultipart(c *gin.Context, uploadId UploadID, params CompleteMultipartParams)
 	// Sign multiple parts (batch)
 	// (POST /multipart/{upload_id}/parts/sign)
-	SignPartsBatch(c *gin.Context, uploadId UploadID)
+	SignPartsBatch(c *gin.Context, uploadId UploadID, params SignPartsBatchParams)
 	// Sign a single part for upload
 	// (POST /multipart/{upload_id}/parts/{part_number}/sign)
-	SignPart(c *gin.Context, uploadId UploadID, partNumber PartNumber)
+	SignPart(c *gin.Context, uploadId UploadID, partNumber PartNumber, params SignPartParams)
 	// List objects
 	// (GET /objects)
 	ListObjects(c *gin.Context, params ListObjectsParams)
@@ -951,22 +1270,22 @@ type ServerInterface interface {
 	DeleteObject(c *gin.Context, id ObjectID, params DeleteObjectParams)
 	// Get object details (without signing download URL)
 	// (GET /objects/{id})
-	GetObject(c *gin.Context, id ObjectID)
+	GetObject(c *gin.Context, id ObjectID, params GetObjectParams)
 	// Check object existence
 	// (HEAD /objects/{id})
-	HeadObject(c *gin.Context, id ObjectID)
+	HeadObject(c *gin.Context, id ObjectID, params HeadObjectParams)
 	// Update object lifecycle status (non-delete transitions)
 	// (PATCH /objects/{id})
 	UpdateObject(c *gin.Context, id ObjectID, params UpdateObjectParams)
 	// Commit single object upload (server validates via S3 HEAD)
 	// (POST /objects/{id}/complete)
-	CompleteObject(c *gin.Context, id ObjectID)
+	CompleteObject(c *gin.Context, id ObjectID, params CompleteObjectParams)
 	// Get object metadata
 	// (GET /objects/{id}/meta)
-	GetObjectMeta(c *gin.Context, id ObjectID)
+	GetObjectMeta(c *gin.Context, id ObjectID, params GetObjectMetaParams)
 	// Update object metadata (labels/external_ref)
 	// (PATCH /objects/{id}/meta)
-	PatchObjectMeta(c *gin.Context, id ObjectID)
+	PatchObjectMeta(c *gin.Context, id ObjectID, params PatchObjectMetaParams)
 	// Permanently purge an object (hard delete)
 	// (DELETE /objects/{id}/purge)
 	PurgeObject(c *gin.Context, id ObjectID, params PurgeObjectParams)
@@ -975,22 +1294,22 @@ type ServerInterface interface {
 	RestoreObject(c *gin.Context, id ObjectID, params RestoreObjectParams)
 	// Issue signed download action (GET)
 	// (POST /objects/{id}/sign-download)
-	SignObjectDownload(c *gin.Context, id ObjectID)
+	SignObjectDownload(c *gin.Context, id ObjectID, params SignObjectDownloadParams)
 	// Re-issue signed upload action for single PUT (if upload not completed)
 	// (POST /objects/{id}/sign-upload)
-	SignObjectUpload(c *gin.Context, id ObjectID)
+	SignObjectUpload(c *gin.Context, id ObjectID, params SignObjectUploadParams)
 	// S3 Ping
 	// (GET /ops/s3/ping)
-	PingS3(c *gin.Context)
+	PingS3(c *gin.Context, params PingS3Params)
 	// Get object statistics for analytics
 	// (GET /ops/stats)
-	GetObjectStats(c *gin.Context)
+	GetObjectStats(c *gin.Context, params GetObjectStatsParams)
 	// List available tenants
 	// (GET /tenants)
 	ListTenants(c *gin.Context, params ListTenantsParams)
 	// Build/version info
 	// (GET /version)
-	Version(c *gin.Context)
+	Version(c *gin.Context, params VersionParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1006,6 +1325,8 @@ type MiddlewareFunc func(c *gin.Context)
 func (siw *ServerInterfaceWrapper) ListAuditLogs(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAuditLogsParams
@@ -1090,6 +1411,46 @@ func (siw *ServerInterfaceWrapper) ListAuditLogs(c *gin.Context) {
 		return
 	}
 
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1114,6 +1475,51 @@ func (siw *ServerInterfaceWrapper) GetAuditLog(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAuditLogParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1121,12 +1527,59 @@ func (siw *ServerInterfaceWrapper) GetAuditLog(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetAuditLog(c, id)
+	siw.Handler.GetAuditLog(c, id, params)
 }
 
 // GetAdminConfig operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminConfig(c *gin.Context) {
 
+	var err error
+
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdminConfigParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1134,13 +1587,15 @@ func (siw *ServerInterfaceWrapper) GetAdminConfig(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetAdminConfig(c)
+	siw.Handler.GetAdminConfig(c, params)
 }
 
 // ListCategories operation middleware
 func (siw *ServerInterfaceWrapper) ListCategories(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListCategoriesParams
@@ -1161,6 +1616,46 @@ func (siw *ServerInterfaceWrapper) ListCategories(c *gin.Context) {
 		return
 	}
 
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1174,6 +1669,53 @@ func (siw *ServerInterfaceWrapper) ListCategories(c *gin.Context) {
 // CreateCategory operation middleware
 func (siw *ServerInterfaceWrapper) CreateCategory(c *gin.Context) {
 
+	var err error
+
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateCategoryParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1181,7 +1723,7 @@ func (siw *ServerInterfaceWrapper) CreateCategory(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.CreateCategory(c)
+	siw.Handler.CreateCategory(c, params)
 }
 
 // DeleteCategory operation middleware
@@ -1198,6 +1740,51 @@ func (siw *ServerInterfaceWrapper) DeleteCategory(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteCategoryParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1205,12 +1792,126 @@ func (siw *ServerInterfaceWrapper) DeleteCategory(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.DeleteCategory(c, slug)
+	siw.Handler.DeleteCategory(c, slug, params)
+}
+
+// GetCategoryStats operation middleware
+func (siw *ServerInterfaceWrapper) GetCategoryStats(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", c.Param("slug"), &slug, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter slug: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCategoryStatsParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetCategoryStats(c, slug, params)
 }
 
 // HealthLivez operation middleware
 func (siw *ServerInterfaceWrapper) HealthLivez(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params HealthLivezParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1218,12 +1919,57 @@ func (siw *ServerInterfaceWrapper) HealthLivez(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.HealthLivez(c)
+	siw.Handler.HealthLivez(c, params)
 }
 
 // HealthReadyz operation middleware
 func (siw *ServerInterfaceWrapper) HealthReadyz(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params HealthReadyzParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1231,12 +1977,57 @@ func (siw *ServerInterfaceWrapper) HealthReadyz(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.HealthReadyz(c)
+	siw.Handler.HealthReadyz(c, params)
 }
 
 // HealthStartupz operation middleware
 func (siw *ServerInterfaceWrapper) HealthStartupz(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params HealthStartupzParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1244,13 +2035,15 @@ func (siw *ServerInterfaceWrapper) HealthStartupz(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.HealthStartupz(c)
+	siw.Handler.HealthStartupz(c, params)
 }
 
 // InitiateMultipart operation middleware
 func (siw *ServerInterfaceWrapper) InitiateMultipart(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params InitiateMultipartParams
@@ -1273,6 +2066,44 @@ func (siw *ServerInterfaceWrapper) InitiateMultipart(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1300,6 +2131,51 @@ func (siw *ServerInterfaceWrapper) GetMultipart(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMultipartParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1307,7 +2183,7 @@ func (siw *ServerInterfaceWrapper) GetMultipart(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetMultipart(c, uploadId)
+	siw.Handler.GetMultipart(c, uploadId, params)
 }
 
 // AbortMultipart operation middleware
@@ -1324,6 +2200,51 @@ func (siw *ServerInterfaceWrapper) AbortMultipart(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AbortMultipartParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1331,7 +2252,7 @@ func (siw *ServerInterfaceWrapper) AbortMultipart(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.AbortMultipart(c, uploadId)
+	siw.Handler.AbortMultipart(c, uploadId, params)
 }
 
 // CompleteMultipart operation middleware
@@ -1348,6 +2269,51 @@ func (siw *ServerInterfaceWrapper) CompleteMultipart(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteMultipartParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1355,7 +2321,7 @@ func (siw *ServerInterfaceWrapper) CompleteMultipart(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.CompleteMultipart(c, uploadId)
+	siw.Handler.CompleteMultipart(c, uploadId, params)
 }
 
 // SignPartsBatch operation middleware
@@ -1372,6 +2338,51 @@ func (siw *ServerInterfaceWrapper) SignPartsBatch(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SignPartsBatchParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1379,7 +2390,7 @@ func (siw *ServerInterfaceWrapper) SignPartsBatch(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.SignPartsBatch(c, uploadId)
+	siw.Handler.SignPartsBatch(c, uploadId, params)
 }
 
 // SignPart operation middleware
@@ -1405,6 +2416,51 @@ func (siw *ServerInterfaceWrapper) SignPart(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SignPartParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1412,13 +2468,15 @@ func (siw *ServerInterfaceWrapper) SignPart(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.SignPart(c, uploadId, partNumber)
+	siw.Handler.SignPart(c, uploadId, partNumber, params)
 }
 
 // ListObjects operation middleware
 func (siw *ServerInterfaceWrapper) ListObjects(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListObjectsParams
@@ -1487,6 +2545,62 @@ func (siw *ServerInterfaceWrapper) ListObjects(c *gin.Context) {
 		return
 	}
 
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", c.Request.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter sort: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "order", c.Request.URL.Query(), &params.Order)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter order: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1501,6 +2615,8 @@ func (siw *ServerInterfaceWrapper) ListObjects(c *gin.Context) {
 func (siw *ServerInterfaceWrapper) CreateObject(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params CreateObjectParams
@@ -1526,6 +2642,44 @@ func (siw *ServerInterfaceWrapper) CreateObject(c *gin.Context) {
 
 	}
 
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1540,6 +2694,8 @@ func (siw *ServerInterfaceWrapper) CreateObject(c *gin.Context) {
 func (siw *ServerInterfaceWrapper) BulkDeleteObjects(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params BulkDeleteObjectsParams
@@ -1565,6 +2721,44 @@ func (siw *ServerInterfaceWrapper) BulkDeleteObjects(c *gin.Context) {
 
 	}
 
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1579,6 +2773,8 @@ func (siw *ServerInterfaceWrapper) BulkDeleteObjects(c *gin.Context) {
 func (siw *ServerInterfaceWrapper) BulkPurgeObjects(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params BulkPurgeObjectsParams
@@ -1604,6 +2800,44 @@ func (siw *ServerInterfaceWrapper) BulkPurgeObjects(c *gin.Context) {
 
 	}
 
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1618,6 +2852,8 @@ func (siw *ServerInterfaceWrapper) BulkPurgeObjects(c *gin.Context) {
 func (siw *ServerInterfaceWrapper) BulkRestoreObjects(c *gin.Context) {
 
 	var err error
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params BulkRestoreObjectsParams
@@ -1640,6 +2876,44 @@ func (siw *ServerInterfaceWrapper) BulkRestoreObjects(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1667,6 +2941,8 @@ func (siw *ServerInterfaceWrapper) DeleteObject(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params DeleteObjectParams
 
@@ -1688,6 +2964,44 @@ func (siw *ServerInterfaceWrapper) DeleteObject(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1715,6 +3029,51 @@ func (siw *ServerInterfaceWrapper) GetObject(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetObjectParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1722,7 +3081,7 @@ func (siw *ServerInterfaceWrapper) GetObject(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetObject(c, id)
+	siw.Handler.GetObject(c, id, params)
 }
 
 // HeadObject operation middleware
@@ -1739,6 +3098,51 @@ func (siw *ServerInterfaceWrapper) HeadObject(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params HeadObjectParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1746,7 +3150,7 @@ func (siw *ServerInterfaceWrapper) HeadObject(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.HeadObject(c, id)
+	siw.Handler.HeadObject(c, id, params)
 }
 
 // UpdateObject operation middleware
@@ -1762,6 +3166,8 @@ func (siw *ServerInterfaceWrapper) UpdateObject(c *gin.Context) {
 		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
 		return
 	}
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params UpdateObjectParams
@@ -1784,6 +3190,44 @@ func (siw *ServerInterfaceWrapper) UpdateObject(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1811,6 +3255,51 @@ func (siw *ServerInterfaceWrapper) CompleteObject(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompleteObjectParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1818,7 +3307,7 @@ func (siw *ServerInterfaceWrapper) CompleteObject(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.CompleteObject(c, id)
+	siw.Handler.CompleteObject(c, id, params)
 }
 
 // GetObjectMeta operation middleware
@@ -1835,6 +3324,51 @@ func (siw *ServerInterfaceWrapper) GetObjectMeta(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetObjectMetaParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1842,7 +3376,7 @@ func (siw *ServerInterfaceWrapper) GetObjectMeta(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetObjectMeta(c, id)
+	siw.Handler.GetObjectMeta(c, id, params)
 }
 
 // PatchObjectMeta operation middleware
@@ -1859,6 +3393,51 @@ func (siw *ServerInterfaceWrapper) PatchObjectMeta(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PatchObjectMetaParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1866,7 +3445,7 @@ func (siw *ServerInterfaceWrapper) PatchObjectMeta(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.PatchObjectMeta(c, id)
+	siw.Handler.PatchObjectMeta(c, id, params)
 }
 
 // PurgeObject operation middleware
@@ -1882,6 +3461,8 @@ func (siw *ServerInterfaceWrapper) PurgeObject(c *gin.Context) {
 		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
 		return
 	}
+
+	c.Set(BearerAuthScopes, []string{})
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params PurgeObjectParams
@@ -1904,6 +3485,44 @@ func (siw *ServerInterfaceWrapper) PurgeObject(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1931,6 +3550,8 @@ func (siw *ServerInterfaceWrapper) RestoreObject(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
 	// Parameter object where we will unmarshal all parameters from the context
 	var params RestoreObjectParams
 
@@ -1952,6 +3573,44 @@ func (siw *ServerInterfaceWrapper) RestoreObject(c *gin.Context) {
 		}
 
 		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
 
 	}
 
@@ -1979,6 +3638,51 @@ func (siw *ServerInterfaceWrapper) SignObjectDownload(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SignObjectDownloadParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -1986,7 +3690,7 @@ func (siw *ServerInterfaceWrapper) SignObjectDownload(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.SignObjectDownload(c, id)
+	siw.Handler.SignObjectDownload(c, id, params)
 }
 
 // SignObjectUpload operation middleware
@@ -2003,6 +3707,51 @@ func (siw *ServerInterfaceWrapper) SignObjectUpload(c *gin.Context) {
 		return
 	}
 
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SignObjectUploadParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -2010,12 +3759,57 @@ func (siw *ServerInterfaceWrapper) SignObjectUpload(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.SignObjectUpload(c, id)
+	siw.Handler.SignObjectUpload(c, id, params)
 }
 
 // PingS3 operation middleware
 func (siw *ServerInterfaceWrapper) PingS3(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PingS3Params
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -2023,12 +3817,59 @@ func (siw *ServerInterfaceWrapper) PingS3(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.PingS3(c)
+	siw.Handler.PingS3(c, params)
 }
 
 // GetObjectStats operation middleware
 func (siw *ServerInterfaceWrapper) GetObjectStats(c *gin.Context) {
 
+	var err error
+
+	c.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetObjectStatsParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -2036,7 +3877,7 @@ func (siw *ServerInterfaceWrapper) GetObjectStats(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetObjectStats(c)
+	siw.Handler.GetObjectStats(c, params)
 }
 
 // ListTenants operation middleware
@@ -2063,6 +3904,46 @@ func (siw *ServerInterfaceWrapper) ListTenants(c *gin.Context) {
 		return
 	}
 
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -2076,6 +3957,51 @@ func (siw *ServerInterfaceWrapper) ListTenants(c *gin.Context) {
 // Version operation middleware
 func (siw *ServerInterfaceWrapper) Version(c *gin.Context) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params VersionParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Request-ID, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Request-ID: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Optional header parameter "Traceparent" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Traceparent")]; found {
+		var Traceparent Traceparent
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for Traceparent, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Traceparent", valueList[0], &Traceparent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter Traceparent: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.Traceparent = &Traceparent
+
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -2083,7 +4009,7 @@ func (siw *ServerInterfaceWrapper) Version(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.Version(c)
+	siw.Handler.Version(c, params)
 }
 
 // GinServerOptions provides options for the Gin server.
@@ -2119,6 +4045,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/categories", wrapper.ListCategories)
 	router.POST(options.BaseURL+"/categories", wrapper.CreateCategory)
 	router.DELETE(options.BaseURL+"/categories/:slug", wrapper.DeleteCategory)
+	router.GET(options.BaseURL+"/categories/:slug/stats", wrapper.GetCategoryStats)
 	router.GET(options.BaseURL+"/health/livez", wrapper.HealthLivez)
 	router.GET(options.BaseURL+"/health/readyz", wrapper.HealthReadyz)
 	router.GET(options.BaseURL+"/health/startupz", wrapper.HealthStartupz)
@@ -2153,131 +4080,136 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"auy7z3f/EwAA//+v6W9xWrIAAA==",
+	"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",
+	"wo9qmtefrv8/AAD//yd2f8DcygAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

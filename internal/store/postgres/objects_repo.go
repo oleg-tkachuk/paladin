@@ -68,7 +68,7 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 
 	out := make([]domain.Object, 0, len(rows))
 	for _, row := range rows {
-		obj, err := MapObjectToDomain(row)
+		obj, err := MapObjectToDomain(row.Object)
 		if err != nil {
 			return nil, fmt.Errorf("map object: %w", err)
 		}
@@ -94,7 +94,7 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapObjectToDomain(obj)
+	result, err := MapObjectToDomain(obj.Object)
 	if err != nil {
 		status = "error"
 		return nil, err
@@ -210,7 +210,7 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapObjectToDomain(obj)
+	result, err := MapObjectToDomain(obj.Object)
 	if err != nil {
 		status = "error"
 		return nil, err
@@ -250,6 +250,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		cursorTime,
 		filter.Category,
 		filter.KeyPrefix,
+		filter.SortOrder,
 	)
 	if err != nil {
 		opStatus = "error"
@@ -263,7 +264,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 
 	out := make([]domain.Object, 0, len(rows))
 	for _, row := range rows {
-		obj, err := MapListObjectsRowToDomain(row)
+		obj, err := MapObjectToDomain(row.Object)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map object: %w", err)
 		}
@@ -296,7 +297,9 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
-		obj, err = r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
+		row, errPkg := r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
+		err = errPkg
+		obj = row.Object
 	} else if labels != nil {
 		var labelsJSON []byte
 		labelsJSON, err = marshalStringMap(labels)
@@ -304,9 +307,13 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 			status = "error"
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
-		obj, err = r.db.Queries.PatchObjectLabels(ctx, tenantID, uuidToPgtype(id), labelsJSON)
+		row, errPkg := r.db.Queries.PatchObjectLabels(ctx, tenantID, uuidToPgtype(id), labelsJSON)
+		err = errPkg
+		obj = row.Object
 	} else if externalRef != nil {
-		obj, err = r.db.Queries.PatchObjectExternalRef(ctx, tenantID, uuidToPgtype(id), externalRef)
+		row, errPkg := r.db.Queries.PatchObjectExternalRef(ctx, tenantID, uuidToPgtype(id), externalRef)
+		err = errPkg
+		obj = row.Object
 	} else {
 		// Nothing to patch, just fetch the current object
 		status = "success"

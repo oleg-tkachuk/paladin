@@ -6,6 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type AppMetadata struct {
+	Version   string
+	Commit    string
+	BuildTime string
+}
+
 type ObjectStatus string
 
 const (
@@ -14,6 +20,7 @@ const (
 	ObjectUploaded    ObjectStatus = "uploaded"
 	ObjectComplete    ObjectStatus = "complete"
 	ObjectAborted     ObjectStatus = "aborted"
+	ObjectError       ObjectStatus = "error"
 	ObjectDeleted     ObjectStatus = "deleted"
 	ObjectSoftDeleted ObjectStatus = "soft_deleted"
 	ObjectHardDeleted ObjectStatus = "hard_deleted"
@@ -115,6 +122,15 @@ type ListObjectsFilter struct {
 	// KeyPrefix is an optional prefix filter within tenant/category scope.
 	// The server validates that it cannot escape the tenant+category boundary.
 	KeyPrefix *string
+
+	// Sorting
+	SortBy    string // e.g. "created_at"
+	SortOrder string // "asc" or "desc"
+}
+
+type CategoryStats struct {
+	TotalCount int64
+	TotalSize  int64
 }
 
 type CreateObjectResponse struct {

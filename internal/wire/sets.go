@@ -34,12 +34,6 @@ type Commit string
 type BuildTime string
 type ConfigPath string
 
-type AppMetadata struct {
-	Version   string
-	Commit    string
-	BuildTime string
-}
-
 // BootstrapLogger is a type alias to help Wire distinguish between early and late loggers.
 type BootstrapLogger *zap.Logger
 
@@ -56,8 +50,10 @@ var ProviderSet = wire.NewSet(
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideBreakerFactory,
+	ProvideUoWFactory,
 	ProvideCategoryService,
 	ProvideObjectsService,
+	ProvideSystemService,
 	ProvideHealthService,
 	ProvideHTTPServer,
 	ProvideGRPCServer,
@@ -177,11 +173,16 @@ func ProvideCategoryService(catRepo domain.CategoryRepository) domain.CategorySe
 	return service.NewCategoryService(catRepo)
 }
 
+func ProvideUoWFactory(db *postgres.DB) domain.UoWFactory {
+	return postgres.NewUoWFactory(db)
+}
+
 func ProvideObjectsService(
 	objRepo domain.ObjectsRepository,
 	mpRepo domain.MultipartRepository,
 	s3c *s3.Client,
 	policy domain.Policy,
+	uowf domain.UoWFactory,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
 	brk breaker.Factory,
@@ -192,6 +193,7 @@ func ProvideObjectsService(
 		mpRepo,
 		s3c,
 		policy,
+		uowf,
 		idemRepo,
 		catRepo,
 		brk,
@@ -202,6 +204,10 @@ func ProvideObjectsService(
 		cfg.Timeouts.LongOperation,
 		cfg.Idempotency.TTL,
 	)
+}
+
+func ProvideSystemService(cfg config.Config) domain.SystemService {
+	return service.NewSystemService(&cfg)
 }
 
 func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) *service.HealthService {
@@ -215,10 +221,11 @@ func ProvideHTTPServer(
 	catSvc domain.CategoryService,
 	auditRepo domain.AuditLogRepository,
 	hs *service.HealthService,
+	sysSvc domain.SystemService,
 	appStarted *atomic.Bool,
-	meta AppMetadata,
+	meta domain.AppMetadata,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta.Version, meta.Commit, meta.BuildTime, hs, appStarted)
+	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta, hs, sysSvc, appStarted)
 }
 
 func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService) *grpc.Server {
@@ -237,7 +244,7 @@ func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo d
 }
 
 func ProvideApp(
-	meta AppMetadata,
+	meta domain.AppMetadata,
 	cfg config.Config,
 	l *zap.Logger,
 	grpcSrv *grpc.Server,
@@ -255,7 +262,7 @@ func ProvideApp(
 		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
 	}
-
+	// Note: We use meta strings directly for container but could pass the whole struct.
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
 		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started,

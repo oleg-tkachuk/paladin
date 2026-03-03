@@ -1,15 +1,23 @@
 package config
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	_ "embed"
 
 	"cuelang.org/go/cue/cuecontext"
-	cueyaml "cuelang.org/go/encoding/yaml"
+	"github.com/jackc/pgx/v5"
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"go.uber.org/zap"
 	goyaml "gopkg.in/yaml.v3"
 )
@@ -25,26 +33,35 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("CUE schema invalid: %w", schemaVal.Err())
 	}
 
-	yamlBytes, err := os.ReadFile(path)
-	if err != nil {
+	// Initialize koanf
+	k := koanf.New(".")
+
+	// Load configuration from YAML file
+	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
 		return Config{}, fmt.Errorf("YAML read error (%s): %w", path, err)
 	}
 
-	yamlFile, err := cueyaml.Extract(path, yamlBytes)
-	if err != nil {
-		return Config{}, fmt.Errorf("YAML -> CUE AST error: %w", err)
+	// Load environment variables prefixed with PALADIN_ and replace _ with .
+	if err := k.Load(env.Provider("PALADIN_", ".", func(s string) string {
+		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "PALADIN_")), "_", ".", -1)
+	}), nil); err != nil {
+		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}
 
-	yamlVal := ctx.BuildFile(yamlFile)
+	// Export merged config back to JSON for CUE validation and default injection
+	configBytes, err := json.Marshal(k.Raw())
+	if err != nil {
+		return Config{}, fmt.Errorf("failed to marshal merged config: %w", err)
+	}
 
-	combined := schemaVal.Unify(yamlVal)
-	if err = combined.Validate(); err != nil {
-		return Config{}, fmt.Errorf("YAML validation failed (%s): %w", path, err)
+	configVal := ctx.CompileBytes(configBytes)
+	combined := schemaVal.Unify(configVal)
+	if err := combined.Validate(); err != nil {
+		return Config{}, fmt.Errorf("config validation failed (%s): %w", path, err)
 	}
 
 	var cfg Config
-	// Use JSON intermediate to apply defaults and support time.Duration.
-	// MarshalJSON is more reliable than cueyaml.Encode when dealing with CUE AST nodes.
+
 	jsonBytes, err := combined.MarshalJSON()
 	if err != nil {
 		return Config{}, fmt.Errorf("CUE -> JSON marshaling failed: %w", err)
@@ -52,6 +69,18 @@ func Load(path string, log *zap.Logger) (Config, error) {
 
 	if err := goyaml.Unmarshal(jsonBytes, &cfg); err != nil {
 		return Config{}, fmt.Errorf("YAML unmarshal failed: %w", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return Config{}, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	// Resolve secrets if running in a Kubernetes environment
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		resolver := NewK8sSecretResolver()
+		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
+			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
+		}
 	}
 
 	// Parse sizes
@@ -85,7 +114,117 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse policy.max_part_size (%s): %w", cfg.Policy.MaxPartSizeRaw, err)
 	}
 
-	log.Info("Config loaded", zap.String("path", path))
+	log.Info("Config loaded and validated", zap.Any("config", cfg.Obfuscated()))
 
 	return cfg, nil
+}
+
+func (c *Config) Validate() error {
+	// Validate required fields
+	if c.Datastores.Postgres.DSN == "" {
+		return fmt.Errorf("postgres DSN is required")
+	}
+
+	if c.App.Name == "" {
+		return fmt.Errorf("app name is required")
+	}
+
+	// Validate secret mutual exclusivity
+	if c.Datastores.Postgres.Password != "" && c.Datastores.Postgres.PasswordSecret != nil {
+		return fmt.Errorf("postgres: cannot specify both password and password_secret")
+	}
+
+	if c.Datastores.S3.AccessKey != "" && c.Datastores.S3.AccessKeySecret != nil {
+		return fmt.Errorf("s3: cannot specify both access_key and access_key_secret")
+	}
+
+	if c.Datastores.S3.SecretKey != "" && c.Datastores.S3.SecretKeySecret != nil {
+		return fmt.Errorf("s3: cannot specify both secret_key and secret_key_secret")
+	}
+
+	return nil
+}
+
+func (c *Config) Sanitize() domain.SystemConfig {
+	var pgHost, pgPort, pgUser, pgDB, pgSSLMode string
+	pgConfig, err := pgx.ParseConfig(c.Datastores.Postgres.DSN)
+	if err == nil {
+		pgHost = pgConfig.Host
+		pgPort = fmt.Sprintf("%d", pgConfig.Port)
+		pgUser = pgConfig.User
+		pgDB = pgConfig.Database
+		if val, ok := pgConfig.RuntimeParams["sslmode"]; ok {
+			pgSSLMode = val
+		} else if pgConfig.TLSConfig == nil {
+			pgSSLMode = "disable"
+		} else {
+			pgSSLMode = "enable"
+		}
+	}
+
+	sc := domain.SystemConfig{}
+	sc.App.Name = c.App.Name
+	sc.App.Env = c.App.Env
+
+	sc.Server.Name = c.Server.Name
+	sc.Server.Mode = c.Server.Mode
+	sc.Server.HTTP.Addr = c.Server.HTTP.Addr
+	sc.Server.HTTP.CORSAllowedOrigins = c.Server.HTTP.CORSAllowedOrigins
+	sc.Server.HTTP.ReadTimeout = c.Server.HTTP.ReadTimeout.String()
+	sc.Server.HTTP.WriteTimeout = c.Server.HTTP.WriteTimeout.String()
+	sc.Server.HTTP.RequestIDHeader = c.Server.HTTP.RequestIDHeader
+
+	sc.Datastores.Postgres.Host = pgHost
+	sc.Datastores.Postgres.Port = pgPort
+	sc.Datastores.Postgres.User = pgUser
+	sc.Datastores.Postgres.Dbname = pgDB
+	sc.Datastores.Postgres.SslMode = pgSSLMode
+
+	sc.Datastores.S3.Bucket = c.Datastores.S3.Bucket
+	sc.Datastores.S3.Endpoint = c.Datastores.S3.Endpoint
+	sc.Datastores.S3.PublicEndpoint = c.Datastores.S3.PublicEndpoint
+	sc.Datastores.S3.ForcePathStyle = c.Datastores.S3.ForcePathStyle
+	sc.Datastores.S3.PresignTTL = c.Datastores.S3.PresignTTL.String()
+	sc.Datastores.S3.PartSize = c.Datastores.S3.PartSizeRaw
+	sc.Datastores.S3.SSEType = c.Datastores.S3.SSEType
+
+	sc.Policy.MaxObjectSize = c.Policy.MaxObjectSizeRaw
+	sc.Policy.MaxMultipartSize = c.Policy.MaxMultipartSizeRaw
+	sc.Policy.MinPartSize = c.Policy.MinPartSizeRaw
+	sc.Policy.MaxPartSize = c.Policy.MaxPartSizeRaw
+	sc.Policy.PresignPutTTL = c.Policy.PresignPutTTL.String()
+	sc.Policy.PresignGetTTL = c.Policy.PresignGetTTL.String()
+	sc.Policy.AllowedContentTypes = c.Policy.AllowedContentTypes
+
+	sc.Security.TrustTenantIDFromRequest = c.Security.TrustTenantIDFromRequest
+	sc.Security.RejectTenantMismatch = c.Security.RejectTenantMismatch
+	sc.Security.EnableRLS = c.Security.EnableRLS
+
+	sc.Housekeeping.EnableReaper = c.Housekeeping.EnableReaper
+	sc.Housekeeping.PendingTTL = c.Housekeeping.PendingTTL.String()
+	sc.Housekeeping.MultipartTTL = c.Housekeeping.MultipartTTL.String()
+	sc.Housekeeping.GCInterval = c.Housekeeping.GCInterval.String()
+
+	sc.RateLimit.RequestsPerSecond = float32(c.RateLimit.RequestsPerSecond)
+	sc.RateLimit.Burst = c.RateLimit.Burst
+	sc.RateLimit.MaxTenants = c.RateLimit.MaxTenants
+
+	sc.Cache.Enabled = c.Cache.Enabled
+	sc.Cache.MaxSize = c.Cache.MaxSize
+	sc.Cache.TTL = c.Cache.TTL.String()
+
+	sc.Timeouts.FastOperation = c.Timeouts.FastOperation.String()
+	sc.Timeouts.DefaultOperation = c.Timeouts.DefaultOperation.String()
+	sc.Timeouts.S3Operation = c.Timeouts.S3Operation.String()
+	sc.Timeouts.LongOperation = c.Timeouts.LongOperation.String()
+
+	sc.Idempotency.Enabled = c.Idempotency.Enabled
+	sc.Idempotency.TTL = c.Idempotency.TTL.String()
+
+	sc.OTel.Enabled = c.OTel.Enabled
+	sc.OTel.Endpoint = c.OTel.Endpoint
+	sc.OTel.Protocol = c.OTel.Protocol
+	sc.OTel.Insecure = c.OTel.Insecure
+
+	return sc
 }

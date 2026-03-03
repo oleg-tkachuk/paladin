@@ -79,18 +79,35 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
 
-	if _, err = s.objRepo.MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
+	// Ensure db transaction using Unit of Work
+	uow, err := s.uowf.Begin(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer uow.Rollback(ctx)
+
+	if _, err = uow.Objects().MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 		return nil, err
 	}
 
-	if err = s.multiRepo.MarkCompleted(ctx, tenantID, uploadID); err != nil {
+	if err = uow.Multipart().MarkCompleted(ctx, tenantID, uploadID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 		return nil, err
+	}
+
+	if err := uow.Commit(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	rec, err := s.objRepo.Get(ctx, tenantID, multi.ObjectID)

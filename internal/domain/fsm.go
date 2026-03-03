@@ -12,6 +12,8 @@ const (
 	EventObjectSoftDelete     ObjectEvent = "soft_delete"
 	EventObjectRestore        ObjectEvent = "restore"
 	EventObjectHardDelete     ObjectEvent = "hard_delete"
+	EventObjectAbort          ObjectEvent = "abort"
+	EventObjectFail           ObjectEvent = "fail"
 )
 
 func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
@@ -21,19 +23,25 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 	sm.Configure(ObjectPending).
 		Permit(EventObjectUploadComplete, ObjectComplete).
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
-		Permit(EventObjectHardDelete, ObjectHardDeleted)
+		Permit(EventObjectHardDelete, ObjectHardDeleted).
+		Permit(EventObjectAbort, ObjectAborted).
+		Permit(EventObjectFail, ObjectError)
 
 	// Uploading (Reserved for iterative uploads, unused in v1 CreateSingle, but defined just in case)
 	sm.Configure(ObjectUploading).
 		Permit(EventObjectUploadComplete, ObjectComplete).
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
-		Permit(EventObjectHardDelete, ObjectHardDeleted)
+		Permit(EventObjectHardDelete, ObjectHardDeleted).
+		Permit(EventObjectAbort, ObjectAborted).
+		Permit(EventObjectFail, ObjectError)
 
 	// Uploaded (If tracking intermediate state before verification, same as pending/uploading for now)
 	sm.Configure(ObjectUploaded).
 		Permit(EventObjectUploadComplete, ObjectComplete).
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
-		Permit(EventObjectHardDelete, ObjectHardDeleted)
+		Permit(EventObjectHardDelete, ObjectHardDeleted).
+		Permit(EventObjectAbort, ObjectAborted).
+		Permit(EventObjectFail, ObjectError)
 
 	// Complete
 	sm.Configure(ObjectComplete).
@@ -56,6 +64,16 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 	// HardDeleted
 	sm.Configure(ObjectHardDeleted).
 		Ignore(EventObjectHardDelete) // Idempotent hard-delete
+
+	// Aborted
+	sm.Configure(ObjectAborted).
+		Ignore(EventObjectAbort).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
+
+	// Error
+	sm.Configure(ObjectError).
+		Ignore(EventObjectFail).
+		Permit(EventObjectHardDelete, ObjectHardDeleted)
 
 	return sm
 }

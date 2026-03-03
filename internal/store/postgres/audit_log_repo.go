@@ -98,7 +98,7 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 		return nil, MapPgError(err)
 	}
 
-	result, err := MapGetAuditLogRowToDomain(row)
+	result, err := MapAuditLogToDomain(row.AuditLog)
 	if err != nil {
 		status = "error"
 		return nil, err
@@ -153,7 +153,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	logs := make([]domain.AuditLog, 0, len(rows))
 	for _, row := range rows {
-		log, err := MapListAuditLogsRowToDomain(row)
+		log, err := MapAuditLogToDomain(row.AuditLog)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map audit log: %w", err)
 		}

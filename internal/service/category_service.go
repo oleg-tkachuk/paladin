@@ -55,6 +55,10 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 	return err
 }
 
+func (s *categoryService) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {
+	return s.repo.GetStats(ctx, tenantID, slug)
+}
+
 func (s *categoryService) ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error) {
 	return s.repo.ListTenants(ctx, limit, cursor)
 }

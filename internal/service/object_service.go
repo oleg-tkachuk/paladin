@@ -26,6 +26,7 @@ type objectsService struct {
 	multiRepo domain.MultipartRepository
 	s3        domain.StorageClient
 	policy    domain.Policy
+	uowf      domain.UoWFactory
 	idemRepo  domain.IdempotencyRepository
 	catRepo   domain.CategoryRepository
 	brk       breaker.Factory
@@ -44,6 +45,7 @@ func NewObjectsService(
 	multiRepo domain.MultipartRepository,
 	s3Client domain.StorageClient,
 	policy domain.Policy,
+	uowf domain.UoWFactory,
 	idemRepo domain.IdempotencyRepository,
 	catRepo domain.CategoryRepository,
 	brk breaker.Factory,
@@ -56,6 +58,7 @@ func NewObjectsService(
 		multiRepo:               multiRepo,
 		s3:                      s3Client,
 		policy:                  policy,
+		uowf:                    uowf,
 		idemRepo:                idemRepo,
 		catRepo:                 catRepo,
 		brk:                     brk,
@@ -74,7 +77,7 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 
 // Delete performs a soft delete
 func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "Delete")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpDeleteObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -112,7 +115,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
-		return fmt.Errorf("invalid transition: %w", err)
+		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
@@ -131,7 +134,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	}
 
 	if updated {
-		logger.FromContext(ctx).Info("Object Soft Deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info(LogObjectSoftDeleted, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
 	status = "success"
@@ -141,7 +144,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 // Restore brings back a soft-deleted object
 func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "Restore")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpRestoreObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -175,7 +178,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
-		return fmt.Errorf("invalid transition: %w", err)
+		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
@@ -194,7 +197,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	}
 
 	if updated {
-		logger.FromContext(ctx).Info("Object Restored", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info(LogObjectRestored, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
 	status = "success"
@@ -204,7 +207,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 
 // Purge performs a hard delete (removes from S3 and marks hard deleted)
 func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "Purge")
+	ctx, span := otel.Tracer("object-service").Start(ctx, OpPurgeObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -251,7 +254,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
-		return fmt.Errorf("invalid transition: %w", err)
+		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
@@ -295,7 +298,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		})
 	}
 
-	logger.FromContext(ctx).Info("Object Purged (Hard Deleted)", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	logger.FromContext(ctx).Info(LogObjectPurged, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 	return nil

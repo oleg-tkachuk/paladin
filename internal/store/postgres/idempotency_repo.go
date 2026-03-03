@@ -26,7 +26,7 @@ func (r *IdempotencyRepo) Get(ctx context.Context, tenantID string, key string) 
 	}
 
 	status = "success"
-	result := MapIdempotencyToDomain(rec)
+	result := MapIdempotencyToDomain(rec.IdempotencyKey)
 	return &result, nil
 }
 
