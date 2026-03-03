@@ -35,6 +35,10 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 		return nil, fmt.Errorf("pgxpool config parse: %w", err)
 	}
 
+	if cfg.Password != "" {
+		poolCfg.ConnConfig.Password = cfg.Password
+	}
+
 	// Apply config from struct
 	poolCfg.MaxConns = cfg.Pool.MaxConns
 	poolCfg.MinConns = cfg.Pool.MinConns
