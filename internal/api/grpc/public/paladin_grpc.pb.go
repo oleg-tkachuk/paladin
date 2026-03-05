@@ -34,6 +34,7 @@ const (
 	Paladin_DeleteCategory_FullMethodName    = "/paladin.public.v1.Paladin/DeleteCategory"
 	Paladin_GetCategoryStats_FullMethodName  = "/paladin.public.v1.Paladin/GetCategoryStats"
 	Paladin_GetObjectStats_FullMethodName    = "/paladin.public.v1.Paladin/GetObjectStats"
+	Paladin_ListObjects_FullMethodName       = "/paladin.public.v1.Paladin/ListObjects"
 )
 
 // PaladinClient is the client API for Paladin service.
@@ -56,6 +57,7 @@ type PaladinClient interface {
 	DeleteCategory(ctx context.Context, in *DeleteCategoryRequest, opts ...grpc.CallOption) (*DeleteCategoryResponse, error)
 	GetCategoryStats(ctx context.Context, in *GetCategoryStatsRequest, opts ...grpc.CallOption) (*GetCategoryStatsResponse, error)
 	GetObjectStats(ctx context.Context, in *GetObjectStatsRequest, opts ...grpc.CallOption) (*GetObjectStatsResponse, error)
+	ListObjects(ctx context.Context, in *ListObjectsRequest, opts ...grpc.CallOption) (*ListObjectsResponse, error)
 }
 
 type objectControlPlaneClient struct {
@@ -216,6 +218,16 @@ func (c *objectControlPlaneClient) GetObjectStats(ctx context.Context, in *GetOb
 	return out, nil
 }
 
+func (c *objectControlPlaneClient) ListObjects(ctx context.Context, in *ListObjectsRequest, opts ...grpc.CallOption) (*ListObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_ListObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaladinServer is the server API for Paladin service.
 // All implementations must embed UnimplementedPaladinServer
 // for forward compatibility.
@@ -236,6 +248,7 @@ type PaladinServer interface {
 	DeleteCategory(context.Context, *DeleteCategoryRequest) (*DeleteCategoryResponse, error)
 	GetCategoryStats(context.Context, *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error)
 	GetObjectStats(context.Context, *GetObjectStatsRequest) (*GetObjectStatsResponse, error)
+	ListObjects(context.Context, *ListObjectsRequest) (*ListObjectsResponse, error)
 	mustEmbedUnimplementedPaladinServer()
 }
 
@@ -290,6 +303,9 @@ func (UnimplementedPaladinServer) GetCategoryStats(context.Context, *GetCategory
 }
 func (UnimplementedPaladinServer) GetObjectStats(context.Context, *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetObjectStats not implemented")
+}
+func (UnimplementedPaladinServer) ListObjects(context.Context, *ListObjectsRequest) (*ListObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListObjects not implemented")
 }
 func (UnimplementedPaladinServer) mustEmbedUnimplementedPaladinServer() {}
 func (UnimplementedPaladinServer) testEmbeddedByValue()                            {}
@@ -582,6 +598,24 @@ func _Paladin_GetObjectStats_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Paladin_ListObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).ListObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_ListObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).ListObjects(ctx, req.(*ListObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Paladin_ServiceDesc is the grpc.ServiceDesc for Paladin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -648,6 +682,10 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetObjectStats",
 			Handler:    _Paladin_GetObjectStats_Handler,
+		},
+		{
+			MethodName: "ListObjects",
+			Handler:    _Paladin_ListObjects_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

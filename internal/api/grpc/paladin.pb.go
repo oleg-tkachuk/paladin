@@ -1885,6 +1885,258 @@ func (x *AbortMultipartResponse) GetStatus() string {
 	return ""
 }
 
+type ListObjectsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Category      *string                `protobuf:"bytes,4,opt,name=category,proto3,oneof" json:"category,omitempty"`
+	Status        *string                `protobuf:"bytes,5,opt,name=status,proto3,oneof" json:"status,omitempty"`
+	Search        *string                `protobuf:"bytes,6,opt,name=search,proto3,oneof" json:"search,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListObjectsRequest) Reset() {
+	*x = ListObjectsRequest{}
+	mi := &file_paladin_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListObjectsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListObjectsRequest) ProtoMessage() {}
+
+func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
+func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListObjectsRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListObjectsRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetCategory() string {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetStatus() string {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetSearch() string {
+	if x != nil && x.Search != nil {
+		return *x.Search
+	}
+	return ""
+}
+
+type ListObjectsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*ListObjectItem      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListObjectsResponse) Reset() {
+	*x = ListObjectsResponse{}
+	mi := &file_paladin_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListObjectsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListObjectsResponse) ProtoMessage() {}
+
+func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListObjectsResponse.ProtoReflect.Descriptor instead.
+func (*ListObjectsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListObjectsResponse) GetItems() []*ListObjectItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *ListObjectsResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *ListObjectsResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type ListObjectItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId      string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	ObjectKey     string                 `protobuf:"bytes,2,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	ContentType   string                 `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAtUnix int64                  `protobuf:"varint,6,opt,name=created_at_unix,json=createdAtUnix,proto3" json:"created_at_unix,omitempty"`
+	Category      string                 `protobuf:"bytes,7,opt,name=category,proto3" json:"category,omitempty"`
+	Labels        map[string]string      `protobuf:"bytes,8,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExternalRef   string                 `protobuf:"bytes,9,opt,name=external_ref,json=externalRef,proto3" json:"external_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListObjectItem) Reset() {
+	*x = ListObjectItem{}
+	mi := &file_paladin_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListObjectItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListObjectItem) ProtoMessage() {}
+
+func (x *ListObjectItem) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListObjectItem.ProtoReflect.Descriptor instead.
+func (*ListObjectItem) Descriptor() ([]byte, []int) {
+	return file_paladin_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListObjectItem) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetObjectKey() string {
+	if x != nil {
+		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *ListObjectItem) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetCreatedAtUnix() int64 {
+	if x != nil {
+		return x.CreatedAtUnix
+	}
+	return 0
+}
+
+func (x *ListObjectItem) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *ListObjectItem) GetExternalRef() string {
+	if x != nil {
+		return x.ExternalRef
+	}
+	return ""
+}
+
 var File_paladin_proto protoreflect.FileDescriptor
 
 const file_paladin_proto_rawDesc = "" +
@@ -2053,7 +2305,38 @@ const file_paladin_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
 	"\tupload_id\x18\x02 \x01(\tR\buploadId\"0\n" +
 	"\x16AbortMultipartResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status2\xab\t\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xdd\x01\n" +
+	"\x12ListObjectsRequest\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\x12\x1f\n" +
+	"\bcategory\x18\x04 \x01(\tH\x00R\bcategory\x88\x01\x01\x12\x1b\n" +
+	"\x06status\x18\x05 \x01(\tH\x01R\x06status\x88\x01\x01\x12\x1b\n" +
+	"\x06search\x18\x06 \x01(\tH\x02R\x06search\x88\x01\x01B\v\n" +
+	"\t_categoryB\t\n" +
+	"\a_statusB\t\n" +
+	"\a_search\"\x85\x01\n" +
+	"\x13ListObjectsResponse\x12,\n" +
+	"\x05items\x18\x01 \x03(\v2\x16.paladin.v1.ListObjectItemR\x05items\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\x03R\n" +
+	"totalCount\"\x84\x03\n" +
+	"\x0eListObjectItem\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x02 \x01(\tR\tobjectKey\x12!\n" +
+	"\fcontent_type\x18\x03 \x01(\tR\vcontentType\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12&\n" +
+	"\x0fcreated_at_unix\x18\x06 \x01(\x03R\rcreatedAtUnix\x12\x1a\n" +
+	"\bcategory\x18\a \x01(\tR\bcategory\x12:\n" +
+	"\x06labels\x18\b \x03(\v2\".paladin.v1.ListObjectItem.LabelsEntryR\x06labels\x12!\n" +
+	"\fexternal_ref\x18\t \x01(\tR\vexternalRef\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xf3\t\n" +
 	"\x12Paladin\x12I\n" +
 	"\fCreateObject\x12\x1b.paladin.v1.CreateObjectRequest\x1a\x1c.paladin.v1.CreateObjectResponse\x12@\n" +
 	"\tGetObject\x12\x18.paladin.v1.GetObjectRequest\x1a\x19.paladin.v1.GetObjectResponse\x12H\n" +
@@ -2069,7 +2352,8 @@ const file_paladin_proto_rawDesc = "" +
 	"\x0eCreateCategory\x12\x1d.paladin.v1.CreateCategoryRequest\x1a\x1b.paladin.v1.GetCategoryResponse\x12O\n" +
 	"\x0eDeleteCategory\x12\x1d.paladin.v1.DeleteCategoryRequest\x1a\x1e.paladin.v1.DeleteCategoryResponse\x12U\n" +
 	"\x10GetCategoryStats\x12\x1f.paladin.v1.GetCategoryStatsRequest\x1a .paladin.v1.GetCategoryStatsResponse\x12O\n" +
-	"\x0eGetObjectStats\x12\x1d.paladin.v1.GetObjectStatsRequest\x1a\x1e.paladin.v1.GetObjectStatsResponseBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
+	"\x0eGetObjectStats\x12\x1d.paladin.v1.GetObjectStatsRequest\x1a\x1e.paladin.v1.GetObjectStatsResponse\x12F\n" +
+	"\vListObjects\x12\x1a.paladin.v1.ListObjectsRequest\x1a\x1b.paladin.v1.ListObjectsResponseBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
 
 var (
 	file_paladin_proto_rawDescOnce sync.Once
@@ -2083,7 +2367,7 @@ func file_paladin_proto_rawDescGZIP() []byte {
 	return file_paladin_proto_rawDescData
 }
 
-var file_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_paladin_proto_goTypes = []any{
 	(*GetObjectStatsRequest)(nil),     // 0: paladin.v1.GetObjectStatsRequest
 	(*GetObjectStatsResponse)(nil),    // 1: paladin.v1.GetObjectStatsResponse
@@ -2115,56 +2399,64 @@ var file_paladin_proto_goTypes = []any{
 	(*CompleteMultipartResponse)(nil), // 27: paladin.v1.CompleteMultipartResponse
 	(*AbortMultipartRequest)(nil),     // 28: paladin.v1.AbortMultipartRequest
 	(*AbortMultipartResponse)(nil),    // 29: paladin.v1.AbortMultipartResponse
-	nil,                               // 30: paladin.v1.CreateObjectRequest.LabelsEntry
-	nil,                               // 31: paladin.v1.CreateObjectResponse.HeadersEntry
-	nil,                               // 32: paladin.v1.GetObjectResponse.LabelsEntry
-	nil,                               // 33: paladin.v1.GetObjectMetaResponse.LabelsEntry
-	nil,                               // 34: paladin.v1.InitiateMultipartRequest.LabelsEntry
+	(*ListObjectsRequest)(nil),        // 30: paladin.v1.ListObjectsRequest
+	(*ListObjectsResponse)(nil),       // 31: paladin.v1.ListObjectsResponse
+	(*ListObjectItem)(nil),            // 32: paladin.v1.ListObjectItem
+	nil,                               // 33: paladin.v1.CreateObjectRequest.LabelsEntry
+	nil,                               // 34: paladin.v1.CreateObjectResponse.HeadersEntry
+	nil,                               // 35: paladin.v1.GetObjectResponse.LabelsEntry
+	nil,                               // 36: paladin.v1.GetObjectMetaResponse.LabelsEntry
+	nil,                               // 37: paladin.v1.InitiateMultipartRequest.LabelsEntry
+	nil,                               // 38: paladin.v1.ListObjectItem.LabelsEntry
 }
 var file_paladin_proto_depIdxs = []int32{
 	11, // 0: paladin.v1.ListCategoriesResponse.items:type_name -> paladin.v1.Category
 	11, // 1: paladin.v1.GetCategoryResponse.category:type_name -> paladin.v1.Category
-	30, // 2: paladin.v1.CreateObjectRequest.labels:type_name -> paladin.v1.CreateObjectRequest.LabelsEntry
-	31, // 3: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
-	32, // 4: paladin.v1.GetObjectResponse.labels:type_name -> paladin.v1.GetObjectResponse.LabelsEntry
-	33, // 5: paladin.v1.GetObjectMetaResponse.labels:type_name -> paladin.v1.GetObjectMetaResponse.LabelsEntry
-	34, // 6: paladin.v1.InitiateMultipartRequest.labels:type_name -> paladin.v1.InitiateMultipartRequest.LabelsEntry
+	33, // 2: paladin.v1.CreateObjectRequest.labels:type_name -> paladin.v1.CreateObjectRequest.LabelsEntry
+	34, // 3: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
+	35, // 4: paladin.v1.GetObjectResponse.labels:type_name -> paladin.v1.GetObjectResponse.LabelsEntry
+	36, // 5: paladin.v1.GetObjectMetaResponse.labels:type_name -> paladin.v1.GetObjectMetaResponse.LabelsEntry
+	37, // 6: paladin.v1.InitiateMultipartRequest.labels:type_name -> paladin.v1.InitiateMultipartRequest.LabelsEntry
 	26, // 7: paladin.v1.CompleteMultipartRequest.parts:type_name -> paladin.v1.CompleteMultipartPart
-	12, // 8: paladin.v1.Paladin.CreateObject:input_type -> paladin.v1.CreateObjectRequest
-	14, // 9: paladin.v1.Paladin.GetObject:input_type -> paladin.v1.GetObjectRequest
-	14, // 10: paladin.v1.Paladin.GetObjectMeta:input_type -> paladin.v1.GetObjectRequest
-	17, // 11: paladin.v1.Paladin.CompleteObject:input_type -> paladin.v1.CompleteObjectRequest
-	19, // 12: paladin.v1.Paladin.DeleteObject:input_type -> paladin.v1.DeleteObjectRequest
-	21, // 13: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
-	23, // 14: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
-	25, // 15: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
-	28, // 16: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
-	2,  // 17: paladin.v1.Paladin.ListCategories:input_type -> paladin.v1.ListCategoriesRequest
-	4,  // 18: paladin.v1.Paladin.GetCategory:input_type -> paladin.v1.GetCategoryRequest
-	6,  // 19: paladin.v1.Paladin.CreateCategory:input_type -> paladin.v1.CreateCategoryRequest
-	7,  // 20: paladin.v1.Paladin.DeleteCategory:input_type -> paladin.v1.DeleteCategoryRequest
-	9,  // 21: paladin.v1.Paladin.GetCategoryStats:input_type -> paladin.v1.GetCategoryStatsRequest
-	0,  // 22: paladin.v1.Paladin.GetObjectStats:input_type -> paladin.v1.GetObjectStatsRequest
-	13, // 23: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
-	15, // 24: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
-	16, // 25: paladin.v1.Paladin.GetObjectMeta:output_type -> paladin.v1.GetObjectMetaResponse
-	18, // 26: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
-	20, // 27: paladin.v1.Paladin.DeleteObject:output_type -> paladin.v1.DeleteObjectResponse
-	22, // 28: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
-	24, // 29: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
-	27, // 30: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
-	29, // 31: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
-	3,  // 32: paladin.v1.Paladin.ListCategories:output_type -> paladin.v1.ListCategoriesResponse
-	5,  // 33: paladin.v1.Paladin.GetCategory:output_type -> paladin.v1.GetCategoryResponse
-	5,  // 34: paladin.v1.Paladin.CreateCategory:output_type -> paladin.v1.GetCategoryResponse
-	8,  // 35: paladin.v1.Paladin.DeleteCategory:output_type -> paladin.v1.DeleteCategoryResponse
-	10, // 36: paladin.v1.Paladin.GetCategoryStats:output_type -> paladin.v1.GetCategoryStatsResponse
-	1,  // 37: paladin.v1.Paladin.GetObjectStats:output_type -> paladin.v1.GetObjectStatsResponse
-	23, // [23:38] is the sub-list for method output_type
-	8,  // [8:23] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	32, // 8: paladin.v1.ListObjectsResponse.items:type_name -> paladin.v1.ListObjectItem
+	38, // 9: paladin.v1.ListObjectItem.labels:type_name -> paladin.v1.ListObjectItem.LabelsEntry
+	12, // 10: paladin.v1.Paladin.CreateObject:input_type -> paladin.v1.CreateObjectRequest
+	14, // 11: paladin.v1.Paladin.GetObject:input_type -> paladin.v1.GetObjectRequest
+	14, // 12: paladin.v1.Paladin.GetObjectMeta:input_type -> paladin.v1.GetObjectRequest
+	17, // 13: paladin.v1.Paladin.CompleteObject:input_type -> paladin.v1.CompleteObjectRequest
+	19, // 14: paladin.v1.Paladin.DeleteObject:input_type -> paladin.v1.DeleteObjectRequest
+	21, // 15: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
+	23, // 16: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
+	25, // 17: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
+	28, // 18: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
+	2,  // 19: paladin.v1.Paladin.ListCategories:input_type -> paladin.v1.ListCategoriesRequest
+	4,  // 20: paladin.v1.Paladin.GetCategory:input_type -> paladin.v1.GetCategoryRequest
+	6,  // 21: paladin.v1.Paladin.CreateCategory:input_type -> paladin.v1.CreateCategoryRequest
+	7,  // 22: paladin.v1.Paladin.DeleteCategory:input_type -> paladin.v1.DeleteCategoryRequest
+	9,  // 23: paladin.v1.Paladin.GetCategoryStats:input_type -> paladin.v1.GetCategoryStatsRequest
+	0,  // 24: paladin.v1.Paladin.GetObjectStats:input_type -> paladin.v1.GetObjectStatsRequest
+	30, // 25: paladin.v1.Paladin.ListObjects:input_type -> paladin.v1.ListObjectsRequest
+	13, // 26: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
+	15, // 27: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
+	16, // 28: paladin.v1.Paladin.GetObjectMeta:output_type -> paladin.v1.GetObjectMetaResponse
+	18, // 29: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
+	20, // 30: paladin.v1.Paladin.DeleteObject:output_type -> paladin.v1.DeleteObjectResponse
+	22, // 31: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
+	24, // 32: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
+	27, // 33: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
+	29, // 34: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
+	3,  // 35: paladin.v1.Paladin.ListCategories:output_type -> paladin.v1.ListCategoriesResponse
+	5,  // 36: paladin.v1.Paladin.GetCategory:output_type -> paladin.v1.GetCategoryResponse
+	5,  // 37: paladin.v1.Paladin.CreateCategory:output_type -> paladin.v1.GetCategoryResponse
+	8,  // 38: paladin.v1.Paladin.DeleteCategory:output_type -> paladin.v1.DeleteCategoryResponse
+	10, // 39: paladin.v1.Paladin.GetCategoryStats:output_type -> paladin.v1.GetCategoryStatsResponse
+	1,  // 40: paladin.v1.Paladin.GetObjectStats:output_type -> paladin.v1.GetObjectStatsResponse
+	31, // 41: paladin.v1.Paladin.ListObjects:output_type -> paladin.v1.ListObjectsResponse
+	26, // [26:42] is the sub-list for method output_type
+	10, // [10:26] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_paladin_proto_init() }
@@ -2174,13 +2466,14 @@ func file_paladin_proto_init() {
 	}
 	file_paladin_proto_msgTypes[6].OneofWrappers = []any{}
 	file_paladin_proto_msgTypes[11].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[30].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_proto_rawDesc), len(file_paladin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   35,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

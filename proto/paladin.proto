@@ -24,6 +24,7 @@ service Paladin {
   rpc GetCategoryStats(GetCategoryStatsRequest) returns (GetCategoryStatsResponse);
 
   rpc GetObjectStats(GetObjectStatsRequest) returns (GetObjectStatsResponse);
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
 }
 
 message GetObjectStatsRequest {
@@ -212,4 +213,31 @@ message AbortMultipartRequest {
 
 message AbortMultipartResponse {
   string status = 1;
+}
+
+message ListObjectsRequest {
+  string tenant_id = 1;
+  int32 limit = 2;
+  string cursor = 3;
+  optional string category = 4;
+  optional string status = 5;
+  optional string search = 6;
+}
+
+message ListObjectsResponse {
+  repeated ListObjectItem items = 1;
+  string next_cursor = 2;
+  int64 total_count = 3;
+}
+
+message ListObjectItem {
+  string object_id = 1;
+  string object_key = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  string status = 5;
+  int64 created_at_unix = 6;
+  string category = 7;
+  map<string, string> labels = 8;
+  string external_ref = 9;
 }

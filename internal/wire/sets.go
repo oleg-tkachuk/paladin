@@ -7,6 +7,7 @@ import (
 	"time"
 
 	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
+	publicapi "github.com/oleg-tkachuk/paladin/internal/api/grpc/public"
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
@@ -240,7 +241,9 @@ func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsServi
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	grpcapi.RegisterPaladinServer(srv, grpcapi.NewServer(l, svc, catSvc))
+	s := grpcapi.NewServer(l, svc, catSvc)
+	grpcapi.RegisterPaladinServer(srv, s)
+	publicapi.RegisterPaladinServer(srv, &grpcapi.PublicServer{Server: s})
 	reflection.Register(srv)
 
 	return srv
