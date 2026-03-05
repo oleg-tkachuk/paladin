@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"google.golang.org/grpc/codes"
@@ -248,6 +249,10 @@ func MapToHTTP(ctx context.Context, err error) (int, any) {
 func MapToGRPC(err error) error {
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
+		if errors.Is(err, domain.ErrNotFound) {
+			return status.Error(codes.NotFound, "not found")
+		}
+
 		return status.Error(codes.Internal, "internal server error")
 	}
 
@@ -280,6 +285,10 @@ func MapToGRPC(err error) error {
 
 // IsNotFound checks if the error is a NotFound error.
 func IsNotFound(err error) bool {
+	if errors.Is(err, domain.ErrNotFound) {
+		return true
+	}
+
 	var appErr *AppError
 	if errors.As(err, &appErr) {
 		return appErr.Code == CodeNotFound

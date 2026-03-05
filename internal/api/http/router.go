@@ -4,11 +4,15 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"connectrpc.com/connect"
+	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/service"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/grpc/grpcapiconnect"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -102,6 +106,12 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	// Register generated handlers
 	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, sysSvc, started, metadata)
 	api.RegisterHandlers(v1, adapter)
+
+	path, handler := grpcapiconnect.NewPaladinHandler(
+		grpcapi.NewConnectServer(log, svc, catSvc, tenantSvc),
+		connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log)...),
+	)
+	r.Any(path+"*path", gin.WrapH(handler))
 
 	// Admin-only routes: tenant lifecycle management.
 	// Gated by AdminOnly middleware (requires Authorization: Bearer <admin_key>).

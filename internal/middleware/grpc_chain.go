@@ -2,6 +2,9 @@ package middleware
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
+	"connectrpc.com/connect"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -64,14 +68,31 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 		GRPCRateLimitInterceptor(cfg, rl),
 		// 5. Context logger — enrich logger with request_id for all downstream logs.
 		ContextLoggerInterceptor(log),
-		// 6. Access logger — log every RPC with method, code, tenant, latency.
-		LoggerInterceptor(log),
-		// 7. Auth — extract tenant_id from metadata into context.
+		// 6. Auth — extract tenant_id from metadata into context.
 		AuthInterceptor(cfg),
+		// 7. Access logger — log every RPC with method, code, tenant, latency.
+		// Moved after Auth so tenantID is available in context.
+		LoggerInterceptor(),
 		// 8. Tenant enforcement — reject requests without tenant when auth enabled.
 		EnforceTenantInterceptor(cfg),
 		// 9. Validation — call req.Validate() on messages that implement GRPCValidator.
 		ValidationInterceptor(),
+	}
+}
+
+// SetupConnectInterceptors returns the ordered interceptor chain for Connect RPC.
+func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger) []connect.Interceptor {
+	rl := newGRPCRateLimiter(cfg)
+
+	return []connect.Interceptor{
+		ConnectRecoveryInterceptor(log),
+		ConnectRequestIDInterceptor(),
+		ConnectContextLoggerInterceptor(log),
+		ConnectAuthInterceptor(cfg),
+		ConnectLoggerInterceptor(),
+		ConnectEnforceTenantInterceptor(cfg),
+		ConnectValidationInterceptor(),
+		ConnectRateLimitInterceptor(cfg, rl),
 	}
 }
 
@@ -158,7 +179,7 @@ func ContextLoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 // LoggerInterceptor logs every RPC call with method, gRPC code, tenant, and
 // latency. Uses Warn for client errors (4xx-class codes) and Error for server
 // errors (5xx-class). Success calls are logged at Info.
-func LoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
+func LoggerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 
@@ -170,7 +191,11 @@ func LoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 		tenantID := utils.TenantIDFromContext(ctx, "")
 		rid := utils.RequestIDFromContext(ctx, "")
 
+		// Use the context-enriched logger to include request_id and trace_id
+		log := logger.FromContext(ctx)
+
 		fields := []zap.Field{
+			zap.String("protocol", "grpc"),
 			zap.String("method", info.FullMethod),
 			zap.String("code", code.String()),
 			zap.Float64("duration_ms", durationMs),
@@ -311,4 +336,171 @@ func newGRPCRateLimiter(cfg *config.Config) *TenantRateLimiter {
 		cfg.RateLimit.CleanupTTL,
 		cfg.RateLimit.CleanupInterval,
 	)
+}
+
+// Connect RequestID Interceptor
+func ConnectRequestIDInterceptor() connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			rid := req.Header().Get(grpcMetaRequestID)
+			if rid == "" {
+				rid = uuid.New().String()
+			}
+			ctx = context.WithValue(ctx, utils.RequestIDKey, rid)
+			res, err := next(ctx, req)
+			if res != nil {
+				res.Header().Set(grpcMetaRequestID, rid)
+			}
+			return res, err
+		}
+	})
+}
+
+// Connect Context Logger Interceptor
+func ConnectContextLoggerInterceptor(log *zap.Logger) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			rid := utils.RequestIDFromContext(ctx, "")
+			l := log
+			if rid != "" {
+				l = l.With(zap.String("request_id", rid))
+			}
+			ctx = logger.WithContext(ctx, l)
+			return next(ctx, req)
+		}
+	})
+}
+
+// Connect Logger Interceptor
+func ConnectLoggerInterceptor() connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			start := time.Now()
+			res, err := next(ctx, req)
+			durationMs := float64(time.Since(start).Nanoseconds()) / 1e6
+			tenantID := utils.TenantIDFromContext(ctx, "")
+			rid := utils.RequestIDFromContext(ctx, "")
+
+			// Use context-enriched logger
+			log := logger.FromContext(ctx)
+
+			fields := []zap.Field{
+				zap.String("protocol", "connect"),
+				zap.String("method", req.Spec().Procedure),
+				zap.Float64("duration_ms", durationMs),
+				zap.String("tenant_id", tenantID),
+				zap.String("request_id", rid),
+			}
+
+			if err != nil {
+				lerr := connect.CodeOf(err)
+				fields = append(fields, zap.String("code", lerr.String()))
+				log.Error("Connect request error", append(fields, zap.Error(err))...)
+			} else {
+				log.Info("Connect request", fields...)
+			}
+			return res, err
+		}
+	})
+}
+
+// Connect Auth Interceptor
+func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			tenantID := ""
+			if cfg.Security.TrustTenantIDFromRequest {
+				tenantID = req.Header().Get(grpcMetaTenantID)
+			}
+
+			authHeader := req.Header().Get(grpcMetaAuthorization)
+			if tenantID == "" && cfg.Auth.AdminKey != "" && authHeader == "Bearer "+cfg.Auth.AdminKey {
+				tenantID = utils.SystemAdminTenant
+			}
+
+			if tenantID == "" && !cfg.Auth.Enabled {
+				tenantID = utils.DefaultTenant
+			}
+
+			if tenantID != "" {
+				ctx = context.WithValue(ctx, utils.TenantIDKey, tenantID)
+			}
+			return next(ctx, req)
+		}
+	})
+}
+
+// Connect Enforce Tenant Interceptor
+func ConnectEnforceTenantInterceptor(cfg *config.Config) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			procedure := req.Spec().Procedure
+			if grpcSkippedMethods[procedure] {
+				return next(ctx, req)
+			}
+
+			if cfg.Auth.Enabled {
+				tenant := utils.TenantIDFromContext(ctx, "")
+				if tenant == "" {
+					return nil, connect.NewError(connect.CodeUnauthenticated,
+						errors.New("missing tenant: supply x-tenant-id header or a valid Authorization header"))
+				}
+			}
+			return next(ctx, req)
+		}
+	})
+}
+
+// Connect Validation Interceptor
+func ConnectValidationInterceptor() connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if v, ok := req.Any().(GRPCValidator); ok {
+				if err := v.Validate(); err != nil {
+					return nil, connect.NewError(connect.CodeInvalidArgument, err)
+				}
+			}
+			return next(ctx, req)
+		}
+	})
+}
+
+// Connect Rate Limit Interceptor
+func ConnectRateLimitInterceptor(cfg *config.Config, rl *TenantRateLimiter) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if !cfg.RateLimit.Enabled {
+				return next(ctx, req)
+			}
+
+			tenantID := utils.TenantIDFromContext(ctx, "unknown")
+			if !rl.GetLimiter(tenantID).Allow() {
+				return nil, connect.NewError(connect.CodeResourceExhausted,
+					fmt.Errorf("rate limit exceeded for tenant %q", tenantID))
+			}
+			return next(ctx, req)
+		}
+	})
+}
+
+// ConnectRecoveryInterceptor catches panics in Connect RPC handlers and logs them.
+func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (res connect.AnyResponse, err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					rid := utils.RequestIDFromContext(ctx, "")
+					stack := debug.Stack()
+					log.Error("Connect RPC panic recovered",
+						zap.Any("panic", r),
+						zap.String("request_id", rid),
+						zap.String("method", req.Spec().Procedure),
+						zap.ByteString("stacktrace", stack),
+					)
+					err = connect.NewError(connect.CodeInternal, fmt.Errorf("internal server error"))
+				}
+			}()
+			return next(ctx, req)
+		}
+	})
 }

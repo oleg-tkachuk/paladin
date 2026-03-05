@@ -14,9 +14,6 @@ import (
 
 // SetupHTTPStack configures the canonical middleware stack for Gin
 func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRepo domain.AuditLogRepository) {
-	// 1. Recovery (Panic -> 500)
-	r.Use(gin.Recovery())
-
 	// 2. Security Headers (protect all responses)
 	r.Use(SecurityHeadersMiddleware())
 
@@ -46,6 +43,9 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRep
 
 	// 7. Logger (Structured Zap)
 	r.Use(RequestLogger(log, cfg.Server.LogProbes))
+
+	// 8. Recovery (Panic -> 500) - Positioned after logger to ensure panics are logged
+	r.Use(ZapRecovery(log, true))
 
 	// 8. Audit Logging (captured after logging enrichment)
 	r.Use(AuditLogMiddleware(auditRepo, log))

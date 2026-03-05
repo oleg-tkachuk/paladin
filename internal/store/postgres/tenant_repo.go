@@ -327,7 +327,7 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.TenantFilter, limit
 	}
 
 	nextCursor := ""
-	if len(tenants) > limit {
+	if limit > 0 && len(tenants) > limit {
 		nextCursor = tenants[limit-1].CreatedAt.Format(time.RFC3339)
 		tenants = tenants[:limit]
 	}

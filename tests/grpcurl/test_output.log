@@ -1,0 +1,40 @@
+========================================
+ Running All gRPC E2E Tests
+========================================
+========================================
+ Running Happy Path Tests
+========================================
+-> Executing: ./cases/Paladin/AbortMultipart/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found expected isolated) (paladin.v1.Paladin/AbortMultipart)[0m
+Request ID: test-run-9943d1f7-84af-4faf-a839-5152d7bb29bf
+[0;32m[PASS] gRPC Status: InvalidArgument[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CompleteMultipart/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found expected isolated) (paladin.v1.Paladin/CompleteMultipart)[0m
+Request ID: test-run-8a811bee-2e01-4362-a9e8-37d1ee84fbb1
+[0;32m[PASS] gRPC Status: InvalidArgument[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CompleteObject/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found) (paladin.v1.Paladin/CompleteObject)[0m
+Request ID: test-run-716c57ea-8824-4064-a847-0702df9b3803
+[0;32m[PASS] gRPC Status: NotFound[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CreateCategory/happy.sh
+
+[1;33mRunning Test: Happy Path: Create Category (paladin.v1.Paladin/CreateCategory)[0m
+Request ID: test-run-f182565f-5278-453f-8988-bbc99551c541
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CreateObject/happy.sh
+
+[1;33mRunning Test: Happy Path: Standard Creation (paladin.v1.Paladin/CreateObject)[0m
+Request ID: test-run-6a2f0702-f049-4ab7-aa86-ec477d9f21c4
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+
+[1;33mRunning Test: Happy Path: Minimal Fields (paladin.v1.Paladin/CreateObject)[0m
+Request ID: test-run-5331105a-4fff-451d-92d3-3b1da578d9c9
+[0;32m[PASS] gRPC Status: OK[0m

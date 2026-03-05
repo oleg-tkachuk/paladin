@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"connectrpc.com/connect"
 )
 
 // Server is the internal gRPC server implementation. It holds all service
@@ -27,6 +29,193 @@ type Server struct {
 // NewServer creates a new Server with the given service dependencies.
 func NewServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *Server {
 	return &Server{log: log, svc: svc, catSvc: catSvc, tenantSvc: tenantSvc}
+}
+
+// NewConnectServer is a helper for the HTTP router to get a Connect-compatible
+// implementation of the service.
+func NewConnectServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *ConnectServer {
+	return &ConnectServer{Server: NewServer(log, svc, catSvc, tenantSvc)}
+}
+
+// ConnectServer wraps the internal gRPC Server to implement the Connect RPC interface.
+type ConnectServer struct {
+	*Server
+}
+
+func (s *ConnectServer) CreateObject(ctx context.Context, req *connect.Request[CreateObjectRequest]) (*connect.Response[CreateObjectResponse], error) {
+	res, err := s.Server.CreateObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetObject(ctx context.Context, req *connect.Request[GetObjectRequest]) (*connect.Response[GetObjectResponse], error) {
+	res, err := s.Server.GetObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetObjectMeta(ctx context.Context, req *connect.Request[GetObjectRequest]) (*connect.Response[GetObjectMetaResponse], error) {
+	res, err := s.Server.GetObjectMeta(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) PatchObjectMeta(ctx context.Context, req *connect.Request[PatchObjectMetaRequest]) (*connect.Response[PatchObjectMetaResponse], error) {
+	res, err := s.Server.PatchObjectMeta(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) CompleteObject(ctx context.Context, req *connect.Request[CompleteObjectRequest]) (*connect.Response[CompleteObjectResponse], error) {
+	res, err := s.Server.CompleteObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) DeleteObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
+	res, err := s.Server.DeleteObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) InitiateMultipart(ctx context.Context, req *connect.Request[InitiateMultipartRequest]) (*connect.Response[InitiateMultipartResponse], error) {
+	res, err := s.Server.InitiateMultipart(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) SignPart(ctx context.Context, req *connect.Request[SignPartRequest]) (*connect.Response[SignPartResponse], error) {
+	res, err := s.Server.SignPart(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) CompleteMultipart(ctx context.Context, req *connect.Request[CompleteMultipartRequest]) (*connect.Response[CompleteMultipartResponse], error) {
+	res, err := s.Server.CompleteMultipart(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) AbortMultipart(ctx context.Context, req *connect.Request[AbortMultipartRequest]) (*connect.Response[AbortMultipartResponse], error) {
+	res, err := s.Server.AbortMultipart(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) ListCategories(ctx context.Context, req *connect.Request[ListCategoriesRequest]) (*connect.Response[ListCategoriesResponse], error) {
+	res, err := s.Server.ListCategories(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetCategory(ctx context.Context, req *connect.Request[GetCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
+	res, err := s.Server.GetCategory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) CreateCategory(ctx context.Context, req *connect.Request[CreateCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
+	res, err := s.Server.CreateCategory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) DeleteCategory(ctx context.Context, req *connect.Request[DeleteCategoryRequest]) (*connect.Response[DeleteCategoryResponse], error) {
+	res, err := s.Server.DeleteCategory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetCategoryStats(ctx context.Context, req *connect.Request[GetCategoryStatsRequest]) (*connect.Response[GetCategoryStatsResponse], error) {
+	res, err := s.Server.GetCategoryStats(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetObjectStats(ctx context.Context, req *connect.Request[GetObjectStatsRequest]) (*connect.Response[GetObjectStatsResponse], error) {
+	res, err := s.Server.GetObjectStats(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) ListObjects(ctx context.Context, req *connect.Request[ListObjectsRequest]) (*connect.Response[ListObjectsResponse], error) {
+	res, err := s.Server.ListObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) CreateTenant(ctx context.Context, req *connect.Request[CreateTenantRequest]) (*connect.Response[TenantResponse], error) {
+	res, err := s.Server.CreateTenant(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) GetTenant(ctx context.Context, req *connect.Request[GetTenantRequest]) (*connect.Response[TenantResponse], error) {
+	res, err := s.Server.GetTenant(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) DeleteTenant(ctx context.Context, req *connect.Request[DeleteTenantRequest]) (*connect.Response[DeleteTenantResponse], error) {
+	res, err := s.Server.DeleteTenant(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) ListTenants(ctx context.Context, req *connect.Request[ListTenantsRequest]) (*connect.Response[ListTenantsResponse], error) {
+	res, err := s.Server.ListTenants(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) PatchTenantMetadata(ctx context.Context, req *connect.Request[PatchTenantMetadataRequest]) (*connect.Response[TenantResponse], error) {
+	res, err := s.Server.PatchTenantMetadata(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
 }
 
 // PublicServer wraps the internal Server to satisfy the public API interface.
@@ -343,7 +532,12 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 		filter.Status = &st
 	}
 
-	items, next, total, err := s.svc.List(ctx, tenant, filter, int(req.Limit), req.Cursor)
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 20
+	}
+
+	items, next, total, err := s.svc.List(ctx, tenant, filter, limit, req.Cursor)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -383,7 +577,12 @@ func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest)
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
-	items, next, total, err := s.catSvc.List(ctx, tenant, int(req.Limit), req.Cursor)
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 20
+	}
+
+	items, next, total, err := s.catSvc.List(ctx, tenant, limit, req.Cursor)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -523,7 +722,12 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 		TagSelector:   req.TagSelector,
 	}
 
-	tenants, nextCursor, total, err := s.tenantSvc.List(ctx, filter, int(req.Limit), req.Cursor)
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 20
+	}
+
+	tenants, nextCursor, total, err := s.tenantSvc.List(ctx, filter, limit, req.Cursor)
 	if err != nil {
 		return nil, grpcError(err)
 	}

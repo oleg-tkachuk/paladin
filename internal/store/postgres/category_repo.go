@@ -82,7 +82,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cur
 	}
 
 	nextCursor := ""
-	if len(cats) > limit {
+	if limit > 0 && len(cats) > limit {
 		nextCursor = cats[limit-1].CreatedAt.Format(time.RFC3339)
 		cats = cats[:limit]
 	}
@@ -161,7 +161,7 @@ func (r *CategoryRepo) ListTenants(ctx context.Context, limit int, cursor string
 	}
 
 	nextCursor := ""
-	if len(tenants) > limit {
+	if limit > 0 && len(tenants) > limit {
 		nextCursor = lastCreatedAt.Format(time.RFC3339)
 		tenants = tenants[:limit]
 	}

@@ -295,7 +295,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 	}
 
 	nextCursor := ""
-	if len(out) > limit {
+	if limit > 0 && len(out) > limit {
 		nextCursor = out[limit-1].CreatedAt.Format(time.RFC3339)
 		out = out[:limit]
 	}

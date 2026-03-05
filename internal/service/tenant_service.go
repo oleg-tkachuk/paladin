@@ -82,9 +82,12 @@ func (s *tenantService) Delete(ctx context.Context, tenantID string) error {
 		)
 	}
 
-	_, err = s.repo.Delete(ctx, tenantID)
+	deleted, err := s.repo.Delete(ctx, tenantID)
 	if err != nil {
 		return fmt.Errorf("delete tenant: %w", err)
+	}
+	if !deleted {
+		return apperrors.NotFound("tenant not found", nil)
 	}
 
 	return nil

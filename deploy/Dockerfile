@@ -19,6 +19,8 @@ ARG PROTOC_GEN_GO_VERSION=latest
 ARG PROTOC_GEN_GO_GRPC_VERSION=latest
 ARG WIRE_VERSION=latest
 ARG OAPI_CODEGEN_VERSION=latest
+ARG PROTOC_GEN_CONNECT_GO_VERSION=latest
+ARG SQLC_VERSION=latest
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -37,7 +39,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
     go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
-    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}
+    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION} && \
+    go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION} && \
+    go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}
 
 # -----------------------------
 # Builder stage (target binary)
@@ -98,14 +102,14 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build \
-      -buildvcs=false \
-      -trimpath \
-      -tags=go_json \
-      -ldflags="-w -s \
-        -X 'main.version=${APP_VERSION}' \
-        -X 'main.commit=${GIT_COMMIT_HASH}' \
-        -X 'main.buildTime=${BUILD_TIME}'" \
-      -o /out/paladin ./cmd/server
+    -buildvcs=false \
+    -trimpath \
+    -tags=go_json \
+    -ldflags="-w -s \
+    -X 'main.version=${APP_VERSION}' \
+    -X 'main.commit=${GIT_COMMIT_HASH}' \
+    -X 'main.buildTime=${BUILD_TIME}'" \
+    -o /out/paladin ./cmd/server
 
 # -----------------------------
 # Runtime stage

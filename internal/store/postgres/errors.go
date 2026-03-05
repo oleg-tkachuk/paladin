@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 
 	"github.com/jackc/pgerrcode"
@@ -18,9 +19,9 @@ func MapPgError(err error) error {
 		return nil
 	}
 
-	// No rows found - return nil for Get operations (caller decides if this is an error)
+	// No rows found
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		return domain.ErrNotFound
 	}
 
 	// Check for postgres-specific errors

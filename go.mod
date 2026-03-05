@@ -51,6 +51,7 @@ require (
 )
 
 require (
+	connectrpc.com/connect v1.19.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/gammazero/deque v1.2.1 // indirect

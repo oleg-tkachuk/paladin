@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	"go.opentelemetry.io/otel"
@@ -40,7 +41,16 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 
-		return nil, err
+		return nil, errors.BadRequest("invalid upload_id", err)
+	}
+
+	if multi == nil {
+		err = fmt.Errorf("multipart upload not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+
+		return nil, errors.BadRequest("invalid upload_id", err)
 	}
 
 	// FSM State Transition Check

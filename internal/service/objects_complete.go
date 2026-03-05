@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -42,6 +43,10 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
+		if errors.IsNotFound(err) || err == domain.ErrNotFound {
+			return nil, errors.NotFound("object not found", err)
+		}
 
 		return nil, err
 	}

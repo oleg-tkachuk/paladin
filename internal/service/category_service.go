@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -51,9 +52,15 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 		return errors.Conflict("Cannot delete category because it still contains active objects", nil)
 	}
 
-	_, err = s.repo.Delete(ctx, tenantID, slug)
+	deleted, err := s.repo.Delete(ctx, tenantID, slug)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return errors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
+	}
 
-	return err
+	return nil
 }
 
 func (s *categoryService) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {

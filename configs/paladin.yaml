@@ -5,13 +5,13 @@ app:
 # ─── Observability ──────────────────────────────────────────────────────────
 
 logger:
-  level: error # debug, info, warn, error, dpanic, panic, fatal
+  level: debug # debug, info, warn, error, dpanic, panic, fatal
   format: json # json, console
   development: true
   disable_caller: false
   disable_stacktrace: true
   sampling:
-    enabled: true
+    enabled: false
     initial: 100
     thereafter: 100
   # fields default to app.name / app.env — only override when they must differ
@@ -31,7 +31,7 @@ otel:
 # ─── Network ────────────────────────────────────────────────────────────────
 
 server:
-  mode: release # debug | test | release
+  mode: debug # debug | test | release
   name: paladin
 
   http:

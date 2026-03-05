@@ -26,6 +26,8 @@ import (
 	"github.com/google/wire"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -275,9 +277,10 @@ func ProvideApp(
 	reaper *worker.Reaper,
 	started *atomic.Bool,
 ) (*app.App, func()) {
+	h2s := &http2.Server{}
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
-		Handler:           httpapiSrv.Handler(),
+		Handler:           h2c.NewHandler(httpapiSrv.Handler(), h2s),
 		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,

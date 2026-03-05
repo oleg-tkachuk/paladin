@@ -1,0 +1,64 @@
+========================================
+ Running Happy Path Tests
+========================================
+-> Executing: ./cases/Paladin/AbortMultipart/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found expected isolated) (paladin.v1.Paladin/AbortMultipart)[0m
+Request ID: test-run-017dcdf5-e8d7-45f3-b538-0f203ef339c6
+[0;32m[PASS] gRPC Status: InvalidArgument[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CompleteMultipart/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found expected isolated) (paladin.v1.Paladin/CompleteMultipart)[0m
+Request ID: test-run-45d462ae-93e0-4a19-b743-8b47a4e6db34
+[0;32m[PASS] gRPC Status: InvalidArgument[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CompleteObject/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found) (paladin.v1.Paladin/CompleteObject)[0m
+Request ID: test-run-9ca1ccc8-2039-4a6c-bbaf-1bebaa971012
+[0;32m[PASS] gRPC Status: NotFound[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CreateCategory/happy.sh
+
+[1;33mRunning Test: Happy Path: Create Category (paladin.v1.Paladin/CreateCategory)[0m
+Request ID: test-run-582d8edc-73d7-4263-91ed-0d883a27a530
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CreateObject/happy.sh
+
+[1;33mRunning Test: Happy Path: Standard Creation (paladin.v1.Paladin/CreateObject)[0m
+Request ID: test-run-4678fd85-f3ef-4f3a-9ff7-62afc0f85a97
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+
+[1;33mRunning Test: Happy Path: Minimal Fields (paladin.v1.Paladin/CreateObject)[0m
+Request ID: test-run-32545329-cf19-488f-b1a6-545709084e18
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/CreateTenant/happy.sh
+
+[1;33mRunning Test: Happy Path: Create Tenant (paladin.v1.Paladin/CreateTenant)[0m
+Request ID: test-run-1e3dc8a5-ed10-438a-9dfe-a3eac357c54f
+[0;32m[PASS] gRPC Status: OK[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/DeleteCategory/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found expected isolated) (paladin.v1.Paladin/DeleteCategory)[0m
+Request ID: test-run-1423d06f-201f-4e8d-a14e-92983ee340ba
+[0;32m[PASS] gRPC Status: NotFound[0m
+[0;32m[PASS] Log correlation successful (1 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/DeleteObject/happy.sh
+
+[1;33mRunning Test: Happy Path: Valid Structure (Not Found) (paladin.v1.Paladin/DeleteObject)[0m
+Request ID: test-run-7d0ce4c0-47b4-4838-916a-18180c745bee
+[0;32m[PASS] gRPC Status: NotFound[0m
+[0;32m[PASS] Log correlation successful (2 lines found). No panics.[0m
+-> Executing: ./cases/Paladin/DeleteTenant/happy.sh
+
+[1;33mRunning Test: Happy Path: Delete Tenant (Not Found expected isolated) (paladin.v1.Paladin/DeleteTenant)[0m
+Request ID: test-run-9c04f724-9e0b-4ba8-8180-8e942220f0bd
+[0;31m[FAIL] Expected code: NotFound, Actual code: OK[0m
+Response: {
+  "status": "deleted"
+}

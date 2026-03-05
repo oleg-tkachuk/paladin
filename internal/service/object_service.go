@@ -99,11 +99,6 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	// Get object to check current status
 	obj, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
-		if apperrors.IsNotFound(err) {
-			status = "success"
-
-			return nil
-		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -141,6 +136,8 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	if updated {
 		logger.FromContext(ctx).Info(LogObjectSoftDeleted, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	} else {
+		return apperrors.NotFound("object not found", nil)
 	}
 
 	status = "success"
@@ -249,13 +246,6 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	// Get object record to retrieve S3 key and check state
 	obj, err := s.objRepo.Get(ctx, tenantID, id)
 	if err != nil {
-		// If object not found, treat as success (idempotent)
-		if apperrors.IsNotFound(err) {
-			status = "success"
-			span.SetStatus(codes.Ok, "object already absent")
-
-			return nil
-		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
@@ -300,13 +290,16 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	}
 
 	// Permanently delete record from database
-	_, err = s.objRepo.Delete(ctx, tenantID, id)
+	updated, err := s.objRepo.Delete(ctx, tenantID, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 
 		return err
+	}
+	if !updated {
+		return apperrors.NotFound("object not found", nil)
 	}
 
 	if idempotencyKey != nil {
