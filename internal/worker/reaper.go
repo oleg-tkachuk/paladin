@@ -41,6 +41,7 @@ func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo
 func (r *Reaper) Start(ctx context.Context) {
 	if !r.cfg.EnableReaper {
 		r.log.Info("Reaper disabled")
+
 		return
 	}
 
@@ -56,6 +57,7 @@ func (r *Reaper) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			r.log.Info("Reaper stopping", zap.Error(ctx.Err()))
+
 			return
 		case <-ticker.C:
 			r.runCleanup(ctx)
@@ -80,6 +82,7 @@ func (r *Reaper) cleanupAuditLogs(ctx context.Context) {
 	count, err := r.auditRepo.Prune(ctx, cutoff, limit)
 	if err != nil {
 		r.log.Error("Failed to prune audit logs", zap.Error(err))
+
 		return
 	}
 
@@ -96,6 +99,7 @@ func (r *Reaper) cleanupPending(ctx context.Context) {
 	recs, err := r.objRepo.ListExpiredPending(ctx, cutoff, limit)
 	if err != nil {
 		r.log.Error("Failed to list expired pending objects", zap.Error(err))
+
 		return
 	}
 
@@ -117,7 +121,6 @@ func (r *Reaper) cleanupPending(ctx context.Context) {
 		if _, err := r.objRepo.Delete(ctx, rec.TenantID, rec.ID); err != nil {
 			r.log.Error("Failed to physically delete object", zap.String("id", rec.ID.String()), zap.Error(err))
 		}
-
 	}
 }
 
@@ -126,6 +129,7 @@ func (r *Reaper) cleanupMultipart(ctx context.Context) {
 	recs, err := r.mpRepo.ListExpired(ctx, limit)
 	if err != nil {
 		r.log.Error("Failed to list expired multipart uploads", zap.Error(err))
+
 		return
 	}
 

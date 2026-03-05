@@ -127,6 +127,7 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 	for _, bState := range status.Breakers {
 		if bState == "open" {
 			ready = false
+
 			break
 		}
 	}

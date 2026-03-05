@@ -30,6 +30,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -38,6 +39,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -48,11 +50,13 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return domain.Presigned{
 		URL:       presigned.URL,
 		Method:    presigned.Method,
@@ -78,6 +82,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -86,6 +91,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -112,6 +118,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 					ExpiresAt: signed.ExpiresAt,
 				},
 			}
+
 			return nil
 		})
 	}
@@ -120,10 +127,12 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return out, nil
 }

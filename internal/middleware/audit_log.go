@@ -41,6 +41,7 @@ func newAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *audit
 	}
 	w.wg.Add(1)
 	go w.run()
+
 	return w
 }
 
@@ -66,6 +67,7 @@ func (w *auditBatchWriter) run() {
 				if len(batch) > 0 {
 					w.flush(batch)
 				}
+
 				return
 			}
 			batch = append(batch, entry)
@@ -115,6 +117,7 @@ func (w *errorBodyWriter) Write(b []byte) (int, error) {
 	if w.statusCode >= 400 || w.statusCode == 0 {
 		w.body.Write(b)
 	}
+
 	return w.ResponseWriter.Write(b)
 }
 
@@ -241,5 +244,6 @@ func ptrStr(s *string) string {
 	if s == nil {
 		return ""
 	}
+
 	return *s
 }

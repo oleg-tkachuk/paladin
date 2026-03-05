@@ -21,6 +21,7 @@ func LoadSpec() (*openapi3.T, error) {
 		doc, err := api.GetSwagger()
 		if err != nil {
 			initErr = fmt.Errorf("failed to get swagger spec: %w", err)
+
 			return
 		}
 

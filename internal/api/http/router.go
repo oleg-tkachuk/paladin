@@ -52,6 +52,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 				"status": "starting",
 				"reason": "initialization_in_progress",
 			})
+
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "started"})
@@ -69,6 +70,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 				"reason":       "dependency_unavailable",
 				"dependencies": status,
 			})
+
 			return
 		}
 

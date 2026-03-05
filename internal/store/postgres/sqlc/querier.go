@@ -29,7 +29,7 @@ type Querier interface {
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
-	GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error)
+	GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error)
 	GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error)
 	// Idempotency queries
 	GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (GetIdempotencyKeyRow, error)

@@ -42,6 +42,7 @@ func TraceIDFromContext(ctx context.Context, fallback string) string {
 			return s
 		}
 	}
+
 	return fallback
 }
 

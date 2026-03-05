@@ -47,6 +47,7 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if cat, ok := val.(*domain.Category); ok {
 			metrics.RecordCacheOp(ctx, "category_get", "hit")
+
 			return cat, nil
 		}
 	}
@@ -59,6 +60,7 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, cat, r.ttl)
+
 	return cat, nil
 }
 
@@ -92,6 +94,7 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if exists, ok := val.(bool); ok {
 			metrics.RecordCacheOp(ctx, "category_exists", "hit")
+
 			return exists, nil
 		}
 	}
@@ -104,6 +107,7 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, exists, r.ttl)
+
 	return exists, nil
 }
 
@@ -118,6 +122,7 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if stats, ok := val.(*domain.CategoryStats); ok {
 			metrics.RecordCacheOp(ctx, "category_stats", "hit")
+
 			return stats, nil
 		}
 	}
@@ -130,6 +135,7 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, stats, r.ttl)
+
 	return stats, nil
 }
 

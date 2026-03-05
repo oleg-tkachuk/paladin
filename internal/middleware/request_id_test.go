@@ -25,7 +25,7 @@ func TestRequestID(t *testing.T) {
 		})
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -40,7 +40,7 @@ func TestRequestID(t *testing.T) {
 		})
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set(HeaderRequestID, "existing-id")
 		r.ServeHTTP(w, req)
 
@@ -57,7 +57,7 @@ func TestRequestID(t *testing.T) {
 		})
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set(HeaderTenantID, "test-tenant")
 		r.ServeHTTP(w, req)
 

@@ -111,7 +111,7 @@ func TestGetAdminConfig(t *testing.T) {
 
 	// Create request
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/admin/config", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/admin/config", nil)
 	r.ServeHTTP(w, req)
 
 	// Assertions

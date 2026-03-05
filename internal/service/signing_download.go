@@ -31,6 +31,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -39,6 +40,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -47,6 +49,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -62,11 +65,13 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return domain.Presigned{
 		URL:       presigned.URL,
 		Method:    presigned.Method,

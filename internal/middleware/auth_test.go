@@ -42,7 +42,7 @@ var _ = Describe("AuthMiddleware", func() {
 	})
 
 	It("should allow request with matching tenant", func() {
-		req, _ := http.NewRequest("GET", "/v1/tenant1/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/v1/tenant1/test", nil)
 		req.Header.Set("X-Tenant-ID", "tenant1")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -51,7 +51,7 @@ var _ = Describe("AuthMiddleware", func() {
 	})
 
 	It("should block request with missing tenant context", func() {
-		req, _ := http.NewRequest("GET", "/v1/tenant1/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/v1/tenant1/test", nil)
 		// No X-Tenant-ID header
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -60,7 +60,7 @@ var _ = Describe("AuthMiddleware", func() {
 	})
 
 	It("should block request with tenant mismatch when configured", func() {
-		req, _ := http.NewRequest("GET", "/v1/tenant1/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/v1/tenant1/test", nil)
 		req.Header.Set("X-Tenant-ID", "tenant2") // Mismatch
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -81,7 +81,7 @@ var _ = Describe("AuthMiddleware", func() {
 			c.String(http.StatusOK, "ok")
 		})
 
-		req, _ := http.NewRequest("GET", "/v1/tenant1/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/v1/tenant1/test", nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 

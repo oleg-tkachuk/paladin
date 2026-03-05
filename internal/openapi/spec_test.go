@@ -12,7 +12,7 @@ func TestLoadSpec(t *testing.T) {
 	spec, err := openapi.LoadSpec()
 	require.NoError(t, err)
 	assert.NotNil(t, spec)
-	assert.Greater(t, len(spec.Paths.Map()), 0, "should have paths")
+	assert.NotEmpty(t, spec.Paths.Map(), "should have paths")
 
 	// Test caching/idempotency
 	spec2, err2 := openapi.LoadSpec()

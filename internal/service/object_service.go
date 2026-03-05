@@ -92,6 +92,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -100,11 +101,13 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	if err != nil {
 		if apperrors.IsNotFound(err) {
 			status = "success"
+
 			return nil
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -115,12 +118,14 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
 	if state == obj.Status { // Idempotent
 		status = "success"
+
 		return nil
 	}
 
@@ -130,6 +135,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -139,6 +145,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return nil
 }
 
@@ -159,6 +166,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -168,6 +176,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -178,12 +187,14 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
 	state, _ := sm.State(ctx)
 	if state == obj.Status { // Idempotent
 		status = "success"
+
 		return nil
 	}
 
@@ -193,6 +204,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -202,6 +214,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return nil
 }
 
@@ -222,6 +235,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -239,11 +253,13 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		if apperrors.IsNotFound(err) {
 			status = "success"
 			span.SetStatus(codes.Ok, "object already absent")
+
 			return nil
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -254,6 +270,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
@@ -261,6 +278,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	if state == obj.Status { // Idempotent hard-delete
 		status = "success"
 		span.SetStatus(codes.Ok, "already_hard_deleted")
+
 		return nil
 	}
 
@@ -277,6 +295,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 
@@ -286,6 +305,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -301,6 +321,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	logger.FromContext(ctx).Info(LogObjectPurged, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return nil
 }
 
@@ -370,6 +391,7 @@ func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn
 	_, err := fault.Execute(w, func() (interface{}, error) {
 		return nil, fn()
 	})
+
 	return err
 }
 
@@ -380,8 +402,10 @@ func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name
 	})
 	if err != nil {
 		var zero T
+
 		return zero, err
 	}
+
 	return res.(T), nil
 }
 func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
@@ -395,16 +419,19 @@ func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
 	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, ids)
 	if err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
 	status = "success"
+
 	return count, nil
 }
 
@@ -419,16 +446,19 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
 	count, err := s.objRepo.BulkRestore(ctx, tenantID, ids)
 	if err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
 	status = "success"
+
 	return count, nil
 }
 
@@ -443,6 +473,7 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
@@ -464,10 +495,12 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 	count, err := s.objRepo.BulkDelete(ctx, tenantID, ids)
 	if err != nil {
 		status = "error"
+
 		return 0, err
 	}
 
 	status = "success"
+
 	return count, nil
 }
 

@@ -71,6 +71,7 @@ func (u *pgUoW) Commit(ctx context.Context) error {
 	if err := u.tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
+
 	return nil
 }
 
@@ -78,5 +79,6 @@ func (u *pgUoW) Rollback(ctx context.Context) error {
 	if err := u.tx.Rollback(ctx); err != nil {
 		return fmt.Errorf("rollback transaction: %w", err)
 	}
+
 	return nil
 }

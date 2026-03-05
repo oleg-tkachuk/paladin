@@ -35,8 +35,10 @@ func (r *CategoryRepo) Create(ctx context.Context, rec domain.Category) error {
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return apperrors.Conflict(fmt.Sprintf("category %q already exists", rec.Slug), nil)
 		}
+
 		return fmt.Errorf("create category: %w", err)
 	}
+
 	return nil
 }
 
@@ -46,9 +48,11 @@ func (r *CategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperrors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
 		}
+
 		return nil, fmt.Errorf("get category: %w", err)
 	}
-	cat := MapCategoryToDomain(row)
+	cat := MapCategoryToDomain(row.ObjectCategory)
+
 	return &cat, nil
 }
 
@@ -74,7 +78,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cur
 
 	cats := make([]domain.Category, 0, len(rows))
 	for _, row := range rows {
-		cats = append(cats, MapListCategoriesRowToDomain(row))
+		cats = append(cats, MapCategoryToDomain(row.ObjectCategory))
 	}
 
 	nextCursor := ""
@@ -91,6 +95,7 @@ func (r *CategoryRepo) Delete(ctx context.Context, tenantID, slug string) (bool,
 	if err != nil {
 		return false, fmt.Errorf("delete category: %w", err)
 	}
+
 	return n > 0, nil
 }
 
@@ -99,6 +104,7 @@ func (r *CategoryRepo) Exists(ctx context.Context, tenantID, slug string) (bool,
 	if err != nil {
 		return false, fmt.Errorf("category exists check: %w", err)
 	}
+
 	return exists, nil
 }
 
@@ -107,6 +113,7 @@ func (r *CategoryRepo) ObjectCount(ctx context.Context, tenantID, slug string) (
 	if err != nil {
 		return 0, fmt.Errorf("category object count: %w", err)
 	}
+
 	return count, nil
 }
 
@@ -116,8 +123,10 @@ func (r *CategoryRepo) GetStats(ctx context.Context, tenantID, slug string) (*do
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperrors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
 		}
+
 		return nil, fmt.Errorf("get category stats: %w", err)
 	}
+
 	return &domain.CategoryStats{
 		TotalCount: row.TotalCount,
 		TotalSize:  row.TotalSize,

@@ -30,6 +30,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -38,6 +39,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -48,6 +50,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return nil, fmt.Errorf("invalid transition: %w", err)
 	}
 
@@ -56,6 +59,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		status = "success"
 		span.SetStatus(codes.Ok, "already_completed")
 		rec, _ := s.objRepo.Get(ctx, tenantID, multi.ObjectID)
+
 		return rec, nil
 	}
 
@@ -65,6 +69,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -76,6 +81,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
 
@@ -85,6 +91,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer uow.Rollback(ctx)
@@ -93,6 +100,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -100,6 +108,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -107,6 +116,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
@@ -115,11 +125,13 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", multi.ObjectID.String()))
+
 	return rec, nil
 }

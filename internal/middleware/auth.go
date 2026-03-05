@@ -21,6 +21,7 @@ func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 			if cfg.RejectTenantMismatch {
 				c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 					errors.Forbidden("tenant mismatch", nil)))
+
 				return
 			}
 		}
@@ -31,12 +32,14 @@ func EnforceTenant(cfg config.Security) gin.HandlerFunc {
 			path == "/v1/health/livez" || path == "/v1/health/readyz" || path == "/v1/health/startupz" || path == "/v1/version" ||
 			path == "/v1/admin/config" || path == "/admin/config" {
 			c.Next()
+
 			return
 		}
 
 		if derivedTenant == "" {
 			c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 				errors.Unauthorized("missing tenant context", nil)))
+
 			return
 		}
 

@@ -59,6 +59,7 @@ func TestCircuitBreaker(t *testing.T) {
 	// Next execution should fail with ErrOpen automatically
 	_, err = fault.Execute(cb, func() (interface{}, error) {
 		assert.Fail(t, "should not be called")
+
 		return nil, nil
 	})
 	assert.ErrorIs(t, err, circuitbreaker.ErrOpen)

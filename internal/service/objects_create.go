@@ -43,6 +43,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return domain.CreateObjectResponse{}, err
 	}
 
@@ -93,12 +94,14 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 				if err != nil {
 					return domain.CreateObjectResponse{}, err
 				}
+
 				return domain.CreateObjectResponse{
 					ID: existing.ID, Key: existing.ObjectKey, Bucket: existing.Bucket,
 					Category: existing.Category,
 					Upload:   domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},
 				}, nil
 			}
+
 			return domain.CreateObjectResponse{}, apperrors.Conflict("object with this external_ref already exists with different parameters", nil)
 		}
 	}
@@ -160,5 +163,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	opStatus = "success"
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", id.String()))
+
 	return res, nil
 }

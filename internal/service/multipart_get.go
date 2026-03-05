@@ -29,6 +29,7 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -37,10 +38,12 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return rec, nil
 }

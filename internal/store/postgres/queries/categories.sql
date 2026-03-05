@@ -5,12 +5,12 @@ INSERT INTO object_categories (id, tenant_id, slug, name, description)
 VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetCategory :one
-SELECT id, tenant_id, slug, name, description, created_at, updated_at
+SELECT sqlc.embed(object_categories)
 FROM object_categories
 WHERE tenant_id = $1 AND slug = $2;
 
 -- name: ListCategories :many
-SELECT id, tenant_id, slug, name, description, created_at, updated_at,
+SELECT sqlc.embed(object_categories),
        COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1

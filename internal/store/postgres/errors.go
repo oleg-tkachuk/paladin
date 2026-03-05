@@ -95,6 +95,7 @@ func unmarshalJSONB(data []byte) (map[string]any, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal jsonb: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -107,6 +108,7 @@ func marshalJSONB(data map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal jsonb: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -119,6 +121,7 @@ func unmarshalStringMap(data []byte) (map[string]string, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal string map: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -131,5 +134,6 @@ func marshalStringMap(data map[string]string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal string map: %w", err)
 	}
+
 	return result, nil
 }

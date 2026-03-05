@@ -33,6 +33,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -50,6 +51,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return errors.BadRequest("invalid upload_id", err)
 	}
 
@@ -60,6 +62,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return fmt.Errorf("invalid transition: %w", err)
 	}
 
@@ -67,6 +70,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	if state == multi.Status { // Idempotent abort
 		status = "success"
 		span.SetStatus(codes.Ok, "already_aborted")
+
 		return nil
 	}
 
@@ -76,6 +80,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -84,6 +89,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return err
 	}
 
@@ -91,5 +97,6 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return nil
 }

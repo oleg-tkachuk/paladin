@@ -70,6 +70,7 @@ func TestValidateLabels(t *testing.T) {
 			for i := 0; i < 51; i++ {
 				m[string(rune('a'+i))] = "value"
 			}
+
 			return m
 		}(), true},
 	}

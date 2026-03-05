@@ -40,6 +40,7 @@ func OAPIValidationMiddleware(spec *openapi3.T) gin.HandlerFunc {
 			// For "production-grade": clear errors.
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("route not found in spec: %v", err)})
 			c.Abort()
+
 			return
 		}
 
@@ -58,6 +59,7 @@ func OAPIValidationMiddleware(spec *openapi3.T) gin.HandlerFunc {
 		if err := openapi3filter.ValidateRequest(c.Request.Context(), requestValidationInput); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("openapi validation failure: %v", err)})
 			c.Abort()
+
 			return
 		}
 

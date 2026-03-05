@@ -60,6 +60,7 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 		rl.mu.Lock()
 		entry.lastAccess = time.Now()
 		rl.mu.Unlock()
+
 		return entry.limiter
 	}
 	rl.mu.RUnlock()
@@ -71,6 +72,7 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 	// Double-check after acquiring write lock
 	if entry, exists = rl.visitors[tenantID]; exists {
 		entry.lastAccess = time.Now()
+
 		return entry.limiter
 	}
 
@@ -167,6 +169,7 @@ func RateLimitMiddleware(cfg *config.Config) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": "rate_limit_exceeded",
 			})
+
 			return
 		}
 

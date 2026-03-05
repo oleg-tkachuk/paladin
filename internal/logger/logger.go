@@ -89,8 +89,8 @@ func New(c config.Logger) (*zap.Logger, error) {
 	}
 
 	// Optional: include additional env fields without leaking secrets
-	if v := os.Getenv("K8S_NAMESPACE"); v != "" {
-		fields = append(fields, zap.String("k8s_namespace", v))
+	if v := os.Getenv(config.DefaultK8sNamespaceEnvKey); v != "" {
+		fields = append(fields, zap.String("namespace", v))
 	}
 
 	return log.With(fields...), nil

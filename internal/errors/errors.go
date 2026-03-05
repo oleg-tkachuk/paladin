@@ -14,8 +14,6 @@ import (
 )
 
 // problemTypeBase is the base URI for RFC 7807 problem types.
-const problemTypeBase = "https://api.paladin.io/problems/"
-
 // Canonical Error Codes
 const (
 	CodeBadRequest            = "bad_request"
@@ -76,6 +74,7 @@ func (e *AppError) Error() string {
 	if e.Err != nil {
 		return fmt.Sprintf("[%s] %s: %v", e.Code, e.Message, e.Err)
 	}
+
 	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 }
 
@@ -99,6 +98,7 @@ func (e *AppError) WithContext(key string, value interface{}) *AppError {
 		e.Details = make(map[string]any)
 	}
 	e.Details[key] = value
+
 	return e
 }
 
@@ -107,6 +107,7 @@ func (e *AppError) WithStack() *AppError {
 	if e.StackTrace == "" {
 		e.StackTrace = string(debug.Stack())
 	}
+
 	return e
 }
 
@@ -120,6 +121,7 @@ func (e *AppError) WithFieldError(field, code, message string) *AppError {
 		Code:    code,
 		Message: message,
 	})
+
 	return e
 }
 
@@ -214,7 +216,7 @@ func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, Pro
 	httpStatus := statusCodeForAppError(appErr.Code)
 
 	pd := ProblemDetail{
-		Type:      problemTypeBase + appErr.Code,
+		Type:      ProblemTypeBase + appErr.Code,
 		Title:     titleForCode(appErr.Code),
 		Status:    httpStatus,
 		Detail:    appErr.Message,
@@ -238,6 +240,7 @@ func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, Pro
 // Kept for backward compatibility with non-HTTP layers.
 func MapToHTTP(ctx context.Context, err error) (int, any) {
 	status, pd := MapToHTTPProblem(ctx, err, "")
+
 	return status, pd
 }
 
@@ -281,5 +284,6 @@ func IsNotFound(err error) bool {
 	if errors.As(err, &appErr) {
 		return appErr.Code == CodeNotFound
 	}
+
 	return false
 }

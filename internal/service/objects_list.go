@@ -29,6 +29,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, "", 0, err
 	}
 
@@ -37,6 +38,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, "", 0, err
 	}
 
@@ -53,6 +55,6 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.Int("result_count", len(filtered)))
-	return filtered, nextCursor, totalCount, nil
 
+	return filtered, nextCursor, totalCount, nil
 }

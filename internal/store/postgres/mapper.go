@@ -104,19 +104,6 @@ func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	}
 }
 
-// MapListCategoriesRowToDomain converts sqlc.ListCategoriesRow to domain.Category
-func MapListCategoriesRowToDomain(row sqlc.ListCategoriesRow) domain.Category {
-	return domain.Category{
-		ID:          uuid.UUID(row.ID.Bytes),
-		TenantID:    row.TenantID,
-		Slug:        row.Slug,
-		Name:        row.Name,
-		Description: row.Description,
-		CreatedAt:   timestampFromPgtype(row.CreatedAt),
-		UpdatedAt:   timestampFromPgtype(row.UpdatedAt),
-	}
-}
-
 // MapCategoryToDomain converts sqlc.ObjectCategory to domain.Category
 func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
 	return domain.Category{
@@ -189,6 +176,7 @@ func uuidFromPgtype(u pgtype.UUID) (uuid.UUID, error) {
 	if !u.Valid {
 		return uuid.Nil, fmt.Errorf("invalid uuid")
 	}
+
 	return uuid.UUID(u.Bytes), nil
 }
 
@@ -203,6 +191,7 @@ func timestampFromPgtype(t pgtype.Timestamptz) time.Time {
 	if !t.Valid {
 		return time.Time{}
 	}
+
 	return t.Time
 }
 
@@ -211,6 +200,7 @@ func timestampPtrFromPgtype(t pgtype.Timestamptz) *time.Time {
 		return nil
 	}
 	result := t.Time
+
 	return &result
 }
 
@@ -225,6 +215,7 @@ func timestampPtrToPgtype(t *time.Time) pgtype.Timestamptz {
 	if t == nil {
 		return pgtype.Timestamptz{Valid: false}
 	}
+
 	return pgtype.Timestamptz{
 		Time:  *t,
 		Valid: true,
@@ -236,5 +227,6 @@ func clientIPFromNetipAddr(ip *netip.Addr) *string {
 		return nil
 	}
 	str := ip.String()
+
 	return &str
 }

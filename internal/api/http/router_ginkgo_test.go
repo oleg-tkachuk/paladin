@@ -17,7 +17,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"github.com/google/uuid"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -31,106 +30,127 @@ type MockObjectsService struct {
 
 func (m *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
 	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+
 	return args.Get(0).(domain.CreateObjectResponse), args.Error(1)
 }
 
 func (m *MockObjectsService) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id)
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id)
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id, etag, sizeBytes)
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
+
 	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id, labels, externalRef)
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
 	args := m.Called(ctx, tenantID, id)
+
 	return args.Error(0)
 }
 
 func (m *MockObjectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	args := m.Called(ctx, tenantID, ids)
+
 	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockObjectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
 	args := m.Called(ctx, tenantID, id)
+
 	return args.Error(0)
 }
 
 func (m *MockObjectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	args := m.Called(ctx, tenantID, ids)
+
 	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockObjectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, idempotencyKey)
+
 	return args.Error(0)
 }
 
 func (m *MockObjectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
 	args := m.Called(ctx, tenantID, ids, idempotencyKey)
+
 	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, status, idempotencyKey)
+
 	return args.Error(0)
 }
 
 func (m *MockObjectsService) SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, id, uploadTTL)
+
 	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
 func (m *MockObjectsService) SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, id, downloadTTL)
+
 	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
 func (m *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	args := m.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+
 	return args.Get(0).(domain.MultipartInitResponse), args.Error(1)
 }
 
 func (m *MockObjectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
 	args := m.Called(ctx, tenantID, uploadID)
+
 	return args.Get(0).(*domain.Multipart), args.Error(1)
 }
 
 func (m *MockObjectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	args := m.Called(ctx, tenantID, uploadID, partNumber)
+
 	return args.Get(0).(domain.Presigned), args.Error(1)
 }
 
 func (m *MockObjectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
 	args := m.Called(ctx, tenantID, uploadID, partNumbers)
+
 	return args.Get(0).([]domain.SignPartResponse), args.Error(1)
 }
 
 func (m *MockObjectsService) CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []domain.CompletePart) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, uploadID, parts)
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
 func (m *MockObjectsService) AbortMultipart(ctx context.Context, tenantID string, uploadID string) error {
 	args := m.Called(ctx, tenantID, uploadID)
+
 	return args.Error(0)
 }
 
@@ -139,6 +159,7 @@ func (m *MockObjectsService) GetStats(ctx context.Context, tenantID string) (*do
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.ObjectStats), args.Error(1)
 }
 
@@ -152,6 +173,7 @@ func (m *MockCategoryService) Create(ctx context.Context, tenantID, slug, name s
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Category), args.Error(1)
 }
 
@@ -160,16 +182,19 @@ func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Category), args.Error(1)
 }
 
 func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
 	args := m.Called(ctx, tenantID, limit, cursor)
+
 	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockCategoryService) Delete(ctx context.Context, tenantID, slug string) error {
 	args := m.Called(ctx, tenantID, slug)
+
 	return args.Error(0)
 }
 
@@ -178,6 +203,7 @@ func (m *MockCategoryService) ListTenants(ctx context.Context, limit int, cursor
 	if args.Get(0) == nil {
 		return nil, "", 0, args.Error(3)
 	}
+
 	return args.Get(0).([]string), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
@@ -186,6 +212,7 @@ func (m *MockCategoryService) GetStats(ctx context.Context, tenantID, slug strin
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.CategoryStats), args.Error(1)
 }
 
@@ -196,21 +223,25 @@ type MockAuditLogRepository struct {
 
 func (m *MockAuditLogRepository) Create(ctx context.Context, log domain.AuditLog) error {
 	args := m.Called(ctx, log)
+
 	return args.Error(0)
 }
 
 func (m *MockAuditLogRepository) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.AuditLog, error) {
 	args := m.Called(ctx, tenantID, id)
+
 	return args.Get(0).(*domain.AuditLog), args.Error(1)
 }
 
 func (m *MockAuditLogRepository) List(ctx context.Context, tenantID string, filter domain.ListAuditLogsFilter, limit int, cursor string) ([]domain.AuditLog, string, int64, error) {
 	args := m.Called(ctx, tenantID, filter, limit, cursor)
+
 	return args.Get(0).([]domain.AuditLog), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
 func (m *MockAuditLogRepository) Prune(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
 	args := m.Called(ctx, cutoff, limit)
+
 	return args.Get(0).(int64), args.Error(1)
 }
 
@@ -221,6 +252,7 @@ type MockSystemService struct {
 
 func (m *MockSystemService) GetConfig(ctx context.Context) (domain.SystemConfig, error) {
 	args := m.Called(ctx)
+
 	return args.Get(0).(domain.SystemConfig), args.Error(1)
 }
 
@@ -240,6 +272,7 @@ type MockS3Health struct {
 
 func (m *MockS3Health) Ping(ctx context.Context) (domain.S3PingResult, error) {
 	args := m.Called(ctx)
+
 	return args.Get(0).(domain.S3PingResult), args.Error(1)
 }
 
@@ -310,7 +343,7 @@ var _ = Describe("Router", func() {
 
 	Describe("GET /v1/version", func() {
 		It("returns version information", func() {
-			req, _ := http.NewRequest("GET", "/v1/version", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/version", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 
 			server.Handler().ServeHTTP(recorder, req)
@@ -328,7 +361,7 @@ var _ = Describe("Router", func() {
 
 	Describe("GET /v1/health/livez", func() {
 		It("returns 200 alive", func() {
-			req, _ := http.NewRequest("GET", "/v1/health/livez", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/health/livez", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -344,7 +377,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 503 starting", func() {
-				req, _ := http.NewRequest("GET", "/v1/health/startupz", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/v1/health/startupz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -355,7 +388,7 @@ var _ = Describe("Router", func() {
 
 		Context("when started", func() {
 			It("returns 200 started", func() {
-				req, _ := http.NewRequest("GET", "/v1/health/startupz", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/v1/health/startupz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -374,7 +407,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 200 ready", func() {
-				req, _ := http.NewRequest("GET", "/v1/health/readyz", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/v1/health/readyz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -391,7 +424,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 503 not_ready", func() {
-				req, _ := http.NewRequest("GET", "/v1/health/readyz", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/v1/health/readyz", nil)
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
 
@@ -411,7 +444,7 @@ var _ = Describe("Router", func() {
 
 			It("returns 200 and upload URL", func() {
 				body := `{"content_type": "image/png", "size_bytes": 1024}`
-				req, _ := http.NewRequest("POST", "/v1/objects", strings.NewReader(body))
+				req, _ := http.NewRequest(http.MethodPost, "/v1/objects", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("X-Tenant-ID", "default")
 				server.Handler().ServeHTTP(recorder, req)
@@ -431,7 +464,7 @@ var _ = Describe("Router", func() {
 				}, nil)
 
 			body := `{"content_type": "application/octet-stream", "size_bytes": 104857600}`
-			req, _ := http.NewRequest("POST", "/v1/multipart", strings.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
@@ -446,7 +479,7 @@ var _ = Describe("Router", func() {
 			mockSvc.On("SignPart", mock.Anything, mock.Anything, "up123", int32(1)).
 				Return(domain.Presigned{URL: "http://sign"}, nil)
 
-			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/1/sign", nil)
+			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/parts/1/sign", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -462,7 +495,7 @@ var _ = Describe("Router", func() {
 				Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
 
 			body := `{"parts": [{"part_number": 1, "etag": "etag1"}]}`
-			req, _ := http.NewRequest("POST", "/v1/multipart/up123/complete", strings.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/complete", strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
 			server.Handler().ServeHTTP(recorder, req)
@@ -477,7 +510,7 @@ var _ = Describe("Router", func() {
 			mockSvc.On("AbortMultipart", mock.Anything, mock.Anything, "up123").
 				Return(nil)
 
-			req, _ := http.NewRequest("POST", "/v1/multipart/up123/abort", nil)
+			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/abort", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -489,11 +522,11 @@ var _ = Describe("Router", func() {
 	Describe("GET /v1/objects/:id", func() {
 		It("returns object details", func() {
 			id := uuid.New()
-			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
-				ID: openapi_types.UUID(id), Status: domain.ObjectComplete,
+			mockSvc.On("Get", mock.Anything, mock.Anything, id).Return(&domain.Object{
+				ID: id, Status: domain.ObjectComplete,
 			}, nil)
 
-			req, _ := http.NewRequest("GET", "/v1/objects/"+id.String(), nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/objects/"+id.String(), nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -505,9 +538,9 @@ var _ = Describe("Router", func() {
 	Describe("DELETE /v1/objects/:id", func() {
 		It("deletes the object", func() {
 			id := uuid.New()
-			mockSvc.On("Delete", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(nil)
+			mockSvc.On("Delete", mock.Anything, mock.Anything, id).Return(nil)
 			// Ensure we are testing the soft delete endpoint which no longer takes query params
-			req, _ := http.NewRequest("DELETE", "/v1/objects/"+id.String(), nil)
+			req, _ := http.NewRequest(http.MethodDelete, "/v1/objects/"+id.String(), nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -518,9 +551,9 @@ var _ = Describe("Router", func() {
 	Describe("DELETE /v1/objects/:id/purge", func() {
 		It("purges the object", func() {
 			id := uuid.New()
-			mockSvc.On("Purge", mock.Anything, mock.Anything, openapi_types.UUID(id), (*string)(nil)).Return(nil)
+			mockSvc.On("Purge", mock.Anything, mock.Anything, id, (*string)(nil)).Return(nil)
 
-			req, _ := http.NewRequest("DELETE", "/v1/objects/"+id.String()+"/purge", nil)
+			req, _ := http.NewRequest(http.MethodDelete, "/v1/objects/"+id.String()+"/purge", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -533,7 +566,7 @@ var _ = Describe("Router", func() {
 			id := uuid.New()
 			mockSvc.On("SignUpload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Presigned{URL: "http://upload"}, nil)
 
-			req, _ := http.NewRequest("POST", "/v1/objects/"+id.String()+"/sign-upload", strings.NewReader("{}"))
+			req, _ := http.NewRequest(http.MethodPost, "/v1/objects/"+id.String()+"/sign-upload", strings.NewReader("{}"))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
@@ -546,13 +579,13 @@ var _ = Describe("Router", func() {
 	Describe("PATCH /v1/objects/:id", func() {
 		It("updates the object status", func() {
 			id := uuid.New()
-			mockSvc.On("UpdateStatus", mock.Anything, mock.Anything, openapi_types.UUID(id), "soft_deleted", (*string)(nil)).Return(nil)
-			mockSvc.On("Get", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
-				ID: openapi_types.UUID(id), Status: domain.ObjectSoftDeleted,
+			mockSvc.On("UpdateStatus", mock.Anything, mock.Anything, id, "soft_deleted", (*string)(nil)).Return(nil)
+			mockSvc.On("Get", mock.Anything, mock.Anything, id).Return(&domain.Object{
+				ID: id, Status: domain.ObjectSoftDeleted,
 			}, nil)
 
 			body := `{"status": "soft_deleted"}`
-			req, _ := http.NewRequest("PATCH", "/v1/objects/"+id.String(), strings.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPatch, "/v1/objects/"+id.String(), strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
 			server.Handler().ServeHTTP(recorder, req)
@@ -567,7 +600,7 @@ var _ = Describe("Router", func() {
 			id := uuid.New()
 			mockSvc.On("SignDownload", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(domain.Presigned{URL: "http://download"}, nil)
 
-			req, _ := http.NewRequest("POST", "/v1/objects/"+id.String()+"/sign-download", strings.NewReader("{}"))
+			req, _ := http.NewRequest(http.MethodPost, "/v1/objects/"+id.String()+"/sign-download", strings.NewReader("{}"))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
@@ -579,11 +612,11 @@ var _ = Describe("Router", func() {
 	Describe("GET /v1/objects/:id/meta", func() {
 		It("returns object metadata", func() {
 			id := uuid.New()
-			mockSvc.On("GetMeta", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{
-				ID: openapi_types.UUID(id), Status: domain.ObjectComplete,
+			mockSvc.On("GetMeta", mock.Anything, mock.Anything, id).Return(&domain.Object{
+				ID: id, Status: domain.ObjectComplete,
 			}, nil)
 
-			req, _ := http.NewRequest("GET", "/v1/objects/"+id.String()+"/meta", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/objects/"+id.String()+"/meta", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -596,12 +629,12 @@ var _ = Describe("Router", func() {
 		It("updates object metadata", func() {
 			id := uuid.New()
 			labels := map[string]string{"foo": "bar"}
-			mockSvc.On("PatchMeta", mock.Anything, mock.Anything, openapi_types.UUID(id), labels, (*string)(nil)).Return(&domain.Object{
-				ID: openapi_types.UUID(id), Labels: labels,
+			mockSvc.On("PatchMeta", mock.Anything, mock.Anything, id, labels, (*string)(nil)).Return(&domain.Object{
+				ID: id, Labels: labels,
 			}, nil)
 
 			body := `{"labels": {"foo": "bar"}}`
-			req, _ := http.NewRequest("PATCH", "/v1/objects/"+id.String()+"/meta", strings.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPatch, "/v1/objects/"+id.String()+"/meta", strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
 			server.Handler().ServeHTTP(recorder, req)
@@ -620,7 +653,7 @@ var _ = Describe("Router", func() {
 				}, nil)
 
 			body := `{"part_numbers": [1, 2]}`
-			req, _ := http.NewRequest("POST", "/v1/multipart/up123/parts/sign", strings.NewReader(body))
+			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/parts/sign", strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
 			server.Handler().ServeHTTP(recorder, req)
@@ -636,7 +669,7 @@ var _ = Describe("Router", func() {
 			mockSvc.On("List", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]domain.Object{{ID: uuid.New()}}, "next-cursor", int64(1), nil)
 
-			req, _ := http.NewRequest("GET", "/v1/objects?limit=10", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/objects?limit=10", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -649,9 +682,9 @@ var _ = Describe("Router", func() {
 	Describe("HEAD /v1/objects/:id", func() {
 		It("returns 200 if object exists", func() {
 			id := uuid.New()
-			mockSvc.On("GetMeta", mock.Anything, mock.Anything, openapi_types.UUID(id)).Return(&domain.Object{ID: openapi_types.UUID(id)}, nil)
+			mockSvc.On("GetMeta", mock.Anything, mock.Anything, id).Return(&domain.Object{ID: id}, nil)
 
-			req, _ := http.NewRequest("HEAD", "/v1/objects/"+id.String(), nil)
+			req, _ := http.NewRequest(http.MethodHead, "/v1/objects/"+id.String(), nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -665,7 +698,7 @@ var _ = Describe("Router", func() {
 				UploadID: "up123", ObjectID: uuid.New(),
 			}, nil)
 
-			req, _ := http.NewRequest("GET", "/v1/multipart/up123", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/multipart/up123", nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 
@@ -678,7 +711,7 @@ var _ = Describe("Router", func() {
 			mockSvc.On("Get", mock.Anything, mock.Anything, mock.Anything).
 				Return(&domain.Object{}, errors.New("not found"))
 
-			req, _ := http.NewRequest("GET", "/v1/objects/"+uuid.NewString(), nil)
+			req, _ := http.NewRequest(http.MethodGet, "/v1/objects/"+uuid.NewString(), nil)
 			req.Header.Set("X-Tenant-ID", "default")
 			server.Handler().ServeHTTP(recorder, req)
 

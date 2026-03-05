@@ -41,6 +41,7 @@ func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action doma
 	if tenantID == "" {
 		return errors.New("unauthorized: tenant_id required")
 	}
+
 	return nil
 }
 

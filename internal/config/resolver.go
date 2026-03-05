@@ -140,6 +140,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		if resp.StatusCode == http.StatusNotFound {
 			return "", fmt.Errorf("secret %s not found in namespace %s", ref.Name, namespace)
 		}
+
 		return "", fmt.Errorf("kubernetes API returned status %d", resp.StatusCode)
 	}
 
@@ -165,6 +166,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		if err != nil {
 			return "", fmt.Errorf("secret key %s contains invalid base64 data: %w", key, err)
 		}
+
 		return string(decoded), nil
 	}
 

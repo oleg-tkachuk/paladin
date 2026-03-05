@@ -33,6 +33,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -41,6 +42,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -51,6 +53,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("invalid transition: %w", err)
 	}
 
@@ -58,6 +61,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if state == domain.ObjectComplete && rec.Status == domain.ObjectComplete {
 		status = "success"
 		span.SetStatus(codes.Ok, "already_complete")
+
 		return rec, nil
 	}
 
@@ -67,6 +71,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("s3 head check: %w", err)
 	}
 
@@ -76,6 +81,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 	// Validate Size if provided
@@ -84,6 +90,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -92,6 +99,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -104,10 +112,12 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return finalRec, nil
 }

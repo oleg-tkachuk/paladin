@@ -30,6 +30,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -38,18 +39,20 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	if rec.Status == domain.ObjectHardDeleted {
 		status = "error"
+
 		return nil, domain.ErrNotFound
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
-	return rec, nil
 
+	return rec, nil
 }
 
 // getMeta retrieves object metadata (delegates to get)
@@ -70,10 +73,12 @@ func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openap
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return rec, nil
 }

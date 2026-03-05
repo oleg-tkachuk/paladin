@@ -33,6 +33,7 @@ func init() {
 		if s == ".." || s == "." {
 			return false
 		}
+
 		return pathSegmentRegex.MatchString(s)
 	})
 	_ = v.RegisterValidation("content_type", func(fl validator.FieldLevel) bool {
@@ -48,6 +49,7 @@ func ValidatePathSegment(segment string) error {
 	if err := v.Var(segment, "required,printascii,path_segment"); err != nil {
 		return fmt.Errorf("invalid path segment %q", segment)
 	}
+
 	return nil
 }
 
@@ -56,6 +58,7 @@ func ValidateCategorySlug(slug string) error {
 	if err := ValidatePathSegment(slug); err != nil {
 		return fmt.Errorf("invalid category slug: %w", err)
 	}
+
 	return nil
 }
 
@@ -75,6 +78,7 @@ func ValidateSubpath(subpath string) error {
 			return fmt.Errorf("invalid subpath segment: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -89,6 +93,7 @@ func ValidateKeyPrefix(prefix string) error {
 	if strings.HasPrefix(prefix, "/") || strings.Contains(prefix, "..") || strings.Contains(prefix, "//") || strings.Contains(prefix, "%") {
 		return fmt.Errorf("invalid key_prefix format")
 	}
+
 	return nil
 }
 
@@ -97,6 +102,7 @@ func ValidateContentType(contentType string) error {
 	if err := v.Var(contentType, "required,max=255,content_type"); err != nil {
 		return fmt.Errorf("invalid content type format")
 	}
+
 	return nil
 }
 
@@ -108,6 +114,7 @@ func ValidateExternalRef(externalRef string) error {
 	if err := v.Var(externalRef, fmt.Sprintf("max=%d,printascii", MaxExternalRefLength)); err != nil {
 		return fmt.Errorf("invalid external_ref")
 	}
+
 	return nil
 }
 
@@ -127,6 +134,7 @@ func ValidateLabels(labels map[string]string) error {
 			return fmt.Errorf("invalid label value for key %q", key)
 		}
 	}
+
 	return nil
 }
 
@@ -135,6 +143,7 @@ func ValidateUUID(id string) error {
 	if err := v.Var(strings.ToLower(id), "required,uuid4"); err != nil {
 		return fmt.Errorf("invalid UUID format")
 	}
+
 	return nil
 }
 
@@ -146,5 +155,6 @@ func ValidateSizeBytes(sizeBytes int64, maxSize int64) error {
 	if sizeBytes > maxSize {
 		return fmt.Errorf("size_bytes exceeds maximum allowed size (%d bytes)", maxSize)
 	}
+
 	return nil
 }

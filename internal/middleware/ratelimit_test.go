@@ -41,7 +41,7 @@ var _ = Describe("RateLimitMiddleware", func() {
 
 	It("should allow requests within limits", func() {
 		for i := 0; i < 5; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 			req.Header.Set("X-Tenant-ID", "tenant1")
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
@@ -51,13 +51,13 @@ var _ = Describe("RateLimitMiddleware", func() {
 
 	It("should block requests exceeding burst", func() {
 		for i := 0; i < 5; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 			req.Header.Set("X-Tenant-ID", "tenant1")
 			router.ServeHTTP(httptest.NewRecorder(), req)
 		}
 
 		// 6th request should be blocked
-		req, _ := http.NewRequest("GET", "/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("X-Tenant-ID", "tenant1")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -67,13 +67,13 @@ var _ = Describe("RateLimitMiddleware", func() {
 	It("should maintain separate limits for different tenants", func() {
 		// Exhaust tenant1
 		for i := 0; i < 10; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
+			req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 			req.Header.Set("X-Tenant-ID", "tenant1")
 			router.ServeHTTP(httptest.NewRecorder(), req)
 		}
 
 		// tenant2 should still be allowed
-		req, _ := http.NewRequest("GET", "/test", nil)
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("X-Tenant-ID", "tenant2")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -90,12 +90,12 @@ var _ = Describe("RateLimitMiddleware", func() {
 		})
 
 		// 1. Fill with tenant1
-		req1, _ := http.NewRequest("GET", "/test", nil)
+		req1, _ := http.NewRequest(http.MethodGet, "/test", nil)
 		req1.Header.Set("X-Tenant-ID", "tenant1")
 		router.ServeHTTP(httptest.NewRecorder(), req1)
 
 		// 2. Add tenant2 (should evict tenant1)
-		req2, _ := http.NewRequest("GET", "/test", nil)
+		req2, _ := http.NewRequest(http.MethodGet, "/test", nil)
 		req2.Header.Set("X-Tenant-ID", "tenant2")
 		router.ServeHTTP(httptest.NewRecorder(), req2)
 
@@ -111,7 +111,7 @@ var _ = Describe("RateLimitMiddleware", func() {
 		for i := 0; i < n; i++ {
 			go func() {
 				defer wg.Done()
-				req, _ := http.NewRequest("GET", "/test", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/test", nil)
 				req.Header.Set("X-Tenant-ID", "concurrent")
 				router.ServeHTTP(httptest.NewRecorder(), req)
 			}()

@@ -75,6 +75,7 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 		if err := mp.Shutdown(ctx); err != nil {
 			errs = errors.Join(errs, err)
 		}
+
 		return errs
 	}
 

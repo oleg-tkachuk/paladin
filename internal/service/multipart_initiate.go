@@ -40,6 +40,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return domain.MultipartInitResponse{}, err
 	}
 
@@ -150,5 +151,6 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 
 	opStatus = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return res, nil
 }

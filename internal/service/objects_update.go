@@ -87,6 +87,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return err
 	}
 
@@ -96,6 +97,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return err
 	}
 
@@ -111,11 +113,13 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
 		opStatus = "error"
+
 		return err
 	}
 
 	if err = sm.Fire(event); err != nil {
 		opStatus = "conflict"
+
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
 
@@ -126,6 +130,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	// E.g. restoring a complete object, or soft-deleting a soft-deleted object.
 	if state == obj.Status {
 		opStatus = "success"
+
 		return nil
 	}
 
@@ -134,6 +139,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		if _, err = s.objRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 			span.RecordError(err)
 			opStatus = "error"
+
 			return err
 		}
 	}
@@ -145,5 +151,6 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 
 	opStatus = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return nil
 }

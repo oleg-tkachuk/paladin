@@ -40,6 +40,7 @@ func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error 
 	} else {
 		status = "success"
 	}
+
 	return MapPgError(err)
 }
 
@@ -51,16 +52,19 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 	mp, err := r.db.Queries.GetMultipartByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
 		status = "error"
+
 		return nil, MapPgError(err)
 	}
 
 	result, err := MapMultipartToDomain(mp.MultipartUpload)
 	if err != nil {
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
+
 	return &result, nil
 }
 
@@ -75,6 +79,7 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUI
 	} else {
 		status = "success"
 	}
+
 	return MapPgError(err)
 }
 
@@ -86,6 +91,7 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 	rows, err := r.db.Queries.ListMultipartParts(ctx, uuidToPgtype(multipartID))
 	if err != nil {
 		status = "error"
+
 		return nil, MapPgError(err)
 	}
 
@@ -94,12 +100,14 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 		part, err := MapMultipartPartToDomain(row.MultipartPart)
 		if err != nil {
 			status = "error"
+
 			return nil, fmt.Errorf("map multipart part: %w", err)
 		}
 		out = append(out, part)
 	}
 
 	status = "success"
+
 	return out, nil
 }
 
@@ -114,6 +122,7 @@ func (r *MultipartRepo) MarkCompleted(ctx context.Context, tenantID string, uplo
 	} else {
 		status = "success"
 	}
+
 	return MapPgError(err)
 }
 
@@ -128,6 +137,7 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 	} else {
 		status = "success"
 	}
+
 	return MapPgError(err)
 }
 
@@ -169,6 +179,7 @@ func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, upl
 	} else {
 		status = "success"
 	}
+
 	return err
 }
 
@@ -180,6 +191,7 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, int32(limit))
 	if err != nil {
 		status = "error"
+
 		return nil, MapPgError(err)
 	}
 
@@ -188,11 +200,13 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 		mp, err := MapMultipartToDomain(row.MultipartUpload)
 		if err != nil {
 			status = "error"
+
 			return nil, fmt.Errorf("map multipart: %w", err)
 		}
 		out = append(out, mp)
 	}
 
 	status = "success"
+
 	return out, nil
 }

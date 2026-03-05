@@ -35,6 +35,7 @@ func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UU
 	// Try cache first
 	if rec, ok := r.cache.Get(ctx, cacheKey); ok {
 		metrics.RecordCacheOp(ctx, "get", "hit")
+
 		return rec, nil
 	}
 
@@ -59,6 +60,7 @@ func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID strin
 	// Try cache first
 	if rec, ok := r.cache.Get(ctx, cacheKey); ok {
 		metrics.RecordCacheOp(ctx, "get", "hit")
+
 		return rec, nil
 	}
 

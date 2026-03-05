@@ -14,7 +14,6 @@ import (
 
 // SetupHTTPStack configures the canonical middleware stack for Gin
 func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRepo domain.AuditLogRepository) {
-
 	// 1. Recovery (Panic -> 500)
 	r.Use(gin.Recovery())
 

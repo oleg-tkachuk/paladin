@@ -50,6 +50,7 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		log.Error("PostgreSQL pool init failed", zap.Error(err))
+
 		return nil, fmt.Errorf("pgxpool init: %w", err)
 	}
 
@@ -84,6 +85,7 @@ func (d *DB) Stats() *pgxpool.Stat {
 	if d == nil || d.Pool == nil {
 		return nil
 	}
+
 	return d.Pool.Stat()
 }
 
@@ -94,6 +96,7 @@ func (d *DB) HealthWithStats(ctx context.Context) (map[string]interface{}, error
 	}
 
 	stats := d.Pool.Stat()
+
 	return map[string]interface{}{
 		"healthy":                true,
 		"acquired_conns":         stats.AcquiredConns(),

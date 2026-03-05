@@ -85,6 +85,7 @@ func ProvideLogger(cfg config.Config) (*zap.Logger, error) {
 		return nil, err
 	}
 	logger.ReplaceGlobals(l)
+
 	return l, nil
 }
 
@@ -101,9 +102,11 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 		}
 		if err := d.Ping(ctx); err != nil {
 			d.Close()
+
 			return err
 		}
 		db = d
+
 		return nil
 	}
 	b := backoff.NewExponentialBackOff()
@@ -130,6 +133,7 @@ func ProvideS3(ctx context.Context, cfg config.Config, l *zap.Logger) (*s3.Clien
 		return nil, err
 	}
 	_ = s3c.EnsureBucket(ctx)
+
 	return s3c, nil
 }
 
@@ -142,6 +146,7 @@ func ProvideObjectsRepo(db *postgres.DB, cfg config.Config) domain.ObjectsReposi
 	if cfg.Cache.Enabled {
 		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
 	}
+
 	return repo
 }
 
@@ -158,6 +163,7 @@ func ProvideCategoryRepo(db *postgres.DB, cfg config.Config) domain.CategoryRepo
 	if cfg.Cache.Enabled {
 		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
 	}
+
 	return repo
 }
 
@@ -236,6 +242,7 @@ func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsServi
 	)
 	grpcapi.RegisterPaladinServer(srv, grpcapi.NewServer(l, svc, catSvc))
 	reflection.Register(srv)
+
 	return srv
 }
 

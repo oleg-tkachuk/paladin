@@ -28,6 +28,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	queryParams, err := marshalJSONB(log.QueryParams)
 	if err != nil {
 		status = "error"
+
 		return fmt.Errorf("marshal query params: %w", err)
 	}
 
@@ -80,10 +81,12 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 
 	if err != nil {
 		status = "error"
+
 		return MapPgError(err)
 	}
 
 	status = "success"
+
 	return nil
 }
 
@@ -95,16 +98,19 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 	row, err := r.db.Queries.GetAuditLog(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
 		status = "error"
+
 		return nil, MapPgError(err)
 	}
 
 	result, err := MapAuditLogToDomain(row.AuditLog)
 	if err != nil {
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
+
 	return &result, nil
 }
 
@@ -143,6 +149,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 	)
 	if err != nil {
 		opStatus = "error"
+
 		return nil, "", 0, MapPgError(err)
 	}
 
@@ -179,9 +186,11 @@ func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (
 	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), int32(limit))
 	if err != nil {
 		status = "error"
+
 		return 0, MapPgError(err)
 	}
 
 	status = "success"
+
 	return rows, nil
 }

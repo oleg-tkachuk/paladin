@@ -71,22 +71,26 @@ func (q *Queries) DeleteCategory(ctx context.Context, tenantID string, slug stri
 }
 
 const getCategory = `-- name: GetCategory :one
-SELECT id, tenant_id, slug, name, description, created_at, updated_at
+SELECT object_categories.id, object_categories.tenant_id, object_categories.slug, object_categories.name, object_categories.description, object_categories.created_at, object_categories.updated_at
 FROM object_categories
 WHERE tenant_id = $1 AND slug = $2
 `
 
-func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error) {
+type GetCategoryRow struct {
+	ObjectCategory ObjectCategory `json:"object_category"`
+}
+
+func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error) {
 	row := q.db.QueryRow(ctx, getCategory, tenantID, slug)
-	var i ObjectCategory
+	var i GetCategoryRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Slug,
-		&i.Name,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ObjectCategory.ID,
+		&i.ObjectCategory.TenantID,
+		&i.ObjectCategory.Slug,
+		&i.ObjectCategory.Name,
+		&i.ObjectCategory.Description,
+		&i.ObjectCategory.CreatedAt,
+		&i.ObjectCategory.UpdatedAt,
 	)
 	return i, err
 }
@@ -113,7 +117,7 @@ func (q *Queries) GetCategoryStats(ctx context.Context, tenantID string, categor
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, tenant_id, slug, name, description, created_at, updated_at,
+SELECT object_categories.id, object_categories.tenant_id, object_categories.slug, object_categories.name, object_categories.description, object_categories.created_at, object_categories.updated_at,
        COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1
@@ -123,14 +127,8 @@ LIMIT $2
 `
 
 type ListCategoriesRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	Slug        string             `json:"slug"`
-	Name        string             `json:"name"`
-	Description *string            `json:"description"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	TotalCount  int64              `json:"total_count"`
+	ObjectCategory ObjectCategory `json:"object_category"`
+	TotalCount     int64          `json:"total_count"`
 }
 
 func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error) {
@@ -143,13 +141,13 @@ func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int
 	for rows.Next() {
 		var i ListCategoriesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.Slug,
-			&i.Name,
-			&i.Description,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.ObjectCategory.ID,
+			&i.ObjectCategory.TenantID,
+			&i.ObjectCategory.Slug,
+			&i.ObjectCategory.Name,
+			&i.ObjectCategory.Description,
+			&i.ObjectCategory.CreatedAt,
+			&i.ObjectCategory.UpdatedAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

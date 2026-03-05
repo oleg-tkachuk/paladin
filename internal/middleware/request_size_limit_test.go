@@ -24,7 +24,7 @@ func TestRequestSizeLimitMiddleware(t *testing.T) {
 		})
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("POST", "/test", strings.NewReader("hello"))
+		req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader("hello"))
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -37,13 +37,14 @@ func TestRequestSizeLimitMiddleware(t *testing.T) {
 			_, err := io.ReadAll(c.Request.Body)
 			if err != nil {
 				c.Error(http.ErrHandlerTimeout) // Simulate MaxBytesReader error handling in middleware
+
 				return
 			}
 			c.Status(http.StatusOK)
 		})
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("POST", "/test", strings.NewReader("too long body"))
+		req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader("too long body"))
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)

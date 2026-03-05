@@ -31,6 +31,7 @@ func NewCache[K comparable, V any](maxSize int, _ time.Duration) *Cache[K, V] {
 	if err != nil {
 		panic(err)
 	}
+
 	return &Cache[K, V]{
 		cache:   c,
 		maxSize: maxSize,
@@ -48,18 +49,21 @@ func (c *Cache[K, V]) Set(ctx context.Context, key K, value V, ttl time.Duration
 		ttl = time.Hour * 87600 // 10 years
 	}
 	c.cache.Set(key, value, ttl)
+
 	return nil
 }
 
 // Delete removes a value from the cache
 func (c *Cache[K, V]) Delete(ctx context.Context, key K) error {
 	c.cache.Delete(key)
+
 	return nil
 }
 
 // Clear removes all entries from the cache
 func (c *Cache[K, V]) Clear(ctx context.Context) error {
 	c.cache.Clear()
+
 	return nil
 }
 

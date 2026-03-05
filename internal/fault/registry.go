@@ -63,6 +63,7 @@ func GetWithConfig(cfg BreakerConfig) *CircuitBreakerWrapper {
 
 	if w, ok := defaultRegistry.breakers[cfg.Name]; ok {
 		w.lastUsedAt = time.Now()
+
 		return w
 	}
 

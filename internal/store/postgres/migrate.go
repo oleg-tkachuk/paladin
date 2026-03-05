@@ -52,5 +52,6 @@ func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
 		zap.String("service", "paladin"),
 		zap.Int("count", gl.count),
 	)
+
 	return nil
 }

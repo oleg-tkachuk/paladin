@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,13 +17,14 @@ func RequestSizeLimitMiddleware(maxBytes int64) gin.HandlerFunc {
 
 		// Check if the request was too large
 		if c.Errors.Last() != nil {
-			if c.Errors.Last().Err == http.ErrHandlerTimeout {
+			if errors.Is(c.Errors.Last().Err, http.ErrHandlerTimeout) {
 				c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
 					"error": gin.H{
 						"code":    "request_too_large",
 						"message": "Request body exceeds maximum allowed size",
 					},
 				})
+
 				return
 			}
 		}
