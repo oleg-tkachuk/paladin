@@ -15,14 +15,19 @@ import (
 
 var _ = Describe("AuthMiddleware", func() {
 	var (
-		cfg    config.Security
+		cfg    *config.Config
 		router *gin.Engine
 	)
 
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
-		cfg = config.Security{
-			RejectTenantMismatch: true,
+		cfg = &config.Config{
+			Auth: config.Auth{
+				Enabled: true,
+			},
+			Security: config.Security{
+				RejectTenantMismatch: true,
+			},
 		}
 
 		router = gin.New()
@@ -69,7 +74,7 @@ var _ = Describe("AuthMiddleware", func() {
 	})
 
 	It("should allow request with tenant mismatch when not configured to reject", func() {
-		cfg.RejectTenantMismatch = false
+		cfg.Security.RejectTenantMismatch = false
 		router = gin.New()
 		router.Use(func(c *gin.Context) {
 			ctx := utils.WithTenantID(c.Request.Context(), "tenant2")

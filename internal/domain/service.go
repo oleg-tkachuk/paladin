@@ -101,6 +101,9 @@ type SystemConfig struct {
 		PresignGetTTL       string
 		AllowedContentTypes []string
 	}
+	Auth struct {
+		Enabled bool
+	}
 	Security struct {
 		TrustTenantIDFromRequest bool
 		RejectTenantMismatch     bool

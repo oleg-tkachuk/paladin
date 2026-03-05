@@ -26,9 +26,9 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 		// 4. Logger
 		LoggerInterceptor(log),
 		// 5. Auth & Tenant
-		AuthInterceptor(cfg.Security),
+		AuthInterceptor(cfg),
 		// 6. Tenant Enforcement
-		EnforceTenantInterceptor(cfg.Security),
+		EnforceTenantInterceptor(cfg),
 	}
 }
 
@@ -106,7 +106,7 @@ func LoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
-func AuthInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
+func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		// Extract tenant from metadata x-tenant-id if trusted.
 		// Security middleware (EnforceTenant) will reject requests without tenant if configured.
@@ -114,10 +114,21 @@ func AuthInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
 		md, _ := metadata.FromIncomingContext(ctx)
 
 		tenant := ""
-		if cfg.TrustTenantIDFromRequest {
+		if cfg.Security.TrustTenantIDFromRequest {
 			if vals := md.Get("x-tenant-id"); len(vals) > 0 {
 				tenant = vals[0]
 			}
+		}
+
+		authHeader := ""
+		if vals := md.Get("authorization"); len(vals) > 0 {
+			authHeader = vals[0]
+		}
+
+		if tenant == "" && !cfg.Auth.Enabled {
+			tenant = "default-tenant"
+		} else if tenant == "" && cfg.Auth.AdminKey != "" && authHeader == "Bearer "+cfg.Auth.AdminKey {
+			tenant = "system-admin"
 		}
 
 		if tenant != "" {
@@ -128,11 +139,10 @@ func AuthInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
 	}
 }
 
-func EnforceTenantInterceptor(cfg config.Security) grpc.UnaryServerInterceptor {
+func EnforceTenantInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		// If needed, check if request has tenant_id field and matches context.
-		// gRPC usually has tenant_id in the message. Reflecting that is expensive (using protoreflect).
 		// For this level, we just enforce that we HAVE a tenant if we are not trusted.
+		// If auth is disabled or admin key is valid (which populates a dummy tenant above), it will pass.
 
 		return handler(ctx, req)
 	}

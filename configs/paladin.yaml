@@ -136,6 +136,11 @@ policy:
   external_ref_max_len: 256
   object_key_max_len: 1024
 
+# ─── Auth ───
+auth:
+  enabled: false
+  admin_key: ""
+
 # ─── Security ───────────────────────────────────────────────────────────────
 
 security:

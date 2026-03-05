@@ -13,6 +13,7 @@ type Config struct {
 	Server       Server       `yaml:"server" json:"server"`
 	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
 	Policy       Policy       `yaml:"policy" json:"policy"`
+	Auth         Auth         `yaml:"auth" json:"auth"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
 	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
@@ -201,6 +202,11 @@ type Policy struct {
 	LabelsMaxKeys         int           `yaml:"labels_max_keys" json:"labels_max_keys"`
 	ExternalRefMaxLen     int           `yaml:"external_ref_max_len" json:"external_ref_max_len"`
 	ObjectKeyMaxLen       int           `yaml:"object_key_max_len" json:"object_key_max_len"`
+}
+
+type Auth struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	AdminKey string `yaml:"admin_key" json:"admin_key"`
 }
 
 type Security struct {

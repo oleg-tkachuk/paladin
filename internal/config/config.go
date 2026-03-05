@@ -196,6 +196,8 @@ func (c *Config) Sanitize() domain.SystemConfig {
 	sc.Policy.PresignGetTTL = c.Policy.PresignGetTTL.String()
 	sc.Policy.AllowedContentTypes = c.Policy.AllowedContentTypes
 
+	sc.Auth.Enabled = c.Auth.Enabled
+
 	sc.Security.TrustTenantIDFromRequest = c.Security.TrustTenantIDFromRequest
 	sc.Security.RejectTenantMismatch = c.Security.RejectTenantMismatch
 	sc.Security.EnableRLS = c.Security.EnableRLS

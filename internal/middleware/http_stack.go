@@ -54,7 +54,7 @@ func SetupHTTPStack(r *gin.Engine, cfg *config.Config, log *zap.Logger, auditRep
 	// r.Use(Auth(authorizer, cfg.Security, log))
 
 	// 9. Enforce Tenant & Limits
-	r.Use(EnforceTenant(cfg.Security))
+	r.Use(EnforceTenant(cfg))
 
 	// 10. OpenTelemetry Tracing & Metrics
 	if cfg.OTel.Enabled {
