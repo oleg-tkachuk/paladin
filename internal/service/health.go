@@ -7,6 +7,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"golang.org/x/sync/errgroup"
 )
 
 // DetailedDependencyStatus provides detailed health information for a single dependency
@@ -67,61 +68,72 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 	}
 	ready := true
 
-	// Check PostgreSQL with latency tracking
-	start := time.Now()
-	if err := s.db.Ping(ctx); err != nil {
-		metrics.RecordDbQuery(ctx, "ping", "error", start)
-		status.PostgreSQL.Status = "down"
-		status.PostgreSQL.Message = err.Error()
-		ready = false
-	} else {
-		metrics.RecordDbQuery(ctx, "ping", "success", start)
-		latency := time.Since(start).Milliseconds()
-		status.PostgreSQL.LatencyMs = &latency
+	// Run PostgreSQL and SeaweedFS pings in parallel using errgroup
+	g, gCtx := errgroup.WithContext(ctx)
 
-		// Get detailed pool stats if available
-		if s.poolDB != nil {
-			if stats, err := s.poolDB.HealthWithStats(ctx); err == nil {
-				status.PoolStats = stats
+	// Check PostgreSQL with latency tracking
+	g.Go(func() error {
+		pStart := time.Now()
+		if err := s.db.Ping(gCtx); err != nil {
+			metrics.RecordDbQuery(gCtx, "ping", "error", pStart)
+			status.PostgreSQL.Status = "down"
+			status.PostgreSQL.Message = err.Error()
+			ready = false
+		} else {
+			metrics.RecordDbQuery(gCtx, "ping", "success", pStart)
+			latency := time.Since(pStart).Milliseconds()
+			status.PostgreSQL.LatencyMs = &latency
+
+			// Get detailed pool stats if available
+			if s.poolDB != nil {
+				if stats, err := s.poolDB.HealthWithStats(gCtx); err == nil {
+					status.PoolStats = stats
+				}
 			}
 		}
-	}
+		return nil
+	})
 
 	// Check SeaweedFS with detailed ping logic
-	start = time.Now()
-	pingResult, err := s.s3.Ping(ctx)
-	latency := time.Since(start).Milliseconds()
-	status.SeaweedFS.LatencyMs = &latency
+	g.Go(func() error {
+		sStart := time.Now()
+		pingResult, err := s.s3.Ping(gCtx)
+		sLatency := time.Since(sStart).Milliseconds()
+		status.SeaweedFS.LatencyMs = &sLatency
 
-	if err != nil {
-		metrics.RecordS3Op(ctx, "health", "error", start)
-		status.SeaweedFS.Status = "down"
-		status.SeaweedFS.Message = err.Error()
-		ready = false
-	} else {
-		metrics.RecordS3Op(ctx, "health", "success", start)
-
-		// Map S3PingResult status to DetailedDependencyStatus status
-		switch pingResult.Status {
-		case "healthy":
-			status.SeaweedFS.Status = "ok"
-		case "degraded":
-			status.SeaweedFS.Status = "degraded"
-			// Degraded S3 (e.g. bucket missing) means not ready
-			ready = false
-		case "unavailable":
+		if err != nil {
+			metrics.RecordS3Op(gCtx, "health", "error", sStart)
 			status.SeaweedFS.Status = "down"
+			status.SeaweedFS.Message = err.Error()
 			ready = false
-		default:
-			status.SeaweedFS.Status = "down"
-			ready = false
-		}
+		} else {
+			metrics.RecordS3Op(gCtx, "health", "success", sStart)
 
-		if pingResult.Message != "" {
-			status.SeaweedFS.Message = pingResult.Message
+			// Map S3PingResult status to DetailedDependencyStatus status
+			switch pingResult.Status {
+			case "healthy":
+				status.SeaweedFS.Status = "ok"
+			case "degraded":
+				status.SeaweedFS.Status = "degraded"
+				// Degraded S3 (e.g. bucket missing) means not ready
+				ready = false
+			case "unavailable":
+				status.SeaweedFS.Status = "down"
+				ready = false
+			default:
+				status.SeaweedFS.Status = "down"
+				ready = false
+			}
+
+			if pingResult.Message != "" {
+				status.SeaweedFS.Message = pingResult.Message
+			}
+			status.SeaweedFS.S3Ping = &pingResult
 		}
-		status.SeaweedFS.S3Ping = &pingResult
-	}
+		return nil
+	})
+
+	_ = g.Wait()
 
 	// Check if any breakers are open
 	for _, bState := range status.Breakers {

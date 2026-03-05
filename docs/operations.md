@@ -120,6 +120,8 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `internal/config/resolver.go` | Kubernetes secret resolver |
 | `internal/config/schema.cue` | CUE schema for config validation |
 | `internal/api/grpc/server.go` | gRPC server implementation |
+| `internal/api/grpc/tenant_types.go` | gRPC tenant RPC message mappers |
+| `internal/api/grpc/validation.go` | gRPC request validation logic |
 | `internal/api/http/router.go` | Gin HTTP router setup |
 | `internal/api/http/adapter.go` | OpenAPI → domain service adapter (all HTTP handler implementations) |
 | `internal/middleware/http_stack.go` | HTTP middleware chain setup |

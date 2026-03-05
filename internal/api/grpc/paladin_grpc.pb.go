@@ -19,22 +19,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Paladin_CreateObject_FullMethodName      = "/paladin.v1.Paladin/CreateObject"
-	Paladin_GetObject_FullMethodName         = "/paladin.v1.Paladin/GetObject"
-	Paladin_GetObjectMeta_FullMethodName     = "/paladin.v1.Paladin/GetObjectMeta"
-	Paladin_CompleteObject_FullMethodName    = "/paladin.v1.Paladin/CompleteObject"
-	Paladin_DeleteObject_FullMethodName      = "/paladin.v1.Paladin/DeleteObject"
-	Paladin_InitiateMultipart_FullMethodName = "/paladin.v1.Paladin/InitiateMultipart"
-	Paladin_SignPart_FullMethodName          = "/paladin.v1.Paladin/SignPart"
-	Paladin_CompleteMultipart_FullMethodName = "/paladin.v1.Paladin/CompleteMultipart"
-	Paladin_AbortMultipart_FullMethodName    = "/paladin.v1.Paladin/AbortMultipart"
-	Paladin_ListCategories_FullMethodName    = "/paladin.v1.Paladin/ListCategories"
-	Paladin_GetCategory_FullMethodName       = "/paladin.v1.Paladin/GetCategory"
-	Paladin_CreateCategory_FullMethodName    = "/paladin.v1.Paladin/CreateCategory"
-	Paladin_DeleteCategory_FullMethodName    = "/paladin.v1.Paladin/DeleteCategory"
-	Paladin_GetCategoryStats_FullMethodName  = "/paladin.v1.Paladin/GetCategoryStats"
-	Paladin_GetObjectStats_FullMethodName    = "/paladin.v1.Paladin/GetObjectStats"
-	Paladin_ListObjects_FullMethodName       = "/paladin.v1.Paladin/ListObjects"
+	Paladin_CreateObject_FullMethodName        = "/paladin.v1.Paladin/CreateObject"
+	Paladin_GetObject_FullMethodName           = "/paladin.v1.Paladin/GetObject"
+	Paladin_GetObjectMeta_FullMethodName       = "/paladin.v1.Paladin/GetObjectMeta"
+	Paladin_PatchObjectMeta_FullMethodName     = "/paladin.v1.Paladin/PatchObjectMeta"
+	Paladin_CompleteObject_FullMethodName      = "/paladin.v1.Paladin/CompleteObject"
+	Paladin_DeleteObject_FullMethodName        = "/paladin.v1.Paladin/DeleteObject"
+	Paladin_InitiateMultipart_FullMethodName   = "/paladin.v1.Paladin/InitiateMultipart"
+	Paladin_SignPart_FullMethodName            = "/paladin.v1.Paladin/SignPart"
+	Paladin_CompleteMultipart_FullMethodName   = "/paladin.v1.Paladin/CompleteMultipart"
+	Paladin_AbortMultipart_FullMethodName      = "/paladin.v1.Paladin/AbortMultipart"
+	Paladin_ListCategories_FullMethodName      = "/paladin.v1.Paladin/ListCategories"
+	Paladin_GetCategory_FullMethodName         = "/paladin.v1.Paladin/GetCategory"
+	Paladin_CreateCategory_FullMethodName      = "/paladin.v1.Paladin/CreateCategory"
+	Paladin_DeleteCategory_FullMethodName      = "/paladin.v1.Paladin/DeleteCategory"
+	Paladin_GetCategoryStats_FullMethodName    = "/paladin.v1.Paladin/GetCategoryStats"
+	Paladin_GetObjectStats_FullMethodName      = "/paladin.v1.Paladin/GetObjectStats"
+	Paladin_ListObjects_FullMethodName         = "/paladin.v1.Paladin/ListObjects"
+	Paladin_CreateTenant_FullMethodName        = "/paladin.v1.Paladin/CreateTenant"
+	Paladin_GetTenant_FullMethodName           = "/paladin.v1.Paladin/GetTenant"
+	Paladin_DeleteTenant_FullMethodName        = "/paladin.v1.Paladin/DeleteTenant"
+	Paladin_ListTenants_FullMethodName         = "/paladin.v1.Paladin/ListTenants"
+	Paladin_PatchTenantMetadata_FullMethodName = "/paladin.v1.Paladin/PatchTenantMetadata"
 )
 
 // PaladinClient is the client API for Paladin service.
@@ -44,6 +50,7 @@ type PaladinClient interface {
 	CreateObject(ctx context.Context, in *CreateObjectRequest, opts ...grpc.CallOption) (*CreateObjectResponse, error)
 	GetObject(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectResponse, error)
 	GetObjectMeta(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectMetaResponse, error)
+	PatchObjectMeta(ctx context.Context, in *PatchObjectMetaRequest, opts ...grpc.CallOption) (*PatchObjectMetaResponse, error)
 	CompleteObject(ctx context.Context, in *CompleteObjectRequest, opts ...grpc.CallOption) (*CompleteObjectResponse, error)
 	DeleteObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
 	InitiateMultipart(ctx context.Context, in *InitiateMultipartRequest, opts ...grpc.CallOption) (*InitiateMultipartResponse, error)
@@ -58,6 +65,12 @@ type PaladinClient interface {
 	GetCategoryStats(ctx context.Context, in *GetCategoryStatsRequest, opts ...grpc.CallOption) (*GetCategoryStatsResponse, error)
 	GetObjectStats(ctx context.Context, in *GetObjectStatsRequest, opts ...grpc.CallOption) (*GetObjectStatsResponse, error)
 	ListObjects(ctx context.Context, in *ListObjectsRequest, opts ...grpc.CallOption) (*ListObjectsResponse, error)
+	// Tenant lifecycle management (admin-only)
+	CreateTenant(ctx context.Context, in *CreateTenantRequest, opts ...grpc.CallOption) (*TenantResponse, error)
+	GetTenant(ctx context.Context, in *GetTenantRequest, opts ...grpc.CallOption) (*TenantResponse, error)
+	DeleteTenant(ctx context.Context, in *DeleteTenantRequest, opts ...grpc.CallOption) (*DeleteTenantResponse, error)
+	ListTenants(ctx context.Context, in *ListTenantsRequest, opts ...grpc.CallOption) (*ListTenantsResponse, error)
+	PatchTenantMetadata(ctx context.Context, in *PatchTenantMetadataRequest, opts ...grpc.CallOption) (*TenantResponse, error)
 }
 
 type objectControlPlaneClient struct {
@@ -92,6 +105,16 @@ func (c *objectControlPlaneClient) GetObjectMeta(ctx context.Context, in *GetObj
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetObjectMetaResponse)
 	err := c.cc.Invoke(ctx, Paladin_GetObjectMeta_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) PatchObjectMeta(ctx context.Context, in *PatchObjectMetaRequest, opts ...grpc.CallOption) (*PatchObjectMetaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PatchObjectMetaResponse)
+	err := c.cc.Invoke(ctx, Paladin_PatchObjectMeta_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +251,56 @@ func (c *objectControlPlaneClient) ListObjects(ctx context.Context, in *ListObje
 	return out, nil
 }
 
+func (c *objectControlPlaneClient) CreateTenant(ctx context.Context, in *CreateTenantRequest, opts ...grpc.CallOption) (*TenantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TenantResponse)
+	err := c.cc.Invoke(ctx, Paladin_CreateTenant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) GetTenant(ctx context.Context, in *GetTenantRequest, opts ...grpc.CallOption) (*TenantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TenantResponse)
+	err := c.cc.Invoke(ctx, Paladin_GetTenant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) DeleteTenant(ctx context.Context, in *DeleteTenantRequest, opts ...grpc.CallOption) (*DeleteTenantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteTenantResponse)
+	err := c.cc.Invoke(ctx, Paladin_DeleteTenant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) ListTenants(ctx context.Context, in *ListTenantsRequest, opts ...grpc.CallOption) (*ListTenantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTenantsResponse)
+	err := c.cc.Invoke(ctx, Paladin_ListTenants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) PatchTenantMetadata(ctx context.Context, in *PatchTenantMetadataRequest, opts ...grpc.CallOption) (*TenantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TenantResponse)
+	err := c.cc.Invoke(ctx, Paladin_PatchTenantMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaladinServer is the server API for Paladin service.
 // All implementations must embed UnimplementedPaladinServer
 // for forward compatibility.
@@ -235,6 +308,7 @@ type PaladinServer interface {
 	CreateObject(context.Context, *CreateObjectRequest) (*CreateObjectResponse, error)
 	GetObject(context.Context, *GetObjectRequest) (*GetObjectResponse, error)
 	GetObjectMeta(context.Context, *GetObjectRequest) (*GetObjectMetaResponse, error)
+	PatchObjectMeta(context.Context, *PatchObjectMetaRequest) (*PatchObjectMetaResponse, error)
 	CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error)
 	DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
 	InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error)
@@ -249,6 +323,12 @@ type PaladinServer interface {
 	GetCategoryStats(context.Context, *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error)
 	GetObjectStats(context.Context, *GetObjectStatsRequest) (*GetObjectStatsResponse, error)
 	ListObjects(context.Context, *ListObjectsRequest) (*ListObjectsResponse, error)
+	// Tenant lifecycle management (admin-only)
+	CreateTenant(context.Context, *CreateTenantRequest) (*TenantResponse, error)
+	GetTenant(context.Context, *GetTenantRequest) (*TenantResponse, error)
+	DeleteTenant(context.Context, *DeleteTenantRequest) (*DeleteTenantResponse, error)
+	ListTenants(context.Context, *ListTenantsRequest) (*ListTenantsResponse, error)
+	PatchTenantMetadata(context.Context, *PatchTenantMetadataRequest) (*TenantResponse, error)
 	mustEmbedUnimplementedPaladinServer()
 }
 
@@ -267,6 +347,9 @@ func (UnimplementedPaladinServer) GetObject(context.Context, *GetObjectRequest) 
 }
 func (UnimplementedPaladinServer) GetObjectMeta(context.Context, *GetObjectRequest) (*GetObjectMetaResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetObjectMeta not implemented")
+}
+func (UnimplementedPaladinServer) PatchObjectMeta(context.Context, *PatchObjectMetaRequest) (*PatchObjectMetaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchObjectMeta not implemented")
 }
 func (UnimplementedPaladinServer) CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteObject not implemented")
@@ -306,6 +389,21 @@ func (UnimplementedPaladinServer) GetObjectStats(context.Context, *GetObjectStat
 }
 func (UnimplementedPaladinServer) ListObjects(context.Context, *ListObjectsRequest) (*ListObjectsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListObjects not implemented")
+}
+func (UnimplementedPaladinServer) CreateTenant(context.Context, *CreateTenantRequest) (*TenantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTenant not implemented")
+}
+func (UnimplementedPaladinServer) GetTenant(context.Context, *GetTenantRequest) (*TenantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTenant not implemented")
+}
+func (UnimplementedPaladinServer) DeleteTenant(context.Context, *DeleteTenantRequest) (*DeleteTenantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteTenant not implemented")
+}
+func (UnimplementedPaladinServer) ListTenants(context.Context, *ListTenantsRequest) (*ListTenantsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTenants not implemented")
+}
+func (UnimplementedPaladinServer) PatchTenantMetadata(context.Context, *PatchTenantMetadataRequest) (*TenantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchTenantMetadata not implemented")
 }
 func (UnimplementedPaladinServer) mustEmbedUnimplementedPaladinServer() {}
 func (UnimplementedPaladinServer) testEmbeddedByValue()                            {}
@@ -378,6 +476,24 @@ func _Paladin_GetObjectMeta_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PaladinServer).GetObjectMeta(ctx, req.(*GetObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_PatchObjectMeta_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchObjectMetaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).PatchObjectMeta(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_PatchObjectMeta_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).PatchObjectMeta(ctx, req.(*PatchObjectMetaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -616,6 +732,96 @@ func _Paladin_ListObjects_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Paladin_CreateTenant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTenantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).CreateTenant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_CreateTenant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).CreateTenant(ctx, req.(*CreateTenantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_GetTenant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTenantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).GetTenant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_GetTenant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).GetTenant(ctx, req.(*GetTenantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_DeleteTenant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTenantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).DeleteTenant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_DeleteTenant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).DeleteTenant(ctx, req.(*DeleteTenantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_ListTenants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTenantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).ListTenants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_ListTenants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).ListTenants(ctx, req.(*ListTenantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_PatchTenantMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchTenantMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).PatchTenantMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_PatchTenantMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).PatchTenantMetadata(ctx, req.(*PatchTenantMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Paladin_ServiceDesc is the grpc.ServiceDesc for Paladin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -634,6 +840,10 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetObjectMeta",
 			Handler:    _Paladin_GetObjectMeta_Handler,
+		},
+		{
+			MethodName: "PatchObjectMeta",
+			Handler:    _Paladin_PatchObjectMeta_Handler,
 		},
 		{
 			MethodName: "CompleteObject",
@@ -686,6 +896,26 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListObjects",
 			Handler:    _Paladin_ListObjects_Handler,
+		},
+		{
+			MethodName: "CreateTenant",
+			Handler:    _Paladin_CreateTenant_Handler,
+		},
+		{
+			MethodName: "GetTenant",
+			Handler:    _Paladin_GetTenant_Handler,
+		},
+		{
+			MethodName: "DeleteTenant",
+			Handler:    _Paladin_DeleteTenant_Handler,
+		},
+		{
+			MethodName: "ListTenants",
+			Handler:    _Paladin_ListTenants_Handler,
+		},
+		{
+			MethodName: "PatchTenantMetadata",
+			Handler:    _Paladin_PatchTenantMetadata_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

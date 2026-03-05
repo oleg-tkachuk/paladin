@@ -50,10 +50,12 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyRepo,
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
+	ProvideTenantRepo,
 	ProvideBreakerFactory,
 	ProvideUoWFactory,
 	ProvideCategoryService,
 	ProvideObjectsService,
+	ProvideTenantService,
 	ProvideSystemService,
 	ProvideHealthService,
 	ProvideHTTPServer,
@@ -221,27 +223,36 @@ func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) 
 	return service.NewHealthService(db, s3c, brk)
 }
 
+func ProvideTenantRepo(db *postgres.DB) domain.TenantRepository {
+	return postgres.NewTenantRepo(db)
+}
+
+func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
+	return service.NewTenantService(repo)
+}
+
 func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
 	svc domain.ObjectsService,
 	catSvc domain.CategoryService,
+	tenantSvc domain.TenantService,
 	auditRepo domain.AuditLogRepository,
 	hs *service.HealthService,
 	sysSvc domain.SystemService,
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta, hs, sysSvc, appStarted)
+	return httpapi.NewServer(&cfg, l, svc, catSvc, tenantSvc, auditRepo, meta, hs, sysSvc, appStarted)
 }
 
-func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService) *grpc.Server {
+func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *grpc.Server {
 	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	s := grpcapi.NewServer(l, svc, catSvc)
+	s := grpcapi.NewServer(l, svc, catSvc, tenantSvc)
 	grpcapi.RegisterPaladinServer(srv, s)
 	publicapi.RegisterPaladinServer(srv, &grpcapi.PublicServer{Server: s})
 	reflection.Register(srv)

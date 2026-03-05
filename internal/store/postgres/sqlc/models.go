@@ -97,3 +97,15 @@ type ObjectCategory struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
+
+type Tenant struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    string             `json:"tenant_id"`
+	DisplayName *string            `json:"display_name"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	// Arbitrary key-value metadata. Keys are strings, values are strings.
+	Labels []byte `json:"labels"`
+	// Unordered set of string tags for categorical filtering.
+	Tags []string `json:"tags"`
+}

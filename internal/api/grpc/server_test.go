@@ -13,7 +13,8 @@ func TestGRPCServer_Dummy(t *testing.T) {
 	logger := zap.NewNop()
 	svc := mocks.NewMockObjectsService(t)
 	catSvc := mocks.NewMockCategoryService(t)
+	tenantSvc := mocks.NewMockTenantService(t)
 
-	server := grpcapi.NewServer(logger, svc, catSvc)
+	server := grpcapi.NewServer(logger, svc, catSvc, tenantSvc)
 	assert.NotNil(t, server)
 }

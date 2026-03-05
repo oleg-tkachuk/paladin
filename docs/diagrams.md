@@ -169,6 +169,18 @@ erDiagram
         TIMESTAMPTZ updated_at
     }
 
+    tenants {
+        UUID id PK
+        TEXT tenant_id UK
+        TEXT display_name
+        JSONB labels
+        TEXT[] tags
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    tenants ||--o{ objects : "owns"
+    tenants ||--o{ object_categories : "defines"
     objects ||--o{ multipart_uploads : "has"
     multipart_uploads ||--|{ multipart_parts : "contains"
 ```

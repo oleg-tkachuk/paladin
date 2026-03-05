@@ -1,0 +1,336 @@
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
+	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+)
+
+const (
+	upsertTenantQuery = `
+INSERT INTO tenants (id, tenant_id, display_name, labels, tags)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (tenant_id) DO UPDATE
+    SET display_name = EXCLUDED.display_name,
+        labels       = EXCLUDED.labels,
+        tags         = EXCLUDED.tags,
+        updated_at   = now()
+RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at`
+
+	getTenantQuery = `
+SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at
+FROM tenants
+WHERE tenant_id = $1`
+
+	deleteTenantQuery = `
+DELETE FROM tenants
+WHERE tenant_id = $1`
+
+	tenantHasActiveObjectsQuery = `
+SELECT EXISTS(
+    SELECT 1
+    FROM objects
+    WHERE tenant_id = $1
+      AND status NOT IN ('hard_deleted')
+) AS has_active_objects`
+
+	updateTenantMetadataQuery = `
+UPDATE tenants
+SET labels     = jsonb_strip_nulls(labels || $2::jsonb),
+    tags       = $3::text[],
+    updated_at = now()
+WHERE tenant_id = $1
+RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at`
+
+	// listTenantsQuery is built with 4 positional parameters:
+	// $1 = cursor (timestamptz, nullable), $2 = label filter (jsonb, nullable),
+	// $3 = tag filter (text[], nullable), $4 = limit (int4).
+	listTenantsQuery = `
+SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at,
+       COUNT(*) OVER () AS total_count
+FROM tenants
+WHERE
+    ($1::timestamptz IS NULL OR created_at < $1::timestamptz)
+    AND ($2::jsonb IS NULL OR labels @> $2::jsonb)
+    AND ($3::text[] IS NULL OR tags && $3::text[])
+ORDER BY created_at DESC
+LIMIT $4`
+)
+
+// TenantRepo implements domain.TenantRepository backed by PostgreSQL.
+type TenantRepo struct {
+	db *DB
+}
+
+// NewTenantRepo creates a new TenantRepo.
+func NewTenantRepo(db *DB) *TenantRepo {
+	return &TenantRepo{db: db}
+}
+
+// scanTenant scans a full tenant row (id, tenant_id, display_name, labels, tags, created_at, updated_at).
+func scanTenant(row pgx.Row) (*domain.Tenant, error) {
+	var t domain.Tenant
+	var rawID pgtype.UUID
+	var displayName *string
+	var labelsJSON []byte
+	var tags []string
+
+	if err := row.Scan(&rawID, &t.TenantID, &displayName, &labelsJSON, &tags, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+
+	id, err := uuidFromPgtype(rawID)
+	if err != nil {
+		return nil, fmt.Errorf("parse tenant id: %w", err)
+	}
+
+	t.ID = id
+	t.DisplayName = displayName
+
+	if len(labelsJSON) > 0 {
+		if err := json.Unmarshal(labelsJSON, &t.Labels); err != nil {
+			return nil, fmt.Errorf("parse tenant labels: %w", err)
+		}
+	}
+
+	if t.Labels == nil {
+		t.Labels = make(map[string]string)
+	}
+
+	t.Tags = tags
+	if t.Tags == nil {
+		t.Tags = []string{}
+	}
+
+	return &t, nil
+}
+
+// labelsToJSON converts a map[string]string to JSON bytes for PostgreSQL JSONB.
+func labelsToJSON(labels map[string]string) ([]byte, error) {
+	if labels == nil {
+		return []byte("{}"), nil
+	}
+
+	b, err := json.Marshal(labels)
+	if err != nil {
+		return nil, fmt.Errorf("marshal labels: %w", err)
+	}
+
+	return b, nil
+}
+
+// labelsPatchToJSON converts a map[string]interface{} (where values can be nil to delete keys)
+// to JSON bytes for the PostgreSQL JSONB merge expression.
+func labelsPatchToJSON(patch map[string]interface{}) ([]byte, error) {
+	if patch == nil {
+		return []byte("{}"), nil
+	}
+
+	b, err := json.Marshal(patch)
+	if err != nil {
+		return nil, fmt.Errorf("marshal labels patch: %w", err)
+	}
+
+	return b, nil
+}
+
+// toTextArray converts a []string to the pgx text array format.
+// A nil slice is stored as an empty array.
+func toTextArray(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+
+	return s
+}
+
+// Create upserts a tenant. If the tenant already exists its fields are
+// updated and the resulting record is returned (idempotent).
+func (r *TenantRepo) Create(ctx context.Context, rec domain.Tenant) (*domain.Tenant, error) {
+	labelsJSON, err := labelsToJSON(rec.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("upsert tenant: %w", err)
+	}
+
+	row := r.db.Pool.QueryRow(ctx, upsertTenantQuery,
+		uuidToPgtype(rec.ID),
+		rec.TenantID,
+		rec.DisplayName,
+		labelsJSON,
+		toTextArray(rec.Tags),
+	)
+
+	t, err := scanTenant(row)
+	if err != nil {
+		return nil, fmt.Errorf("upsert tenant: %w", err)
+	}
+
+	return t, nil
+}
+
+// Get retrieves a tenant by tenant_id. Returns ErrNotFound if absent.
+func (r *TenantRepo) Get(ctx context.Context, tenantID string) (*domain.Tenant, error) {
+	row := r.db.Pool.QueryRow(ctx, getTenantQuery, tenantID)
+
+	t, err := scanTenant(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.NotFound(fmt.Sprintf("tenant %q not found", tenantID), nil)
+		}
+
+		return nil, fmt.Errorf("get tenant: %w", err)
+	}
+
+	return t, nil
+}
+
+// Delete removes the tenant. Returns (false, nil) if it did not exist.
+func (r *TenantRepo) Delete(ctx context.Context, tenantID string) (bool, error) {
+	result, err := r.db.Pool.Exec(ctx, deleteTenantQuery, tenantID)
+	if err != nil {
+		return false, fmt.Errorf("delete tenant: %w", err)
+	}
+
+	return result.RowsAffected() > 0, nil
+}
+
+// HasActiveObjects returns true when the tenant owns at least one object
+// that has not been hard-deleted.
+func (r *TenantRepo) HasActiveObjects(ctx context.Context, tenantID string) (bool, error) {
+	row := r.db.Pool.QueryRow(ctx, tenantHasActiveObjectsQuery, tenantID)
+
+	var hasActive bool
+	if err := row.Scan(&hasActive); err != nil {
+		return false, fmt.Errorf("check active objects: %w", err)
+	}
+
+	return hasActive, nil
+}
+
+// UpdateMetadata merges the label patch into existing labels (stripping null
+// values) and replaces tags wholesale.
+func (r *TenantRepo) UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
+	patchJSON, err := labelsPatchToJSON(labelsPatch)
+	if err != nil {
+		return nil, fmt.Errorf("update tenant metadata: %w", err)
+	}
+
+	row := r.db.Pool.QueryRow(ctx, updateTenantMetadataQuery,
+		tenantID,
+		patchJSON,
+		toTextArray(tags),
+	)
+
+	t, err := scanTenant(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.NotFound(fmt.Sprintf("tenant %q not found", tenantID), nil)
+		}
+
+		return nil, fmt.Errorf("update tenant metadata: %w", err)
+	}
+
+	return t, nil
+}
+
+// List returns a page of tenants matching filter, ordered by created_at DESC.
+// cursor is an RFC3339-encoded timestamp; pass "" for the first page.
+func (r *TenantRepo) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
+	// Encode the cursor as a pgtype.Timestamptz (nil = no cursor).
+	var pgCursor pgtype.Timestamptz
+	if cursor != "" {
+		t, err := time.Parse(time.RFC3339, cursor)
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("list tenants: invalid cursor: %w", err)
+		}
+
+		pgCursor = timestampToPgtype(t)
+	}
+
+	// Encode the label filter as JSON (nil = no filter).
+	var labelFilterJSON []byte
+	if len(filter.LabelSelector) > 0 {
+		b, err := json.Marshal(filter.LabelSelector)
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("list tenants: marshal label selector: %w", err)
+		}
+
+		labelFilterJSON = b
+	}
+
+	// Tag filter: nil = no filter (pass nil to pgx so the query sees NULL).
+	var tagFilter []string
+	if len(filter.TagSelector) > 0 {
+		tagFilter = filter.TagSelector
+	}
+
+	rows, err := r.db.Pool.Query(ctx, listTenantsQuery,
+		pgCursor,
+		labelFilterJSON,
+		tagFilter,
+		int32(limit+1), // fetch one extra to determine next cursor
+	)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []domain.Tenant
+	var totalCount int64
+
+	for rows.Next() {
+		var t domain.Tenant
+		var rawID pgtype.UUID
+		var displayName *string
+		var labelsJSON []byte
+		var tags []string
+
+		if err := rows.Scan(&rawID, &t.TenantID, &displayName, &labelsJSON, &tags, &t.CreatedAt, &t.UpdatedAt, &totalCount); err != nil {
+			return nil, "", 0, fmt.Errorf("list tenants: scan row: %w", err)
+		}
+
+		id, err := uuidFromPgtype(rawID)
+		if err != nil {
+			return nil, "", 0, fmt.Errorf("list tenants: parse id: %w", err)
+		}
+
+		t.ID = id
+		t.DisplayName = displayName
+
+		if len(labelsJSON) > 0 {
+			if err := json.Unmarshal(labelsJSON, &t.Labels); err != nil {
+				return nil, "", 0, fmt.Errorf("list tenants: parse labels: %w", err)
+			}
+		}
+
+		if t.Labels == nil {
+			t.Labels = make(map[string]string)
+		}
+
+		t.Tags = tags
+		if t.Tags == nil {
+			t.Tags = []string{}
+		}
+
+		tenants = append(tenants, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
+	}
+
+	nextCursor := ""
+	if len(tenants) > limit {
+		nextCursor = tenants[limit-1].CreatedAt.Format(time.RFC3339)
+		tenants = tenants[:limit]
+	}
+
+	return tenants, nextCursor, totalCount, nil
+}

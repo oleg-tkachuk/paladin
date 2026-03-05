@@ -38,6 +38,30 @@ type Category struct {
 	UpdatedAt   time.Time
 }
 
+// Tenant is a registered tenant in the system.
+// Tenants are first-class entities that must be provisioned before they can
+// store objects. The tenant_id is the canonical identifier used throughout
+// all other tables, headers, and RLS policies.
+type Tenant struct {
+	ID          uuid.UUID
+	TenantID    string
+	DisplayName *string
+	// Labels are arbitrary key-value metadata. Max 10 keys, max 4 KiB total.
+	Labels map[string]string
+	// Tags are an unordered set of strings for categorical filtering.
+	Tags      []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// TenantFilter holds optional filter criteria for listing tenants.
+type TenantFilter struct {
+	// LabelSelector matches tenants whose labels contain all provided key-value pairs.
+	LabelSelector map[string]string
+	// TagSelector matches tenants that have at least one of the provided tags.
+	TagSelector []string
+}
+
 type Object struct {
 	ID              uuid.UUID
 	TenantID        string

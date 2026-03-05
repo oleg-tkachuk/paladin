@@ -226,6 +226,7 @@ type Housekeeping struct {
 }
 
 type RateLimit struct {
+	Enabled           bool          `yaml:"enabled" json:"enabled"`
 	RequestsPerSecond float64       `yaml:"requests_per_second" json:"requests_per_second"`
 	Burst             int           `yaml:"burst" json:"burst"`
 	MaxTenants        int           `yaml:"max_tenants" json:"max_tenants"`

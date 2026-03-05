@@ -19,7 +19,7 @@ type Server struct {
 	engine *gin.Engine
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, metadata domain.AppMetadata, hs *service.HealthService, sysSvc domain.SystemService, started *atomic.Bool) *Server {
+func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService, auditRepo domain.AuditLogRepository, metadata domain.AppMetadata, hs *service.HealthService, sysSvc domain.SystemService, started *atomic.Bool) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 
@@ -102,6 +102,19 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	// Register generated handlers
 	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, sysSvc, started, metadata)
 	api.RegisterHandlers(v1, adapter)
+
+	// Admin-only routes: tenant lifecycle management.
+	// Gated by AdminOnly middleware (requires Authorization: Bearer <admin_key>).
+	admin := v1.Group("/admin")
+	admin.Use(middleware.AdminOnly(cfg))
+	{
+		tenantHandler := NewTenantHandler(tenantSvc)
+		admin.GET("/tenants", tenantHandler.ListTenants)
+		admin.POST("/tenants", tenantHandler.CreateTenant)
+		admin.GET("/tenants/:tenant_id", tenantHandler.GetTenant)
+		admin.DELETE("/tenants/:tenant_id", tenantHandler.DeleteTenant)
+		admin.PATCH("/tenants/:tenant_id/metadata", tenantHandler.PatchTenantMetadata)
+	}
 
 	return &Server{engine: r}
 }

@@ -256,6 +256,48 @@ func (m *MockSystemService) GetConfig(ctx context.Context) (domain.SystemConfig,
 	return args.Get(0).(domain.SystemConfig), args.Error(1)
 }
 
+// MockTenantService is a mock implementation of the TenantService interface
+type MockTenantService struct {
+	mock.Mock
+}
+
+func (m *MockTenantService) Create(ctx context.Context, tenantID string, displayName *string, labels map[string]string, tags []string) (*domain.Tenant, error) {
+	args := m.Called(ctx, tenantID, displayName, labels, tags)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.Tenant), args.Error(1)
+}
+
+func (m *MockTenantService) Get(ctx context.Context, tenantID string) (*domain.Tenant, error) {
+	args := m.Called(ctx, tenantID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.Tenant), args.Error(1)
+}
+
+func (m *MockTenantService) Delete(ctx context.Context, tenantID string) error {
+	return m.Called(ctx, tenantID).Error(0)
+}
+
+func (m *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
+	args := m.Called(ctx, tenantID, labelsPatch, tags)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.Tenant), args.Error(1)
+}
+
+func (m *MockTenantService) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
+	args := m.Called(ctx, filter, limit, cursor)
+
+	return args.Get(0).([]domain.Tenant), args.String(1), args.Get(2).(int64), args.Error(3)
+}
+
 // MockPinger
 type MockPinger struct {
 	mock.Mock
@@ -337,7 +379,7 @@ var _ = Describe("Router", func() {
 
 		logger, _ := zap.NewDevelopment()
 		meta := domain.AppMetadata{Version: "1.0.0", Commit: "deadbeef", BuildTime: "2023-01-01"}
-		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, mockAudit, meta, hs, mockSys, started)
+		server = httpapi.NewServer(cfg, logger, mockSvc, mockCat, new(MockTenantService), mockAudit, meta, hs, mockSys, started)
 		recorder = httptest.NewRecorder()
 	})
 

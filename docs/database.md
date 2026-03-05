@@ -211,6 +211,22 @@ All tables use `UUID` primary keys, `TIMESTAMPTZ` for timestamps, and `TEXT` (wi
 
 ---
 
+### `tenants`
+
+**Purpose:** Registry of authorized tenants. Used for administrative management, metadata tagging (`labels`, `tags`), and existence verification.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK | Internal record ID |
+| `tenant_id` | TEXT | UNIQUE | Application-facing tenant identifier |
+| `display_name` | TEXT | NULL | Human-readable name |
+| `labels` | JSONB | DEFAULT `{}` | Key-value metadata (GIN indexed) |
+| `tags` | TEXT[] | DEFAULT `{}` | Categorical tags (GIN indexed) |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Auto-managed by trigger |
+
+---
+
 ## Transactions
 
 - Unit-of-Work pattern via `UoWFactory` (`internal/store/uow.go`) for operations requiring atomic DB + S3 coordination.
@@ -224,6 +240,7 @@ All tables use `UUID` primary keys, `TIMESTAMPTZ` for timestamps, and `TEXT` (wi
 | `multipart_uploads` | Status: `aborted` / `expired` | Reaper worker + explicit `AbortMultipart` |
 | `idempotency_keys` | Hard delete by expiry | Reaper or TTL-based cleanup |
 | `audit_logs` | Hard delete by TTL | Reaper (`cleanupAuditLogs`, batch 1000) |
+| `tenants` | Hard delete | Admin `DeleteTenant` RPC |
 
 ## Migration History
 
@@ -242,3 +259,5 @@ All tables use `UUID` primary keys, `TIMESTAMPTZ` for timestamps, and `TEXT` (wi
 | `011_db_optimizations.sql` | Drop redundant indexes, add BRIN on `audit_logs.created_at`, add `text_pattern_ops` index for prefix search |
 | `012_remove_builtin_categories.sql` | Remove seeded built-in categories |
 | `013_optimization_indexes.sql` | Add category listing index, audit log path prefix and idempotency indexes |
+| `014_tenants.sql` | Create `tenants` table with backfill from existing data |
+| `015_tenant_metadata.sql` | Add GIN-indexed `labels` and `tags` columns to `tenants` |

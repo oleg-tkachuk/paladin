@@ -14,7 +14,13 @@ The Reaper is the only background goroutine running inside the service. It is en
 
 ### Cleanup Cycle (`runCleanup`)
 
-Each cycle calls three sub-tasks in sequence:
+Each cycle triggers three sub-tasks in **parallel** using `errgroup`:
+
+- **cleanupPending** — Prunes expired pending object records.
+- **cleanupMultipart** — Aborts expired multipart upload sessions.
+- **cleanupAuditLogs** — Purges expired audit trail entries.
+
+Sub-tasks that involve batched network/IO (Pending and Multipart) further parallelize their internal loops with a **concurrency limit of 10** to bound resource usage.
 
 #### 1. Pending Object Cleanup (`cleanupPending`)
 

@@ -12,6 +12,20 @@
 | `auth.enabled: true` + `auth.admin_key` configured | Requests with `Authorization: Bearer <admin_key>` pass auth. Tenant defaults to `"system-admin"` if `X-Tenant-ID` is absent. |
 | `security.trust_tenant_id_from_request: true` | The `X-Tenant-ID` header is trusted as the tenant identity (Linkerd mTLS mesh enforces authenticity at the network layer). |
 
+### gRPC Interceptor Chain (Ordered)
+
+**Source:** `internal/api/grpc/server.go`, `internal/middleware/grpc_chain.go`
+
+1. **RecoveryInterceptor** — Catches panics.
+2. **DeadlineInterceptor** — Enforces a 30s default timeout.
+3. **RequestIDInterceptor** — Extracts/generates UUID request ID.
+4. **GRPCRateLimitInterceptor** — Enforces per-tenant rate limits.
+5. **ContextLoggerInterceptor** — Attaches logger with `request_id`.
+6. **LoggerInterceptor** — Logs every RPC with `method`, `code`, `latency`, `tenant_id`.
+7. **AuthInterceptor** — Extracts `tenant_id` from metadata into context.
+8. **EnforceTenantInterceptor** — Rejects requests if tenant context is missing.
+9. **ValidationInterceptor** — Calls `req.Validate()` on request messages.
+
 > [!IMPORTANT]
 > In production, PALADIN depends on the service mesh (Linkerd mTLS) or an API gateway to authenticate and inject `X-Tenant-ID`. There is no JWT or OIDC validation inside the service itself.
 

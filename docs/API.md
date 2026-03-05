@@ -536,7 +536,14 @@ Returns non-sensitive configuration fields (passwords and secrets are redacted).
 **Service:** `Paladin`
 **Source:** `proto/paladin.proto`
 
-All RPCs accept a `tenant_id` field in the request message. Interceptor chain: Recovery → RequestID → ContextLogger → Logger → Auth → EnforceTenant.
+### gRPC Interceptor Chain
+
+The gRPC server uses a structured interceptor chain (see [Architecture](architecture.md#grpc-interceptor-chain) for details) to enforce:
+
+- **Tenant Context** — Extracted from metadata and enforced for all non-health RPCs.
+- **Request Validation** — Automatic `req.Validate()` calls before handlers.
+- **Rate Limiting** — Per-tenant enforcement using the common token-bucket engine.
+- **Observability** — Logic-less tracing, logging, and `x-request-id` trailer propagation.
 
 ### Methods
 
@@ -545,6 +552,7 @@ All RPCs accept a `tenant_id` field in the request message. Interceptor chain: R
 | `CreateObject` | `CreateObjectRequest` | `CreateObjectResponse` | Create single-upload object |
 | `GetObject` | `GetObjectRequest` | `GetObjectResponse` | Get object with download URL |
 | `GetObjectMeta` | `GetObjectRequest` | `GetObjectMetaResponse` | Get object metadata only |
+| `PatchObjectMeta` | `PatchObjectMetaRequest` | `PatchObjectMetaResponse` | Update object labels and tags |
 | `CompleteObject` | `CompleteObjectRequest` | `CompleteObjectResponse` | Mark object upload complete |
 | `DeleteObject` | `DeleteObjectRequest` | `DeleteObjectResponse` | Soft-delete object |
 | `InitiateMultipart` | `InitiateMultipartRequest` | `InitiateMultipartResponse` | Start multipart upload |
@@ -558,23 +566,28 @@ All RPCs accept a `tenant_id` field in the request message. Interceptor chain: R
 | `GetCategoryStats` | `GetCategoryStatsRequest` | `GetCategoryStatsResponse` | Category object stats |
 | `GetObjectStats` | `GetObjectStatsRequest` | `GetObjectStatsResponse` | Tenant-level object stats |
 | `ListObjects` | `ListObjectsRequest` | `ListObjectsResponse` | List objects (paginated) |
+| `CreateTenant` | `CreateTenantRequest` | `CreateTenantResponse` | Admin: Create new tenant |
+| `GetTenant` | `GetTenantRequest` | `GetTenantResponse` | Admin: Get tenant details |
+| `ListTenants` | `ListTenantsRequest` | `ListTenantsResponse` | Admin: List all tenants (paginated) |
+| `DeleteTenant` | `DeleteTenantRequest` | `DeleteTenantResponse` | Admin: Delete tenant |
+| `PatchTenantMetadata` | `PatchTenantMetadataRequest` | `PatchTenantMetadataResponse` | Admin: Update tenant labels/tags |
 
 ### Example (grpcurl)
 
 ```bash
-# List categories
+# List categories (requires x-tenant-id metadata)
 grpcurl -plaintext \
   -H 'x-tenant-id: my-tenant' \
-  -d '{"tenant_id": "my-tenant", "limit": 10}' \
+  -d '{"limit": 10}' \
   localhost:9090 \
   paladin.v1.Paladin/ListCategories
 
-# Create object
+# Admin: Create tenant (requires system-admin context)
 grpcurl -plaintext \
-  -H 'x-tenant-id: my-tenant' \
-  -d '{"tenant_id":"my-tenant","content_type":"image/jpeg","size_bytes":4096,"category":"images"}' \
+  -H 'x-tenant-id: system-admin' \
+  -d '{"id":"new-customer","name":"New Customer", "labels":{"tier":"gold"}}' \
   localhost:9090 \
-  paladin.v1.Paladin/CreateObject
+  paladin.v1.Paladin/CreateTenant
 ```
 
 ---

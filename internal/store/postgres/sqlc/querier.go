@@ -28,6 +28,7 @@ type Querier interface {
 	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
+	DeleteTenant(ctx context.Context, tenantID string) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
 	GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error)
 	GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error)
@@ -37,6 +38,7 @@ type Querier interface {
 	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (GetObjectRow, error)
 	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (GetObjectByExternalRefRow, error)
 	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
+	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
 	ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)
@@ -44,6 +46,7 @@ type Querier interface {
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error)
 	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error)
 	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
+	ListTenantsPaginated(ctx context.Context, column1 pgtype.Timestamptz, column2 []byte, column3 []string, limit int32) ([]ListTenantsPaginatedRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
 	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)
@@ -54,11 +57,21 @@ type Querier interface {
 	PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, externalRef *string) (PatchObjectLabelsAndExternalRefRow, error)
 	PruneAuditLogs(ctx context.Context, createdAt pgtype.Timestamptz, limit int32) (int64, error)
 	RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
+	TenantHasActiveObjects(ctx context.Context, tenantID string) (bool, error)
 	UpdateMultipartStatus(ctx context.Context, tenantID string, uploadID string) (int64, error)
 	UpdateObjectStatus(ctx context.Context, tenantID string, iD pgtype.UUID, status string) (int64, error)
 	UpdateObjectStatusToActive(ctx context.Context, iD pgtype.UUID, tenantID string) (int64, error)
+	// Labels patch: merge existing labels with the patch, stripping null values.
+	// This means:
+	//   - Provided keys overwrite existing keys.
+	//   - Provided keys with JSON null values are removed.
+	//   - Keys absent from the patch are preserved.
+	// Tags: full replacement.
+	UpdateTenantMetadata(ctx context.Context, tenantID string, column2 []byte, column3 []string) (UpdateTenantMetadataRow, error)
 	UpsertIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string, requestPath string, requestHash string, responseCode int32, responseBody []byte, expiresAt pgtype.Timestamptz) error
 	UpsertMultipartPart(ctx context.Context, multipartID pgtype.UUID, partNumber int32, etag *string, sizeBytes *int64) error
+	// Tenant queries
+	UpsertTenant(ctx context.Context, iD pgtype.UUID, tenantID string, displayName *string, labels []byte, tags []string) (UpsertTenantRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -86,11 +86,11 @@ Health probes are registered directly on the Gin router (not behind auth or rate
 
 ### Readiness Check Details
 
-The `HealthService.CheckReady()` method (`internal/service/health.go`) performs:
+The `HealthService.CheckReady()` method (`internal/service/health.go`) performs checks in **parallel** using `errgroup`:
 
-1. PostgreSQL `Ping()` — latency measured and returned as `postgresql.latency_ms`
-2. S3 `HeadBucket()` — latency measured and returned as `seaweedfs.latency_ms`
-3. Circuit breaker state for each breaker — reported as `breakers` map
-4. Connection pool stats — reported as `pool_stats`
+1. **PostgreSQL Ping** — Latency measured and returned as `postgresql.latency_ms`.
+2. **S3 HeadBucket** — Latency measured and returned as `seaweedfs.latency_ms`.
+3. **Circuit Breaker State** — Reported for each registered breaker.
+4. **Connection Pool Stats** — Real-time `pgxpool` metrics.
 
 Response body includes detailed dependency status suitable for monitoring dashboards.

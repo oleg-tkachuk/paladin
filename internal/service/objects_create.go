@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -106,15 +107,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		}
 	}
 
-	// Verify the category exists for this tenant
-	exists, err := s.catRepo.Exists(ctx, tenantID, category)
-	if err != nil {
-		return domain.CreateObjectResponse{}, fmt.Errorf("check category: %w", err)
-	}
-	if !exists {
-		return domain.CreateObjectResponse{}, apperrors.NotFound(fmt.Sprintf("category %q not found", category), nil)
-	}
-
 	id := uuid.New()
 	// Key is computed by DB trigger, but we pass the intended value for consistency in presign
 	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
@@ -124,11 +116,34 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		ttl = s.s3.PresignTTLDuration()
 	}
 
-	signed, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
-		return s.s3.PresignPutObject(ctx, key, contentType, sizeBytes, ttl)
+	// Parallelize S3 presign and Category existence check
+	g, gCtx := errgroup.WithContext(ctx)
+	var catExists bool
+	var signed domain.Presigned
+
+	g.Go(func() error {
+		exists, err := s.catRepo.Exists(gCtx, tenantID, category)
+		if err != nil {
+			return fmt.Errorf("check category: %w", err)
+		}
+		catExists = exists
+		return nil
 	})
-	if err != nil {
+
+	g.Go(func() error {
+		var err error
+		signed, err = executeWithBreakerRet(gCtx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+			return s.s3.PresignPutObject(gCtx, key, contentType, sizeBytes, ttl)
+		})
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		return domain.CreateObjectResponse{}, err
+	}
+
+	if !catExists {
+		return domain.CreateObjectResponse{}, apperrors.NotFound(fmt.Sprintf("category %q not found", category), nil)
 	}
 
 	bucket := s.s3.BucketName()

@@ -14,15 +14,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Server is the internal gRPC server implementation. It holds all service
+// dependencies and implements PaladinServer.
 type Server struct {
 	UnimplementedPaladinServer
-	log    *zap.Logger
-	svc    domain.ObjectsService
-	catSvc domain.CategoryService
+	log       *zap.Logger
+	svc       domain.ObjectsService
+	catSvc    domain.CategoryService
+	tenantSvc domain.TenantService
 }
 
-func NewServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService) *Server {
-	return &Server{log: log, svc: svc, catSvc: catSvc}
+// NewServer creates a new Server with the given service dependencies.
+func NewServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *Server {
+	return &Server{log: log, svc: svc, catSvc: catSvc, tenantSvc: tenantSvc}
 }
 
 // PublicServer wraps the internal Server to satisfy the public API interface.
@@ -30,6 +34,557 @@ type PublicServer struct {
 	publicapi.UnimplementedPaladinServer
 	*Server
 }
+
+// tenantFromCtx reads the tenant ID set by the Auth interceptor chain.
+// The internal (admin) API where the caller specifies tenant_id explicitly
+// must use req.TenantId directly — these handlers are identified by their RPC name.
+func tenantFromCtx(ctx context.Context) string {
+	return utils.TenantIDFromContext(ctx, "")
+}
+
+// ─── Object RPCs ─────────────────────────────────────────────────────────────
+
+func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*CreateObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	var externalRef *string
+	if req.ExternalRef != "" {
+		externalRef = &req.ExternalRef
+	}
+
+	out, err := s.svc.CreateSingle(ctx, tenant, req.Category, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
+	if err != nil {
+		logger.FromContext(ctx).Warn("CreateObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &CreateObjectResponse{
+		ObjectId:      out.ID.String(),
+		ObjectKey:     out.Key,
+		UploadUrl:     out.Upload.URL,
+		Method:        out.Upload.Method,
+		Headers:       out.Upload.Headers,
+		ExpiresAtUnix: out.Upload.ExpiresAt.Unix(),
+	}, nil
+}
+
+func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	rec, err := s.svc.Get(ctx, tenant, id)
+	if err != nil {
+		logger.FromContext(ctx).Warn("GetObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	var ref string
+	if rec.ExternalRef != nil {
+		ref = *rec.ExternalRef
+	}
+
+	return &GetObjectResponse{
+		ObjectId:    rec.ID.String(),
+		ObjectKey:   rec.ObjectKey,
+		Bucket:      rec.Bucket,
+		ContentType: rec.ContentType,
+		SizeBytes:   rec.SizeBytes,
+		Status:      string(rec.Status),
+		Labels:      rec.Labels,
+		ExternalRef: ref,
+	}, nil
+}
+
+func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*GetObjectMetaResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	rec, err := s.svc.GetMeta(ctx, tenant, id)
+	if err != nil {
+		logger.FromContext(ctx).Warn("GetObjectMeta failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	var ref string
+	if rec.ExternalRef != nil {
+		ref = *rec.ExternalRef
+	}
+
+	var expires int64
+	if rec.ExpiresAt != nil {
+		expires = rec.ExpiresAt.Unix()
+	}
+
+	return &GetObjectMetaResponse{
+		ObjectId:      rec.ID.String(),
+		ObjectKey:     rec.ObjectKey,
+		Bucket:        rec.Bucket,
+		ContentType:   rec.ContentType,
+		SizeBytes:     rec.SizeBytes,
+		Status:        string(rec.Status),
+		ExpiresAtUnix: expires,
+		Labels:        rec.Labels,
+		ExternalRef:   ref,
+	}, nil
+}
+
+func (s *Server) PatchObjectMeta(ctx context.Context, req *PatchObjectMetaRequest) (*PatchObjectMetaResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	rec, err := s.svc.PatchMeta(ctx, tenant, id, req.Labels, req.ExternalRef)
+	if err != nil {
+		logger.FromContext(ctx).Warn("PatchObjectMeta failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	var ref string
+	if rec.ExternalRef != nil {
+		ref = *rec.ExternalRef
+	}
+
+	return &PatchObjectMetaResponse{
+		ObjectId:    rec.ID.String(),
+		Labels:      rec.Labels,
+		ExternalRef: ref,
+	}, nil
+}
+
+func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest) (*CompleteObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	if _, err := s.svc.CompleteObject(ctx, tenant, id, nil, nil); err != nil {
+		logger.FromContext(ctx).Error("CompleteObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &CompleteObjectResponse{Status: "active"}, nil
+}
+
+func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
+		logger.FromContext(ctx).Error("DeleteObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &DeleteObjectResponse{Status: "deleted"}, nil
+}
+
+// ─── Multipart RPCs ──────────────────────────────────────────────────────────
+
+func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	var extRef *string
+	if req.ExternalRef != "" {
+		extRef = &req.ExternalRef
+	}
+
+	out, err := s.svc.InitiateMultipart(ctx, tenant, req.Category, req.ContentType, req.SizeBytes, req.Labels, extRef, 0, nil)
+	if err != nil {
+		logger.FromContext(ctx).Warn("InitiateMultipart failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &InitiateMultipartResponse{
+		ObjectId:      out.ObjectID.String(),
+		ObjectKey:     out.ObjectKey,
+		UploadId:      out.UploadID,
+		PartSize:      out.PartSize,
+		ExpiresAtUnix: out.ExpiresAt.Unix(),
+	}, nil
+}
+
+func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	p, err := s.svc.SignPart(ctx, tenant, req.UploadId, req.PartNumber)
+	if err != nil {
+		logger.FromContext(ctx).Warn("SignPart failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &SignPartResponse{
+		UploadUrl:     p.URL,
+		Method:        p.Method,
+		ExpiresAtUnix: p.ExpiresAt.Unix(),
+	}, nil
+}
+
+func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRequest) (*CompleteMultipartResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	parts := make([]domain.CompletePart, 0, len(req.Parts))
+	for _, p := range req.Parts {
+		parts = append(parts, domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
+	}
+
+	rec, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)
+	if err != nil {
+		logger.FromContext(ctx).Warn("CompleteMultipart failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &CompleteMultipartResponse{ObjectId: rec.ID.String(), Status: "active"}, nil
+}
+
+func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest) (*AbortMultipartResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	if err := s.svc.AbortMultipart(ctx, tenant, req.UploadId); err != nil {
+		logger.FromContext(ctx).Warn("AbortMultipart failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &AbortMultipartResponse{Status: "aborted"}, nil
+}
+
+// ─── Stats & List RPCs ───────────────────────────────────────────────────────
+
+func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	stats, err := s.svc.GetStats(ctx, tenant)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &GetObjectStatsResponse{
+		TotalCount:       stats.TotalCount,
+		TotalSize:        stats.TotalSize,
+		PendingCount:     stats.PendingCount,
+		UploadingCount:   stats.UploadingCount,
+		UploadedCount:    stats.UploadedCount,
+		CompleteCount:    stats.CompleteCount,
+		SoftDeletedCount: stats.SoftDeletedCount,
+	}, nil
+}
+
+func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*ListObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	filter := domain.ListObjectsFilter{
+		Category:  req.Category,
+		KeyPrefix: req.Search,
+	}
+
+	if req.Status != nil {
+		st := domain.ObjectStatus(*req.Status)
+		filter.Status = &st
+	}
+
+	items, next, total, err := s.svc.List(ctx, tenant, filter, int(req.Limit), req.Cursor)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	respItems := make([]*ListObjectItem, len(items))
+	for i, obj := range items {
+		var ref string
+		if obj.ExternalRef != nil {
+			ref = *obj.ExternalRef
+		}
+
+		respItems[i] = &ListObjectItem{
+			ObjectId:      obj.ID.String(),
+			ObjectKey:     obj.ObjectKey,
+			ContentType:   obj.ContentType,
+			SizeBytes:     obj.SizeBytes,
+			Status:        string(obj.Status),
+			CreatedAtUnix: obj.CreatedAt.Unix(),
+			Category:      obj.Category,
+			Labels:        obj.Labels,
+			ExternalRef:   ref,
+		}
+	}
+
+	return &ListObjectsResponse{
+		Items:      respItems,
+		NextCursor: next,
+		TotalCount: total,
+	}, nil
+}
+
+// ─── Category RPCs ───────────────────────────────────────────────────────────
+
+func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	items, next, total, err := s.catSvc.List(ctx, tenant, int(req.Limit), req.Cursor)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	respItems := make([]*Category, len(items))
+	for i, cat := range items {
+		respItems[i] = &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		}
+	}
+
+	return &ListCategoriesResponse{
+		Items:      respItems,
+		NextCursor: next,
+		TotalCount: total,
+	}, nil
+}
+
+func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	cat, err := s.catSvc.Get(ctx, tenant, req.Slug)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &GetCategoryResponse{
+		Category: &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		},
+	}, nil
+}
+
+func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*GetCategoryResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	cat, err := s.catSvc.Create(ctx, tenant, req.Slug, req.Name, req.Description)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &GetCategoryResponse{
+		Category: &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		},
+	}, nil
+}
+
+func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	if err := s.catSvc.Delete(ctx, tenant, req.Slug); err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &DeleteCategoryResponse{Status: "deleted"}, nil
+}
+
+func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	stats, err := s.catSvc.GetStats(ctx, tenant, req.Slug)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &GetCategoryStatsResponse{
+		TotalCount: stats.TotalCount,
+		TotalSize:  stats.TotalSize,
+	}, nil
+}
+
+// ─── Tenant Admin RPCs ───────────────────────────────────────────────────────
+// These RPCs are only accessible on the internal gRPC server.
+// Use the AdminOnly interceptor at the server level or configure the client
+// to supply the admin bearer key.
+
+func (s *Server) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*TenantResponse, error) {
+	var displayName *string
+	if req.DisplayName != "" {
+		displayName = &req.DisplayName
+	}
+
+	t, err := s.tenantSvc.Create(ctx, req.TenantId, displayName, req.Labels, req.Tags)
+	if err != nil {
+		logger.FromContext(ctx).Warn("CreateTenant failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return domainTenantToProto(t), nil
+}
+
+func (s *Server) GetTenant(ctx context.Context, req *GetTenantRequest) (*TenantResponse, error) {
+	t, err := s.tenantSvc.Get(ctx, req.TenantId)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return domainTenantToProto(t), nil
+}
+
+func (s *Server) DeleteTenant(ctx context.Context, req *DeleteTenantRequest) (*DeleteTenantResponse, error) {
+	if err := s.tenantSvc.Delete(ctx, req.TenantId); err != nil {
+		logger.FromContext(ctx).Warn("DeleteTenant failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &DeleteTenantResponse{Status: "deleted"}, nil
+}
+
+func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*ListTenantsResponse, error) {
+	filter := domain.TenantFilter{
+		LabelSelector: req.LabelSelector,
+		TagSelector:   req.TagSelector,
+	}
+
+	tenants, nextCursor, total, err := s.tenantSvc.List(ctx, filter, int(req.Limit), req.Cursor)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	items := make([]*TenantResponse, 0, len(tenants))
+	for i := range tenants {
+		items = append(items, domainTenantToProto(&tenants[i]))
+	}
+
+	return &ListTenantsResponse{
+		Items:      items,
+		NextCursor: nextCursor,
+		TotalCount: total,
+	}, nil
+}
+
+func (s *Server) PatchTenantMetadata(ctx context.Context, req *PatchTenantMetadataRequest) (*TenantResponse, error) {
+	patch, err := parseLabelsPatch(req.LabelsPatchJson)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	t, err := s.tenantSvc.PatchMetadata(ctx, req.TenantId, patch, req.Tags)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return domainTenantToProto(t), nil
+}
+
+// domainTenantToProto converts a domain.Tenant to a TenantResponse proto message.
+func domainTenantToProto(t *domain.Tenant) *TenantResponse {
+	displayName := ""
+	if t.DisplayName != nil {
+		displayName = *t.DisplayName
+	}
+
+	labels := t.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	tags := t.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return &TenantResponse{
+		TenantId:      t.TenantID,
+		DisplayName:   displayName,
+		Labels:        labels,
+		Tags:          tags,
+		CreatedAtUnix: t.CreatedAt.Unix(),
+		UpdatedAtUnix: t.UpdatedAt.Unix(),
+	}
+}
+
+// ─── Public server wrappers ───────────────────────────────────────────────────
+// All public-api methods delegate to the internal Server, which now reads
+// the tenant from context (set by the Auth interceptor) rather than from
+// the request body. The public proto messages don't include tenant_id.
 
 func (s *PublicServer) ListObjects(ctx context.Context, req *publicapi.ListObjectsRequest) (*publicapi.ListObjectsResponse, error) {
 	internalReq := &ListObjectsRequest{
@@ -78,6 +633,7 @@ func (s *PublicServer) CreateObject(ctx context.Context, req *publicapi.CreateOb
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.CreateObjectResponse{
 		ObjectId:      resp.ObjectId,
 		ObjectKey:     resp.ObjectKey,
@@ -94,6 +650,7 @@ func (s *PublicServer) GetObject(ctx context.Context, req *publicapi.GetObjectRe
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetObjectResponse{
 		ObjectId:    resp.ObjectId,
 		ObjectKey:   resp.ObjectKey,
@@ -112,6 +669,7 @@ func (s *PublicServer) GetObjectMeta(ctx context.Context, req *publicapi.GetObje
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetObjectMetaResponse{
 		ObjectId:      resp.ObjectId,
 		ObjectKey:     resp.ObjectKey,
@@ -131,6 +689,7 @@ func (s *PublicServer) CompleteObject(ctx context.Context, req *publicapi.Comple
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.CompleteObjectResponse{Status: resp.Status}, nil
 }
 
@@ -140,6 +699,7 @@ func (s *PublicServer) DeleteObject(ctx context.Context, req *publicapi.DeleteOb
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
 }
 
@@ -155,6 +715,7 @@ func (s *PublicServer) InitiateMultipart(ctx context.Context, req *publicapi.Ini
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.InitiateMultipartResponse{
 		ObjectId:      resp.ObjectId,
 		ObjectKey:     resp.ObjectKey,
@@ -170,6 +731,7 @@ func (s *PublicServer) SignPart(ctx context.Context, req *publicapi.SignPartRequ
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.SignPartResponse{
 		UploadUrl:     resp.UploadUrl,
 		Method:        resp.Method,
@@ -187,6 +749,7 @@ func (s *PublicServer) CompleteMultipart(ctx context.Context, req *publicapi.Com
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.CompleteMultipartResponse{ObjectId: resp.ObjectId, Status: resp.Status}, nil
 }
 
@@ -196,6 +759,7 @@ func (s *PublicServer) AbortMultipart(ctx context.Context, req *publicapi.AbortM
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.AbortMultipartResponse{Status: resp.Status}, nil
 }
 
@@ -205,6 +769,7 @@ func (s *PublicServer) ListCategories(ctx context.Context, req *publicapi.ListCa
 	if err != nil {
 		return nil, err
 	}
+
 	items := make([]*publicapi.Category, len(resp.Items))
 	for i, item := range resp.Items {
 		items[i] = &publicapi.Category{
@@ -214,6 +779,7 @@ func (s *PublicServer) ListCategories(ctx context.Context, req *publicapi.ListCa
 			Description: item.Description,
 		}
 	}
+
 	return &publicapi.ListCategoriesResponse{Items: items, NextCursor: resp.NextCursor, TotalCount: resp.TotalCount}, nil
 }
 
@@ -223,6 +789,7 @@ func (s *PublicServer) GetCategory(ctx context.Context, req *publicapi.GetCatego
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetCategoryResponse{
 		Category: &publicapi.Category{
 			Id:          resp.Category.Id,
@@ -239,6 +806,7 @@ func (s *PublicServer) CreateCategory(ctx context.Context, req *publicapi.Create
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetCategoryResponse{
 		Category: &publicapi.Category{
 			Id:          resp.Category.Id,
@@ -255,6 +823,7 @@ func (s *PublicServer) DeleteCategory(ctx context.Context, req *publicapi.Delete
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.DeleteCategoryResponse{Status: resp.Status}, nil
 }
 
@@ -264,6 +833,7 @@ func (s *PublicServer) GetCategoryStats(ctx context.Context, req *publicapi.GetC
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetCategoryStatsResponse{TotalCount: resp.TotalCount, TotalSize: resp.TotalSize}, nil
 }
 
@@ -273,6 +843,7 @@ func (s *PublicServer) GetObjectStats(ctx context.Context, req *publicapi.GetObj
 	if err != nil {
 		return nil, err
 	}
+
 	return &publicapi.GetObjectStatsResponse{
 		TotalCount:       resp.TotalCount,
 		TotalSize:        resp.TotalSize,
@@ -281,416 +852,5 @@ func (s *PublicServer) GetObjectStats(ctx context.Context, req *publicapi.GetObj
 		UploadedCount:    resp.UploadedCount,
 		CompleteCount:    resp.CompleteCount,
 		SoftDeletedCount: resp.SoftDeletedCount,
-	}, nil
-}
-
-func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	items, next, total, err := s.catSvc.List(ctx, tenant, int(req.Limit), req.Cursor)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	respItems := make([]*Category, len(items))
-	for i, cat := range items {
-		respItems[i] = &Category{
-			Id:          cat.ID.String(),
-			Slug:        cat.Slug,
-			Name:        cat.Name,
-			Description: cat.Description,
-		}
-	}
-
-	return &ListCategoriesResponse{
-		Items:      respItems,
-		NextCursor: next,
-		TotalCount: total,
-	}, nil
-}
-
-func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	cat, err := s.catSvc.Get(ctx, tenant, req.Slug)
-	if err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
-	}
-
-	return &GetCategoryResponse{
-		Category: &Category{
-			Id:          cat.ID.String(),
-			Slug:        cat.Slug,
-			Name:        cat.Name,
-			Description: cat.Description,
-		},
-	}, nil
-}
-
-func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*GetCategoryResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	cat, err := s.catSvc.Create(ctx, tenant, req.Slug, req.Name, req.Description)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &GetCategoryResponse{
-		Category: &Category{
-			Id:          cat.ID.String(),
-			Slug:        cat.Slug,
-			Name:        cat.Name,
-			Description: cat.Description,
-		},
-	}, nil
-}
-
-func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	err := s.catSvc.Delete(ctx, tenant, req.Slug)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &DeleteCategoryResponse{Status: "deleted"}, nil
-}
-
-func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	stats, err := s.catSvc.GetStats(ctx, tenant, req.Slug)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &GetCategoryStatsResponse{
-		TotalCount: stats.TotalCount,
-		TotalSize:  stats.TotalSize,
-	}, nil
-}
-
-func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*CreateObjectResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	var externalRef *string
-	if req.ExternalRef != "" {
-		externalRef = &req.ExternalRef
-	}
-
-	category := req.Category
-
-	out, err := s.svc.CreateSingle(ctx, tenant, category, req.ContentType, req.SizeBytes, req.Labels, externalRef, 0, nil)
-	if err != nil {
-		logger.FromContext(ctx).Warn("CreateObject failed", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return &CreateObjectResponse{
-		ObjectId:      out.ID.String(),
-		ObjectKey:     out.Key,
-		UploadUrl:     out.Upload.URL,
-		Method:        out.Upload.Method,
-		Headers:       out.Upload.Headers,
-		ExpiresAtUnix: out.Upload.ExpiresAt.Unix(),
-	}, nil
-}
-
-func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObjectResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	id, err := uuid.Parse(req.ObjectId)
-	if err != nil {
-		logger.FromContext(ctx).Warn("GetObject invalid ID", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, "invalid object id")
-	}
-
-	rec, err := s.svc.Get(ctx, tenant, id)
-	if err != nil {
-		logger.FromContext(ctx).Warn("GetObject failed", zap.Error(err))
-
-		return nil, status.Error(codes.NotFound, err.Error())
-	}
-
-	var ref string
-	if rec.ExternalRef != nil {
-		ref = *rec.ExternalRef
-	}
-
-	return &GetObjectResponse{
-		ObjectId:    rec.ID.String(),
-		ObjectKey:   rec.ObjectKey,
-		Bucket:      rec.Bucket,
-		ContentType: rec.ContentType,
-		SizeBytes:   rec.SizeBytes,
-		Status:      string(rec.Status),
-		Labels:      rec.Labels,
-		ExternalRef: ref,
-	}, nil
-}
-
-func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*GetObjectMetaResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	id, err := uuid.Parse(req.ObjectId)
-	if err != nil {
-		logger.FromContext(ctx).Warn("GetObjectMeta invalid ID", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, "invalid object id")
-	}
-
-	rec, err := s.svc.GetMeta(ctx, tenant, id)
-	if err != nil {
-		logger.FromContext(ctx).Warn("GetObjectMeta failed", zap.Error(err))
-
-		return nil, status.Error(codes.NotFound, err.Error())
-	}
-
-	var ref string
-	if rec.ExternalRef != nil {
-		ref = *rec.ExternalRef
-	}
-
-	var expires int64
-	if rec.ExpiresAt != nil {
-		expires = rec.ExpiresAt.Unix()
-	}
-
-	return &GetObjectMetaResponse{
-		ObjectId:      rec.ID.String(),
-		ObjectKey:     rec.ObjectKey,
-		Bucket:        rec.Bucket,
-		ContentType:   rec.ContentType,
-		SizeBytes:     rec.SizeBytes,
-		Status:        string(rec.Status),
-		ExpiresAtUnix: expires,
-		Labels:        rec.Labels,
-		ExternalRef:   ref,
-	}, nil
-}
-
-func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest) (*CompleteObjectResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	id, err := uuid.Parse(req.ObjectId)
-	if err != nil {
-		logger.FromContext(ctx).Warn("CompleteObject invalid ID", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, "invalid object id")
-	}
-
-	if _, err := s.svc.CompleteObject(ctx, tenant, id, nil, nil); err != nil {
-		logger.FromContext(ctx).Error("CompleteObject failed", zap.Error(err))
-
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &CompleteObjectResponse{Status: "active"}, nil
-}
-
-func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	category := req.Category
-	// category will be validated in the service layer
-
-	var extRef *string
-	if req.ExternalRef != "" {
-		extRef = &req.ExternalRef
-	}
-
-	out, err := s.svc.InitiateMultipart(ctx, tenant, category, req.ContentType, req.SizeBytes, req.Labels, extRef, 0, nil)
-	if err != nil {
-		logger.FromContext(ctx).Warn("InitiateMultipart failed", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return &InitiateMultipartResponse{
-		ObjectId:      out.ObjectID.String(),
-		ObjectKey:     out.ObjectKey,
-		UploadId:      out.UploadID,
-		PartSize:      out.PartSize,
-		ExpiresAtUnix: out.ExpiresAt.Unix(),
-	}, nil
-}
-
-func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	p, err := s.svc.SignPart(ctx, tenant, req.UploadId, req.PartNumber)
-	if err != nil {
-		logger.FromContext(ctx).Warn("SignPart failed", zap.Error(err))
-
-		return nil, status.Error(codes.NotFound, err.Error())
-	}
-
-	return &SignPartResponse{
-		UploadUrl:     p.URL,
-		Method:        p.Method,
-		ExpiresAtUnix: p.ExpiresAt.Unix(),
-	}, nil
-}
-
-func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRequest) (*CompleteMultipartResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	parts := make([]domain.CompletePart, 0, len(req.Parts))
-	for _, p := range req.Parts {
-		parts = append(parts, domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
-	}
-
-	rec, err := s.svc.CompleteMultipart(ctx, tenant, req.UploadId, parts)
-	if err != nil {
-		logger.FromContext(ctx).Warn("CompleteMultipart failed", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return &CompleteMultipartResponse{ObjectId: rec.ID.String(), Status: "active"}, nil
-}
-
-func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest) (*AbortMultipartResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	if err := s.svc.AbortMultipart(ctx, tenant, req.UploadId); err != nil {
-		logger.FromContext(ctx).Warn("AbortMultipart failed", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	return &AbortMultipartResponse{Status: "aborted"}, nil
-}
-
-func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	stats, err := s.svc.GetStats(ctx, tenant)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &GetObjectStatsResponse{
-		TotalCount:       stats.TotalCount,
-		TotalSize:        stats.TotalSize,
-		PendingCount:     stats.PendingCount,
-		UploadingCount:   stats.UploadingCount,
-		UploadedCount:    stats.UploadedCount,
-		CompleteCount:    stats.CompleteCount,
-		SoftDeletedCount: stats.SoftDeletedCount,
-	}, nil
-}
-
-func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	id, err := uuid.Parse(req.ObjectId)
-	if err != nil {
-		logger.FromContext(ctx).Warn("DeleteObject invalid ID", zap.Error(err))
-
-		return nil, status.Error(codes.InvalidArgument, "invalid object id")
-	}
-
-	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
-		logger.FromContext(ctx).Error("DeleteObject failed", zap.Error(err))
-
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &DeleteObjectResponse{Status: "deleted"}, nil
-}
-
-func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*ListObjectsResponse, error) {
-	tenant := req.TenantId
-	if tenant == "" {
-		tenant = utils.TenantIDFromContext(ctx, "default")
-	}
-
-	filter := domain.ListObjectsFilter{
-		Category:  req.Category,
-		KeyPrefix: req.Search,
-	}
-
-	if req.Status != nil {
-		st := domain.ObjectStatus(*req.Status)
-		filter.Status = &st
-	}
-
-	items, next, total, err := s.svc.List(ctx, tenant, filter, int(req.Limit), req.Cursor)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	respItems := make([]*ListObjectItem, len(items))
-	for i, obj := range items {
-		var ref string
-		if obj.ExternalRef != nil {
-			ref = *obj.ExternalRef
-		}
-
-		respItems[i] = &ListObjectItem{
-			ObjectId:      obj.ID.String(),
-			ObjectKey:     obj.ObjectKey,
-			ContentType:   obj.ContentType,
-			SizeBytes:     obj.SizeBytes,
-			Status:        string(obj.Status),
-			CreatedAtUnix: obj.CreatedAt.Unix(),
-			Category:      obj.Category,
-			Labels:        obj.Labels,
-			ExternalRef:   ref,
-		}
-	}
-
-	return &ListObjectsResponse{
-		Items:      respItems,
-		NextCursor: next,
-		TotalCount: total,
 	}, nil
 }

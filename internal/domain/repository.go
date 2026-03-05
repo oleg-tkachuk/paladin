@@ -43,6 +43,26 @@ type CategoryRepository interface {
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
 }
 
+// TenantRepository manages the lifecycle of registered tenants.
+type TenantRepository interface {
+	// Create upserts the tenant record. Returns the persisted tenant.
+	// Safe to call multiple times with the same tenant_id (idempotent).
+	Create(ctx context.Context, rec Tenant) (*Tenant, error)
+	// Get retrieves a tenant by its tenant_id. Returns ErrNotFound if absent.
+	Get(ctx context.Context, tenantID string) (*Tenant, error)
+	// Delete removes the tenant record. Returns (false, nil) if it did not exist.
+	Delete(ctx context.Context, tenantID string) (bool, error)
+	// HasActiveObjects returns true when the tenant has any objects that
+	// have not reached the hard_deleted status.
+	HasActiveObjects(ctx context.Context, tenantID string) (bool, error)
+	// UpdateMetadata performs a partial-update of a tenant's labels and tags.
+	// Labels are merged (provided keys overwrite; null values remove the key).
+	// Tags are replaced in full.
+	UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
+	// List returns tenants matching filter, cursor-paginated (created_at DESC).
+	List(ctx context.Context, filter TenantFilter, limit int, cursor string) ([]Tenant, string, int64, error)
+}
+
 // CategoryService defines the business logic for managing categories.
 type CategoryService interface {
 	Create(ctx context.Context, tenantID, slug, name string, description *string) (*Category, error)
@@ -54,6 +74,23 @@ type CategoryService interface {
 	GetStats(ctx context.Context, tenantID, slug string) (*CategoryStats, error)
 	// ListTenants returns a list of available tenants in the system.
 	ListTenants(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)
+}
+
+// TenantService defines business operations for managing tenants.
+type TenantService interface {
+	// Create provisions a new tenant. Re-creating the same tenant_id is
+	// idempotent and returns the existing record.
+	Create(ctx context.Context, tenantID string, displayName *string, labels map[string]string, tags []string) (*Tenant, error)
+	// Get retrieves a tenant. Returns ErrNotFound when absent.
+	Get(ctx context.Context, tenantID string) (*Tenant, error)
+	// Delete removes a tenant. Returns ErrConflict when the tenant still has
+	// active (non-hard-deleted) objects; callers must purge all data first.
+	Delete(ctx context.Context, tenantID string) error
+	// PatchMetadata performs a partial-update of labels (merge) and a full
+	// replacement of tags. Returns ErrNotFound if the tenant does not exist.
+	PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
+	// List returns tenants matching filter, cursor-paginated.
+	List(ctx context.Context, filter TenantFilter, limit int, cursor string) ([]Tenant, string, int64, error)
 }
 
 // CreateCategoryRequest carries validated input for CategoryService.Create.
