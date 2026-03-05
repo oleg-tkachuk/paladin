@@ -746,12 +746,12 @@ var _ = Describe("ObjectsService", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should return an error if the object is completed", func() {
+		It("should return an error if the object is hard deleted", func() {
 			tenantID := "test-tenant"
 			objID := uuid.New()
 
-			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
-			mockRepo.On("MarkSoftDeleted", mock.Anything, tenantID, objID).Return(true, nil)
+			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectHardDeleted}, nil)
+			// Mocking MarkSoftDeleted is no longer needed since Get will result in transition error
 
 			err := svc.Delete(ctx, tenantID, objID)
 			Expect(err).To(HaveOccurred())
