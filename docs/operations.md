@@ -1,51 +1,150 @@
 # Operations
 
-The `paladin` is designed to be deployed as a containerized microservice, primarily targeting Kubernetes environments.
+## Running Locally
 
-## 1. Build System & Tooling
+### Prerequisites
 
-The project uses [Task](https://taskfile.dev/) (`Taskfile.yaml`) as its primary task runner.
+- Go 1.23+
+- Task (`brew install go-task/tap/go-task`)
+- Docker + Docker Compose
+- A running PostgreSQL instance (or use the provided compose file)
+- A running SeaweedFS instance (or MinIO)
 
-**Common Commands:**
+### Start with Docker Compose
 
-- `task build`: Automatically bumps the patch version, writes build metadata, and triggers a Docker image build.
-- `task test`: Runs Go unit tests.
-- `task test:hurl`: Runs Hurl integration tests.
-- `task generate`: Generates Go code from Protobuf definitions, OpenAPI specs, and mock files.
-- `task up`: Stands up a local Docker Compose stack (`deploy/docker-compose.yaml`).
+```bash
+cd deploy/
+docker-compose up -d
+```
 
-## 2. Containerization (Docker)
+Compose services:
 
-The application is packaged using a multi-stage `Dockerfile` located at `deploy/Dockerfile`.
+- PostgreSQL with custom config (`postgres-custom.conf`)
+- SeaweedFS S3-compatible storage (configured via `seaweedfs-s3.json`)
 
-**Stages:**
+### Local Config
 
-1. **tools**: Fetches exact pinned versions of code generators (`protoc-gen-go`, `wire`, `oapi-codegen`).
-2. **builder**: Copies source code, downloads Go modules, runs `go generate`, and compiles the static binary. It aggressively strips debug symbols and injects build metadata (`version`, `commit`, `buildTime`) via `-ldflags`.
-3. **runtime**: Uses `gcr.io/distroless/static:nonroot` as the base image for maximum security and minimal attack surface.
+Use `configs/paladin.local.yaml` for local development:
 
-**Container Artifacts:**
+```bash
+./server --config configs/paladin.local.yaml
+```
 
-- The Go binary resides at `/app/bin/paladin`.
-- Configuration templates are loaded into `/app/configs`.
-- PostgreSQL migrations are bundled into `/app/migrations` allowing the application to optionally apply migrations on startup (or via init containers).
+### Run Migrations
 
-**Runtime Configuration:**
+Migrations use Goose. From the project root:
 
-- Processes run as user `nonroot:nonroot`.
-- Default exposed ports: `8080` (HTTP), `9090` (gRPC).
+```bash
+task db:migrate
+# or manually:
+go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DSN_HERE" up
+```
 
-## 3. Deployment Topology (Kubernetes)
+### Build and Run
 
-- **Namespace**: Typically deployed in the `paladin` namespace.
-- **Scaling**: Horizontally scalable. The service is stateless (state is wholly managed in Postgres/S3).
-- **Probes**: Kubernetes uses `/health/livez` and `/health/readyz` to manage pod routing.
-- **Secrets**: Bound to Kubernetes Secrets and resolved at startup using the internal configuration resolver.
+```bash
+# Build binary
+task build
 
-## 4. Database Migrations
+# Run directly
+./server --config configs/paladin.local.yaml
+```
 
-Migrations are written using `goose` and are strictly managed in the `migrations/` directory.
+### Run Tests
 
-- The migrations define the DDL schemas.
-- When new schema changes are added, they must be numbered sequentially (e.g., `011_new_feature.sql`).
-- It traverses these files during CI/CD to ensure identical state across environments.
+```bash
+# Unit tests
+task test
+
+# Integration tests (require running DB and S3)
+task test:integration
+```
+
+## Docker Build
+
+**Source:** `deploy/Dockerfile`
+
+Multi-stage build:
+
+1. Builder stage — compiles the Go binary
+2. Final stage — minimal image, copies binary + config
+
+```bash
+docker build -f deploy/Dockerfile -t paladin:dev .
+```
+
+Default runtime config path inside the image: `/app/configs/paladin.yaml`
+
+## Taskfile Commands
+
+Available tasks (from `Taskfile.yaml`):
+
+```bash
+task --list
+```
+
+Common tasks include:
+
+- `task build` — build the binary
+- `task test` — run unit tests
+- `task lint` — run golangci-lint
+- `task proto` — regenerate proto Go files
+- `task sqlc` — regenerate sqlc query files
+- `task wire` — regenerate Wire injection code
+- `task db:migrate` — run Goose migrations
+
+## Kubernetes Deployment
+
+In Kubernetes, the service is deployed with:
+
+- A `Deployment` running the compiled binary
+- A `ConfigMap` mounting the YAML config to `/app/configs/paladin.yaml`
+- `Secret` objects referenced in the config for DB password and S3 credentials
+- Two `Services`: one for HTTP (`:8080`), one for gRPC (`:9090`)
+- Liveness probe: `GET /health/livez`
+- Readiness probe: `GET /health/readyz`
+- Startup probe: `GET /health/startupz`
+
+For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
+
+## Source Index
+
+| File | Description |
+|---|---|
+| `cmd/server/main.go` | Binary entry point — calls `Execute()` |
+| `cmd/server/root.go` | Cobra root command — flag parsing, app initialization, signal handling |
+| `cmd/server/wire.go` | Wire provider declarations |
+| `cmd/server/wire_gen.go` | Wire-generated dependency injection graph |
+| `internal/config/types.go` | All config struct definitions |
+| `internal/config/config.go` | Config loader (YAML → struct) |
+| `internal/config/resolver.go` | Kubernetes secret resolver |
+| `internal/config/schema.cue` | CUE schema for config validation |
+| `internal/api/grpc/server.go` | gRPC server implementation |
+| `internal/api/http/router.go` | Gin HTTP router setup |
+| `internal/api/http/adapter.go` | OpenAPI → domain service adapter (all HTTP handler implementations) |
+| `internal/middleware/http_stack.go` | HTTP middleware chain setup |
+| `internal/middleware/grpc_chain.go` | gRPC interceptor chain setup |
+| `internal/middleware/auth.go` | HTTP tenant enforcement middleware |
+| `internal/middleware/ratelimit.go` | Per-tenant token bucket rate limiter |
+| `internal/middleware/audit_log.go` | HTTP audit logging middleware |
+| `internal/middleware/security_headers.go` | Security response headers |
+| `internal/middleware/request_size_limit.go` | Request body size enforcement |
+| `internal/service/object_service.go` | Core object lifecycle service |
+| `internal/service/category_service.go` | Category management service |
+| `internal/service/health.go` | Health & dependency check service |
+| `internal/service/system_service.go` | Admin config endpoint service |
+| `internal/service/policy.go` | Upload policy enforcement |
+| `internal/store/` | PostgreSQL repositories (sqlc-generated queries + wrappers) |
+| `internal/storage/` | S3 client adapter |
+| `internal/worker/reaper.go` | Background reaper goroutine |
+| `internal/metrics/metrics.go` | Prometheus metric definitions |
+| `internal/metrics/otel.go` | OpenTelemetry instrument definitions |
+| `migrations/001_init.sql` | Initial schema: objects, multipart_uploads, multipart_parts |
+| `migrations/003_harden_objects.sql` | RLS policies, triggers, CHECK constraints |
+| `migrations/004_v1_1_0_refactor.sql` | Status expansion, idempotency_keys table |
+| `migrations/007_audit_logs.sql` | audit_logs table |
+| `migrations/010_category_support.sql` | object_categories table, category/subpath columns |
+| `proto/paladin.proto` | gRPC service and message definitions |
+| `configs/paladin.yaml` | Default config (local environment) |
+| `deploy/Dockerfile` | Multi-stage Docker build |
+| `deploy/docker-compose.yaml` | Local development stack |

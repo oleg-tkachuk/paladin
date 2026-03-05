@@ -1,36 +1,37 @@
-# Paladin
+# Paladin (PALADIN)
 
-The **Paladin** is a robust, multi-tenant microservice acting as a metadata broker and orchestration layer over S3-compatible blob storage. It does not store binary blobs itself; instead, it tracks object lifecycles in PostgreSQL and issues secure, time-bound pre-signed URLs directly to clients for uploading and downloading content.
+**Paladin** is a multi-tenant object lifecycle management service. It acts as a control plane for S3-compatible storage: it manages object metadata, orchestrates pre-signed upload/download URLs, tracks multipart uploads, enforces tenant isolation, and handles lifecycle housekeeping. Binary data never passes through this service — only metadata and pre-signed URL coordination.
 
-## Features
+## Navigation
 
-- **Decoupled Storage**: Clients upload binary data directly to S3 using short-lived tokens, bypassing the control plane to save bandwidth.
-- **Strict Multi-Tenancy**: Data isolation is enforced at the database layer using PostgreSQL Row-Level Security (RLS).
-- **Multipart Upload Support**: Full orchestration for files up to 5TB via S3 multipart APIs.
-- **Idempotency**: Built-in support for safely retrying state-mutating requests.
-- **Audit Logging**: Immutable history of all read/write actions.
+| Document | Description |
+|---|---|
+| [Architecture](docs/architecture.md) | Service components, runtime entry points, and how everything wires together |
+| [Configuration](docs/configuration.md) | All configuration keys, their defaults, and environment variable mapping |
+| [API](docs/API.md) | Complete HTTP REST and gRPC API reference |
+| [Database](docs/database.md) | PostgreSQL schema, RLS policies, indexes, and migration history |
+| [Logging](docs/logging.md) | Structured logging setup, fields, and example log entries |
+| [Telemetry](docs/telemetry.md) | Prometheus metrics catalog, OpenTelemetry tracing, and health probes |
+| [Async & Jobs](docs/async.md) | Background reaper worker: pending objects, multipart uploads, audit log pruning |
+| [Security](docs/security.md) | Authentication, authorization, tenant isolation, and security headers |
+| [Diagrams](docs/diagrams.md) | C4 context, sequence, ER, and deployment diagrams |
+| [Operations](docs/operations.md) | Running locally, building Docker image, and Kubernetes deployment |
 
-## Documentation Navigation
+## Technology Stack
 
-Comprehensive technical documentation is split into domain-specific guides:
-
-- **[Architecture](docs/architecture.md)**: System design, boundaries, and codebase inventory.
-- **[Configuration](docs/configuration.md)**: Exhaustive breakdown of YAML configurations and environment mappings.
-- **[API](docs/api.md)**: Endpoints, contracts, and interaction patterns.
-- **[Database](docs/database.md)**: PostgreSQL schemas, RLS policies, and migrations.
-- **[Logging](docs/logging.md)**: Log taxonomy, structured fields, and redaction policies.
-- **[Telemetry](docs/telemetry.md)**: Prometheus metrics, OpenTelemetry spans, and Kubernetes health probes.
-- **[Async & Jobs](docs/async.md)**: Background workers (e.g., the Reaper for garbage collection).
-- **[Security](docs/security.md)**: Tenant isolation, authentication rules, and secret resolution.
-- **[Operations](docs/operations.md)**: Docker packaging, build pipelines, and Kubernetes deployment.
-- **[Diagrams (Mermaid)](docs/diagrams.md)**: Visual context, sequence, ER, and deployment diagrams.
-
-## Quick Start
-
-To run the full stack locally:
-
-```bash
-task up
-```
-
-Ensure you have your environment configuration securely populated before starting.
+| Component | Technology |
+|---|---|
+| Language | Go 1.23+ |
+| HTTP Framework | Gin (`github.com/gin-gonic/gin`) |
+| gRPC | `google.golang.org/grpc` |
+| CLI / Bootstrap | Cobra |
+| Dependency Injection | Google Wire |
+| Database | PostgreSQL (pgx/v5 + pgxpool) |
+| Object Storage | S3-compatible (SeaweedFS in local/staging) |
+| Migrations | Goose |
+| Logging | Zap (structured, JSON) |
+| Metrics | Prometheus (`promauto` + default Go runtime collector) |
+| Tracing | OpenTelemetry (OTLP gRPC/HTTP exporter) |
+| Config | YAML + Kubernetes Secrets |
+| Build | Taskfile |
+| Container | Multi-stage Dockerfile |

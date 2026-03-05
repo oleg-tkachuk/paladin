@@ -1,50 +1,96 @@
 # Telemetry
 
-The `paladin` utilizes a dual-stack configuration for observability: **Prometheus** for local/pull-based metrics and **OpenTelemetry (OTel)** for distributed tracing and OTLP metric exports.
+**Source:** `internal/metrics/metrics.go`, `internal/metrics/otel.go`, `internal/observability/`, `internal/api/http/router.go`
 
-## 1. Stack Components
+## Telemetry Stack
 
-- **Metrics Library:** `github.com/prometheus/client_golang` and `go.opentelemetry.io/otel/metric`
-- **Tracing Library:** `go.opentelemetry.io/otel/trace`
-- **Middleware:** Web frameworks and gRPC servers are instrumented via `otelhttp` and `otelgrpc`.
-- **Exporters:** Metrics and Traces pushed via OTLP (`otlpmetricgrpc`, `otlptracegrpc`) to an OpenTelemetry collector.
+| Component | Technology |
+|---|---|
+| Metrics (Prometheus) | `github.com/prometheus/client_golang` (`promauto`) |
+| Tracing & Metrics (OTel) | `go.opentelemetry.io/otel` |
+| OTLP Exporter | gRPC or HTTP to configurable collector endpoint |
+| Scrape Endpoint | `GET /metrics` (Prometheus text format) |
 
-## 2. Health & Readiness Probes
+## Prometheus Metrics Catalog
 
-Exposed unauthenticated to orchestrators (e.g., Kubernetes):
+All metrics are registered at package initialization via `promauto`. Metric names are prefixed with `paladin_`.
 
-- `GET /health/livez`: Basic liveness check. Asserts the server is accepting connections.
-- `GET /health/readyz`: Strict readiness check. Verifies the Postgres connection pool is healthy and the S3 backend responds to `HEAD Bucket` (`pingS3`).
-- `GET /health/startupz`: Used during the boot phase to grant the service time to warm up connections.
-
-The health endpoint payloads return a `status` top-level struct, including `dependencies` statuses detailing component latencies (`postgresql`, `seaweedfs`).
-
-## 3. Metrics Catalog
-
-The service defines custom application metrics (`internal/metrics/metrics.go` and `otel.go`).
-
-| Metric Name | Type | Labels | Description |
+| Metric | Type | Labels | Description |
 |---|---|---|---|
-| `paladin_object_operation_duration_seconds` | Histogram | `operation`, `status` | Latency and count of logical object operations |
-| `paladin_s3_operation_duration_seconds` | Histogram | `operation`, `status` | Latency and count of external S3 API calls |
-| `paladin_db_query_duration_seconds` | Histogram | `query`, `status` | Latency of internal database interactions |
-| `paladin_db_connections` | Gauge | `state` (`acquired`, `idle`, `max`, `total`) | Connection pool size monitoring |
-| `paladin_cache_operations_total` | Counter | `operation`, `result` (`hit`/`miss`) | Track internal cache effectiveness |
-| `paladin_rate_limiter_tenants` | Gauge | `state` | Track active vs max concurrent rate limiters |
-| `paladin_http_requests_total` | Counter | `method`, `path`, `status` | Raw HTTP inbound volume |
-| `paladin_http_request_duration_seconds` | Histogram | `method`, `path`, `status` | HTTP endpoint tail latencies |
-| `paladin_objects_total` | Gauge | `status` | Overall point-in-time counts of tracked metadata rows |
-| `paladin_multipart_uploads_total` | Gauge | `status` | Active/pending multipart upload workflows |
+| `paladin_object_operation_duration_seconds` | Histogram | `operation`, `status` | Duration of object service operations |
+| `paladin_s3_operation_duration_seconds` | Histogram | `operation`, `status` | Duration of S3 client operations |
+| `paladin_db_query_duration_seconds` | Histogram | `query`, `status` | Duration of PostgreSQL queries |
+| `paladin_db_connections` | Gauge | `state` (`acquired`, `idle`, `max`, `total`) | DB connection pool state |
+| `paladin_cache_operations_total` | Counter | `operation` (`get`/`set`/`delete`), `result` (`hit`/`miss`/`success`/`error`) | Cache operation counters |
+| `paladin_rate_limiter_tenants` | Gauge | `state` (`active`, `max`) | Active per-tenant rate limiter slots |
+| `paladin_http_requests_total` | Counter | `method`, `path`, `status` | Total HTTP requests by method/path/status |
+| `paladin_http_request_duration_seconds` | Histogram | `method`, `path`, `status` | HTTP request latency distribution |
+| `paladin_objects_total` | Gauge | `status` | Total objects by lifecycle status |
+| `paladin_multipart_uploads_total` | Gauge | `status` | Total multipart uploads by status |
 
-*Note: High cardinality fields like `tenant_id` are intentionally excluded from Prometheus labels to prevent TSDB explosion unless explicitly opted into via configuration.*
+### Histogram Bucket Boundaries
 
-## 4. Distributed Tracing
+| Metric | Buckets (seconds) |
+|---|---|
+| `paladin_object_operation_duration_seconds` | `.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10` |
+| `paladin_s3_operation_duration_seconds` | `.01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30` |
+| `paladin_db_query_duration_seconds` | `.001, .005, .01, .025, .05, .1, .25, .5, 1` |
+| `paladin_http_request_duration_seconds` | `.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5` |
 
-Tracing is initialized in `internal/observability/otel.go`.
+### Cardinality Notes
 
-**Span Structure:**
+- `paladin_http_requests_total` and `paladin_http_request_duration_seconds` use `path` as a label. High-cardinality dynamic paths (e.g. `/v1/objects/:id`) should be normalized to route templates in production to avoid metric explosion.
+- `paladin_db_query_duration_seconds` `query` label should be a named query identifier, not raw SQL.
 
-- Every HTTP/gRPC ingress creates an implicit root span (or continues a propagated trace).
-- `SpanContext` is pushed into the `context.Context` payload.
-- W3C Trace Context standards (`traceparent`, `tracestate`) are parsed from inbound HTTP headers to maintain linkage across microservice boundaries.
-- The logger automatically extracts and prints the `trace_id` for logs emitted within the span.
+## OpenTelemetry
+
+When `otel.enabled: true`:
+
+### Instruments
+
+All OTel instruments are registered in `internal/metrics/otel.go` under meter name `"github.com/oleg-tkachuk/paladin"`:
+
+| Instrument | Type | Unit | Description |
+|---|---|---|---|
+| `paladin_object_operation_duration_seconds` | Float64Histogram | `s` | Object operation durations |
+| `paladin_object_operations_total` | Int64Counter | — | Object operation count |
+| `paladin_s3_operation_duration_seconds` | Float64Histogram | `s` | S3 operation durations |
+| `paladin_s3_operations_total` | Int64Counter | — | S3 operation count |
+| `paladin_db_query_duration_seconds` | Float64Histogram | `s` | DB query durations |
+| `paladin_db_queries_total` | Int64Counter | — | DB query count |
+| `paladin_cache_operations_total` | Int64Counter | — | Cache operation count |
+
+### Tracing
+
+HTTP tracing middleware is enabled via `middleware.OTelHTTP()` when `otel.enabled: true` (applied in the HTTP middleware stack as step 10).
+
+- Span attributes include: HTTP method, URL path, response status code.
+- Trace context is propagated via standard W3C Trace-Context headers (`traceparent`, `tracestate`).
+
+### OTLP Exporter
+
+- **Protocol:** `grpc` or `http` (from `otel.protocol`)
+- **Endpoint:** `otel.endpoint` (default: `otel-collector:4317`)
+- **Insecure:** `otel.insecure: true` skips TLS (for local/dev)
+- **Resource attributes:** `service.name`, `deployment.environment`
+
+## Health Probes
+
+Health probes are registered directly on the Gin router (not behind auth or rate limiting).
+
+| Endpoint | Type | Description |
+|---|---|---|
+| `GET /health/livez` | Liveness | Always returns `200 OK` after process start |
+| `GET /health/readyz` | Readiness | Checks PostgreSQL ping + S3 HeadBucket; returns `503` if any dependency is unhealthy |
+| `GET /health/startupz` | Startup | Returns `503` until `atomic.Bool` is set by `app.Run()` after initialization |
+
+### Readiness Check Details
+
+The `HealthService.CheckReady()` method (`internal/service/health.go`) performs:
+
+1. PostgreSQL `Ping()` — latency measured and returned as `postgresql.latency_ms`
+2. S3 `HeadBucket()` — latency measured and returned as `seaweedfs.latency_ms`
+3. Circuit breaker state for each breaker — reported as `breakers` map
+4. Connection pool stats — reported as `pool_stats`
+
+Response body includes detailed dependency status suitable for monitoring dashboards.
