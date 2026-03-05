@@ -228,13 +228,13 @@ func ProvideHTTPServer(
 	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta, hs, sysSvc, appStarted)
 }
 
-func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService) *grpc.Server {
+func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService) *grpc.Server {
 	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 	srv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	grpcapi.RegisterPaladinServer(srv, grpcapi.NewServer(l, svc))
+	grpcapi.RegisterPaladinServer(srv, grpcapi.NewServer(l, svc, catSvc))
 	reflection.Register(srv)
 	return srv
 }

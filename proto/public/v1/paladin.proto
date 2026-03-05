@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package paladin.v1;
+package paladin.public.v1;
 
-option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc/public;publicapi";
 
 service Paladin {
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
@@ -26,9 +26,7 @@ service Paladin {
   rpc GetObjectStats(GetObjectStatsRequest) returns (GetObjectStatsResponse);
 }
 
-message GetObjectStatsRequest {
-  string tenant_id = 1;
-}
+message GetObjectStatsRequest {}
 
 message GetObjectStatsResponse {
   int64 total_count = 1;
@@ -41,9 +39,8 @@ message GetObjectStatsResponse {
 }
 
 message ListCategoriesRequest {
-  string tenant_id = 1;
-  int32 limit = 2;
-  string cursor = 3;
+  int32 limit = 1;
+  string cursor = 2;
 }
 
 message ListCategoriesResponse {
@@ -53,8 +50,7 @@ message ListCategoriesResponse {
 }
 
 message GetCategoryRequest {
-  string tenant_id = 1;
-  string slug = 2;
+  string slug = 1;
 }
 
 message GetCategoryResponse {
@@ -62,15 +58,13 @@ message GetCategoryResponse {
 }
 
 message CreateCategoryRequest {
-  string tenant_id = 1;
-  string slug = 2;
-  string name = 3;
-  optional string description = 4;
+  string slug = 1;
+  string name = 2;
+  optional string description = 3;
 }
 
 message DeleteCategoryRequest {
-  string tenant_id = 1;
-  string slug = 2;
+  string slug = 1;
 }
 
 message DeleteCategoryResponse {
@@ -78,8 +72,7 @@ message DeleteCategoryResponse {
 }
 
 message GetCategoryStatsRequest {
-  string tenant_id = 1;
-  string slug = 2;
+  string slug = 1;
 }
 
 message GetCategoryStatsResponse {
@@ -95,12 +88,11 @@ message Category {
 }
 
 message CreateObjectRequest {
-  string tenant_id = 1;
-  string content_type = 2;
-  int64 size_bytes = 3;
-  map<string, string> labels = 4;
-  string external_ref = 5;
-  string category = 6;
+  string content_type = 1;
+  int64 size_bytes = 2;
+  map<string, string> labels = 3;
+  string external_ref = 4;
+  string category = 5;
 }
 
 message CreateObjectResponse {
@@ -113,8 +105,7 @@ message CreateObjectResponse {
 }
 
 message GetObjectRequest {
-  string tenant_id = 1;
-  string object_id = 2;
+  string object_id = 1;
 }
 
 message GetObjectResponse {
@@ -143,8 +134,7 @@ message GetObjectMetaResponse {
 }
 
 message CompleteObjectRequest {
-  string tenant_id = 1;
-  string object_id = 2;
+  string object_id = 1;
 }
 
 message CompleteObjectResponse {
@@ -152,8 +142,7 @@ message CompleteObjectResponse {
 }
 
 message DeleteObjectRequest {
-  string tenant_id = 1;
-  string object_id = 2;
+  string object_id = 1;
 }
 
 message DeleteObjectResponse {
@@ -161,12 +150,11 @@ message DeleteObjectResponse {
 }
 
 message InitiateMultipartRequest {
-  string tenant_id = 1;
-  string content_type = 2;
-  int64 size_bytes = 3;
-  map<string, string> labels = 4;
-  string external_ref = 5;
-  string category = 6;
+  string content_type = 1;
+  int64 size_bytes = 2;
+  map<string, string> labels = 3;
+  string external_ref = 4;
+  string category = 5;
 }
 
 message InitiateMultipartResponse {
@@ -178,9 +166,8 @@ message InitiateMultipartResponse {
 }
 
 message SignPartRequest {
-  string tenant_id = 1;
-  string upload_id = 2;
-  int32 part_number = 3;
+  string upload_id = 1;
+  int32 part_number = 2;
 }
 
 message SignPartResponse {
@@ -190,9 +177,8 @@ message SignPartResponse {
 }
 
 message CompleteMultipartRequest {
-  string tenant_id = 1;
-  string upload_id = 2;
-  repeated CompleteMultipartPart parts = 3;
+  string upload_id = 1;
+  repeated CompleteMultipartPart parts = 2;
 }
 
 message CompleteMultipartPart {
@@ -206,8 +192,7 @@ message CompleteMultipartResponse {
 }
 
 message AbortMultipartRequest {
-  string tenant_id = 1;
-  string upload_id = 2;
+  string upload_id = 1;
 }
 
 message AbortMultipartResponse {

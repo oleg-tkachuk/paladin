@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.0
-// source: paladin.proto
+// source: public/v1/paladin.proto
 
-package grpcapi
+package publicapi
 
 import (
 	context "context"
@@ -19,21 +19,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Paladin_CreateObject_FullMethodName      = "/paladin.v1.Paladin/CreateObject"
-	Paladin_GetObject_FullMethodName         = "/paladin.v1.Paladin/GetObject"
-	Paladin_GetObjectMeta_FullMethodName     = "/paladin.v1.Paladin/GetObjectMeta"
-	Paladin_CompleteObject_FullMethodName    = "/paladin.v1.Paladin/CompleteObject"
-	Paladin_DeleteObject_FullMethodName      = "/paladin.v1.Paladin/DeleteObject"
-	Paladin_InitiateMultipart_FullMethodName = "/paladin.v1.Paladin/InitiateMultipart"
-	Paladin_SignPart_FullMethodName          = "/paladin.v1.Paladin/SignPart"
-	Paladin_CompleteMultipart_FullMethodName = "/paladin.v1.Paladin/CompleteMultipart"
-	Paladin_AbortMultipart_FullMethodName    = "/paladin.v1.Paladin/AbortMultipart"
-	Paladin_ListCategories_FullMethodName    = "/paladin.v1.Paladin/ListCategories"
-	Paladin_GetCategory_FullMethodName       = "/paladin.v1.Paladin/GetCategory"
-	Paladin_CreateCategory_FullMethodName    = "/paladin.v1.Paladin/CreateCategory"
-	Paladin_DeleteCategory_FullMethodName    = "/paladin.v1.Paladin/DeleteCategory"
-	Paladin_GetCategoryStats_FullMethodName  = "/paladin.v1.Paladin/GetCategoryStats"
-	Paladin_GetObjectStats_FullMethodName    = "/paladin.v1.Paladin/GetObjectStats"
+	Paladin_CreateObject_FullMethodName      = "/paladin.public.v1.Paladin/CreateObject"
+	Paladin_GetObject_FullMethodName         = "/paladin.public.v1.Paladin/GetObject"
+	Paladin_GetObjectMeta_FullMethodName     = "/paladin.public.v1.Paladin/GetObjectMeta"
+	Paladin_CompleteObject_FullMethodName    = "/paladin.public.v1.Paladin/CompleteObject"
+	Paladin_DeleteObject_FullMethodName      = "/paladin.public.v1.Paladin/DeleteObject"
+	Paladin_InitiateMultipart_FullMethodName = "/paladin.public.v1.Paladin/InitiateMultipart"
+	Paladin_SignPart_FullMethodName          = "/paladin.public.v1.Paladin/SignPart"
+	Paladin_CompleteMultipart_FullMethodName = "/paladin.public.v1.Paladin/CompleteMultipart"
+	Paladin_AbortMultipart_FullMethodName    = "/paladin.public.v1.Paladin/AbortMultipart"
+	Paladin_ListCategories_FullMethodName    = "/paladin.public.v1.Paladin/ListCategories"
+	Paladin_GetCategory_FullMethodName       = "/paladin.public.v1.Paladin/GetCategory"
+	Paladin_CreateCategory_FullMethodName    = "/paladin.public.v1.Paladin/CreateCategory"
+	Paladin_DeleteCategory_FullMethodName    = "/paladin.public.v1.Paladin/DeleteCategory"
+	Paladin_GetCategoryStats_FullMethodName  = "/paladin.public.v1.Paladin/GetCategoryStats"
+	Paladin_GetObjectStats_FullMethodName    = "/paladin.public.v1.Paladin/GetObjectStats"
 )
 
 // PaladinClient is the client API for Paladin service.
@@ -586,7 +586,7 @@ func _Paladin_GetObjectStats_Handler(srv interface{}, ctx context.Context, dec f
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Paladin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "paladin.v1.Paladin",
+	ServiceName: "paladin.public.v1.Paladin",
 	HandlerType: (*PaladinServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -651,5 +651,5 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "paladin.proto",
+	Metadata: "public/v1/paladin.proto",
 }

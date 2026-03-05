@@ -15,12 +15,114 @@ import (
 
 type Server struct {
 	UnimplementedPaladinServer
-	log *zap.Logger
-	svc domain.ObjectsService
+	log    *zap.Logger
+	svc    domain.ObjectsService
+	catSvc domain.CategoryService
 }
 
-func NewServer(log *zap.Logger, svc domain.ObjectsService) *Server {
-	return &Server{log: log, svc: svc}
+func NewServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService) *Server {
+	return &Server{log: log, svc: svc, catSvc: catSvc}
+}
+
+func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	items, next, total, err := s.catSvc.List(ctx, tenant, int(req.Limit), req.Cursor)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	respItems := make([]*Category, len(items))
+	for i, cat := range items {
+		respItems[i] = &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		}
+	}
+
+	return &ListCategoriesResponse{
+		Items:      respItems,
+		NextCursor: next,
+		TotalCount: total,
+	}, nil
+}
+
+func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	cat, err := s.catSvc.Get(ctx, tenant, req.Slug)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+
+	return &GetCategoryResponse{
+		Category: &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		},
+	}, nil
+}
+
+func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*GetCategoryResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	cat, err := s.catSvc.Create(ctx, tenant, req.Slug, req.Name, req.Description)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &GetCategoryResponse{
+		Category: &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		},
+	}, nil
+}
+
+func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	err := s.catSvc.Delete(ctx, tenant, req.Slug)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &DeleteCategoryResponse{Status: "deleted"}, nil
+}
+
+func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	stats, err := s.catSvc.GetStats(ctx, tenant, req.Slug)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &GetCategoryStatsResponse{
+		TotalCount: stats.TotalCount,
+		TotalSize:  stats.TotalSize,
+	}, nil
 }
 
 func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*CreateObjectResponse, error) {
@@ -228,6 +330,28 @@ func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest)
 	}
 
 	return &AbortMultipartResponse{Status: "aborted"}, nil
+}
+
+func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
+	tenant := req.TenantId
+	if tenant == "" {
+		tenant = utils.TenantIDFromContext(ctx, "default")
+	}
+
+	stats, err := s.svc.GetStats(ctx, tenant)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &GetObjectStatsResponse{
+		TotalCount:       stats.TotalCount,
+		TotalSize:        stats.TotalSize,
+		PendingCount:     stats.PendingCount,
+		UploadingCount:   stats.UploadingCount,
+		UploadedCount:    stats.UploadedCount,
+		CompleteCount:    stats.CompleteCount,
+		SoftDeletedCount: stats.SoftDeletedCount,
+	}, nil
 }
 
 func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
