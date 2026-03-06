@@ -122,6 +122,8 @@ type ObjectsRepository interface {
 	BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
+	BulkCreate(ctx context.Context, objects []Object) error
+	BulkPatch(ctx context.Context, tenantID string, items []BulkPatchItem) (int64, error)
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
 
 	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)

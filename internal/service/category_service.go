@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -21,6 +22,18 @@ func NewCategoryService(repo domain.CategoryRepository) domain.CategoryService {
 }
 
 func (s *categoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	// If slug contains slashes, check if parent categories exist
+	if lastSlash := strings.LastIndex(slug, "/"); lastSlash > 0 {
+		parentSlug := slug[:lastSlash]
+		exists, err := s.repo.Exists(ctx, tenantID, parentSlug)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.NotFound(fmt.Sprintf("parent category %q not found", parentSlug), nil)
+		}
+	}
+
 	cat := domain.Category{
 		ID:          uuid.New(),
 		TenantID:    tenantID,

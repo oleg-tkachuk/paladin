@@ -33,9 +33,11 @@ func (r *CachedCategoryRepo) Create(ctx context.Context, rec domain.Category) er
 		return err
 	}
 
-	// Invalidate exists cache
+	// Invalidate caches
 	existsKey := fmt.Sprintf("cat:exists:%s:%s", rec.TenantID, rec.Slug)
+	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
 	_ = r.cache.Delete(ctx, existsKey)
+	_ = r.cache.Delete(ctx, getKey)
 
 	return nil
 }

@@ -143,6 +143,8 @@ type ListObjectsFilter struct {
 	CreatedBefore *time.Time
 	// Category filters objects to a specific category slug. If nil, all categories are returned.
 	Category *string
+	// Recursive enables prefix matching for category slugs (e.g. 'docs' matches 'docs/invoices').
+	Recursive bool
 	// KeyPrefix is an optional prefix filter within tenant/category scope.
 	// The server validates that it cannot escape the tenant+category boundary.
 	KeyPrefix *string
@@ -153,8 +155,16 @@ type ListObjectsFilter struct {
 }
 
 type CategoryStats struct {
-	TotalCount int64
-	TotalSize  int64
+	TotalCount       int64
+	TotalSize        int64
+	SoftDeletedCount int64
+}
+
+// BulkPatchItem carries partial updates for a single object.
+type BulkPatchItem struct {
+	ID          uuid.UUID
+	Labels      map[string]string
+	ExternalRef *string
 }
 
 type CreateObjectResponse struct {
@@ -214,4 +224,20 @@ type Presigned struct {
 	Method    string            `json:"method"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	ExpiresAt time.Time         `json:"expires_at"`
+}
+
+// CreateObjectRequest carries validated input for ObjectsService.CreateSingle and BulkCreate.
+type CreateObjectRequest struct {
+	TenantID    string
+	Category    string
+	ContentType string
+	SizeBytes   int64
+	Labels      map[string]string
+	ExternalRef *string
+}
+
+// SignUploadItem carries input for ObjectsService.BulkSignUploads.
+type SignUploadItem struct {
+	ObjectID  uuid.UUID
+	UploadTTL int
 }

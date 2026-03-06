@@ -52,7 +52,6 @@ func (x *GetObjectStatsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectStatsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{0}
 }
@@ -95,7 +94,6 @@ func (x *GetObjectStatsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectStatsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{1}
 }
@@ -182,7 +180,6 @@ func (x *ListCategoriesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListCategoriesRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{2}
 }
@@ -235,7 +232,6 @@ func (x *ListCategoriesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListCategoriesResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{3}
 }
@@ -293,7 +289,6 @@ func (x *GetCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryRequest.ProtoReflect.Descriptor instead.
 func (*GetCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{4}
 }
@@ -337,7 +332,6 @@ func (x *GetCategoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryResponse.ProtoReflect.Descriptor instead.
 func (*GetCategoryResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{5}
 }
@@ -383,7 +377,6 @@ func (x *CreateCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateCategoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{6}
 }
@@ -441,7 +434,6 @@ func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteCategoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{7}
 }
@@ -485,7 +477,6 @@ func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteCategoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{8}
 }
@@ -529,7 +520,6 @@ func (x *GetCategoryStatsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{9}
 }
@@ -574,7 +564,6 @@ func (x *GetCategoryStatsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{10}
 }
@@ -628,7 +617,6 @@ func (x *Category) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Category.ProtoReflect.Descriptor instead.
 func (*Category) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{11}
 }
@@ -697,7 +685,6 @@ func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateObjectRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{12}
 }
@@ -774,7 +761,6 @@ func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateObjectResponse.ProtoReflect.Descriptor instead.
 func (*CreateObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{13}
 }
@@ -853,7 +839,6 @@ func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{14}
 }
@@ -906,7 +891,6 @@ func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{15}
 }
@@ -1021,7 +1005,6 @@ func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectMetaResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectMetaResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{16}
 }
@@ -1121,7 +1104,6 @@ func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*CompleteObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{17}
 }
@@ -1165,7 +1147,6 @@ func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*CompleteObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{18}
 }
@@ -1209,7 +1190,6 @@ func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{19}
 }
@@ -1253,7 +1233,6 @@ func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{20}
 }
@@ -1301,7 +1280,6 @@ func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InitiateMultipartRequest.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{21}
 }
@@ -1377,7 +1355,6 @@ func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InitiateMultipartResponse.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{22}
 }
@@ -1450,7 +1427,6 @@ func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignPartRequest.ProtoReflect.Descriptor instead.
 func (*SignPartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{23}
 }
@@ -1503,7 +1479,6 @@ func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignPartResponse.ProtoReflect.Descriptor instead.
 func (*SignPartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{24}
 }
@@ -1562,7 +1537,6 @@ func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartRequest.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{25}
 }
@@ -1614,7 +1588,6 @@ func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartPart.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartPart) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{26}
 }
@@ -1666,7 +1639,6 @@ func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartResponse.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{27}
 }
@@ -1717,7 +1689,6 @@ func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AbortMultipartRequest.ProtoReflect.Descriptor instead.
 func (*AbortMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{28}
 }
@@ -1761,7 +1732,6 @@ func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AbortMultipartResponse.ProtoReflect.Descriptor instead.
 func (*AbortMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{29}
 }
@@ -1809,7 +1779,6 @@ func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{30}
 }
@@ -1883,7 +1852,6 @@ func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListObjectsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{31}
 }
@@ -1949,7 +1917,6 @@ func (x *ListObjectItem) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectItem.ProtoReflect.Descriptor instead.
 func (*ListObjectItem) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{32}
 }

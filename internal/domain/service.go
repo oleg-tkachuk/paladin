@@ -24,6 +24,10 @@ type ObjectsService interface {
 	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error)
+	BulkCreate(ctx context.Context, tenantID string, items []CreateObjectRequest, idempotencyKey *string) ([]CreateObjectResponse, error)
+	BulkPatch(ctx context.Context, tenantID string, items []BulkPatchItem, idempotencyKey *string) (int64, error)
+	BulkSignUploads(ctx context.Context, tenantID string, items []SignUploadItem) ([]CreateObjectResponse, error)
+	BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*Object, error)
 	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
@@ -55,6 +59,7 @@ const (
 	ActionRead   Action = "read"
 	ActionUpdate Action = "update"
 	ActionDelete Action = "delete"
+	ActionPatch  Action = "patch"
 )
 
 // SystemConfig represents the sanitized system configuration for administrative display.

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -43,27 +41,10 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	}
 
 	createClient := func(endpoint string) (*s3.Client, error) {
-		resolved, err := url.Parse(endpoint)
-		if err != nil {
-			return nil, fmt.Errorf("invalid s3 endpoint: %w", err)
-		}
-
-		customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-			if strings.EqualFold(service, s3.ServiceID) {
-				return aws.Endpoint{
-					URL:               resolved.String(),
-					HostnameImmutable: true,
-					SigningRegion:     cfg.Region,
-				}, nil
-			}
-
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-		})
 
 		// Prepare configuration options
 		currentOptFns := []func(*awsconfig.LoadOptions) error{
 			awsconfig.WithRegion(cfg.Region),
-			awsconfig.WithEndpointResolver(customResolver),
 		}
 		currentOptFns = append(currentOptFns, optFns...)
 
@@ -73,6 +54,7 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 		}
 
 		return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
 			o.UsePathStyle = cfg.ForcePathStyle
 		}), nil
 	}

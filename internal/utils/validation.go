@@ -53,10 +53,16 @@ func ValidatePathSegment(segment string) error {
 	return nil
 }
 
-// ValidateCategorySlug checks a category slug against the strict path segment rules.
+// ValidateCategorySlug checks a category slug. It allows multiple path segments separated by '/'.
 func ValidateCategorySlug(slug string) error {
-	if err := ValidatePathSegment(slug); err != nil {
-		return fmt.Errorf("invalid category slug: %w", err)
+	if slug == "" {
+		return fmt.Errorf("category slug cannot be empty")
+	}
+	segments := strings.Split(slug, "/")
+	for _, segment := range segments {
+		if err := ValidatePathSegment(segment); err != nil {
+			return fmt.Errorf("invalid category segment %q: %w", segment, err)
+		}
 	}
 
 	return nil

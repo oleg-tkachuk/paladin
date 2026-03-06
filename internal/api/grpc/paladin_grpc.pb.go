@@ -41,6 +41,13 @@ const (
 	Paladin_DeleteTenant_FullMethodName        = "/paladin.v1.Paladin/DeleteTenant"
 	Paladin_ListTenants_FullMethodName         = "/paladin.v1.Paladin/ListTenants"
 	Paladin_PatchTenantMetadata_FullMethodName = "/paladin.v1.Paladin/PatchTenantMetadata"
+	Paladin_BulkCreateObjects_FullMethodName   = "/paladin.v1.Paladin/BulkCreateObjects"
+	Paladin_BulkDeleteObjects_FullMethodName   = "/paladin.v1.Paladin/BulkDeleteObjects"
+	Paladin_BulkRestoreObjects_FullMethodName  = "/paladin.v1.Paladin/BulkRestoreObjects"
+	Paladin_BulkPurgeObjects_FullMethodName    = "/paladin.v1.Paladin/BulkPurgeObjects"
+	Paladin_BulkSignUploads_FullMethodName     = "/paladin.v1.Paladin/BulkSignUploads"
+	Paladin_BulkCompleteObjects_FullMethodName = "/paladin.v1.Paladin/BulkCompleteObjects"
+	Paladin_BulkPatchObjects_FullMethodName    = "/paladin.v1.Paladin/BulkPatchObjects"
 )
 
 // PaladinClient is the client API for Paladin service.
@@ -71,6 +78,14 @@ type PaladinClient interface {
 	DeleteTenant(ctx context.Context, in *DeleteTenantRequest, opts ...grpc.CallOption) (*DeleteTenantResponse, error)
 	ListTenants(ctx context.Context, in *ListTenantsRequest, opts ...grpc.CallOption) (*ListTenantsResponse, error)
 	PatchTenantMetadata(ctx context.Context, in *PatchTenantMetadataRequest, opts ...grpc.CallOption) (*TenantResponse, error)
+	// Bulk operations
+	BulkCreateObjects(ctx context.Context, in *BulkCreateObjectsRequest, opts ...grpc.CallOption) (*BulkCreateObjectsResponse, error)
+	BulkDeleteObjects(ctx context.Context, in *BulkDeleteObjectsRequest, opts ...grpc.CallOption) (*BulkDeleteObjectsResponse, error)
+	BulkRestoreObjects(ctx context.Context, in *BulkRestoreObjectsRequest, opts ...grpc.CallOption) (*BulkRestoreObjectsResponse, error)
+	BulkPurgeObjects(ctx context.Context, in *BulkPurgeObjectsRequest, opts ...grpc.CallOption) (*BulkPurgeObjectsResponse, error)
+	BulkSignUploads(ctx context.Context, in *BulkSignUploadsRequest, opts ...grpc.CallOption) (*BulkSignUploadsResponse, error)
+	BulkCompleteObjects(ctx context.Context, in *BulkCompleteObjectsRequest, opts ...grpc.CallOption) (*BulkCompleteObjectsResponse, error)
+	BulkPatchObjects(ctx context.Context, in *BulkPatchObjectsRequest, opts ...grpc.CallOption) (*BulkPatchObjectsResponse, error)
 }
 
 type objectControlPlaneClient struct {
@@ -301,6 +316,76 @@ func (c *objectControlPlaneClient) PatchTenantMetadata(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *objectControlPlaneClient) BulkCreateObjects(ctx context.Context, in *BulkCreateObjectsRequest, opts ...grpc.CallOption) (*BulkCreateObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkCreateObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkCreateObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkDeleteObjects(ctx context.Context, in *BulkDeleteObjectsRequest, opts ...grpc.CallOption) (*BulkDeleteObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkDeleteObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkDeleteObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkRestoreObjects(ctx context.Context, in *BulkRestoreObjectsRequest, opts ...grpc.CallOption) (*BulkRestoreObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkRestoreObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkRestoreObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkPurgeObjects(ctx context.Context, in *BulkPurgeObjectsRequest, opts ...grpc.CallOption) (*BulkPurgeObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkPurgeObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkPurgeObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkSignUploads(ctx context.Context, in *BulkSignUploadsRequest, opts ...grpc.CallOption) (*BulkSignUploadsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkSignUploadsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkSignUploads_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkCompleteObjects(ctx context.Context, in *BulkCompleteObjectsRequest, opts ...grpc.CallOption) (*BulkCompleteObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkCompleteObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkCompleteObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) BulkPatchObjects(ctx context.Context, in *BulkPatchObjectsRequest, opts ...grpc.CallOption) (*BulkPatchObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BulkPatchObjectsResponse)
+	err := c.cc.Invoke(ctx, Paladin_BulkPatchObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaladinServer is the server API for Paladin service.
 // All implementations must embed UnimplementedPaladinServer
 // for forward compatibility.
@@ -329,6 +414,14 @@ type PaladinServer interface {
 	DeleteTenant(context.Context, *DeleteTenantRequest) (*DeleteTenantResponse, error)
 	ListTenants(context.Context, *ListTenantsRequest) (*ListTenantsResponse, error)
 	PatchTenantMetadata(context.Context, *PatchTenantMetadataRequest) (*TenantResponse, error)
+	// Bulk operations
+	BulkCreateObjects(context.Context, *BulkCreateObjectsRequest) (*BulkCreateObjectsResponse, error)
+	BulkDeleteObjects(context.Context, *BulkDeleteObjectsRequest) (*BulkDeleteObjectsResponse, error)
+	BulkRestoreObjects(context.Context, *BulkRestoreObjectsRequest) (*BulkRestoreObjectsResponse, error)
+	BulkPurgeObjects(context.Context, *BulkPurgeObjectsRequest) (*BulkPurgeObjectsResponse, error)
+	BulkSignUploads(context.Context, *BulkSignUploadsRequest) (*BulkSignUploadsResponse, error)
+	BulkCompleteObjects(context.Context, *BulkCompleteObjectsRequest) (*BulkCompleteObjectsResponse, error)
+	BulkPatchObjects(context.Context, *BulkPatchObjectsRequest) (*BulkPatchObjectsResponse, error)
 	mustEmbedUnimplementedPaladinServer()
 }
 
@@ -404,6 +497,27 @@ func (UnimplementedPaladinServer) ListTenants(context.Context, *ListTenantsReque
 }
 func (UnimplementedPaladinServer) PatchTenantMetadata(context.Context, *PatchTenantMetadataRequest) (*TenantResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PatchTenantMetadata not implemented")
+}
+func (UnimplementedPaladinServer) BulkCreateObjects(context.Context, *BulkCreateObjectsRequest) (*BulkCreateObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkCreateObjects not implemented")
+}
+func (UnimplementedPaladinServer) BulkDeleteObjects(context.Context, *BulkDeleteObjectsRequest) (*BulkDeleteObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkDeleteObjects not implemented")
+}
+func (UnimplementedPaladinServer) BulkRestoreObjects(context.Context, *BulkRestoreObjectsRequest) (*BulkRestoreObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkRestoreObjects not implemented")
+}
+func (UnimplementedPaladinServer) BulkPurgeObjects(context.Context, *BulkPurgeObjectsRequest) (*BulkPurgeObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkPurgeObjects not implemented")
+}
+func (UnimplementedPaladinServer) BulkSignUploads(context.Context, *BulkSignUploadsRequest) (*BulkSignUploadsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkSignUploads not implemented")
+}
+func (UnimplementedPaladinServer) BulkCompleteObjects(context.Context, *BulkCompleteObjectsRequest) (*BulkCompleteObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkCompleteObjects not implemented")
+}
+func (UnimplementedPaladinServer) BulkPatchObjects(context.Context, *BulkPatchObjectsRequest) (*BulkPatchObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BulkPatchObjects not implemented")
 }
 func (UnimplementedPaladinServer) mustEmbedUnimplementedPaladinServer() {}
 func (UnimplementedPaladinServer) testEmbeddedByValue()                            {}
@@ -822,6 +936,132 @@ func _Paladin_PatchTenantMetadata_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Paladin_BulkCreateObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkCreateObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkCreateObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkCreateObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkCreateObjects(ctx, req.(*BulkCreateObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkDeleteObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkDeleteObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkDeleteObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkDeleteObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkDeleteObjects(ctx, req.(*BulkDeleteObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkRestoreObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkRestoreObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkRestoreObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkRestoreObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkRestoreObjects(ctx, req.(*BulkRestoreObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkPurgeObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkPurgeObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkPurgeObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkPurgeObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkPurgeObjects(ctx, req.(*BulkPurgeObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkSignUploads_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkSignUploadsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkSignUploads(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkSignUploads_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkSignUploads(ctx, req.(*BulkSignUploadsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkCompleteObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkCompleteObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkCompleteObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkCompleteObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkCompleteObjects(ctx, req.(*BulkCompleteObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_BulkPatchObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkPatchObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).BulkPatchObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_BulkPatchObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).BulkPatchObjects(ctx, req.(*BulkPatchObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Paladin_ServiceDesc is the grpc.ServiceDesc for Paladin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -916,6 +1156,34 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PatchTenantMetadata",
 			Handler:    _Paladin_PatchTenantMetadata_Handler,
+		},
+		{
+			MethodName: "BulkCreateObjects",
+			Handler:    _Paladin_BulkCreateObjects_Handler,
+		},
+		{
+			MethodName: "BulkDeleteObjects",
+			Handler:    _Paladin_BulkDeleteObjects_Handler,
+		},
+		{
+			MethodName: "BulkRestoreObjects",
+			Handler:    _Paladin_BulkRestoreObjects_Handler,
+		},
+		{
+			MethodName: "BulkPurgeObjects",
+			Handler:    _Paladin_BulkPurgeObjects_Handler,
+		},
+		{
+			MethodName: "BulkSignUploads",
+			Handler:    _Paladin_BulkSignUploads_Handler,
+		},
+		{
+			MethodName: "BulkCompleteObjects",
+			Handler:    _Paladin_BulkCompleteObjects_Handler,
+		},
+		{
+			MethodName: "BulkPatchObjects",
+			Handler:    _Paladin_BulkPatchObjects_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -33,7 +33,94 @@ service Paladin {
   rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
   rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
   rpc PatchTenantMetadata(PatchTenantMetadataRequest) returns (TenantResponse);
+
+  // Bulk operations
+  rpc BulkCreateObjects(BulkCreateObjectsRequest) returns (BulkCreateObjectsResponse);
+  rpc BulkDeleteObjects(BulkDeleteObjectsRequest) returns (BulkDeleteObjectsResponse);
+  rpc BulkRestoreObjects(BulkRestoreObjectsRequest) returns (BulkRestoreObjectsResponse);
+  rpc BulkPurgeObjects(BulkPurgeObjectsRequest) returns (BulkPurgeObjectsResponse);
+  rpc BulkSignUploads(BulkSignUploadsRequest) returns (BulkSignUploadsResponse);
+  rpc BulkCompleteObjects(BulkCompleteObjectsRequest) returns (BulkCompleteObjectsResponse);
+  rpc BulkPatchObjects(BulkPatchObjectsRequest) returns (BulkPatchObjectsResponse);
 }
+
+message BulkCreateObjectsRequest {
+  string tenant_id = 1;
+  repeated CreateObjectRequest items = 2;
+  optional string idempotency_key = 3;
+}
+
+message BulkCreateObjectsResponse {
+  repeated CreateObjectResponse items = 1;
+}
+
+message BulkDeleteObjectsRequest {
+  string tenant_id = 1;
+  repeated string object_ids = 2;
+}
+
+message BulkDeleteObjectsResponse {
+  int64 count = 1;
+}
+
+message BulkRestoreObjectsRequest {
+  string tenant_id = 1;
+  repeated string object_ids = 2;
+}
+
+message BulkRestoreObjectsResponse {
+  int64 count = 1;
+}
+
+message BulkPurgeObjectsRequest {
+  string tenant_id = 1;
+  repeated string object_ids = 2;
+  optional string idempotency_key = 3;
+}
+
+message BulkPurgeObjectsResponse {
+  int64 count = 1;
+}
+
+message BulkSignUploadsRequest {
+  string tenant_id = 1;
+  repeated SignUploadItem items = 2;
+}
+
+message SignUploadItem {
+  string object_id = 1;
+  int32 upload_ttl = 2;
+}
+
+message BulkSignUploadsResponse {
+  repeated CreateObjectResponse items = 1;
+}
+
+message BulkCompleteObjectsRequest {
+  string tenant_id = 1;
+  repeated string object_ids = 2;
+}
+
+message BulkCompleteObjectsResponse {
+  repeated CompleteObjectResponse items = 1;
+}
+
+message BulkPatchObjectsRequest {
+  string tenant_id = 1;
+  repeated BulkPatchItem items = 2;
+  optional string idempotency_key = 3;
+}
+
+message BulkPatchItem {
+  string object_id = 1;
+  map<string, string> labels = 2;
+  optional string external_ref = 3;
+}
+
+message BulkPatchObjectsResponse {
+  int64 count = 1;
+}
+
 
 message GetObjectStatsRequest {
   string tenant_id = 1;
@@ -230,6 +317,7 @@ message ListObjectsRequest {
   optional string category = 4;
   optional string status = 5;
   optional string search = 6;
+  bool recursive = 7;
 }
 
 message ListObjectsResponse {

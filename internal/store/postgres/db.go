@@ -18,6 +18,7 @@ type PgxPool interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Ping(ctx context.Context) error
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 	Close()
 	Stat() *pgxpool.Stat
 	Config() *pgxpool.Config

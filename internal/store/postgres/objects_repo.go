@@ -271,6 +271,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		timestampPtrToPgtype(filter.CreatedBefore),
 		cursorTime,
 		filter.Category,
+		filter.Recursive,
 		filter.KeyPrefix,
 		filter.SortOrder,
 	)
@@ -360,6 +361,58 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 
 	return &result, nil
 }
+func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkCreateObject", status, start) }()
+
+	// We can use a transaction for multiple inserts if sqlc doesn't support bulk directly
+	// Or we can use pgx.Batch
+	batch := &pgx.Batch{}
+	for _, rec := range objects {
+		labels, err := marshalStringMap(rec.Labels)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("marshal labels for %s: %w", rec.ID, err)
+		}
+
+		batch.Queue(`INSERT INTO objects (
+			id, tenant_id, object_key, bucket, content_type, size_bytes,
+			checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+		)`,
+			uuidToPgtype(rec.ID),
+			rec.TenantID,
+			rec.ObjectKey,
+			rec.Bucket,
+			rec.ContentType,
+			rec.SizeBytes,
+			rec.ChecksumSHA256,
+			string(rec.Status),
+			timestampPtrToPgtype(rec.ExpiresAt),
+			labels,
+			rec.ExternalRef,
+			rec.Category,
+			rec.Subpath,
+		)
+	}
+
+	br := r.db.Pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for i := 0; i < len(objects); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			status = "error"
+			return MapPgError(err)
+		}
+	}
+
+	status = "success"
+	return nil
+}
+
 func (r *ObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	start := time.Now()
 	var status string
@@ -449,4 +502,52 @@ func (r *ObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.Ob
 		CompleteCount:    row.CompleteCount,
 		SoftDeletedCount: row.SoftDeletedCount,
 	}, nil
+}
+
+func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkPatchObject", status, start) }()
+
+	batch := &pgx.Batch{}
+	for _, item := range items {
+		if item.Labels != nil && item.ExternalRef != nil {
+			labelsJSON, err := marshalStringMap(item.Labels)
+			if err != nil {
+				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET labels = labels || $3, external_ref = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), labelsJSON, item.ExternalRef)
+		} else if item.Labels != nil {
+			labelsJSON, err := marshalStringMap(item.Labels)
+			if err != nil {
+				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET labels = labels || $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), labelsJSON)
+		} else if item.ExternalRef != nil {
+			batch.Queue(`UPDATE objects SET external_ref = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), item.ExternalRef)
+		}
+	}
+
+	if batch.Len() == 0 {
+		return 0, nil
+	}
+
+	br := r.db.Pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	var totalRows int64
+	for i := 0; i < batch.Len(); i++ {
+		ct, err := br.Exec()
+		if err != nil {
+			status = "error"
+			return totalRows, MapPgError(err)
+		}
+		totalRows += ct.RowsAffected()
+	}
+
+	status = "success"
+	return totalRows, nil
 }

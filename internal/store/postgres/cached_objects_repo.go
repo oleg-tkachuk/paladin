@@ -229,6 +229,21 @@ func (r *CachedObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid
 func (r *CachedObjectsRepo) CacheStats() cache.CacheStats {
 	return r.cache.Stats()
 }
+func (r *CachedObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) error {
+	err := r.repo.BulkCreate(ctx, objects)
+	if err != nil {
+		return err
+	}
+
+	// Cache the newly created objects
+	for _, rec := range objects {
+		cacheKey := fmt.Sprintf("obj:%s:%s", rec.TenantID, rec.ID.String())
+		_ = r.cache.Set(ctx, cacheKey, &rec, r.ttl)
+	}
+
+	return nil
+}
+
 func (r *CachedObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	rows, err := r.repo.BulkMarkSoftDeleted(ctx, tenantID, ids)
 	if err != nil {
@@ -276,4 +291,28 @@ func (r *CachedObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids
 
 func (r *CachedObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
 	return r.repo.GetStats(ctx, tenantID)
+}
+
+func (r *CachedObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
+	rows, err := r.repo.BulkPatch(ctx, tenantID, items)
+	if err != nil {
+		return 0, err
+	}
+
+	// Invalidate cache for all affected IDs
+	for _, item := range items {
+		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, item.ID.String())
+		_ = r.cache.Delete(ctx, cacheKey)
+
+		// Also invalidate by external_ref if we know it, or just let it expire.
+		// Since we don't know the OLD external_ref here without fetching,
+		// and the NEW one is in 'item.ExternalRef', we can at least invalidate the new one's cache key
+		// in case it was pointing to something else (unlikely but safe).
+		if item.ExternalRef != nil {
+			extKey := fmt.Sprintf("obj:ext:%s:%s", tenantID, *item.ExternalRef)
+			_ = r.cache.Delete(ctx, extKey)
+		}
+	}
+
+	return rows, nil
 }

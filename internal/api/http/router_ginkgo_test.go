@@ -100,6 +100,26 @@ func (m *MockObjectsService) BulkPurge(ctx context.Context, tenantID string, ids
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockObjectsService) BulkCreate(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string) ([]domain.CreateObjectResponse, error) {
+	args := m.Called(ctx, tenantID, items, idempotencyKey)
+	return args.Get(0).([]domain.CreateObjectResponse), args.Error(1)
+}
+
+func (m *MockObjectsService) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem, idempotencyKey *string) (int64, error) {
+	args := m.Called(ctx, tenantID, items, idempotencyKey)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockObjectsService) BulkSignUploads(ctx context.Context, tenantID string, items []domain.SignUploadItem) ([]domain.CreateObjectResponse, error) {
+	args := m.Called(ctx, tenantID, items)
+	return args.Get(0).([]domain.CreateObjectResponse), args.Error(1)
+}
+
+func (m *MockObjectsService) BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*domain.Object, error) {
+	args := m.Called(ctx, tenantID, ids)
+	return args.Get(0).([]*domain.Object), args.Error(1)
+}
+
 func (m *MockObjectsService) UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error {
 	args := m.Called(ctx, tenantID, id, status, idempotencyKey)
 

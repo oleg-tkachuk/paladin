@@ -40,6 +40,63 @@ func (_m *MockObjectsRepository) EXPECT() *MockObjectsRepository_Expecter {
 	return &MockObjectsRepository_Expecter{mock: &_m.Mock}
 }
 
+// BulkCreate provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) BulkCreate(ctx context.Context, objects []domain.Object) error {
+	ret := _mock.Called(ctx, objects)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkCreate")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []domain.Object) error); ok {
+		r0 = returnFunc(ctx, objects)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockObjectsRepository_BulkCreate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkCreate'
+type MockObjectsRepository_BulkCreate_Call struct {
+	*mock.Call
+}
+
+// BulkCreate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - objects []domain.Object
+func (_e *MockObjectsRepository_Expecter) BulkCreate(ctx interface{}, objects interface{}) *MockObjectsRepository_BulkCreate_Call {
+	return &MockObjectsRepository_BulkCreate_Call{Call: _e.mock.On("BulkCreate", ctx, objects)}
+}
+
+func (_c *MockObjectsRepository_BulkCreate_Call) Run(run func(ctx context.Context, objects []domain.Object)) *MockObjectsRepository_BulkCreate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []domain.Object
+		if args[1] != nil {
+			arg1 = args[1].([]domain.Object)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkCreate_Call) Return(err error) *MockObjectsRepository_BulkCreate_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkCreate_Call) RunAndReturn(run func(ctx context.Context, objects []domain.Object) error) *MockObjectsRepository_BulkCreate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BulkDelete provides a mock function for the type MockObjectsRepository
 func (_mock *MockObjectsRepository) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	ret := _mock.Called(ctx, tenantID, ids)
@@ -180,6 +237,78 @@ func (_c *MockObjectsRepository_BulkMarkSoftDeleted_Call) Return(n int64, err er
 }
 
 func (_c *MockObjectsRepository_BulkMarkSoftDeleted_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsRepository_BulkMarkSoftDeleted_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkPatch provides a mock function for the type MockObjectsRepository
+func (_mock *MockObjectsRepository) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, items)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkPatch")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.BulkPatchItem) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, items)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.BulkPatchItem) int64); ok {
+		r0 = returnFunc(ctx, tenantID, items)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []domain.BulkPatchItem) error); ok {
+		r1 = returnFunc(ctx, tenantID, items)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsRepository_BulkPatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkPatch'
+type MockObjectsRepository_BulkPatch_Call struct {
+	*mock.Call
+}
+
+// BulkPatch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - items []domain.BulkPatchItem
+func (_e *MockObjectsRepository_Expecter) BulkPatch(ctx interface{}, tenantID interface{}, items interface{}) *MockObjectsRepository_BulkPatch_Call {
+	return &MockObjectsRepository_BulkPatch_Call{Call: _e.mock.On("BulkPatch", ctx, tenantID, items)}
+}
+
+func (_c *MockObjectsRepository_BulkPatch_Call) Run(run func(ctx context.Context, tenantID string, items []domain.BulkPatchItem)) *MockObjectsRepository_BulkPatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []domain.BulkPatchItem
+		if args[2] != nil {
+			arg2 = args[2].([]domain.BulkPatchItem)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkPatch_Call) Return(n int64, err error) *MockObjectsRepository_BulkPatch_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsRepository_BulkPatch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error)) *MockObjectsRepository_BulkPatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

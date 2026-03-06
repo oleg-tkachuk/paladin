@@ -65,7 +65,7 @@ server:
 
   grpc:
     addr: "0.0.0.0:9090"
-    reflection_enabled: false
+    reflection_enabled: true
     max_recv_msg_size: 4194304 # 4 MiB
     max_send_msg_size: 4194304 # 4 MiB
 

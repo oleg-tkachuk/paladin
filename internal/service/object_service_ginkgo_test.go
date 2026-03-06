@@ -81,6 +81,16 @@ func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter doma
 	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
+func (m *MockObjectsRepo) BulkCreate(ctx context.Context, items []domain.Object) error {
+	args := m.Called(ctx, items)
+	return args.Error(0)
+}
+
+func (m *MockObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
+	args := m.Called(ctx, tenantID, items)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
 	args := m.Called(ctx, tenantID, id, labels, externalRef)
 

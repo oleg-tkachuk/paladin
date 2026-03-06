@@ -102,6 +102,160 @@ func (_c *MockObjectsService_AbortMultipart_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// BulkComplete provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*domain.Object, error) {
+	ret := _mock.Called(ctx, tenantID, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkComplete")
+	}
+
+	var r0 []*domain.Object
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) ([]*domain.Object, error)); ok {
+		return returnFunc(ctx, tenantID, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []uuid.UUID) []*domain.Object); ok {
+		r0 = returnFunc(ctx, tenantID, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*domain.Object)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []uuid.UUID) error); ok {
+		r1 = returnFunc(ctx, tenantID, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkComplete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkComplete'
+type MockObjectsService_BulkComplete_Call struct {
+	*mock.Call
+}
+
+// BulkComplete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - ids []uuid.UUID
+func (_e *MockObjectsService_Expecter) BulkComplete(ctx interface{}, tenantID interface{}, ids interface{}) *MockObjectsService_BulkComplete_Call {
+	return &MockObjectsService_BulkComplete_Call{Call: _e.mock.On("BulkComplete", ctx, tenantID, ids)}
+}
+
+func (_c *MockObjectsService_BulkComplete_Call) Run(run func(ctx context.Context, tenantID string, ids []uuid.UUID)) *MockObjectsService_BulkComplete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []uuid.UUID
+		if args[2] != nil {
+			arg2 = args[2].([]uuid.UUID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkComplete_Call) Return(objects []*domain.Object, err error) *MockObjectsService_BulkComplete_Call {
+	_c.Call.Return(objects, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkComplete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*domain.Object, error)) *MockObjectsService_BulkComplete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkCreate provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkCreate(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string) ([]domain.CreateObjectResponse, error) {
+	ret := _mock.Called(ctx, tenantID, items, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkCreate")
+	}
+
+	var r0 []domain.CreateObjectResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.CreateObjectRequest, *string) ([]domain.CreateObjectResponse, error)); ok {
+		return returnFunc(ctx, tenantID, items, idempotencyKey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.CreateObjectRequest, *string) []domain.CreateObjectResponse); ok {
+		r0 = returnFunc(ctx, tenantID, items, idempotencyKey)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.CreateObjectResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []domain.CreateObjectRequest, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, items, idempotencyKey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkCreate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkCreate'
+type MockObjectsService_BulkCreate_Call struct {
+	*mock.Call
+}
+
+// BulkCreate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - items []domain.CreateObjectRequest
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) BulkCreate(ctx interface{}, tenantID interface{}, items interface{}, idempotencyKey interface{}) *MockObjectsService_BulkCreate_Call {
+	return &MockObjectsService_BulkCreate_Call{Call: _e.mock.On("BulkCreate", ctx, tenantID, items, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_BulkCreate_Call) Run(run func(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string)) *MockObjectsService_BulkCreate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []domain.CreateObjectRequest
+		if args[2] != nil {
+			arg2 = args[2].([]domain.CreateObjectRequest)
+		}
+		var arg3 *string
+		if args[3] != nil {
+			arg3 = args[3].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkCreate_Call) Return(createObjectResponses []domain.CreateObjectResponse, err error) *MockObjectsService_BulkCreate_Call {
+	_c.Call.Return(createObjectResponses, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkCreate_Call) RunAndReturn(run func(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string) ([]domain.CreateObjectResponse, error)) *MockObjectsService_BulkCreate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BulkDelete provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
 	ret := _mock.Called(ctx, tenantID, ids)
@@ -170,6 +324,84 @@ func (_c *MockObjectsService_BulkDelete_Call) Return(n int64, err error) *MockOb
 }
 
 func (_c *MockObjectsService_BulkDelete_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsService_BulkDelete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkPatch provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem, idempotencyKey *string) (int64, error) {
+	ret := _mock.Called(ctx, tenantID, items, idempotencyKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkPatch")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.BulkPatchItem, *string) (int64, error)); ok {
+		return returnFunc(ctx, tenantID, items, idempotencyKey)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.BulkPatchItem, *string) int64); ok {
+		r0 = returnFunc(ctx, tenantID, items, idempotencyKey)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []domain.BulkPatchItem, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, items, idempotencyKey)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkPatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkPatch'
+type MockObjectsService_BulkPatch_Call struct {
+	*mock.Call
+}
+
+// BulkPatch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - items []domain.BulkPatchItem
+//   - idempotencyKey *string
+func (_e *MockObjectsService_Expecter) BulkPatch(ctx interface{}, tenantID interface{}, items interface{}, idempotencyKey interface{}) *MockObjectsService_BulkPatch_Call {
+	return &MockObjectsService_BulkPatch_Call{Call: _e.mock.On("BulkPatch", ctx, tenantID, items, idempotencyKey)}
+}
+
+func (_c *MockObjectsService_BulkPatch_Call) Run(run func(ctx context.Context, tenantID string, items []domain.BulkPatchItem, idempotencyKey *string)) *MockObjectsService_BulkPatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []domain.BulkPatchItem
+		if args[2] != nil {
+			arg2 = args[2].([]domain.BulkPatchItem)
+		}
+		var arg3 *string
+		if args[3] != nil {
+			arg3 = args[3].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkPatch_Call) Return(n int64, err error) *MockObjectsService_BulkPatch_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkPatch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, items []domain.BulkPatchItem, idempotencyKey *string) (int64, error)) *MockObjectsService_BulkPatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -320,6 +552,80 @@ func (_c *MockObjectsService_BulkRestore_Call) Return(n int64, err error) *MockO
 }
 
 func (_c *MockObjectsService_BulkRestore_Call) RunAndReturn(run func(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)) *MockObjectsService_BulkRestore_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// BulkSignUploads provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) BulkSignUploads(ctx context.Context, tenantID string, items []domain.SignUploadItem) ([]domain.CreateObjectResponse, error) {
+	ret := _mock.Called(ctx, tenantID, items)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BulkSignUploads")
+	}
+
+	var r0 []domain.CreateObjectResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.SignUploadItem) ([]domain.CreateObjectResponse, error)); ok {
+		return returnFunc(ctx, tenantID, items)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []domain.SignUploadItem) []domain.CreateObjectResponse); ok {
+		r0 = returnFunc(ctx, tenantID, items)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.CreateObjectResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []domain.SignUploadItem) error); ok {
+		r1 = returnFunc(ctx, tenantID, items)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockObjectsService_BulkSignUploads_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BulkSignUploads'
+type MockObjectsService_BulkSignUploads_Call struct {
+	*mock.Call
+}
+
+// BulkSignUploads is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - items []domain.SignUploadItem
+func (_e *MockObjectsService_Expecter) BulkSignUploads(ctx interface{}, tenantID interface{}, items interface{}) *MockObjectsService_BulkSignUploads_Call {
+	return &MockObjectsService_BulkSignUploads_Call{Call: _e.mock.On("BulkSignUploads", ctx, tenantID, items)}
+}
+
+func (_c *MockObjectsService_BulkSignUploads_Call) Run(run func(ctx context.Context, tenantID string, items []domain.SignUploadItem)) *MockObjectsService_BulkSignUploads_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []domain.SignUploadItem
+		if args[2] != nil {
+			arg2 = args[2].([]domain.SignUploadItem)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_BulkSignUploads_Call) Return(createObjectResponses []domain.CreateObjectResponse, err error) *MockObjectsService_BulkSignUploads_Call {
+	_c.Call.Return(createObjectResponses, err)
+	return _c
+}
+
+func (_c *MockObjectsService_BulkSignUploads_Call) RunAndReturn(run func(ctx context.Context, tenantID string, items []domain.SignUploadItem) ([]domain.CreateObjectResponse, error)) *MockObjectsService_BulkSignUploads_Call {
 	_c.Call.Return(run)
 	return _c
 }

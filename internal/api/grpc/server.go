@@ -218,6 +218,62 @@ func (s *ConnectServer) PatchTenantMetadata(ctx context.Context, req *connect.Re
 	return connect.NewResponse(res), nil
 }
 
+func (s *ConnectServer) BulkCreateObjects(ctx context.Context, req *connect.Request[BulkCreateObjectsRequest]) (*connect.Response[BulkCreateObjectsResponse], error) {
+	res, err := s.Server.BulkCreateObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkDeleteObjects(ctx context.Context, req *connect.Request[BulkDeleteObjectsRequest]) (*connect.Response[BulkDeleteObjectsResponse], error) {
+	res, err := s.Server.BulkDeleteObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkRestoreObjects(ctx context.Context, req *connect.Request[BulkRestoreObjectsRequest]) (*connect.Response[BulkRestoreObjectsResponse], error) {
+	res, err := s.Server.BulkRestoreObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkPurgeObjects(ctx context.Context, req *connect.Request[BulkPurgeObjectsRequest]) (*connect.Response[BulkPurgeObjectsResponse], error) {
+	res, err := s.Server.BulkPurgeObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkSignUploads(ctx context.Context, req *connect.Request[BulkSignUploadsRequest]) (*connect.Response[BulkSignUploadsResponse], error) {
+	res, err := s.Server.BulkSignUploads(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkCompleteObjects(ctx context.Context, req *connect.Request[BulkCompleteObjectsRequest]) (*connect.Response[BulkCompleteObjectsResponse], error) {
+	res, err := s.Server.BulkCompleteObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) BulkPatchObjects(ctx context.Context, req *connect.Request[BulkPatchObjectsRequest]) (*connect.Response[BulkPatchObjectsResponse], error) {
+	res, err := s.Server.BulkPatchObjects(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
 // PublicServer wraps the internal Server to satisfy the public API interface.
 type PublicServer struct {
 	publicapi.UnimplementedPaladinServer
@@ -525,6 +581,7 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 	filter := domain.ListObjectsFilter{
 		Category:  req.Category,
 		KeyPrefix: req.Search,
+		Recursive: req.Recursive,
 	}
 
 	if req.Status != nil {
@@ -742,6 +799,252 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 		NextCursor: nextCursor,
 		TotalCount: total,
 	}, nil
+}
+
+func (s *Server) BulkCreateObjects(ctx context.Context, req *BulkCreateObjectsRequest) (*BulkCreateObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	items := make([]domain.CreateObjectRequest, len(req.Items))
+	for i, item := range req.Items {
+		var externalRef *string
+		if item.ExternalRef != "" {
+			externalRef = &item.ExternalRef
+		}
+		items[i] = domain.CreateObjectRequest{
+			TenantID:    tenant,
+			Category:    item.Category,
+			ContentType: item.ContentType,
+			SizeBytes:   item.SizeBytes,
+			Labels:      item.Labels,
+			ExternalRef: externalRef,
+		}
+	}
+
+	var idempotencyKey *string
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		idempotencyKey = req.IdempotencyKey
+	}
+
+	res, err := s.svc.BulkCreate(ctx, tenant, items, idempotencyKey)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	respItems := make([]*CreateObjectResponse, len(res))
+	for i, item := range res {
+		respItems[i] = &CreateObjectResponse{
+			ObjectId:      item.ID.String(),
+			ObjectKey:     item.Key,
+			UploadUrl:     item.Upload.URL,
+			Method:        item.Upload.Method,
+			Headers:       item.Upload.Headers,
+			ExpiresAtUnix: item.Upload.ExpiresAt.Unix(),
+		}
+	}
+
+	return &BulkCreateObjectsResponse{Items: respItems}, nil
+}
+
+func (s *Server) BulkDeleteObjects(ctx context.Context, req *BulkDeleteObjectsRequest) (*BulkDeleteObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
+	for _, idStr := range req.ObjectIds {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
+		}
+		ids = append(ids, id)
+	}
+
+	count, err := s.svc.BulkDelete(ctx, tenant, ids)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &BulkDeleteObjectsResponse{Count: count}, nil
+}
+
+func (s *Server) BulkRestoreObjects(ctx context.Context, req *BulkRestoreObjectsRequest) (*BulkRestoreObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
+	for _, idStr := range req.ObjectIds {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
+		}
+		ids = append(ids, id)
+	}
+
+	count, err := s.svc.BulkRestore(ctx, tenant, ids)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &BulkRestoreObjectsResponse{Count: count}, nil
+}
+
+func (s *Server) BulkPurgeObjects(ctx context.Context, req *BulkPurgeObjectsRequest) (*BulkPurgeObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
+	for _, idStr := range req.ObjectIds {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
+		}
+		ids = append(ids, id)
+	}
+
+	var idempotencyKey *string
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		idempotencyKey = req.IdempotencyKey
+	}
+
+	count, err := s.svc.BulkPurge(ctx, tenant, ids, idempotencyKey)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &BulkPurgeObjectsResponse{Count: count}, nil
+}
+
+func (s *Server) BulkSignUploads(ctx context.Context, req *BulkSignUploadsRequest) (*BulkSignUploadsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	items := make([]domain.SignUploadItem, len(req.Items))
+	for i, item := range req.Items {
+		id, err := uuid.Parse(item.ObjectId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", item.ObjectId)
+		}
+		items[i] = domain.SignUploadItem{
+			ObjectID:  id,
+			UploadTTL: int(item.UploadTtl),
+		}
+	}
+
+	res, err := s.svc.BulkSignUploads(ctx, tenant, items)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	respItems := make([]*CreateObjectResponse, len(res))
+	for i, item := range res {
+		respItems[i] = &CreateObjectResponse{
+			ObjectId:      item.ID.String(),
+			ObjectKey:     item.Key,
+			UploadUrl:     item.Upload.URL,
+			Method:        item.Upload.Method,
+			Headers:       item.Upload.Headers,
+			ExpiresAtUnix: item.Upload.ExpiresAt.Unix(),
+		}
+	}
+
+	return &BulkSignUploadsResponse{Items: respItems}, nil
+}
+
+func (s *Server) BulkCompleteObjects(ctx context.Context, req *BulkCompleteObjectsRequest) (*BulkCompleteObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
+	for _, idStr := range req.ObjectIds {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
+		}
+		ids = append(ids, id)
+	}
+
+	res, err := s.svc.BulkComplete(ctx, tenant, ids)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	respItems := make([]*CompleteObjectResponse, len(res))
+	for i := range res {
+		respItems[i] = &CompleteObjectResponse{Status: "active"}
+	}
+
+	return &BulkCompleteObjectsResponse{Items: respItems}, nil
+}
+
+func (s *Server) BulkPatchObjects(ctx context.Context, req *BulkPatchObjectsRequest) (*BulkPatchObjectsResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	items := make([]domain.BulkPatchItem, len(req.Items))
+	for i, item := range req.Items {
+		id, err := uuid.Parse(item.ObjectId)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", item.ObjectId)
+		}
+
+		var extRef *string
+		if item.ExternalRef != nil && *item.ExternalRef != "" {
+			extRef = item.ExternalRef
+		}
+
+		items[i] = domain.BulkPatchItem{
+			ID:          id,
+			Labels:      item.Labels,
+			ExternalRef: extRef,
+		}
+	}
+
+	var idempotencyKey *string
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		idempotencyKey = req.IdempotencyKey
+	}
+
+	count, err := s.svc.BulkPatch(ctx, tenant, items, idempotencyKey)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &BulkPatchObjectsResponse{Count: count}, nil
 }
 
 func (s *Server) PatchTenantMetadata(ctx context.Context, req *PatchTenantMetadataRequest) (*TenantResponse, error) {

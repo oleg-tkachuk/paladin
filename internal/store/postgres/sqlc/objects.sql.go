@@ -276,11 +276,15 @@ WHERE tenant_id = $1
   AND ($5::timestamptz IS NULL OR created_at >= $5)
   AND ($6::timestamptz IS NULL OR created_at < $6)
   AND ($7::timestamptz IS NULL OR created_at < $7)
-  AND ($8::text IS NULL OR category = $8)
-  AND ($9::text IS NULL OR object_key LIKE $9 || '%')
+  AND (
+    $8::text IS NULL OR 
+    ($9::bool AND (category = $8 OR category LIKE $8 || '/%')) OR
+    category = $8
+  )
+  AND ($10::text IS NULL OR object_key LIKE $10 || '%')
 ORDER BY
-    CASE WHEN $10::text = 'asc' THEN created_at END ASC,
-    CASE WHEN $10::text = 'desc' OR $10::text IS NULL THEN created_at END DESC
+    CASE WHEN $11::text = 'asc' THEN created_at END ASC,
+    CASE WHEN $11::text = 'desc' OR $11::text IS NULL THEN created_at END DESC
 LIMIT $2
 `
 
@@ -289,7 +293,7 @@ type ListObjectsRow struct {
 	TotalCount int64  `json:"total_count"`
 }
 
-func (q *Queries) ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
 		limit,
@@ -299,6 +303,7 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID string, limit int32,
 		createdBefore,
 		cursor,
 		category,
+		recursive,
 		keyPrefix,
 		sortOrder,
 	)

@@ -66,7 +66,11 @@ WHERE tenant_id = $1
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR created_at >= sqlc.narg('created_after'))
   AND (sqlc.narg('created_before')::timestamptz IS NULL OR created_at < sqlc.narg('created_before'))
   AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
-  AND (sqlc.narg('category')::text IS NULL OR category = sqlc.narg('category'))
+  AND (
+    sqlc.narg('category')::text IS NULL OR 
+    (sqlc.arg('recursive')::bool AND (category = sqlc.narg('category') OR category LIKE sqlc.narg('category') || '/%')) OR
+    category = sqlc.narg('category')
+  )
   AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
 ORDER BY
     CASE WHEN sqlc.arg('sort_order')::text = 'asc' THEN created_at END ASC,

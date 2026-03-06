@@ -99,6 +99,27 @@ const (
 	// PaladinPatchTenantMetadataProcedure is the fully-qualified name of the
 	// Paladin's PatchTenantMetadata RPC.
 	PaladinPatchTenantMetadataProcedure = "/paladin.v1.Paladin/PatchTenantMetadata"
+	// PaladinBulkCreateObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkCreateObjects RPC.
+	PaladinBulkCreateObjectsProcedure = "/paladin.v1.Paladin/BulkCreateObjects"
+	// PaladinBulkDeleteObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkDeleteObjects RPC.
+	PaladinBulkDeleteObjectsProcedure = "/paladin.v1.Paladin/BulkDeleteObjects"
+	// PaladinBulkRestoreObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkRestoreObjects RPC.
+	PaladinBulkRestoreObjectsProcedure = "/paladin.v1.Paladin/BulkRestoreObjects"
+	// PaladinBulkPurgeObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkPurgeObjects RPC.
+	PaladinBulkPurgeObjectsProcedure = "/paladin.v1.Paladin/BulkPurgeObjects"
+	// PaladinBulkSignUploadsProcedure is the fully-qualified name of the
+	// Paladin's BulkSignUploads RPC.
+	PaladinBulkSignUploadsProcedure = "/paladin.v1.Paladin/BulkSignUploads"
+	// PaladinBulkCompleteObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkCompleteObjects RPC.
+	PaladinBulkCompleteObjectsProcedure = "/paladin.v1.Paladin/BulkCompleteObjects"
+	// PaladinBulkPatchObjectsProcedure is the fully-qualified name of the
+	// Paladin's BulkPatchObjects RPC.
+	PaladinBulkPatchObjectsProcedure = "/paladin.v1.Paladin/BulkPatchObjects"
 )
 
 // PaladinClient is a client for the paladin.v1.Paladin service.
@@ -127,6 +148,14 @@ type PaladinClient interface {
 	DeleteTenant(context.Context, *connect.Request[grpc.DeleteTenantRequest]) (*connect.Response[grpc.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[grpc.ListTenantsRequest]) (*connect.Response[grpc.ListTenantsResponse], error)
 	PatchTenantMetadata(context.Context, *connect.Request[grpc.PatchTenantMetadataRequest]) (*connect.Response[grpc.TenantResponse], error)
+	// Bulk operations
+	BulkCreateObjects(context.Context, *connect.Request[grpc.BulkCreateObjectsRequest]) (*connect.Response[grpc.BulkCreateObjectsResponse], error)
+	BulkDeleteObjects(context.Context, *connect.Request[grpc.BulkDeleteObjectsRequest]) (*connect.Response[grpc.BulkDeleteObjectsResponse], error)
+	BulkRestoreObjects(context.Context, *connect.Request[grpc.BulkRestoreObjectsRequest]) (*connect.Response[grpc.BulkRestoreObjectsResponse], error)
+	BulkPurgeObjects(context.Context, *connect.Request[grpc.BulkPurgeObjectsRequest]) (*connect.Response[grpc.BulkPurgeObjectsResponse], error)
+	BulkSignUploads(context.Context, *connect.Request[grpc.BulkSignUploadsRequest]) (*connect.Response[grpc.BulkSignUploadsResponse], error)
+	BulkCompleteObjects(context.Context, *connect.Request[grpc.BulkCompleteObjectsRequest]) (*connect.Response[grpc.BulkCompleteObjectsResponse], error)
+	BulkPatchObjects(context.Context, *connect.Request[grpc.BulkPatchObjectsRequest]) (*connect.Response[grpc.BulkPatchObjectsResponse], error)
 }
 
 // NewPaladinClient constructs a client for the paladin.v1.Paladin service. By
@@ -272,6 +301,48 @@ func NewPaladinClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(objectControlPlaneMethods.ByName("PatchTenantMetadata")),
 			connect.WithClientOptions(opts...),
 		),
+		bulkCreateObjects: connect.NewClient[grpc.BulkCreateObjectsRequest, grpc.BulkCreateObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkCreateObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkCreateObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkDeleteObjects: connect.NewClient[grpc.BulkDeleteObjectsRequest, grpc.BulkDeleteObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkDeleteObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkDeleteObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkRestoreObjects: connect.NewClient[grpc.BulkRestoreObjectsRequest, grpc.BulkRestoreObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkRestoreObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkRestoreObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkPurgeObjects: connect.NewClient[grpc.BulkPurgeObjectsRequest, grpc.BulkPurgeObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkPurgeObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkPurgeObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkSignUploads: connect.NewClient[grpc.BulkSignUploadsRequest, grpc.BulkSignUploadsResponse](
+			httpClient,
+			baseURL+PaladinBulkSignUploadsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkSignUploads")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkCompleteObjects: connect.NewClient[grpc.BulkCompleteObjectsRequest, grpc.BulkCompleteObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkCompleteObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkCompleteObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkPatchObjects: connect.NewClient[grpc.BulkPatchObjectsRequest, grpc.BulkPatchObjectsResponse](
+			httpClient,
+			baseURL+PaladinBulkPatchObjectsProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("BulkPatchObjects")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -299,6 +370,13 @@ type objectControlPlaneClient struct {
 	deleteTenant        *connect.Client[grpc.DeleteTenantRequest, grpc.DeleteTenantResponse]
 	listTenants         *connect.Client[grpc.ListTenantsRequest, grpc.ListTenantsResponse]
 	patchTenantMetadata *connect.Client[grpc.PatchTenantMetadataRequest, grpc.TenantResponse]
+	bulkCreateObjects   *connect.Client[grpc.BulkCreateObjectsRequest, grpc.BulkCreateObjectsResponse]
+	bulkDeleteObjects   *connect.Client[grpc.BulkDeleteObjectsRequest, grpc.BulkDeleteObjectsResponse]
+	bulkRestoreObjects  *connect.Client[grpc.BulkRestoreObjectsRequest, grpc.BulkRestoreObjectsResponse]
+	bulkPurgeObjects    *connect.Client[grpc.BulkPurgeObjectsRequest, grpc.BulkPurgeObjectsResponse]
+	bulkSignUploads     *connect.Client[grpc.BulkSignUploadsRequest, grpc.BulkSignUploadsResponse]
+	bulkCompleteObjects *connect.Client[grpc.BulkCompleteObjectsRequest, grpc.BulkCompleteObjectsResponse]
+	bulkPatchObjects    *connect.Client[grpc.BulkPatchObjectsRequest, grpc.BulkPatchObjectsResponse]
 }
 
 // CreateObject calls paladin.v1.Paladin.CreateObject.
@@ -411,6 +489,41 @@ func (c *objectControlPlaneClient) PatchTenantMetadata(ctx context.Context, req 
 	return c.patchTenantMetadata.CallUnary(ctx, req)
 }
 
+// BulkCreateObjects calls paladin.v1.Paladin.BulkCreateObjects.
+func (c *objectControlPlaneClient) BulkCreateObjects(ctx context.Context, req *connect.Request[grpc.BulkCreateObjectsRequest]) (*connect.Response[grpc.BulkCreateObjectsResponse], error) {
+	return c.bulkCreateObjects.CallUnary(ctx, req)
+}
+
+// BulkDeleteObjects calls paladin.v1.Paladin.BulkDeleteObjects.
+func (c *objectControlPlaneClient) BulkDeleteObjects(ctx context.Context, req *connect.Request[grpc.BulkDeleteObjectsRequest]) (*connect.Response[grpc.BulkDeleteObjectsResponse], error) {
+	return c.bulkDeleteObjects.CallUnary(ctx, req)
+}
+
+// BulkRestoreObjects calls paladin.v1.Paladin.BulkRestoreObjects.
+func (c *objectControlPlaneClient) BulkRestoreObjects(ctx context.Context, req *connect.Request[grpc.BulkRestoreObjectsRequest]) (*connect.Response[grpc.BulkRestoreObjectsResponse], error) {
+	return c.bulkRestoreObjects.CallUnary(ctx, req)
+}
+
+// BulkPurgeObjects calls paladin.v1.Paladin.BulkPurgeObjects.
+func (c *objectControlPlaneClient) BulkPurgeObjects(ctx context.Context, req *connect.Request[grpc.BulkPurgeObjectsRequest]) (*connect.Response[grpc.BulkPurgeObjectsResponse], error) {
+	return c.bulkPurgeObjects.CallUnary(ctx, req)
+}
+
+// BulkSignUploads calls paladin.v1.Paladin.BulkSignUploads.
+func (c *objectControlPlaneClient) BulkSignUploads(ctx context.Context, req *connect.Request[grpc.BulkSignUploadsRequest]) (*connect.Response[grpc.BulkSignUploadsResponse], error) {
+	return c.bulkSignUploads.CallUnary(ctx, req)
+}
+
+// BulkCompleteObjects calls paladin.v1.Paladin.BulkCompleteObjects.
+func (c *objectControlPlaneClient) BulkCompleteObjects(ctx context.Context, req *connect.Request[grpc.BulkCompleteObjectsRequest]) (*connect.Response[grpc.BulkCompleteObjectsResponse], error) {
+	return c.bulkCompleteObjects.CallUnary(ctx, req)
+}
+
+// BulkPatchObjects calls paladin.v1.Paladin.BulkPatchObjects.
+func (c *objectControlPlaneClient) BulkPatchObjects(ctx context.Context, req *connect.Request[grpc.BulkPatchObjectsRequest]) (*connect.Response[grpc.BulkPatchObjectsResponse], error) {
+	return c.bulkPatchObjects.CallUnary(ctx, req)
+}
+
 // PaladinHandler is an implementation of the paladin.v1.Paladin service.
 type PaladinHandler interface {
 	CreateObject(context.Context, *connect.Request[grpc.CreateObjectRequest]) (*connect.Response[grpc.CreateObjectResponse], error)
@@ -437,6 +550,14 @@ type PaladinHandler interface {
 	DeleteTenant(context.Context, *connect.Request[grpc.DeleteTenantRequest]) (*connect.Response[grpc.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[grpc.ListTenantsRequest]) (*connect.Response[grpc.ListTenantsResponse], error)
 	PatchTenantMetadata(context.Context, *connect.Request[grpc.PatchTenantMetadataRequest]) (*connect.Response[grpc.TenantResponse], error)
+	// Bulk operations
+	BulkCreateObjects(context.Context, *connect.Request[grpc.BulkCreateObjectsRequest]) (*connect.Response[grpc.BulkCreateObjectsResponse], error)
+	BulkDeleteObjects(context.Context, *connect.Request[grpc.BulkDeleteObjectsRequest]) (*connect.Response[grpc.BulkDeleteObjectsResponse], error)
+	BulkRestoreObjects(context.Context, *connect.Request[grpc.BulkRestoreObjectsRequest]) (*connect.Response[grpc.BulkRestoreObjectsResponse], error)
+	BulkPurgeObjects(context.Context, *connect.Request[grpc.BulkPurgeObjectsRequest]) (*connect.Response[grpc.BulkPurgeObjectsResponse], error)
+	BulkSignUploads(context.Context, *connect.Request[grpc.BulkSignUploadsRequest]) (*connect.Response[grpc.BulkSignUploadsResponse], error)
+	BulkCompleteObjects(context.Context, *connect.Request[grpc.BulkCompleteObjectsRequest]) (*connect.Response[grpc.BulkCompleteObjectsResponse], error)
+	BulkPatchObjects(context.Context, *connect.Request[grpc.BulkPatchObjectsRequest]) (*connect.Response[grpc.BulkPatchObjectsResponse], error)
 }
 
 // NewPaladinHandler builds an HTTP handler from the service implementation. It returns
@@ -578,6 +699,48 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(objectControlPlaneMethods.ByName("PatchTenantMetadata")),
 		connect.WithHandlerOptions(opts...),
 	)
+	objectControlPlaneBulkCreateObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkCreateObjectsProcedure,
+		svc.BulkCreateObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkCreateObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkDeleteObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkDeleteObjectsProcedure,
+		svc.BulkDeleteObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkDeleteObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkRestoreObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkRestoreObjectsProcedure,
+		svc.BulkRestoreObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkRestoreObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkPurgeObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkPurgeObjectsProcedure,
+		svc.BulkPurgeObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkPurgeObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkSignUploadsHandler := connect.NewUnaryHandler(
+		PaladinBulkSignUploadsProcedure,
+		svc.BulkSignUploads,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkSignUploads")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkCompleteObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkCompleteObjectsProcedure,
+		svc.BulkCompleteObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkCompleteObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneBulkPatchObjectsHandler := connect.NewUnaryHandler(
+		PaladinBulkPatchObjectsProcedure,
+		svc.BulkPatchObjects,
+		connect.WithSchema(objectControlPlaneMethods.ByName("BulkPatchObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.Paladin/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PaladinCreateObjectProcedure:
@@ -624,6 +787,20 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 			objectControlPlaneListTenantsHandler.ServeHTTP(w, r)
 		case PaladinPatchTenantMetadataProcedure:
 			objectControlPlanePatchTenantMetadataHandler.ServeHTTP(w, r)
+		case PaladinBulkCreateObjectsProcedure:
+			objectControlPlaneBulkCreateObjectsHandler.ServeHTTP(w, r)
+		case PaladinBulkDeleteObjectsProcedure:
+			objectControlPlaneBulkDeleteObjectsHandler.ServeHTTP(w, r)
+		case PaladinBulkRestoreObjectsProcedure:
+			objectControlPlaneBulkRestoreObjectsHandler.ServeHTTP(w, r)
+		case PaladinBulkPurgeObjectsProcedure:
+			objectControlPlaneBulkPurgeObjectsHandler.ServeHTTP(w, r)
+		case PaladinBulkSignUploadsProcedure:
+			objectControlPlaneBulkSignUploadsHandler.ServeHTTP(w, r)
+		case PaladinBulkCompleteObjectsProcedure:
+			objectControlPlaneBulkCompleteObjectsHandler.ServeHTTP(w, r)
+		case PaladinBulkPatchObjectsProcedure:
+			objectControlPlaneBulkPatchObjectsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -719,4 +896,32 @@ func (UnimplementedPaladinHandler) ListTenants(context.Context, *connect.Request
 
 func (UnimplementedPaladinHandler) PatchTenantMetadata(context.Context, *connect.Request[grpc.PatchTenantMetadataRequest]) (*connect.Response[grpc.TenantResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.PatchTenantMetadata is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkCreateObjects(context.Context, *connect.Request[grpc.BulkCreateObjectsRequest]) (*connect.Response[grpc.BulkCreateObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkCreateObjects is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkDeleteObjects(context.Context, *connect.Request[grpc.BulkDeleteObjectsRequest]) (*connect.Response[grpc.BulkDeleteObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkDeleteObjects is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkRestoreObjects(context.Context, *connect.Request[grpc.BulkRestoreObjectsRequest]) (*connect.Response[grpc.BulkRestoreObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkRestoreObjects is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkPurgeObjects(context.Context, *connect.Request[grpc.BulkPurgeObjectsRequest]) (*connect.Response[grpc.BulkPurgeObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkPurgeObjects is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkSignUploads(context.Context, *connect.Request[grpc.BulkSignUploadsRequest]) (*connect.Response[grpc.BulkSignUploadsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkSignUploads is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkCompleteObjects(context.Context, *connect.Request[grpc.BulkCompleteObjectsRequest]) (*connect.Response[grpc.BulkCompleteObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkCompleteObjects is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) BulkPatchObjects(context.Context, *connect.Request[grpc.BulkPatchObjectsRequest]) (*connect.Response[grpc.BulkPatchObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.BulkPatchObjects is not implemented"))
 }
