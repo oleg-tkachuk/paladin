@@ -54,12 +54,20 @@ type Tenant struct {
 	UpdatedAt time.Time
 }
 
-// TenantFilter holds optional filter criteria for listing tenants.
-type TenantFilter struct {
+// ListTenantsFilter holds optional filter criteria for listing tenants.
+type ListTenantsFilter struct {
 	// LabelSelector matches tenants whose labels contain all provided key-value pairs.
 	LabelSelector map[string]string
 	// TagSelector matches tenants that have at least one of the provided tags.
 	TagSelector []string
+	// Search matches tenants by ID or DisplayName.
+	Search *string
+	// Sorting
+	SortBy    string
+	SortOrder string
+
+	Limit  int
+	Cursor string
 }
 
 type Object struct {
@@ -139,6 +147,7 @@ type IdempotencyRecord struct {
 type ListObjectsFilter struct {
 	Status        *ObjectStatus
 	ExternalRef   *string
+	Search        *string
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
 	// Category filters objects to a specific category slug. If nil, all categories are returned.
@@ -152,6 +161,20 @@ type ListObjectsFilter struct {
 	// Sorting
 	SortBy    string // e.g. "created_at"
 	SortOrder string // "asc" or "desc"
+
+	Limit  int
+	Cursor string
+}
+
+// ListCategoriesFilter holds pagination state for listing categories.
+type ListCategoriesFilter struct {
+	Limit  int
+	Cursor string
+	// Search matches categories by slug or name.
+	Search *string
+	// Sorting
+	SortBy    string
+	SortOrder string
 }
 
 type CategoryStats struct {

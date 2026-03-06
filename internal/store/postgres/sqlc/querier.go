@@ -40,13 +40,13 @@ type Querier interface {
 	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
-	ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error)
+	ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ListExpiredPendingObjectsRow, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error)
-	ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, tenantID string, status string, externalRef string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category string, recursive bool, keyPrefix string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error)
 	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
-	ListTenantsPaginated(ctx context.Context, column1 pgtype.Timestamptz, column2 []byte, column3 []string, limit int32) ([]ListTenantsPaginatedRow, error)
+	ListTenantsPaginated(ctx context.Context, cursor pgtype.Timestamptz, labelSelector []byte, tagSelector []string, search string, sortBy string, sortOrder string, limitVal int32) ([]ListTenantsPaginatedRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
 	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
 	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)

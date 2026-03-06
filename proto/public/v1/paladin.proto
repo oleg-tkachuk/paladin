@@ -49,6 +49,9 @@ message GetObjectStatsResponse {
 message ListCategoriesRequest {
   int32 limit = 1;
   string cursor = 2;
+  optional string search = 3;
+  optional string sort_by = 4;
+  optional string sort_order = 5;
 }
 
 message ListCategoriesResponse {
@@ -213,6 +216,9 @@ message ListObjectsRequest {
   optional string category = 3;
   optional string status = 4;
   optional string search = 5;
+  bool recursive = 6;
+  optional string sort_by = 7;
+  optional string sort_order = 8;
 }
 
 message ListObjectsResponse {

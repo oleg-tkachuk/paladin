@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 const (
@@ -242,95 +244,98 @@ func (r *TenantRepo) UpdateMetadata(ctx context.Context, tenantID string, labels
 
 // List returns a page of tenants matching filter, ordered by created_at DESC.
 // cursor is an RFC3339-encoded timestamp; pass "" for the first page.
-func (r *TenantRepo) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
-	// Encode the cursor as a pgtype.Timestamptz (nil = no cursor).
+func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error) {
+	limit := filter.Limit
+	cursor := filter.Cursor
+	start := time.Now()
+	var opStatus string
+	defer func() { metrics.RecordDbQuery(ctx, "ListTenants", opStatus, start) }()
+
 	var pgCursor pgtype.Timestamptz
 	if cursor != "" {
 		t, err := time.Parse(time.RFC3339, cursor)
 		if err != nil {
-			return nil, "", 0, fmt.Errorf("list tenants: invalid cursor: %w", err)
+			opStatus = "error"
+			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
 		}
-
 		pgCursor = timestampToPgtype(t)
 	}
 
-	// Encode the label filter as JSON (nil = no filter).
 	var labelFilterJSON []byte
 	if len(filter.LabelSelector) > 0 {
-		b, err := json.Marshal(filter.LabelSelector)
+		var err error
+		labelFilterJSON, err = json.Marshal(filter.LabelSelector)
 		if err != nil {
-			return nil, "", 0, fmt.Errorf("list tenants: marshal label selector: %w", err)
+			opStatus = "error"
+			return nil, "", 0, fmt.Errorf("marshal label filter: %w", err)
 		}
-
-		labelFilterJSON = b
 	}
 
-	// Tag filter: nil = no filter (pass nil to pgx so the query sees NULL).
-	var tagFilter []string
-	if len(filter.TagSelector) > 0 {
-		tagFilter = filter.TagSelector
+	var search string
+	if filter.Search != nil {
+		search = *filter.Search
 	}
 
-	rows, err := r.db.Pool.Query(ctx, listTenantsQuery,
+	rows, err := r.db.Queries.ListTenantsPaginated(ctx,
 		pgCursor,
 		labelFilterJSON,
-		tagFilter,
-		int32(limit+1), // fetch one extra to determine next cursor
+		filter.TagSelector,
+		search,
+		filter.SortBy,
+		filter.SortOrder,
+		int32(limit+1),
 	)
 	if err != nil {
+		opStatus = "error"
 		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
 	}
-	defer rows.Close()
 
-	var tenants []domain.Tenant
 	var totalCount int64
-
-	for rows.Next() {
-		var t domain.Tenant
-		var rawID pgtype.UUID
-		var displayName *string
-		var labelsJSON []byte
-		var tags []string
-
-		if err := rows.Scan(&rawID, &t.TenantID, &displayName, &labelsJSON, &tags, &t.CreatedAt, &t.UpdatedAt, &totalCount); err != nil {
-			return nil, "", 0, fmt.Errorf("list tenants: scan row: %w", err)
-		}
-
-		id, err := uuidFromPgtype(rawID)
-		if err != nil {
-			return nil, "", 0, fmt.Errorf("list tenants: parse id: %w", err)
-		}
-
-		t.ID = id
-		t.DisplayName = displayName
-
-		if len(labelsJSON) > 0 {
-			if err := json.Unmarshal(labelsJSON, &t.Labels); err != nil {
-				return nil, "", 0, fmt.Errorf("list tenants: parse labels: %w", err)
-			}
-		}
-
-		if t.Labels == nil {
-			t.Labels = make(map[string]string)
-		}
-
-		t.Tags = tags
-		if t.Tags == nil {
-			t.Tags = []string{}
-		}
-
-		tenants = append(tenants, t)
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
+	out := make([]domain.Tenant, 0, len(rows))
+	for _, row := range rows {
+		t, err := MapTenantToDomain(row)
+		if err != nil {
+			opStatus = "error"
+			return nil, "", 0, fmt.Errorf("map tenant: %w", err)
+		}
+		out = append(out, t)
 	}
 
 	nextCursor := ""
-	if limit > 0 && len(tenants) > limit {
-		nextCursor = tenants[limit-1].CreatedAt.Format(time.RFC3339)
-		tenants = tenants[:limit]
+	if limit > 0 && len(out) > limit {
+		nextCursor = out[limit-1].CreatedAt.Format(time.RFC3339)
+		out = out[:limit]
 	}
 
-	return tenants, nextCursor, totalCount, nil
+	opStatus = "success"
+	return out, nextCursor, totalCount, nil
+}
+
+// MapTenantToDomain converts a SQLC row to a domain Tenant.
+func MapTenantToDomain(row sqlc.ListTenantsPaginatedRow) (domain.Tenant, error) {
+	id, err := uuidFromPgtype(row.ID)
+	if err != nil {
+		return domain.Tenant{}, err
+	}
+
+	var labels map[string]string
+	if len(row.Labels) > 0 {
+		if err := json.Unmarshal(row.Labels, &labels); err != nil {
+			return domain.Tenant{}, err
+		}
+	}
+
+	return domain.Tenant{
+		ID:          id,
+		TenantID:    row.TenantID,
+		DisplayName: row.DisplayName,
+		Labels:      labels,
+		Tags:        row.Tags,
+		CreatedAt:   timestampFromPgtype(row.CreatedAt),
+		UpdatedAt:   timestampFromPgtype(row.UpdatedAt),
+	}, nil
 }

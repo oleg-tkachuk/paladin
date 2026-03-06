@@ -464,9 +464,11 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		CreatedBefore: params.CreatedBefore,
 		SortBy:        string(safeDeref(params.Sort, api.CreatedAt)),
 		SortOrder:     string(safeDeref(params.Order, api.Desc)),
+		Limit:         limit,
+		Cursor:        cursor,
 	}
 
-	items, next, totalCount, err := s.svc.List(c.Request.Context(), tenantID(c), filter, limit, cursor)
+	items, next, total, err := s.svc.List(c.Request.Context(), tenantID(c), filter)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -478,23 +480,19 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		out[i] = mapObjectCommon(&item)
 	}
 
-	// Determine if there are more results
-	hasMore := next != ""
-	var nextCursor *string
-	if hasMore {
-		nextCursor = &next
+	var nextPtr *string
+	if next != "" {
+		nextPtr = &next
 	}
 
-	resp := api.ListObjectsResponse{
+	c.JSON(http.StatusOK, api.ListObjectsResponse{
 		Items: out,
 		Pagination: api.Pagination{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-			TotalCount: totalCount,
+			NextCursor: nextPtr,
+			HasMore:    next != "",
+			TotalCount: total,
 		},
-	}
-
-	c.JSON(http.StatusOK, resp)
+	})
 }
 
 func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id api.ObjectID, params api.SignObjectDownloadParams) {
@@ -871,25 +869,24 @@ func (s *OpenAPIAdapter) ListTenants(c *gin.Context, params api.ListTenantsParam
 		cursor = *params.Cursor
 	}
 
-	tenants, next, totalCount, err := s.catSvc.ListTenants(c.Request.Context(), limit, cursor)
+	tenants, next, total, err := s.catSvc.ListTenants(c.Request.Context(), limit, cursor)
 	if err != nil {
 		respondWithError(c, 0, err)
 
 		return
 	}
 
-	hasMore := next != ""
-	var nextCursor *string
-	if hasMore {
-		nextCursor = &next
+	var nextPtr *string
+	if next != "" {
+		nextPtr = &next
 	}
 
 	c.JSON(http.StatusOK, api.ListTenantsResponse{
 		Items: tenants,
 		Pagination: api.Pagination{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-			TotalCount: totalCount,
+			NextCursor: nextPtr,
+			HasMore:    next != "",
+			TotalCount: total,
 		},
 	})
 }
@@ -1046,7 +1043,12 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 		cursor = *params.Cursor
 	}
 
-	items, next, totalCount, err := s.catSvc.List(c.Request.Context(), tenantID(c), limit, cursor)
+	filter := domain.ListCategoriesFilter{
+		Limit:  limit,
+		Cursor: cursor,
+	}
+
+	items, next, total, err := s.catSvc.List(c.Request.Context(), tenantID(c), filter)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -1058,22 +1060,19 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 		out[i] = mapCategory(item)
 	}
 
-	hasMore := next != ""
-	var nextCursor *string
-	if hasMore {
-		nextCursor = &next
+	var nextPtr *string
+	if next != "" {
+		nextPtr = &next
 	}
 
-	resp := api.ListCategoriesResponse{
+	c.JSON(http.StatusOK, api.ListCategoriesResponse{
 		Items: out,
 		Pagination: api.Pagination{
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-			TotalCount: totalCount,
+			NextCursor: nextPtr,
+			HasMore:    next != "",
+			TotalCount: total,
 		},
-	}
-
-	c.JSON(http.StatusOK, resp)
+	})
 }
 
 func (s *OpenAPIAdapter) CreateCategory(c *gin.Context, params api.CreateCategoryParams) {

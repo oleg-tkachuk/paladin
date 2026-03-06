@@ -3,6 +3,7 @@ module github.com/oleg-tkachuk/paladin
 go 1.25.5
 
 require (
+	connectrpc.com/connect v1.19.1
 	cuelang.org/go v0.16.0
 	github.com/aws/aws-sdk-go-v2 v1.41.3
 	github.com/aws/aws-sdk-go-v2/config v1.32.11
@@ -51,7 +52,6 @@ require (
 )
 
 require (
-	connectrpc.com/connect v1.19.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/gammazero/deque v1.2.1 // indirect
@@ -228,7 +228,7 @@ require (
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/net v0.51.0
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect

@@ -28,7 +28,6 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	labels, err := marshalStringMap(rec.Labels)
 	if err != nil {
 		status = "error"
-
 		return fmt.Errorf("marshal labels: %w", err)
 	}
 
@@ -55,6 +54,56 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	}
 
 	return MapPgError(err)
+}
+
+func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "BulkCreateObject", status, start) }()
+
+	batch := &pgx.Batch{}
+	for _, rec := range objects {
+		labels, err := marshalStringMap(rec.Labels)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("marshal labels for %s: %w", rec.ID, err)
+		}
+
+		batch.Queue(`INSERT INTO objects (
+			id, tenant_id, object_key, bucket, content_type, size_bytes,
+			checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+		)`,
+			uuidToPgtype(rec.ID),
+			rec.TenantID,
+			rec.ObjectKey,
+			rec.Bucket,
+			rec.ContentType,
+			rec.SizeBytes,
+			rec.ChecksumSHA256,
+			string(rec.Status),
+			timestampPtrToPgtype(rec.ExpiresAt),
+			labels,
+			rec.ExternalRef,
+			rec.Category,
+			rec.Subpath,
+		)
+	}
+
+	br := r.db.Pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for i := 0; i < len(objects); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			status = "error"
+			return MapPgError(err)
+		}
+	}
+
+	status = "success"
+	return nil
 }
 
 func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error) {
@@ -212,7 +261,6 @@ func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid
 
 		return false, MapPgError(err)
 	}
-	// UpdateObjectStatus is :execrows
 	opStatus = "success"
 
 	return rows > 0, nil
@@ -242,52 +290,63 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 	return &result, nil
 }
 
-func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	var cursorTime pgtype.Timestamptz
-	if cursor != "" {
-		t, err := time.Parse(time.RFC3339, cursor)
-		if err != nil {
-			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
-		}
-		cursorTime = timestampToPgtype(t)
-	}
-
-	var statusPtr *string
-	if filter.Status != nil {
-		s := string(*filter.Status)
-		statusPtr = &s
-	}
-
+func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
 	start := time.Now()
 	var opStatus string
 	defer func() { metrics.RecordDbQuery(ctx, "ListObjects", opStatus, start) }()
 
+	var status string
+	if filter.Status != nil {
+		status = string(*filter.Status)
+	}
+
+	var extRef string
+	if filter.ExternalRef != nil {
+		extRef = *filter.ExternalRef
+	}
+
+	var cat string
+	if filter.Category != nil {
+		cat = *filter.Category
+	}
+
+	var keyPrefix string
+	if filter.KeyPrefix != nil {
+		keyPrefix = *filter.KeyPrefix
+	}
+
+	var cursorTime pgtype.Timestamptz
+	if filter.Cursor != "" {
+		t, err := time.Parse(time.RFC3339Nano, filter.Cursor)
+		if err == nil {
+			cursorTime = timestampToPgtype(t)
+		}
+	}
+
 	rows, err := r.db.Queries.ListObjects(ctx,
 		tenantID,
-		int32(limit+1), // Fetch one extra to determine if there's a next page
-		statusPtr,
-		filter.ExternalRef,
+		status,
+		extRef,
 		timestampPtrToPgtype(filter.CreatedAfter),
 		timestampPtrToPgtype(filter.CreatedBefore),
 		cursorTime,
-		filter.Category,
+		cat,
 		filter.Recursive,
-		filter.KeyPrefix,
+		keyPrefix,
+		filter.SortBy,
 		filter.SortOrder,
+		int32(filter.Limit+1),
 	)
 	if err != nil {
 		opStatus = "error"
-
 		return nil, "", 0, MapPgError(err)
 	}
 
-	var totalCount int64
-	if len(rows) > 0 {
-		totalCount = rows[0].TotalCount
-	}
-
 	out := make([]domain.Object, 0, len(rows))
-	for _, row := range rows {
+	for i, row := range rows {
+		if i == filter.Limit {
+			break
+		}
 		obj, err := MapObjectToDomain(row.Object)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map object: %w", err)
@@ -295,122 +354,19 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		out = append(out, obj)
 	}
 
-	nextCursor := ""
-	if limit > 0 && len(out) > limit {
-		nextCursor = out[limit-1].CreatedAt.Format(time.RFC3339)
-		out = out[:limit]
+	var nextCursor string
+	if len(rows) > filter.Limit {
+		last := rows[filter.Limit-1]
+		nextCursor = last.Object.CreatedAt.Time.Format(time.RFC3339Nano)
+	}
+
+	var total int64
+	if len(rows) > 0 {
+		total = rows[0].TotalCount
 	}
 
 	opStatus = "success"
-
-	return out, nextCursor, totalCount, nil
-}
-
-func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	var obj sqlc.Object
-	var err error
-
-	start := time.Now()
-	var status string
-	defer func() { metrics.RecordDbQuery(ctx, "PatchObject", status, start) }()
-
-	// Determine which query to use based on what's being patched
-	if labels != nil && externalRef != nil {
-		var labelsJSON []byte
-		labelsJSON, err = marshalStringMap(labels)
-		if err != nil {
-			status = "error"
-
-			return nil, fmt.Errorf("marshal labels: %w", err)
-		}
-		row, errPkg := r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
-		err = errPkg
-		obj = row.Object
-	} else if labels != nil {
-		var labelsJSON []byte
-		labelsJSON, err = marshalStringMap(labels)
-		if err != nil {
-			status = "error"
-
-			return nil, fmt.Errorf("marshal labels: %w", err)
-		}
-		row, errPkg := r.db.Queries.PatchObjectLabels(ctx, tenantID, uuidToPgtype(id), labelsJSON)
-		err = errPkg
-		obj = row.Object
-	} else if externalRef != nil {
-		row, errPkg := r.db.Queries.PatchObjectExternalRef(ctx, tenantID, uuidToPgtype(id), externalRef)
-		err = errPkg
-		obj = row.Object
-	} else {
-		// Nothing to patch, just fetch the current object
-		status = "success"
-
-		return r.Get(ctx, tenantID, id)
-	}
-
-	if err != nil {
-		status = "error"
-
-		return nil, MapPgError(err)
-	}
-
-	result, err := MapObjectToDomain(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	return &result, nil
-}
-func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) error {
-	start := time.Now()
-	var status string
-	defer func() { metrics.RecordDbQuery(ctx, "BulkCreateObject", status, start) }()
-
-	// We can use a transaction for multiple inserts if sqlc doesn't support bulk directly
-	// Or we can use pgx.Batch
-	batch := &pgx.Batch{}
-	for _, rec := range objects {
-		labels, err := marshalStringMap(rec.Labels)
-		if err != nil {
-			status = "error"
-			return fmt.Errorf("marshal labels for %s: %w", rec.ID, err)
-		}
-
-		batch.Queue(`INSERT INTO objects (
-			id, tenant_id, object_key, bucket, content_type, size_bytes,
-			checksum_sha256, status, expires_at, labels, external_ref, category, subpath
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-		)`,
-			uuidToPgtype(rec.ID),
-			rec.TenantID,
-			rec.ObjectKey,
-			rec.Bucket,
-			rec.ContentType,
-			rec.SizeBytes,
-			rec.ChecksumSHA256,
-			string(rec.Status),
-			timestampPtrToPgtype(rec.ExpiresAt),
-			labels,
-			rec.ExternalRef,
-			rec.Category,
-			rec.Subpath,
-		)
-	}
-
-	br := r.db.Pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for i := 0; i < len(objects); i++ {
-		_, err := br.Exec()
-		if err != nil {
-			status = "error"
-			return MapPgError(err)
-		}
-	}
-
-	status = "success"
-	return nil
+	return out, nextCursor, total, nil
 }
 
 func (r *ObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
@@ -550,4 +506,60 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 
 	status = "success"
 	return totalRows, nil
+}
+
+func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
+	var obj sqlc.Object
+	var err error
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "PatchObject", status, start) }()
+
+	// Determine which query to use based on what's being patched
+	if labels != nil && externalRef != nil {
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
+		if err != nil {
+			status = "error"
+
+			return nil, fmt.Errorf("marshal labels: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectLabelsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, externalRef)
+		err = errPkg
+		obj = row.Object
+	} else if labels != nil {
+		var labelsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
+		if err != nil {
+			status = "error"
+
+			return nil, fmt.Errorf("marshal labels: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectLabels(ctx, tenantID, uuidToPgtype(id), labelsJSON)
+		err = errPkg
+		obj = row.Object
+	} else if externalRef != nil {
+		row, errPkg := r.db.Queries.PatchObjectExternalRef(ctx, tenantID, uuidToPgtype(id), externalRef)
+		err = errPkg
+		obj = row.Object
+	} else {
+		// Nothing to patch, just fetch the current object
+		status = "success"
+
+		return r.Get(ctx, tenantID, id)
+	}
+
+	if err != nil {
+		status = "error"
+
+		return nil, MapPgError(err)
+	}
+
+	result, err := MapObjectToDomain(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }

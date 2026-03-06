@@ -67,8 +67,8 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 }
 
 // List delegates to underlying repo (no caching for list)
-func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	return r.repo.List(ctx, tenantID, limit, cursor)
+func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	return r.repo.List(ctx, tenantID, filter)
 }
 
 // Delete removes a category and invalidates related caches

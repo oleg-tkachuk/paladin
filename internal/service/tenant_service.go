@@ -124,16 +124,16 @@ func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labe
 }
 
 // List returns tenants matching filter, cursor-paginated.
-func (s *tenantService) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
-	if limit <= 0 {
-		limit = defaultListLimit
+func (s *tenantService) List(ctx context.Context, filter domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = defaultListLimit
 	}
 
-	if limit > maxListLimit {
-		limit = maxListLimit
+	if filter.Limit > maxListLimit {
+		filter.Limit = maxListLimit
 	}
 
-	tenants, nextCursor, total, err := s.repo.List(ctx, filter, limit, cursor)
+	tenants, nextCursor, total, err := s.repo.List(ctx, filter)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
 	}

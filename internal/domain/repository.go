@@ -29,8 +29,8 @@ type CategoryRepository interface {
 	Create(ctx context.Context, rec Category) error
 	// Get retrieves a category by tenant + slug. Returns ErrNotFound if absent.
 	Get(ctx context.Context, tenantID, slug string) (*Category, error)
-	// List returns categories for a tenant, paginated by cursor (created_at).
-	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, int64, error)
+	// List returns categories for a tenant, paginated.
+	List(ctx context.Context, tenantID string, filter ListCategoriesFilter) ([]Category, string, int64, error)
 	// Delete removes a category. Returns (false, nil) if it did not exist.
 	Delete(ctx context.Context, tenantID, slug string) (bool, error)
 	// Exists returns true if the slug is registered for the tenant.
@@ -60,14 +60,14 @@ type TenantRepository interface {
 	// Tags are replaced in full.
 	UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
 	// List returns tenants matching filter, cursor-paginated (created_at DESC).
-	List(ctx context.Context, filter TenantFilter, limit int, cursor string) ([]Tenant, string, int64, error)
+	List(ctx context.Context, filter ListTenantsFilter) ([]Tenant, string, int64, error)
 }
 
 // CategoryService defines the business logic for managing categories.
 type CategoryService interface {
 	Create(ctx context.Context, tenantID, slug, name string, description *string) (*Category, error)
 	Get(ctx context.Context, tenantID, slug string) (*Category, error)
-	List(ctx context.Context, tenantID string, limit int, cursor string) ([]Category, string, int64, error)
+	List(ctx context.Context, tenantID string, filter ListCategoriesFilter) ([]Category, string, int64, error)
 	// Delete returns ErrConflict if any active objects still reference the category.
 	Delete(ctx context.Context, tenantID, slug string) error
 	// GetStats returns detailed statistics for a category.
@@ -90,7 +90,7 @@ type TenantService interface {
 	// replacement of tags. Returns ErrNotFound if the tenant does not exist.
 	PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
 	// List returns tenants matching filter, cursor-paginated.
-	List(ctx context.Context, filter TenantFilter, limit int, cursor string) ([]Tenant, string, int64, error)
+	List(ctx context.Context, filter ListTenantsFilter) ([]Tenant, string, int64, error)
 }
 
 // CreateCategoryRequest carries validated input for CategoryService.Create.
@@ -99,12 +99,6 @@ type CreateCategoryRequest struct {
 	Slug        string
 	Name        string
 	Description *string
-}
-
-// ListCategoriesFilter holds pagination state for listing categories.
-type ListCategoriesFilter struct {
-	Limit  int
-	Cursor string
 }
 
 // ObjectsRepository defines persistent object operations.
@@ -124,7 +118,7 @@ type ObjectsRepository interface {
 	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkCreate(ctx context.Context, objects []Object) error
 	BulkPatch(ctx context.Context, tenantID string, items []BulkPatchItem) (int64, error)
-	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
+	List(ctx context.Context, tenantID string, filter ListObjectsFilter) ([]Object, string, int64, error)
 
 	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]Object, error)

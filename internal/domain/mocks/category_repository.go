@@ -388,8 +388,8 @@ func (_c *MockCategoryRepository_GetStats_Call) RunAndReturn(run func(ctx contex
 }
 
 // List provides a mock function for the type MockCategoryRepository
-func (_mock *MockCategoryRepository) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	ret := _mock.Called(ctx, tenantID, limit, cursor)
+func (_mock *MockCategoryRepository) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	ret := _mock.Called(ctx, tenantID, filter)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -399,28 +399,28 @@ func (_mock *MockCategoryRepository) List(ctx context.Context, tenantID string, 
 	var r1 string
 	var r2 int64
 	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) ([]domain.Category, string, int64, error)); ok {
-		return returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListCategoriesFilter) ([]domain.Category, string, int64, error)); ok {
+		return returnFunc(ctx, tenantID, filter)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) []domain.Category); ok {
-		r0 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListCategoriesFilter) []domain.Category); ok {
+		r0 = returnFunc(ctx, tenantID, filter)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.Category)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, string) string); ok {
-		r1 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListCategoriesFilter) string); ok {
+		r1 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, int, string) int64); ok {
-		r2 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListCategoriesFilter) int64); ok {
+		r2 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r2 = ret.Get(2).(int64)
 	}
-	if returnFunc, ok := ret.Get(3).(func(context.Context, string, int, string) error); ok {
-		r3 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListCategoriesFilter) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r3 = ret.Error(3)
 	}
@@ -435,13 +435,12 @@ type MockCategoryRepository_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - limit int
-//   - cursor string
-func (_e *MockCategoryRepository_Expecter) List(ctx interface{}, tenantID interface{}, limit interface{}, cursor interface{}) *MockCategoryRepository_List_Call {
-	return &MockCategoryRepository_List_Call{Call: _e.mock.On("List", ctx, tenantID, limit, cursor)}
+//   - filter domain.ListCategoriesFilter
+func (_e *MockCategoryRepository_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}) *MockCategoryRepository_List_Call {
+	return &MockCategoryRepository_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter)}
 }
 
-func (_c *MockCategoryRepository_List_Call) Run(run func(ctx context.Context, tenantID string, limit int, cursor string)) *MockCategoryRepository_List_Call {
+func (_c *MockCategoryRepository_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter)) *MockCategoryRepository_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -451,19 +450,14 @@ func (_c *MockCategoryRepository_List_Call) Run(run func(ctx context.Context, te
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 int
+		var arg2 domain.ListCategoriesFilter
 		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg2 = args[2].(domain.ListCategoriesFilter)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -474,7 +468,7 @@ func (_c *MockCategoryRepository_List_Call) Return(categorys []domain.Category, 
 	return _c
 }
 
-func (_c *MockCategoryRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error)) *MockCategoryRepository_List_Call {
+func (_c *MockCategoryRepository_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error)) *MockCategoryRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

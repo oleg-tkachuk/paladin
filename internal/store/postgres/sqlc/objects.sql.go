@@ -271,21 +271,30 @@ const listObjects = `-- name: ListObjects :many
 SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, COUNT(*) OVER() AS total_count
 FROM objects
 WHERE tenant_id = $1
-  AND ($3::text IS NULL OR status = $3)
-  AND ($4::text IS NULL OR external_ref = $4)
-  AND ($5::timestamptz IS NULL OR created_at >= $5)
-  AND ($6::timestamptz IS NULL OR created_at < $6)
-  AND ($7::timestamptz IS NULL OR created_at < $7)
+  AND ($2::text IS NULL OR status = $2)
+  AND ($3::text IS NULL OR external_ref = $3)
+  AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
+  AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR created_at < $6::timestamptz)
   AND (
-    $8::text IS NULL OR 
-    ($9::bool AND (category = $8 OR category LIKE $8 || '/%')) OR
-    category = $8
+    $7::text IS NULL OR 
+    ($8::bool AND (category = $7 OR category LIKE $7 || '/%')) OR
+    category = $7
   )
-  AND ($10::text IS NULL OR object_key LIKE $10 || '%')
+  AND ($9::text IS NULL OR object_key LIKE $9 || '%')
 ORDER BY
-    CASE WHEN $11::text = 'asc' THEN created_at END ASC,
-    CASE WHEN $11::text = 'desc' OR $11::text IS NULL THEN created_at END DESC
-LIMIT $2
+    -- Sorting logic
+    CASE WHEN $10::text = 'name' AND $11::text = 'asc' THEN object_key END ASC,
+    CASE WHEN $10::text = 'name' AND $11::text = 'desc' THEN object_key END DESC,
+    CASE WHEN $10::text = 'category' AND $11::text = 'asc' THEN category END ASC,
+    CASE WHEN $10::text = 'category' AND $11::text = 'desc' THEN category END DESC,
+    CASE WHEN $10::text = 'size' AND $11::text = 'asc' THEN size_bytes END ASC,
+    CASE WHEN $10::text = 'size' AND $11::text = 'desc' THEN size_bytes END DESC,
+    CASE WHEN $10::text = 'status' AND $11::text = 'asc' THEN status END ASC,
+    CASE WHEN $10::text = 'status' AND $11::text = 'desc' THEN status END DESC,
+    CASE WHEN ($10::text = 'created' OR $10::text IS NULL) AND $11::text = 'asc' THEN created_at END ASC,
+    CASE WHEN ($10::text = 'created' OR $10::text IS NULL) AND ($11::text = 'desc' OR $11::text IS NULL) THEN created_at END DESC
+LIMIT $12
 `
 
 type ListObjectsRow struct {
@@ -293,10 +302,9 @@ type ListObjectsRow struct {
 	TotalCount int64  `json:"total_count"`
 }
 
-func (q *Queries) ListObjects(ctx context.Context, tenantID string, limit int32, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortOrder string) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID string, status string, externalRef string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category string, recursive bool, keyPrefix string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		limit,
 		status,
 		externalRef,
 		createdAfter,
@@ -305,7 +313,9 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID string, limit int32,
 		category,
 		recursive,
 		keyPrefix,
+		sortBy,
 		sortOrder,
+		limitVal,
 	)
 	if err != nil {
 		return nil, err

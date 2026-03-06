@@ -215,12 +215,15 @@ func (h *TenantHandler) ListTenants(c *gin.Context) {
 	// tag_selector is a repeated query param: ?tag_selector=enterprise&tag_selector=eu
 	tagSelector := c.QueryArray("tag_selector")
 
-	filter := domain.TenantFilter{
+	filter := domain.ListTenantsFilter{
 		LabelSelector: labelSelector,
 		TagSelector:   tagSelector,
 	}
 
-	tenants, nextCursor, total, err := h.svc.List(c.Request.Context(), filter, limit, cursor)
+	filter.Limit = limit
+	filter.Cursor = cursor
+	ctx := c.Request.Context()
+	tenants, nextCursor, total, err := h.svc.List(ctx, filter)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), err))
 

@@ -650,13 +650,15 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 		limit = 20
 	}
 
-	items, next, total, err := s.svc.List(ctx, tenant, filter, limit, req.Cursor)
+	filter.Limit = limit
+	filter.Cursor = req.Cursor
+	objects, nextCursor, total, err := s.svc.List(ctx, tenant, filter)
 	if err != nil {
 		return nil, grpcError(err)
 	}
 
-	respItems := make([]*ListObjectItem, len(items))
-	for i, obj := range items {
+	respItems := make([]*ListObjectItem, len(objects))
+	for i, obj := range objects {
 		var ref string
 		if obj.ExternalRef != nil {
 			ref = *obj.ExternalRef
@@ -677,7 +679,7 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 
 	return &ListObjectsResponse{
 		Items:      respItems,
-		NextCursor: next,
+		NextCursor: nextCursor,
 		TotalCount: total,
 	}, nil
 }
@@ -690,12 +692,19 @@ func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest)
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
-	limit := int(req.Limit)
-	if limit <= 0 {
-		limit = 20
+	filter := domain.ListCategoriesFilter{
+		Limit:  int(req.Limit),
+		Cursor: req.Cursor,
+		Search: req.Search,
+	}
+	if req.SortBy != nil {
+		filter.SortBy = *req.SortBy
+	}
+	if req.SortOrder != nil {
+		filter.SortOrder = *req.SortOrder
 	}
 
-	items, next, total, err := s.catSvc.List(ctx, tenant, limit, req.Cursor)
+	items, next, total, err := s.catSvc.List(ctx, tenant, filter)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -830,9 +839,14 @@ func (s *Server) DeleteTenant(ctx context.Context, req *DeleteTenantRequest) (*D
 }
 
 func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*ListTenantsResponse, error) {
-	filter := domain.TenantFilter{
-		LabelSelector: req.LabelSelector,
-		TagSelector:   req.TagSelector,
+	var tags []string
+	if len(req.TagSelector) > 0 {
+		tags = req.TagSelector
+	}
+
+	var cursor string
+	if req.Cursor != "" {
+		cursor = req.Cursor
 	}
 
 	limit := int(req.Limit)
@@ -840,7 +854,12 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 		limit = 20
 	}
 
-	tenants, nextCursor, total, err := s.tenantSvc.List(ctx, filter, limit, req.Cursor)
+	filter := domain.ListTenantsFilter{
+		TagSelector: tags,
+	}
+	filter.Limit = limit
+	filter.Cursor = cursor
+	tenants, nextCursor, total, err := s.tenantSvc.List(ctx, filter)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -1150,37 +1169,54 @@ func domainTenantToProto(t *domain.Tenant) *TenantResponse {
 // the request body. The public proto messages don't include tenant_id.
 
 func (s *PublicServer) ListObjects(ctx context.Context, req *publicapi.ListObjectsRequest) (*publicapi.ListObjectsResponse, error) {
-	internalReq := &ListObjectsRequest{
-		Category: req.Category,
-		Status:   req.Status,
-		Limit:    req.Limit,
-		Cursor:   req.Cursor,
-		Search:   req.Search,
-	}
-	resp, err := s.Server.ListObjects(ctx, internalReq)
-	if err != nil {
-		return nil, err
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
-	items := make([]*publicapi.ListObjectItem, len(resp.Items))
-	for i, item := range resp.Items {
+	filter := domain.ListObjectsFilter{
+		Category:  req.Category,
+		Search:    req.Search,
+		Recursive: req.Recursive,
+		Limit:     int(req.Limit),
+		Cursor:    req.Cursor,
+		SortBy:    req.GetSortBy(),
+		SortOrder: req.GetSortOrder(),
+	}
+
+	if statusStr := req.GetStatus(); statusStr != "" {
+		st := domain.ObjectStatus(statusStr)
+		filter.Status = &st
+	}
+
+	resp, nextCursor, totalCount, err := s.svc.List(ctx, tenant, filter)
+	if err != nil {
+		return nil, s.Server.mapError(err)
+	}
+
+	items := make([]*publicapi.ListObjectItem, len(resp))
+	for i, item := range resp {
+		extRef := ""
+		if item.ExternalRef != nil {
+			extRef = *item.ExternalRef
+		}
 		items[i] = &publicapi.ListObjectItem{
-			ObjectId:      item.ObjectId,
+			ObjectId:      item.ID.String(),
 			ObjectKey:     item.ObjectKey,
 			ContentType:   item.ContentType,
 			SizeBytes:     item.SizeBytes,
-			Status:        item.Status,
-			CreatedAtUnix: item.CreatedAtUnix,
+			Status:        string(item.Status),
+			CreatedAtUnix: item.CreatedAt.Unix(),
 			Category:      item.Category,
 			Labels:        item.Labels,
-			ExternalRef:   item.ExternalRef,
+			ExternalRef:   extRef,
 		}
 	}
 
 	return &publicapi.ListObjectsResponse{
 		Items:      items,
-		NextCursor: resp.NextCursor,
-		TotalCount: resp.TotalCount,
+		NextCursor: nextCursor,
+		TotalCount: totalCount,
 	}, nil
 }
 
@@ -1347,23 +1383,47 @@ func (s *PublicServer) AbortMultipart(ctx context.Context, req *publicapi.AbortM
 }
 
 func (s *PublicServer) ListCategories(ctx context.Context, req *publicapi.ListCategoriesRequest) (*publicapi.ListCategoriesResponse, error) {
-	internalReq := &ListCategoriesRequest{Limit: req.Limit, Cursor: req.Cursor}
-	resp, err := s.Server.ListCategories(ctx, internalReq)
-	if err != nil {
-		return nil, err
+	tenantID := tenantFromCtx(ctx)
+	if tenantID == "" {
+		return nil, status.Error(codes.Unauthenticated, "tenant ID is required")
 	}
 
-	items := make([]*publicapi.Category, len(resp.Items))
-	for i, item := range resp.Items {
-		items[i] = &publicapi.Category{
-			Id:          item.Id,
+	filter := domain.ListCategoriesFilter{
+		Limit:     int(req.GetLimit()),
+		Cursor:    req.GetCursor(),
+		Search:    req.Search,
+		SortBy:    req.GetSortBy(),
+		SortOrder: req.GetSortOrder(),
+	}
+
+	items, next, total, err := s.catSvc.List(ctx, tenantID, filter)
+	if err != nil {
+		return nil, s.Server.mapError(err)
+	}
+
+	categories := make([]*publicapi.Category, len(items))
+	for i, item := range items {
+		categories[i] = &publicapi.Category{
+			Id:          item.ID.String(),
 			Slug:        item.Slug,
 			Name:        item.Name,
 			Description: item.Description,
 		}
 	}
 
-	return &publicapi.ListCategoriesResponse{Items: items, NextCursor: resp.NextCursor, TotalCount: resp.TotalCount}, nil
+	return &publicapi.ListCategoriesResponse{
+		Items:      categories,
+		NextCursor: next,
+		TotalCount: total,
+	}, nil
+}
+
+func (s *Server) mapError(err error) error {
+	return status.Error(codes.Internal, err.Error())
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }
 
 func (s *PublicServer) GetCategory(ctx context.Context, req *publicapi.GetCategoryRequest) (*publicapi.GetCategoryResponse, error) {

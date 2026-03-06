@@ -10,13 +10,24 @@ FROM object_categories
 WHERE tenant_id = $1 AND slug = $2;
 
 -- name: ListCategories :many
-SELECT sqlc.embed(object_categories),
+SELECT id, tenant_id, slug, name, description, created_at, updated_at,
        COUNT(*) OVER() AS total_count
 FROM object_categories
-WHERE tenant_id = $1
-  AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
-ORDER BY created_at DESC
-LIMIT $2;
+WHERE tenant_id = @tenant_id
+  AND (@cursor::timestamptz IS NULL OR created_at < @cursor::timestamptz)
+  AND (
+    @search::text IS NULL OR 
+    slug ILIKE '%' || @search || '%' OR 
+    name ILIKE '%' || @search || '%'
+  )
+ORDER BY
+    CASE WHEN @sort_by::text = 'slug' AND @sort_order::text = 'asc' THEN slug END ASC,
+    CASE WHEN @sort_by::text = 'slug' AND @sort_order::text = 'desc' THEN slug END DESC,
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'asc' THEN name END ASC,
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'desc' THEN name END DESC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND @sort_order::text = 'asc' THEN created_at END ASC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND (@sort_order::text = 'desc' OR @sort_order::text IS NULL) THEN created_at END DESC
+LIMIT @limit_val;
 
 -- name: DeleteCategory :execrows
 DELETE FROM object_categories

@@ -250,8 +250,8 @@ func (_c *MockTenantService_Get_Call) RunAndReturn(run func(ctx context.Context,
 }
 
 // List provides a mock function for the type MockTenantService
-func (_mock *MockTenantService) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
-	ret := _mock.Called(ctx, filter, limit, cursor)
+func (_mock *MockTenantService) List(ctx context.Context, filter domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error) {
+	ret := _mock.Called(ctx, filter)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -261,28 +261,28 @@ func (_mock *MockTenantService) List(ctx context.Context, filter domain.TenantFi
 	var r1 string
 	var r2 int64
 	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.TenantFilter, int, string) ([]domain.Tenant, string, int64, error)); ok {
-		return returnFunc(ctx, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error)); ok {
+		return returnFunc(ctx, filter)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.TenantFilter, int, string) []domain.Tenant); ok {
-		r0 = returnFunc(ctx, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.ListTenantsFilter) []domain.Tenant); ok {
+		r0 = returnFunc(ctx, filter)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.Tenant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.TenantFilter, int, string) string); ok {
-		r1 = returnFunc(ctx, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.ListTenantsFilter) string); ok {
+		r1 = returnFunc(ctx, filter)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, domain.TenantFilter, int, string) int64); ok {
-		r2 = returnFunc(ctx, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, domain.ListTenantsFilter) int64); ok {
+		r2 = returnFunc(ctx, filter)
 	} else {
 		r2 = ret.Get(2).(int64)
 	}
-	if returnFunc, ok := ret.Get(3).(func(context.Context, domain.TenantFilter, int, string) error); ok {
-		r3 = returnFunc(ctx, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(3).(func(context.Context, domain.ListTenantsFilter) error); ok {
+		r3 = returnFunc(ctx, filter)
 	} else {
 		r3 = ret.Error(3)
 	}
@@ -299,33 +299,23 @@ type MockTenantService_List_Call struct {
 //   - filter domain.TenantFilter
 //   - limit int
 //   - cursor string
-func (_e *MockTenantService_Expecter) List(ctx interface{}, filter interface{}, limit interface{}, cursor interface{}) *MockTenantService_List_Call {
-	return &MockTenantService_List_Call{Call: _e.mock.On("List", ctx, filter, limit, cursor)}
+func (_e *MockTenantService_Expecter) List(ctx interface{}, filter interface{}) *MockTenantService_List_Call {
+	return &MockTenantService_List_Call{Call: _e.mock.On("List", ctx, filter)}
 }
 
-func (_c *MockTenantService_List_Call) Run(run func(ctx context.Context, filter domain.TenantFilter, limit int, cursor string)) *MockTenantService_List_Call {
+func (_c *MockTenantService_List_Call) Run(run func(ctx context.Context, filter domain.ListTenantsFilter)) *MockTenantService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 domain.TenantFilter
+		var arg1 domain.ListTenantsFilter
 		if args[1] != nil {
-			arg1 = args[1].(domain.TenantFilter)
-		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg1 = args[1].(domain.ListTenantsFilter)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -336,7 +326,7 @@ func (_c *MockTenantService_List_Call) Return(tenants []domain.Tenant, s string,
 	return _c
 }
 
-func (_c *MockTenantService_List_Call) RunAndReturn(run func(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error)) *MockTenantService_List_Call {
+func (_c *MockTenantService_List_Call) RunAndReturn(run func(ctx context.Context, filter domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error)) *MockTenantService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

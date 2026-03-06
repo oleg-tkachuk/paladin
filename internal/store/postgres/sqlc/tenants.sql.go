@@ -66,8 +66,19 @@ WHERE
     AND ($2::jsonb IS NULL OR labels @> $2::jsonb)
     -- tag overlap filter: tenant.tags must have at least one tag from the list
     AND ($3::text[] IS NULL OR tags && $3::text[])
-ORDER BY created_at DESC
-LIMIT $4
+    -- search filter
+    AND (
+        $4::text IS NULL OR
+        tenant_id ILIKE '%' || $4 || '%' OR
+        display_name ILIKE '%' || $4 || '%'
+    )
+ORDER BY
+    -- Sorting logic
+    CASE WHEN $5::text = 'name' AND $6::text = 'asc' THEN display_name END ASC,
+    CASE WHEN $5::text = 'name' AND $6::text = 'desc' THEN display_name END DESC,
+    CASE WHEN ($5::text = 'created' OR $5::text IS NULL) AND $6::text = 'asc' THEN created_at END ASC,
+    CASE WHEN ($5::text = 'created' OR $5::text IS NULL) AND ($6::text = 'desc' OR $6::text IS NULL) THEN created_at END DESC
+LIMIT $7
 `
 
 type ListTenantsPaginatedRow struct {
@@ -81,12 +92,15 @@ type ListTenantsPaginatedRow struct {
 	TotalCount  int64              `json:"total_count"`
 }
 
-func (q *Queries) ListTenantsPaginated(ctx context.Context, column1 pgtype.Timestamptz, column2 []byte, column3 []string, limit int32) ([]ListTenantsPaginatedRow, error) {
+func (q *Queries) ListTenantsPaginated(ctx context.Context, cursor pgtype.Timestamptz, labelSelector []byte, tagSelector []string, search string, sortBy string, sortOrder string, limitVal int32) ([]ListTenantsPaginatedRow, error) {
 	rows, err := q.db.Query(ctx, listTenantsPaginated,
-		column1,
-		column2,
-		column3,
-		limit,
+		cursor,
+		labelSelector,
+		tagSelector,
+		search,
+		sortBy,
+		sortOrder,
+		limitVal,
 	)
 	if err != nil {
 		return nil, err

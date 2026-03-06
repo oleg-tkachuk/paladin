@@ -75,8 +75,8 @@ func (m *MockObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	args := m.Called(ctx, tenantID, filter, limit, cursor)
+func (m *MockObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
+	args := m.Called(ctx, tenantID, filter)
 
 	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
@@ -176,8 +176,8 @@ func (m *MockCategoryRepo) Exists(ctx context.Context, tenantID, slug string) (b
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	args := m.Called(ctx, tenantID, limit, cursor)
+func (m *MockCategoryRepo) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	args := m.Called(ctx, tenantID, filter)
 
 	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
 }

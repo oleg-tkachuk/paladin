@@ -52,7 +52,6 @@ func (x *GetObjectStatsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectStatsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{0}
 }
@@ -95,7 +94,6 @@ func (x *GetObjectStatsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectStatsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{1}
 }
@@ -153,6 +151,9 @@ type ListCategoriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
 	Cursor        string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Search        *string                `protobuf:"bytes,3,opt,name=search,proto3,oneof" json:"search,omitempty"`
+	SortBy        *string                `protobuf:"bytes,4,opt,name=sort_by,json=sortBy,proto3,oneof" json:"sort_by,omitempty"`
+	SortOrder     *string                `protobuf:"bytes,5,opt,name=sort_order,json=sortOrder,proto3,oneof" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -182,7 +183,6 @@ func (x *ListCategoriesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListCategoriesRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{2}
 }
@@ -197,6 +197,27 @@ func (x *ListCategoriesRequest) GetLimit() int32 {
 func (x *ListCategoriesRequest) GetCursor() string {
 	if x != nil {
 		return x.Cursor
+	}
+	return ""
+}
+
+func (x *ListCategoriesRequest) GetSearch() string {
+	if x != nil && x.Search != nil {
+		return *x.Search
+	}
+	return ""
+}
+
+func (x *ListCategoriesRequest) GetSortBy() string {
+	if x != nil && x.SortBy != nil {
+		return *x.SortBy
+	}
+	return ""
+}
+
+func (x *ListCategoriesRequest) GetSortOrder() string {
+	if x != nil && x.SortOrder != nil {
+		return *x.SortOrder
 	}
 	return ""
 }
@@ -235,7 +256,6 @@ func (x *ListCategoriesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListCategoriesResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{3}
 }
@@ -293,7 +313,6 @@ func (x *GetCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryRequest.ProtoReflect.Descriptor instead.
 func (*GetCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{4}
 }
@@ -337,7 +356,6 @@ func (x *GetCategoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryResponse.ProtoReflect.Descriptor instead.
 func (*GetCategoryResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{5}
 }
@@ -383,7 +401,6 @@ func (x *CreateCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateCategoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{6}
 }
@@ -441,7 +458,6 @@ func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteCategoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{7}
 }
@@ -485,7 +501,6 @@ func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteCategoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{8}
 }
@@ -529,7 +544,6 @@ func (x *GetCategoryStatsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{9}
 }
@@ -574,7 +588,6 @@ func (x *GetCategoryStatsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCategoryStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{10}
 }
@@ -628,7 +641,6 @@ func (x *Category) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Category.ProtoReflect.Descriptor instead.
 func (*Category) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{11}
 }
@@ -697,7 +709,6 @@ func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateObjectRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{12}
 }
@@ -774,7 +785,6 @@ func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateObjectResponse.ProtoReflect.Descriptor instead.
 func (*CreateObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{13}
 }
@@ -853,7 +863,6 @@ func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{14}
 }
@@ -906,7 +915,6 @@ func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{15}
 }
@@ -1021,7 +1029,6 @@ func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetObjectMetaResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectMetaResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{16}
 }
@@ -1121,7 +1128,6 @@ func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*CompleteObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{17}
 }
@@ -1165,7 +1171,6 @@ func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*CompleteObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{18}
 }
@@ -1209,7 +1214,6 @@ func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{19}
 }
@@ -1253,7 +1257,6 @@ func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{20}
 }
@@ -1301,7 +1304,6 @@ func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InitiateMultipartRequest.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{21}
 }
@@ -1377,7 +1379,6 @@ func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InitiateMultipartResponse.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{22}
 }
@@ -1450,7 +1451,6 @@ func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignPartRequest.ProtoReflect.Descriptor instead.
 func (*SignPartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{23}
 }
@@ -1503,7 +1503,6 @@ func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SignPartResponse.ProtoReflect.Descriptor instead.
 func (*SignPartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{24}
 }
@@ -1562,7 +1561,6 @@ func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartRequest.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{25}
 }
@@ -1614,7 +1612,6 @@ func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartPart.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartPart) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{26}
 }
@@ -1666,7 +1663,6 @@ func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompleteMultipartResponse.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{27}
 }
@@ -1717,7 +1713,6 @@ func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AbortMultipartRequest.ProtoReflect.Descriptor instead.
 func (*AbortMultipartRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{28}
 }
@@ -1761,7 +1756,6 @@ func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AbortMultipartResponse.ProtoReflect.Descriptor instead.
 func (*AbortMultipartResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{29}
 }
@@ -1780,6 +1774,9 @@ type ListObjectsRequest struct {
 	Category      *string                `protobuf:"bytes,3,opt,name=category,proto3,oneof" json:"category,omitempty"`
 	Status        *string                `protobuf:"bytes,4,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	Search        *string                `protobuf:"bytes,5,opt,name=search,proto3,oneof" json:"search,omitempty"`
+	Recursive     bool                   `protobuf:"varint,6,opt,name=recursive,proto3" json:"recursive,omitempty"`
+	SortBy        *string                `protobuf:"bytes,7,opt,name=sort_by,json=sortBy,proto3,oneof" json:"sort_by,omitempty"`
+	SortOrder     *string                `protobuf:"bytes,8,opt,name=sort_order,json=sortOrder,proto3,oneof" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1809,7 +1806,6 @@ func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{30}
 }
@@ -1849,6 +1845,27 @@ func (x *ListObjectsRequest) GetSearch() string {
 	return ""
 }
 
+func (x *ListObjectsRequest) GetRecursive() bool {
+	if x != nil {
+		return x.Recursive
+	}
+	return false
+}
+
+func (x *ListObjectsRequest) GetSortBy() string {
+	if x != nil && x.SortBy != nil {
+		return *x.SortBy
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetSortOrder() string {
+	if x != nil && x.SortOrder != nil {
+		return *x.SortOrder
+	}
+	return ""
+}
+
 type ListObjectsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*ListObjectItem      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -1883,7 +1900,6 @@ func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListObjectsResponse) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{31}
 }
@@ -1949,7 +1965,6 @@ func (x *ListObjectItem) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListObjectItem.ProtoReflect.Descriptor instead.
 func (*ListObjectItem) Descriptor() ([]byte, []int) {
 	return file_public_v1_paladin_proto_rawDescGZIP(), []int{32}
 }
@@ -2032,10 +2047,18 @@ const file_public_v1_paladin_proto_rawDesc = "" +
 	"\x0fuploading_count\x18\x04 \x01(\x03R\x0euploadingCount\x12%\n" +
 	"\x0euploaded_count\x18\x05 \x01(\x03R\ruploadedCount\x12%\n" +
 	"\x0ecomplete_count\x18\x06 \x01(\x03R\rcompleteCount\x12,\n" +
-	"\x12soft_deleted_count\x18\a \x01(\x03R\x10softDeletedCount\"E\n" +
+	"\x12soft_deleted_count\x18\a \x01(\x03R\x10softDeletedCount\"\xca\x01\n" +
 	"\x15ListCategoriesRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\x89\x01\n" +
+	"\x06cursor\x18\x02 \x01(\tR\x06cursor\x12\x1b\n" +
+	"\x06search\x18\x03 \x01(\tH\x00R\x06search\x88\x01\x01\x12\x1c\n" +
+	"\asort_by\x18\x04 \x01(\tH\x01R\x06sortBy\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"sort_order\x18\x05 \x01(\tH\x02R\tsortOrder\x88\x01\x01B\t\n" +
+	"\a_searchB\n" +
+	"\n" +
+	"\b_sort_byB\r\n" +
+	"\v_sort_order\"\x89\x01\n" +
 	"\x16ListCategoriesResponse\x12-\n" +
 	"\x05items\x18\x01 \x03(\v2\x17.paladin.public.v1.CategoryR\x05items\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
@@ -2171,16 +2194,23 @@ const file_public_v1_paladin_proto_rawDesc = "" +
 	"\x15AbortMultipartRequest\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\"0\n" +
 	"\x16AbortMultipartResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\xc0\x01\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xbb\x02\n" +
 	"\x12ListObjectsRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\x12\x1f\n" +
 	"\bcategory\x18\x03 \x01(\tH\x00R\bcategory\x88\x01\x01\x12\x1b\n" +
 	"\x06status\x18\x04 \x01(\tH\x01R\x06status\x88\x01\x01\x12\x1b\n" +
-	"\x06search\x18\x05 \x01(\tH\x02R\x06search\x88\x01\x01B\v\n" +
+	"\x06search\x18\x05 \x01(\tH\x02R\x06search\x88\x01\x01\x12\x1c\n" +
+	"\trecursive\x18\x06 \x01(\bR\trecursive\x12\x1c\n" +
+	"\asort_by\x18\a \x01(\tH\x03R\x06sortBy\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"sort_order\x18\b \x01(\tH\x04R\tsortOrder\x88\x01\x01B\v\n" +
 	"\t_categoryB\t\n" +
 	"\a_statusB\t\n" +
-	"\a_search\"\x8c\x01\n" +
+	"\a_searchB\n" +
+	"\n" +
+	"\b_sort_byB\r\n" +
+	"\v_sort_order\"\x8c\x01\n" +
 	"\x13ListObjectsResponse\x123\n" +
 	"\x05items\x18\x01 \x03(\v2\x1d.paladin.public.v1.ListObjectItemR\x05items\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
@@ -2335,6 +2365,7 @@ func file_public_v1_paladin_proto_init() {
 	if File_public_v1_paladin_proto != nil {
 		return
 	}
+	file_public_v1_paladin_proto_msgTypes[2].OneofWrappers = []any{}
 	file_public_v1_paladin_proto_msgTypes[6].OneofWrappers = []any{}
 	file_public_v1_paladin_proto_msgTypes[11].OneofWrappers = []any{}
 	file_public_v1_paladin_proto_msgTypes[30].OneofWrappers = []any{}

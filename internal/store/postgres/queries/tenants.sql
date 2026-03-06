@@ -47,11 +47,21 @@ SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at,
 FROM tenants
 WHERE
     -- cursor: only return rows created before this timestamp (DESC ordering)
-    ($1::timestamptz IS NULL OR created_at < $1::timestamptz)
+    (@cursor::timestamptz IS NULL OR created_at < @cursor::timestamptz)
     -- label containment filter: tenant.labels must contain all provided key-value pairs
-    AND ($2::jsonb IS NULL OR labels @> $2::jsonb)
+    AND (@label_selector::jsonb IS NULL OR labels @> @label_selector::jsonb)
     -- tag overlap filter: tenant.tags must have at least one tag from the list
-    AND ($3::text[] IS NULL OR tags && $3::text[])
-ORDER BY created_at DESC
-LIMIT $4;
-
+    AND (@tag_selector::text[] IS NULL OR tags && @tag_selector::text[])
+    -- search filter
+    AND (
+        @search::text IS NULL OR
+        tenant_id ILIKE '%' || @search || '%' OR
+        display_name ILIKE '%' || @search || '%'
+    )
+ORDER BY
+    -- Sorting logic
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'asc' THEN display_name END ASC,
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'desc' THEN display_name END DESC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND @sort_order::text = 'asc' THEN created_at END ASC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND (@sort_order::text = 'desc' OR @sort_order::text IS NULL) THEN created_at END DESC
+LIMIT @limit_val;

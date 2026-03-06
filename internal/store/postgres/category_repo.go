@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // CategoryRepo implements domain.CategoryRepository backed by PostgreSQL.
@@ -56,19 +57,37 @@ func (r *CategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.
 	return &cat, nil
 }
 
-func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	var pgCursor pgtype.Timestamptz
-	if cursor != "" {
-		t, err := time.Parse(time.RFC3339, cursor)
+func (r *CategoryRepo) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "ListCategories", status, start) }()
+
+	cursorTime := pgtype.Timestamptz{}
+	if filter.Cursor != "" {
+		t, err := time.Parse(time.RFC3339, filter.Cursor)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
 		}
-		pgCursor = timestampToPgtype(t)
+		cursorTime = timestampToPgtype(t)
 	}
 
-	rows, err := r.db.Queries.ListCategories(ctx, tenantID, int32(limit+1), pgCursor)
+	var search string
+	if filter.Search != nil {
+		search = *filter.Search
+	}
+
+	rows, err := r.db.Queries.ListCategories(ctx,
+		tenantID,
+		cursorTime,
+		search,
+		filter.SortBy,
+		filter.SortOrder,
+		int32(filter.Limit+1),
+	)
 	if err != nil {
-		return nil, "", 0, fmt.Errorf("list categories: %w", err)
+		status = "error"
+
+		return nil, "", 0, MapPgError(err)
 	}
 
 	var totalCount int64
@@ -76,18 +95,27 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, limit int, cur
 		totalCount = rows[0].TotalCount
 	}
 
-	cats := make([]domain.Category, 0, len(rows))
+	out := make([]domain.Category, 0, len(rows))
 	for _, row := range rows {
-		cats = append(cats, MapCategoryToDomain(row.ObjectCategory))
+		catID, _ := uuidFromPgtype(row.ID)
+		out = append(out, domain.Category{
+			ID:          catID,
+			TenantID:    row.TenantID,
+			Slug:        row.Slug,
+			Name:        row.Name,
+			Description: row.Description,
+			CreatedAt:   row.CreatedAt.Time,
+			UpdatedAt:   row.UpdatedAt.Time,
+		})
 	}
 
 	nextCursor := ""
-	if limit > 0 && len(cats) > limit {
-		nextCursor = cats[limit-1].CreatedAt.Format(time.RFC3339)
-		cats = cats[:limit]
+	if filter.Limit > 0 && len(out) > filter.Limit {
+		nextCursor = out[filter.Limit-1].CreatedAt.Format(time.RFC3339)
+		out = out[:filter.Limit]
 	}
 
-	return cats, nextCursor, totalCount, nil
+	return out, nextCursor, totalCount, nil
 }
 
 func (r *CategoryRepo) Delete(ctx context.Context, tenantID, slug string) (bool, error) {

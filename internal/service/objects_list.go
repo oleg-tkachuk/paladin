@@ -13,10 +13,10 @@ import (
 )
 
 // listObjects retrieves a paginated list of objects
-func (s *objectsService) listObjects(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
+func (s *objectsService) listObjects(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "List")
 	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("limit", limit))
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("limit", filter.Limit))
 
 	start := time.Now()
 	var status string
@@ -33,7 +33,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 		return nil, "", 0, err
 	}
 
-	recs, nextCursor, totalCount, err := s.objRepo.List(ctx, tenantID, filter, limit, cursor)
+	recs, nextCursor, totalCount, err := s.objRepo.List(ctx, tenantID, filter)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

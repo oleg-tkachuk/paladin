@@ -30,7 +30,7 @@ type ObjectsService interface {
 	BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*Object, error)
 	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
-	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
+	List(ctx context.Context, tenantID string, filter ListObjectsFilter) ([]Object, string, int64, error)
 	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (Presigned, error)
 	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (Presigned, error)

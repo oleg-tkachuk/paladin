@@ -202,8 +202,8 @@ func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.
 }
 
 // List delegates to underlying repo (no caching for list operations)
-func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	return r.repo.List(ctx, tenantID, filter, limit, cursor)
+func (r *CachedObjectsRepo) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
+	return r.repo.List(ctx, tenantID, filter)
 }
 
 // ListExpiredPending delegates to underlying repo

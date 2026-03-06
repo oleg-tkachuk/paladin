@@ -52,8 +52,8 @@ func (m *MockObjectsService) CompleteObject(ctx context.Context, tenantID string
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
-func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	args := m.Called(ctx, tenantID, filter, limit, cursor)
+func (m *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
+	args := m.Called(ctx, tenantID, filter)
 
 	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
@@ -206,9 +206,8 @@ func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*
 	return args.Get(0).(*domain.Category), args.Error(1)
 }
 
-func (m *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	args := m.Called(ctx, tenantID, limit, cursor)
-
+func (m *MockCategoryService) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	args := m.Called(ctx, tenantID, filter)
 	return args.Get(0).([]domain.Category), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 
@@ -312,8 +311,8 @@ func (m *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, 
 	return args.Get(0).(*domain.Tenant), args.Error(1)
 }
 
-func (m *MockTenantService) List(ctx context.Context, filter domain.TenantFilter, limit int, cursor string) ([]domain.Tenant, string, int64, error) {
-	args := m.Called(ctx, filter, limit, cursor)
+func (m *MockTenantService) List(ctx context.Context, filter domain.ListTenantsFilter) ([]domain.Tenant, string, int64, error) {
+	args := m.Called(ctx, filter)
 
 	return args.Get(0).([]domain.Tenant), args.String(1), args.Get(2).(int64), args.Error(3)
 }

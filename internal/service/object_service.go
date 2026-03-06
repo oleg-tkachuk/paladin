@@ -339,8 +339,8 @@ func (s *objectsService) HardDelete(ctx context.Context, tenantID string, id ope
 	return s.Purge(ctx, tenantID, id, idempotencyKey)
 }
 
-func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	return s.listObjects(ctx, tenantID, filter, limit, cursor)
+func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
+	return s.objRepo.List(ctx, tenantID, filter)
 }
 
 func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {

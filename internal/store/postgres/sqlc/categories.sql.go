@@ -117,22 +117,46 @@ func (q *Queries) GetCategoryStats(ctx context.Context, tenantID string, categor
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT object_categories.id, object_categories.tenant_id, object_categories.slug, object_categories.name, object_categories.description, object_categories.created_at, object_categories.updated_at,
+SELECT id, tenant_id, slug, name, description, created_at, updated_at,
        COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1
-  AND ($3::timestamptz IS NULL OR created_at < $3)
-ORDER BY created_at DESC
-LIMIT $2
+  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
+  AND (
+    $3::text IS NULL OR 
+    slug ILIKE '%' || $3 || '%' OR 
+    name ILIKE '%' || $3 || '%'
+  )
+ORDER BY
+    CASE WHEN $4::text = 'slug' AND $5::text = 'asc' THEN slug END ASC,
+    CASE WHEN $4::text = 'slug' AND $5::text = 'desc' THEN slug END DESC,
+    CASE WHEN $4::text = 'name' AND $5::text = 'asc' THEN name END ASC,
+    CASE WHEN $4::text = 'name' AND $5::text = 'desc' THEN name END DESC,
+    CASE WHEN ($4::text = 'created' OR $4::text IS NULL) AND $5::text = 'asc' THEN created_at END ASC,
+    CASE WHEN ($4::text = 'created' OR $4::text IS NULL) AND ($5::text = 'desc' OR $5::text IS NULL) THEN created_at END DESC
+LIMIT $6
 `
 
 type ListCategoriesRow struct {
-	ObjectCategory ObjectCategory `json:"object_category"`
-	TotalCount     int64          `json:"total_count"`
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    string             `json:"tenant_id"`
+	Slug        string             `json:"slug"`
+	Name        string             `json:"name"`
+	Description *string            `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	TotalCount  int64              `json:"total_count"`
 }
 
-func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error) {
-	rows, err := q.db.Query(ctx, listCategories, tenantID, limit, cursor)
+func (q *Queries) ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listCategories,
+		tenantID,
+		cursor,
+		search,
+		sortBy,
+		sortOrder,
+		limitVal,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -141,13 +165,13 @@ func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int
 	for rows.Next() {
 		var i ListCategoriesRow
 		if err := rows.Scan(
-			&i.ObjectCategory.ID,
-			&i.ObjectCategory.TenantID,
-			&i.ObjectCategory.Slug,
-			&i.ObjectCategory.Name,
-			&i.ObjectCategory.Description,
-			&i.ObjectCategory.CreatedAt,
-			&i.ObjectCategory.UpdatedAt,
+			&i.ID,
+			&i.TenantID,
+			&i.Slug,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

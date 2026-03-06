@@ -52,8 +52,8 @@ func (s *categoryService) Get(ctx context.Context, tenantID, slug string) (*doma
 	return s.repo.Get(ctx, tenantID, slug)
 }
 
-func (s *categoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	return s.repo.List(ctx, tenantID, limit, cursor)
+func (s *categoryService) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	return s.repo.List(ctx, tenantID, filter)
 }
 
 func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) error {

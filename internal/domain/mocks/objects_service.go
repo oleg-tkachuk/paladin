@@ -1366,8 +1366,8 @@ func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx c
 }
 
 // List provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error) {
-	ret := _mock.Called(ctx, tenantID, filter, limit, cursor)
+func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
+	ret := _mock.Called(ctx, tenantID, filter)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -1377,28 +1377,28 @@ func (_mock *MockObjectsService) List(ctx context.Context, tenantID string, filt
 	var r1 string
 	var r2 int64
 	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) ([]domain.Object, string, int64, error)); ok {
-		return returnFunc(ctx, tenantID, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter) ([]domain.Object, string, int64, error)); ok {
+		return returnFunc(ctx, tenantID, filter)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter, int, string) []domain.Object); ok {
-		r0 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListObjectsFilter) []domain.Object); ok {
+		r0 = returnFunc(ctx, tenantID, filter)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListObjectsFilter, int, string) string); ok {
-		r1 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListObjectsFilter) string); ok {
+		r1 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter, int, string) int64); ok {
-		r2 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListObjectsFilter) int64); ok {
+		r2 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r2 = ret.Get(2).(int64)
 	}
-	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListObjectsFilter, int, string) error); ok {
-		r3 = returnFunc(ctx, tenantID, filter, limit, cursor)
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListObjectsFilter) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r3 = ret.Error(3)
 	}
@@ -1414,13 +1414,11 @@ type MockObjectsService_List_Call struct {
 //   - ctx context.Context
 //   - tenantID string
 //   - filter domain.ListObjectsFilter
-//   - limit int
-//   - cursor string
-func (_e *MockObjectsService_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}, limit interface{}, cursor interface{}) *MockObjectsService_List_Call {
-	return &MockObjectsService_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter, limit, cursor)}
+func (_e *MockObjectsService_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}) *MockObjectsService_List_Call {
+	return &MockObjectsService_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter)}
 }
 
-func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string)) *MockObjectsService_List_Call {
+func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter)) *MockObjectsService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1434,20 +1432,10 @@ func (_c *MockObjectsService_List_Call) Run(run func(ctx context.Context, tenant
 		if args[2] != nil {
 			arg2 = args[2].(domain.ListObjectsFilter)
 		}
-		var arg3 int
-		if args[3] != nil {
-			arg3 = args[3].(int)
-		}
-		var arg4 string
-		if args[4] != nil {
-			arg4 = args[4].(string)
-		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
-			arg4,
 		)
 	})
 	return _c
@@ -1458,7 +1446,7 @@ func (_c *MockObjectsService_List_Call) Return(objects []domain.Object, s string
 	return _c
 }
 
-func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter, limit int, cursor string) ([]domain.Object, string, int64, error)) *MockObjectsService_List_Call {
+func (_c *MockObjectsService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error)) *MockObjectsService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
