@@ -90,6 +90,22 @@ func (s *ConnectServer) DeleteObject(ctx context.Context, req *connect.Request[D
 	return connect.NewResponse(res), nil
 }
 
+func (s *ConnectServer) RestoreObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
+	res, err := s.Server.RestoreObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
+func (s *ConnectServer) PurgeObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
+	res, err := s.Server.PurgeObject(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
 func (s *ConnectServer) InitiateMultipart(ctx context.Context, req *connect.Request[InitiateMultipartRequest]) (*connect.Response[InitiateMultipartResponse], error) {
 	res, err := s.Server.InitiateMultipart(ctx, req.Msg)
 	if err != nil {
@@ -454,13 +470,53 @@ func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*D
 		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
 	}
 
-	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
+	if err := s.svc.Delete(ctx, tenant, id); err != nil {
 		logger.FromContext(ctx).Error("DeleteObject failed", zap.Error(err))
 
 		return nil, grpcError(err)
 	}
 
 	return &DeleteObjectResponse{Status: "deleted"}, nil
+}
+
+func (s *Server) PurgeObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
+		logger.FromContext(ctx).Error("PurgeObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &DeleteObjectResponse{Status: "purged"}, nil
+}
+
+func (s *Server) RestoreObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	if err := s.svc.Restore(ctx, tenant, id); err != nil {
+		logger.FromContext(ctx).Error("RestoreObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &DeleteObjectResponse{Status: "restored"}, nil
 }
 
 // ─── Multipart RPCs ──────────────────────────────────────────────────────────
@@ -1203,6 +1259,26 @@ func (s *PublicServer) CompleteObject(ctx context.Context, req *publicapi.Comple
 func (s *PublicServer) DeleteObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
 	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
 	resp, err := s.Server.DeleteObject(ctx, internalReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
+}
+
+func (s *PublicServer) RestoreObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
+	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
+	resp, err := s.Server.RestoreObject(ctx, internalReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
+}
+
+func (s *PublicServer) PurgeObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
+	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
+	resp, err := s.Server.PurgeObject(ctx, internalReq)
 	if err != nil {
 		return nil, err
 	}

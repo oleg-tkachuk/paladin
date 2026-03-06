@@ -11,6 +11,13 @@ service Paladin {
   rpc CompleteObject(CompleteObjectRequest) returns (CompleteObjectResponse);
   rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
 
+  // RestoreObject brings back a soft-deleted object to its original state.
+  rpc RestoreObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+
+  // PurgeObject permanently deletes an object and its data from storage.
+  // This action cannot be undone.
+  rpc PurgeObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+
   rpc InitiateMultipart(InitiateMultipartRequest) returns (InitiateMultipartResponse);
   rpc SignPart(SignPartRequest) returns (SignPartResponse);
   rpc CompleteMultipart(CompleteMultipartRequest) returns (CompleteMultipartResponse);

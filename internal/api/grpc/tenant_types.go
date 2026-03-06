@@ -2,9 +2,11 @@ package grpcapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"connectrpc.com/connect"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -14,7 +16,11 @@ import (
 // This replaces all the ad-hoc status.Error(codes.Internal, err.Error()) calls
 // that were previously scattered across handlers.
 func grpcError(err error) error {
-	return apperrors.MapToGRPC(err)
+	grpcErr := apperrors.MapToGRPC(err)
+	if s, ok := status.FromError(grpcErr); ok {
+		return connect.NewError(connect.Code(s.Code()), errors.New(s.Message()))
+	}
+	return grpcErr
 }
 
 // ─── Tenant proto message types ──────────────────────────────────────────────

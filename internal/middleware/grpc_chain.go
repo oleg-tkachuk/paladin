@@ -348,7 +348,7 @@ func ConnectRequestIDInterceptor() connect.Interceptor {
 			}
 			ctx = context.WithValue(ctx, utils.RequestIDKey, rid)
 			res, err := next(ctx, req)
-			if res != nil {
+			if err == nil && res != nil {
 				res.Header().Set(grpcMetaRequestID, rid)
 			}
 			return res, err

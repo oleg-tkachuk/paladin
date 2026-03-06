@@ -24,6 +24,8 @@ const (
 	Paladin_GetObjectMeta_FullMethodName     = "/paladin.public.v1.Paladin/GetObjectMeta"
 	Paladin_CompleteObject_FullMethodName    = "/paladin.public.v1.Paladin/CompleteObject"
 	Paladin_DeleteObject_FullMethodName      = "/paladin.public.v1.Paladin/DeleteObject"
+	Paladin_RestoreObject_FullMethodName     = "/paladin.public.v1.Paladin/RestoreObject"
+	Paladin_PurgeObject_FullMethodName       = "/paladin.public.v1.Paladin/PurgeObject"
 	Paladin_InitiateMultipart_FullMethodName = "/paladin.public.v1.Paladin/InitiateMultipart"
 	Paladin_SignPart_FullMethodName          = "/paladin.public.v1.Paladin/SignPart"
 	Paladin_CompleteMultipart_FullMethodName = "/paladin.public.v1.Paladin/CompleteMultipart"
@@ -46,6 +48,11 @@ type PaladinClient interface {
 	GetObjectMeta(ctx context.Context, in *GetObjectRequest, opts ...grpc.CallOption) (*GetObjectMetaResponse, error)
 	CompleteObject(ctx context.Context, in *CompleteObjectRequest, opts ...grpc.CallOption) (*CompleteObjectResponse, error)
 	DeleteObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
+	// RestoreObject brings back a soft-deleted object to its original state.
+	RestoreObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
+	// PurgeObject permanently deletes an object and its data from storage.
+	// This action cannot be undone.
+	PurgeObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error)
 	InitiateMultipart(ctx context.Context, in *InitiateMultipartRequest, opts ...grpc.CallOption) (*InitiateMultipartResponse, error)
 	SignPart(ctx context.Context, in *SignPartRequest, opts ...grpc.CallOption) (*SignPartResponse, error)
 	CompleteMultipart(ctx context.Context, in *CompleteMultipartRequest, opts ...grpc.CallOption) (*CompleteMultipartResponse, error)
@@ -112,6 +119,26 @@ func (c *objectControlPlaneClient) DeleteObject(ctx context.Context, in *DeleteO
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteObjectResponse)
 	err := c.cc.Invoke(ctx, Paladin_DeleteObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) RestoreObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteObjectResponse)
+	err := c.cc.Invoke(ctx, Paladin_RestoreObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) PurgeObject(ctx context.Context, in *DeleteObjectRequest, opts ...grpc.CallOption) (*DeleteObjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteObjectResponse)
+	err := c.cc.Invoke(ctx, Paladin_PurgeObject_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +264,11 @@ type PaladinServer interface {
 	GetObjectMeta(context.Context, *GetObjectRequest) (*GetObjectMetaResponse, error)
 	CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error)
 	DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
+	// RestoreObject brings back a soft-deleted object to its original state.
+	RestoreObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
+	// PurgeObject permanently deletes an object and its data from storage.
+	// This action cannot be undone.
+	PurgeObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error)
 	InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error)
 	SignPart(context.Context, *SignPartRequest) (*SignPartResponse, error)
 	CompleteMultipart(context.Context, *CompleteMultipartRequest) (*CompleteMultipartResponse, error)
@@ -273,6 +305,12 @@ func (UnimplementedPaladinServer) CompleteObject(context.Context, *CompleteObjec
 }
 func (UnimplementedPaladinServer) DeleteObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteObject not implemented")
+}
+func (UnimplementedPaladinServer) RestoreObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestoreObject not implemented")
+}
+func (UnimplementedPaladinServer) PurgeObject(context.Context, *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PurgeObject not implemented")
 }
 func (UnimplementedPaladinServer) InitiateMultipart(context.Context, *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InitiateMultipart not implemented")
@@ -414,6 +452,42 @@ func _Paladin_DeleteObject_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PaladinServer).DeleteObject(ctx, req.(*DeleteObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_RestoreObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).RestoreObject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_RestoreObject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).RestoreObject(ctx, req.(*DeleteObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_PurgeObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).PurgeObject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_PurgeObject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).PurgeObject(ctx, req.(*DeleteObjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -642,6 +716,14 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteObject",
 			Handler:    _Paladin_DeleteObject_Handler,
+		},
+		{
+			MethodName: "RestoreObject",
+			Handler:    _Paladin_RestoreObject_Handler,
+		},
+		{
+			MethodName: "PurgeObject",
+			Handler:    _Paladin_PurgeObject_Handler,
 		},
 		{
 			MethodName: "InitiateMultipart",

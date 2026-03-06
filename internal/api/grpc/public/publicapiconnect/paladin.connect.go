@@ -48,6 +48,12 @@ const (
 	// PaladinDeleteObjectProcedure is the fully-qualified name of the Paladin's
 	// DeleteObject RPC.
 	PaladinDeleteObjectProcedure = "/paladin.public.v1.Paladin/DeleteObject"
+	// PaladinRestoreObjectProcedure is the fully-qualified name of the Paladin's
+	// RestoreObject RPC.
+	PaladinRestoreObjectProcedure = "/paladin.public.v1.Paladin/RestoreObject"
+	// PaladinPurgeObjectProcedure is the fully-qualified name of the Paladin's
+	// PurgeObject RPC.
+	PaladinPurgeObjectProcedure = "/paladin.public.v1.Paladin/PurgeObject"
 	// PaladinInitiateMultipartProcedure is the fully-qualified name of the
 	// Paladin's InitiateMultipart RPC.
 	PaladinInitiateMultipartProcedure = "/paladin.public.v1.Paladin/InitiateMultipart"
@@ -90,6 +96,11 @@ type PaladinClient interface {
 	GetObjectMeta(context.Context, *connect.Request[public.GetObjectRequest]) (*connect.Response[public.GetObjectMetaResponse], error)
 	CompleteObject(context.Context, *connect.Request[public.CompleteObjectRequest]) (*connect.Response[public.CompleteObjectResponse], error)
 	DeleteObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
+	// RestoreObject brings back a soft-deleted object to its original state.
+	RestoreObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
+	// PurgeObject permanently deletes an object and its data from storage.
+	// This action cannot be undone.
+	PurgeObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
 	InitiateMultipart(context.Context, *connect.Request[public.InitiateMultipartRequest]) (*connect.Response[public.InitiateMultipartResponse], error)
 	SignPart(context.Context, *connect.Request[public.SignPartRequest]) (*connect.Response[public.SignPartResponse], error)
 	CompleteMultipart(context.Context, *connect.Request[public.CompleteMultipartRequest]) (*connect.Response[public.CompleteMultipartResponse], error)
@@ -143,6 +154,18 @@ func NewPaladinClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			httpClient,
 			baseURL+PaladinDeleteObjectProcedure,
 			connect.WithSchema(objectControlPlaneMethods.ByName("DeleteObject")),
+			connect.WithClientOptions(opts...),
+		),
+		restoreObject: connect.NewClient[public.DeleteObjectRequest, public.DeleteObjectResponse](
+			httpClient,
+			baseURL+PaladinRestoreObjectProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("RestoreObject")),
+			connect.WithClientOptions(opts...),
+		),
+		purgeObject: connect.NewClient[public.DeleteObjectRequest, public.DeleteObjectResponse](
+			httpClient,
+			baseURL+PaladinPurgeObjectProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("PurgeObject")),
 			connect.WithClientOptions(opts...),
 		),
 		initiateMultipart: connect.NewClient[public.InitiateMultipartRequest, public.InitiateMultipartResponse](
@@ -221,6 +244,8 @@ type objectControlPlaneClient struct {
 	getObjectMeta     *connect.Client[public.GetObjectRequest, public.GetObjectMetaResponse]
 	completeObject    *connect.Client[public.CompleteObjectRequest, public.CompleteObjectResponse]
 	deleteObject      *connect.Client[public.DeleteObjectRequest, public.DeleteObjectResponse]
+	restoreObject     *connect.Client[public.DeleteObjectRequest, public.DeleteObjectResponse]
+	purgeObject       *connect.Client[public.DeleteObjectRequest, public.DeleteObjectResponse]
 	initiateMultipart *connect.Client[public.InitiateMultipartRequest, public.InitiateMultipartResponse]
 	signPart          *connect.Client[public.SignPartRequest, public.SignPartResponse]
 	completeMultipart *connect.Client[public.CompleteMultipartRequest, public.CompleteMultipartResponse]
@@ -257,6 +282,16 @@ func (c *objectControlPlaneClient) CompleteObject(ctx context.Context, req *conn
 // DeleteObject calls paladin.public.v1.Paladin.DeleteObject.
 func (c *objectControlPlaneClient) DeleteObject(ctx context.Context, req *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
 	return c.deleteObject.CallUnary(ctx, req)
+}
+
+// RestoreObject calls paladin.public.v1.Paladin.RestoreObject.
+func (c *objectControlPlaneClient) RestoreObject(ctx context.Context, req *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
+	return c.restoreObject.CallUnary(ctx, req)
+}
+
+// PurgeObject calls paladin.public.v1.Paladin.PurgeObject.
+func (c *objectControlPlaneClient) PurgeObject(ctx context.Context, req *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
+	return c.purgeObject.CallUnary(ctx, req)
 }
 
 // InitiateMultipart calls paladin.public.v1.Paladin.InitiateMultipart.
@@ -321,6 +356,11 @@ type PaladinHandler interface {
 	GetObjectMeta(context.Context, *connect.Request[public.GetObjectRequest]) (*connect.Response[public.GetObjectMetaResponse], error)
 	CompleteObject(context.Context, *connect.Request[public.CompleteObjectRequest]) (*connect.Response[public.CompleteObjectResponse], error)
 	DeleteObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
+	// RestoreObject brings back a soft-deleted object to its original state.
+	RestoreObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
+	// PurgeObject permanently deletes an object and its data from storage.
+	// This action cannot be undone.
+	PurgeObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error)
 	InitiateMultipart(context.Context, *connect.Request[public.InitiateMultipartRequest]) (*connect.Response[public.InitiateMultipartResponse], error)
 	SignPart(context.Context, *connect.Request[public.SignPartRequest]) (*connect.Response[public.SignPartResponse], error)
 	CompleteMultipart(context.Context, *connect.Request[public.CompleteMultipartRequest]) (*connect.Response[public.CompleteMultipartResponse], error)
@@ -370,6 +410,18 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 		PaladinDeleteObjectProcedure,
 		svc.DeleteObject,
 		connect.WithSchema(objectControlPlaneMethods.ByName("DeleteObject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneRestoreObjectHandler := connect.NewUnaryHandler(
+		PaladinRestoreObjectProcedure,
+		svc.RestoreObject,
+		connect.WithSchema(objectControlPlaneMethods.ByName("RestoreObject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlanePurgeObjectHandler := connect.NewUnaryHandler(
+		PaladinPurgeObjectProcedure,
+		svc.PurgeObject,
+		connect.WithSchema(objectControlPlaneMethods.ByName("PurgeObject")),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectControlPlaneInitiateMultipartHandler := connect.NewUnaryHandler(
@@ -450,6 +502,10 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 			objectControlPlaneCompleteObjectHandler.ServeHTTP(w, r)
 		case PaladinDeleteObjectProcedure:
 			objectControlPlaneDeleteObjectHandler.ServeHTTP(w, r)
+		case PaladinRestoreObjectProcedure:
+			objectControlPlaneRestoreObjectHandler.ServeHTTP(w, r)
+		case PaladinPurgeObjectProcedure:
+			objectControlPlanePurgeObjectHandler.ServeHTTP(w, r)
 		case PaladinInitiateMultipartProcedure:
 			objectControlPlaneInitiateMultipartHandler.ServeHTTP(w, r)
 		case PaladinSignPartProcedure:
@@ -499,6 +555,14 @@ func (UnimplementedPaladinHandler) CompleteObject(context.Context, *connect.Requ
 
 func (UnimplementedPaladinHandler) DeleteObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.public.v1.Paladin.DeleteObject is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) RestoreObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.public.v1.Paladin.RestoreObject is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) PurgeObject(context.Context, *connect.Request[public.DeleteObjectRequest]) (*connect.Response[public.DeleteObjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.public.v1.Paladin.PurgeObject is not implemented"))
 }
 
 func (UnimplementedPaladinHandler) InitiateMultipart(context.Context, *connect.Request[public.InitiateMultipartRequest]) (*connect.Response[public.InitiateMultipartResponse], error) {
