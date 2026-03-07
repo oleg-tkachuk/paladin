@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // CategoryRepo implements domain.CategoryRepository backed by PostgreSQL.
@@ -82,7 +83,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, filter domain.
 		search,
 		filter.SortBy,
 		filter.SortOrder,
-		int32(filter.Limit+1),
+		utils.ToInt32Safe(filter.Limit+1),
 	)
 	if err != nil {
 		status = "error"
@@ -171,7 +172,7 @@ func (r *CategoryRepo) ListTenants(ctx context.Context, limit int, cursor string
 		pgCursor = timestampToPgtype(t)
 	}
 
-	rows, err := r.db.Queries.ListTenants(ctx, int32(limit+1), pgCursor)
+	rows, err := r.db.Queries.ListTenants(ctx, utils.ToInt32Safe(limit+1), pgCursor)
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
 	}

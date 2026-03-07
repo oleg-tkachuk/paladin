@@ -156,13 +156,44 @@ tasks:
       - cmd: |-
           ./run-mutations.sh
 
+  test:security:sast:
+    desc: "Run Security SAST tests (gosec)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-gosec.sh
+
+  test:security:dast:
+    desc: "Run Security DAST tests (nuclei, zap)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-nuclei.sh
+      - cmd: |-
+          ./run-zap.sh
+
+  test:security:sca:
+    desc: "Run Security SCA tests (trivy)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-trivy.sh
+
+  test:security:
+    desc: "Run all security tests"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-all-security.sh
+
   test:all:
-    desc: "Run all verification tasks (lint, unit, functional, e2e)"
+    desc: "Run all verification tasks (lint, unit, functional, e2e, security)"
     cmds:
       - task: test:lint
       - task: test:unit
       - task: test:functional
       - task: test:e2e
+      - task: test:security
 
   # Alias for backward compatibility or convenience
   test:

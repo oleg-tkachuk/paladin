@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultK8sAPIBaseURL = "https://kubernetes.default.svc"
-	k8sTokenPath         = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	k8sTokenPath         = "/var/run/secrets/kubernetes.io/serviceaccount/token" // #nosec G101
 	k8sNamespacePath     = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	k8sCACertPath        = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	defaultHTTPTimeout   = 5 * time.Second

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 type AuditLogRepo struct {
@@ -39,13 +40,13 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 
 	var httpStatus *int32
 	if log.HTTPStatus != nil {
-		status := int32(*log.HTTPStatus)
+		status := utils.ToInt32WithFallback(*log.HTTPStatus, 500)
 		httpStatus = &status
 	}
 
 	var responseTimeMS *int32
 	if log.ResponseTimeMS != nil {
-		ms := int32(*log.ResponseTimeMS)
+		ms := utils.ToInt32Safe(*log.ResponseTimeMS)
 		responseTimeMS = &ms
 	}
 
@@ -126,7 +127,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	var httpStatus *int32
 	if filter.HTTPStatus != nil {
-		status := int32(*filter.HTTPStatus)
+		status := utils.ToInt32WithFallback(*filter.HTTPStatus, 500)
 		httpStatus = &status
 	}
 
@@ -136,7 +137,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	rows, err := r.db.Queries.ListAuditLogs(ctx,
 		tenantID,
-		int32(limit+1),
+		utils.ToInt32Safe(limit+1),
 		timestampPtrToPgtype(filter.From),
 		timestampPtrToPgtype(filter.To),
 		filter.Path,
@@ -169,6 +170,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	opStatus = "success"
 
+	opStatus = "success"
 	nextCursor := ""
 	if len(logs) > limit {
 		nextCursor = logs[limit-1].CreatedAt.Format(time.RFC3339Nano)
@@ -183,7 +185,7 @@ func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "PruneAuditLogs", status, start) }()
 
-	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), int32(limit))
+	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), utils.ToInt32Safe(limit))
 	if err != nil {
 		status = "error"
 

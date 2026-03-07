@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 type ObjectsRepo struct {
@@ -111,7 +112,7 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "ListExpiredPendingObjects", status, start) }()
 
-	rows, err := r.db.Queries.ListExpiredPendingObjects(ctx, timestampToPgtype(cutoff), int32(limit))
+	rows, err := r.db.Queries.ListExpiredPendingObjects(ctx, timestampToPgtype(cutoff), utils.ToInt32Safe(limit))
 	if err != nil {
 		status = "error"
 
@@ -335,7 +336,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		keyPrefix,
 		filter.SortBy,
 		filter.SortOrder,
-		int32(filter.Limit+1),
+		utils.ToInt32Safe(filter.Limit+1),
 	)
 	if err != nil {
 		opStatus = "error"
