@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -80,7 +81,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	// external_ref idempotency
 	if externalRef != nil {
 		existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef)
-		if err != nil {
+		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return domain.CreateObjectResponse{}, err
 		}
 		if existing != nil {

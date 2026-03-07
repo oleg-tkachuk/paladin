@@ -137,7 +137,7 @@ tasks:
       - cmd: |-
           printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running Hurl tests on {{.HOST}}...\n"
       - cmd: |-
-          time hurl --variable host={{.HOST}} --test tests/hurl/*.hurl
+          time hurl --variable host={{.HOST}} --test tests/api/e2e/*.hurl
 
   generate:
     desc: "Generate all code (OpenAPI, Proto, Mocks)"

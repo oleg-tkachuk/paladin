@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/aws/smithy-go"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
@@ -210,8 +211,12 @@ func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, Pro
 
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
-		// Wrap unknown errors as internal.
-		appErr = Internal("an unexpected error occurred", err)
+		if errors.Is(err, domain.ErrNotFound) {
+			appErr = NotFound("resource not found", err)
+		} else {
+			// Wrap unknown errors as internal.
+			appErr = Internal("an unexpected error occurred", err)
+		}
 	}
 
 	httpStatus := statusCodeForAppError(appErr.Code)
@@ -294,5 +299,15 @@ func IsNotFound(err error) bool {
 		return appErr.Code == CodeNotFound
 	}
 
+	return false
+}
+
+// IsS3NotFound checks if the error is an S3 NotFound error.
+func IsS3NotFound(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "NotFound" || code == "NoSuchKey" || code == "NoSuchBucket"
+	}
 	return false
 }

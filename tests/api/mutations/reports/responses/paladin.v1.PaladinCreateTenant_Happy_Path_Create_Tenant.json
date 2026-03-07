@@ -1,0 +1,9 @@
+{
+  "tenantId": "grpcurl-test-tenant-1772750603",
+  "displayName": "E2E Test Tenant",
+  "labels": {
+    "environment": "test"
+  },
+  "createdAtUnix": "1772750603",
+  "updatedAtUnix": "1772750603"
+}

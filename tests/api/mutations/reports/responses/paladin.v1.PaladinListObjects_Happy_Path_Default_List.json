@@ -1,0 +1,139 @@
+{
+  "items": [
+    {
+      "objectId": "1e567d41-c5eb-494e-bdf2-151033da650d",
+      "objectKey": "default-tenant/testcategory/1e567d41-c5eb-494e-bdf2-151033da650d",
+      "contentType": "image/jpeg",
+      "sizeBytes": "1024",
+      "status": "pending",
+      "createdAtUnix": "1772749873",
+      "category": "testcategory",
+      "labels": {
+        "source": "grpcurl-test"
+      },
+      "externalRef": "ext-123"
+    },
+    {
+      "objectId": "34d69420-b8cc-4137-a1b5-87c1da098eb6",
+      "objectKey": "default-tenant/testcategory/34d69420-b8cc-4137-a1b5-87c1da098eb6",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772749992",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "fb16eedc-2f9d-43a5-ad02-38f56bd21f61",
+      "objectKey": "default-tenant/testcategory/fb16eedc-2f9d-43a5-ad02-38f56bd21f61",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750073",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "e08f183b-2037-4468-b5aa-f9fa6f49565f",
+      "objectKey": "default-tenant/testcategory/e08f183b-2037-4468-b5aa-f9fa6f49565f",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750121",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "ac3dab50-3c73-4a2c-a382-1765c3ad5417",
+      "objectKey": "default-tenant/testcategory/ac3dab50-3c73-4a2c-a382-1765c3ad5417",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750135",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "02f9a7c9-0ddc-4d6f-a5f9-583584f02c7d",
+      "objectKey": "default-tenant/testcategory/02f9a7c9-0ddc-4d6f-a5f9-583584f02c7d",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750164",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "c8a10118-cb67-4d68-9e23-77e50848bb46",
+      "objectKey": "default-tenant/testcategory/c8a10118-cb67-4d68-9e23-77e50848bb46",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750172",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "34bdaec7-8d12-4a03-91b9-88b87bd0f852",
+      "objectKey": "default-tenant/testcategory/34bdaec7-8d12-4a03-91b9-88b87bd0f852",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750187",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "7e03f48a-dd63-4e75-9d41-dd7b66e212e7",
+      "objectKey": "default-tenant/testcategory/7e03f48a-dd63-4e75-9d41-dd7b66e212e7",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750246",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "5b5d6608-808e-40f8-a251-d3f3ffabdc5d",
+      "objectKey": "default-tenant/testcategory/5b5d6608-808e-40f8-a251-d3f3ffabdc5d",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750291",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "8f0457f1-5f1f-4599-9361-28afb395c68e",
+      "objectKey": "default-tenant/testcategory/8f0457f1-5f1f-4599-9361-28afb395c68e",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750300",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "1641ffaa-c9b3-4cd7-97d1-33c7ccb2baf2",
+      "objectKey": "default-tenant/testcategory/1641ffaa-c9b3-4cd7-97d1-33c7ccb2baf2",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750331",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "51e8cfb9-ff81-45ca-875a-7075c47acd4d",
+      "objectKey": "default-tenant/testcategory/51e8cfb9-ff81-45ca-875a-7075c47acd4d",
+      "contentType": "text/plain",
+      "sizeBytes": "10",
+      "status": "pending",
+      "createdAtUnix": "1772750407",
+      "category": "testcategory"
+    },
+    {
+      "objectId": "cce7635d-bbbe-4b41-b7bf-b051d5457a3f",
+      "objectKey": "default-tenant/testcategory/cce7635d-bbbe-4b41-b7bf-b051d5457a3f",
+      "contentType": "application/octet-stream",
+      "sizeBytes": "10485760",
+      "status": "uploading",
+      "createdAtUnix": "1772750421",
+      "category": "testcategory",
+      "labels": {
+        "source": "grpcurl-test"
+      },
+      "externalRef": "large-ext-123"
+    }
+  ],
+  "totalCount": "14"
+}

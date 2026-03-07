@@ -1,0 +1,11 @@
+{
+  "objectId": "e7ddb415-642f-44af-9cbd-aa09ac7531ac",
+  "objectKey": "default-tenant/testcategory/e7ddb415-642f-44af-9cbd-aa09ac7531ac",
+  "uploadUrl": "http://s3.paladin.local/paladin/default-tenant/testcategory/e7ddb415-642f-44af-9cbd-aa09ac7531ac?X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=dummy_access_key%2F20260305%2Fus-east-1%2Fs3%2Faws4_request\u0026X-Amz-Date=20260305T224321Z\u0026X-Amz-Expires=900\u0026X-Amz-SignedHeaders=host%3Bx-amz-server-side-encryption\u0026x-id=PutObject\u0026X-Amz-Signature=97d1dbde92783c70de160c8228d62fbe78ab4ab5790bc37ece9e762c20081286",
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "text/plain",
+    "x-amz-server-side-encryption": "AES256"
+  },
+  "expiresAtUnix": "1772751501"
+}

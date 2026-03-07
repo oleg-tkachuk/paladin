@@ -54,7 +54,7 @@ server:
 
 datastores:
   postgres:
-    dsn: "postgres://app_user:change-me@localhost:5432/acme?sslmode=disable"
+    dsn: "postgres://paladin:paladin@paladin-postgres:5432/paladin?sslmode=disable"
     pool:
       max_conns: 50
       min_conns: 5

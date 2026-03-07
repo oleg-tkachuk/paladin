@@ -77,6 +77,10 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
 
+		if errors.IsS3NotFound(err) {
+			return nil, errors.PreconditionFailed("object not yet uploaded to storage", err)
+		}
+
 		return nil, fmt.Errorf("s3 head check: %w", err)
 	}
 

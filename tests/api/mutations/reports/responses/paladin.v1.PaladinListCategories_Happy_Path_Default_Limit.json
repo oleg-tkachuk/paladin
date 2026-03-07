@@ -1,0 +1,107 @@
+{
+  "items": [
+    {
+      "id": "b76b826c-ebe7-4297-afbe-ebbd5031a5e5",
+      "slug": "test-category-1772750404",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "5867e72f-647c-445a-b313-9787b6c6136f",
+      "slug": "test-category-1772750328",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "457dd0c2-012e-4a3d-98a4-0ad957b0d7cc",
+      "slug": "test-category-1772750297",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "bfd5ec6a-01f7-4af3-ba0d-6d5803af55a3",
+      "slug": "test-category-1772750288",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "08482c65-7f6c-4dcc-8884-ac8fd14e5162",
+      "slug": "test-category-1772750281",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "60c6eaed-ab42-4db7-b7b3-2048fc09768d",
+      "slug": "test-category-1772750243",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "1faf7caa-f999-4544-8676-c3a277bfd340",
+      "slug": "test-category-1772750184",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "0146d06a-7a3a-46b0-95c1-82db80a541be",
+      "slug": "test-category-1772750169",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "cf1542fe-c224-4904-9a9f-2b225809c78b",
+      "slug": "test-category-1772750162",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "e8929d85-537e-42cc-9deb-78cd1cf8b21f",
+      "slug": "test-category-1772750135",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "0cad8cdd-91a9-48b2-b11b-951f5fa1e77f",
+      "slug": "test-category-1772750119",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "a79ca172-caf2-486f-a9e6-3f93e06384ca",
+      "slug": "test-category-1772750070",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "49a0f7ac-afc4-433b-b4a5-a5d765b47734",
+      "slug": "test-category-1772749990",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "24a4b628-6dec-408b-97f1-57c9d81b69ed",
+      "slug": "test-category-1772749946",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "9f29845f-1726-444b-ada6-c254180e6e79",
+      "slug": "test-category-1772749937",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "df63af2c-8781-4888-9c08-575d25ec0196",
+      "slug": "test-category-1772749871",
+      "name": "E2E Test Category",
+      "description": "Created by grpcurl e2e tests"
+    },
+    {
+      "id": "5a761449-c95c-4434-8c72-be1bf04f3045",
+      "slug": "testcategory",
+      "name": "testcategory",
+      "description": "testcategoryadfasf"
+    }
+  ],
+  "totalCount": "17"
+}
