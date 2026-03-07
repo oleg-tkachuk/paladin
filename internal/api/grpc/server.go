@@ -5,6 +5,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
@@ -645,7 +646,7 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 		filter.Status = &st
 	}
 
-	limit := int(req.Limit)
+	limit := safecast.IntFrom32(req.Limit)
 	if limit <= 0 {
 		limit = 20
 	}
@@ -693,7 +694,7 @@ func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest)
 	}
 
 	filter := domain.ListCategoriesFilter{
-		Limit:  int(req.Limit),
+		Limit:  safecast.IntFrom32(req.Limit),
 		Cursor: req.Cursor,
 		Search: req.Search,
 	}
@@ -849,7 +850,7 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 		cursor = req.Cursor
 	}
 
-	limit := int(req.Limit)
+	limit := safecast.IntFrom32(req.Limit)
 	if limit <= 0 {
 		limit = 20
 	}
@@ -1026,7 +1027,7 @@ func (s *Server) BulkSignUploads(ctx context.Context, req *BulkSignUploadsReques
 		}
 		items[i] = domain.SignUploadItem{
 			ObjectID:  id,
-			UploadTTL: int(item.UploadTtl),
+			UploadTTL: safecast.IntFrom32(item.UploadTtl),
 		}
 	}
 
@@ -1178,7 +1179,7 @@ func (s *PublicServer) ListObjects(ctx context.Context, req *publicapi.ListObjec
 		Category:  req.Category,
 		Search:    req.Search,
 		Recursive: req.Recursive,
-		Limit:     int(req.Limit),
+		Limit:     safecast.IntFrom32(req.Limit),
 		Cursor:    req.Cursor,
 		SortBy:    req.GetSortBy(),
 		SortOrder: req.GetSortOrder(),
@@ -1389,7 +1390,7 @@ func (s *PublicServer) ListCategories(ctx context.Context, req *publicapi.ListCa
 	}
 
 	filter := domain.ListCategoriesFilter{
-		Limit:     int(req.GetLimit()),
+		Limit:     safecast.IntFrom32(req.GetLimit()),
 		Cursor:    req.GetCursor(),
 		Search:    req.Search,
 		SortBy:    req.GetSortBy(),

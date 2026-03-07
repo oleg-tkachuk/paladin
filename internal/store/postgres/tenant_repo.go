@@ -12,8 +12,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 const (
@@ -270,7 +270,7 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 		search,
 		filter.SortBy,
 		filter.SortOrder,
-		utils.ToInt32Safe(limit+1),
+		safecast.Int32(limit+1),
 	)
 	if err != nil {
 		opStatus = "error"

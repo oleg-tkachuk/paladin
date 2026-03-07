@@ -9,7 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -48,17 +48,17 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("validation failed", err)
 	}
 
-	if err := utils.ValidateCategorySlug(category); err != nil {
+	if err := validation.CategorySlug(category); err != nil {
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid category", err)
 	}
 
 	if externalRef != nil {
-		if err := utils.ValidateExternalRef(*externalRef); err != nil {
+		if err := validation.ExternalRef(*externalRef); err != nil {
 			return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
-	if err := utils.ValidateLabels(labels); err != nil {
+	if err := validation.Labels(labels); err != nil {
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 

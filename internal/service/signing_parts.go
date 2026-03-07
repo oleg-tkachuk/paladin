@@ -6,6 +6,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -17,7 +18,7 @@ import (
 func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPart")
 	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", int(partNumber)))
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", safecast.IntFrom32(partNumber)))
 
 	start := time.Now()
 	var status string

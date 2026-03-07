@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 type MultipartRepo struct {
@@ -77,7 +77,7 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUI
 	if partNumber > 2147483647 {
 		return fmt.Errorf("part number %d is too large", partNumber)
 	}
-	err := r.db.Queries.UpsertMultipartPart(ctx, uuidToPgtype(multipartID), utils.ToInt32Safe(partNumber), &etag, sizeBytes)
+	err := r.db.Queries.UpsertMultipartPart(ctx, uuidToPgtype(multipartID), safecast.Int32(partNumber), &etag, sizeBytes)
 	if err != nil {
 		status = "error"
 	} else {
@@ -192,7 +192,7 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "ListExpiredMultiparts", status, start) }()
 
-	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, utils.ToInt32Safe(limit))
+	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, safecast.Int32(limit))
 	if err != nil {
 		status = "error"
 

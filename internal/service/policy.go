@@ -9,7 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 )
 
 type policyImpl struct {
@@ -47,12 +47,12 @@ func (p *policyImpl) Authorize(ctx context.Context, tenantID string, action doma
 
 func (p *policyImpl) Validate(contentType string, sizeBytes int64) error {
 	// Validate content type format
-	if err := utils.ValidateContentType(contentType); err != nil {
+	if err := validation.ContentType(contentType); err != nil {
 		return fmt.Errorf("invalid content_type: %w", err)
 	}
 
 	// Validate size bounds
-	if err := utils.ValidateSizeBytes(sizeBytes, p.maxObjectSizeBytes); err != nil {
+	if err := validation.SizeBytes(sizeBytes, p.maxObjectSizeBytes); err != nil {
 		return err
 	}
 

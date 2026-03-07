@@ -6,7 +6,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 )
 
 type IdempotencyRepo struct {
@@ -43,7 +43,7 @@ func (r *IdempotencyRepo) Save(ctx context.Context, rec domain.IdempotencyRecord
 		rec.Key,
 		rec.RequestPath,
 		rec.RequestHash,
-		utils.ToInt32Safe(rec.ResponseCode),
+		safecast.Int32(rec.ResponseCode),
 		rec.ResponseBody,
 		timestampToPgtype(rec.ExpiresAt),
 	)

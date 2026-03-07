@@ -1,4 +1,4 @@
-package utils
+package validation
 
 import (
 	"fmt"
@@ -44,8 +44,8 @@ func init() {
 	})
 }
 
-// ValidatePathSegment checks that a single component of an S3 key path is valid.
-func ValidatePathSegment(segment string) error {
+// PathSegment checks that a single component of an S3 key path is valid.
+func PathSegment(segment string) error {
 	if err := v.Var(segment, "required,printascii,path_segment"); err != nil {
 		return fmt.Errorf("invalid path segment %q", segment)
 	}
@@ -53,14 +53,14 @@ func ValidatePathSegment(segment string) error {
 	return nil
 }
 
-// ValidateCategorySlug checks a category slug. It allows multiple path segments separated by '/'.
-func ValidateCategorySlug(slug string) error {
+// CategorySlug checks a category slug. It allows multiple path segments separated by '/'.
+func CategorySlug(slug string) error {
 	if slug == "" {
 		return fmt.Errorf("category slug cannot be empty")
 	}
 	segments := strings.Split(slug, "/")
 	for _, segment := range segments {
-		if err := ValidatePathSegment(segment); err != nil {
+		if err := PathSegment(segment); err != nil {
 			return fmt.Errorf("invalid category segment %q: %w", segment, err)
 		}
 	}
@@ -68,8 +68,8 @@ func ValidateCategorySlug(slug string) error {
 	return nil
 }
 
-// ValidateSubpath checks an optional subpath within a category.
-func ValidateSubpath(subpath string) error {
+// Subpath checks an optional subpath within a category.
+func Subpath(subpath string) error {
 	if subpath == "" {
 		return nil
 	}
@@ -80,7 +80,7 @@ func ValidateSubpath(subpath string) error {
 		return fmt.Errorf("subpath must not start or end with '/' or contain consecutive slashes")
 	}
 	for _, seg := range strings.Split(subpath, "/") {
-		if err := ValidatePathSegment(seg); err != nil {
+		if err := PathSegment(seg); err != nil {
 			return fmt.Errorf("invalid subpath segment: %w", err)
 		}
 	}
@@ -88,8 +88,8 @@ func ValidateSubpath(subpath string) error {
 	return nil
 }
 
-// ValidateKeyPrefix validates a client-supplied key_prefix filter.
-func ValidateKeyPrefix(prefix string) error {
+// KeyPrefix validates a client-supplied key_prefix filter.
+func KeyPrefix(prefix string) error {
 	if prefix == "" {
 		return nil
 	}
@@ -103,8 +103,8 @@ func ValidateKeyPrefix(prefix string) error {
 	return nil
 }
 
-// ValidateContentType checks if content type format is valid
-func ValidateContentType(contentType string) error {
+// ContentType checks if content type format is valid
+func ContentType(contentType string) error {
 	if err := v.Var(contentType, "required,max=255,content_type"); err != nil {
 		return fmt.Errorf("invalid content type format")
 	}
@@ -112,8 +112,8 @@ func ValidateContentType(contentType string) error {
 	return nil
 }
 
-// ValidateExternalRef checks for path traversal and SQL injection attempts
-func ValidateExternalRef(externalRef string) error {
+// ExternalRef checks for path traversal and SQL injection attempts
+func ExternalRef(externalRef string) error {
 	if externalRef == "" {
 		return nil
 	}
@@ -124,8 +124,8 @@ func ValidateExternalRef(externalRef string) error {
 	return nil
 }
 
-// ValidateLabels checks label keys and values for safety
-func ValidateLabels(labels map[string]string) error {
+// Labels checks label keys and values for safety
+func Labels(labels map[string]string) error {
 	if labels == nil {
 		return nil
 	}
@@ -144,8 +144,8 @@ func ValidateLabels(labels map[string]string) error {
 	return nil
 }
 
-// ValidateUUID checks if a string is a valid UUID v4
-func ValidateUUID(id string) error {
+// UUID checks if a string is a valid UUID v4
+func UUID(id string) error {
 	if err := v.Var(strings.ToLower(id), "required,uuid4"); err != nil {
 		return fmt.Errorf("invalid UUID format")
 	}
@@ -153,8 +153,8 @@ func ValidateUUID(id string) error {
 	return nil
 }
 
-// ValidateSizeBytes checks if size is within reasonable bounds
-func ValidateSizeBytes(sizeBytes int64, maxSize int64) error {
+// SizeBytes checks if size is within reasonable bounds
+func SizeBytes(sizeBytes int64, maxSize int64) error {
 	if sizeBytes <= 0 {
 		return fmt.Errorf("size_bytes must be positive")
 	}

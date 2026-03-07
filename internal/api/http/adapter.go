@@ -8,6 +8,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/errors"
 	api "github.com/oleg-tkachuk/paladin/internal/generated/api"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -320,7 +321,7 @@ func (s *OpenAPIAdapter) BulkDeleteObjects(c *gin.Context, params api.BulkDelete
 		return
 	}
 
-	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(safecast.IntFrom64(count))})
 }
 
 func (s *OpenAPIAdapter) BulkRestoreObjects(c *gin.Context, params api.BulkRestoreObjectsParams) {
@@ -338,7 +339,7 @@ func (s *OpenAPIAdapter) BulkRestoreObjects(c *gin.Context, params api.BulkResto
 		return
 	}
 
-	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(safecast.IntFrom64(count))})
 }
 
 func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeObjectsParams) {
@@ -361,7 +362,7 @@ func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeOb
 		return
 	}
 
-	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(int(count))})
+	c.JSON(http.StatusOK, api.BulkActionResponse{AffectedCount: ptr(safecast.IntFrom64(count))})
 }
 
 func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context, params api.GetObjectStatsParams) {
@@ -373,13 +374,13 @@ func (s *OpenAPIAdapter) GetObjectStats(c *gin.Context, params api.GetObjectStat
 	}
 
 	resp := api.ObjectStats{
-		TotalCount:       int(stats.TotalCount),
+		TotalCount:       safecast.IntFrom64(stats.TotalCount),
 		TotalSize:        stats.TotalSize,
-		PendingCount:     int(stats.PendingCount),
-		UploadingCount:   int(stats.UploadingCount),
-		UploadedCount:    int(stats.UploadedCount),
-		CompleteCount:    int(stats.CompleteCount),
-		SoftDeletedCount: int(stats.SoftDeletedCount),
+		PendingCount:     safecast.IntFrom64(stats.PendingCount),
+		UploadingCount:   safecast.IntFrom64(stats.UploadingCount),
+		UploadedCount:    safecast.IntFrom64(stats.UploadedCount),
+		CompleteCount:    safecast.IntFrom64(stats.CompleteCount),
+		SoftDeletedCount: safecast.IntFrom64(stats.SoftDeletedCount),
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -393,7 +394,7 @@ func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string, params ap
 	}
 
 	c.JSON(http.StatusOK, api.CategoryStats{
-		TotalCount: int(stats.TotalCount),
+		TotalCount: safecast.IntFrom64(stats.TotalCount),
 		TotalSize:  stats.TotalSize,
 	})
 }

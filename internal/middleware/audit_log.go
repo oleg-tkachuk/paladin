@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
 )
@@ -164,7 +165,7 @@ func AuditLogMiddleware(repo domain.AuditLogRepository, log *zap.Logger) gin.Han
 		c.Next()
 
 		// 2. Capture response metadata
-		duration := int(time.Since(start).Milliseconds())
+		duration := safecast.IntFrom64(time.Since(start).Milliseconds())
 		status := c.Writer.Status()
 
 		// Compute body SHA after handler has consumed the body

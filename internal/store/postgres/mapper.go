@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -83,7 +84,7 @@ func mapToDomainMultipartPart(part sqlc.MultipartPart) (domain.MultipartPart, er
 
 	return domain.MultipartPart{
 		MultipartID: multipartID,
-		PartNumber:  int(part.PartNumber),
+		PartNumber:  safecast.IntFrom32(part.PartNumber),
 		ETag:        part.Etag,
 		SizeBytes:   part.SizeBytes,
 		CreatedAt:   timestampFromPgtype(part.CreatedAt),
@@ -97,7 +98,7 @@ func mapToDomainIdempotency(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 		Key:          key.IdempotencyKey,
 		RequestPath:  key.RequestPath,
 		RequestHash:  key.RequestHash,
-		ResponseCode: int(key.ResponseCode),
+		ResponseCode: safecast.IntFrom32(key.ResponseCode),
 		ResponseBody: key.ResponseBody,
 		CreatedAt:    timestampFromPgtype(key.CreatedAt),
 		ExpiresAt:    timestampFromPgtype(key.ExpiresAt),
@@ -136,13 +137,13 @@ func mapToDomainAuditLog(log sqlc.AuditLog) (domain.AuditLog, error) {
 
 	var httpStatus *int
 	if log.HttpStatus != nil {
-		status := int(*log.HttpStatus)
+		status := safecast.IntFrom32(*log.HttpStatus)
 		httpStatus = &status
 	}
 
 	var responseTimeMS *int
 	if log.ResponseTimeMs != nil {
-		ms := int(*log.ResponseTimeMs)
+		ms := safecast.IntFrom32(*log.ResponseTimeMs)
 		responseTimeMS = &ms
 	}
 

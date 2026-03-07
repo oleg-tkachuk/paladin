@@ -12,7 +12,7 @@ import (
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -54,17 +54,17 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	// Validate category slug format server-side before any DB lookup
-	if err := utils.ValidateCategorySlug(category); err != nil {
+	if err := validation.CategorySlug(category); err != nil {
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid category", err)
 	}
 
 	if externalRef != nil {
-		if err := utils.ValidateExternalRef(*externalRef); err != nil {
+		if err := validation.ExternalRef(*externalRef); err != nil {
 			return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
-	if err := utils.ValidateLabels(labels); err != nil {
+	if err := validation.Labels(labels); err != nil {
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
