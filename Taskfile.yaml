@@ -108,36 +108,67 @@ tasks:
             build
 
   # -------------------------
-  # Other tasks
+  # Verification & Quality
   # -------------------------
-  up:
-    desc: "Start the local stack"
-    silent: true
-    cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Starting local stack...\n"
-      - cmd: |-
-          time docker compose --progress={{.PROGRESS | default "auto"}} -f {{.COMPOSE_FILE}} -p {{.PROJECT_NAME}} up -d --build
 
-  test:
+  test:unit:
     desc: "Run unit tests"
-    silent: true
     cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running unit tests...\n"
       - cmd: |-
           eval "$(minikube docker-env)" && time go test ./...
 
-  test:hurl:
-    desc: "Run Hurl integration tests"
-    silent: true
+  test:lint:
+    desc: "Run linters"
+    cmds:
+      - cmd: |-
+          time golangci-lint run ./...
+
+  test:coverage:
+    desc: "Run unit tests with coverage"
+    cmds:
+      - cmd: |-
+          eval "$(minikube docker-env)" && \
+          mkdir -p coverage && \
+          time go test -coverprofile=coverage/cover.out ./... && \
+          go tool cover -html=coverage/cover.out -o coverage/cover.html
+      - cmd: |-
+          printf "INFO: Coverage report saved to coverage/cover.html\n"
+
+  test:e2e:
+    desc: "Run E2E integration tests (Hurl)"
     vars:
       HOST: '{{.HOST | default "http://localhost:8080"}}'
     cmds:
       - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Running Hurl tests on {{.HOST}}...\n"
-      - cmd: |-
           time hurl --variable host={{.HOST}} --test tests/api/e2e/*.hurl
+
+  test:functional:
+    desc: "Run API functional tests"
+    dir: tests/api/functional
+    cmds:
+      - cmd: |-
+          ./run-functional.sh
+
+  test:mutations:
+    desc: "Run API mutation tests"
+    dir: tests/api/mutations
+    cmds:
+      - cmd: |-
+          ./run-mutations.sh
+
+  test:all:
+    desc: "Run all verification tasks (lint, unit, functional, e2e)"
+    cmds:
+      - task: test:lint
+      - task: test:unit
+      - task: test:functional
+      - task: test:e2e
+
+  # Alias for backward compatibility or convenience
+  test:
+    desc: "Alias for test:unit"
+    cmds:
+      - task: test:unit
 
   generate:
     desc: "Generate all code (OpenAPI, Proto, Mocks)"
