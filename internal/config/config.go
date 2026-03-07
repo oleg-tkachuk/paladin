@@ -42,8 +42,8 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	}
 
 	// Load environment variables prefixed with PALADIN_ and replace _ with .
-	if err := k.Load(env.Provider("PALADIN_", ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "PALADIN_")), "_", ".")
+	if err := k.Load(env.Provider(EnvPrefix, ".", func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, EnvPrefix)), "_", ".")
 	}), nil); err != nil {
 		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}

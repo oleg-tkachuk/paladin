@@ -222,7 +222,11 @@ func (s *OpenAPIAdapter) GetObject(c *gin.Context, id api.ObjectID, params api.G
 func (s *OpenAPIAdapter) HeadObject(c *gin.Context, id api.ObjectID, params api.HeadObjectParams) {
 	_, err := s.svc.GetMeta(c.Request.Context(), tenantID(c), id)
 	if err != nil {
-		c.Status(http.StatusNotFound)
+		if errors.IsNotFound(err) {
+			c.Status(http.StatusNotFound)
+		} else {
+			respondWithError(c, 0, err)
+		}
 
 		return
 	}
@@ -242,8 +246,7 @@ func (s *OpenAPIAdapter) DeleteObject(c *gin.Context, id openapi_types.UUID, par
 func (s *OpenAPIAdapter) PurgeObject(c *gin.Context, id openapi_types.UUID, params api.PurgeObjectParams) {
 	var idempotencyKey *string
 	if params.IdempotencyKey != nil {
-		k := string(*params.IdempotencyKey)
-		idempotencyKey = &k
+		idempotencyKey = params.IdempotencyKey
 	}
 
 	if err := s.svc.Purge(c.Request.Context(), tenantID(c), id, idempotencyKey); err != nil {
@@ -282,8 +285,7 @@ func (s *OpenAPIAdapter) UpdateObject(c *gin.Context, id openapi_types.UUID, par
 
 	var idempotencyKey *string
 	if params.IdempotencyKey != nil {
-		k := string(*params.IdempotencyKey)
-		idempotencyKey = &k
+		idempotencyKey = params.IdempotencyKey
 	}
 
 	if err := s.svc.UpdateStatus(c.Request.Context(), tenantID(c), id, string(req.Status), idempotencyKey); err != nil {
@@ -349,8 +351,7 @@ func (s *OpenAPIAdapter) BulkPurgeObjects(c *gin.Context, params api.BulkPurgeOb
 
 	var idempotencyKey *string
 	if params.IdempotencyKey != nil {
-		k := string(*params.IdempotencyKey)
-		idempotencyKey = &k
+		idempotencyKey = params.IdempotencyKey
 	}
 
 	count, err := s.svc.BulkPurge(c.Request.Context(), tenantID(c), req.Ids, idempotencyKey)
@@ -399,7 +400,13 @@ func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string, params ap
 
 func (s *OpenAPIAdapter) CompleteObject(c *gin.Context, id api.ObjectID, params api.CompleteObjectParams) {
 	var req api.CompleteObjectRequest
-	_ = c.ShouldBindJSON(&req) // Optional body
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondWithError(c, http.StatusBadRequest, err)
+
+			return
+		}
+	}
 
 	rec, err := s.svc.CompleteObject(c.Request.Context(), tenantID(c), id, req.Etag, req.SizeBytes)
 	if err != nil {
@@ -497,7 +504,13 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 
 func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id api.ObjectID, params api.SignObjectDownloadParams) {
 	var req api.SignObjectDownloadRequest
-	_ = c.ShouldBindJSON(&req)
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondWithError(c, http.StatusBadRequest, err)
+
+			return
+		}
+	}
 
 	ttl := 0
 	if req.DownloadExpiresInSeconds != nil {
@@ -519,7 +532,13 @@ func (s *OpenAPIAdapter) SignObjectDownload(c *gin.Context, id api.ObjectID, par
 
 func (s *OpenAPIAdapter) SignObjectUpload(c *gin.Context, id api.ObjectID, params api.SignObjectUploadParams) {
 	var req api.SignObjectUploadRequest
-	_ = c.ShouldBindJSON(&req)
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondWithError(c, http.StatusBadRequest, err)
+
+			return
+		}
+	}
 
 	ttl := 0
 	if req.UploadExpiresInSeconds != nil {

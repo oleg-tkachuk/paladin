@@ -11,8 +11,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// MapObjectToDomain converts sqlc.Object to domain.Object
-func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
+// mapToDomainObject converts sqlc.Object to domain.Object
+func mapToDomainObject(obj sqlc.Object) (domain.Object, error) {
 	id, err := uuidFromPgtype(obj.ID)
 	if err != nil {
 		return domain.Object{}, fmt.Errorf("convert object id: %w", err)
@@ -46,8 +46,8 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 	}, nil
 }
 
-// MapMultipartToDomain converts sqlc.MultipartUpload to domain.Multipart
-func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
+// mapToDomainMultipart converts sqlc.MultipartUpload to domain.Multipart
+func mapToDomainMultipart(mp sqlc.MultipartUpload) (domain.Multipart, error) {
 	id, err := uuidFromPgtype(mp.ID)
 	if err != nil {
 		return domain.Multipart{}, fmt.Errorf("convert multipart id: %w", err)
@@ -74,8 +74,8 @@ func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
 	}, nil
 }
 
-// MapMultipartPartToDomain converts sqlc.MultipartPart to domain.MultipartPart
-func MapMultipartPartToDomain(part sqlc.MultipartPart) (domain.MultipartPart, error) {
+// mapToDomainMultipartPart converts sqlc.MultipartPart to domain.MultipartPart
+func mapToDomainMultipartPart(part sqlc.MultipartPart) (domain.MultipartPart, error) {
 	multipartID, err := uuidFromPgtype(part.MultipartID)
 	if err != nil {
 		return domain.MultipartPart{}, fmt.Errorf("convert multipart id: %w", err)
@@ -90,8 +90,8 @@ func MapMultipartPartToDomain(part sqlc.MultipartPart) (domain.MultipartPart, er
 	}, nil
 }
 
-// MapIdempotencyToDomain converts sqlc.IdempotencyKey to domain.IdempotencyRecord
-func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
+// mapToDomainIdempotency converts sqlc.IdempotencyKey to domain.IdempotencyRecord
+func mapToDomainIdempotency(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	return domain.IdempotencyRecord{
 		TenantID:     key.TenantID,
 		Key:          key.IdempotencyKey,
@@ -104,8 +104,8 @@ func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	}
 }
 
-// MapCategoryToDomain converts sqlc.ObjectCategory to domain.Category
-func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
+// mapToDomainCategory converts sqlc.ObjectCategory to domain.Category
+func mapToDomainCategory(c sqlc.ObjectCategory) domain.Category {
 	return domain.Category{
 		ID:          uuid.UUID(c.ID.Bytes),
 		TenantID:    c.TenantID,
@@ -117,9 +117,8 @@ func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
 	}
 }
 
-// MapAuditLogToDomain converts sqlc.AuditLog to domain.AuditLog
-// This is kept for compatibility with Create operations
-func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
+// mapToDomainAuditLog converts sqlc.AuditLog to domain.AuditLog
+func mapToDomainAuditLog(log sqlc.AuditLog) (domain.AuditLog, error) {
 	id, err := uuidFromPgtype(log.ID)
 	if err != nil {
 		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)

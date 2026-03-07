@@ -82,7 +82,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	if err != nil {
 		status = "error"
 
-		return MapPgError(err)
+		return mapPgError(err)
 	}
 
 	status = "success"
@@ -99,10 +99,10 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapAuditLogToDomain(row.AuditLog)
+	result, err := mapToDomainAuditLog(row.AuditLog)
 	if err != nil {
 		status = "error"
 
@@ -150,7 +150,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 	if err != nil {
 		opStatus = "error"
 
-		return nil, "", 0, MapPgError(err)
+		return nil, "", 0, mapPgError(err)
 	}
 
 	var totalCount int64
@@ -160,7 +160,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	logs := make([]domain.AuditLog, 0, len(rows))
 	for _, row := range rows {
-		log, err := MapAuditLogToDomain(row.AuditLog)
+		log, err := mapToDomainAuditLog(row.AuditLog)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map audit log: %w", err)
 		}
@@ -187,7 +187,7 @@ func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (
 	if err != nil {
 		status = "error"
 
-		return 0, MapPgError(err)
+		return 0, mapPgError(err)
 	}
 
 	status = "success"

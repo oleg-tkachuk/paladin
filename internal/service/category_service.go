@@ -23,7 +23,7 @@ func NewCategoryService(repo domain.CategoryRepository) domain.CategoryService {
 
 func (s *categoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
 	// If slug contains slashes, check if parent categories exist
-	if lastSlash := strings.LastIndex(slug, "/"); lastSlash > 0 {
+	if lastSlash := strings.LastIndex(slug, domain.CategorySeparator); lastSlash > 0 {
 		parentSlug := slug[:lastSlash]
 		exists, err := s.repo.Exists(ctx, tenantID, parentSlug)
 		if err != nil {

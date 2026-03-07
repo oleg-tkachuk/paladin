@@ -50,20 +50,6 @@ SET labels     = jsonb_strip_nulls(labels || $2::jsonb),
     updated_at = now()
 WHERE tenant_id = $1
 RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at`
-
-	// listTenantsQuery is built with 4 positional parameters:
-	// $1 = cursor (timestamptz, nullable), $2 = label filter (jsonb, nullable),
-	// $3 = tag filter (text[], nullable), $4 = limit (int4).
-	listTenantsQuery = `
-SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at,
-       COUNT(*) OVER () AS total_count
-FROM tenants
-WHERE
-    ($1::timestamptz IS NULL OR created_at < $1::timestamptz)
-    AND ($2::jsonb IS NULL OR labels @> $2::jsonb)
-    AND ($3::text[] IS NULL OR tags && $3::text[])
-ORDER BY created_at DESC
-LIMIT $4`
 )
 
 // TenantRepo implements domain.TenantRepository backed by PostgreSQL.
@@ -297,7 +283,7 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 
 	out := make([]domain.Tenant, 0, len(rows))
 	for _, row := range rows {
-		t, err := MapTenantToDomain(row)
+		t, err := mapToDomainTenant(row)
 		if err != nil {
 			opStatus = "error"
 			return nil, "", 0, fmt.Errorf("map tenant: %w", err)
@@ -315,8 +301,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 	return out, nextCursor, totalCount, nil
 }
 
-// MapTenantToDomain converts a SQLC row to a domain Tenant.
-func MapTenantToDomain(row sqlc.ListTenantsPaginatedRow) (domain.Tenant, error) {
+// mapToDomainTenant converts a SQLC row to a domain Tenant.
+func mapToDomainTenant(row sqlc.ListTenantsPaginatedRow) (domain.Tenant, error) {
 	id, err := uuidFromPgtype(row.ID)
 	if err != nil {
 		return domain.Tenant{}, err

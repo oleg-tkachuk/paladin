@@ -53,7 +53,7 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 		status = "success"
 	}
 
-	return MapPgError(err)
+	return mapPgError(err)
 }
 
 func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) error {
@@ -98,7 +98,7 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 		_, err := br.Exec()
 		if err != nil {
 			status = "error"
-			return MapPgError(err)
+			return mapPgError(err)
 		}
 	}
 
@@ -115,12 +115,12 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
 	out := make([]domain.Object, 0, len(rows))
 	for _, row := range rows {
-		obj, err := MapObjectToDomain(row.Object)
+		obj, err := mapToDomainObject(row.Object)
 		if err != nil {
 			return nil, fmt.Errorf("map object: %w", err)
 		}
@@ -146,10 +146,10 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*
 			return nil, domain.ErrNotFound
 		}
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapObjectToDomain(obj.Object)
+	result, err := mapToDomainObject(obj.Object)
 	if err != nil {
 		status = "error"
 
@@ -170,7 +170,7 @@ func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid
 	if err != nil {
 		status = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 
 	status = "success"
@@ -187,7 +187,7 @@ func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id u
 	if err != nil {
 		status = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 
 	status = "success"
@@ -204,7 +204,7 @@ func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id u
 	if err != nil {
 		status = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 
 	status = "success"
@@ -221,7 +221,7 @@ func (r *ObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID
 	if err != nil {
 		status = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 
 	status = "success"
@@ -242,7 +242,7 @@ func (r *ObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID)
 	if err != nil {
 		status = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 
 	status = "success"
@@ -259,7 +259,7 @@ func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid
 	if err != nil {
 		opStatus = "error"
 
-		return false, MapPgError(err)
+		return false, mapPgError(err)
 	}
 	opStatus = "success"
 
@@ -275,10 +275,10 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapObjectToDomain(obj.Object)
+	result, err := mapToDomainObject(obj.Object)
 	if err != nil {
 		status = "error"
 
@@ -339,7 +339,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 	)
 	if err != nil {
 		opStatus = "error"
-		return nil, "", 0, MapPgError(err)
+		return nil, "", 0, mapPgError(err)
 	}
 
 	out := make([]domain.Object, 0, len(rows))
@@ -347,7 +347,7 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		if i == filter.Limit {
 			break
 		}
-		obj, err := MapObjectToDomain(row.Object)
+		obj, err := mapToDomainObject(row.Object)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map object: %w", err)
 		}
@@ -383,7 +383,7 @@ func (r *ObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, 
 	if err != nil {
 		status = "error"
 
-		return 0, MapPgError(err)
+		return 0, mapPgError(err)
 	}
 
 	status = "success"
@@ -405,7 +405,7 @@ func (r *ObjectsRepo) BulkRestore(ctx context.Context, tenantID string, ids []uu
 	if err != nil {
 		status = "error"
 
-		return 0, MapPgError(err)
+		return 0, mapPgError(err)
 	}
 
 	status = "success"
@@ -427,7 +427,7 @@ func (r *ObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids []uui
 	if err != nil {
 		status = "error"
 
-		return 0, MapPgError(err)
+		return 0, mapPgError(err)
 	}
 
 	status = "success"
@@ -444,7 +444,7 @@ func (r *ObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.Ob
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
 	status = "success"
@@ -499,7 +499,7 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 		ct, err := br.Exec()
 		if err != nil {
 			status = "error"
-			return totalRows, MapPgError(err)
+			return totalRows, mapPgError(err)
 		}
 		totalRows += ct.RowsAffected()
 	}
@@ -553,10 +553,10 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapObjectToDomain(obj)
+	result, err := mapToDomainObject(obj)
 	if err != nil {
 		return nil, err
 	}

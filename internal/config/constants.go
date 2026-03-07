@@ -8,4 +8,7 @@ const (
 	// DefaultK8sNamespaceEnvKey is the standard environment variable holding the
 	// Kubernetes namespace the pod is deployed in.
 	DefaultK8sNamespaceEnvKey = "K8S_NAMESPACE"
+
+	// EnvPrefix is the prefix used for all environment variables.
+	EnvPrefix = "PALADIN_"
 )

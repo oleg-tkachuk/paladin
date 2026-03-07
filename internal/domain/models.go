@@ -26,6 +26,11 @@ const (
 	ObjectHardDeleted ObjectStatus = "hard_deleted"
 )
 
+const (
+	// CategorySeparator is the character used to separate segments in category slugs.
+	CategorySeparator = "/"
+)
+
 // Category represents a tenant-scoped object category.
 // Category slugs are user-defined and managed via the /categories API.
 type Category struct {

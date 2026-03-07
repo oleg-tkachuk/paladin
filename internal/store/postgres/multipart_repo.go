@@ -41,7 +41,7 @@ func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error 
 		status = "success"
 	}
 
-	return MapPgError(err)
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
@@ -53,10 +53,10 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapMultipartToDomain(mp.MultipartUpload)
+	result, err := mapToDomainMultipart(mp.MultipartUpload)
 	if err != nil {
 		status = "error"
 
@@ -80,7 +80,7 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUI
 		status = "success"
 	}
 
-	return MapPgError(err)
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]domain.MultipartPart, error) {
@@ -92,12 +92,12 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
 	out := make([]domain.MultipartPart, 0, len(rows))
 	for _, row := range rows {
-		part, err := MapMultipartPartToDomain(row.MultipartPart)
+		part, err := mapToDomainMultipartPart(row.MultipartPart)
 		if err != nil {
 			status = "error"
 
@@ -123,7 +123,7 @@ func (r *MultipartRepo) MarkCompleted(ctx context.Context, tenantID string, uplo
 		status = "success"
 	}
 
-	return MapPgError(err)
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, uploadID string) error {
@@ -138,7 +138,7 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 		status = "success"
 	}
 
-	return MapPgError(err)
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
@@ -192,12 +192,12 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 	if err != nil {
 		status = "error"
 
-		return nil, MapPgError(err)
+		return nil, mapPgError(err)
 	}
 
 	out := make([]domain.Multipart, 0, len(rows))
 	for _, row := range rows {
-		mp, err := MapMultipartToDomain(row.MultipartUpload)
+		mp, err := mapToDomainMultipart(row.MultipartUpload)
 		if err != nil {
 			status = "error"
 

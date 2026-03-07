@@ -52,7 +52,7 @@ func (r *CategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.
 
 		return nil, fmt.Errorf("get category: %w", err)
 	}
-	cat := MapCategoryToDomain(row.ObjectCategory)
+	cat := mapToDomainCategory(row.ObjectCategory)
 
 	return &cat, nil
 }
@@ -87,7 +87,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, filter domain.
 	if err != nil {
 		status = "error"
 
-		return nil, "", 0, MapPgError(err)
+		return nil, "", 0, mapPgError(err)
 	}
 
 	var totalCount int64

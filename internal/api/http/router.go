@@ -38,16 +38,16 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	// Add API version header to ALL responses (including /version, /health/*, etc.)
 	r.Use(middleware.APIVersionMiddleware(metadata.Version))
 
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.GET(RouteMetrics, gin.WrapH(promhttp.Handler()))
 
-	r.GET("/health/livez", func(c *gin.Context) {
+	r.GET(RouteHealthLivez, func(c *gin.Context) {
 		if cfg.Server.LogProbes {
 			log.Debug("Liveness check called")
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})
 	})
 
-	r.GET("/health/startupz", func(c *gin.Context) {
+	r.GET(RouteHealthStartupz, func(c *gin.Context) {
 		if cfg.Server.LogProbes {
 			log.Debug("Startup check called")
 		}
@@ -62,7 +62,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 		c.JSON(http.StatusOK, gin.H{"status": "started"})
 	})
 
-	r.GET("/health/readyz", func(c *gin.Context) {
+	r.GET(RouteHealthReadyz, func(c *gin.Context) {
 		if cfg.Server.LogProbes {
 			log.Debug("Readiness check called")
 		}
@@ -90,7 +90,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 	// Apply rate limiting middleware
 	r.Use(middleware.RateLimitMiddleware(cfg))
 
-	r.GET("/version", func(c *gin.Context) {
+	r.GET(RouteVersion, func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"version":    metadata.Version,
 			"commit":     metadata.Commit,
@@ -98,7 +98,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 		})
 	})
 
-	v1 := r.Group("/v1")
+	v1 := r.Group(RouteV1)
 
 	// Add rate limiting headers (placeholder for future implementation)
 	v1.Use(middleware.RateLimitHeadersMiddleware())
@@ -115,7 +115,7 @@ func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, c
 
 	// Admin-only routes: tenant lifecycle management.
 	// Gated by AdminOnly middleware (requires Authorization: Bearer <admin_key>).
-	admin := v1.Group("/admin")
+	admin := v1.Group(RouteAdmin)
 	admin.Use(middleware.AdminOnly(cfg))
 	{
 		tenantHandler := NewTenantHandler(tenantSvc)

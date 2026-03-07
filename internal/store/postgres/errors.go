@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// MapPgError converts pgx errors to domain-appropriate errors
-func MapPgError(err error) error {
+// mapPgError converts pgx errors to domain-appropriate errors
+func mapPgError(err error) error {
 	if err == nil {
 		return nil
 	}
