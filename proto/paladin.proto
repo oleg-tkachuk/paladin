@@ -348,6 +348,7 @@ message ListObjectItem {
   string category = 7;
   map<string, string> labels = 8;
   string external_ref = 9;
+  string download_url = 10;
 }
 
 message PatchObjectMetaRequest {

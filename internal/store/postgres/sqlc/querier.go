@@ -44,7 +44,7 @@ type Querier interface {
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ListExpiredPendingObjectsRow, error)
 	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error)
-	ListObjects(ctx context.Context, tenantID string, status string, externalRef string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category string, recursive bool, keyPrefix string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, tenantID string, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error)
 	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
 	ListTenantsPaginated(ctx context.Context, cursor pgtype.Timestamptz, labelSelector []byte, tagSelector []string, search string, sortBy string, sortOrder string, limitVal int32) ([]ListTenantsPaginatedRow, error)
 	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error

@@ -296,24 +296,10 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 	var opStatus string
 	defer func() { metrics.RecordDbQuery(ctx, "ListObjects", opStatus, start) }()
 
-	var status string
+	var status *string
 	if filter.Status != nil {
-		status = string(*filter.Status)
-	}
-
-	var extRef string
-	if filter.ExternalRef != nil {
-		extRef = *filter.ExternalRef
-	}
-
-	var cat string
-	if filter.Category != nil {
-		cat = *filter.Category
-	}
-
-	var keyPrefix string
-	if filter.KeyPrefix != nil {
-		keyPrefix = *filter.KeyPrefix
+		s := string(*filter.Status)
+		status = &s
 	}
 
 	var cursorTime pgtype.Timestamptz
@@ -327,13 +313,13 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 	rows, err := r.db.Queries.ListObjects(ctx,
 		tenantID,
 		status,
-		extRef,
+		filter.ExternalRef,
 		timestampPtrToPgtype(filter.CreatedAfter),
 		timestampPtrToPgtype(filter.CreatedBefore),
 		cursorTime,
-		cat,
+		filter.Category,
 		filter.Recursive,
-		keyPrefix,
+		filter.KeyPrefix,
 		filter.SortBy,
 		filter.SortOrder,
 		safecast.Int32(filter.Limit+1),

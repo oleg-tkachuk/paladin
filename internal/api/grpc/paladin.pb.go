@@ -2848,6 +2848,7 @@ type ListObjectItem struct {
 	Category      string                 `protobuf:"bytes,7,opt,name=category,proto3" json:"category,omitempty"`
 	Labels        map[string]string      `protobuf:"bytes,8,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExternalRef   string                 `protobuf:"bytes,9,opt,name=external_ref,json=externalRef,proto3" json:"external_ref,omitempty"`
+	DownloadUrl   string                 `protobuf:"bytes,10,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2940,6 +2941,13 @@ func (x *ListObjectItem) GetLabels() map[string]string {
 func (x *ListObjectItem) GetExternalRef() string {
 	if x != nil {
 		return x.ExternalRef
+	}
+	return ""
+}
+
+func (x *ListObjectItem) GetDownloadUrl() string {
+	if x != nil {
+		return x.DownloadUrl
 	}
 	return ""
 }
@@ -3814,7 +3822,7 @@ const file_paladin_proto_rawDesc = "" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
 	"nextCursor\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
-	"totalCount\"\x84\x03\n" +
+	"totalCount\"\xa7\x03\n" +
 	"\x0eListObjectItem\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x1d\n" +
 	"\n" +
@@ -3826,7 +3834,9 @@ const file_paladin_proto_rawDesc = "" +
 	"\x0fcreated_at_unix\x18\x06 \x01(\x03R\rcreatedAtUnix\x12\x1a\n" +
 	"\bcategory\x18\a \x01(\tR\bcategory\x12:\n" +
 	"\x06labels\x18\b \x03(\v2\".paladin.v1.ListObjectItem.LabelsEntryR\x06labels\x12!\n" +
-	"\fexternal_ref\x18\t \x01(\tR\vexternalRef\x1a9\n" +
+	"\fexternal_ref\x18\t \x01(\tR\vexternalRef\x12!\n" +
+	"\fdownload_url\x18\n" +
+	" \x01(\tR\vdownloadUrl\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x02\n" +

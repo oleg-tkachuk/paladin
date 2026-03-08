@@ -296,9 +296,7 @@ type MockTenantService_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
-//   - filter domain.TenantFilter
-//   - limit int
-//   - cursor string
+//   - filter domain.ListTenantsFilter
 func (_e *MockTenantService_Expecter) List(ctx interface{}, filter interface{}) *MockTenantService_List_Call {
 	return &MockTenantService_List_Call{Call: _e.mock.On("List", ctx, filter)}
 }

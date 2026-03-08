@@ -309,6 +309,9 @@ func tenantFromCtx(ctx context.Context) string {
 func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*CreateObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -337,6 +340,9 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -352,6 +358,18 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 		return nil, grpcError(err)
 	}
 
+	var downloadURL string
+	if rec.Status == domain.ObjectComplete {
+		// Generate signed URL (default 1 hour TTL)
+		// TODO: In a real app, this TTL might be configurable or passed in the request
+		signed, err := s.svc.SignDownload(ctx, tenant, id, 3600)
+		if err != nil {
+			logger.FromContext(ctx).Warn("Failed to sign download URL for GetObject", zap.Error(err))
+		} else {
+			downloadURL = signed.URL
+		}
+	}
+
 	var ref string
 	if rec.ExternalRef != nil {
 		ref = *rec.ExternalRef
@@ -364,6 +382,7 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 		ContentType: rec.ContentType,
 		SizeBytes:   rec.SizeBytes,
 		Status:      string(rec.Status),
+		DownloadUrl: downloadURL,
 		Labels:      rec.Labels,
 		ExternalRef: ref,
 	}, nil
@@ -371,6 +390,9 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 
 func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*GetObjectMetaResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -413,6 +435,9 @@ func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*Get
 func (s *Server) PatchObjectMeta(ctx context.Context, req *PatchObjectMetaRequest) (*PatchObjectMetaResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -443,6 +468,9 @@ func (s *Server) PatchObjectMeta(ctx context.Context, req *PatchObjectMetaReques
 func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest) (*CompleteObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -462,6 +490,9 @@ func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest)
 
 func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -483,6 +514,9 @@ func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*D
 func (s *Server) PurgeObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -502,6 +536,9 @@ func (s *Server) PurgeObject(ctx context.Context, req *DeleteObjectRequest) (*De
 
 func (s *Server) RestoreObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -524,6 +561,9 @@ func (s *Server) RestoreObject(ctx context.Context, req *DeleteObjectRequest) (*
 
 func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -552,6 +592,9 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -571,6 +614,9 @@ func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartR
 
 func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRequest) (*CompleteMultipartResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -593,6 +639,9 @@ func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRe
 func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest) (*AbortMultipartResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -609,6 +658,9 @@ func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest)
 
 func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -631,6 +683,9 @@ func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest)
 
 func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*ListObjectsResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -658,14 +713,27 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 		return nil, grpcError(err)
 	}
 
-	respItems := make([]*ListObjectItem, len(objects))
-	for i, obj := range objects {
+	respItems := make([]*ListObjectItem, 0, len(objects))
+	for _, obj := range objects {
 		var ref string
 		if obj.ExternalRef != nil {
 			ref = *obj.ExternalRef
 		}
 
-		respItems[i] = &ListObjectItem{
+		var downloadURL string
+		if obj.Status == domain.ObjectComplete {
+			// Generate signed URL (default 1 hour TTL)
+			signed, err := s.svc.SignDownload(ctx, tenant, obj.ID, 3600)
+			if err != nil {
+				logger.FromContext(ctx).Warn("Failed to sign download URL for ListObjects item",
+					zap.String("object_id", obj.ID.String()),
+					zap.Error(err))
+			} else {
+				downloadURL = signed.URL
+			}
+		}
+
+		respItems = append(respItems, &ListObjectItem{
 			ObjectId:      obj.ID.String(),
 			ObjectKey:     obj.ObjectKey,
 			ContentType:   obj.ContentType,
@@ -675,7 +743,8 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 			Category:      obj.Category,
 			Labels:        obj.Labels,
 			ExternalRef:   ref,
-		}
+			DownloadUrl:   downloadURL,
+		})
 	}
 
 	return &ListObjectsResponse{
@@ -689,6 +758,9 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 
 func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -730,6 +802,9 @@ func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest)
 func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -750,6 +825,9 @@ func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*Get
 
 func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*GetCategoryResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
@@ -772,6 +850,9 @@ func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest)
 func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
 	tenant := tenantFromCtx(ctx)
 	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}
 
@@ -784,6 +865,9 @@ func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest)
 
 func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
 	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
 	if tenant == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
 	}

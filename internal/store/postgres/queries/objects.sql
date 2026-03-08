@@ -61,17 +61,17 @@ WHERE tenant_id = $1
 SELECT sqlc.embed(objects), COUNT(*) OVER() AS total_count
 FROM objects
 WHERE tenant_id = @tenant_id
-  AND (@status::text IS NULL OR status = @status)
-  AND (@external_ref::text IS NULL OR external_ref = @external_ref)
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('external_ref')::text IS NULL OR external_ref = sqlc.narg('external_ref'))
   AND (@created_after::timestamptz IS NULL OR created_at >= @created_after::timestamptz)
   AND (@created_before::timestamptz IS NULL OR created_at < @created_before::timestamptz)
   AND (@cursor::timestamptz IS NULL OR created_at < @cursor::timestamptz)
   AND (
-    @category::text IS NULL OR 
-    (@recursive::bool AND (category = @category OR category LIKE @category || '/%')) OR
-    category = @category
+    sqlc.narg('category')::text IS NULL OR 
+    (@recursive::bool AND (category = sqlc.narg('category') OR category LIKE sqlc.narg('category') || '/%')) OR
+    category = sqlc.narg('category')
   )
-  AND (@key_prefix::text IS NULL OR object_key LIKE @key_prefix || '%')
+  AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
 ORDER BY
     -- Sorting logic
     CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'asc' THEN object_key END ASC,

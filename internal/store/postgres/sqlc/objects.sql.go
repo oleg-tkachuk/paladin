@@ -302,7 +302,7 @@ type ListObjectsRow struct {
 	TotalCount int64  `json:"total_count"`
 }
 
-func (q *Queries) ListObjects(ctx context.Context, tenantID string, status string, externalRef string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category string, recursive bool, keyPrefix string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID string, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
 		status,
