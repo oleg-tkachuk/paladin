@@ -77,7 +77,7 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 
 // Delete performs a soft delete
 func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, OpDeleteObject)
+	ctx, span := otel.Tracer(TracerName).Start(ctx, OpDeleteObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -148,7 +148,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 // Restore brings back a soft-deleted object
 func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.UUID) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, OpRestoreObject)
+	ctx, span := otel.Tracer(TracerName).Start(ctx, OpRestoreObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -217,7 +217,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 
 // Purge performs a hard delete (removes from S3 and marks hard deleted)
 func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUID, idempotencyKey *string) error {
-	ctx, span := otel.Tracer("object-service").Start(ctx, OpPurgeObject)
+	ctx, span := otel.Tracer(TracerName).Start(ctx, OpPurgeObject)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
 
@@ -273,7 +273,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	}
 
 	// Delete from S3
-	err = s.executeWithBreaker(ctx, "s3_delete", func() error {
+	err = s.executeWithBreaker(ctx, S3DeleteBreaker, func() error {
 		return s.s3.DeleteObject(ctx, obj.ObjectKey)
 	})
 	if err != nil {
@@ -402,7 +402,7 @@ func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name
 	return res.(T), nil
 }
 func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkDelete")
+	ctx, span := otel.Tracer(TracerName).Start(ctx, "BulkDelete")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
 
@@ -429,7 +429,7 @@ func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []
 }
 
 func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkRestore")
+	ctx, span := otel.Tracer(TracerName).Start(ctx, "BulkRestore")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
 
@@ -456,7 +456,7 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 }
 
 func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkPurge")
+	ctx, span := otel.Tracer(TracerName).Start(ctx, "BulkPurge")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
 

@@ -1,11 +1,11 @@
 package middleware
 
 import (
-    "net/http"
+	"net/http"
 
-    "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func OTelHTTP(next http.Handler) http.Handler {
-    return otelhttp.NewHandler(next, "http")
+	return otelhttp.NewHandler(next, OTelHandlerName)
 }

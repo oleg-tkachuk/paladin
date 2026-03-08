@@ -101,7 +101,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 
 	key := ref.Key
 	if key == "" {
-		key = "password"
+		key = DefaultSecretKey
 	}
 
 	namespace := ref.Namespace

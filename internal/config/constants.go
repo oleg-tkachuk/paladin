@@ -11,4 +11,7 @@ const (
 
 	// EnvPrefix is the prefix used for all environment variables.
 	EnvPrefix = "PALADIN_"
+
+	// DefaultSecretKey is the default key used to extract values from Kubernetes Secrets.
+	DefaultSecretKey = "password"
 )

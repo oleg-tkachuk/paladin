@@ -38,7 +38,7 @@ func (s *SecretRef) UnmarshalJSON(data []byte) error {
 	var str string
 	if err := json.Unmarshal(data, &str); err == nil {
 		s.Name = str
-		s.Key = "password"
+		s.Key = DefaultSecretKey
 
 		return nil
 	}
@@ -48,7 +48,7 @@ func (s *SecretRef) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if s.Key == "" {
-		s.Key = "password"
+		s.Key = DefaultSecretKey
 	}
 
 	return nil
@@ -58,7 +58,7 @@ func (s *SecretRef) UnmarshalJSON(data []byte) error {
 func (s *SecretRef) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		s.Name = value.Value
-		s.Key = "password"
+		s.Key = DefaultSecretKey
 
 		return nil
 	}
@@ -68,7 +68,7 @@ func (s *SecretRef) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	if s.Key == "" {
-		s.Key = "password"
+		s.Key = DefaultSecretKey
 	}
 
 	return nil
