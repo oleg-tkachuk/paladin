@@ -1273,6 +1273,74 @@ func (x *CreateCategoryRequest) GetDescription() string {
 	return ""
 }
 
+type UpdateCategoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCategoryRequest) Reset() {
+	*x = UpdateCategoryRequest{}
+	mi := &file_paladin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCategoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCategoryRequest) ProtoMessage() {}
+
+func (x *UpdateCategoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCategoryRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCategoryRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UpdateCategoryRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *UpdateCategoryRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *UpdateCategoryRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdateCategoryRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
 type DeleteCategoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -1283,7 +1351,7 @@ type DeleteCategoryRequest struct {
 
 func (x *DeleteCategoryRequest) Reset() {
 	*x = DeleteCategoryRequest{}
-	mi := &file_paladin_proto_msgTypes[23]
+	mi := &file_paladin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1295,7 +1363,7 @@ func (x *DeleteCategoryRequest) String() string {
 func (*DeleteCategoryRequest) ProtoMessage() {}
 
 func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[23]
+	mi := &file_paladin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1308,7 +1376,7 @@ func (x *DeleteCategoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCategoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{23}
+	return file_paladin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DeleteCategoryRequest) GetTenantId() string {
@@ -1334,7 +1402,7 @@ type DeleteCategoryResponse struct {
 
 func (x *DeleteCategoryResponse) Reset() {
 	*x = DeleteCategoryResponse{}
-	mi := &file_paladin_proto_msgTypes[24]
+	mi := &file_paladin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1346,7 +1414,7 @@ func (x *DeleteCategoryResponse) String() string {
 func (*DeleteCategoryResponse) ProtoMessage() {}
 
 func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[24]
+	mi := &file_paladin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1359,7 +1427,7 @@ func (x *DeleteCategoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCategoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCategoryResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{24}
+	return file_paladin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteCategoryResponse) GetStatus() string {
@@ -1379,7 +1447,7 @@ type GetCategoryStatsRequest struct {
 
 func (x *GetCategoryStatsRequest) Reset() {
 	*x = GetCategoryStatsRequest{}
-	mi := &file_paladin_proto_msgTypes[25]
+	mi := &file_paladin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1391,7 +1459,7 @@ func (x *GetCategoryStatsRequest) String() string {
 func (*GetCategoryStatsRequest) ProtoMessage() {}
 
 func (x *GetCategoryStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[25]
+	mi := &file_paladin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1404,7 +1472,7 @@ func (x *GetCategoryStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCategoryStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{25}
+	return file_paladin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetCategoryStatsRequest) GetTenantId() string {
@@ -1431,7 +1499,7 @@ type GetCategoryStatsResponse struct {
 
 func (x *GetCategoryStatsResponse) Reset() {
 	*x = GetCategoryStatsResponse{}
-	mi := &file_paladin_proto_msgTypes[26]
+	mi := &file_paladin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1511,7 @@ func (x *GetCategoryStatsResponse) String() string {
 func (*GetCategoryStatsResponse) ProtoMessage() {}
 
 func (x *GetCategoryStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[26]
+	mi := &file_paladin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1524,7 @@ func (x *GetCategoryStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCategoryStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetCategoryStatsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{26}
+	return file_paladin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetCategoryStatsResponse) GetTotalCount() int64 {
@@ -1485,7 +1553,7 @@ type Category struct {
 
 func (x *Category) Reset() {
 	*x = Category{}
-	mi := &file_paladin_proto_msgTypes[27]
+	mi := &file_paladin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1565,7 @@ func (x *Category) String() string {
 func (*Category) ProtoMessage() {}
 
 func (x *Category) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[27]
+	mi := &file_paladin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1578,7 @@ func (x *Category) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Category.ProtoReflect.Descriptor instead.
 func (*Category) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{27}
+	return file_paladin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Category) GetId() string {
@@ -1555,7 +1623,7 @@ type CreateObjectRequest struct {
 
 func (x *CreateObjectRequest) Reset() {
 	*x = CreateObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[28]
+	mi := &file_paladin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1567,7 +1635,7 @@ func (x *CreateObjectRequest) String() string {
 func (*CreateObjectRequest) ProtoMessage() {}
 
 func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[28]
+	mi := &file_paladin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1580,7 +1648,7 @@ func (x *CreateObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{28}
+	return file_paladin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CreateObjectRequest) GetTenantId() string {
@@ -1639,7 +1707,7 @@ type CreateObjectResponse struct {
 
 func (x *CreateObjectResponse) Reset() {
 	*x = CreateObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[29]
+	mi := &file_paladin_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1719,7 @@ func (x *CreateObjectResponse) String() string {
 func (*CreateObjectResponse) ProtoMessage() {}
 
 func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[29]
+	mi := &file_paladin_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1732,7 @@ func (x *CreateObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectResponse.ProtoReflect.Descriptor instead.
 func (*CreateObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{29}
+	return file_paladin_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CreateObjectResponse) GetObjectId() string {
@@ -1719,7 +1787,7 @@ type GetObjectRequest struct {
 
 func (x *GetObjectRequest) Reset() {
 	*x = GetObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[30]
+	mi := &file_paladin_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1799,7 @@ func (x *GetObjectRequest) String() string {
 func (*GetObjectRequest) ProtoMessage() {}
 
 func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[30]
+	mi := &file_paladin_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1812,7 @@ func (x *GetObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{30}
+	return file_paladin_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetObjectRequest) GetTenantId() string {
@@ -1779,7 +1847,7 @@ type GetObjectResponse struct {
 
 func (x *GetObjectResponse) Reset() {
 	*x = GetObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[31]
+	mi := &file_paladin_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1791,7 +1859,7 @@ func (x *GetObjectResponse) String() string {
 func (*GetObjectResponse) ProtoMessage() {}
 
 func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[31]
+	mi := &file_paladin_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1804,7 +1872,7 @@ func (x *GetObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{31}
+	return file_paladin_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetObjectResponse) GetObjectId() string {
@@ -1894,7 +1962,7 @@ type GetObjectMetaResponse struct {
 
 func (x *GetObjectMetaResponse) Reset() {
 	*x = GetObjectMetaResponse{}
-	mi := &file_paladin_proto_msgTypes[32]
+	mi := &file_paladin_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1906,7 +1974,7 @@ func (x *GetObjectMetaResponse) String() string {
 func (*GetObjectMetaResponse) ProtoMessage() {}
 
 func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[32]
+	mi := &file_paladin_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1919,7 +1987,7 @@ func (x *GetObjectMetaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectMetaResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectMetaResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{32}
+	return file_paladin_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetObjectMetaResponse) GetObjectId() string {
@@ -1995,7 +2063,7 @@ type CompleteObjectRequest struct {
 
 func (x *CompleteObjectRequest) Reset() {
 	*x = CompleteObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[33]
+	mi := &file_paladin_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2007,7 +2075,7 @@ func (x *CompleteObjectRequest) String() string {
 func (*CompleteObjectRequest) ProtoMessage() {}
 
 func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[33]
+	mi := &file_paladin_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2020,7 +2088,7 @@ func (x *CompleteObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*CompleteObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{33}
+	return file_paladin_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *CompleteObjectRequest) GetTenantId() string {
@@ -2046,7 +2114,7 @@ type CompleteObjectResponse struct {
 
 func (x *CompleteObjectResponse) Reset() {
 	*x = CompleteObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[34]
+	mi := &file_paladin_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2058,7 +2126,7 @@ func (x *CompleteObjectResponse) String() string {
 func (*CompleteObjectResponse) ProtoMessage() {}
 
 func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[34]
+	mi := &file_paladin_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2071,7 +2139,7 @@ func (x *CompleteObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*CompleteObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{34}
+	return file_paladin_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CompleteObjectResponse) GetStatus() string {
@@ -2091,7 +2159,7 @@ type DeleteObjectRequest struct {
 
 func (x *DeleteObjectRequest) Reset() {
 	*x = DeleteObjectRequest{}
-	mi := &file_paladin_proto_msgTypes[35]
+	mi := &file_paladin_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2171,7 @@ func (x *DeleteObjectRequest) String() string {
 func (*DeleteObjectRequest) ProtoMessage() {}
 
 func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[35]
+	mi := &file_paladin_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2184,7 @@ func (x *DeleteObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{35}
+	return file_paladin_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DeleteObjectRequest) GetTenantId() string {
@@ -2142,7 +2210,7 @@ type DeleteObjectResponse struct {
 
 func (x *DeleteObjectResponse) Reset() {
 	*x = DeleteObjectResponse{}
-	mi := &file_paladin_proto_msgTypes[36]
+	mi := &file_paladin_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2154,7 +2222,7 @@ func (x *DeleteObjectResponse) String() string {
 func (*DeleteObjectResponse) ProtoMessage() {}
 
 func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[36]
+	mi := &file_paladin_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2167,7 +2235,7 @@ func (x *DeleteObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{36}
+	return file_paladin_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeleteObjectResponse) GetStatus() string {
@@ -2191,7 +2259,7 @@ type InitiateMultipartRequest struct {
 
 func (x *InitiateMultipartRequest) Reset() {
 	*x = InitiateMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[37]
+	mi := &file_paladin_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2203,7 +2271,7 @@ func (x *InitiateMultipartRequest) String() string {
 func (*InitiateMultipartRequest) ProtoMessage() {}
 
 func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[37]
+	mi := &file_paladin_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2216,7 +2284,7 @@ func (x *InitiateMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartRequest.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{37}
+	return file_paladin_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *InitiateMultipartRequest) GetTenantId() string {
@@ -2274,7 +2342,7 @@ type InitiateMultipartResponse struct {
 
 func (x *InitiateMultipartResponse) Reset() {
 	*x = InitiateMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[38]
+	mi := &file_paladin_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2286,7 +2354,7 @@ func (x *InitiateMultipartResponse) String() string {
 func (*InitiateMultipartResponse) ProtoMessage() {}
 
 func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[38]
+	mi := &file_paladin_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2299,7 +2367,7 @@ func (x *InitiateMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitiateMultipartResponse.ProtoReflect.Descriptor instead.
 func (*InitiateMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{38}
+	return file_paladin_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *InitiateMultipartResponse) GetObjectId() string {
@@ -2348,7 +2416,7 @@ type SignPartRequest struct {
 
 func (x *SignPartRequest) Reset() {
 	*x = SignPartRequest{}
-	mi := &file_paladin_proto_msgTypes[39]
+	mi := &file_paladin_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2360,7 +2428,7 @@ func (x *SignPartRequest) String() string {
 func (*SignPartRequest) ProtoMessage() {}
 
 func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[39]
+	mi := &file_paladin_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2373,7 +2441,7 @@ func (x *SignPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartRequest.ProtoReflect.Descriptor instead.
 func (*SignPartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{39}
+	return file_paladin_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SignPartRequest) GetTenantId() string {
@@ -2408,7 +2476,7 @@ type SignPartResponse struct {
 
 func (x *SignPartResponse) Reset() {
 	*x = SignPartResponse{}
-	mi := &file_paladin_proto_msgTypes[40]
+	mi := &file_paladin_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2420,7 +2488,7 @@ func (x *SignPartResponse) String() string {
 func (*SignPartResponse) ProtoMessage() {}
 
 func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[40]
+	mi := &file_paladin_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2433,7 +2501,7 @@ func (x *SignPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignPartResponse.ProtoReflect.Descriptor instead.
 func (*SignPartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{40}
+	return file_paladin_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SignPartResponse) GetUploadUrl() string {
@@ -2468,7 +2536,7 @@ type CompleteMultipartRequest struct {
 
 func (x *CompleteMultipartRequest) Reset() {
 	*x = CompleteMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[41]
+	mi := &file_paladin_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2480,7 +2548,7 @@ func (x *CompleteMultipartRequest) String() string {
 func (*CompleteMultipartRequest) ProtoMessage() {}
 
 func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[41]
+	mi := &file_paladin_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2493,7 +2561,7 @@ func (x *CompleteMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartRequest.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{41}
+	return file_paladin_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CompleteMultipartRequest) GetTenantId() string {
@@ -2527,7 +2595,7 @@ type CompleteMultipartPart struct {
 
 func (x *CompleteMultipartPart) Reset() {
 	*x = CompleteMultipartPart{}
-	mi := &file_paladin_proto_msgTypes[42]
+	mi := &file_paladin_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2539,7 +2607,7 @@ func (x *CompleteMultipartPart) String() string {
 func (*CompleteMultipartPart) ProtoMessage() {}
 
 func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[42]
+	mi := &file_paladin_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2552,7 +2620,7 @@ func (x *CompleteMultipartPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartPart.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartPart) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{42}
+	return file_paladin_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CompleteMultipartPart) GetPartNumber() int32 {
@@ -2579,7 +2647,7 @@ type CompleteMultipartResponse struct {
 
 func (x *CompleteMultipartResponse) Reset() {
 	*x = CompleteMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[43]
+	mi := &file_paladin_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2591,7 +2659,7 @@ func (x *CompleteMultipartResponse) String() string {
 func (*CompleteMultipartResponse) ProtoMessage() {}
 
 func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[43]
+	mi := &file_paladin_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2604,7 +2672,7 @@ func (x *CompleteMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteMultipartResponse.ProtoReflect.Descriptor instead.
 func (*CompleteMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{43}
+	return file_paladin_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CompleteMultipartResponse) GetObjectId() string {
@@ -2631,7 +2699,7 @@ type AbortMultipartRequest struct {
 
 func (x *AbortMultipartRequest) Reset() {
 	*x = AbortMultipartRequest{}
-	mi := &file_paladin_proto_msgTypes[44]
+	mi := &file_paladin_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2643,7 +2711,7 @@ func (x *AbortMultipartRequest) String() string {
 func (*AbortMultipartRequest) ProtoMessage() {}
 
 func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[44]
+	mi := &file_paladin_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2656,7 +2724,7 @@ func (x *AbortMultipartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartRequest.ProtoReflect.Descriptor instead.
 func (*AbortMultipartRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{44}
+	return file_paladin_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AbortMultipartRequest) GetTenantId() string {
@@ -2682,7 +2750,7 @@ type AbortMultipartResponse struct {
 
 func (x *AbortMultipartResponse) Reset() {
 	*x = AbortMultipartResponse{}
-	mi := &file_paladin_proto_msgTypes[45]
+	mi := &file_paladin_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2694,7 +2762,7 @@ func (x *AbortMultipartResponse) String() string {
 func (*AbortMultipartResponse) ProtoMessage() {}
 
 func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[45]
+	mi := &file_paladin_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2707,7 +2775,7 @@ func (x *AbortMultipartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AbortMultipartResponse.ProtoReflect.Descriptor instead.
 func (*AbortMultipartResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{45}
+	return file_paladin_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AbortMultipartResponse) GetStatus() string {
@@ -2734,7 +2802,7 @@ type ListObjectsRequest struct {
 
 func (x *ListObjectsRequest) Reset() {
 	*x = ListObjectsRequest{}
-	mi := &file_paladin_proto_msgTypes[46]
+	mi := &file_paladin_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2746,7 +2814,7 @@ func (x *ListObjectsRequest) String() string {
 func (*ListObjectsRequest) ProtoMessage() {}
 
 func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[46]
+	mi := &file_paladin_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2759,7 +2827,7 @@ func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{46}
+	return file_paladin_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListObjectsRequest) GetTenantId() string {
@@ -2836,7 +2904,7 @@ type ListObjectsResponse struct {
 
 func (x *ListObjectsResponse) Reset() {
 	*x = ListObjectsResponse{}
-	mi := &file_paladin_proto_msgTypes[47]
+	mi := &file_paladin_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2848,7 +2916,7 @@ func (x *ListObjectsResponse) String() string {
 func (*ListObjectsResponse) ProtoMessage() {}
 
 func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[47]
+	mi := &file_paladin_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2861,7 +2929,7 @@ func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{47}
+	return file_paladin_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListObjectsResponse) GetItems() []*ListObjectItem {
@@ -2903,7 +2971,7 @@ type ListObjectItem struct {
 
 func (x *ListObjectItem) Reset() {
 	*x = ListObjectItem{}
-	mi := &file_paladin_proto_msgTypes[48]
+	mi := &file_paladin_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2915,7 +2983,7 @@ func (x *ListObjectItem) String() string {
 func (*ListObjectItem) ProtoMessage() {}
 
 func (x *ListObjectItem) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[48]
+	mi := &file_paladin_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2928,7 +2996,7 @@ func (x *ListObjectItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectItem.ProtoReflect.Descriptor instead.
 func (*ListObjectItem) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{48}
+	return file_paladin_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListObjectItem) GetObjectId() string {
@@ -3013,7 +3081,7 @@ type PatchObjectMetaRequest struct {
 
 func (x *PatchObjectMetaRequest) Reset() {
 	*x = PatchObjectMetaRequest{}
-	mi := &file_paladin_proto_msgTypes[49]
+	mi := &file_paladin_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3025,7 +3093,7 @@ func (x *PatchObjectMetaRequest) String() string {
 func (*PatchObjectMetaRequest) ProtoMessage() {}
 
 func (x *PatchObjectMetaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[49]
+	mi := &file_paladin_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3038,7 +3106,7 @@ func (x *PatchObjectMetaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatchObjectMetaRequest.ProtoReflect.Descriptor instead.
 func (*PatchObjectMetaRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{49}
+	return file_paladin_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *PatchObjectMetaRequest) GetTenantId() string {
@@ -3080,7 +3148,7 @@ type PatchObjectMetaResponse struct {
 
 func (x *PatchObjectMetaResponse) Reset() {
 	*x = PatchObjectMetaResponse{}
-	mi := &file_paladin_proto_msgTypes[50]
+	mi := &file_paladin_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3092,7 +3160,7 @@ func (x *PatchObjectMetaResponse) String() string {
 func (*PatchObjectMetaResponse) ProtoMessage() {}
 
 func (x *PatchObjectMetaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[50]
+	mi := &file_paladin_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3105,7 +3173,7 @@ func (x *PatchObjectMetaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatchObjectMetaResponse.ProtoReflect.Descriptor instead.
 func (*PatchObjectMetaResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{50}
+	return file_paladin_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *PatchObjectMetaResponse) GetObjectId() string {
@@ -3141,7 +3209,7 @@ type CreateTenantRequest struct {
 
 func (x *CreateTenantRequest) Reset() {
 	*x = CreateTenantRequest{}
-	mi := &file_paladin_proto_msgTypes[51]
+	mi := &file_paladin_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3153,7 +3221,7 @@ func (x *CreateTenantRequest) String() string {
 func (*CreateTenantRequest) ProtoMessage() {}
 
 func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[51]
+	mi := &file_paladin_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3166,7 +3234,7 @@ func (x *CreateTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTenantRequest.ProtoReflect.Descriptor instead.
 func (*CreateTenantRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{51}
+	return file_paladin_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *CreateTenantRequest) GetTenantId() string {
@@ -3211,7 +3279,7 @@ type TenantResponse struct {
 
 func (x *TenantResponse) Reset() {
 	*x = TenantResponse{}
-	mi := &file_paladin_proto_msgTypes[52]
+	mi := &file_paladin_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3223,7 +3291,7 @@ func (x *TenantResponse) String() string {
 func (*TenantResponse) ProtoMessage() {}
 
 func (x *TenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[52]
+	mi := &file_paladin_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3236,7 +3304,7 @@ func (x *TenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TenantResponse.ProtoReflect.Descriptor instead.
 func (*TenantResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{52}
+	return file_paladin_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *TenantResponse) GetTenantId() string {
@@ -3290,7 +3358,7 @@ type GetTenantRequest struct {
 
 func (x *GetTenantRequest) Reset() {
 	*x = GetTenantRequest{}
-	mi := &file_paladin_proto_msgTypes[53]
+	mi := &file_paladin_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3302,7 +3370,7 @@ func (x *GetTenantRequest) String() string {
 func (*GetTenantRequest) ProtoMessage() {}
 
 func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[53]
+	mi := &file_paladin_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3315,7 +3383,7 @@ func (x *GetTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantRequest.ProtoReflect.Descriptor instead.
 func (*GetTenantRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{53}
+	return file_paladin_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetTenantRequest) GetTenantId() string {
@@ -3334,7 +3402,7 @@ type DeleteTenantRequest struct {
 
 func (x *DeleteTenantRequest) Reset() {
 	*x = DeleteTenantRequest{}
-	mi := &file_paladin_proto_msgTypes[54]
+	mi := &file_paladin_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3346,7 +3414,7 @@ func (x *DeleteTenantRequest) String() string {
 func (*DeleteTenantRequest) ProtoMessage() {}
 
 func (x *DeleteTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[54]
+	mi := &file_paladin_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3359,7 +3427,7 @@ func (x *DeleteTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTenantRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTenantRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{54}
+	return file_paladin_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *DeleteTenantRequest) GetTenantId() string {
@@ -3378,7 +3446,7 @@ type DeleteTenantResponse struct {
 
 func (x *DeleteTenantResponse) Reset() {
 	*x = DeleteTenantResponse{}
-	mi := &file_paladin_proto_msgTypes[55]
+	mi := &file_paladin_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3390,7 +3458,7 @@ func (x *DeleteTenantResponse) String() string {
 func (*DeleteTenantResponse) ProtoMessage() {}
 
 func (x *DeleteTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[55]
+	mi := &file_paladin_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3403,7 +3471,7 @@ func (x *DeleteTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTenantResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTenantResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{55}
+	return file_paladin_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *DeleteTenantResponse) GetStatus() string {
@@ -3428,7 +3496,7 @@ type ListTenantsRequest struct {
 
 func (x *ListTenantsRequest) Reset() {
 	*x = ListTenantsRequest{}
-	mi := &file_paladin_proto_msgTypes[56]
+	mi := &file_paladin_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3440,7 +3508,7 @@ func (x *ListTenantsRequest) String() string {
 func (*ListTenantsRequest) ProtoMessage() {}
 
 func (x *ListTenantsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[56]
+	mi := &file_paladin_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3453,7 +3521,7 @@ func (x *ListTenantsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTenantsRequest.ProtoReflect.Descriptor instead.
 func (*ListTenantsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{56}
+	return file_paladin_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListTenantsRequest) GetLimit() int32 {
@@ -3516,7 +3584,7 @@ type ListTenantsResponse struct {
 
 func (x *ListTenantsResponse) Reset() {
 	*x = ListTenantsResponse{}
-	mi := &file_paladin_proto_msgTypes[57]
+	mi := &file_paladin_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3528,7 +3596,7 @@ func (x *ListTenantsResponse) String() string {
 func (*ListTenantsResponse) ProtoMessage() {}
 
 func (x *ListTenantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[57]
+	mi := &file_paladin_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3541,7 +3609,7 @@ func (x *ListTenantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTenantsResponse.ProtoReflect.Descriptor instead.
 func (*ListTenantsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{57}
+	return file_paladin_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListTenantsResponse) GetItems() []*TenantResponse {
@@ -3577,7 +3645,7 @@ type PatchTenantMetadataRequest struct {
 
 func (x *PatchTenantMetadataRequest) Reset() {
 	*x = PatchTenantMetadataRequest{}
-	mi := &file_paladin_proto_msgTypes[58]
+	mi := &file_paladin_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3589,7 +3657,7 @@ func (x *PatchTenantMetadataRequest) String() string {
 func (*PatchTenantMetadataRequest) ProtoMessage() {}
 
 func (x *PatchTenantMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_proto_msgTypes[58]
+	mi := &file_paladin_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3602,7 +3670,7 @@ func (x *PatchTenantMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatchTenantMetadataRequest.ProtoReflect.Descriptor instead.
 func (*PatchTenantMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_proto_rawDescGZIP(), []int{58}
+	return file_paladin_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *PatchTenantMetadataRequest) GetTenantId() string {
@@ -3731,6 +3799,12 @@ const file_paladin_proto_rawDesc = "" +
 	"\x13GetCategoryResponse\x12,\n" +
 	"\bcategory\x18\x01 \x01(\v2\x10.paladin.v1.CategoryR\bcategory\"\x93\x01\n" +
 	"\x15CreateCategoryRequest\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x04 \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
+	"\f_description\"\x93\x01\n" +
+	"\x15UpdateCategoryRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12%\n" +
@@ -3974,7 +4048,7 @@ const file_paladin_proto_rawDesc = "" +
 	"\x11labels_patch_json\x18\x02 \x01(\tR\x0flabelsPatchJson\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\x12&\n" +
 	"\fdisplay_name\x18\x04 \x01(\tH\x00R\vdisplayName\x88\x01\x01B\x0f\n" +
-	"\r_display_name2\xba\x13\n" +
+	"\r_display_name2\x88\x14\n" +
 	"\x12Paladin\x12I\n" +
 	"\fCreateObject\x12\x1b.paladin.v1.CreateObjectRequest\x1a\x1c.paladin.v1.CreateObjectResponse\x12@\n" +
 	"\tGetObject\x12\x18.paladin.v1.GetObjectRequest\x1a\x19.paladin.v1.GetObjectResponse\x12H\n" +
@@ -3990,7 +4064,8 @@ const file_paladin_proto_rawDesc = "" +
 	"\x0eAbortMultipart\x12\x1d.paladin.v1.AbortMultipartRequest\x1a\x1e.paladin.v1.AbortMultipartResponse\x12O\n" +
 	"\x0eListCategories\x12\x1d.paladin.v1.ListCategoriesRequest\x1a\x1e.paladin.v1.ListCategoriesResponse\x12F\n" +
 	"\vGetCategory\x12\x1a.paladin.v1.GetCategoryRequest\x1a\x1b.paladin.v1.GetCategoryResponse\x12L\n" +
-	"\x0eCreateCategory\x12\x1d.paladin.v1.CreateCategoryRequest\x1a\x1b.paladin.v1.GetCategoryResponse\x12O\n" +
+	"\x0eCreateCategory\x12\x1d.paladin.v1.CreateCategoryRequest\x1a\x1b.paladin.v1.GetCategoryResponse\x12L\n" +
+	"\x0eUpdateCategory\x12\x1d.paladin.v1.UpdateCategoryRequest\x1a\x1b.paladin.v1.GetCategoryResponse\x12O\n" +
 	"\x0eDeleteCategory\x12\x1d.paladin.v1.DeleteCategoryRequest\x1a\x1e.paladin.v1.DeleteCategoryResponse\x12U\n" +
 	"\x10GetCategoryStats\x12\x1f.paladin.v1.GetCategoryStatsRequest\x1a .paladin.v1.GetCategoryStatsResponse\x12O\n" +
 	"\x0eGetObjectStats\x12\x1d.paladin.v1.GetObjectStatsRequest\x1a\x1e.paladin.v1.GetObjectStatsResponse\x12F\n" +
@@ -4020,7 +4095,7 @@ func file_paladin_proto_rawDescGZIP() []byte {
 	return file_paladin_proto_rawDescData
 }
 
-var file_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
+var file_paladin_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
 var file_paladin_proto_goTypes = []any{
 	(*BulkCreateObjectsRequest)(nil),    // 0: paladin.v1.BulkCreateObjectsRequest
 	(*BulkCreateObjectsResponse)(nil),   // 1: paladin.v1.BulkCreateObjectsResponse
@@ -4045,143 +4120,146 @@ var file_paladin_proto_goTypes = []any{
 	(*GetCategoryRequest)(nil),          // 20: paladin.v1.GetCategoryRequest
 	(*GetCategoryResponse)(nil),         // 21: paladin.v1.GetCategoryResponse
 	(*CreateCategoryRequest)(nil),       // 22: paladin.v1.CreateCategoryRequest
-	(*DeleteCategoryRequest)(nil),       // 23: paladin.v1.DeleteCategoryRequest
-	(*DeleteCategoryResponse)(nil),      // 24: paladin.v1.DeleteCategoryResponse
-	(*GetCategoryStatsRequest)(nil),     // 25: paladin.v1.GetCategoryStatsRequest
-	(*GetCategoryStatsResponse)(nil),    // 26: paladin.v1.GetCategoryStatsResponse
-	(*Category)(nil),                    // 27: paladin.v1.Category
-	(*CreateObjectRequest)(nil),         // 28: paladin.v1.CreateObjectRequest
-	(*CreateObjectResponse)(nil),        // 29: paladin.v1.CreateObjectResponse
-	(*GetObjectRequest)(nil),            // 30: paladin.v1.GetObjectRequest
-	(*GetObjectResponse)(nil),           // 31: paladin.v1.GetObjectResponse
-	(*GetObjectMetaResponse)(nil),       // 32: paladin.v1.GetObjectMetaResponse
-	(*CompleteObjectRequest)(nil),       // 33: paladin.v1.CompleteObjectRequest
-	(*CompleteObjectResponse)(nil),      // 34: paladin.v1.CompleteObjectResponse
-	(*DeleteObjectRequest)(nil),         // 35: paladin.v1.DeleteObjectRequest
-	(*DeleteObjectResponse)(nil),        // 36: paladin.v1.DeleteObjectResponse
-	(*InitiateMultipartRequest)(nil),    // 37: paladin.v1.InitiateMultipartRequest
-	(*InitiateMultipartResponse)(nil),   // 38: paladin.v1.InitiateMultipartResponse
-	(*SignPartRequest)(nil),             // 39: paladin.v1.SignPartRequest
-	(*SignPartResponse)(nil),            // 40: paladin.v1.SignPartResponse
-	(*CompleteMultipartRequest)(nil),    // 41: paladin.v1.CompleteMultipartRequest
-	(*CompleteMultipartPart)(nil),       // 42: paladin.v1.CompleteMultipartPart
-	(*CompleteMultipartResponse)(nil),   // 43: paladin.v1.CompleteMultipartResponse
-	(*AbortMultipartRequest)(nil),       // 44: paladin.v1.AbortMultipartRequest
-	(*AbortMultipartResponse)(nil),      // 45: paladin.v1.AbortMultipartResponse
-	(*ListObjectsRequest)(nil),          // 46: paladin.v1.ListObjectsRequest
-	(*ListObjectsResponse)(nil),         // 47: paladin.v1.ListObjectsResponse
-	(*ListObjectItem)(nil),              // 48: paladin.v1.ListObjectItem
-	(*PatchObjectMetaRequest)(nil),      // 49: paladin.v1.PatchObjectMetaRequest
-	(*PatchObjectMetaResponse)(nil),     // 50: paladin.v1.PatchObjectMetaResponse
-	(*CreateTenantRequest)(nil),         // 51: paladin.v1.CreateTenantRequest
-	(*TenantResponse)(nil),              // 52: paladin.v1.TenantResponse
-	(*GetTenantRequest)(nil),            // 53: paladin.v1.GetTenantRequest
-	(*DeleteTenantRequest)(nil),         // 54: paladin.v1.DeleteTenantRequest
-	(*DeleteTenantResponse)(nil),        // 55: paladin.v1.DeleteTenantResponse
-	(*ListTenantsRequest)(nil),          // 56: paladin.v1.ListTenantsRequest
-	(*ListTenantsResponse)(nil),         // 57: paladin.v1.ListTenantsResponse
-	(*PatchTenantMetadataRequest)(nil),  // 58: paladin.v1.PatchTenantMetadataRequest
-	nil,                                 // 59: paladin.v1.BulkPatchItem.LabelsEntry
-	nil,                                 // 60: paladin.v1.CreateObjectRequest.LabelsEntry
-	nil,                                 // 61: paladin.v1.CreateObjectResponse.HeadersEntry
-	nil,                                 // 62: paladin.v1.GetObjectResponse.LabelsEntry
-	nil,                                 // 63: paladin.v1.GetObjectMetaResponse.LabelsEntry
-	nil,                                 // 64: paladin.v1.InitiateMultipartRequest.LabelsEntry
-	nil,                                 // 65: paladin.v1.ListObjectItem.LabelsEntry
-	nil,                                 // 66: paladin.v1.PatchObjectMetaRequest.LabelsEntry
-	nil,                                 // 67: paladin.v1.PatchObjectMetaResponse.LabelsEntry
-	nil,                                 // 68: paladin.v1.CreateTenantRequest.LabelsEntry
-	nil,                                 // 69: paladin.v1.TenantResponse.LabelsEntry
-	nil,                                 // 70: paladin.v1.ListTenantsRequest.LabelSelectorEntry
+	(*UpdateCategoryRequest)(nil),       // 23: paladin.v1.UpdateCategoryRequest
+	(*DeleteCategoryRequest)(nil),       // 24: paladin.v1.DeleteCategoryRequest
+	(*DeleteCategoryResponse)(nil),      // 25: paladin.v1.DeleteCategoryResponse
+	(*GetCategoryStatsRequest)(nil),     // 26: paladin.v1.GetCategoryStatsRequest
+	(*GetCategoryStatsResponse)(nil),    // 27: paladin.v1.GetCategoryStatsResponse
+	(*Category)(nil),                    // 28: paladin.v1.Category
+	(*CreateObjectRequest)(nil),         // 29: paladin.v1.CreateObjectRequest
+	(*CreateObjectResponse)(nil),        // 30: paladin.v1.CreateObjectResponse
+	(*GetObjectRequest)(nil),            // 31: paladin.v1.GetObjectRequest
+	(*GetObjectResponse)(nil),           // 32: paladin.v1.GetObjectResponse
+	(*GetObjectMetaResponse)(nil),       // 33: paladin.v1.GetObjectMetaResponse
+	(*CompleteObjectRequest)(nil),       // 34: paladin.v1.CompleteObjectRequest
+	(*CompleteObjectResponse)(nil),      // 35: paladin.v1.CompleteObjectResponse
+	(*DeleteObjectRequest)(nil),         // 36: paladin.v1.DeleteObjectRequest
+	(*DeleteObjectResponse)(nil),        // 37: paladin.v1.DeleteObjectResponse
+	(*InitiateMultipartRequest)(nil),    // 38: paladin.v1.InitiateMultipartRequest
+	(*InitiateMultipartResponse)(nil),   // 39: paladin.v1.InitiateMultipartResponse
+	(*SignPartRequest)(nil),             // 40: paladin.v1.SignPartRequest
+	(*SignPartResponse)(nil),            // 41: paladin.v1.SignPartResponse
+	(*CompleteMultipartRequest)(nil),    // 42: paladin.v1.CompleteMultipartRequest
+	(*CompleteMultipartPart)(nil),       // 43: paladin.v1.CompleteMultipartPart
+	(*CompleteMultipartResponse)(nil),   // 44: paladin.v1.CompleteMultipartResponse
+	(*AbortMultipartRequest)(nil),       // 45: paladin.v1.AbortMultipartRequest
+	(*AbortMultipartResponse)(nil),      // 46: paladin.v1.AbortMultipartResponse
+	(*ListObjectsRequest)(nil),          // 47: paladin.v1.ListObjectsRequest
+	(*ListObjectsResponse)(nil),         // 48: paladin.v1.ListObjectsResponse
+	(*ListObjectItem)(nil),              // 49: paladin.v1.ListObjectItem
+	(*PatchObjectMetaRequest)(nil),      // 50: paladin.v1.PatchObjectMetaRequest
+	(*PatchObjectMetaResponse)(nil),     // 51: paladin.v1.PatchObjectMetaResponse
+	(*CreateTenantRequest)(nil),         // 52: paladin.v1.CreateTenantRequest
+	(*TenantResponse)(nil),              // 53: paladin.v1.TenantResponse
+	(*GetTenantRequest)(nil),            // 54: paladin.v1.GetTenantRequest
+	(*DeleteTenantRequest)(nil),         // 55: paladin.v1.DeleteTenantRequest
+	(*DeleteTenantResponse)(nil),        // 56: paladin.v1.DeleteTenantResponse
+	(*ListTenantsRequest)(nil),          // 57: paladin.v1.ListTenantsRequest
+	(*ListTenantsResponse)(nil),         // 58: paladin.v1.ListTenantsResponse
+	(*PatchTenantMetadataRequest)(nil),  // 59: paladin.v1.PatchTenantMetadataRequest
+	nil,                                 // 60: paladin.v1.BulkPatchItem.LabelsEntry
+	nil,                                 // 61: paladin.v1.CreateObjectRequest.LabelsEntry
+	nil,                                 // 62: paladin.v1.CreateObjectResponse.HeadersEntry
+	nil,                                 // 63: paladin.v1.GetObjectResponse.LabelsEntry
+	nil,                                 // 64: paladin.v1.GetObjectMetaResponse.LabelsEntry
+	nil,                                 // 65: paladin.v1.InitiateMultipartRequest.LabelsEntry
+	nil,                                 // 66: paladin.v1.ListObjectItem.LabelsEntry
+	nil,                                 // 67: paladin.v1.PatchObjectMetaRequest.LabelsEntry
+	nil,                                 // 68: paladin.v1.PatchObjectMetaResponse.LabelsEntry
+	nil,                                 // 69: paladin.v1.CreateTenantRequest.LabelsEntry
+	nil,                                 // 70: paladin.v1.TenantResponse.LabelsEntry
+	nil,                                 // 71: paladin.v1.ListTenantsRequest.LabelSelectorEntry
 }
 var file_paladin_proto_depIdxs = []int32{
-	28, // 0: paladin.v1.BulkCreateObjectsRequest.items:type_name -> paladin.v1.CreateObjectRequest
-	29, // 1: paladin.v1.BulkCreateObjectsResponse.items:type_name -> paladin.v1.CreateObjectResponse
+	29, // 0: paladin.v1.BulkCreateObjectsRequest.items:type_name -> paladin.v1.CreateObjectRequest
+	30, // 1: paladin.v1.BulkCreateObjectsResponse.items:type_name -> paladin.v1.CreateObjectResponse
 	9,  // 2: paladin.v1.BulkSignUploadsRequest.items:type_name -> paladin.v1.SignUploadItem
-	29, // 3: paladin.v1.BulkSignUploadsResponse.items:type_name -> paladin.v1.CreateObjectResponse
-	34, // 4: paladin.v1.BulkCompleteObjectsResponse.items:type_name -> paladin.v1.CompleteObjectResponse
+	30, // 3: paladin.v1.BulkSignUploadsResponse.items:type_name -> paladin.v1.CreateObjectResponse
+	35, // 4: paladin.v1.BulkCompleteObjectsResponse.items:type_name -> paladin.v1.CompleteObjectResponse
 	14, // 5: paladin.v1.BulkPatchObjectsRequest.items:type_name -> paladin.v1.BulkPatchItem
-	59, // 6: paladin.v1.BulkPatchItem.labels:type_name -> paladin.v1.BulkPatchItem.LabelsEntry
-	27, // 7: paladin.v1.ListCategoriesResponse.items:type_name -> paladin.v1.Category
-	27, // 8: paladin.v1.GetCategoryResponse.category:type_name -> paladin.v1.Category
-	60, // 9: paladin.v1.CreateObjectRequest.labels:type_name -> paladin.v1.CreateObjectRequest.LabelsEntry
-	61, // 10: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
-	62, // 11: paladin.v1.GetObjectResponse.labels:type_name -> paladin.v1.GetObjectResponse.LabelsEntry
-	63, // 12: paladin.v1.GetObjectMetaResponse.labels:type_name -> paladin.v1.GetObjectMetaResponse.LabelsEntry
-	64, // 13: paladin.v1.InitiateMultipartRequest.labels:type_name -> paladin.v1.InitiateMultipartRequest.LabelsEntry
-	42, // 14: paladin.v1.CompleteMultipartRequest.parts:type_name -> paladin.v1.CompleteMultipartPart
-	48, // 15: paladin.v1.ListObjectsResponse.items:type_name -> paladin.v1.ListObjectItem
-	65, // 16: paladin.v1.ListObjectItem.labels:type_name -> paladin.v1.ListObjectItem.LabelsEntry
-	66, // 17: paladin.v1.PatchObjectMetaRequest.labels:type_name -> paladin.v1.PatchObjectMetaRequest.LabelsEntry
-	67, // 18: paladin.v1.PatchObjectMetaResponse.labels:type_name -> paladin.v1.PatchObjectMetaResponse.LabelsEntry
-	68, // 19: paladin.v1.CreateTenantRequest.labels:type_name -> paladin.v1.CreateTenantRequest.LabelsEntry
-	69, // 20: paladin.v1.TenantResponse.labels:type_name -> paladin.v1.TenantResponse.LabelsEntry
-	70, // 21: paladin.v1.ListTenantsRequest.label_selector:type_name -> paladin.v1.ListTenantsRequest.LabelSelectorEntry
-	52, // 22: paladin.v1.ListTenantsResponse.items:type_name -> paladin.v1.TenantResponse
-	28, // 23: paladin.v1.Paladin.CreateObject:input_type -> paladin.v1.CreateObjectRequest
-	30, // 24: paladin.v1.Paladin.GetObject:input_type -> paladin.v1.GetObjectRequest
-	30, // 25: paladin.v1.Paladin.GetObjectMeta:input_type -> paladin.v1.GetObjectRequest
-	49, // 26: paladin.v1.Paladin.PatchObjectMeta:input_type -> paladin.v1.PatchObjectMetaRequest
-	33, // 27: paladin.v1.Paladin.CompleteObject:input_type -> paladin.v1.CompleteObjectRequest
-	35, // 28: paladin.v1.Paladin.DeleteObject:input_type -> paladin.v1.DeleteObjectRequest
-	35, // 29: paladin.v1.Paladin.RestoreObject:input_type -> paladin.v1.DeleteObjectRequest
-	35, // 30: paladin.v1.Paladin.PurgeObject:input_type -> paladin.v1.DeleteObjectRequest
-	37, // 31: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
-	39, // 32: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
-	41, // 33: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
-	44, // 34: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
+	60, // 6: paladin.v1.BulkPatchItem.labels:type_name -> paladin.v1.BulkPatchItem.LabelsEntry
+	28, // 7: paladin.v1.ListCategoriesResponse.items:type_name -> paladin.v1.Category
+	28, // 8: paladin.v1.GetCategoryResponse.category:type_name -> paladin.v1.Category
+	61, // 9: paladin.v1.CreateObjectRequest.labels:type_name -> paladin.v1.CreateObjectRequest.LabelsEntry
+	62, // 10: paladin.v1.CreateObjectResponse.headers:type_name -> paladin.v1.CreateObjectResponse.HeadersEntry
+	63, // 11: paladin.v1.GetObjectResponse.labels:type_name -> paladin.v1.GetObjectResponse.LabelsEntry
+	64, // 12: paladin.v1.GetObjectMetaResponse.labels:type_name -> paladin.v1.GetObjectMetaResponse.LabelsEntry
+	65, // 13: paladin.v1.InitiateMultipartRequest.labels:type_name -> paladin.v1.InitiateMultipartRequest.LabelsEntry
+	43, // 14: paladin.v1.CompleteMultipartRequest.parts:type_name -> paladin.v1.CompleteMultipartPart
+	49, // 15: paladin.v1.ListObjectsResponse.items:type_name -> paladin.v1.ListObjectItem
+	66, // 16: paladin.v1.ListObjectItem.labels:type_name -> paladin.v1.ListObjectItem.LabelsEntry
+	67, // 17: paladin.v1.PatchObjectMetaRequest.labels:type_name -> paladin.v1.PatchObjectMetaRequest.LabelsEntry
+	68, // 18: paladin.v1.PatchObjectMetaResponse.labels:type_name -> paladin.v1.PatchObjectMetaResponse.LabelsEntry
+	69, // 19: paladin.v1.CreateTenantRequest.labels:type_name -> paladin.v1.CreateTenantRequest.LabelsEntry
+	70, // 20: paladin.v1.TenantResponse.labels:type_name -> paladin.v1.TenantResponse.LabelsEntry
+	71, // 21: paladin.v1.ListTenantsRequest.label_selector:type_name -> paladin.v1.ListTenantsRequest.LabelSelectorEntry
+	53, // 22: paladin.v1.ListTenantsResponse.items:type_name -> paladin.v1.TenantResponse
+	29, // 23: paladin.v1.Paladin.CreateObject:input_type -> paladin.v1.CreateObjectRequest
+	31, // 24: paladin.v1.Paladin.GetObject:input_type -> paladin.v1.GetObjectRequest
+	31, // 25: paladin.v1.Paladin.GetObjectMeta:input_type -> paladin.v1.GetObjectRequest
+	50, // 26: paladin.v1.Paladin.PatchObjectMeta:input_type -> paladin.v1.PatchObjectMetaRequest
+	34, // 27: paladin.v1.Paladin.CompleteObject:input_type -> paladin.v1.CompleteObjectRequest
+	36, // 28: paladin.v1.Paladin.DeleteObject:input_type -> paladin.v1.DeleteObjectRequest
+	36, // 29: paladin.v1.Paladin.RestoreObject:input_type -> paladin.v1.DeleteObjectRequest
+	36, // 30: paladin.v1.Paladin.PurgeObject:input_type -> paladin.v1.DeleteObjectRequest
+	38, // 31: paladin.v1.Paladin.InitiateMultipart:input_type -> paladin.v1.InitiateMultipartRequest
+	40, // 32: paladin.v1.Paladin.SignPart:input_type -> paladin.v1.SignPartRequest
+	42, // 33: paladin.v1.Paladin.CompleteMultipart:input_type -> paladin.v1.CompleteMultipartRequest
+	45, // 34: paladin.v1.Paladin.AbortMultipart:input_type -> paladin.v1.AbortMultipartRequest
 	18, // 35: paladin.v1.Paladin.ListCategories:input_type -> paladin.v1.ListCategoriesRequest
 	20, // 36: paladin.v1.Paladin.GetCategory:input_type -> paladin.v1.GetCategoryRequest
 	22, // 37: paladin.v1.Paladin.CreateCategory:input_type -> paladin.v1.CreateCategoryRequest
-	23, // 38: paladin.v1.Paladin.DeleteCategory:input_type -> paladin.v1.DeleteCategoryRequest
-	25, // 39: paladin.v1.Paladin.GetCategoryStats:input_type -> paladin.v1.GetCategoryStatsRequest
-	16, // 40: paladin.v1.Paladin.GetObjectStats:input_type -> paladin.v1.GetObjectStatsRequest
-	46, // 41: paladin.v1.Paladin.ListObjects:input_type -> paladin.v1.ListObjectsRequest
-	51, // 42: paladin.v1.Paladin.CreateTenant:input_type -> paladin.v1.CreateTenantRequest
-	53, // 43: paladin.v1.Paladin.GetTenant:input_type -> paladin.v1.GetTenantRequest
-	54, // 44: paladin.v1.Paladin.DeleteTenant:input_type -> paladin.v1.DeleteTenantRequest
-	56, // 45: paladin.v1.Paladin.ListTenants:input_type -> paladin.v1.ListTenantsRequest
-	58, // 46: paladin.v1.Paladin.PatchTenantMetadata:input_type -> paladin.v1.PatchTenantMetadataRequest
-	0,  // 47: paladin.v1.Paladin.BulkCreateObjects:input_type -> paladin.v1.BulkCreateObjectsRequest
-	2,  // 48: paladin.v1.Paladin.BulkDeleteObjects:input_type -> paladin.v1.BulkDeleteObjectsRequest
-	4,  // 49: paladin.v1.Paladin.BulkRestoreObjects:input_type -> paladin.v1.BulkRestoreObjectsRequest
-	6,  // 50: paladin.v1.Paladin.BulkPurgeObjects:input_type -> paladin.v1.BulkPurgeObjectsRequest
-	8,  // 51: paladin.v1.Paladin.BulkSignUploads:input_type -> paladin.v1.BulkSignUploadsRequest
-	11, // 52: paladin.v1.Paladin.BulkCompleteObjects:input_type -> paladin.v1.BulkCompleteObjectsRequest
-	13, // 53: paladin.v1.Paladin.BulkPatchObjects:input_type -> paladin.v1.BulkPatchObjectsRequest
-	29, // 54: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
-	31, // 55: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
-	32, // 56: paladin.v1.Paladin.GetObjectMeta:output_type -> paladin.v1.GetObjectMetaResponse
-	50, // 57: paladin.v1.Paladin.PatchObjectMeta:output_type -> paladin.v1.PatchObjectMetaResponse
-	34, // 58: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
-	36, // 59: paladin.v1.Paladin.DeleteObject:output_type -> paladin.v1.DeleteObjectResponse
-	36, // 60: paladin.v1.Paladin.RestoreObject:output_type -> paladin.v1.DeleteObjectResponse
-	36, // 61: paladin.v1.Paladin.PurgeObject:output_type -> paladin.v1.DeleteObjectResponse
-	38, // 62: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
-	40, // 63: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
-	43, // 64: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
-	45, // 65: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
-	19, // 66: paladin.v1.Paladin.ListCategories:output_type -> paladin.v1.ListCategoriesResponse
-	21, // 67: paladin.v1.Paladin.GetCategory:output_type -> paladin.v1.GetCategoryResponse
-	21, // 68: paladin.v1.Paladin.CreateCategory:output_type -> paladin.v1.GetCategoryResponse
-	24, // 69: paladin.v1.Paladin.DeleteCategory:output_type -> paladin.v1.DeleteCategoryResponse
-	26, // 70: paladin.v1.Paladin.GetCategoryStats:output_type -> paladin.v1.GetCategoryStatsResponse
-	17, // 71: paladin.v1.Paladin.GetObjectStats:output_type -> paladin.v1.GetObjectStatsResponse
-	47, // 72: paladin.v1.Paladin.ListObjects:output_type -> paladin.v1.ListObjectsResponse
-	52, // 73: paladin.v1.Paladin.CreateTenant:output_type -> paladin.v1.TenantResponse
-	52, // 74: paladin.v1.Paladin.GetTenant:output_type -> paladin.v1.TenantResponse
-	55, // 75: paladin.v1.Paladin.DeleteTenant:output_type -> paladin.v1.DeleteTenantResponse
-	57, // 76: paladin.v1.Paladin.ListTenants:output_type -> paladin.v1.ListTenantsResponse
-	52, // 77: paladin.v1.Paladin.PatchTenantMetadata:output_type -> paladin.v1.TenantResponse
-	1,  // 78: paladin.v1.Paladin.BulkCreateObjects:output_type -> paladin.v1.BulkCreateObjectsResponse
-	3,  // 79: paladin.v1.Paladin.BulkDeleteObjects:output_type -> paladin.v1.BulkDeleteObjectsResponse
-	5,  // 80: paladin.v1.Paladin.BulkRestoreObjects:output_type -> paladin.v1.BulkRestoreObjectsResponse
-	7,  // 81: paladin.v1.Paladin.BulkPurgeObjects:output_type -> paladin.v1.BulkPurgeObjectsResponse
-	10, // 82: paladin.v1.Paladin.BulkSignUploads:output_type -> paladin.v1.BulkSignUploadsResponse
-	12, // 83: paladin.v1.Paladin.BulkCompleteObjects:output_type -> paladin.v1.BulkCompleteObjectsResponse
-	15, // 84: paladin.v1.Paladin.BulkPatchObjects:output_type -> paladin.v1.BulkPatchObjectsResponse
-	54, // [54:85] is the sub-list for method output_type
-	23, // [23:54] is the sub-list for method input_type
+	23, // 38: paladin.v1.Paladin.UpdateCategory:input_type -> paladin.v1.UpdateCategoryRequest
+	24, // 39: paladin.v1.Paladin.DeleteCategory:input_type -> paladin.v1.DeleteCategoryRequest
+	26, // 40: paladin.v1.Paladin.GetCategoryStats:input_type -> paladin.v1.GetCategoryStatsRequest
+	16, // 41: paladin.v1.Paladin.GetObjectStats:input_type -> paladin.v1.GetObjectStatsRequest
+	47, // 42: paladin.v1.Paladin.ListObjects:input_type -> paladin.v1.ListObjectsRequest
+	52, // 43: paladin.v1.Paladin.CreateTenant:input_type -> paladin.v1.CreateTenantRequest
+	54, // 44: paladin.v1.Paladin.GetTenant:input_type -> paladin.v1.GetTenantRequest
+	55, // 45: paladin.v1.Paladin.DeleteTenant:input_type -> paladin.v1.DeleteTenantRequest
+	57, // 46: paladin.v1.Paladin.ListTenants:input_type -> paladin.v1.ListTenantsRequest
+	59, // 47: paladin.v1.Paladin.PatchTenantMetadata:input_type -> paladin.v1.PatchTenantMetadataRequest
+	0,  // 48: paladin.v1.Paladin.BulkCreateObjects:input_type -> paladin.v1.BulkCreateObjectsRequest
+	2,  // 49: paladin.v1.Paladin.BulkDeleteObjects:input_type -> paladin.v1.BulkDeleteObjectsRequest
+	4,  // 50: paladin.v1.Paladin.BulkRestoreObjects:input_type -> paladin.v1.BulkRestoreObjectsRequest
+	6,  // 51: paladin.v1.Paladin.BulkPurgeObjects:input_type -> paladin.v1.BulkPurgeObjectsRequest
+	8,  // 52: paladin.v1.Paladin.BulkSignUploads:input_type -> paladin.v1.BulkSignUploadsRequest
+	11, // 53: paladin.v1.Paladin.BulkCompleteObjects:input_type -> paladin.v1.BulkCompleteObjectsRequest
+	13, // 54: paladin.v1.Paladin.BulkPatchObjects:input_type -> paladin.v1.BulkPatchObjectsRequest
+	30, // 55: paladin.v1.Paladin.CreateObject:output_type -> paladin.v1.CreateObjectResponse
+	32, // 56: paladin.v1.Paladin.GetObject:output_type -> paladin.v1.GetObjectResponse
+	33, // 57: paladin.v1.Paladin.GetObjectMeta:output_type -> paladin.v1.GetObjectMetaResponse
+	51, // 58: paladin.v1.Paladin.PatchObjectMeta:output_type -> paladin.v1.PatchObjectMetaResponse
+	35, // 59: paladin.v1.Paladin.CompleteObject:output_type -> paladin.v1.CompleteObjectResponse
+	37, // 60: paladin.v1.Paladin.DeleteObject:output_type -> paladin.v1.DeleteObjectResponse
+	37, // 61: paladin.v1.Paladin.RestoreObject:output_type -> paladin.v1.DeleteObjectResponse
+	37, // 62: paladin.v1.Paladin.PurgeObject:output_type -> paladin.v1.DeleteObjectResponse
+	39, // 63: paladin.v1.Paladin.InitiateMultipart:output_type -> paladin.v1.InitiateMultipartResponse
+	41, // 64: paladin.v1.Paladin.SignPart:output_type -> paladin.v1.SignPartResponse
+	44, // 65: paladin.v1.Paladin.CompleteMultipart:output_type -> paladin.v1.CompleteMultipartResponse
+	46, // 66: paladin.v1.Paladin.AbortMultipart:output_type -> paladin.v1.AbortMultipartResponse
+	19, // 67: paladin.v1.Paladin.ListCategories:output_type -> paladin.v1.ListCategoriesResponse
+	21, // 68: paladin.v1.Paladin.GetCategory:output_type -> paladin.v1.GetCategoryResponse
+	21, // 69: paladin.v1.Paladin.CreateCategory:output_type -> paladin.v1.GetCategoryResponse
+	21, // 70: paladin.v1.Paladin.UpdateCategory:output_type -> paladin.v1.GetCategoryResponse
+	25, // 71: paladin.v1.Paladin.DeleteCategory:output_type -> paladin.v1.DeleteCategoryResponse
+	27, // 72: paladin.v1.Paladin.GetCategoryStats:output_type -> paladin.v1.GetCategoryStatsResponse
+	17, // 73: paladin.v1.Paladin.GetObjectStats:output_type -> paladin.v1.GetObjectStatsResponse
+	48, // 74: paladin.v1.Paladin.ListObjects:output_type -> paladin.v1.ListObjectsResponse
+	53, // 75: paladin.v1.Paladin.CreateTenant:output_type -> paladin.v1.TenantResponse
+	53, // 76: paladin.v1.Paladin.GetTenant:output_type -> paladin.v1.TenantResponse
+	56, // 77: paladin.v1.Paladin.DeleteTenant:output_type -> paladin.v1.DeleteTenantResponse
+	58, // 78: paladin.v1.Paladin.ListTenants:output_type -> paladin.v1.ListTenantsResponse
+	53, // 79: paladin.v1.Paladin.PatchTenantMetadata:output_type -> paladin.v1.TenantResponse
+	1,  // 80: paladin.v1.Paladin.BulkCreateObjects:output_type -> paladin.v1.BulkCreateObjectsResponse
+	3,  // 81: paladin.v1.Paladin.BulkDeleteObjects:output_type -> paladin.v1.BulkDeleteObjectsResponse
+	5,  // 82: paladin.v1.Paladin.BulkRestoreObjects:output_type -> paladin.v1.BulkRestoreObjectsResponse
+	7,  // 83: paladin.v1.Paladin.BulkPurgeObjects:output_type -> paladin.v1.BulkPurgeObjectsResponse
+	10, // 84: paladin.v1.Paladin.BulkSignUploads:output_type -> paladin.v1.BulkSignUploadsResponse
+	12, // 85: paladin.v1.Paladin.BulkCompleteObjects:output_type -> paladin.v1.BulkCompleteObjectsResponse
+	15, // 86: paladin.v1.Paladin.BulkPatchObjects:output_type -> paladin.v1.BulkPatchObjectsResponse
+	55, // [55:87] is the sub-list for method output_type
+	23, // [23:55] is the sub-list for method input_type
 	23, // [23:23] is the sub-list for extension type_name
 	23, // [23:23] is the sub-list for extension extendee
 	0,  // [0:23] is the sub-list for field type_name
@@ -4198,18 +4276,19 @@ func file_paladin_proto_init() {
 	file_paladin_proto_msgTypes[14].OneofWrappers = []any{}
 	file_paladin_proto_msgTypes[18].OneofWrappers = []any{}
 	file_paladin_proto_msgTypes[22].OneofWrappers = []any{}
-	file_paladin_proto_msgTypes[27].OneofWrappers = []any{}
-	file_paladin_proto_msgTypes[46].OneofWrappers = []any{}
-	file_paladin_proto_msgTypes[49].OneofWrappers = []any{}
-	file_paladin_proto_msgTypes[56].OneofWrappers = []any{}
-	file_paladin_proto_msgTypes[58].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[23].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[28].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[47].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[50].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[57].OneofWrappers = []any{}
+	file_paladin_proto_msgTypes[59].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_proto_rawDesc), len(file_paladin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   71,
+			NumMessages:   72,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -34,6 +34,7 @@ const (
 	Paladin_ListCategories_FullMethodName      = "/paladin.v1.Paladin/ListCategories"
 	Paladin_GetCategory_FullMethodName         = "/paladin.v1.Paladin/GetCategory"
 	Paladin_CreateCategory_FullMethodName      = "/paladin.v1.Paladin/CreateCategory"
+	Paladin_UpdateCategory_FullMethodName      = "/paladin.v1.Paladin/UpdateCategory"
 	Paladin_DeleteCategory_FullMethodName      = "/paladin.v1.Paladin/DeleteCategory"
 	Paladin_GetCategoryStats_FullMethodName    = "/paladin.v1.Paladin/GetCategoryStats"
 	Paladin_GetObjectStats_FullMethodName      = "/paladin.v1.Paladin/GetObjectStats"
@@ -75,6 +76,7 @@ type PaladinClient interface {
 	ListCategories(ctx context.Context, in *ListCategoriesRequest, opts ...grpc.CallOption) (*ListCategoriesResponse, error)
 	GetCategory(ctx context.Context, in *GetCategoryRequest, opts ...grpc.CallOption) (*GetCategoryResponse, error)
 	CreateCategory(ctx context.Context, in *CreateCategoryRequest, opts ...grpc.CallOption) (*GetCategoryResponse, error)
+	UpdateCategory(ctx context.Context, in *UpdateCategoryRequest, opts ...grpc.CallOption) (*GetCategoryResponse, error)
 	DeleteCategory(ctx context.Context, in *DeleteCategoryRequest, opts ...grpc.CallOption) (*DeleteCategoryResponse, error)
 	GetCategoryStats(ctx context.Context, in *GetCategoryStatsRequest, opts ...grpc.CallOption) (*GetCategoryStatsResponse, error)
 	GetObjectStats(ctx context.Context, in *GetObjectStatsRequest, opts ...grpc.CallOption) (*GetObjectStatsResponse, error)
@@ -247,6 +249,16 @@ func (c *objectControlPlaneClient) CreateCategory(ctx context.Context, in *Creat
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCategoryResponse)
 	err := c.cc.Invoke(ctx, Paladin_CreateCategory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *objectControlPlaneClient) UpdateCategory(ctx context.Context, in *UpdateCategoryRequest, opts ...grpc.CallOption) (*GetCategoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCategoryResponse)
+	err := c.cc.Invoke(ctx, Paladin_UpdateCategory_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -436,6 +448,7 @@ type PaladinServer interface {
 	ListCategories(context.Context, *ListCategoriesRequest) (*ListCategoriesResponse, error)
 	GetCategory(context.Context, *GetCategoryRequest) (*GetCategoryResponse, error)
 	CreateCategory(context.Context, *CreateCategoryRequest) (*GetCategoryResponse, error)
+	UpdateCategory(context.Context, *UpdateCategoryRequest) (*GetCategoryResponse, error)
 	DeleteCategory(context.Context, *DeleteCategoryRequest) (*DeleteCategoryResponse, error)
 	GetCategoryStats(context.Context, *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error)
 	GetObjectStats(context.Context, *GetObjectStatsRequest) (*GetObjectStatsResponse, error)
@@ -508,6 +521,9 @@ func (UnimplementedPaladinServer) GetCategory(context.Context, *GetCategoryReque
 }
 func (UnimplementedPaladinServer) CreateCategory(context.Context, *CreateCategoryRequest) (*GetCategoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateCategory not implemented")
+}
+func (UnimplementedPaladinServer) UpdateCategory(context.Context, *UpdateCategoryRequest) (*GetCategoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCategory not implemented")
 }
 func (UnimplementedPaladinServer) DeleteCategory(context.Context, *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCategory not implemented")
@@ -844,6 +860,24 @@ func _Paladin_CreateCategory_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PaladinServer).CreateCategory(ctx, req.(*CreateCategoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Paladin_UpdateCategory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCategoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaladinServer).UpdateCategory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Paladin_UpdateCategory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaladinServer).UpdateCategory(ctx, req.(*UpdateCategoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1202,6 +1236,10 @@ var Paladin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateCategory",
 			Handler:    _Paladin_CreateCategory_Handler,
+		},
+		{
+			MethodName: "UpdateCategory",
+			Handler:    _Paladin_UpdateCategory_Handler,
 		},
 		{
 			MethodName: "DeleteCategory",

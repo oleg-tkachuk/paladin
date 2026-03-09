@@ -4,6 +4,13 @@
 INSERT INTO object_categories (id, tenant_id, slug, name, description)
 VALUES ($1, $2, $3, $4, $5);
 
+-- name: UpdateCategory :exec
+UPDATE object_categories
+SET name = $3,
+    description = $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND slug = $2;
+
 -- name: GetCategory :one
 SELECT sqlc.embed(object_categories)
 FROM object_categories

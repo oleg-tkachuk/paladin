@@ -149,6 +149,7 @@ func (m *FuzzMockUoWFactory) Begin(ctx context.Context) (domain.UnitOfWork, erro
 type FuzzMockCategoryRepo struct{ mock.Mock }
 
 func (m *FuzzMockCategoryRepo) Create(ctx context.Context, cat domain.Category) error { return nil }
+func (m *FuzzMockCategoryRepo) Update(ctx context.Context, cat domain.Category) error { return nil }
 func (m *FuzzMockCategoryRepo) Get(ctx context.Context, tID, id string) (*domain.Category, error) {
 	return nil, nil
 }

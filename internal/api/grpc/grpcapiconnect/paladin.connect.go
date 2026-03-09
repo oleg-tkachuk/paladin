@@ -78,6 +78,9 @@ const (
 	// PaladinCreateCategoryProcedure is the fully-qualified name of the Paladin's
 	// CreateCategory RPC.
 	PaladinCreateCategoryProcedure = "/paladin.v1.Paladin/CreateCategory"
+	// PaladinUpdateCategoryProcedure is the fully-qualified name of the Paladin's
+	// UpdateCategory RPC.
+	PaladinUpdateCategoryProcedure = "/paladin.v1.Paladin/UpdateCategory"
 	// PaladinDeleteCategoryProcedure is the fully-qualified name of the Paladin's
 	// DeleteCategory RPC.
 	PaladinDeleteCategoryProcedure = "/paladin.v1.Paladin/DeleteCategory"
@@ -149,6 +152,7 @@ type PaladinClient interface {
 	ListCategories(context.Context, *connect.Request[grpc.ListCategoriesRequest]) (*connect.Response[grpc.ListCategoriesResponse], error)
 	GetCategory(context.Context, *connect.Request[grpc.GetCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
 	CreateCategory(context.Context, *connect.Request[grpc.CreateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
+	UpdateCategory(context.Context, *connect.Request[grpc.UpdateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
 	DeleteCategory(context.Context, *connect.Request[grpc.DeleteCategoryRequest]) (*connect.Response[grpc.DeleteCategoryResponse], error)
 	GetCategoryStats(context.Context, *connect.Request[grpc.GetCategoryStatsRequest]) (*connect.Response[grpc.GetCategoryStatsResponse], error)
 	GetObjectStats(context.Context, *connect.Request[grpc.GetObjectStatsRequest]) (*connect.Response[grpc.GetObjectStatsResponse], error)
@@ -270,6 +274,12 @@ func NewPaladinClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(objectControlPlaneMethods.ByName("CreateCategory")),
 			connect.WithClientOptions(opts...),
 		),
+		updateCategory: connect.NewClient[grpc.UpdateCategoryRequest, grpc.GetCategoryResponse](
+			httpClient,
+			baseURL+PaladinUpdateCategoryProcedure,
+			connect.WithSchema(objectControlPlaneMethods.ByName("UpdateCategory")),
+			connect.WithClientOptions(opts...),
+		),
 		deleteCategory: connect.NewClient[grpc.DeleteCategoryRequest, grpc.DeleteCategoryResponse](
 			httpClient,
 			baseURL+PaladinDeleteCategoryProcedure,
@@ -386,6 +396,7 @@ type objectControlPlaneClient struct {
 	listCategories      *connect.Client[grpc.ListCategoriesRequest, grpc.ListCategoriesResponse]
 	getCategory         *connect.Client[grpc.GetCategoryRequest, grpc.GetCategoryResponse]
 	createCategory      *connect.Client[grpc.CreateCategoryRequest, grpc.GetCategoryResponse]
+	updateCategory      *connect.Client[grpc.UpdateCategoryRequest, grpc.GetCategoryResponse]
 	deleteCategory      *connect.Client[grpc.DeleteCategoryRequest, grpc.DeleteCategoryResponse]
 	getCategoryStats    *connect.Client[grpc.GetCategoryStatsRequest, grpc.GetCategoryStatsResponse]
 	getObjectStats      *connect.Client[grpc.GetObjectStatsRequest, grpc.GetObjectStatsResponse]
@@ -477,6 +488,11 @@ func (c *objectControlPlaneClient) GetCategory(ctx context.Context, req *connect
 // CreateCategory calls paladin.v1.Paladin.CreateCategory.
 func (c *objectControlPlaneClient) CreateCategory(ctx context.Context, req *connect.Request[grpc.CreateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error) {
 	return c.createCategory.CallUnary(ctx, req)
+}
+
+// UpdateCategory calls paladin.v1.Paladin.UpdateCategory.
+func (c *objectControlPlaneClient) UpdateCategory(ctx context.Context, req *connect.Request[grpc.UpdateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error) {
+	return c.updateCategory.CallUnary(ctx, req)
 }
 
 // DeleteCategory calls paladin.v1.Paladin.DeleteCategory.
@@ -580,6 +596,7 @@ type PaladinHandler interface {
 	ListCategories(context.Context, *connect.Request[grpc.ListCategoriesRequest]) (*connect.Response[grpc.ListCategoriesResponse], error)
 	GetCategory(context.Context, *connect.Request[grpc.GetCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
 	CreateCategory(context.Context, *connect.Request[grpc.CreateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
+	UpdateCategory(context.Context, *connect.Request[grpc.UpdateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error)
 	DeleteCategory(context.Context, *connect.Request[grpc.DeleteCategoryRequest]) (*connect.Response[grpc.DeleteCategoryResponse], error)
 	GetCategoryStats(context.Context, *connect.Request[grpc.GetCategoryStatsRequest]) (*connect.Response[grpc.GetCategoryStatsResponse], error)
 	GetObjectStats(context.Context, *connect.Request[grpc.GetObjectStatsRequest]) (*connect.Response[grpc.GetObjectStatsResponse], error)
@@ -695,6 +712,12 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 		PaladinCreateCategoryProcedure,
 		svc.CreateCategory,
 		connect.WithSchema(objectControlPlaneMethods.ByName("CreateCategory")),
+		connect.WithHandlerOptions(opts...),
+	)
+	objectControlPlaneUpdateCategoryHandler := connect.NewUnaryHandler(
+		PaladinUpdateCategoryProcedure,
+		svc.UpdateCategory,
+		connect.WithSchema(objectControlPlaneMethods.ByName("UpdateCategory")),
 		connect.WithHandlerOptions(opts...),
 	)
 	objectControlPlaneDeleteCategoryHandler := connect.NewUnaryHandler(
@@ -825,6 +848,8 @@ func NewPaladinHandler(svc PaladinHandler, opts ...connect.HandlerOption) (strin
 			objectControlPlaneGetCategoryHandler.ServeHTTP(w, r)
 		case PaladinCreateCategoryProcedure:
 			objectControlPlaneCreateCategoryHandler.ServeHTTP(w, r)
+		case PaladinUpdateCategoryProcedure:
+			objectControlPlaneUpdateCategoryHandler.ServeHTTP(w, r)
 		case PaladinDeleteCategoryProcedure:
 			objectControlPlaneDeleteCategoryHandler.ServeHTTP(w, r)
 		case PaladinGetCategoryStatsProcedure:
@@ -924,6 +949,10 @@ func (UnimplementedPaladinHandler) GetCategory(context.Context, *connect.Request
 
 func (UnimplementedPaladinHandler) CreateCategory(context.Context, *connect.Request[grpc.CreateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.CreateCategory is not implemented"))
+}
+
+func (UnimplementedPaladinHandler) UpdateCategory(context.Context, *connect.Request[grpc.UpdateCategoryRequest]) (*connect.Response[grpc.GetCategoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.Paladin.UpdateCategory is not implemented"))
 }
 
 func (UnimplementedPaladinHandler) DeleteCategory(context.Context, *connect.Request[grpc.DeleteCategoryRequest]) (*connect.Response[grpc.DeleteCategoryResponse], error) {

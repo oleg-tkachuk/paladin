@@ -163,6 +163,14 @@ func (s *ConnectServer) CreateCategory(ctx context.Context, req *connect.Request
 	return connect.NewResponse(res), nil
 }
 
+func (s *ConnectServer) UpdateCategory(ctx context.Context, req *connect.Request[UpdateCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
+	res, err := s.Server.UpdateCategory(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(res), nil
+}
+
 func (s *ConnectServer) DeleteCategory(ctx context.Context, req *connect.Request[DeleteCategoryRequest]) (*connect.Response[DeleteCategoryResponse], error) {
 	res, err := s.Server.DeleteCategory(ctx, req.Msg)
 	if err != nil {
@@ -833,6 +841,30 @@ func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest)
 	}
 
 	cat, err := s.catSvc.Create(ctx, tenant, req.Slug, req.Name, req.Description)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &GetCategoryResponse{
+		Category: &Category{
+			Id:          cat.ID.String(),
+			Slug:        cat.Slug,
+			Name:        cat.Name,
+			Description: cat.Description,
+		},
+	}, nil
+}
+
+func (s *Server) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest) (*GetCategoryResponse, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = req.TenantId
+	}
+	if tenant == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+
+	cat, err := s.catSvc.Update(ctx, tenant, req.Slug, req.Name, req.Description)
 	if err != nil {
 		return nil, grpcError(err)
 	}

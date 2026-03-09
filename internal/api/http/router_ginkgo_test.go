@@ -197,6 +197,15 @@ func (m *MockCategoryService) Create(ctx context.Context, tenantID, slug, name s
 	return args.Get(0).(*domain.Category), args.Error(1)
 }
 
+func (m *MockCategoryService) Update(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	args := m.Called(ctx, tenantID, slug, name, description)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+
 func (m *MockCategoryService) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
 	args := m.Called(ctx, tenantID, slug)
 	if args.Get(0) == nil {

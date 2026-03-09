@@ -58,6 +58,7 @@ type Querier interface {
 	PruneAuditLogs(ctx context.Context, createdAt pgtype.Timestamptz, limit int32) (int64, error)
 	RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	TenantHasActiveObjects(ctx context.Context, tenantID string) (bool, error)
+	UpdateCategory(ctx context.Context, tenantID string, slug string, name string, description *string) error
 	UpdateMultipartStatus(ctx context.Context, tenantID string, uploadID string) (int64, error)
 	UpdateObjectStatus(ctx context.Context, tenantID string, iD pgtype.UUID, status string) (int64, error)
 	UpdateObjectStatusToActive(ctx context.Context, iD pgtype.UUID, tenantID string) (int64, error)

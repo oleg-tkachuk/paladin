@@ -506,3 +506,89 @@ func (_c *MockCategoryService_ListTenants_Call) RunAndReturn(run func(ctx contex
 	_c.Call.Return(run)
 	return _c
 }
+
+// Update provides a mock function for the type MockCategoryService
+func (_mock *MockCategoryService) Update(ctx context.Context, tenantID string, slug string, name string, description *string) (*domain.Category, error) {
+	ret := _mock.Called(ctx, tenantID, slug, name, description)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Update")
+	}
+
+	var r0 *domain.Category
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) (*domain.Category, error)); ok {
+		return returnFunc(ctx, tenantID, slug, name, description)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) *domain.Category); ok {
+		r0 = returnFunc(ctx, tenantID, slug, name, description)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.Category)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, slug, name, description)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCategoryService_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
+type MockCategoryService_Update_Call struct {
+	*mock.Call
+}
+
+// Update is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - slug string
+//   - name string
+//   - description *string
+func (_e *MockCategoryService_Expecter) Update(ctx interface{}, tenantID interface{}, slug interface{}, name interface{}, description interface{}) *MockCategoryService_Update_Call {
+	return &MockCategoryService_Update_Call{Call: _e.mock.On("Update", ctx, tenantID, slug, name, description)}
+}
+
+func (_c *MockCategoryService_Update_Call) Run(run func(ctx context.Context, tenantID string, slug string, name string, description *string)) *MockCategoryService_Update_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 *string
+		if args[4] != nil {
+			arg4 = args[4].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCategoryService_Update_Call) Return(category *domain.Category, err error) *MockCategoryService_Update_Call {
+	_c.Call.Return(category, err)
+	return _c
+}
+
+func (_c *MockCategoryService_Update_Call) RunAndReturn(run func(ctx context.Context, tenantID string, slug string, name string, description *string) (*domain.Category, error)) *MockCategoryService_Update_Call {
+	_c.Call.Return(run)
+	return _c
+}

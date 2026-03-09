@@ -152,6 +152,12 @@ func (m *MockCategoryRepo) Create(ctx context.Context, cat domain.Category) erro
 	return args.Error(0)
 }
 
+func (m *MockCategoryRepo) Update(ctx context.Context, cat domain.Category) error {
+	args := m.Called(ctx, cat)
+
+	return args.Error(0)
+}
+
 func (m *MockCategoryRepo) Get(ctx context.Context, tenantID, id string) (*domain.Category, error) {
 	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {

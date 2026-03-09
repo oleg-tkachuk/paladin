@@ -62,6 +62,30 @@ func (s *categoryService) Create(ctx context.Context, tenantID, slug, name strin
 	return s.repo.Get(ctx, tenantID, slug)
 }
 
+func (s *categoryService) Update(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	if err := validation.CategoryName(name); err != nil {
+		return nil, apperrors.BadRequest("invalid category name", err)
+	}
+	if description != nil {
+		if err := validation.CategoryDescription(*description); err != nil {
+			return nil, apperrors.BadRequest("invalid category description", err)
+		}
+	}
+
+	cat := domain.Category{
+		TenantID:    tenantID,
+		Slug:        slug,
+		Name:        name,
+		Description: description,
+	}
+
+	if err := s.repo.Update(ctx, cat); err != nil {
+		return nil, err
+	}
+
+	return s.repo.Get(ctx, tenantID, slug)
+}
+
 func (s *categoryService) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
 	return s.repo.Get(ctx, tenantID, slug)
 }

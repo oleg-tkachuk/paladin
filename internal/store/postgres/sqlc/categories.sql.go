@@ -223,3 +223,21 @@ func (q *Queries) ListTenants(ctx context.Context, limit int32, cursor pgtype.Ti
 	}
 	return items, nil
 }
+
+const updateCategory = `-- name: UpdateCategory :exec
+UPDATE object_categories
+SET name = $3,
+    description = $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND slug = $2
+`
+
+func (q *Queries) UpdateCategory(ctx context.Context, tenantID string, slug string, name string, description *string) error {
+	_, err := q.db.Exec(ctx, updateCategory,
+		tenantID,
+		slug,
+		name,
+		description,
+	)
+	return err
+}

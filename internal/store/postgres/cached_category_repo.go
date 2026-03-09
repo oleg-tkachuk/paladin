@@ -42,6 +42,20 @@ func (r *CachedCategoryRepo) Create(ctx context.Context, rec domain.Category) er
 	return nil
 }
 
+// Update modifies a category and invalidates related caches
+func (r *CachedCategoryRepo) Update(ctx context.Context, rec domain.Category) error {
+	err := r.repo.Update(ctx, rec)
+	if err != nil {
+		return err
+	}
+
+	// Invalidate caches
+	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
+	_ = r.cache.Delete(ctx, getKey)
+
+	return nil
+}
+
 // Get retrieves a category with caching
 func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
 	cacheKey := fmt.Sprintf("cat:get:%s:%s", tenantID, slug)

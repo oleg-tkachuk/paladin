@@ -44,6 +44,20 @@ func (r *CategoryRepo) Create(ctx context.Context, rec domain.Category) error {
 	return nil
 }
 
+func (r *CategoryRepo) Update(ctx context.Context, rec domain.Category) error {
+	err := r.db.Queries.UpdateCategory(ctx,
+		rec.TenantID,
+		rec.Slug,
+		rec.Name,
+		rec.Description,
+	)
+	if err != nil {
+		return fmt.Errorf("update category: %w", err)
+	}
+
+	return nil
+}
+
 func (r *CategoryRepo) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
 	row, err := r.db.Queries.GetCategory(ctx, tenantID, slug)
 	if err != nil {

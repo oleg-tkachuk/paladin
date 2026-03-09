@@ -28,6 +28,7 @@ service Paladin {
   rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
   rpc GetCategory(GetCategoryRequest) returns (GetCategoryResponse);
   rpc CreateCategory(CreateCategoryRequest) returns (GetCategoryResponse);
+  rpc UpdateCategory(UpdateCategoryRequest) returns (GetCategoryResponse);
   rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
   rpc GetCategoryStats(GetCategoryStatsRequest) returns (GetCategoryStatsResponse);
 
@@ -168,6 +169,13 @@ message GetCategoryResponse {
 }
 
 message CreateCategoryRequest {
+  string tenant_id = 1;
+  string slug = 2;
+  string name = 3;
+  optional string description = 4;
+}
+
+message UpdateCategoryRequest {
   string tenant_id = 1;
   string slug = 2;
   string name = 3;

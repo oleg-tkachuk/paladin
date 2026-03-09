@@ -27,6 +27,8 @@ type UoWFactory interface {
 type CategoryRepository interface {
 	// Create persists a new category. Returns error on duplicate slug.
 	Create(ctx context.Context, rec Category) error
+	// Update modifies an existing category.
+	Update(ctx context.Context, rec Category) error
 	// Get retrieves a category by tenant + slug. Returns ErrNotFound if absent.
 	Get(ctx context.Context, tenantID, slug string) (*Category, error)
 	// List returns categories for a tenant, paginated.
@@ -66,6 +68,7 @@ type TenantRepository interface {
 // CategoryService defines the business logic for managing categories.
 type CategoryService interface {
 	Create(ctx context.Context, tenantID, slug, name string, description *string) (*Category, error)
+	Update(ctx context.Context, tenantID, slug, name string, description *string) (*Category, error)
 	Get(ctx context.Context, tenantID, slug string) (*Category, error)
 	List(ctx context.Context, tenantID string, filter ListCategoriesFilter) ([]Category, string, int64, error)
 	// Delete returns ErrConflict if any active objects still reference the category.
