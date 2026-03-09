@@ -164,7 +164,7 @@ func (h *TenantHandler) PatchTenantMetadata(c *gin.Context) {
 		return
 	}
 
-	tenant, err := h.svc.PatchMetadata(c.Request.Context(), tenantID, req.Labels, req.Tags)
+	tenant, err := h.svc.PatchMetadata(c.Request.Context(), tenantID, req.Labels, req.Tags, nil)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), err))
 

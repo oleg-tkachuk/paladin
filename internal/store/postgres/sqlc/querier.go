@@ -66,8 +66,7 @@ type Querier interface {
 	//   - Provided keys overwrite existing keys.
 	//   - Provided keys with JSON null values are removed.
 	//   - Keys absent from the patch are preserved.
-	// Tags: full replacement.
-	UpdateTenantMetadata(ctx context.Context, tenantID string, column2 []byte, column3 []string) (UpdateTenantMetadataRow, error)
+	UpdateTenantMetadata(ctx context.Context, tenantID string, labels []byte, tags []string, displayName *string) (UpdateTenantMetadataRow, error)
 	UpsertIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string, requestPath string, requestHash string, responseCode int32, responseBody []byte, expiresAt pgtype.Timestamptz) error
 	UpsertMultipartPart(ctx context.Context, multipartID pgtype.UUID, partNumber int32, etag *string, sizeBytes *int64) error
 	// Tenant queries

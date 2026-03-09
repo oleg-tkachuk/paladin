@@ -147,8 +147,9 @@ func (q *Queries) TenantHasActiveObjects(ctx context.Context, tenantID string) (
 
 const updateTenantMetadata = `-- name: UpdateTenantMetadata :one
 UPDATE tenants
-SET labels     = jsonb_strip_nulls(labels || $2::jsonb),
-    tags       = $3::text[],
+SET labels = jsonb_strip_nulls(labels || $2),
+    tags = $3,
+    display_name = COALESCE($4, display_name),
     updated_at = now()
 WHERE tenant_id = $1
 RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at
@@ -169,10 +170,13 @@ type UpdateTenantMetadataRow struct {
 //   - Provided keys overwrite existing keys.
 //   - Provided keys with JSON null values are removed.
 //   - Keys absent from the patch are preserved.
-//
-// Tags: full replacement.
-func (q *Queries) UpdateTenantMetadata(ctx context.Context, tenantID string, column2 []byte, column3 []string) (UpdateTenantMetadataRow, error) {
-	row := q.db.QueryRow(ctx, updateTenantMetadata, tenantID, column2, column3)
+func (q *Queries) UpdateTenantMetadata(ctx context.Context, tenantID string, labels []byte, tags []string, displayName *string) (UpdateTenantMetadataRow, error) {
+	row := q.db.QueryRow(ctx, updateTenantMetadata,
+		tenantID,
+		labels,
+		tags,
+		displayName,
+	)
 	var i UpdateTenantMetadataRow
 	err := row.Scan(
 		&i.ID,

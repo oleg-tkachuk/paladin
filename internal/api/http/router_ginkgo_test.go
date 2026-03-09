@@ -302,8 +302,8 @@ func (m *MockTenantService) Delete(ctx context.Context, tenantID string) error {
 	return m.Called(ctx, tenantID).Error(0)
 }
 
-func (m *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
-	args := m.Called(ctx, tenantID, labelsPatch, tags)
+func (m *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*domain.Tenant, error) {
+	args := m.Called(ctx, tenantID, labelsPatch, tags, displayName)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

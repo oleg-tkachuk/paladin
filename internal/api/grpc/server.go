@@ -1213,7 +1213,7 @@ func (s *Server) PatchTenantMetadata(ctx context.Context, req *PatchTenantMetada
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	t, err := s.tenantSvc.PatchMetadata(ctx, req.TenantId, patch, req.Tags)
+	t, err := s.tenantSvc.PatchMetadata(ctx, req.TenantId, patch, req.Tags, req.DisplayName)
 	if err != nil {
 		return nil, grpcError(err)
 	}

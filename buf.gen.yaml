@@ -1,0 +1,11 @@
+version: v1
+plugins:
+  - plugin: go
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin
+  - plugin: go-grpc
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin
+  - plugin: connect-go
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin

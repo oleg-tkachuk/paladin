@@ -410,6 +410,7 @@ message ListTenantsResponse {
 
 message PatchTenantMetadataRequest {
   string tenant_id = 1;
-  string labels_patch_json = 2;
+  string labels_patch_json = 2; // JSON Merge Patch or simple map
   repeated string tags = 3;
+  optional string display_name = 4;
 }

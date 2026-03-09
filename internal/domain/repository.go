@@ -58,7 +58,7 @@ type TenantRepository interface {
 	// UpdateMetadata performs a partial-update of a tenant's labels and tags.
 	// Labels are merged (provided keys overwrite; null values remove the key).
 	// Tags are replaced in full.
-	UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
+	UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*Tenant, error)
 	// List returns tenants matching filter, cursor-paginated (created_at DESC).
 	List(ctx context.Context, filter ListTenantsFilter) ([]Tenant, string, int64, error)
 }
@@ -86,9 +86,8 @@ type TenantService interface {
 	// Delete removes a tenant. Returns ErrConflict when the tenant still has
 	// active (non-hard-deleted) objects; callers must purge all data first.
 	Delete(ctx context.Context, tenantID string) error
-	// PatchMetadata performs a partial-update of labels (merge) and a full
-	// replacement of tags. Returns ErrNotFound if the tenant does not exist.
-	PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*Tenant, error)
+	// PatchMetadata merges the label patch into existing labels and replaces tags.
+	PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*Tenant, error)
 	// List returns tenants matching filter, cursor-paginated.
 	List(ctx context.Context, filter ListTenantsFilter) ([]Tenant, string, int64, error)
 }

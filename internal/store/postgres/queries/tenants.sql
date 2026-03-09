@@ -27,16 +27,16 @@ SELECT EXISTS(
       AND status NOT IN ('hard_deleted')
 ) AS has_active_objects;
 
--- name: UpdateTenantMetadata :one
 -- Labels patch: merge existing labels with the patch, stripping null values.
 -- This means:
 --   - Provided keys overwrite existing keys.
 --   - Provided keys with JSON null values are removed.
 --   - Keys absent from the patch are preserved.
--- Tags: full replacement.
+-- name: UpdateTenantMetadata :one
 UPDATE tenants
-SET labels     = jsonb_strip_nulls(labels || $2::jsonb),
-    tags       = $3::text[],
+SET labels = jsonb_strip_nulls(labels || $2),
+    tags = $3,
+    display_name = COALESCE($4, display_name),
     updated_at = now()
 WHERE tenant_id = $1
 RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at;

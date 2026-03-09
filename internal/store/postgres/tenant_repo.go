@@ -46,9 +46,10 @@ SELECT EXISTS(
 
 	updateTenantMetadataQuery = `
 UPDATE tenants
-SET labels     = jsonb_strip_nulls(labels || $2::jsonb),
-    tags       = $3::text[],
-    updated_at = now()
+SET labels       = jsonb_strip_nulls(labels || $2::jsonb),
+    tags         = $3::text[],
+    display_name = COALESCE($4, display_name),
+    updated_at   = now()
 WHERE tenant_id = $1
 RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at`
 )
@@ -205,8 +206,8 @@ func (r *TenantRepo) HasActiveObjects(ctx context.Context, tenantID string) (boo
 
 // UpdateMetadata merges the label patch into existing labels (stripping null
 // values) and replaces tags wholesale.
-func (r *TenantRepo) UpdateMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
-	patchJSON, err := labelsPatchToJSON(labelsPatch)
+func (r *TenantRepo) UpdateMetadata(ctx context.Context, tenantID string, labels map[string]interface{}, tags []string, displayName *string) (*domain.Tenant, error) {
+	patchJSON, err := labelsPatchToJSON(labels)
 	if err != nil {
 		return nil, fmt.Errorf("update tenant metadata: %w", err)
 	}
@@ -215,6 +216,7 @@ func (r *TenantRepo) UpdateMetadata(ctx context.Context, tenantID string, labels
 		tenantID,
 		patchJSON,
 		toTextArray(tags),
+		displayName,
 	)
 
 	t, err := scanTenant(row)

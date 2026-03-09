@@ -95,9 +95,14 @@ func (s *tenantService) Delete(ctx context.Context, tenantID string) error {
 
 // PatchMetadata merges the label patch into existing labels and replaces tags.
 // labelsPatch values may be nil (interface{}) to delete a key.
-func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
+func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*domain.Tenant, error) {
 	if tenantID == "" {
 		return nil, apperrors.BadRequest("tenant_id must not be empty", nil)
+	}
+
+	// Validate display_name if provided.
+	if displayName != nil && *displayName == "" {
+		return nil, apperrors.BadRequest("display_name must not be empty if provided", nil)
 	}
 
 	// Validate total label patch size.
@@ -115,7 +120,7 @@ func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labe
 		)
 	}
 
-	t, err := s.repo.UpdateMetadata(ctx, tenantID, labelsPatch, normalizeTags(tags))
+	t, err := s.repo.UpdateMetadata(ctx, tenantID, labelsPatch, normalizeTags(tags), displayName)
 	if err != nil {
 		return nil, fmt.Errorf("patch tenant metadata: %w", err)
 	}

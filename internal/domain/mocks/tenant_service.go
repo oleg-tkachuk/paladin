@@ -330,8 +330,8 @@ func (_c *MockTenantService_List_Call) RunAndReturn(run func(ctx context.Context
 }
 
 // PatchMetadata provides a mock function for the type MockTenantService
-func (_mock *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error) {
-	ret := _mock.Called(ctx, tenantID, labelsPatch, tags)
+func (_mock *MockTenantService) PatchMetadata(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*domain.Tenant, error) {
+	ret := _mock.Called(ctx, tenantID, labelsPatch, tags, displayName)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PatchMetadata")
@@ -339,18 +339,18 @@ func (_mock *MockTenantService) PatchMetadata(ctx context.Context, tenantID stri
 
 	var r0 *domain.Tenant
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]interface{}, []string) (*domain.Tenant, error)); ok {
-		return returnFunc(ctx, tenantID, labelsPatch, tags)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]interface{}, []string, *string) (*domain.Tenant, error)); ok {
+		return returnFunc(ctx, tenantID, labelsPatch, tags, displayName)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]interface{}, []string) *domain.Tenant); ok {
-		r0 = returnFunc(ctx, tenantID, labelsPatch, tags)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]interface{}, []string, *string) *domain.Tenant); ok {
+		r0 = returnFunc(ctx, tenantID, labelsPatch, tags, displayName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.Tenant)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, map[string]interface{}, []string) error); ok {
-		r1 = returnFunc(ctx, tenantID, labelsPatch, tags)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, map[string]interface{}, []string, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, labelsPatch, tags, displayName)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -367,11 +367,12 @@ type MockTenantService_PatchMetadata_Call struct {
 //   - tenantID string
 //   - labelsPatch map[string]interface{}
 //   - tags []string
-func (_e *MockTenantService_Expecter) PatchMetadata(ctx interface{}, tenantID interface{}, labelsPatch interface{}, tags interface{}) *MockTenantService_PatchMetadata_Call {
-	return &MockTenantService_PatchMetadata_Call{Call: _e.mock.On("PatchMetadata", ctx, tenantID, labelsPatch, tags)}
+//   - displayName *string
+func (_e *MockTenantService_Expecter) PatchMetadata(ctx interface{}, tenantID interface{}, labelsPatch interface{}, tags interface{}, displayName interface{}) *MockTenantService_PatchMetadata_Call {
+	return &MockTenantService_PatchMetadata_Call{Call: _e.mock.On("PatchMetadata", ctx, tenantID, labelsPatch, tags, displayName)}
 }
 
-func (_c *MockTenantService_PatchMetadata_Call) Run(run func(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string)) *MockTenantService_PatchMetadata_Call {
+func (_c *MockTenantService_PatchMetadata_Call) Run(run func(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string)) *MockTenantService_PatchMetadata_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -389,11 +390,16 @@ func (_c *MockTenantService_PatchMetadata_Call) Run(run func(ctx context.Context
 		if args[3] != nil {
 			arg3 = args[3].([]string)
 		}
+		var arg4 *string
+		if args[4] != nil {
+			arg4 = args[4].(*string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -404,7 +410,7 @@ func (_c *MockTenantService_PatchMetadata_Call) Return(tenant *domain.Tenant, er
 	return _c
 }
 
-func (_c *MockTenantService_PatchMetadata_Call) RunAndReturn(run func(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string) (*domain.Tenant, error)) *MockTenantService_PatchMetadata_Call {
+func (_c *MockTenantService_PatchMetadata_Call) RunAndReturn(run func(ctx context.Context, tenantID string, labelsPatch map[string]interface{}, tags []string, displayName *string) (*domain.Tenant, error)) *MockTenantService_PatchMetadata_Call {
 	_c.Call.Return(run)
 	return _c
 }
