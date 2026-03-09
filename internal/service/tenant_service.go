@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 )
 
 const (
@@ -31,6 +32,12 @@ func NewTenantService(repo domain.TenantRepository) domain.TenantService {
 func (s *tenantService) Create(ctx context.Context, tenantID string, displayName *string, labels map[string]string, tags []string) (*domain.Tenant, error) {
 	if tenantID == "" {
 		return nil, apperrors.BadRequest("tenant_id must not be empty", nil)
+	}
+
+	if displayName != nil {
+		if err := validation.TenantDisplayName(*displayName); err != nil {
+			return nil, apperrors.BadRequest("invalid display_name", err)
+		}
 	}
 
 	if err := validateLabels(labels); err != nil {
@@ -100,9 +107,10 @@ func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labe
 		return nil, apperrors.BadRequest("tenant_id must not be empty", nil)
 	}
 
-	// Validate display_name if provided.
-	if displayName != nil && *displayName == "" {
-		return nil, apperrors.BadRequest("display_name must not be empty if provided", nil)
+	if displayName != nil {
+		if err := validation.TenantDisplayName(*displayName); err != nil {
+			return nil, apperrors.BadRequest("invalid display_name", err)
+		}
 	}
 
 	// Validate total label patch size.

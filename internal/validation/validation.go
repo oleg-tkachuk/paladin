@@ -16,10 +16,15 @@ const (
 	MaxLabelsCount       = 50
 	MaxSubpathLength     = 256
 	MaxKeyPrefixLength   = 256
+
+	MaxTenantDisplayNameLength   = 64
+	MaxCategorySlugLength        = 63
+	MaxCategoryNameLength        = 64
+	MaxCategoryDescriptionLength = 128
 )
 
 var (
-	pathSegmentRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	pathSegmentRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 	contentTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}(;.*)?$`)
 	labelKeyRegex    = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
@@ -162,5 +167,32 @@ func SizeBytes(sizeBytes int64, maxSize int64) error {
 		return fmt.Errorf("size_bytes exceeds maximum allowed size (%d bytes)", maxSize)
 	}
 
+	return nil
+}
+
+// TenantDisplayName validates the tenant display name length
+func TenantDisplayName(name string) error {
+	if len(name) > MaxTenantDisplayNameLength {
+		return fmt.Errorf("display_name too long (max %d characters)", MaxTenantDisplayNameLength)
+	}
+	return nil
+}
+
+// CategoryName validates the category name length
+func CategoryName(name string) error {
+	if name == "" {
+		return fmt.Errorf("category name cannot be empty")
+	}
+	if len(name) > MaxCategoryNameLength {
+		return fmt.Errorf("category name too long (max %d characters)", MaxCategoryNameLength)
+	}
+	return nil
+}
+
+// CategoryDescription validates the category description length
+func CategoryDescription(desc string) error {
+	if len(desc) > MaxCategoryDescriptionLength {
+		return fmt.Errorf("category description too long (max %d characters)", MaxCategoryDescriptionLength)
+	}
 	return nil
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/errors"
+	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 )
 
 type categoryService struct {
@@ -22,6 +24,18 @@ func NewCategoryService(repo domain.CategoryRepository) domain.CategoryService {
 }
 
 func (s *categoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	if err := validation.CategorySlug(slug); err != nil {
+		return nil, apperrors.BadRequest("invalid category slug", err)
+	}
+	if err := validation.CategoryName(name); err != nil {
+		return nil, apperrors.BadRequest("invalid category name", err)
+	}
+	if description != nil {
+		if err := validation.CategoryDescription(*description); err != nil {
+			return nil, apperrors.BadRequest("invalid category description", err)
+		}
+	}
+
 	// If slug contains slashes, check if parent categories exist
 	if lastSlash := strings.LastIndex(slug, domain.CategorySeparator); lastSlash > 0 {
 		parentSlug := slug[:lastSlash]

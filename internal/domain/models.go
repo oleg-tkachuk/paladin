@@ -33,11 +33,16 @@ const (
 
 // Category represents a tenant-scoped object category.
 // Category slugs are user-defined and managed via the /categories API.
+//
+// If slug contains slashes, check if parent categories exist
 type Category struct {
-	ID          uuid.UUID
-	TenantID    string
-	Slug        string
-	Name        string
+	ID       uuid.UUID
+	TenantID string
+	// Slug is unique per tenant. Max 63 characters.
+	Slug string
+	// Name is unique per tenant. Max 64 characters.
+	Name string
+	// Description details. Max 128 characters.
 	Description *string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -48,8 +53,10 @@ type Category struct {
 // store objects. The tenant_id is the canonical identifier used throughout
 // all other tables, headers, and RLS policies.
 type Tenant struct {
-	ID          uuid.UUID
-	TenantID    string
+	ID uuid.UUID
+	// TenantID is the unique identifier for the tenant.
+	TenantID string
+	// DisplayName is a human-readable name. Max 64 characters.
 	DisplayName *string
 	// Labels are arbitrary key-value metadata. Max 10 keys, max 4 KiB total.
 	Labels map[string]string
