@@ -1,78 +1,32 @@
-# Async & Background Jobs
+# Async & Jobs - Paladin (PALADIN)
 
-**Source:** `internal/worker/reaper.go`
+## Overview
 
-## Reaper Worker
+PALADIN uses internal background workers to manage object lifecycle tasks that don't need to happen synchronously with request processing.
 
-The Reaper is the only background goroutine running inside the service. It is enabled/disabled via `housekeeping.enable_reaper` configuration.
+## Current Workers
 
-### Trigger
+### 1. Reaper (Object GC)
 
-- Runs once immediately on startup.
-- Then executes a cleanup cycle every `housekeeping.gc_interval` (default: `1h`) using a `time.Ticker`.
-- Stops when the root context is cancelled (SIGINT/SIGTERM).
+- **Implementation**: [internal/worker/reaper.go](file:///workspace/internal/worker/reaper.go)
+- **Purpose**: Cleans up metadata and physical objects that are no longer needed.
+- **Triggers**:
+  - `pending_ttl`: Purgers objects stuck in `pending` state for too long.
+  - `multipart_ttl`: Aborts expired multipart upload sessions in S3/SeaweedFS.
+- **Frequency**: Configurable via `housekeeping.gc_interval`.
 
-### Cleanup Cycle (`runCleanup`)
+### 2. Audit Log Archiver (TBD)
 
-Each cycle triggers three sub-tasks in **parallel** using `errgroup`:
+- **Planned**: Move older audit logs from Postgres to cold storage.
 
-- **cleanupPending** — Prunes expired pending object records.
-- **cleanupMultipart** — Aborts expired multipart upload sessions.
-- **cleanupAuditLogs** — Purges expired audit trail entries.
+## Async Patterns
 
-Sub-tasks that involve batched network/IO (Pending and Multipart) further parallelize their internal loops with a **concurrency limit of 10** to bound resource usage.
+PALADIN relies on **S3 Post-Object Deletion** and **Pre-signed URLs** to offload heavy I/O tasks.
 
-#### 1. Pending Object Cleanup (`cleanupPending`)
+- **Upload Completion**: When a client completes an upload, it notifies PALADIN asynchronously. PALADIN then verifies the size/etag from S3 and updates the metadata record to `active`.
+- **Soft Delete**: Deletion is marked immediately in Postgres. The physical deletion from S3 can happen asynchronously via the Reaper or a scheduled purge request.
 
-| Property | Value |
-|---|---|
-| Trigger | Every `gc_interval` |
-| Target | `objects` table where `status = 'pending'` and `expires_at < now() - pending_ttl` |
-| Batch size | 100 records per cycle |
-| Side effects | Deletes rows from `objects` table (hard delete via `repo.Delete`) |
-| S3 cleanup | Object key may not exist yet (object never uploaded); S3 deletion is attempted but best-effort |
-| TTL config | `housekeeping.pending_ttl` (default: `24h`) |
+## Resilience
 
-#### 2. Multipart Upload Cleanup (`cleanupMultipart`)
-
-| Property | Value |
-|---|---|
-| Trigger | Every `gc_interval` |
-| Target | `multipart_uploads` table where status is expired |
-| Batch size | 100 records per cycle |
-| Side effects | Calls `s3.AbortMultipartUpload()` to release parts in S3, then marks the DB record as `aborted` via `mpRepo.MarkAborted()` |
-| TTL config | `housekeeping.multipart_ttl` (default: `72h`) |
-| Idempotency | If S3 abort fails, the DB is still updated (best-effort) |
-
-#### 3. Audit Log Pruning (`cleanupAuditLogs`)
-
-| Property | Value |
-|---|---|
-| Trigger | Every `gc_interval`, only when `housekeeping.audit_log_ttl > 0` |
-| Target | `audit_logs` rows where `created_at < now() - audit_log_ttl` |
-| Batch size | 1000 records per cycle |
-| Side effects | Hard delete from `audit_logs` via `auditRepo.Prune(cutoff, limit)` |
-| TTL config | `housekeeping.audit_log_ttl` (no default — must be explicitly set) |
-
-### Retry / Backoff
-
-There is no retry or backoff built into the Reaper. On a failed cleanup iteration, errors are logged and the Reaper waits for the next tick.
-
-### Database Role
-
-The Reaper uses a separate DSN (`datastores.postgres.reaper_dsn`) when configured, which allows granting the reaper a database role with `DELETE` privileges on `audit_logs` (migration `008_audit_logs_reaper_role.sql`).
-
-### Goroutine Lifecycle
-
-The Reaper goroutine is started by `wire.ProvideApp()` as part of `app.Run()`. The main server context is passed in; when the context is cancelled (shutdown signal), the Reaper exits cleanly via select on `ctx.Done()`.
-
-### Configuration Reference
-
-| Config Key | Default | Description |
-|---|---|---|
-| `housekeeping.enable_reaper` | `true` | Enable/disable the reaper |
-| `housekeeping.pending_ttl` | `24h` | TTL before pending objects are deleted |
-| `housekeeping.multipart_ttl` | `72h` | TTL before expired multipart sessions are aborted |
-| `housekeeping.audit_log_ttl` | — | TTL for audit log entries (0 = disabled) |
-| `housekeeping.gc_interval` | `1h` | Cleanup cycle frequency |
-| `housekeeping.delete_orphaned_parts` | `false` | Delete orphaned S3 parts from aborted multiparts |
+- **Idempotency**: All mutation operations (Complete, Purge, Update) support an optional `Idempotency-Key` to prevent duplicate processing of async tasks.
+- **Retry Mechanism**: The Reaper uses a simple exponential backoff for failed cleanup tasks.

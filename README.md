@@ -1,37 +1,45 @@
 # Paladin (PALADIN)
 
-**Paladin** is a multi-tenant object lifecycle management service. It acts as a control plane for S3-compatible storage: it manages object metadata, orchestrates pre-signed upload/download URLs, tracks multipart uploads, enforces tenant isolation, and handles lifecycle housekeeping. Binary data never passes through this service — only metadata and pre-signed URL coordination.
+## Overview
 
-## Navigation
+The Paladin (PALADIN) is a high-performance service for managing object metadata and lifecycle across S3-compatible storage systems. It provides multi-tenant isolation, structured audit logs, and a standardized API for object interactions.
 
-| Document | Description |
-|---|---|
-| [Architecture](docs/architecture.md) | Service components, runtime entry points, and how everything wires together |
-| [Configuration](docs/configuration.md) | All configuration keys, their defaults, and environment variable mapping |
-| [API](docs/API.md) | Complete HTTP REST and gRPC API reference |
-| [Database](docs/database.md) | PostgreSQL schema, RLS policies, indexes, and migration history |
-| [Logging](docs/logging.md) | Structured logging setup, fields, and example log entries |
-| [Telemetry](docs/telemetry.md) | Prometheus metrics catalog, OpenTelemetry tracing, and health probes |
-| [Async & Jobs](docs/async.md) | Background reaper worker: pending objects, multipart uploads, audit log pruning |
-| [Security](docs/security.md) | Authentication, authorization, tenant isolation, and security headers |
-| [Diagrams](docs/diagrams.md) | C4 context, sequence, ER, and deployment diagrams |
-| [Operations](docs/operations.md) | Running locally, building Docker image, and Kubernetes deployment |
+## Documentation Index
 
-## Technology Stack
+- [Architecture](docs/architecture.md) - High-level design and inventory.
+- [Configuration](docs/configuration.md) - Environment variables and YAML settings.
+- [API](docs/api.md) - REST and gRPC/Connect endpoints.
+- [Database](docs/database.md) - Postgres schema and migrations.
+- [Logging](docs/logging.md) - Structured logging and event taxonomy.
+- [Telemetry](docs/telemetry.md) - Metrics and tracing.
+- [Async & Jobs](docs/async.md) - Reaper worker and background tasks.
+- [Security](docs/security.md) - Auth, isolation, and secret management.
+- [Diagrams](docs/diagrams.md) - Visualizing flows and architecture.
 
-| Component | Technology |
-|---|---|
-| Language | Go 1.23+ |
-| HTTP Framework | Gin (`github.com/gin-gonic/gin`) |
-| gRPC | `google.golang.org/grpc` |
-| CLI / Bootstrap | Cobra |
-| Dependency Injection | Google Wire |
-| Database | PostgreSQL (pgx/v5 + pgxpool) |
-| Object Storage | S3-compatible (SeaweedFS in local/staging) |
-| Migrations | Goose |
-| Logging | Zap (structured, JSON) |
-| Metrics | Prometheus (`promauto` + default Go runtime collector) |
-| Tracing | OpenTelemetry (OTLP gRPC/HTTP exporter) |
-| Config | YAML + Kubernetes Secrets |
-| Build | Taskfile |
-| Container | Multi-stage Dockerfile |
+## Getting Started
+
+### Prerequisites
+
+- Go 1.21+
+- PostgreSQL 15+
+- S3-compatible storage (e.g., SeaweedFS, MinIO, AWS S3)
+
+### Running Locally
+
+1. Copy the example config: `cp configs/paladin.yaml.example configs/paladin.yaml`
+2. Start dependencies (e.g., via Docker Compose).
+3. Run the migrations: `task db:migrate`
+4. Start the server: `go run cmd/server/main.go`
+
+## Infrastructure
+
+- **K8s Resources**: Deployments, Services, ConfigMaps, Secrets, Ingress.
+- **Helm Values**: See [deploy/helm/values.yaml](file:///workspace/deploy/helm/values.yaml).
+- **CI/CD**: GitHub Actions for building images and running tests.
+
+## Source Index
+
+- [cmd/server/main.go](file:///workspace/cmd/server/main.go) - Entry point.
+- [internal/api/](file:///workspace/internal/api/) - Layered API implementations.
+- [internal/service/](file:///workspace/internal/service/) - Domain services.
+- [internal/store/](file:///workspace/internal/store/) - Postgres repositories.

@@ -1,103 +1,56 @@
-# Architecture
+# Architecture Snapshot - Paladin (PALADIN)
 
 ## Overview
 
-Paladin (PALADIN) is a **pure control-plane service**: it manages lifecycle metadata for objects stored in S3-compatible storage. Binary payloads never traverse PALADIN; instead, callers receive pre-signed URLs to upload/download directly from S3.
+The Paladin (PALADIN) is a central service in the acme ecosystem responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and robust multi-tenant isolation.
 
-## Folder Structure
+## Inventory Map
 
-```
-paladin/
-├── cmd/server/            # Entrypoint (Cobra CLI, Wire injection)
-├── internal/
-│   ├── api/
-│   │   ├── grpc/          # gRPC server + generated pb Go code
-│   │   └── http/          # Gin HTTP server: router, OpenAPI adapter
-│   ├── app/               # App struct: runs gRPC + HTTP servers, manages lifecycle
-│   ├── breaker/           # Circuit breakers (gobreaker)
-│   ├── cache/             # In-process LRU category cache
-│   ├── config/            # Config types, CUE schema validation, resolver
-│   ├── domain/            # Interfaces (ports): ObjectsService, CategoryService, Repos, etc.
-│   ├── errors/            # Domain error types + HTTP/gRPC mapping
-│   ├── generated/api/     # oapi-codegen generated types + server interface
-│   ├── logger/            # Zap logger factory
-│   ├── metrics/           # Prometheus metrics + OTel histograms/counters
-│   ├── middleware/         # HTTP middleware stack + gRPC interceptor chain
-│   ├── observability/     # OTel provider setup
-│   ├── openapi/           # OpenAPI spec embedding
-│   ├── service/           # Business logic (ObjectsService, CategoryService, HealthService, etc.)
-│   ├── storage/           # S3 client adapter (aws-sdk-go-v2)
-│   ├── store/             # PostgreSQL repositories (sqlc-generated queries + wrappers)
-│   ├── utils/             # Helpers: context values (TenantID, RequestID), size parsing, etc.
-│   ├── wire/              # Wire providers
-│   └── worker/            # Background Reaper goroutine
-├── migrations/            # Goose SQL migrations (013 files)
-├── proto/                 # paladin.proto + generated Go code
-├── configs/               # YAML config files
-├── deploy/                # Dockerfile, docker-compose, env files
-└── tests/                 # Integration tests
-```
+- **Language**: Go
+- **Frameworks**:
+  - [Gin](https://github.com/gin-gonic/gin): HTTP web framework.
+  - [Connect](https://connectrpc.com/): gRPC-compatible RPC framework.
+  - [SQLC](https://sqlc.dev/): Type-safe SQL generator.
+  - [Google Wire](https://github.com/google/wire): Dependency injection.
+  - [CUE](https://cuelang.org/): Configuration schema validation.
+  - [Koanf](https://github.com/knadh/koanf): Configuration management.
 
-## Service Boundaries
+## Service Topology & Dependencies
 
-### Internal Components
+### Upstream Dependencies
 
-| Component | Description |
-|---|---|
-| `cmd/server` | Bootstrap: parses flags, reads config, runs Wire injection, starts servers |
-| `internal/service` | Core business logic: object lifecycle, multipart, categories, health |
-| `internal/store` | PostgreSQL query layer (sqlc + pgxpool) |
-| `internal/storage` | S3 client abstraction (pre-sign, multipart management) |
-| `internal/api/http` | REST API server (Gin + oapi-codegen adapter) |
-| `internal/api/grpc` | gRPC server implementing the `Paladin` proto service |
-| `internal/worker` | Reaper goroutine for expired objects and multipart cleanup |
+- **PostgreSQL**: Primary metadata store (objects, tenants, audit logs).
+- **S3-compatible Storage (e.g., SeaweedFS)**: Physical object storage.
+- **OpenTelemetry Collector**: For distributed tracing and metrics.
 
-### External Dependencies
+### Downstream Consumers
 
-| Dependency | Purpose |
-|---|---|
-| PostgreSQL | Object/category/audit metadata, RLS-based tenant isolation |
-| S3-compatible storage (SeaweedFS) | Binary object storage; pre-signed URL generation |
-| Kubernetes Secrets | Password and access-key injection at runtime |
-| OpenTelemetry Collector (optional) | Trace/metric export via OTLP |
+- **acme consumer API**: Consumes PALADIN for document management.
+- **Workflows Workers**: Use PALADIN for hard deletion and object lifecycle management.
+- **Frontend Applications**: Directly consume signed URLs for uploads and downloads.
+
+### Data Flow
+
+1. **Metadata Registration**: Metadata for an object is stored in Postgres.
+2. **Signed Action**: PALADIN provides pre-signed S3 URLs for direct client-to-storage upload/download.
+3. **Completion**: Clients notify PALADIN when an upload is complete to finalize metadata.
+4. **Lifecycle**: Background workers (Reaper) handle cleanup of failed or expired uploads.
 
 ## Runtime Entry Points
 
-### Bootstrap Sequence (`cmd/server/root.go`)
+- **HTTP Server**: `internal/api/http/router.go` - Entry point for REST/OpenAPI requests.
+- **gRPC Server**: `internal/api/grpc/server.go` - Entry point for internal service-to-service RPCs.
+- **Main**: `cmd/server/main.go` - Service bootstrap.
 
-1. Cobra command parses `--config` flag (default `/app/configs/paladin.yaml`)
-2. `InitializeApp()` (Wire-generated) constructs the entire dependency graph:
-   - `ProvideConfig` → loads and validates YAML + Kubernetes Secrets
-   - `ProvideLogger` → creates a Zap logger
-   - `ProvideDB` → opens a `pgxpool` connection pool
-   - `ProvideObjectsRepo`, `ProvideMultipartRepo`, `ProvideCategoryRepo`, `ProvideIdempotencyRepo`, `ProvideAuditRepo`
-   - `ProvideS3` → creates an S3 client (AWS SDK v2)
-   - `ProvidePolicy` → validates policy constraints
-   - `ProvideBreakerFactory` → circuit breaker factory (gobreaker)
-   - `ProvideObjectsService`, `ProvideCategoryService`, `ProvideHealthService`, `ProvideSystemService`
-   - `ProvideGRPCServer` → gRPC `Paladin` server
-   - `ProvideHTTPServer` → Gin HTTP server with full middleware stack
-   - `ProvideOTel` → OTel tracer/meter provider (optional)
-   - `ProvideReaper` → background cleanup goroutine
-3. `app.Run()` starts gRPC + HTTP servers concurrently (goroutines)
-4. SIGINT/SIGTERM triggers graceful shutdown (configurable `shutdown_timeout`)
+## Configuration Sources
 
-### Servers
+- **YAML**: `configs/paladin.yaml`
+- **Environment Variables**: Prefixed with `PALADIN_`.
+- **K8s Secrets**: Automatically resolved if running in Kubernetes.
 
-| Server | Default Address | Protocol |
-|---|---|---|
-| HTTP REST + Prometheus + Health | `0.0.0.0:8080` | HTTP/1.1 (TLS optional) |
-| gRPC | `0.0.0.0:9090` | HTTP/2 (TLS optional) |
+## Source Index
 
-### Goroutines
-
-| Goroutine | Owner | Lifetime |
-|---|---|---|
-| HTTP server | `app.Run` | Until shutdown |
-| gRPC server | `app.Run` | Until shutdown |
-| Reaper cleanup | `worker.Reaper.Start` | Until context cancelled |
-| Rate-limiter cleanup | `middleware.TenantRateLimiter.periodicCleanup` | Process lifetime |
-
-## Dependency Injection
-
-Wire providers are in `internal/wire/` and compiled output is in `cmd/server/wire_gen.go`.
+- [internal/api/](file:///workspace/internal/api/) - API Handlers (HTTP/gRPC).
+- [internal/service/](file:///workspace/internal/service/) - Business logic and orchestrators.
+- [internal/store/](file:///workspace/internal/store/) - Database repositories.
+- [internal/domain/](file:///workspace/internal/domain/) - Model definitions and interfaces.
