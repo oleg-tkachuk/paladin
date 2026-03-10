@@ -1,3 +1,3 @@
 package sqlc
 
-//go:generate sqlc generate -f ../../../../sqlc.yaml
+//go:generate go run github.com/sqlc-dev/sqlc/cmd/sqlc generate -f ../../../../sqlc.yaml

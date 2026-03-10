@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/migrations"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/wire"
@@ -121,7 +122,7 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 		return nil, nil, err
 	}
 
-	if err := db.RunMigrations(ctx, "/app/migrations"); err != nil {
+	if err := db.RunMigrations(ctx, migrations.FS); err != nil {
 		l.Warn("Migrations failed", zap.Error(err))
 	}
 
