@@ -1411,14 +1411,14 @@ components:
           type: string
           enum: [ok, degraded, down]
           example: "ok"
-        latency_ms:
+        latencyMs:
           type: integer
           format: int64
           example: 15
         message:
           type: string
           example: "connection timeout"
-        s3_ping:
+        s3Ping:
           $ref: "#/components/schemas/S3PingResponse"
 
     DependencyStatus:
@@ -1432,7 +1432,7 @@ components:
           type: object
           additionalProperties:
             type: string
-        pool_stats:
+        poolStats:
           type: object
           additionalProperties:
             type: object
@@ -1479,7 +1479,7 @@ components:
                 public_endpoint: { type: string }
                 force_path_style: { type: boolean }
                 presign_ttl: { type: string }
-                part_size: { type: string }
+                partSize: { type: string }
                 sse_type: { type: string }
                 # Secrets redacted: access_key, secret_key, sse_key_id
         policy:
@@ -1505,7 +1505,7 @@ components:
             pending_ttl: { type: string }
             multipart_ttl: { type: string }
             gc_interval: { type: string }
-        rate_limit:
+        rateLimit:
           type: object
           properties:
             requests_per_second: { type: number }
@@ -1555,19 +1555,19 @@ components:
           type: object
           additionalProperties:
             type: string
-        expires_at:
+        expiresAt:
           type: string
           format: date-time
 
     CreateObjectRequest:
       type: object
-      required: [content_type, size_bytes]
+      required: [contentType, size_bytes]
       properties:
         category:
           type: string
           description: Category slug (must match an existing tenant category). Defaults to 'objects'.
           example: "invoices"
-        content_type:
+        contentType:
           type: string
           minLength: 1
           description: MIME type of the object to be uploaded
@@ -1580,7 +1580,7 @@ components:
             - application/pdf
             - application/octet-stream
             - text/plain
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
           minimum: 1
@@ -1598,14 +1598,14 @@ components:
             env: "production"
             team: "backend"
             document_type: "invoice"
-        external_ref:
+        externalRef:
           type: string
           maxLength: 512
           description: |
             Optional external reference ID for idempotency and correlation.
             Must be unique per tenant. Use this to prevent duplicate uploads.
           example: "invoice-2024-001"
-        upload_expires_in_seconds:
+        uploadExpiresInSeconds:
           type: integer
           minimum: 60
           maximum: 3600
@@ -1617,14 +1617,14 @@ components:
 
     CreateObjectResponse:
       type: object
-      required: [object_id, object_key, bucket, status, upload]
+      required: [objectId, objectKey, bucket, status, upload]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
           description: Unique identifier for this object
           example: "550e8400-e29b-41d4-a716-446655440000"
-        object_key:
+        objectKey:
           type: string
           description: S3 object key (path in bucket)
           example: "tenant-123/objects/550e8400-e29b-41d4-a716-446655440000"
@@ -1656,7 +1656,7 @@ components:
     BulkActionResponse:
       type: object
       properties:
-        affected_count:
+        affectedCount:
           type: integer
           example: 2
 
@@ -1664,59 +1664,59 @@ components:
       type: object
       required:
         [
-          total_count,
-          total_size,
-          pending_count,
-          uploading_count,
-          uploaded_count,
-          complete_count,
-          soft_deleted_count,
+          totalCount,
+          totalSize,
+          pendingCount,
+          uploadingCount,
+          uploadedCount,
+          completeCount,
+          softDeletedCount,
         ]
       properties:
-        total_count:
+        totalCount:
           type: integer
           example: 100
-        total_size:
+        totalSize:
           type: integer
           format: int64
           example: 104857600
-        pending_count:
+        pendingCount:
           type: integer
           example: 5
-        uploading_count:
+        uploadingCount:
           type: integer
           example: 2
-        uploaded_count:
+        uploadedCount:
           type: integer
           example: 10
-        complete_count:
+        completeCount:
           type: integer
           example: 80
-        soft_deleted_count:
+        softDeletedCount:
           type: integer
           example: 3
 
     CategoryStats:
       type: object
-      required: [total_count, total_size]
+      required: [totalCount, total_size]
       properties:
-        total_count:
+        totalCount:
           type: integer
           example: 42
-        total_size:
+        totalSize:
           type: integer
           format: int64
           example: 1048576
 
     S3PingResponse:
       type: object
-      required: [status, http_status, bucket]
+      required: [status, httpStatus, bucket]
       properties:
         status:
           type: string
           enum: [healthy, degraded, unavailable, unknown]
           description: Normalized health status
-        http_status:
+        httpStatus:
           type: integer
           description: HTTP status code from S3 API
           example: 200
@@ -1734,28 +1734,28 @@ components:
       type: object
       required:
         [
-          object_id,
-          object_key,
+          objectId,
+          objectKey,
           bucket,
-          content_type,
-          size_bytes,
+          contentType,
+          sizeBytes,
           status,
-          created_at,
-          updated_at,
+          createdAt,
+          updatedAt,
           category,
         ]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
           readOnly: true
-        object_key:
+        objectKey:
           type: string
         bucket:
           type: string
-        content_type:
+        contentType:
           type: string
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
         status:
@@ -1765,30 +1765,30 @@ components:
           description: Category slug the object belongs to
         labels:
           $ref: "#/components/schemas/Labels"
-        external_ref:
+        externalRef:
           type: string
-        stored_etag:
+        storedEtag:
           type: string
           readOnly: true
           description: Populated after successful commit/complete.
-        stored_size_bytes:
+        storedSizeBytes:
           type: integer
           format: int64
           readOnly: true
           description: Populated after successful commit/complete.
-        created_at:
+        createdAt:
           type: string
           format: date-time
           readOnly: true
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           readOnly: true
-        completed_at:
+        completedAt:
           type: string
           format: date-time
           readOnly: true
-        deleted_at:
+        deletedAt:
           type: string
           format: date-time
           readOnly: true
@@ -1806,7 +1806,7 @@ components:
       properties:
         labels:
           $ref: "#/components/schemas/Labels"
-        external_ref:
+        externalRef:
           type: string
           maxLength: 512
 
@@ -1822,16 +1822,16 @@ components:
     SignObjectUploadRequest:
       type: object
       properties:
-        upload_expires_in_seconds:
+        uploadExpiresInSeconds:
           type: integer
           minimum: 60
           maximum: 3600
 
     SignObjectUploadResponse:
       type: object
-      required: [object_id, upload]
+      required: [objectId, upload]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
         upload:
@@ -1840,16 +1840,16 @@ components:
     SignObjectDownloadRequest:
       type: object
       properties:
-        download_expires_in_seconds:
+        downloadExpiresInSeconds:
           type: integer
           minimum: 60
           maximum: 3600
 
     SignObjectDownloadResponse:
       type: object
-      required: [object_id, download]
+      required: [objectId, download]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
         download:
@@ -1861,7 +1861,7 @@ components:
         etag:
           type: string
           description: Optional. If provided, server may compare with HEAD result when meaningful.
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
           minimum: 1
@@ -1873,37 +1873,37 @@ components:
       properties:
         status:
           $ref: "#/components/schemas/ObjectStatus"
-        stored_etag:
+        storedEtag:
           type: string
-        stored_size_bytes:
+        storedSizeBytes:
           type: integer
           format: int64
-        completed_at:
+        completedAt:
           type: string
           format: date-time
           readOnly: true
 
     InitiateMultipartRequest:
       type: object
-      required: [content_type, size_bytes]
+      required: [contentType, size_bytes]
       properties:
         category:
           type: string
           description: Category slug (must match an existing tenant category). Defaults to 'objects'.
           example: "medical-records"
-        content_type:
+        contentType:
           type: string
           minLength: 1
-        size_bytes:
+        sizeBytes:
           type: integer
           format: int64
           minimum: 1
         labels:
           $ref: "#/components/schemas/Labels"
-        external_ref:
+        externalRef:
           type: string
           maxLength: 512
-        upload_expires_in_seconds:
+        uploadExpiresInSeconds:
           type: integer
           minimum: 60
           maximum: 3600
@@ -1912,33 +1912,33 @@ components:
       type: object
       required:
         [
-          object_id,
-          object_key,
+          objectId,
+          objectKey,
           bucket,
-          upload_id,
-          part_size,
+          uploadId,
+          partSize,
           status,
-          expires_at,
+          expiresAt,
         ]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
           readOnly: true
-        object_key:
+        objectKey:
           type: string
         bucket:
           type: string
-        upload_id:
+        uploadId:
           type: string
-        part_size:
+        partSize:
           type: integer
           format: int64
           minimum: 5242880
           description: Suggested part size (server-defined).
         status:
           $ref: "#/components/schemas/ObjectStatus"
-        expires_at:
+        expiresAt:
           type: string
           format: date-time
 
@@ -1946,36 +1946,36 @@ components:
       type: object
       required:
         [
-          upload_id,
-          object_id,
-          object_key,
+          uploadId,
+          objectId,
+          objectKey,
           bucket,
           status,
-          part_size,
-          created_at,
-          updated_at,
+          partSize,
+          createdAt,
+          updatedAt,
         ]
       properties:
-        upload_id:
+        uploadId:
           type: string
-        object_id:
+        objectId:
           type: string
           format: uuid
           readOnly: true
-        object_key:
+        objectKey:
           type: string
         bucket:
           type: string
         status:
           $ref: "#/components/schemas/ObjectStatus"
-        part_size:
+        partSize:
           type: integer
           format: int64
-        created_at:
+        createdAt:
           type: string
           format: date-time
           readOnly: true
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           readOnly: true
@@ -1984,7 +1984,7 @@ components:
       type: object
       required: [part_number, upload]
       properties:
-        part_number:
+        partNumber:
           type: integer
           format: int32
           minimum: 1
@@ -1995,7 +1995,7 @@ components:
       type: object
       required: [part_numbers]
       properties:
-        part_numbers:
+        partNumbers:
           type: array
           minItems: 1
           maxItems: 1000
@@ -2006,9 +2006,9 @@ components:
 
     SignPartsBatchResponse:
       type: object
-      required: [upload_id, parts]
+      required: [uploadId, parts]
       properties:
-        upload_id:
+        uploadId:
           type: string
         parts:
           type: array
@@ -2019,7 +2019,7 @@ components:
       type: object
       required: [part_number, etag]
       properties:
-        part_number:
+        partNumber:
           type: integer
           format: int32
           minimum: 1
@@ -2038,19 +2038,19 @@ components:
 
     CompleteMultipartResponse:
       type: object
-      required: [object_id, status]
+      required: [objectId, status]
       properties:
-        object_id:
+        objectId:
           type: string
           format: uuid
         status:
           $ref: "#/components/schemas/ObjectStatus"
-        stored_etag:
+        storedEtag:
           type: string
-        stored_size_bytes:
+        storedSizeBytes:
           type: integer
           format: int64
-        completed_at:
+        completedAt:
           type: string
           format: date-time
           readOnly: true
@@ -2075,18 +2075,18 @@ components:
 
     Pagination:
       type: object
-      required: [has_more, total_count]
+      required: [hasMore, total_count]
       properties:
-        next_cursor:
+        nextCursor:
           type: string
           nullable: true
           description: Cursor for next page (null if no more results)
           example: "eyJpZCI6IjEyMyIsInRzIjoxNjc1ODkxMjAwfQ=="
-        has_more:
+        hasMore:
           type: boolean
           description: Whether more results exist beyond this page
           example: true
-        total_count:
+        totalCount:
           type: integer
           format: int64
           description: Total number of records matching the filters
@@ -2094,13 +2094,13 @@ components:
 
     Category:
       type: object
-      required: [id, tenant_id, slug, name, created_at, updated_at]
+      required: [id, tenantId, slug, name, createdAt, updated_at]
       properties:
         id:
           type: string
           format: uuid
           readOnly: true
-        tenant_id:
+        tenantId:
           type: string
         slug:
           type: string
@@ -2110,11 +2110,11 @@ components:
         description:
           type: string
           nullable: true
-        created_at:
+        createdAt:
           type: string
           format: date-time
           readOnly: true
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           readOnly: true
@@ -2155,9 +2155,9 @@ components:
           type: string
         version:
           type: string
-        git_sha:
+        gitSha:
           type: string
-        build_time:
+        buildTime:
           type: string
 
     ErrorResponse:
@@ -2188,7 +2188,7 @@ components:
           type: string
           description: Human-readable error message
           example: "External reference 'doc-123' already exists for another object"
-        field_errors:
+        fieldErrors:
           type: array
           description: Validation errors for specific request fields
           items:
@@ -2212,19 +2212,19 @@ components:
           additionalProperties: true
           description: Additional structured context about the error
           example:
-            existing_object_id: "550e8400-e29b-41d4-a716-446655440000"
+            existingObjectId: "550e8400-e29b-41d4-a716-446655440000"
             allowed_content_types:
               ["image/jpeg", "image/png", "application/pdf"]
-        request_id:
+        requestId:
           type: string
           format: uuid
           description: Unique identifier for this request (for support/debugging)
           example: "019c2d3f-b1cc-7039-bd0b-4ff918d667a3"
-        trace_id:
+        traceId:
           type: string
           description: Distributed tracing identifier
           example: "019c2d3f-b1cc-7039-bd0b-4ff918d667a3"
-        help_url:
+        helpUrl:
           type: string
           format: uri
           description: Link to documentation for this error
@@ -2232,61 +2232,61 @@ components:
 
     AuditLog:
       type: object
-      required: [id, tenant_id, actor_type, method, path, created_at]
+      required: [id, tenantId, actor_type, method, path, created_at]
       properties:
         id:
           type: string
           format: uuid
-        tenant_id:
+        tenantId:
           type: string
-        request_id:
-          type: string
-          nullable: true
-        idempotency_key:
+        requestId:
           type: string
           nullable: true
-        actor_subject:
+        idempotencyKey:
           type: string
           nullable: true
-        actor_type:
+        actorSubject:
+          type: string
+          nullable: true
+        actorType:
           type: string
           enum: [user, service, system]
-        client_ip:
+        clientIp:
           type: string
           nullable: true
-        user_agent:
+        userAgent:
           type: string
           nullable: true
         method:
           type: string
         path:
           type: string
-        query_params:
+        queryParams:
           type: object
           additionalProperties: true
-        request_headers:
+        requestHeaders:
           type: object
           additionalProperties: true
-        request_body_sha256:
+        requestBodySha256:
           type: string
           nullable: true
-        request_size_bytes:
+        requestSizeBytes:
           type: integer
           format: int64
           nullable: true
-        http_status:
+        httpStatus:
           type: integer
           nullable: true
-        response_code:
+        responseCode:
           type: string
           nullable: true
-        response_status:
+        responseStatus:
           type: string
           nullable: true
-        response_time_ms:
+        responseTimeMs:
           type: integer
           nullable: true
-        created_at:
+        createdAt:
           type: string
           format: date-time
           readOnly: true
@@ -2310,12 +2310,12 @@ components:
         FUTURE FEATURE: Webhook configuration for async notifications.
         Not currently implemented.
       properties:
-        webhook_url:
+        webhookUrl:
           type: string
           format: uri
           description: URL to receive webhook notifications
           example: "https://api.example.com/webhooks/objects"
-        webhook_secret:
+        webhookSecret:
           type: string
           format: password
           description: Secret for HMAC-SHA256 signature verification
@@ -2327,16 +2327,16 @@ components:
       description: |
         FUTURE FEATURE: Payload sent to webhook URL.
         Not currently implemented.
-      required: [event, object_id, timestamp]
+      required: [event, objectId, timestamp]
       properties:
         event:
           type: string
           enum: [object.completed, object.failed, object.deleted]
           description: Event type
-        object_id:
+        objectId:
           type: string
           format: uuid
-        tenant_id:
+        tenantId:
           type: string
         timestamp:
           type: string

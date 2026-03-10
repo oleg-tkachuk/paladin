@@ -193,7 +193,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		category = *req.Category
 	}
 
-	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), safeDeref(req.SizeBytes, 0), mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -395,7 +395,7 @@ func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string, params ap
 
 	c.JSON(http.StatusOK, api.CategoryStats{
 		TotalCount: safecast.IntFrom64(stats.TotalCount),
-		TotalSize:  stats.TotalSize,
+		TotalSize:  ptr(stats.TotalSize),
 	})
 }
 
@@ -498,7 +498,7 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: total,
+			TotalCount: ptr(total),
 		},
 	})
 }
@@ -577,7 +577,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		category = *req.Category
 	}
 
-	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, req.ContentType, req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, req.ContentType, safeDeref(req.SizeBytes, 0), mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -635,7 +635,7 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId api.UploadID
 
 	parts := make([]domain.CompletePart, len(req.Parts))
 	for i, p := range req.Parts {
-		parts[i] = domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag}
+		parts[i] = domain.CompletePart{PartNumber: safeDeref(p.PartNumber, 0), ETag: p.Etag}
 	}
 
 	rec, err := s.svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadId, parts)
@@ -662,7 +662,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId api.UploadID, p
 		return
 	}
 
-	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, req.PartNumbers)
+	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, safeDeref(req.PartNumbers, nil))
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -672,7 +672,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId api.UploadID, p
 	out := make([]api.SignPartResponse, len(batch))
 	for i, b := range batch {
 		out[i] = api.SignPartResponse{
-			PartNumber: b.PartNumber,
+			PartNumber: ptr(int32(b.PartNumber)),
 			Upload:     mapSignedAction(b.Upload),
 		}
 	}
@@ -692,7 +692,7 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId api.UploadID, partNum
 	}
 
 	c.JSON(http.StatusOK, api.SignPartResponse{
-		PartNumber: partNumber,
+		PartNumber: ptr(int32(partNumber)),
 		Upload:     mapSignedAction(p),
 	})
 }
@@ -753,7 +753,7 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				Bucket         *string `json:"bucket,omitempty"`
 				Endpoint       *string `json:"endpoint,omitempty"`
 				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
-				PartSize       *string `json:"part_size,omitempty"`
+				PartSize       *string `json:"partSize,omitempty"`
 				PresignTtl     *string `json:"presign_ttl,omitempty"`
 				PublicEndpoint *string `json:"public_endpoint,omitempty"`
 				SseType        *string `json:"sse_type,omitempty"`
@@ -776,7 +776,7 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				Bucket         *string `json:"bucket,omitempty"`
 				Endpoint       *string `json:"endpoint,omitempty"`
 				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
-				PartSize       *string `json:"part_size,omitempty"`
+				PartSize       *string `json:"partSize,omitempty"`
 				PresignTtl     *string `json:"presign_ttl,omitempty"`
 				PublicEndpoint *string `json:"public_endpoint,omitempty"`
 				SseType        *string `json:"sse_type,omitempty"`
@@ -906,7 +906,7 @@ func (s *OpenAPIAdapter) ListTenants(c *gin.Context, params api.ListTenantsParam
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: total,
+			TotalCount: ptr(total),
 		},
 	})
 }
@@ -916,7 +916,7 @@ func mapSignedAction(p domain.Presigned) api.SignedAction {
 		Url:       p.URL,
 		Method:    api.SignedActionMethod(p.Method),
 		Headers:   &p.Headers,
-		ExpiresAt: p.ExpiresAt,
+		ExpiresAt: ptr(p.ExpiresAt),
 	}
 }
 
@@ -976,7 +976,7 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		Pagination: api.Pagination{
 			NextCursor: nextCursor,
 			HasMore:    hasMore,
-			TotalCount: totalCount,
+			TotalCount: ptr(totalCount),
 		},
 	}
 
@@ -1008,7 +1008,7 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 		RequestId:         l.RequestID,
 		IdempotencyKey:    l.IdempotencyKey,
 		ActorSubject:      l.ActorSubject,
-		ActorType:         actorType,
+		ActorType:         ptr(actorType),
 		ClientIp:          l.ClientIP,
 		UserAgent:         l.UserAgent,
 		Method:            l.Method,
@@ -1090,7 +1090,7 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: total,
+			TotalCount: ptr(total),
 		},
 	})
 }
