@@ -193,7 +193,7 @@ func (s *OpenAPIAdapter) CreateObject(c *gin.Context, params api.CreateObjectPar
 		category = *req.Category
 	}
 
-	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), safeDeref(req.SizeBytes, 0), mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.CreateSingle(c.Request.Context(), tenantID(c), category, string(req.ContentType), req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -395,7 +395,7 @@ func (s *OpenAPIAdapter) GetCategoryStats(c *gin.Context, slug string, params ap
 
 	c.JSON(http.StatusOK, api.CategoryStats{
 		TotalCount: safecast.IntFrom64(stats.TotalCount),
-		TotalSize:  ptr(stats.TotalSize),
+		TotalSize:  stats.TotalSize,
 	})
 }
 
@@ -498,7 +498,7 @@ func (s *OpenAPIAdapter) ListObjects(c *gin.Context, params api.ListObjectsParam
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: ptr(total),
+			TotalCount: total,
 		},
 	})
 }
@@ -577,7 +577,7 @@ func (s *OpenAPIAdapter) InitiateMultipart(c *gin.Context, params api.InitiateMu
 		category = *req.Category
 	}
 
-	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, req.ContentType, safeDeref(req.SizeBytes, 0), mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
+	out, err := s.svc.InitiateMultipart(c.Request.Context(), tenantID(c), category, req.ContentType, req.SizeBytes, mapLabels(req.Labels), req.ExternalRef, ttl, params.IdempotencyKey)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -635,7 +635,7 @@ func (s *OpenAPIAdapter) CompleteMultipart(c *gin.Context, uploadId api.UploadID
 
 	parts := make([]domain.CompletePart, len(req.Parts))
 	for i, p := range req.Parts {
-		parts[i] = domain.CompletePart{PartNumber: safeDeref(p.PartNumber, 0), ETag: p.Etag}
+		parts[i] = domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag}
 	}
 
 	rec, err := s.svc.CompleteMultipart(c.Request.Context(), tenantID(c), uploadId, parts)
@@ -662,7 +662,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId api.UploadID, p
 		return
 	}
 
-	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, safeDeref(req.PartNumbers, nil))
+	batch, err := s.svc.SignPartsBatch(c.Request.Context(), tenantID(c), uploadId, req.PartNumbers)
 	if err != nil {
 		respondWithError(c, 0, err)
 
@@ -672,7 +672,7 @@ func (s *OpenAPIAdapter) SignPartsBatch(c *gin.Context, uploadId api.UploadID, p
 	out := make([]api.SignPartResponse, len(batch))
 	for i, b := range batch {
 		out[i] = api.SignPartResponse{
-			PartNumber: ptr(int32(b.PartNumber)),
+			PartNumber: int32(b.PartNumber),
 			Upload:     mapSignedAction(b.Upload),
 		}
 	}
@@ -692,7 +692,7 @@ func (s *OpenAPIAdapter) SignPart(c *gin.Context, uploadId api.UploadID, partNum
 	}
 
 	c.JSON(http.StatusOK, api.SignPartResponse{
-		PartNumber: ptr(int32(partNumber)),
+		PartNumber: int32(partNumber),
 		Upload:     mapSignedAction(p),
 	})
 }
@@ -717,10 +717,10 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 		Server: &struct {
 			Http *struct {
 				Addr               *string   `json:"addr,omitempty"`
-				CorsAllowedOrigins *[]string `json:"cors_allowed_origins,omitempty"`
-				ReadTimeout        *string   `json:"read_timeout,omitempty"`
-				RequestIdHeader    *string   `json:"request_id_header,omitempty"`
-				WriteTimeout       *string   `json:"write_timeout,omitempty"`
+				CorsAllowedOrigins *[]string `json:"corsAllowedOrigins,omitempty"`
+				ReadTimeout        *string   `json:"readTimeout,omitempty"`
+				RequestIdHeader    *string   `json:"requestIdHeader,omitempty"`
+				WriteTimeout       *string   `json:"writeTimeout,omitempty"`
 			} `json:"http,omitempty"`
 			Mode *string `json:"mode,omitempty"`
 			Name *string `json:"name,omitempty"`
@@ -729,10 +729,10 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			Name: ptr(cfg.Server.Name),
 			Http: &struct {
 				Addr               *string   `json:"addr,omitempty"`
-				CorsAllowedOrigins *[]string `json:"cors_allowed_origins,omitempty"`
-				ReadTimeout        *string   `json:"read_timeout,omitempty"`
-				RequestIdHeader    *string   `json:"request_id_header,omitempty"`
-				WriteTimeout       *string   `json:"write_timeout,omitempty"`
+				CorsAllowedOrigins *[]string `json:"corsAllowedOrigins,omitempty"`
+				ReadTimeout        *string   `json:"readTimeout,omitempty"`
+				RequestIdHeader    *string   `json:"requestIdHeader,omitempty"`
+				WriteTimeout       *string   `json:"writeTimeout,omitempty"`
 			}{
 				Addr:               ptr(cfg.Server.HTTP.Addr),
 				ReadTimeout:        ptr(cfg.Server.HTTP.ReadTimeout),
@@ -746,24 +746,24 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 				Dbname  *string `json:"dbname,omitempty"`
 				Host    *string `json:"host,omitempty"`
 				Port    *string `json:"port,omitempty"`
-				SslMode *string `json:"ssl_mode,omitempty"`
+				SslMode *string `json:"sslMode,omitempty"`
 				User    *string `json:"user,omitempty"`
 			} `json:"postgres,omitempty"`
 			S3 *struct {
 				Bucket         *string `json:"bucket,omitempty"`
 				Endpoint       *string `json:"endpoint,omitempty"`
-				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
+				ForcePathStyle *bool   `json:"forcePathStyle,omitempty"`
 				PartSize       *string `json:"partSize,omitempty"`
-				PresignTtl     *string `json:"presign_ttl,omitempty"`
-				PublicEndpoint *string `json:"public_endpoint,omitempty"`
-				SseType        *string `json:"sse_type,omitempty"`
+				PresignTtl     *string `json:"presignTtl,omitempty"`
+				PublicEndpoint *string `json:"publicEndpoint,omitempty"`
+				SseType        *string `json:"sseType,omitempty"`
 			} `json:"s3,omitempty"`
 		}{
 			Postgres: &struct {
 				Dbname  *string `json:"dbname,omitempty"`
 				Host    *string `json:"host,omitempty"`
 				Port    *string `json:"port,omitempty"`
-				SslMode *string `json:"ssl_mode,omitempty"`
+				SslMode *string `json:"sslMode,omitempty"`
 				User    *string `json:"user,omitempty"`
 			}{
 				Dbname:  ptr(cfg.Datastores.Postgres.Dbname),
@@ -775,11 +775,11 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			S3: &struct {
 				Bucket         *string `json:"bucket,omitempty"`
 				Endpoint       *string `json:"endpoint,omitempty"`
-				ForcePathStyle *bool   `json:"force_path_style,omitempty"`
+				ForcePathStyle *bool   `json:"forcePathStyle,omitempty"`
 				PartSize       *string `json:"partSize,omitempty"`
-				PresignTtl     *string `json:"presign_ttl,omitempty"`
-				PublicEndpoint *string `json:"public_endpoint,omitempty"`
-				SseType        *string `json:"sse_type,omitempty"`
+				PresignTtl     *string `json:"presignTtl,omitempty"`
+				PublicEndpoint *string `json:"publicEndpoint,omitempty"`
+				SseType        *string `json:"sseType,omitempty"`
 			}{
 				Bucket:         ptr(cfg.Datastores.S3.Bucket),
 				Endpoint:       ptr(cfg.Datastores.S3.Endpoint),
@@ -791,13 +791,13 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			},
 		},
 		Policy: &struct {
-			AllowedContentTypes *[]string `json:"allowed_content_types,omitempty"`
-			MaxMultipartSize    *string   `json:"max_multipart_size,omitempty"`
-			MaxObjectSize       *string   `json:"max_object_size,omitempty"`
-			MaxPartSize         *string   `json:"max_part_size,omitempty"`
-			MinPartSize         *string   `json:"min_part_size,omitempty"`
-			PresignGetTtl       *string   `json:"presign_get_ttl,omitempty"`
-			PresignPutTtl       *string   `json:"presign_put_ttl,omitempty"`
+			AllowedContentTypes *[]string `json:"allowedContentTypes,omitempty"`
+			MaxMultipartSize    *string   `json:"maxMultipartSize,omitempty"`
+			MaxObjectSize       *string   `json:"maxObjectSize,omitempty"`
+			MaxPartSize         *string   `json:"maxPartSize,omitempty"`
+			MinPartSize         *string   `json:"minPartSize,omitempty"`
+			PresignGetTtl       *string   `json:"presignGetTtl,omitempty"`
+			PresignPutTtl       *string   `json:"presignPutTtl,omitempty"`
 		}{
 			MaxObjectSize:       ptr(cfg.Policy.MaxObjectSize),
 			MaxMultipartSize:    ptr(cfg.Policy.MaxMultipartSize),
@@ -808,19 +808,19 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			AllowedContentTypes: &cfg.Policy.AllowedContentTypes,
 		},
 		Security: &struct {
-			EnableRls                *bool `json:"enable_rls,omitempty"`
-			RejectTenantMismatch     *bool `json:"reject_tenant_mismatch,omitempty"`
-			TrustTenantIdFromRequest *bool `json:"trust_tenant_id_from_request,omitempty"`
+			EnableRls                *bool `json:"enableRls,omitempty"`
+			RejectTenantMismatch     *bool `json:"rejectTenantMismatch,omitempty"`
+			TrustTenantIdFromRequest *bool `json:"trustTenantIdFromRequest,omitempty"`
 		}{
 			TrustTenantIdFromRequest: ptr(cfg.Security.TrustTenantIDFromRequest),
 			RejectTenantMismatch:     ptr(cfg.Security.RejectTenantMismatch),
 			EnableRls:                ptr(cfg.Security.EnableRLS),
 		},
 		Housekeeping: &struct {
-			EnableReaper *bool   `json:"enable_reaper,omitempty"`
-			GcInterval   *string `json:"gc_interval,omitempty"`
-			MultipartTtl *string `json:"multipart_ttl,omitempty"`
-			PendingTtl   *string `json:"pending_ttl,omitempty"`
+			EnableReaper *bool   `json:"enableReaper,omitempty"`
+			GcInterval   *string `json:"gcInterval,omitempty"`
+			MultipartTtl *string `json:"multipartTtl,omitempty"`
+			PendingTtl   *string `json:"pendingTtl,omitempty"`
 		}{
 			EnableReaper: ptr(cfg.Housekeeping.EnableReaper),
 			PendingTtl:   ptr(cfg.Housekeeping.PendingTTL),
@@ -829,8 +829,8 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 		},
 		RateLimit: &struct {
 			Burst             *int     `json:"burst,omitempty"`
-			MaxTenants        *int     `json:"max_tenants,omitempty"`
-			RequestsPerSecond *float32 `json:"requests_per_second,omitempty"`
+			MaxTenants        *int     `json:"maxTenants,omitempty"`
+			RequestsPerSecond *float32 `json:"requestsPerSecond,omitempty"`
 		}{
 			RequestsPerSecond: ptr(cfg.RateLimit.RequestsPerSecond),
 			Burst:             ptr(cfg.RateLimit.Burst),
@@ -838,7 +838,7 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 		},
 		Cache: &struct {
 			Enabled *bool   `json:"enabled,omitempty"`
-			MaxSize *int    `json:"max_size,omitempty"`
+			MaxSize *int    `json:"maxSize,omitempty"`
 			Ttl     *string `json:"ttl,omitempty"`
 		}{
 			Enabled: ptr(cfg.Cache.Enabled),
@@ -846,10 +846,10 @@ func (s *OpenAPIAdapter) GetAdminConfig(c *gin.Context, params api.GetAdminConfi
 			Ttl:     ptr(cfg.Cache.TTL),
 		},
 		Timeouts: &struct {
-			DefaultOperation *string `json:"default_operation,omitempty"`
-			FastOperation    *string `json:"fast_operation,omitempty"`
-			LongOperation    *string `json:"long_operation,omitempty"`
-			S3Operation      *string `json:"s3_operation,omitempty"`
+			DefaultOperation *string `json:"defaultOperation,omitempty"`
+			FastOperation    *string `json:"fastOperation,omitempty"`
+			LongOperation    *string `json:"longOperation,omitempty"`
+			S3Operation      *string `json:"s3Operation,omitempty"`
 		}{
 			FastOperation:    ptr(cfg.Timeouts.FastOperation),
 			DefaultOperation: ptr(cfg.Timeouts.DefaultOperation),
@@ -906,7 +906,7 @@ func (s *OpenAPIAdapter) ListTenants(c *gin.Context, params api.ListTenantsParam
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: ptr(total),
+			TotalCount: total,
 		},
 	})
 }
@@ -916,7 +916,7 @@ func mapSignedAction(p domain.Presigned) api.SignedAction {
 		Url:       p.URL,
 		Method:    api.SignedActionMethod(p.Method),
 		Headers:   &p.Headers,
-		ExpiresAt: ptr(p.ExpiresAt),
+		ExpiresAt: p.ExpiresAt,
 	}
 }
 
@@ -976,7 +976,7 @@ func (s *OpenAPIAdapter) ListAuditLogs(c *gin.Context, params api.ListAuditLogsP
 		Pagination: api.Pagination{
 			NextCursor: nextCursor,
 			HasMore:    hasMore,
-			TotalCount: ptr(totalCount),
+			TotalCount: totalCount,
 		},
 	}
 
@@ -1008,7 +1008,7 @@ func mapAuditLog(l domain.AuditLog) api.AuditLog {
 		RequestId:         l.RequestID,
 		IdempotencyKey:    l.IdempotencyKey,
 		ActorSubject:      l.ActorSubject,
-		ActorType:         ptr(actorType),
+		ActorType:         actorType,
 		ClientIp:          l.ClientIP,
 		UserAgent:         l.UserAgent,
 		Method:            l.Method,
@@ -1090,7 +1090,7 @@ func (s *OpenAPIAdapter) ListCategories(c *gin.Context, params api.ListCategorie
 		Pagination: api.Pagination{
 			NextCursor: nextPtr,
 			HasMore:    next != "",
-			TotalCount: ptr(total),
+			TotalCount: total,
 		},
 	})
 }

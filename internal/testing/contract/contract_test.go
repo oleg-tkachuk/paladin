@@ -65,9 +65,9 @@ func TestContract(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{
 			"items": []interface{}{},
 			"pagination": gin.H{
-				"has_more":    false,
-				"next_cursor": nil,
-				"total_count": 0,
+				"hasMore":    false,
+				"nextCursor": nil,
+				"totalCount": int64(0),
 			},
 		})
 	})
@@ -75,14 +75,14 @@ func TestContract(t *testing.T) {
 	router.POST("/v1/objects", func(c *gin.Context) {
 		// Mock handler for POST
 		c.JSON(http.StatusCreated, gin.H{
-			"object_id":  "550e8400-e29b-41d4-a716-446655440000",
-			"object_key": "default/550e8400-e29b-41d4-a716-446655440000",
-			"bucket":     "objects",
-			"status":     "pending",
+			"objectId":  "550e8400-e29b-41d4-a716-446655440000",
+			"objectKey": "default/550e8400-e29b-41d4-a716-446655440000",
+			"bucket":    "objects",
+			"status":    "pending",
 			"upload": gin.H{
-				"url":        "http://example.com/upload",
-				"method":     "PUT",
-				"expires_at": "2026-02-17T11:14:50Z",
+				"url":       "http://example.com/upload",
+				"method":    "PUT",
+				"expiresAt": "2026-02-17T11:14:50Z",
 			},
 		})
 	})

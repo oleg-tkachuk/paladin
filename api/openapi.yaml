@@ -58,18 +58,18 @@ paths:
           required: false
           schema:
             $ref: "#/components/schemas/ObjectStatus"
-        - name: external_ref
+        - name: externalRef
           in: query
           required: false
           schema:
             type: string
-        - name: created_after
+        - name: createdAfter
           in: query
           required: false
           schema:
             type: string
             format: date-time
-        - name: created_before
+        - name: createdBefore
           in: query
           required: false
           schema:
@@ -92,8 +92,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [created_at]
-            default: created_at
+            enum: [createdAt]
+            default: createdAt
           description: Field to sort by
         - name: order
           in: query
@@ -229,7 +229,7 @@ paths:
 
         Notes:
         - This endpoint is for lifecycle/state transitions only (e.g. aborting an upload, marking error).
-        - `soft_deleted` is intentionally not allowed here to avoid ambiguous delete semantics.
+        - `softDeleted` is intentionally not allowed here to avoid ambiguous delete semantics.
       operationId: updateObject
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -265,8 +265,8 @@ paths:
       tags: [Objects]
       summary: Soft delete an object
       description: |
-        Performs a soft delete by marking the object status as `soft_deleted`
-        and setting `deleted_at`. The object content is NOT removed from storage.
+        Performs a soft delete by marking the object status as `softDeleted`
+        and setting `deletedAt`. The object content is NOT removed from storage.
 
         This operation is idempotent:
         - If the object is already soft-deleted, the response is still `204`.
@@ -548,7 +548,7 @@ paths:
 
     patch:
       tags: [Objects]
-      summary: Update object metadata (labels/external_ref)
+      summary: Update object metadata (labels/externalRef)
       operationId: patchObjectMeta
       requestBody:
         required: true
@@ -743,7 +743,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /multipart/{upload_id}:
+  /multipart/{uploadId}:
     parameters:
       - $ref: "#/components/parameters/XRequestID"
       - $ref: "#/components/parameters/Traceparent"
@@ -773,7 +773,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /multipart/{upload_id}/parts/{part_number}/sign:
+  /multipart/{uploadId}/parts/{partNumber}/sign:
     parameters:
       - $ref: "#/components/parameters/XRequestID"
       - $ref: "#/components/parameters/Traceparent"
@@ -808,7 +808,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /multipart/{upload_id}/parts/sign:
+  /multipart/{uploadId}/parts/sign:
     parameters:
       - $ref: "#/components/parameters/XRequestID"
       - $ref: "#/components/parameters/Traceparent"
@@ -848,7 +848,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /multipart/{upload_id}/complete:
+  /multipart/{uploadId}/complete:
     parameters:
       - $ref: "#/components/parameters/XRequestID"
       - $ref: "#/components/parameters/Traceparent"
@@ -888,7 +888,7 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /multipart/{upload_id}/abort:
+  /multipart/{uploadId}/abort:
     parameters:
       - $ref: "#/components/parameters/XRequestID"
       - $ref: "#/components/parameters/Traceparent"
@@ -1170,7 +1170,7 @@ paths:
           required: false
           schema:
             type: string
-        - name: path_prefix
+        - name: pathPrefix
           in: query
           required: false
           schema:
@@ -1180,17 +1180,17 @@ paths:
           required: false
           schema:
             type: string
-        - name: http_status
+        - name: httpStatus
           in: query
           required: false
           schema:
             type: integer
-        - name: request_id
+        - name: requestId
           in: query
           required: false
           schema:
             type: string
-        - name: idempotency_key
+        - name: idempotencyKey
           in: query
           required: false
           schema:
@@ -1327,7 +1327,7 @@ components:
         format: uuid
 
     UploadID:
-      name: upload_id
+      name: uploadId
       in: path
       required: true
       schema:
@@ -1335,7 +1335,7 @@ components:
         minLength: 1
 
     PartNumber:
-      name: part_number
+      name: partNumber
       in: path
       required: true
       schema:
@@ -1399,7 +1399,7 @@ components:
           example: "ready"
         reason:
           type: string
-          example: "dependency_unavailable"
+          example: "dependencyUnavailable"
         dependencies:
           $ref: "#/components/schemas/DependencyStatus"
 
@@ -1456,10 +1456,10 @@ components:
               type: object
               properties:
                 addr: { type: string }
-                read_timeout: { type: string }
-                write_timeout: { type: string }
-                request_id_header: { type: string }
-                cors_allowed_origins: { type: array, items: { type: string } }
+                readTimeout: { type: string }
+                writeTimeout: { type: string }
+                requestIdHeader: { type: string }
+                corsAllowedOrigins: { type: array, items: { type: string } }
         datastores:
           type: object
           properties:
@@ -1470,60 +1470,60 @@ components:
                 port: { type: string }
                 user: { type: string }
                 dbname: { type: string }
-                ssl_mode: { type: string }
+                sslMode: { type: string }
             s3:
               type: object
               properties:
                 bucket: { type: string }
                 endpoint: { type: string }
-                public_endpoint: { type: string }
-                force_path_style: { type: boolean }
-                presign_ttl: { type: string }
+                publicEndpoint: { type: string }
+                forcePathStyle: { type: boolean }
+                presignTtl: { type: string }
                 partSize: { type: string }
-                sse_type: { type: string }
-                # Secrets redacted: access_key, secret_key, sse_key_id
+                sseType: { type: string }
+                # Secrets redacted: accessKey, secretKey, sseKeyId
         policy:
           type: object
           properties:
-            max_object_size: { type: string }
-            max_multipart_size: { type: string }
-            min_part_size: { type: string }
-            max_part_size: { type: string }
-            presign_put_ttl: { type: string }
-            presign_get_ttl: { type: string }
-            allowed_content_types: { type: array, items: { type: string } }
+            maxObjectSize: { type: string }
+            maxMultipartSize: { type: string }
+            minPartSize: { type: string }
+            maxPartSize: { type: string }
+            presignPutTtl: { type: string }
+            presignGetTtl: { type: string }
+            allowedContentTypes: { type: array, items: { type: string } }
         security:
           type: object
           properties:
-            trust_tenant_id_from_request: { type: boolean }
-            reject_tenant_mismatch: { type: boolean }
-            enable_rls: { type: boolean }
+            trustTenantIdFromRequest: { type: boolean }
+            rejectTenantMismatch: { type: boolean }
+            enableRls: { type: boolean }
         housekeeping:
           type: object
           properties:
-            enable_reaper: { type: boolean }
-            pending_ttl: { type: string }
-            multipart_ttl: { type: string }
-            gc_interval: { type: string }
+            enableReaper: { type: boolean }
+            pendingTtl: { type: string }
+            multipartTtl: { type: string }
+            gcInterval: { type: string }
         rateLimit:
           type: object
           properties:
-            requests_per_second: { type: number }
+            requestsPerSecond: { type: number }
             burst: { type: integer }
-            max_tenants: { type: integer }
+            maxTenants: { type: integer }
         cache:
           type: object
           properties:
             enabled: { type: boolean }
-            max_size: { type: integer }
+            maxSize: { type: integer }
             ttl: { type: string }
         timeouts:
           type: object
           properties:
-            fast_operation: { type: string }
-            default_operation: { type: string }
-            s3_operation: { type: string }
-            long_operation: { type: string }
+            fastOperation: { type: string }
+            defaultOperation: { type: string }
+            s3Operation: { type: string }
+            longOperation: { type: string }
         idempotency:
           type: object
           properties:
@@ -1544,7 +1544,7 @@ components:
 
     SignedAction:
       type: object
-      required: [url, method, expires_at]
+      required: [url, method, expiresAt]
       properties:
         url:
           type: string
@@ -1561,7 +1561,7 @@ components:
 
     CreateObjectRequest:
       type: object
-      required: [contentType, size_bytes]
+      required: [contentType, sizeBytes]
       properties:
         category:
           type: string
@@ -1597,7 +1597,7 @@ components:
           example:
             env: "production"
             team: "backend"
-            document_type: "invoice"
+            documentType: "invoice"
         externalRef:
           type: string
           maxLength: 512
@@ -1698,7 +1698,7 @@ components:
 
     CategoryStats:
       type: object
-      required: [totalCount, total_size]
+      required: [totalCount, totalSize]
       properties:
         totalCount:
           type: integer
@@ -1885,7 +1885,7 @@ components:
 
     InitiateMultipartRequest:
       type: object
-      required: [contentType, size_bytes]
+      required: [contentType, sizeBytes]
       properties:
         category:
           type: string
@@ -1982,7 +1982,7 @@ components:
 
     SignPartResponse:
       type: object
-      required: [part_number, upload]
+      required: [partNumber, upload]
       properties:
         partNumber:
           type: integer
@@ -1993,7 +1993,7 @@ components:
 
     SignPartsBatchRequest:
       type: object
-      required: [part_numbers]
+      required: [partNumbers]
       properties:
         partNumbers:
           type: array
@@ -2017,7 +2017,7 @@ components:
 
     CompletePart:
       type: object
-      required: [part_number, etag]
+      required: [partNumber, etag]
       properties:
         partNumber:
           type: integer
@@ -2075,7 +2075,7 @@ components:
 
     Pagination:
       type: object
-      required: [hasMore, total_count]
+      required: [hasMore, totalCount]
       properties:
         nextCursor:
           type: string
@@ -2094,7 +2094,7 @@ components:
 
     Category:
       type: object
-      required: [id, tenantId, slug, name, createdAt, updated_at]
+      required: [id, tenantId, slug, name, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2169,21 +2169,21 @@ components:
 
     ErrorDetails:
       type: object
-      required: [code, message, request_id]
+      required: [code, message, requestId]
       properties:
         code:
           type: string
           description: Machine-readable error code for programmatic handling
           example: "conflict"
           enum:
-            - invalid_argument
-            - validation_failed
-            - not_found
+            - invalidArgument
+            - validationFailed
+            - notFound
             - conflict
             - unauthorized
             - forbidden
-            - internal_error
-            - service_unavailable
+            - internalError
+            - serviceUnavailable
         message:
           type: string
           description: Human-readable error message
@@ -2198,11 +2198,11 @@ components:
               field:
                 type: string
                 description: JSON path to the invalid field
-                example: "size_bytes"
+                example: "sizeBytes"
               code:
                 type: string
                 description: Error code specific to this field
-                example: "out_of_range"
+                example: "outOfRange"
               message:
                 type: string
                 description: Human-readable error for this field
@@ -2213,7 +2213,7 @@ components:
           description: Additional structured context about the error
           example:
             existingObjectId: "550e8400-e29b-41d4-a716-446655440000"
-            allowed_content_types:
+            allowedContentTypes:
               ["image/jpeg", "image/png", "application/pdf"]
         requestId:
           type: string
@@ -2228,11 +2228,11 @@ components:
           type: string
           format: uri
           description: Link to documentation for this error
-          example: "https://docs.acme.io/errors/invalid_external_ref"
+          example: "https://docs.acme.io/errors/invalidExternalRef"
 
     AuditLog:
       type: object
-      required: [id, tenantId, actor_type, method, path, created_at]
+      required: [id, tenantId, actorType, method, path, createdAt]
       properties:
         id:
           type: string

@@ -29,8 +29,8 @@ func NewTenantHandler(svc domain.TenantService) *TenantHandler {
 // createTenantRequest is the JSON body for POST /v1/admin/tenants.
 type createTenantRequest struct {
 	// TenantID is the canonical identifier used in all tenant-scoped APIs.
-	TenantID    string            `json:"tenant_id"    binding:"required"`
-	DisplayName *string           `json:"display_name"`
+	TenantID    string            `json:"tenantId"    binding:"required"`
+	DisplayName *string           `json:"displayName"`
 	Labels      map[string]string `json:"labels"`
 	Tags        []string          `json:"tags"`
 }
@@ -47,18 +47,18 @@ type patchTenantMetadataRequest struct {
 
 // tenantResponse is the JSON body returned by all tenant endpoints.
 type tenantResponse struct {
-	TenantID    string            `json:"tenant_id"`
-	DisplayName *string           `json:"display_name,omitempty"`
+	TenantID    string            `json:"tenantId"`
+	DisplayName *string           `json:"displayName,omitempty"`
 	Labels      map[string]string `json:"labels"`
 	Tags        []string          `json:"tags"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
 // listTenantsResponse wraps a paginated list of tenants.
 type listTenantsResponse struct {
 	Items      []tenantResponse `json:"items"`
-	NextCursor string           `json:"next_cursor,omitempty"`
+	NextCursor string           `json:"nextCursor,omitempty"`
 	Total      int64            `json:"total"`
 }
 
@@ -106,15 +106,15 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 
 // GetTenant handles GET /v1/admin/tenants/:tenant_id.
 func (h *TenantHandler) GetTenant(c *gin.Context) {
-	tenantID := c.Param("tenant_id")
-	if tenantID == "" {
+	tenantId := c.Param("tenant_id")
+	if tenantId == "" {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 			errors.BadRequest("tenant_id path parameter is required", nil)))
 
 		return
 	}
 
-	tenant, err := h.svc.Get(c.Request.Context(), tenantID)
+	tenant, err := h.svc.Get(c.Request.Context(), tenantId)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), err))
 
@@ -127,15 +127,15 @@ func (h *TenantHandler) GetTenant(c *gin.Context) {
 // DeleteTenant handles DELETE /v1/admin/tenants/:tenant_id.
 // Returns 409 Conflict when the tenant still has active objects.
 func (h *TenantHandler) DeleteTenant(c *gin.Context) {
-	tenantID := c.Param("tenant_id")
-	if tenantID == "" {
+	tenantId := c.Param("tenant_id")
+	if tenantId == "" {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 			errors.BadRequest("tenant_id path parameter is required", nil)))
 
 		return
 	}
 
-	if err := h.svc.Delete(c.Request.Context(), tenantID); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), tenantId); err != nil {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), err))
 
 		return
@@ -148,8 +148,8 @@ func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 // Labels are merged (existing keys preserved; send null per key to delete).
 // Tags are replaced in full.
 func (h *TenantHandler) PatchTenantMetadata(c *gin.Context) {
-	tenantID := c.Param("tenant_id")
-	if tenantID == "" {
+	tenantId := c.Param("tenant_id")
+	if tenantId == "" {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(),
 			errors.BadRequest("tenant_id path parameter is required", nil)))
 
@@ -164,7 +164,7 @@ func (h *TenantHandler) PatchTenantMetadata(c *gin.Context) {
 		return
 	}
 
-	tenant, err := h.svc.PatchMetadata(c.Request.Context(), tenantID, req.Labels, req.Tags, nil)
+	tenant, err := h.svc.PatchMetadata(c.Request.Context(), tenantId, req.Labels, req.Tags, nil)
 	if err != nil {
 		c.AbortWithStatusJSON(errors.MapToHTTP(c.Request.Context(), err))
 

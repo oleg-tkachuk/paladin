@@ -424,8 +424,8 @@ var _ = Describe("Router", func() {
 			err := json.Unmarshal(recorder.Body.Bytes(), &resp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp["version"]).To(Equal("1.0.0"))
-			Expect(resp["git_sha"]).To(Equal("deadbeef"))
-			Expect(resp["build_time"]).To(Equal("2023-01-01"))
+			Expect(resp["gitSha"]).To(Equal("deadbeef"))
+			Expect(resp["buildTime"]).To(Equal("2023-01-01"))
 		})
 	})
 
@@ -513,7 +513,7 @@ var _ = Describe("Router", func() {
 			})
 
 			It("returns 200 and upload URL", func() {
-				body := `{"content_type": "image/png", "size_bytes": 1024}`
+				body := `{"contentType": "image/png", "sizeBytes": 1024}`
 				req, _ := http.NewRequest(http.MethodPost, "/v1/objects", strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("X-Tenant-ID", "default")
@@ -533,7 +533,7 @@ var _ = Describe("Router", func() {
 					ObjectID: objID, UploadID: "up123", PartSize: 5 * 1024 * 1024,
 				}, nil)
 
-			body := `{"content_type": "application/octet-stream", "size_bytes": 104857600}`
+			body := `{"contentType": "application/octet-stream", "sizeBytes": 104857600}`
 			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Tenant-ID", "default")
@@ -564,7 +564,7 @@ var _ = Describe("Router", func() {
 			mockSvc.On("CompleteMultipart", mock.Anything, mock.Anything, "up123", mock.Anything).
 				Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
 
-			body := `{"parts": [{"part_number": 1, "etag": "etag1"}]}`
+			body := `{"parts": [{"partNumber": 1, "etag": "etag1"}]}`
 			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/complete", strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
@@ -722,7 +722,7 @@ var _ = Describe("Router", func() {
 					{PartNumber: 2, Upload: domain.Presigned{URL: "url2"}},
 				}, nil)
 
-			body := `{"part_numbers": [1, 2]}`
+			body := `{"partNumbers": [1, 2]}`
 			req, _ := http.NewRequest(http.MethodPost, "/v1/multipart/up123/parts/sign", strings.NewReader(body))
 			req.Header.Set("X-Tenant-ID", "default")
 			req.Header.Set("Content-Type", "application/json")
@@ -745,7 +745,7 @@ var _ = Describe("Router", func() {
 
 			Expect(recorder.Code).To(Equal(http.StatusOK))
 			Expect(recorder.Body.String()).To(ContainSubstring("items"))
-			Expect(recorder.Body.String()).To(ContainSubstring("next_cursor"))
+			Expect(recorder.Body.String()).To(ContainSubstring("nextCursor"))
 		})
 	})
 
