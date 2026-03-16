@@ -3,7 +3,7 @@ version: "3"
 vars:
   PROJECT_NAME: paladin
   COMPOSE_FILE: ./deploy/docker-compose.yaml
-  ENV_FILE_SERVICE: ./deploy/env/service.env
+  DEPLOY_INFO_ENV_FILE: ./deploy/info.env
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
   K8S_DEPLOYMENT_NAME: paladin
@@ -57,17 +57,17 @@ tasks:
       - cmd: |-
           set -euo pipefail
 
-          if [ ! -f {{.ENV_FILE_SERVICE}} ]; then touch {{.ENV_FILE_SERVICE}}; fi
+          if [ ! -f {{.DEPLOY_INFO_ENV_FILE}} ]; then touch {{.DEPLOY_INFO_ENV_FILE}}; fi
 
-          check_version=$(grep "APP_VERSION=" {{.ENV_FILE_SERVICE}} | cut -d'=' -f2 || echo "0.1.0")
+          check_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2 || echo "0.1.0")
           if [ -z "$check_version" ]; then check_version="0.1.0"; fi
 
           next_version="$(printf "%s" "$check_version" | awk -F. -v OFS=. '{$NF += 1 ; print}')"
 
-          if grep -q "APP_VERSION=" {{.ENV_FILE_SERVICE}}; then
-            sed -i '' "s/APP_VERSION=.*/APP_VERSION=$next_version/" {{.ENV_FILE_SERVICE}}
+          if grep -q "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}}; then
+            sed -i '' "s/APP_VERSION=.*/APP_VERSION=$next_version/" {{.DEPLOY_INFO_ENV_FILE}}
           else
-            echo "APP_VERSION=$next_version" >> {{.ENV_FILE_SERVICE}}
+            echo "APP_VERSION=$next_version" >> {{.DEPLOY_INFO_ENV_FILE}}
           fi
 
           printf "INFO: %s: Bumped version from %s to %s\n" "{{.K8S_DEPLOYMENT_NAME}}" "$check_version" "$next_version"
@@ -81,13 +81,13 @@ tasks:
           printf "INFO: %s: Writing build metadata to env file...\n" "{{.K8S_DEPLOYMENT_NAME}}"
 
           # Read the version that was just bumped (or exists)
-          next_version=$(grep "APP_VERSION=" {{.ENV_FILE_SERVICE}} | cut -d'=' -f2)
+          next_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2)
 
           {
             printf "GIT_COMMIT_HASH=%s\n" "$(git rev-parse --short HEAD)"
             printf "BUILD_TIME=%s\n" "$(TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z)"
             printf "APP_VERSION=%s\n" "$next_version"
-          } > {{.ENV_FILE_SERVICE}}
+          } > {{.DEPLOY_INFO_ENV_FILE}}
 
   build:compose:
     desc: "Run docker compose build in minikube docker-env"
@@ -104,7 +104,7 @@ tasks:
             --progress={{.PROGRESS | default "auto"}} \
             -f {{.COMPOSE_FILE}} \
             -p {{.PROJECT_NAME}} \
-            --env-file {{.ENV_FILE_SERVICE}} \
+            --env-file {{.DEPLOY_INFO_ENV_FILE}} \
             build
 
   # -------------------------

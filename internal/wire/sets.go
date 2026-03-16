@@ -7,7 +7,6 @@ import (
 	"time"
 
 	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
-	publicapi "github.com/oleg-tkachuk/paladin/internal/api/grpc/public"
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
@@ -59,13 +58,17 @@ var ProviderSet = wire.NewSet(
 	ProvideCategoryService,
 	ProvideObjectsService,
 	ProvideTenantService,
-	ProvideSystemService,
 	ProvideHealthService,
 	ProvideHTTPServer,
 	ProvideGRPCServer,
+	ProvideStartTime,
 	ProvideReaper,
 	ProvideApp,
 )
+
+func ProvideStartTime() time.Time {
+	return time.Now()
+}
 
 func ProvideConfig(path ConfigPath, log BootstrapLogger) (config.Config, error) {
 	cfg := config.Config{}
@@ -218,10 +221,6 @@ func ProvideObjectsService(
 	)
 }
 
-func ProvideSystemService(cfg config.Config) domain.SystemService {
-	return service.NewSystemService(&cfg)
-}
-
 func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) *service.HealthService {
 	return service.NewHealthService(db, s3c, brk)
 }
@@ -234,21 +233,23 @@ func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
 	return service.NewTenantService(repo)
 }
 
+// ProvideHTTPServer builds the Connect RPC + ops HTTP server.
+// This replaces the old Gin-based server.
 func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
 	svc domain.ObjectsService,
 	catSvc domain.CategoryService,
 	tenantSvc domain.TenantService,
-	auditRepo domain.AuditLogRepository,
 	hs *service.HealthService,
-	sysSvc domain.SystemService,
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
+	startTime time.Time,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, catSvc, tenantSvc, auditRepo, meta, hs, sysSvc, appStarted)
+	return httpapi.NewServer(&cfg, l, svc, catSvc, tenantSvc, meta, hs, appStarted, startTime)
 }
 
+// ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
 func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *grpc.Server {
 	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 	srv := grpc.NewServer(
@@ -256,8 +257,7 @@ func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsServi
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
 	s := grpcapi.NewServer(l, svc, catSvc, tenantSvc)
-	grpcapi.RegisterPaladinServer(srv, s)
-	publicapi.RegisterPaladinServer(srv, &grpcapi.PublicServer{Server: s})
+	grpcapi.RegisterPaladinServiceServer(srv, s)
 	reflection.Register(srv)
 
 	return srv
@@ -287,7 +287,6 @@ func ProvideApp(
 		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
 	}
-	// Note: We use meta strings directly for container but could pass the whole struct.
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
 		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started,

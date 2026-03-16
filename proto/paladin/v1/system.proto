@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "google/protobuf/timestamp.proto";
+
+// SystemService provides health checks and service information.
+service SystemService {
+  // Ping is a low-overhead connectivity check.
+  rpc Ping(PingRequest) returns (PingResponse);
+
+  // GetLivez returns the liveness status of the service.
+  rpc GetLivez(GetLivezRequest) returns (GetLivezResponse);
+
+  // GetReadyz returns the readiness status of the service and its dependencies.
+  rpc GetReadyz(GetReadyzRequest) returns (GetReadyzResponse);
+
+  // GetStartupz returns the startup status of the service.
+  rpc GetStartupz(GetStartupzRequest) returns (GetStartupzResponse);
+
+  // GetInfo returns detailed information about the service, build, and runtime.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_UNHEALTHY = 2;
+  HEALTH_STATUS_DEGRADED = 3;
+  HEALTH_STATUS_DISABLED = 4;
+}
+
+message PingRequest {}
+message PingResponse {
+  string message = 1;
+}
+
+message GetLivezRequest {}
+message GetLivezResponse {
+  string status = 1;
+  HealthStatus health = 2;
+}
+
+message GetReadyzRequest {}
+message GetReadyzResponse {
+  string status = 1;
+  HealthStatus health = 2;
+  repeated DependencyStatus dependencies = 3;
+}
+
+message DependencyStatus {
+  string name = 1;
+  HealthStatus health = 2;
+  string message = 3;
+  int64 latency_ms = 4;
+}
+
+message GetStartupzRequest {}
+message GetStartupzResponse {
+  string status = 1;
+  HealthStatus health = 2;
+}
+
+message GetInfoRequest {}
+message GetInfoResponse {
+  ServiceInfo service = 1;
+  BuildInfo build = 2;
+  RuntimeInfo runtime = 3;
+  string environment = 4;
+}
+
+message ServiceInfo {
+  string name = 1;
+  string version = 2;
+}
+
+message BuildInfo {
+  string commit = 1;
+  google.protobuf.Timestamp build_time = 2;
+}
+
+message RuntimeInfo {
+  string go_version = 1;
+  string os = 2;
+  string arch = 3;
+  google.protobuf.Timestamp start_time = 4;
+  string uptime = 5;
+}

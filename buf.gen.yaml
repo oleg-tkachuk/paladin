@@ -1,11 +1,13 @@
-version: v1
+version: v2
 plugins:
-  - plugin: go
+  # Local binaries — no BSR remote plugin calls, no rate limits.
+  # Requires: protoc-gen-go, protoc-gen-go-grpc, protoc-gen-connect-go on PATH.
+  - local: protoc-gen-go
     out: .
     opt: module=github.com/oleg-tkachuk/paladin
-  - plugin: go-grpc
+  - local: protoc-gen-go-grpc
     out: .
     opt: module=github.com/oleg-tkachuk/paladin
-  - plugin: connect-go
+  - local: protoc-gen-connect-go
     out: .
     opt: module=github.com/oleg-tkachuk/paladin

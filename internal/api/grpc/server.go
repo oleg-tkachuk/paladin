@@ -9,18 +9,16 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"github.com/google/uuid"
-	publicapi "github.com/oleg-tkachuk/paladin/internal/api/grpc/public"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"connectrpc.com/connect"
 )
 
-// Server is the internal gRPC server implementation. It holds all service
-// dependencies and implements PaladinServer.
+// Server is the unified gRPC + Connect RPC server implementation.
+// It implements PaladinServiceServer and is used by both
+// the gRPC server (directly) and the Connect handler (via generated adapter).
 type Server struct {
-	UnimplementedPaladinServer
+	UnimplementedPaladinServiceServer
 	log       *zap.Logger
 	svc       domain.ObjectsService
 	catSvc    domain.CategoryService
@@ -32,279 +30,6 @@ func NewServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.Categor
 	return &Server{log: log, svc: svc, catSvc: catSvc, tenantSvc: tenantSvc}
 }
 
-// NewConnectServer is a helper for the HTTP router to get a Connect-compatible
-// implementation of the service.
-func NewConnectServer(log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *ConnectServer {
-	return &ConnectServer{Server: NewServer(log, svc, catSvc, tenantSvc)}
-}
-
-// ConnectServer wraps the internal gRPC Server to implement the Connect RPC interface.
-type ConnectServer struct {
-	*Server
-}
-
-func (s *ConnectServer) CreateObject(ctx context.Context, req *connect.Request[CreateObjectRequest]) (*connect.Response[CreateObjectResponse], error) {
-	res, err := s.Server.CreateObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetObject(ctx context.Context, req *connect.Request[GetObjectRequest]) (*connect.Response[GetObjectResponse], error) {
-	res, err := s.Server.GetObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetObjectMeta(ctx context.Context, req *connect.Request[GetObjectRequest]) (*connect.Response[GetObjectMetaResponse], error) {
-	res, err := s.Server.GetObjectMeta(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) PatchObjectMeta(ctx context.Context, req *connect.Request[PatchObjectMetaRequest]) (*connect.Response[PatchObjectMetaResponse], error) {
-	res, err := s.Server.PatchObjectMeta(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) CompleteObject(ctx context.Context, req *connect.Request[CompleteObjectRequest]) (*connect.Response[CompleteObjectResponse], error) {
-	res, err := s.Server.CompleteObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) DeleteObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
-	res, err := s.Server.DeleteObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) RestoreObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
-	res, err := s.Server.RestoreObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) PurgeObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
-	res, err := s.Server.PurgeObject(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) InitiateMultipart(ctx context.Context, req *connect.Request[InitiateMultipartRequest]) (*connect.Response[InitiateMultipartResponse], error) {
-	res, err := s.Server.InitiateMultipart(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) SignPart(ctx context.Context, req *connect.Request[SignPartRequest]) (*connect.Response[SignPartResponse], error) {
-	res, err := s.Server.SignPart(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) CompleteMultipart(ctx context.Context, req *connect.Request[CompleteMultipartRequest]) (*connect.Response[CompleteMultipartResponse], error) {
-	res, err := s.Server.CompleteMultipart(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) AbortMultipart(ctx context.Context, req *connect.Request[AbortMultipartRequest]) (*connect.Response[AbortMultipartResponse], error) {
-	res, err := s.Server.AbortMultipart(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) ListCategories(ctx context.Context, req *connect.Request[ListCategoriesRequest]) (*connect.Response[ListCategoriesResponse], error) {
-	res, err := s.Server.ListCategories(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetCategory(ctx context.Context, req *connect.Request[GetCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
-	res, err := s.Server.GetCategory(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) CreateCategory(ctx context.Context, req *connect.Request[CreateCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
-	res, err := s.Server.CreateCategory(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) UpdateCategory(ctx context.Context, req *connect.Request[UpdateCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
-	res, err := s.Server.UpdateCategory(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) DeleteCategory(ctx context.Context, req *connect.Request[DeleteCategoryRequest]) (*connect.Response[DeleteCategoryResponse], error) {
-	res, err := s.Server.DeleteCategory(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetCategoryStats(ctx context.Context, req *connect.Request[GetCategoryStatsRequest]) (*connect.Response[GetCategoryStatsResponse], error) {
-	res, err := s.Server.GetCategoryStats(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetObjectStats(ctx context.Context, req *connect.Request[GetObjectStatsRequest]) (*connect.Response[GetObjectStatsResponse], error) {
-	res, err := s.Server.GetObjectStats(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) ListObjects(ctx context.Context, req *connect.Request[ListObjectsRequest]) (*connect.Response[ListObjectsResponse], error) {
-	res, err := s.Server.ListObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) CreateTenant(ctx context.Context, req *connect.Request[CreateTenantRequest]) (*connect.Response[TenantResponse], error) {
-	res, err := s.Server.CreateTenant(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) GetTenant(ctx context.Context, req *connect.Request[GetTenantRequest]) (*connect.Response[TenantResponse], error) {
-	res, err := s.Server.GetTenant(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) DeleteTenant(ctx context.Context, req *connect.Request[DeleteTenantRequest]) (*connect.Response[DeleteTenantResponse], error) {
-	res, err := s.Server.DeleteTenant(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) ListTenants(ctx context.Context, req *connect.Request[ListTenantsRequest]) (*connect.Response[ListTenantsResponse], error) {
-	res, err := s.Server.ListTenants(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) PatchTenantMetadata(ctx context.Context, req *connect.Request[PatchTenantMetadataRequest]) (*connect.Response[TenantResponse], error) {
-	res, err := s.Server.PatchTenantMetadata(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkCreateObjects(ctx context.Context, req *connect.Request[BulkCreateObjectsRequest]) (*connect.Response[BulkCreateObjectsResponse], error) {
-	res, err := s.Server.BulkCreateObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkDeleteObjects(ctx context.Context, req *connect.Request[BulkDeleteObjectsRequest]) (*connect.Response[BulkDeleteObjectsResponse], error) {
-	res, err := s.Server.BulkDeleteObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkRestoreObjects(ctx context.Context, req *connect.Request[BulkRestoreObjectsRequest]) (*connect.Response[BulkRestoreObjectsResponse], error) {
-	res, err := s.Server.BulkRestoreObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkPurgeObjects(ctx context.Context, req *connect.Request[BulkPurgeObjectsRequest]) (*connect.Response[BulkPurgeObjectsResponse], error) {
-	res, err := s.Server.BulkPurgeObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkSignUploads(ctx context.Context, req *connect.Request[BulkSignUploadsRequest]) (*connect.Response[BulkSignUploadsResponse], error) {
-	res, err := s.Server.BulkSignUploads(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkCompleteObjects(ctx context.Context, req *connect.Request[BulkCompleteObjectsRequest]) (*connect.Response[BulkCompleteObjectsResponse], error) {
-	res, err := s.Server.BulkCompleteObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-func (s *ConnectServer) BulkPatchObjects(ctx context.Context, req *connect.Request[BulkPatchObjectsRequest]) (*connect.Response[BulkPatchObjectsResponse], error) {
-	res, err := s.Server.BulkPatchObjects(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(res), nil
-}
-
-// PublicServer wraps the internal Server to satisfy the public API interface.
-type PublicServer struct {
-	publicapi.UnimplementedPaladinServer
-	*Server
-}
-
 // tenantFromCtx reads the tenant ID set by the Auth interceptor chain.
 // The internal (admin) API where the caller specifies tenant_id explicitly
 // must use req.TenantId directly — these handlers are identified by their RPC name.
@@ -312,15 +37,24 @@ func tenantFromCtx(ctx context.Context) string {
 	return utils.TenantIDFromContext(ctx, "")
 }
 
+// resolveTenant returns the tenant from context, falling back to the request-supplied tenant.
+func resolveTenant(ctx context.Context, reqTenantID string) (string, error) {
+	tenant := tenantFromCtx(ctx)
+	if tenant == "" {
+		tenant = reqTenantID
+	}
+	if tenant == "" {
+		return "", status.Error(codes.Unauthenticated, "missing tenant context")
+	}
+	return tenant, nil
+}
+
 // ─── Object RPCs ─────────────────────────────────────────────────────────────
 
 func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*CreateObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	var externalRef *string
@@ -346,12 +80,9 @@ func (s *Server) CreateObject(ctx context.Context, req *CreateObjectRequest) (*C
 }
 
 func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -368,11 +99,9 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 
 	var downloadURL string
 	if rec.Status == domain.ObjectComplete {
-		// Generate signed URL (default 1 hour TTL)
-		// TODO: In a real app, this TTL might be configurable or passed in the request
-		signed, err := s.svc.SignDownload(ctx, tenant, id, 3600)
-		if err != nil {
-			logger.FromContext(ctx).Warn("Failed to sign download URL for GetObject", zap.Error(err))
+		signed, signErr := s.svc.SignDownload(ctx, tenant, id, 3600)
+		if signErr != nil {
+			logger.FromContext(ctx).Warn("Failed to sign download URL for GetObject", zap.Error(signErr))
 		} else {
 			downloadURL = signed.URL
 		}
@@ -396,13 +125,10 @@ func (s *Server) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObje
 	}, nil
 }
 
-func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*GetObjectMetaResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectMetaRequest) (*GetObjectMetaResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -441,12 +167,9 @@ func (s *Server) GetObjectMeta(ctx context.Context, req *GetObjectRequest) (*Get
 }
 
 func (s *Server) PatchObjectMeta(ctx context.Context, req *PatchObjectMetaRequest) (*PatchObjectMetaResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -474,12 +197,9 @@ func (s *Server) PatchObjectMeta(ctx context.Context, req *PatchObjectMetaReques
 }
 
 func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest) (*CompleteObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -497,12 +217,9 @@ func (s *Server) CompleteObject(ctx context.Context, req *CompleteObjectRequest)
 }
 
 func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -519,36 +236,10 @@ func (s *Server) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*D
 	return &DeleteObjectResponse{Status: "deleted"}, nil
 }
 
-func (s *Server) PurgeObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
-	}
-
-	id, err := uuid.Parse(req.ObjectId)
+func (s *Server) RestoreObject(ctx context.Context, req *RestoreObjectRequest) (*RestoreObjectResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
-	}
-
-	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
-		logger.FromContext(ctx).Error("PurgeObject failed", zap.Error(err))
-
-		return nil, grpcError(err)
-	}
-
-	return &DeleteObjectResponse{Status: "purged"}, nil
-}
-
-func (s *Server) RestoreObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+		return nil, err
 	}
 
 	id, err := uuid.Parse(req.ObjectId)
@@ -562,18 +253,35 @@ func (s *Server) RestoreObject(ctx context.Context, req *DeleteObjectRequest) (*
 		return nil, grpcError(err)
 	}
 
-	return &DeleteObjectResponse{Status: "restored"}, nil
+	return &RestoreObjectResponse{Status: "restored"}, nil
+}
+
+func (s *Server) PurgeObject(ctx context.Context, req *PurgeObjectRequest) (*PurgeObjectResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(req.ObjectId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "object_id must be a valid UUID")
+	}
+
+	if err := s.svc.Purge(ctx, tenant, id, nil); err != nil {
+		logger.FromContext(ctx).Error("PurgeObject failed", zap.Error(err))
+
+		return nil, grpcError(err)
+	}
+
+	return &PurgeObjectResponse{Status: "purged"}, nil
 }
 
 // ─── Multipart RPCs ──────────────────────────────────────────────────────────
 
 func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRequest) (*InitiateMultipartResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	var extRef *string
@@ -598,12 +306,9 @@ func (s *Server) InitiateMultipart(ctx context.Context, req *InitiateMultipartRe
 }
 
 func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	p, err := s.svc.SignPart(ctx, tenant, req.UploadId, req.PartNumber)
@@ -621,12 +326,9 @@ func (s *Server) SignPart(ctx context.Context, req *SignPartRequest) (*SignPartR
 }
 
 func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRequest) (*CompleteMultipartResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	parts := make([]domain.CompletePart, 0, len(req.Parts))
@@ -645,12 +347,9 @@ func (s *Server) CompleteMultipart(ctx context.Context, req *CompleteMultipartRe
 }
 
 func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest) (*AbortMultipartResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.svc.AbortMultipart(ctx, tenant, req.UploadId); err != nil {
@@ -665,12 +364,9 @@ func (s *Server) AbortMultipart(ctx context.Context, req *AbortMultipartRequest)
 // ─── Stats & List RPCs ───────────────────────────────────────────────────────
 
 func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest) (*GetObjectStatsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	stats, err := s.svc.GetStats(ctx, tenant)
@@ -690,12 +386,9 @@ func (s *Server) GetObjectStats(ctx context.Context, req *GetObjectStatsRequest)
 }
 
 func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*ListObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	filter := domain.ListObjectsFilter{
@@ -730,12 +423,11 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 
 		var downloadURL string
 		if obj.Status == domain.ObjectComplete {
-			// Generate signed URL (default 1 hour TTL)
-			signed, err := s.svc.SignDownload(ctx, tenant, obj.ID, 3600)
-			if err != nil {
+			signed, signErr := s.svc.SignDownload(ctx, tenant, obj.ID, 3600)
+			if signErr != nil {
 				logger.FromContext(ctx).Warn("Failed to sign download URL for ListObjects item",
 					zap.String("object_id", obj.ID.String()),
-					zap.Error(err))
+					zap.Error(signErr))
 			} else {
 				downloadURL = signed.URL
 			}
@@ -765,12 +457,9 @@ func (s *Server) ListObjects(ctx context.Context, req *ListObjectsRequest) (*Lis
 // ─── Category RPCs ───────────────────────────────────────────────────────────
 
 func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	filter := domain.ListCategoriesFilter{
@@ -808,12 +497,9 @@ func (s *Server) ListCategories(ctx context.Context, req *ListCategoriesRequest)
 }
 
 func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	cat, err := s.catSvc.Get(ctx, tenant, req.Slug)
@@ -831,13 +517,10 @@ func (s *Server) GetCategory(ctx context.Context, req *GetCategoryRequest) (*Get
 	}, nil
 }
 
-func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*GetCategoryResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*CreateCategoryResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	cat, err := s.catSvc.Create(ctx, tenant, req.Slug, req.Name, req.Description)
@@ -845,7 +528,7 @@ func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest)
 		return nil, grpcError(err)
 	}
 
-	return &GetCategoryResponse{
+	return &CreateCategoryResponse{
 		Category: &Category{
 			Id:          cat.ID.String(),
 			Slug:        cat.Slug,
@@ -855,13 +538,10 @@ func (s *Server) CreateCategory(ctx context.Context, req *CreateCategoryRequest)
 	}, nil
 }
 
-func (s *Server) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest) (*GetCategoryResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+func (s *Server) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest) (*UpdateCategoryResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	cat, err := s.catSvc.Update(ctx, tenant, req.Slug, req.Name, req.Description)
@@ -869,7 +549,7 @@ func (s *Server) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest)
 		return nil, grpcError(err)
 	}
 
-	return &GetCategoryResponse{
+	return &UpdateCategoryResponse{
 		Category: &Category{
 			Id:          cat.ID.String(),
 			Slug:        cat.Slug,
@@ -880,12 +560,9 @@ func (s *Server) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest)
 }
 
 func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.catSvc.Delete(ctx, tenant, req.Slug); err != nil {
@@ -896,12 +573,9 @@ func (s *Server) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest)
 }
 
 func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	stats, err := s.catSvc.GetStats(ctx, tenant, req.Slug)
@@ -916,11 +590,8 @@ func (s *Server) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequ
 }
 
 // ─── Tenant Admin RPCs ───────────────────────────────────────────────────────
-// These RPCs are only accessible on the internal gRPC server.
-// Use the AdminOnly interceptor at the server level or configure the client
-// to supply the admin bearer key.
 
-func (s *Server) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*TenantResponse, error) {
+func (s *Server) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*CreateTenantResponse, error) {
 	var displayName *string
 	if req.DisplayName != "" {
 		displayName = &req.DisplayName
@@ -933,16 +604,16 @@ func (s *Server) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*T
 		return nil, grpcError(err)
 	}
 
-	return domainTenantToProto(t), nil
+	return toCreateTenantResponse(t), nil
 }
 
-func (s *Server) GetTenant(ctx context.Context, req *GetTenantRequest) (*TenantResponse, error) {
+func (s *Server) GetTenant(ctx context.Context, req *GetTenantRequest) (*GetTenantResponse, error) {
 	t, err := s.tenantSvc.Get(ctx, req.TenantId)
 	if err != nil {
 		return nil, grpcError(err)
 	}
 
-	return domainTenantToProto(t), nil
+	return toGetTenantResponse(t), nil
 }
 
 func (s *Server) DeleteTenant(ctx context.Context, req *DeleteTenantRequest) (*DeleteTenantResponse, error) {
@@ -981,9 +652,9 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 		return nil, grpcError(err)
 	}
 
-	items := make([]*TenantResponse, 0, len(tenants))
+	items := make([]*ListTenantsItem, 0, len(tenants))
 	for i := range tenants {
-		items = append(items, domainTenantToProto(&tenants[i]))
+		items = append(items, toListTenantsItem(&tenants[i]))
 	}
 
 	return &ListTenantsResponse{
@@ -993,13 +664,26 @@ func (s *Server) ListTenants(ctx context.Context, req *ListTenantsRequest) (*Lis
 	}, nil
 }
 
-func (s *Server) BulkCreateObjects(ctx context.Context, req *BulkCreateObjectsRequest) (*BulkCreateObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
+func (s *Server) PatchTenantMetadata(ctx context.Context, req *PatchTenantMetadataRequest) (*PatchTenantMetadataResponse, error) {
+	patch, err := parseLabelsPatch(req.LabelsPatchJson)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+
+	t, err := s.tenantSvc.PatchMetadata(ctx, req.TenantId, patch, req.Tags, req.DisplayName)
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	return toPatchTenantMetadataResponse(t), nil
+}
+
+// ─── Bulk RPCs ───────────────────────────────────────────────────────────────
+
+func (s *Server) BulkCreateObjects(ctx context.Context, req *BulkCreateObjectsRequest) (*BulkCreateObjectsResponse, error) {
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]domain.CreateObjectRequest, len(req.Items))
@@ -1044,21 +728,14 @@ func (s *Server) BulkCreateObjects(ctx context.Context, req *BulkCreateObjectsRe
 }
 
 func (s *Server) BulkDeleteObjects(ctx context.Context, req *BulkDeleteObjectsRequest) (*BulkDeleteObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
-	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
-	for _, idStr := range req.ObjectIds {
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
-		}
-		ids = append(ids, id)
+	ids, err := parseUUIDs(req.ObjectIds)
+	if err != nil {
+		return nil, err
 	}
 
 	count, err := s.svc.BulkDelete(ctx, tenant, ids)
@@ -1070,21 +747,14 @@ func (s *Server) BulkDeleteObjects(ctx context.Context, req *BulkDeleteObjectsRe
 }
 
 func (s *Server) BulkRestoreObjects(ctx context.Context, req *BulkRestoreObjectsRequest) (*BulkRestoreObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
-	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
-	for _, idStr := range req.ObjectIds {
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
-		}
-		ids = append(ids, id)
+	ids, err := parseUUIDs(req.ObjectIds)
+	if err != nil {
+		return nil, err
 	}
 
 	count, err := s.svc.BulkRestore(ctx, tenant, ids)
@@ -1096,21 +766,14 @@ func (s *Server) BulkRestoreObjects(ctx context.Context, req *BulkRestoreObjects
 }
 
 func (s *Server) BulkPurgeObjects(ctx context.Context, req *BulkPurgeObjectsRequest) (*BulkPurgeObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
-	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
-	for _, idStr := range req.ObjectIds {
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
-		}
-		ids = append(ids, id)
+	ids, err := parseUUIDs(req.ObjectIds)
+	if err != nil {
+		return nil, err
 	}
 
 	var idempotencyKey *string
@@ -1127,18 +790,15 @@ func (s *Server) BulkPurgeObjects(ctx context.Context, req *BulkPurgeObjectsRequ
 }
 
 func (s *Server) BulkSignUploads(ctx context.Context, req *BulkSignUploadsRequest) (*BulkSignUploadsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]domain.SignUploadItem, len(req.Items))
 	for i, item := range req.Items {
-		id, err := uuid.Parse(item.ObjectId)
-		if err != nil {
+		id, parseErr := uuid.Parse(item.ObjectId)
+		if parseErr != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", item.ObjectId)
 		}
 		items[i] = domain.SignUploadItem{
@@ -1168,21 +828,14 @@ func (s *Server) BulkSignUploads(ctx context.Context, req *BulkSignUploadsReques
 }
 
 func (s *Server) BulkCompleteObjects(ctx context.Context, req *BulkCompleteObjectsRequest) (*BulkCompleteObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
-	ids := make([]uuid.UUID, 0, len(req.ObjectIds))
-	for _, idStr := range req.ObjectIds {
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
-		}
-		ids = append(ids, id)
+	ids, err := parseUUIDs(req.ObjectIds)
+	if err != nil {
+		return nil, err
 	}
 
 	res, err := s.svc.BulkComplete(ctx, tenant, ids)
@@ -1199,18 +852,15 @@ func (s *Server) BulkCompleteObjects(ctx context.Context, req *BulkCompleteObjec
 }
 
 func (s *Server) BulkPatchObjects(ctx context.Context, req *BulkPatchObjectsRequest) (*BulkPatchObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		tenant = req.TenantId
-	}
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
+	tenant, err := resolveTenant(ctx, req.TenantId)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]domain.BulkPatchItem, len(req.Items))
 	for i, item := range req.Items {
-		id, err := uuid.Parse(item.ObjectId)
-		if err != nil {
+		id, parseErr := uuid.Parse(item.ObjectId)
+		if parseErr != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", item.ObjectId)
 		}
 
@@ -1239,378 +889,19 @@ func (s *Server) BulkPatchObjects(ctx context.Context, req *BulkPatchObjectsRequ
 	return &BulkPatchObjectsResponse{Count: count}, nil
 }
 
-func (s *Server) PatchTenantMetadata(ctx context.Context, req *PatchTenantMetadataRequest) (*TenantResponse, error) {
-	patch, err := parseLabelsPatch(req.LabelsPatchJson)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-	t, err := s.tenantSvc.PatchMetadata(ctx, req.TenantId, patch, req.Tags, req.DisplayName)
-	if err != nil {
-		return nil, grpcError(err)
-	}
-
-	return domainTenantToProto(t), nil
-}
-
-// domainTenantToProto converts a domain.Tenant to a TenantResponse proto message.
-func domainTenantToProto(t *domain.Tenant) *TenantResponse {
-	displayName := ""
-	if t.DisplayName != nil {
-		displayName = *t.DisplayName
-	}
-
-	labels := t.Labels
-	if labels == nil {
-		labels = map[string]string{}
-	}
-
-	tags := t.Tags
-	if tags == nil {
-		tags = []string{}
-	}
-
-	return &TenantResponse{
-		TenantId:      t.TenantID,
-		DisplayName:   displayName,
-		Labels:        labels,
-		Tags:          tags,
-		CreatedAtUnix: t.CreatedAt.Unix(),
-		UpdatedAtUnix: t.UpdatedAt.Unix(),
-	}
-}
-
-// ─── Public server wrappers ───────────────────────────────────────────────────
-// All public-api methods delegate to the internal Server, which now reads
-// the tenant from context (set by the Auth interceptor) rather than from
-// the request body. The public proto messages don't include tenant_id.
-
-func (s *PublicServer) ListObjects(ctx context.Context, req *publicapi.ListObjectsRequest) (*publicapi.ListObjectsResponse, error) {
-	tenant := tenantFromCtx(ctx)
-	if tenant == "" {
-		return nil, status.Error(codes.Unauthenticated, "missing tenant context")
-	}
-
-	filter := domain.ListObjectsFilter{
-		Category:  req.Category,
-		Search:    req.Search,
-		Recursive: req.Recursive,
-		Limit:     safecast.IntFrom32(req.Limit),
-		Cursor:    req.Cursor,
-		SortBy:    req.GetSortBy(),
-		SortOrder: req.GetSortOrder(),
-	}
-
-	if statusStr := req.GetStatus(); statusStr != "" {
-		st := domain.ObjectStatus(statusStr)
-		filter.Status = &st
-	}
-
-	resp, nextCursor, totalCount, err := s.svc.List(ctx, tenant, filter)
-	if err != nil {
-		return nil, s.Server.mapError(err)
-	}
-
-	items := make([]*publicapi.ListObjectItem, len(resp))
-	for i, item := range resp {
-		extRef := ""
-		if item.ExternalRef != nil {
-			extRef = *item.ExternalRef
+// parseUUIDs converts a slice of string IDs to uuid.UUIDs, returning an error
+// on the first invalid value.
+func parseUUIDs(ids []string) ([]uuid.UUID, error) {
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, idStr := range ids {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object_id: %s", idStr)
 		}
-		items[i] = &publicapi.ListObjectItem{
-			ObjectId:      item.ID.String(),
-			ObjectKey:     item.ObjectKey,
-			ContentType:   item.ContentType,
-			SizeBytes:     item.SizeBytes,
-			Status:        string(item.Status),
-			CreatedAtUnix: item.CreatedAt.Unix(),
-			Category:      item.Category,
-			Labels:        item.Labels,
-			ExternalRef:   extRef,
-		}
+		out = append(out, id)
 	}
 
-	return &publicapi.ListObjectsResponse{
-		Items:      items,
-		NextCursor: nextCursor,
-		TotalCount: totalCount,
-	}, nil
-}
-
-func (s *PublicServer) CreateObject(ctx context.Context, req *publicapi.CreateObjectRequest) (*publicapi.CreateObjectResponse, error) {
-	internalReq := &CreateObjectRequest{
-		Category:    req.Category,
-		ContentType: req.ContentType,
-		SizeBytes:   req.SizeBytes,
-		Labels:      req.Labels,
-		ExternalRef: req.ExternalRef,
-	}
-	resp, err := s.Server.CreateObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.CreateObjectResponse{
-		ObjectId:      resp.ObjectId,
-		ObjectKey:     resp.ObjectKey,
-		UploadUrl:     resp.UploadUrl,
-		Method:        resp.Method,
-		Headers:       resp.Headers,
-		ExpiresAtUnix: resp.ExpiresAtUnix,
-	}, nil
-}
-
-func (s *PublicServer) GetObject(ctx context.Context, req *publicapi.GetObjectRequest) (*publicapi.GetObjectResponse, error) {
-	internalReq := &GetObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.GetObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetObjectResponse{
-		ObjectId:    resp.ObjectId,
-		ObjectKey:   resp.ObjectKey,
-		Bucket:      resp.Bucket,
-		ContentType: resp.ContentType,
-		SizeBytes:   resp.SizeBytes,
-		Status:      resp.Status,
-		Labels:      resp.Labels,
-		ExternalRef: resp.ExternalRef,
-	}, nil
-}
-
-func (s *PublicServer) GetObjectMeta(ctx context.Context, req *publicapi.GetObjectRequest) (*publicapi.GetObjectMetaResponse, error) {
-	internalReq := &GetObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.GetObjectMeta(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetObjectMetaResponse{
-		ObjectId:      resp.ObjectId,
-		ObjectKey:     resp.ObjectKey,
-		Bucket:        resp.Bucket,
-		ContentType:   resp.ContentType,
-		SizeBytes:     resp.SizeBytes,
-		Status:        resp.Status,
-		ExpiresAtUnix: resp.ExpiresAtUnix,
-		Labels:        resp.Labels,
-		ExternalRef:   resp.ExternalRef,
-	}, nil
-}
-
-func (s *PublicServer) CompleteObject(ctx context.Context, req *publicapi.CompleteObjectRequest) (*publicapi.CompleteObjectResponse, error) {
-	internalReq := &CompleteObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.CompleteObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.CompleteObjectResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) DeleteObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
-	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.DeleteObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) RestoreObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
-	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.RestoreObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) PurgeObject(ctx context.Context, req *publicapi.DeleteObjectRequest) (*publicapi.DeleteObjectResponse, error) {
-	internalReq := &DeleteObjectRequest{ObjectId: req.ObjectId}
-	resp, err := s.Server.PurgeObject(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.DeleteObjectResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) InitiateMultipart(ctx context.Context, req *publicapi.InitiateMultipartRequest) (*publicapi.InitiateMultipartResponse, error) {
-	internalReq := &InitiateMultipartRequest{
-		Category:    req.Category,
-		ContentType: req.ContentType,
-		SizeBytes:   req.SizeBytes,
-		Labels:      req.Labels,
-		ExternalRef: req.ExternalRef,
-	}
-	resp, err := s.Server.InitiateMultipart(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.InitiateMultipartResponse{
-		ObjectId:      resp.ObjectId,
-		ObjectKey:     resp.ObjectKey,
-		UploadId:      resp.UploadId,
-		PartSize:      resp.PartSize,
-		ExpiresAtUnix: resp.ExpiresAtUnix,
-	}, nil
-}
-
-func (s *PublicServer) SignPart(ctx context.Context, req *publicapi.SignPartRequest) (*publicapi.SignPartResponse, error) {
-	internalReq := &SignPartRequest{UploadId: req.UploadId, PartNumber: req.PartNumber}
-	resp, err := s.Server.SignPart(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.SignPartResponse{
-		UploadUrl:     resp.UploadUrl,
-		Method:        resp.Method,
-		ExpiresAtUnix: resp.ExpiresAtUnix,
-	}, nil
-}
-
-func (s *PublicServer) CompleteMultipart(ctx context.Context, req *publicapi.CompleteMultipartRequest) (*publicapi.CompleteMultipartResponse, error) {
-	parts := make([]*CompleteMultipartPart, len(req.Parts))
-	for i, p := range req.Parts {
-		parts[i] = &CompleteMultipartPart{PartNumber: p.PartNumber, Etag: p.Etag}
-	}
-	internalReq := &CompleteMultipartRequest{UploadId: req.UploadId, Parts: parts}
-	resp, err := s.Server.CompleteMultipart(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.CompleteMultipartResponse{ObjectId: resp.ObjectId, Status: resp.Status}, nil
-}
-
-func (s *PublicServer) AbortMultipart(ctx context.Context, req *publicapi.AbortMultipartRequest) (*publicapi.AbortMultipartResponse, error) {
-	internalReq := &AbortMultipartRequest{UploadId: req.UploadId}
-	resp, err := s.Server.AbortMultipart(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.AbortMultipartResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) ListCategories(ctx context.Context, req *publicapi.ListCategoriesRequest) (*publicapi.ListCategoriesResponse, error) {
-	tenantID := tenantFromCtx(ctx)
-	if tenantID == "" {
-		return nil, status.Error(codes.Unauthenticated, "tenant ID is required")
-	}
-
-	filter := domain.ListCategoriesFilter{
-		Limit:     safecast.IntFrom32(req.GetLimit()),
-		Cursor:    req.GetCursor(),
-		Search:    req.Search,
-		SortBy:    req.GetSortBy(),
-		SortOrder: req.GetSortOrder(),
-	}
-
-	items, next, total, err := s.catSvc.List(ctx, tenantID, filter)
-	if err != nil {
-		return nil, s.Server.mapError(err)
-	}
-
-	categories := make([]*publicapi.Category, len(items))
-	for i, item := range items {
-		categories[i] = &publicapi.Category{
-			Id:          item.ID.String(),
-			Slug:        item.Slug,
-			Name:        item.Name,
-			Description: item.Description,
-		}
-	}
-
-	return &publicapi.ListCategoriesResponse{
-		Items:      categories,
-		NextCursor: next,
-		TotalCount: total,
-	}, nil
-}
-
-func (s *Server) mapError(err error) error {
-	return status.Error(codes.Internal, err.Error())
-}
-
-func ptr[T any](v T) *T {
-	return &v
-}
-
-func (s *PublicServer) GetCategory(ctx context.Context, req *publicapi.GetCategoryRequest) (*publicapi.GetCategoryResponse, error) {
-	internalReq := &GetCategoryRequest{Slug: req.Slug}
-	resp, err := s.Server.GetCategory(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetCategoryResponse{
-		Category: &publicapi.Category{
-			Id:          resp.Category.Id,
-			Slug:        resp.Category.Slug,
-			Name:        resp.Category.Name,
-			Description: resp.Category.Description,
-		},
-	}, nil
-}
-
-func (s *PublicServer) CreateCategory(ctx context.Context, req *publicapi.CreateCategoryRequest) (*publicapi.GetCategoryResponse, error) {
-	internalReq := &CreateCategoryRequest{Slug: req.Slug, Name: req.Name, Description: req.Description}
-	resp, err := s.Server.CreateCategory(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetCategoryResponse{
-		Category: &publicapi.Category{
-			Id:          resp.Category.Id,
-			Slug:        resp.Category.Slug,
-			Name:        resp.Category.Name,
-			Description: resp.Category.Description,
-		},
-	}, nil
-}
-
-func (s *PublicServer) DeleteCategory(ctx context.Context, req *publicapi.DeleteCategoryRequest) (*publicapi.DeleteCategoryResponse, error) {
-	internalReq := &DeleteCategoryRequest{Slug: req.Slug}
-	resp, err := s.Server.DeleteCategory(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.DeleteCategoryResponse{Status: resp.Status}, nil
-}
-
-func (s *PublicServer) GetCategoryStats(ctx context.Context, req *publicapi.GetCategoryStatsRequest) (*publicapi.GetCategoryStatsResponse, error) {
-	internalReq := &GetCategoryStatsRequest{Slug: req.Slug}
-	resp, err := s.Server.GetCategoryStats(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetCategoryStatsResponse{TotalCount: resp.TotalCount, TotalSize: resp.TotalSize}, nil
-}
-
-func (s *PublicServer) GetObjectStats(ctx context.Context, req *publicapi.GetObjectStatsRequest) (*publicapi.GetObjectStatsResponse, error) {
-	internalReq := &GetObjectStatsRequest{}
-	resp, err := s.Server.GetObjectStats(ctx, internalReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicapi.GetObjectStatsResponse{
-		TotalCount:       resp.TotalCount,
-		TotalSize:        resp.TotalSize,
-		PendingCount:     resp.PendingCount,
-		UploadingCount:   resp.UploadingCount,
-		UploadedCount:    resp.UploadedCount,
-		CompleteCount:    resp.CompleteCount,
-		SoftDeletedCount: resp.SoftDeletedCount,
-	}, nil
+	return out, nil
 }

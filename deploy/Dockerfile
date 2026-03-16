@@ -18,9 +18,9 @@ FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS tools
 ARG PROTOC_GEN_GO_VERSION=latest
 ARG PROTOC_GEN_GO_GRPC_VERSION=latest
 ARG WIRE_VERSION=latest
-ARG OAPI_CODEGEN_VERSION=latest
 ARG PROTOC_GEN_CONNECT_GO_VERSION=latest
 ARG SQLC_VERSION=latest
+ARG BUF_VERSION=latest
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -39,9 +39,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
     go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
-    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION} && \
     go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION} && \
-    go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}
+    go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION} && \
+    go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}
 
 # -----------------------------
 # Builder stage (target binary)
@@ -88,13 +88,14 @@ COPY --link cmd/ cmd/
 COPY --link internal/ internal/
 COPY --link configs/ configs/
 COPY --link migrations/ migrations/
-COPY --link api/ api/
 COPY --link proto/ proto/
+COPY --link buf.yaml buf.gen.yaml buf.lock ./
 COPY --link sqlc.yaml ./
 
 # Code generation
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    buf generate && \
     go generate ./...
 
 # Build (set GOOS/GOARCH only here)
@@ -118,6 +119,17 @@ FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
 
 ARG HTTP_PORT=8080
 ARG GRPC_PORT=9090
+ARG APP_VERSION=undefined
+ARG GIT_COMMIT_HASH=undefined
+ARG BUILD_TIME=undefined
+
+# OCI image labels
+LABEL org.opencontainers.image.title="paladin" \
+    org.opencontainers.image.description="acme PALADIN API — Connect RPC + gRPC service" \
+    org.opencontainers.image.version="${APP_VERSION}" \
+    org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
+    org.opencontainers.image.created="${BUILD_TIME}" \
+    org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
 
 WORKDIR /app
 

@@ -4,17 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"connectrpc.com/connect"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// grpcError converts a domain error (AppError) to a properly-coded gRPC status.
-// This replaces all the ad-hoc status.Error(codes.Internal, err.Error()) calls
-// that were previously scattered across handlers.
+// grpcError converts a domain error (AppError) to a Connect error with
+// the correct gRPC status code. Both gRPC and Connect handlers use this
+// because connect.NewError is wire-compatible for both protocols.
 func grpcError(err error) error {
 	grpcErr := apperrors.MapToGRPC(err)
 	if s, ok := status.FromError(grpcErr); ok {
@@ -23,45 +22,83 @@ func grpcError(err error) error {
 	return grpcErr
 }
 
-// ─── Tenant proto message types ──────────────────────────────────────────────
-// These are now generated from paladin.proto.
+// ─── Tenant domain → proto helpers ───────────────────────────────────────────
 
-// ─── Validation for PatchObjectMetaRequest ───────────────────────────────────
+func toCreateTenantResponse(t *domain.Tenant) *CreateTenantResponse {
+	displayName, labels, tags := normalizeTenantFields(t)
 
-// Validate implements middleware.GRPCValidator for PatchObjectMetaRequest.
-func (r *PatchObjectMetaRequest) Validate() error {
-	if r.ObjectId == "" {
-		return fmt.Errorf("object_id is required")
-	}
-
-	return nil
-}
-
-// ─── Helper: tenant domain → proto response ──────────────────────────────────
-
-func tenantToProtoResponse(t interface {
-	GetID() string
-	GetTenantID() string
-	GetDisplayName() *string
-	GetLabels() map[string]string
-	GetTags() []string
-	GetCreatedAt() time.Time
-	GetUpdatedAt() time.Time
-}) *TenantResponse {
-	displayName := ""
-	if dn := t.GetDisplayName(); dn != nil {
-		displayName = *dn
-	}
-
-	return &TenantResponse{
-		TenantId:      t.GetTenantID(),
+	return &CreateTenantResponse{
+		TenantId:      t.TenantID,
 		DisplayName:   displayName,
-		Labels:        t.GetLabels(),
-		Tags:          t.GetTags(),
-		CreatedAtUnix: t.GetCreatedAt().Unix(),
-		UpdatedAtUnix: t.GetUpdatedAt().Unix(),
+		Labels:        labels,
+		Tags:          tags,
+		CreatedAtUnix: t.CreatedAt.Unix(),
+		UpdatedAtUnix: t.UpdatedAt.Unix(),
 	}
 }
+
+func toGetTenantResponse(t *domain.Tenant) *GetTenantResponse {
+	displayName, labels, tags := normalizeTenantFields(t)
+
+	return &GetTenantResponse{
+		TenantId:      t.TenantID,
+		DisplayName:   displayName,
+		Labels:        labels,
+		Tags:          tags,
+		CreatedAtUnix: t.CreatedAt.Unix(),
+		UpdatedAtUnix: t.UpdatedAt.Unix(),
+	}
+}
+
+func toListTenantsItem(t *domain.Tenant) *ListTenantsItem {
+	displayName, labels, tags := normalizeTenantFields(t)
+
+	return &ListTenantsItem{
+		TenantId:      t.TenantID,
+		DisplayName:   displayName,
+		Labels:        labels,
+		Tags:          tags,
+		CreatedAtUnix: t.CreatedAt.Unix(),
+		UpdatedAtUnix: t.UpdatedAt.Unix(),
+	}
+}
+
+func toPatchTenantMetadataResponse(t *domain.Tenant) *PatchTenantMetadataResponse {
+	displayName, labels, tags := normalizeTenantFields(t)
+
+	return &PatchTenantMetadataResponse{
+		TenantId:      t.TenantID,
+		DisplayName:   displayName,
+		Labels:        labels,
+		Tags:          tags,
+		CreatedAtUnix: t.CreatedAt.Unix(),
+		UpdatedAtUnix: t.UpdatedAt.Unix(),
+	}
+}
+
+// normalizeTenantFields extracts and normalises the display name, labels,
+// and tags from a domain.Tenant, replacing nil maps/slices with empty values
+// to produce deterministic proto output.
+func normalizeTenantFields(t *domain.Tenant) (string, map[string]string, []string) {
+	displayName := ""
+	if t.DisplayName != nil {
+		displayName = *t.DisplayName
+	}
+
+	labels := t.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	tags := t.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return displayName, labels, tags
+}
+
+// ─── JSON helpers ────────────────────────────────────────────────────────────
 
 // parseLabelsPatch safely decodes a JSON string into a map[string]interface{}.
 // Valid JSON null values for keys are preserved for the merge-delete semantics.
@@ -85,9 +122,4 @@ func parseLabelsPatch(raw string) (map[string]interface{}, error) {
 	}
 
 	return patch, nil
-}
-
-// statusErr wraps a plain error from gRPC status string extraction.
-func statusErr(code codes.Code, format string, args ...any) error {
-	return status.Errorf(code, format, args...)
 }

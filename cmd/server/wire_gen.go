@@ -8,14 +8,13 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
+
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
-	"sync/atomic"
-)
 
-import (
 	_ "go.uber.org/automaxprocs"
 )
 
@@ -53,16 +52,16 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	tenantRepository := wire.ProvideTenantRepo(db)
 	tenantService := wire.ProvideTenantService(tenantRepository)
 	server := wire.ProvideGRPCServer(config, logger, objectsService, categoryService, tenantService)
-	auditLogRepository := wire.ProvideAuditRepo(db)
 	healthService := wire.ProvideHealthService(db, client, factory)
-	systemService := wire.ProvideSystemService(config)
 	atomicBool := provideStartedBool()
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, auditLogRepository, healthService, systemService, atomicBool, appMetadata)
+	time := wire.ProvideStartTime()
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
+	auditLogRepository := wire.ProvideAuditRepo(db)
 	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, auditLogRepository, client, logger)
 	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool)
 	return appApp, func() {

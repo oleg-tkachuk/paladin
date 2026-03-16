@@ -32,6 +32,19 @@ func (r *GetObjectRequest) Validate() error {
 	return nil
 }
 
+// Validate implements middleware.GRPCValidator for GetObjectMetaRequest.
+func (r *GetObjectMetaRequest) Validate() error {
+	if r.ObjectId == "" {
+		return fmt.Errorf("object_id is required")
+	}
+
+	if _, err := uuid.Parse(r.ObjectId); err != nil {
+		return fmt.Errorf("object_id must be a valid UUID")
+	}
+
+	return nil
+}
+
 // Validate implements middleware.GRPCValidator for CompleteObjectRequest.
 func (r *CompleteObjectRequest) Validate() error {
 	if r.ObjectId == "" {
@@ -53,6 +66,41 @@ func (r *DeleteObjectRequest) Validate() error {
 
 	if _, err := uuid.Parse(r.ObjectId); err != nil {
 		return fmt.Errorf("object_id must be a valid UUID")
+	}
+
+	return nil
+}
+
+// Validate implements middleware.GRPCValidator for RestoreObjectRequest.
+func (r *RestoreObjectRequest) Validate() error {
+	if r.ObjectId == "" {
+		return fmt.Errorf("object_id is required")
+	}
+
+	if _, err := uuid.Parse(r.ObjectId); err != nil {
+		return fmt.Errorf("object_id must be a valid UUID")
+	}
+
+	return nil
+}
+
+// Validate implements middleware.GRPCValidator for PurgeObjectRequest.
+func (r *PurgeObjectRequest) Validate() error {
+	if r.ObjectId == "" {
+		return fmt.Errorf("object_id is required")
+	}
+
+	if _, err := uuid.Parse(r.ObjectId); err != nil {
+		return fmt.Errorf("object_id must be a valid UUID")
+	}
+
+	return nil
+}
+
+// Validate implements middleware.GRPCValidator for PatchObjectMetaRequest.
+func (r *PatchObjectMetaRequest) Validate() error {
+	if r.ObjectId == "" {
+		return fmt.Errorf("object_id is required")
 	}
 
 	return nil
