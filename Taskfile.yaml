@@ -202,25 +202,18 @@ tasks:
       - task: test:unit
 
   generate:
-    desc: "Generate all code (OpenAPI, Proto, Mocks)"
+    desc: "Generate all code (Proto, Mocks)"
     silent: true
     cmds:
       - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, OpenAPI, proto)...\n"
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, proto)...\n"
       - cmd: |-
           time go run github.com/vektra/mockery/v3 --config .mockery.yaml
       - cmd: |-
+          time buf generate
+      - cmd: |-
           time go generate ./...
-      - task: clean:proto:comments
 
-  clean:proto:comments:
-    desc: "Cleanup deprecated Descriptor methods in generated proto code"
-    silent: true
-    cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Cleaning up deprecated comments in .pb.go files...\n"
-      - cmd: |-
-          find . -name "*.pb.go" -exec sed -i '' '/\/\/ Deprecated: Use .*Descriptor instead\./d' {} +
 
   restart:
     desc: "Restart the deployment"
