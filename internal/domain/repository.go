@@ -108,6 +108,7 @@ type ObjectsRepository interface {
 	Create(ctx context.Context, rec Object) error
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetByExternalRef(ctx context.Context, tenantID string, externalRef string) (*Object, error)
+	GetByKey(ctx context.Context, tenantID, bucket, key string) (*Object, error)
 	MarkComplete(ctx context.Context, tenantID string, id uuid.UUID, etag string, sizeBytes int64) (bool, error)
 	MarkSoftDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)
 	MarkHardDeleted(ctx context.Context, tenantID string, id uuid.UUID) (bool, error)

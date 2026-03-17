@@ -82,3 +82,49 @@ func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openap
 
 	return rec, nil
 }
+
+// getByKey resolves an object by (tenant, bucket, objectKey) with tenant validation
+func (s *objectsService) getByKey(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	ctx, span := otel.Tracer("object-service").Start(ctx, "GetByKey")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("tenant_id", tenantID),
+		attribute.String("bucket", bucket),
+		attribute.String("key", key),
+	)
+
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordObjectOp(ctx, "get_by_key", status, start) }()
+
+	ctx, cancel := context.WithTimeout(ctx, s.fastOperationTimeout)
+	defer cancel()
+
+	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+
+		return nil, err
+	}
+
+	rec, err := s.objRepo.GetByKey(ctx, tenantID, bucket, key)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+
+		return nil, err
+	}
+
+	if rec.Status == domain.ObjectHardDeleted {
+		status = "error"
+
+		return nil, domain.ErrNotFound
+	}
+
+	status = "success"
+	span.SetStatus(codes.Ok, "")
+
+	return rec, nil
+}

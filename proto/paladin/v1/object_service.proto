@@ -1,0 +1,379 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/v1/types.proto";
+
+// ObjectService manages the full lifecycle of individual objects within a bucket.
+//
+// Operations include upload initiation, metadata retrieval, content download
+// (via presigned URLs), soft/hard deletion, server-side copy and move,
+// and paginated listing with rich filtering.
+service ObjectService {
+  // UploadObject creates a new object record and returns a presigned URL
+  // for the client to upload content directly to the storage backend.
+  //
+  // The object is created in PENDING status and transitions to UPLOADING
+  // once the client begins uploading via the presigned URL.
+  rpc UploadObject(UploadObjectRequest) returns (UploadObjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects"
+      body: "*"
+    };
+  }
+
+  // DownloadObject retrieves object metadata and generates a presigned
+  // download URL for direct client-to-storage content retrieval.
+  rpc DownloadObject(DownloadObjectRequest) returns (DownloadObjectResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}"
+    };
+  }
+
+  // GetObjectMetadata retrieves only the metadata and tags for an object,
+  // without generating a download URL. Use this for metadata-only queries.
+  rpc GetObjectMetadata(GetObjectMetadataRequest) returns (GetObjectMetadataResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}/metadata"
+    };
+  }
+
+  // UpdateObjectMetadata performs a partial update on an object's metadata
+  // and/or tags using a FieldMask to specify which fields to modify.
+  rpc UpdateObjectMetadata(UpdateObjectMetadataRequest) returns (UpdateObjectMetadataResponse) {
+    option (google.api.http) = {
+      patch: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}/metadata"
+      body: "*"
+    };
+  }
+
+  // DeleteObject removes an object. Supports both soft-delete (recoverable)
+  // and hard-delete (permanent, including storage backend removal).
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse) {
+    option (google.api.http) = {
+      delete: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}"
+    };
+  }
+
+  // CopyObject performs a server-side copy of an object to a new location.
+  // The source object remains unchanged.
+  rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:copy"
+      body: "*"
+    };
+  }
+
+  // MoveObject performs a server-side move (copy + delete source) of an object
+  // to a new location. The source object is deleted upon successful copy.
+  rpc MoveObject(MoveObjectRequest) returns (MoveObjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:move"
+      body: "*"
+    };
+  }
+
+  // ListObjects returns a paginated, filtered list of objects in a bucket.
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects"
+    };
+  }
+
+  // CompleteObject marks a single-part upload as complete after the client
+  // has finished uploading content via the presigned URL.
+  rpc CompleteObject(CompleteObjectRequest) returns (CompleteObjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:complete"
+      body: "*"
+    };
+  }
+}
+
+// ─── Upload ──────────────────────────────────────────────────────────────────
+
+// UploadObjectRequest creates a new object record and returns a presigned upload URL.
+message UploadObjectRequest {
+  // Tenant identifier for logical isolation (opaque UUID, used as S3 key prefix).
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Target bucket name.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Desired storage key (path) for the object within the bucket.
+  // If omitted, the server generates a unique key.
+  string key = 3;
+
+  // MIME type of the object content.
+  string content_type = 4 [(buf.validate.field).string.min_len = 1];
+
+  // Size of the object content in bytes.
+  int64 size_bytes = 5 [(buf.validate.field).int64.gt = 0];
+
+  // User-defined metadata key-value pairs.
+  map<string, string> metadata = 6;
+
+  // User-defined tags for classification and filtering.
+  map<string, string> tags = 7;
+
+  // Checksum algorithm to use for content integrity verification.
+  ChecksumAlgorithm checksum_algorithm = 8;
+
+  // Client-provided idempotency key to prevent duplicate uploads.
+  // The server guarantees at-most-once processing for a given key within a retention window.
+  string idempotency_key = 9;
+}
+
+// UploadObjectResponse contains the created object record and a presigned URL for upload.
+message UploadObjectResponse {
+  // The created object resource.
+  Object object = 1;
+
+  // Presigned URL for the client to upload content directly to the storage backend.
+  PresignedUrl upload_url = 2;
+}
+
+// ─── Download ────────────────────────────────────────────────────────────────
+
+// DownloadObjectRequest retrieves an object's metadata and a presigned download URL.
+message DownloadObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to download.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// DownloadObjectResponse contains the object metadata and a presigned download URL.
+message DownloadObjectResponse {
+  // The object resource with full metadata.
+  Object object = 1;
+
+  // Presigned URL for the client to download content directly from the storage backend.
+  PresignedUrl download_url = 2;
+}
+
+// ─── Get metadata ────────────────────────────────────────────────────────────
+
+// GetObjectMetadataRequest retrieves metadata and tags without generating a download URL.
+message GetObjectMetadataRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetObjectMetadataResponse contains the object resource without a download URL.
+message GetObjectMetadataResponse {
+  // The object resource with full metadata.
+  Object object = 1;
+}
+
+// ─── Update metadata ────────────────────────────────────────────────────────
+
+// UpdateObjectMetadataRequest performs a partial update of object metadata and/or tags.
+message UpdateObjectMetadataRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Fields to update. Supports paths: "metadata", "tags", "content_type".
+  // Only the specified fields are modified; unspecified fields remain unchanged.
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+
+  // Updated metadata values. Only applied if "metadata" is in update_mask.
+  map<string, string> metadata = 5;
+
+  // Updated tag values. Only applied if "tags" is in update_mask.
+  map<string, string> tags = 6;
+
+  // Updated content type. Only applied if "content_type" is in update_mask.
+  string content_type = 7;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 8;
+}
+
+// UpdateObjectMetadataResponse contains the updated object resource.
+message UpdateObjectMetadataResponse {
+  // The updated object resource.
+  Object object = 1;
+}
+
+// ─── Delete ──────────────────────────────────────────────────────────────────
+
+// DeleteObjectRequest removes an object from a bucket.
+message DeleteObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to delete.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // If true, permanently deletes the object and its content from the storage backend.
+  // If false (default), performs a soft-delete that can be reversed.
+  bool permanent = 4;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 5;
+}
+
+// DeleteObjectResponse confirms the deletion.
+message DeleteObjectResponse {
+  // The deleted object resource (reflects final state).
+  Object object = 1;
+}
+
+// ─── Copy ────────────────────────────────────────────────────────────────────
+
+// CopyObjectRequest performs a server-side copy of an object.
+message CopyObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Source bucket containing the object to copy.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Source key of the object to copy.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Destination bucket for the copy. If omitted, defaults to the source bucket.
+  string destination_bucket = 4;
+
+  // Destination key for the copied object.
+  string destination_key = 5 [(buf.validate.field).string.min_len = 1];
+
+  // Metadata for the destination object. If omitted, the source metadata is preserved.
+  map<string, string> metadata = 6;
+
+  // Tags for the destination object. If omitted, the source tags are preserved.
+  map<string, string> tags = 7;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 8;
+}
+
+// CopyObjectResponse contains the newly created copy.
+message CopyObjectResponse {
+  // The newly created object resource (the copy).
+  Object object = 1;
+}
+
+// ─── Move ────────────────────────────────────────────────────────────────────
+
+// MoveObjectRequest performs a server-side move (copy then delete source).
+message MoveObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Source bucket containing the object to move.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Source key of the object to move.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Destination bucket for the moved object. If omitted, defaults to the source bucket.
+  string destination_bucket = 4;
+
+  // Destination key for the moved object.
+  string destination_key = 5 [(buf.validate.field).string.min_len = 1];
+
+  // Client-provided idempotency key.
+  string idempotency_key = 6;
+}
+
+// MoveObjectResponse contains the object at its new location.
+message MoveObjectResponse {
+  // The object resource at its new location.
+  Object object = 1;
+}
+
+// ─── List ────────────────────────────────────────────────────────────────────
+
+// ListObjectsRequest retrieves a paginated, filtered list of objects.
+message ListObjectsRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket to list objects from.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Maximum number of objects to return per page.
+  // The server may return fewer results. Default and maximum values are server-defined.
+  int32 page_size = 3;
+
+  // Opaque token for fetching the next page. Obtained from a previous ListObjectsResponse.
+  // Omit or leave empty to start from the beginning.
+  string page_token = 4;
+
+  // Filtering criteria. All specified fields are combined with AND logic.
+  ObjectFilter filter = 5;
+
+  // Field to sort by. Supported values: "key", "size_bytes", "created_at", "updated_at".
+  string order_by = 6;
+
+  // Sort direction. Defaults to ascending if unspecified.
+  SortOrder sort_order = 7;
+}
+
+// ListObjectsResponse contains a page of objects and pagination metadata.
+message ListObjectsResponse {
+  // Objects matching the request criteria.
+  repeated Object objects = 1;
+
+  // Token to retrieve the next page. Empty if this is the last page.
+  string next_page_token = 2;
+
+  // Total number of objects matching the filter (across all pages).
+  // May be an estimate for performance reasons on very large result sets.
+  int64 total_count = 3;
+}
+
+// ─── Complete ────────────────────────────────────────────────────────────────
+
+// CompleteObjectRequest marks a single-part upload as complete.
+message CompleteObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to complete.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Entity tag returned by the storage backend after upload.
+  string etag = 4;
+
+  // Client-computed checksum for server-side integrity verification.
+  string checksum = 5;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 6;
+}
+
+// CompleteObjectResponse contains the object with its updated status.
+message CompleteObjectResponse {
+  // The object resource with status transitioned to AVAILABLE.
+  Object object = 1;
+}

@@ -24,6 +24,11 @@ func mapToDomainObject(obj sqlc.Object) (domain.Object, error) {
 		return domain.Object{}, fmt.Errorf("unmarshal labels: %w", err)
 	}
 
+	tags, err := unmarshalStringMap(obj.Tags)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("unmarshal tags: %w", err)
+	}
+
 	return domain.Object{
 		ID:              id,
 		TenantID:        obj.TenantID,
@@ -34,6 +39,7 @@ func mapToDomainObject(obj sqlc.Object) (domain.Object, error) {
 		ChecksumSHA256:  obj.ChecksumSha256,
 		Status:          domain.ObjectStatus(obj.Status),
 		Labels:          labels,
+		Tags:            tags,
 		ExternalRef:     obj.ExternalRef,
 		StoredETag:      obj.StoredEtag,
 		StoredSizeBytes: obj.StoredSizeBytes,

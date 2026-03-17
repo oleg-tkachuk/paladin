@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
@@ -20,7 +21,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
+
+// protovalidateMessage is satisfied by any protobuf message.
+type protovalidateMessage = proto.Message
+
+// protovalidateValidator is the package-level validator for buf.validate annotations.
+var protovalidateValidator, _ = protovalidate.New()
 
 const (
 	// defaultGRPCTimeout is applied when the caller does not set a deadline.
@@ -451,11 +459,18 @@ func ConnectEnforceTenantInterceptor(cfg *config.Config) connect.Interceptor {
 	})
 }
 
-// Connect Validation Interceptor
+// Connect Validation Interceptor — validates proto messages against buf.validate
+// annotations (e.g. string.uuid, string.min_len, repeated.min_items).
 func ConnectValidationInterceptor() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if v, ok := req.Any().(GRPCValidator); ok {
+			// Try buf/validate first (new proto messages with annotations).
+			if msg, ok := req.Any().(protovalidateMessage); ok {
+				if err := protovalidateValidator.Validate(msg); err != nil {
+					return nil, connect.NewError(connect.CodeInvalidArgument, err)
+				}
+			} else if v, ok := req.Any().(GRPCValidator); ok {
+				// Fallback for legacy messages with Validate() method.
 				if err := v.Validate(); err != nil {
 					return nil, connect.NewError(connect.CodeInvalidArgument, err)
 				}

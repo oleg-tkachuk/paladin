@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/v1/types.proto";
+
+// BucketService manages the lifecycle and configuration of storage buckets.
+//
+// Buckets are the top-level organizational unit for objects. Each bucket
+// has independent configuration for versioning, lifecycle policies, and
+// access control.
+service BucketService {
+  // CreateBucket provisions a new storage bucket.
+  rpc CreateBucket(CreateBucketRequest) returns (CreateBucketResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets"
+      body: "*"
+    };
+  }
+
+  // DeleteBucket removes a storage bucket. The bucket must be empty
+  // (contain no objects) before it can be deleted.
+  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse) {
+    option (google.api.http) = {
+      delete: "/v1/tenants/{tenant_id}/buckets/{name}"
+    };
+  }
+
+  // ListBuckets returns a paginated list of storage buckets.
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets"
+    };
+  }
+
+  // GetBucketConfiguration retrieves the full configuration for a bucket,
+  // including versioning, lifecycle rules, and access control settings.
+  rpc GetBucketConfiguration(GetBucketConfigurationRequest) returns (GetBucketConfigurationResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets/{name}/configuration"
+    };
+  }
+
+  // UpdateBucketConfiguration performs a partial update of a bucket's
+  // configuration using a FieldMask to specify which sections to modify.
+  rpc UpdateBucketConfiguration(UpdateBucketConfigurationRequest) returns (UpdateBucketConfigurationResponse) {
+    option (google.api.http) = {
+      patch: "/v1/tenants/{tenant_id}/buckets/{name}/configuration"
+      body: "*"
+    };
+  }
+}
+
+// ─── Create ──────────────────────────────────────────────────────────────────
+
+// CreateBucketRequest provisions a new storage bucket.
+message CreateBucketRequest {
+  // Tenant identifier for logical isolation (opaque UUID, used as S3 key prefix).
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Globally unique name for the bucket.
+  // Must conform to S3 bucket naming rules (lowercase, 3-63 characters,
+  // no underscores, no adjacent periods).
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 3,
+    max_len: 63,
+    pattern: "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+  }];
+
+  // Optional display label for the bucket.
+  string display_name = 3;
+
+  // Optional region or location hint for the bucket (e.g. "us-east-1").
+  string region = 4;
+
+  // Optional initial configuration. If omitted, the bucket is created
+  // with default settings (versioning disabled, no lifecycle rules, no ACL).
+  BucketConfiguration configuration = 5;
+
+  // Client-provided idempotency key to prevent duplicate bucket creation.
+  string idempotency_key = 6;
+}
+
+// CreateBucketResponse contains the newly created bucket resource.
+message CreateBucketResponse {
+  // The created bucket resource.
+  Bucket bucket = 1;
+}
+
+// ─── Delete ──────────────────────────────────────────────────────────────────
+
+// DeleteBucketRequest removes an empty storage bucket.
+message DeleteBucketRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Name of the bucket to delete.
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Client-provided idempotency key.
+  string idempotency_key = 3;
+}
+
+// DeleteBucketResponse confirms the bucket was deleted.
+message DeleteBucketResponse {}
+
+// ─── List ────────────────────────────────────────────────────────────────────
+
+// ListBucketsRequest retrieves a paginated list of storage buckets.
+message ListBucketsRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Maximum number of buckets to return per page.
+  // The server may return fewer results.
+  int32 page_size = 2;
+
+  // Opaque token for fetching the next page.
+  string page_token = 3;
+
+  // Filter buckets whose name starts with this prefix.
+  string prefix = 4;
+}
+
+// ListBucketsResponse contains a page of buckets.
+message ListBucketsResponse {
+  // Buckets matching the request criteria.
+  repeated Bucket buckets = 1;
+
+  // Token to retrieve the next page. Empty if this is the last page.
+  string next_page_token = 2;
+
+  // Total number of buckets matching the filter (across all pages).
+  int64 total_count = 3;
+}
+
+// ─── Get configuration ───────────────────────────────────────────────────────
+
+// GetBucketConfigurationRequest retrieves a bucket's full configuration.
+message GetBucketConfigurationRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Name of the bucket.
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetBucketConfigurationResponse contains the bucket's configuration.
+message GetBucketConfigurationResponse {
+  // The bucket resource with its current configuration.
+  Bucket bucket = 1;
+}
+
+// ─── Update configuration ────────────────────────────────────────────────────
+
+// UpdateBucketConfigurationRequest partially updates a bucket's configuration.
+message UpdateBucketConfigurationRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Name of the bucket to configure.
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Fields to update. Supports paths:
+  // "configuration.versioning", "configuration.lifecycle", "configuration.access_control",
+  // "display_name".
+  // Only the specified fields are modified; unspecified fields remain unchanged.
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+
+  // Updated configuration values. Only fields specified in update_mask are applied.
+  BucketConfiguration configuration = 4;
+
+  // Updated display name. Only applied if "display_name" is in update_mask.
+  string display_name = 5;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 6;
+}
+
+// UpdateBucketConfigurationResponse contains the updated bucket resource.
+message UpdateBucketConfigurationResponse {
+  // The bucket resource with its updated configuration.
+  Bucket bucket = 1;
+}

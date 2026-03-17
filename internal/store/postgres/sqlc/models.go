@@ -86,6 +86,7 @@ type Object struct {
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 	Category        string             `json:"category"`
 	Subpath         *string            `json:"subpath"`
+	Tags            []byte             `json:"tags"`
 }
 
 type ObjectCategory struct {

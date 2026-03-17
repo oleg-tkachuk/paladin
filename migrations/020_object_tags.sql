@@ -1,0 +1,5 @@
+-- +goose Up
+ALTER TABLE objects ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '{}';
+
+-- +goose Down
+ALTER TABLE objects DROP COLUMN IF EXISTS tags;

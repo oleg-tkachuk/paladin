@@ -30,8 +30,6 @@ func NewServer(
 	cfg *config.Config,
 	log *zap.Logger,
 	svc domain.ObjectsService,
-	catSvc domain.CategoryService,
-	tenantSvc domain.TenantService,
 	metadata domain.AppMetadata,
 	hs *service.HealthService,
 	started *atomic.Bool,
@@ -39,25 +37,42 @@ func NewServer(
 ) *Server {
 	mux := http.NewServeMux()
 
-	// ─── Connect RPC handler ─────────────────────────────────────────────────
-	srv := grpcapi.NewServer(log, svc, catSvc, tenantSvc)
-	path, handler := grpcapiconnect.NewPaladinServiceHandler(
-		grpcapi.NewConnectAdapter(srv),
-		connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log)...),
-	)
+	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log)...)
+
+	// ─── ObjectService ─────────────────────────────────────────────────────
+	objectHandler := grpcapi.NewObjectHandler(log, svc)
+	path, handler := grpcapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
 	mux.Handle(path, handler)
 
-	systemSrv := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg)
-	sysPath, sysHandler := grpcapiconnect.NewSystemServiceHandler(
-		systemSrv,
-		connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log)...),
-	)
-	mux.Handle(sysPath, sysHandler)
+	// ─── MultipartUploadService ────────────────────────────────────────────
+	multipartHandler := grpcapi.NewMultipartHandler(log, svc)
+	path, handler = grpcapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
+	mux.Handle(path, handler)
 
-	// ─── Operational endpoints ───────────────────────────────────────────────
+	// ─── PresignService ────────────────────────────────────────────────────
+	presignHandler := grpcapi.NewPresignHandler(log, svc)
+	path, handler = grpcapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── BulkService ───────────────────────────────────────────────────────
+	bulkHandler := grpcapi.NewBulkHandler(log, svc)
+	path, handler = grpcapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── BucketService ─────────────────────────────────────────────────────
+	bucketHandler := grpcapi.NewBucketHandler()
+	path, handler = grpcapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── SystemService ─────────────────────────────────────────────────────
+	systemHandler := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg)
+	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── Operational endpoints ─────────────────────────────────────────────
 	mux.Handle(RouteMetrics, promhttp.Handler())
 
-	// ─── CORS ────────────────────────────────────────────────────────────────
+	// ─── CORS ──────────────────────────────────────────────────────────────
 	origins := cfg.Server.HTTP.CORSAllowedOrigins
 	if len(origins) == 0 {
 		origins = []string{"*"}

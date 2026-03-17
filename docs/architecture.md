@@ -8,8 +8,8 @@ The Paladin (PALADIN) is a central service in the acme ecosystem responsible for
 
 - **Language**: Go
 - **Frameworks**:
-  - [Gin](https://github.com/gin-gonic/gin): HTTP web framework.
-  - [Connect](https://connectrpc.com/): gRPC-compatible RPC framework.
+  - [Connect RPC](https://connectrpc.com/): gRPC-compatible RPC framework (replaces Gin).
+  - [Protobuf + buf/validate](https://buf.build/bufbuild/protovalidate): Contract-first API with declarative validation.
   - [SQLC](https://sqlc.dev/): Type-safe SQL generator.
   - [Google Wire](https://github.com/google/wire): Dependency injection.
   - [CUE](https://cuelang.org/): Configuration schema validation.
@@ -36,11 +36,44 @@ The Paladin (PALADIN) is a central service in the acme ecosystem responsible for
 3. **Completion**: Clients notify PALADIN when an upload is complete to finalize metadata.
 4. **Lifecycle**: Background workers (Reaper) handle cleanup of failed or expired uploads.
 
+## Transport Layer
+
+All RPCs are served via Connect RPC on a single HTTP/2 port (`:8080`). The transport layer is organized into per-service handlers:
+
+| Handler | File | Service |
+|---------|------|---------|
+| `ObjectHandler` | `internal/api/grpc/object_handler.go` | Object lifecycle (upload, download, copy, move, delete, list) |
+| `MultipartHandler` | `internal/api/grpc/multipart_handler.go` | Multipart upload (initiate, sign parts, complete, abort, list parts) |
+| `PresignHandler` | `internal/api/grpc/presign_handler.go` | Presigned URL generation (upload, download) |
+| `BulkHandler` | `internal/api/grpc/bulk_handler.go` | Batch operations (batch delete, batch copy) |
+| `BucketHandler` | `internal/api/grpc/bucket_handler.go` | Bucket management (stub — see `docs/TODO.md`) |
+| `SystemHandler` | `internal/api/grpc/system_handler.go` | Health, readiness, version, config |
+
+### Shared Components
+
+| File | Purpose |
+|------|---------|
+| `internal/api/grpc/errors.go` | Domain-error → gRPC-code mapping |
+| `internal/api/grpc/mappers.go` | Domain ↔ proto type converters |
+
+### Interceptor Chain (Connect)
+
+Defined in `internal/middleware/grpc_chain.go`:
+
+1. **Recovery** — panic catch → `CodeInternal`
+2. **RequestID** — extract/generate `x-request-id`
+3. **ContextLogger** — enrich zap logger with request_id
+4. **Auth** — extract tenant from header/admin key
+5. **Logger** — access log (method, code, tenant, latency)
+6. **EnforceTenant** — reject unauthenticated when auth enabled
+7. **Validation** — `buf/validate` proto annotation enforcement via `protovalidate`
+8. **RateLimit** — per-tenant token bucket
+
 ## Runtime Entry Points
 
-- **HTTP Server**: `internal/api/http/router.go` - Entry point for REST/OpenAPI requests.
-- **gRPC Server**: `internal/api/grpc/server.go` - Entry point for internal service-to-service RPCs.
-- **Main**: `cmd/server/main.go` - Service bootstrap.
+- **HTTP Server**: `internal/api/http/router.go` — Connect RPC + operational endpoints.
+- **Main**: `cmd/server/main.go` — Service bootstrap.
+- **DI**: `internal/wire/sets.go` — Wire provider graph.
 
 ## Configuration Sources
 
@@ -50,7 +83,12 @@ The Paladin (PALADIN) is a central service in the acme ecosystem responsible for
 
 ## Source Index
 
-- [internal/api/](file:///workspace/internal/api/) - API Handlers (HTTP/gRPC).
-- [internal/service/](file:///workspace/internal/service/) - Business logic and orchestrators.
-- [internal/store/](file:///workspace/internal/store/) - Database repositories.
-- [internal/domain/](file:///workspace/internal/domain/) - Model definitions and interfaces.
+- `internal/api/grpc/` — Per-service RPC handlers, mappers, errors.
+- `internal/api/http/` — HTTP server, CORS, operational routes.
+- `internal/service/` — Business logic and orchestrators.
+- `internal/store/` — Database repositories (Postgres + cache).
+- `internal/storage/s3/` — S3 client implementation.
+- `internal/domain/` — Model definitions and interfaces.
+- `internal/middleware/` — Interceptors (auth, logging, validation, rate limit).
+- `internal/worker/` — Background jobs (Reaper).
+- `proto/paladin/v1/` — Protobuf service definitions.

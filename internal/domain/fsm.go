@@ -14,6 +14,7 @@ const (
 	EventObjectHardDelete     ObjectEvent = "hard_delete"
 	EventObjectAbort          ObjectEvent = "abort"
 	EventObjectFail           ObjectEvent = "fail"
+	EventObjectCopy           ObjectEvent = "copy"
 )
 
 func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
@@ -25,7 +26,8 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
 		Permit(EventObjectHardDelete, ObjectHardDeleted).
 		Permit(EventObjectAbort, ObjectAborted).
-		Permit(EventObjectFail, ObjectError)
+		Permit(EventObjectFail, ObjectError).
+		Ignore(EventObjectCopy)
 
 	// Uploading (Reserved for iterative uploads, unused in v1 CreateSingle, but defined just in case)
 	sm.Configure(ObjectUploading).
@@ -33,7 +35,8 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
 		Permit(EventObjectHardDelete, ObjectHardDeleted).
 		Permit(EventObjectAbort, ObjectAborted).
-		Permit(EventObjectFail, ObjectError)
+		Permit(EventObjectFail, ObjectError).
+		Ignore(EventObjectCopy)
 
 	// Uploaded (If tracking intermediate state before verification, same as pending/uploading for now)
 	sm.Configure(ObjectUploaded).
@@ -41,13 +44,15 @@ func NewObjectFSM(initialState ObjectStatus) *stateless.StateMachine {
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
 		Permit(EventObjectHardDelete, ObjectHardDeleted).
 		Permit(EventObjectAbort, ObjectAborted).
-		Permit(EventObjectFail, ObjectError)
+		Permit(EventObjectFail, ObjectError).
+		Ignore(EventObjectCopy)
 
 	// Complete
 	sm.Configure(ObjectComplete).
 		Ignore(EventObjectUploadComplete). // Idempotent completion
 		Permit(EventObjectSoftDelete, ObjectSoftDeleted).
-		Permit(EventObjectHardDelete, ObjectHardDeleted)
+		Permit(EventObjectHardDelete, ObjectHardDeleted).
+		Ignore(EventObjectCopy)
 
 	// SoftDeleted
 	sm.Configure(ObjectSoftDeleted).

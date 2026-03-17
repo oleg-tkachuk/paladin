@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -23,14 +24,20 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// HealthStatus represents the health of the service or a dependency.
 type HealthStatus int32
 
 const (
+	// Default value. Status has not been determined.
 	HealthStatus_HEALTH_STATUS_UNSPECIFIED HealthStatus = 0
-	HealthStatus_HEALTH_STATUS_HEALTHY     HealthStatus = 1
-	HealthStatus_HEALTH_STATUS_UNHEALTHY   HealthStatus = 2
-	HealthStatus_HEALTH_STATUS_DEGRADED    HealthStatus = 3
-	HealthStatus_HEALTH_STATUS_DISABLED    HealthStatus = 4
+	// The component is functioning normally.
+	HealthStatus_HEALTH_STATUS_HEALTHY HealthStatus = 1
+	// The component is not functioning and should be restarted or investigated.
+	HealthStatus_HEALTH_STATUS_UNHEALTHY HealthStatus = 2
+	// The component is partially functional — some operations may fail.
+	HealthStatus_HEALTH_STATUS_DEGRADED HealthStatus = 3
+	// The component has been intentionally disabled.
+	HealthStatus_HEALTH_STATUS_DISABLED HealthStatus = 4
 )
 
 // Enum value maps for HealthStatus.
@@ -78,6 +85,7 @@ func (HealthStatus) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{0}
 }
 
+// PingRequest is an empty request for the connectivity check.
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -114,9 +122,11 @@ func (*PingRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{0}
 }
 
+// PingResponse contains a simple acknowledgment message.
 type PingResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Human-readable acknowledgment (e.g. "pong").
+	Message       string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -158,6 +168,7 @@ func (x *PingResponse) GetMessage() string {
 	return ""
 }
 
+// GetLivezRequest is an empty request for the liveness probe.
 type GetLivezRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -194,10 +205,13 @@ func (*GetLivezRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{2}
 }
 
+// GetLivezResponse indicates whether the service process is alive.
 type GetLivezResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Health        HealthStatus           `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Human-readable status description.
+	Status string `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	// Structured health indicator.
+	Health        HealthStatus `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,6 +260,7 @@ func (x *GetLivezResponse) GetHealth() HealthStatus {
 	return HealthStatus_HEALTH_STATUS_UNSPECIFIED
 }
 
+// GetReadyzRequest is an empty request for the readiness probe.
 type GetReadyzRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -282,11 +297,15 @@ func (*GetReadyzRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{4}
 }
 
+// GetReadyzResponse indicates whether the service is ready to accept traffic.
 type GetReadyzResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Health        HealthStatus           `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
-	Dependencies  []*DependencyStatus    `protobuf:"bytes,3,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Human-readable status description.
+	Status string `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	// Structured health indicator for the overall service.
+	Health HealthStatus `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
+	// Status of each dependency checked during the readiness evaluation.
+	Dependencies  []*DependencyStatus `protobuf:"bytes,3,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,12 +361,17 @@ func (x *GetReadyzResponse) GetDependencies() []*DependencyStatus {
 	return nil
 }
 
+// DependencyStatus reports the health of a single service dependency.
 type DependencyStatus struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Health        HealthStatus           `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	LatencyMs     int64                  `protobuf:"varint,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Name of the dependency (e.g. "postgres", "s3", "redis").
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Health status of the dependency.
+	Health HealthStatus `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
+	// Human-readable message with additional detail (e.g. error description).
+	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	// Latency of the health check in milliseconds.
+	LatencyMs     int64 `protobuf:"varint,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -410,6 +434,7 @@ func (x *DependencyStatus) GetLatencyMs() int64 {
 	return 0
 }
 
+// GetStartupzRequest is an empty request for the startup probe.
 type GetStartupzRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -446,10 +471,13 @@ func (*GetStartupzRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{7}
 }
 
+// GetStartupzResponse indicates whether the service has completed startup.
 type GetStartupzResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Health        HealthStatus           `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Human-readable status description.
+	Status string `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	// Structured health indicator.
+	Health        HealthStatus `protobuf:"varint,2,opt,name=health,proto3,enum=paladin.v1.HealthStatus" json:"health,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -498,6 +526,7 @@ func (x *GetStartupzResponse) GetHealth() HealthStatus {
 	return HealthStatus_HEALTH_STATUS_UNSPECIFIED
 }
 
+// GetInfoRequest is an empty request for service information.
 type GetInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -534,12 +563,17 @@ func (*GetInfoRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_system_proto_rawDescGZIP(), []int{9}
 }
 
+// GetInfoResponse contains detailed service, build, and runtime information.
 type GetInfoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Service       *ServiceInfo           `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	Build         *BuildInfo             `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
-	Runtime       *RuntimeInfo           `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Service identification.
+	Service *ServiceInfo `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	// Build-time information.
+	Build *BuildInfo `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
+	// Runtime environment information.
+	Runtime *RuntimeInfo `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	// Deployment environment name (e.g. "production", "staging", "development").
+	Environment   string `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -602,10 +636,13 @@ func (x *GetInfoResponse) GetEnvironment() string {
 	return ""
 }
 
+// ServiceInfo identifies the service.
 type ServiceInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Name of the service (e.g. "paladin").
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Semantic version of the service (e.g. "1.2.3").
+	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -654,9 +691,12 @@ func (x *ServiceInfo) GetVersion() string {
 	return ""
 }
 
+// BuildInfo contains build-time metadata.
 type BuildInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commit        string                 `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Git commit SHA at build time.
+	Commit string `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
+	// Timestamp when the binary was built.
 	BuildTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=build_time,json=buildTime,proto3" json:"build_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -706,13 +746,19 @@ func (x *BuildInfo) GetBuildTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// RuntimeInfo contains runtime environment details.
 type RuntimeInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GoVersion     string                 `protobuf:"bytes,1,opt,name=go_version,json=goVersion,proto3" json:"go_version,omitempty"`
-	Os            string                 `protobuf:"bytes,2,opt,name=os,proto3" json:"os,omitempty"`
-	Arch          string                 `protobuf:"bytes,3,opt,name=arch,proto3" json:"arch,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	Uptime        string                 `protobuf:"bytes,5,opt,name=uptime,proto3" json:"uptime,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Go runtime version (e.g. "go1.25.5").
+	GoVersion string `protobuf:"bytes,1,opt,name=go_version,json=goVersion,proto3" json:"go_version,omitempty"`
+	// Operating system (e.g. "linux").
+	Os string `protobuf:"bytes,2,opt,name=os,proto3" json:"os,omitempty"`
+	// CPU architecture (e.g. "amd64", "arm64").
+	Arch string `protobuf:"bytes,3,opt,name=arch,proto3" json:"arch,omitempty"`
+	// Timestamp when the service process started.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// Human-readable uptime string (e.g. "2h15m30s").
+	Uptime        string `protobuf:"bytes,5,opt,name=uptime,proto3" json:"uptime,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -786,7 +832,7 @@ var File_paladin_v1_system_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_system_proto_rawDesc = "" +
 	"\n" +
-	"\x13ocp/v1/system.proto\x12\x06ocp.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\r\n" +
+	"\x13ocp/v1/system.proto\x12\x06ocp.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\r\n" +
 	"\vPingRequest\"(\n" +
 	"\fPingResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"\x11\n" +
@@ -835,13 +881,13 @@ const file_paladin_v1_system_proto_rawDesc = "" +
 	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1b\n" +
 	"\x17HEALTH_STATUS_UNHEALTHY\x10\x02\x12\x1a\n" +
 	"\x16HEALTH_STATUS_DEGRADED\x10\x03\x12\x1a\n" +
-	"\x16HEALTH_STATUS_DISABLED\x10\x042\xc7\x02\n" +
-	"\rSystemService\x121\n" +
-	"\x04Ping\x12\x13.paladin.v1.PingRequest\x1a\x14.paladin.v1.PingResponse\x12=\n" +
-	"\bGetLivez\x12\x17.paladin.v1.GetLivezRequest\x1a\x18.paladin.v1.GetLivezResponse\x12@\n" +
-	"\tGetReadyz\x12\x18.paladin.v1.GetReadyzRequest\x1a\x19.paladin.v1.GetReadyzResponse\x12F\n" +
-	"\vGetStartupz\x12\x1a.paladin.v1.GetStartupzRequest\x1a\x1b.paladin.v1.GetStartupzResponse\x12:\n" +
-	"\aGetInfo\x12\x16.paladin.v1.GetInfoRequest\x1a\x17.paladin.v1.GetInfoResponseBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
+	"\x16HEALTH_STATUS_DISABLED\x10\x042\xcb\x03\n" +
+	"\rSystemService\x12J\n" +
+	"\x04Ping\x12\x13.paladin.v1.PingRequest\x1a\x14.paladin.v1.PingResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/system/ping\x12W\n" +
+	"\bGetLivez\x12\x17.paladin.v1.GetLivezRequest\x1a\x18.paladin.v1.GetLivezResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/system/livez\x12[\n" +
+	"\tGetReadyz\x12\x18.paladin.v1.GetReadyzRequest\x1a\x19.paladin.v1.GetReadyzResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/system/readyz\x12c\n" +
+	"\vGetStartupz\x12\x1a.paladin.v1.GetStartupzRequest\x1a\x1b.paladin.v1.GetStartupzResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/system/startupz\x12S\n" +
+	"\aGetInfo\x12\x16.paladin.v1.GetInfoRequest\x1a\x17.paladin.v1.GetInfoResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/system/infoBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
 
 var (
 	file_paladin_v1_system_proto_rawDescOnce sync.Once

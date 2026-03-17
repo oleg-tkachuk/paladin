@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
@@ -24,12 +23,10 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/wire"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 type Version string
@@ -234,31 +231,24 @@ func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
 }
 
 // ProvideHTTPServer builds the Connect RPC + ops HTTP server.
-// This replaces the old Gin-based server.
 func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
 	svc domain.ObjectsService,
-	catSvc domain.CategoryService,
-	tenantSvc domain.TenantService,
 	hs *service.HealthService,
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
 	startTime time.Time,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, catSvc, tenantSvc, meta, hs, appStarted, startTime)
+	return httpapi.NewServer(&cfg, l, svc, meta, hs, appStarted, startTime)
 }
 
 // ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
-func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, tenantSvc domain.TenantService) *grpc.Server {
+func ProvideGRPCServer(cfg config.Config, l *zap.Logger) *grpc.Server {
 	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 	srv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	s := grpcapi.NewServer(l, svc, catSvc, tenantSvc)
-	grpcapi.RegisterPaladinServiceServer(srv, s)
-	reflection.Register(srv)
 
 	return srv
 }

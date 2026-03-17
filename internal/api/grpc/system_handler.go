@@ -80,16 +80,16 @@ func (h *SystemHandler) GetReadyz(ctx context.Context, req *connect.Request[GetR
 	ready, deps := h.healthSvc.CheckReady(ctx)
 
 	overall := HealthStatus_HEALTH_STATUS_HEALTHY
-	status := healthStatusOK
+	healthStatus := healthStatusOK
 
 	if !ready {
 		overall = HealthStatus_HEALTH_STATUS_UNHEALTHY
-		status = "not_ready"
+		healthStatus = "not_ready"
 	}
 
 	var protoDeps []*DependencyStatus
 
-	// Map PostgreSQL dependency
+	// Map PostgreSQL dependency.
 	pgDep := &DependencyStatus{
 		Name:    "postgresql",
 		Message: deps.PostgreSQL.Message,
@@ -107,7 +107,7 @@ func (h *SystemHandler) GetReadyz(ctx context.Context, req *connect.Request[GetR
 	}
 	protoDeps = append(protoDeps, pgDep)
 
-	// Map SeaweedFS dependency
+	// Map SeaweedFS dependency.
 	s3Dep := &DependencyStatus{
 		Name:    "seaweedfs",
 		Message: deps.SeaweedFS.Message,
@@ -126,7 +126,7 @@ func (h *SystemHandler) GetReadyz(ctx context.Context, req *connect.Request[GetR
 	protoDeps = append(protoDeps, s3Dep)
 
 	return connect.NewResponse(&GetReadyzResponse{
-		Status:       status,
+		Status:       healthStatus,
 		Health:       overall,
 		Dependencies: protoDeps,
 	}), nil

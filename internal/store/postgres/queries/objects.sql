@@ -3,9 +3,9 @@
 -- name: CreateObject :exec
 INSERT INTO objects (
     id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+    checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 );
 
 -- name: GetObject :one
@@ -17,6 +17,11 @@ WHERE tenant_id = $1 AND id = $2;
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND external_ref = $2;
+
+-- name: GetObjectByKey :one
+SELECT sqlc.embed(objects)
+FROM objects
+WHERE tenant_id = $1 AND bucket = $2 AND object_key = $3;
 
 -- name: MarkObjectComplete :execrows
 UPDATE objects

@@ -65,14 +65,14 @@ const createObject = `-- name: CreateObject :exec
 
 INSERT INTO objects (
     id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+    checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 `
 
 // Objects queries
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string) error {
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string, tags []byte) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
@@ -87,6 +87,7 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID str
 		externalRef,
 		category,
 		subpath,
+		tags,
 	)
 	return err
 }
@@ -105,7 +106,7 @@ func (q *Queries) DeleteObject(ctx context.Context, tenantID string, iD pgtype.U
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 FROM objects
 WHERE tenant_id = $1 AND id = $2
 `
@@ -137,12 +138,13 @@ func (q *Queries) GetObject(ctx context.Context, tenantID string, iD pgtype.UUID
 		&i.Object.DeletedAt,
 		&i.Object.Category,
 		&i.Object.Subpath,
+		&i.Object.Tags,
 	)
 	return i, err
 }
 
 const getObjectByExternalRef = `-- name: GetObjectByExternalRef :one
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 FROM objects
 WHERE tenant_id = $1 AND external_ref = $2
 `
@@ -174,6 +176,45 @@ func (q *Queries) GetObjectByExternalRef(ctx context.Context, tenantID string, e
 		&i.Object.DeletedAt,
 		&i.Object.Category,
 		&i.Object.Subpath,
+		&i.Object.Tags,
+	)
+	return i, err
+}
+
+const getObjectByKey = `-- name: GetObjectByKey :one
+SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+FROM objects
+WHERE tenant_id = $1 AND bucket = $2 AND object_key = $3
+`
+
+type GetObjectByKeyRow struct {
+	Object Object `json:"object"`
+}
+
+func (q *Queries) GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, getObjectByKey, tenantID, bucket, objectKey)
+	var i GetObjectByKeyRow
+	err := row.Scan(
+		&i.Object.ID,
+		&i.Object.TenantID,
+		&i.Object.ObjectKey,
+		&i.Object.Bucket,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.ChecksumSha256,
+		&i.Object.Status,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.ExpiresAt,
+		&i.Object.Labels,
+		&i.Object.ExternalRef,
+		&i.Object.StoredEtag,
+		&i.Object.StoredSizeBytes,
+		&i.Object.CompletedAt,
+		&i.Object.DeletedAt,
+		&i.Object.Category,
+		&i.Object.Subpath,
+		&i.Object.Tags,
 	)
 	return i, err
 }
@@ -217,7 +258,7 @@ func (q *Queries) GetObjectStats(ctx context.Context, tenantID string) (GetObjec
 }
 
 const listExpiredPendingObjects = `-- name: ListExpiredPendingObjects :many
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 FROM objects
 WHERE status = 'pending' AND expires_at < $1
 LIMIT $2
@@ -256,6 +297,7 @@ func (q *Queries) ListExpiredPendingObjects(ctx context.Context, expiresAt pgtyp
 			&i.Object.DeletedAt,
 			&i.Object.Category,
 			&i.Object.Subpath,
+			&i.Object.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -268,7 +310,7 @@ func (q *Queries) ListExpiredPendingObjects(ctx context.Context, expiresAt pgtyp
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, COUNT(*) OVER() AS total_count
+SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags, COUNT(*) OVER() AS total_count
 FROM objects
 WHERE tenant_id = $1
   AND ($2::text IS NULL OR status = $2)
@@ -344,6 +386,7 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID string, status *stri
 			&i.Object.DeletedAt,
 			&i.Object.Category,
 			&i.Object.Subpath,
+			&i.Object.Tags,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -423,7 +466,7 @@ UPDATE objects
 SET external_ref = $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 `
 
 type PatchObjectExternalRefRow struct {
@@ -453,6 +496,7 @@ func (q *Queries) PatchObjectExternalRef(ctx context.Context, tenantID string, i
 		&i.Object.DeletedAt,
 		&i.Object.Category,
 		&i.Object.Subpath,
+		&i.Object.Tags,
 	)
 	return i, err
 }
@@ -462,7 +506,7 @@ UPDATE objects
 SET labels = labels || $3,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 `
 
 type PatchObjectLabelsRow struct {
@@ -492,6 +536,7 @@ func (q *Queries) PatchObjectLabels(ctx context.Context, tenantID string, iD pgt
 		&i.Object.DeletedAt,
 		&i.Object.Category,
 		&i.Object.Subpath,
+		&i.Object.Tags,
 	)
 	return i, err
 }
@@ -502,7 +547,7 @@ SET labels = labels || $3,
     external_ref = $4,
     updated_at = now()
 WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 `
 
 type PatchObjectLabelsAndExternalRefRow struct {
@@ -537,6 +582,7 @@ func (q *Queries) PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID 
 		&i.Object.DeletedAt,
 		&i.Object.Category,
 		&i.Object.Subpath,
+		&i.Object.Tags,
 	)
 	return i, err
 }

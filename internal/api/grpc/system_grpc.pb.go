@@ -31,17 +31,24 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SystemService provides health checks and service information.
+// SystemService provides health checks, readiness probes, and service
+// information for infrastructure monitoring and orchestration.
 type SystemServiceClient interface {
-	// Ping is a low-overhead connectivity check.
+	// Ping is a minimal connectivity check that returns immediately.
+	// Use for basic reachability testing only — it does not verify dependencies.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
-	// GetLivez returns the liveness status of the service.
+	// GetLivez returns the liveness status of the service process.
+	// A non-live service should be restarted by the orchestrator.
 	GetLivez(ctx context.Context, in *GetLivezRequest, opts ...grpc.CallOption) (*GetLivezResponse, error)
-	// GetReadyz returns the readiness status of the service and its dependencies.
+	// GetReadyz returns the readiness status of the service and all its
+	// dependencies (database, object storage, etc.).
+	// A non-ready service should be removed from the load balancer.
 	GetReadyz(ctx context.Context, in *GetReadyzRequest, opts ...grpc.CallOption) (*GetReadyzResponse, error)
 	// GetStartupz returns the startup status of the service.
+	// Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
 	GetStartupz(ctx context.Context, in *GetStartupzRequest, opts ...grpc.CallOption) (*GetStartupzResponse, error)
-	// GetInfo returns detailed information about the service, build, and runtime.
+	// GetInfo returns detailed information about the service build, runtime,
+	// and environment for debugging and operational visibility.
 	GetInfo(ctx context.Context, in *GetInfoRequest, opts ...grpc.CallOption) (*GetInfoResponse, error)
 }
 
@@ -107,17 +114,24 @@ func (c *systemServiceClient) GetInfo(ctx context.Context, in *GetInfoRequest, o
 // All implementations must embed UnimplementedSystemServiceServer
 // for forward compatibility.
 //
-// SystemService provides health checks and service information.
+// SystemService provides health checks, readiness probes, and service
+// information for infrastructure monitoring and orchestration.
 type SystemServiceServer interface {
-	// Ping is a low-overhead connectivity check.
+	// Ping is a minimal connectivity check that returns immediately.
+	// Use for basic reachability testing only — it does not verify dependencies.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
-	// GetLivez returns the liveness status of the service.
+	// GetLivez returns the liveness status of the service process.
+	// A non-live service should be restarted by the orchestrator.
 	GetLivez(context.Context, *GetLivezRequest) (*GetLivezResponse, error)
-	// GetReadyz returns the readiness status of the service and its dependencies.
+	// GetReadyz returns the readiness status of the service and all its
+	// dependencies (database, object storage, etc.).
+	// A non-ready service should be removed from the load balancer.
 	GetReadyz(context.Context, *GetReadyzRequest) (*GetReadyzResponse, error)
 	// GetStartupz returns the startup status of the service.
+	// Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
 	GetStartupz(context.Context, *GetStartupzRequest) (*GetStartupzResponse, error)
-	// GetInfo returns detailed information about the service, build, and runtime.
+	// GetInfo returns detailed information about the service build, runtime,
+	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error)
 	mustEmbedUnimplementedSystemServiceServer()
 }

@@ -326,6 +326,10 @@ func (s *objectsService) GetMeta(ctx context.Context, tenantID string, id openap
 	return s.getMeta(ctx, tenantID, id)
 }
 
+func (s *objectsService) GetByKey(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	return s.getByKey(ctx, tenantID, bucket, key)
+}
+
 func (s *objectsService) CompleteObject(ctx context.Context, tenantID string, id openapi_types.UUID, etag *string, sizeBytes *int64) (*domain.Object, error) {
 	return s.completeObject(ctx, tenantID, id, etag, sizeBytes)
 }
@@ -379,6 +383,18 @@ func (s *objectsService) AbortMultipart(ctx context.Context, tenantID string, up
 	return s.abortMultipart(ctx, tenantID, uploadID)
 }
 
+func (s *objectsService) CopyObject(ctx context.Context, tenantID, srcBucket, srcKey, dstBucket, dstKey string, metadata map[string]string) (*domain.Object, error) {
+	return s.copyObject(ctx, tenantID, srcBucket, srcKey, dstBucket, dstKey, metadata)
+}
+
+func (s *objectsService) MoveObject(ctx context.Context, tenantID, srcBucket, srcKey, dstBucket, dstKey string) (*domain.Object, error) {
+	return s.moveObject(ctx, tenantID, srcBucket, srcKey, dstBucket, dstKey)
+}
+
+func (s *objectsService) ListParts(ctx context.Context, tenantID string, uploadID string) ([]domain.MultipartPart, error) {
+	return s.listParts(ctx, tenantID, uploadID)
+}
+
 func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn func() error) error {
 	w := s.brk.Get(name)
 	_, err := fault.Execute(w, func() (interface{}, error) {
@@ -416,7 +432,34 @@ func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []
 		return 0, err
 	}
 
-	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, ids)
+	// Filter IDs through FSM — only soft-delete items in valid states
+	validIDs := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		obj, err := s.objRepo.Get(ctx, tenantID, id)
+		if err != nil {
+			continue
+		}
+
+		sm := domain.NewObjectFSM(obj.Status)
+		if err := sm.Fire(domain.EventObjectSoftDelete); err != nil {
+			logger.FromContext(ctx).Warn("BulkDelete: skipping invalid transition",
+				zap.String("object_id", id.String()),
+				zap.String("current_status", string(obj.Status)),
+				zap.Error(err))
+
+			continue
+		}
+
+		validIDs = append(validIDs, id)
+	}
+
+	if len(validIDs) == 0 {
+		status = "success"
+
+		return 0, nil
+	}
+
+	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, validIDs)
 	if err != nil {
 		status = "error"
 
@@ -443,7 +486,34 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 		return 0, err
 	}
 
-	count, err := s.objRepo.BulkRestore(ctx, tenantID, ids)
+	// Filter IDs through FSM — only restore items in valid states
+	validIDs := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		obj, err := s.objRepo.Get(ctx, tenantID, id)
+		if err != nil {
+			continue
+		}
+
+		sm := domain.NewObjectFSM(obj.Status)
+		if err := sm.Fire(domain.EventObjectRestore); err != nil {
+			logger.FromContext(ctx).Warn("BulkRestore: skipping invalid transition",
+				zap.String("object_id", id.String()),
+				zap.String("current_status", string(obj.Status)),
+				zap.Error(err))
+
+			continue
+		}
+
+		validIDs = append(validIDs, id)
+	}
+
+	if len(validIDs) == 0 {
+		status = "success"
+
+		return 0, nil
+	}
+
+	count, err := s.objRepo.BulkRestore(ctx, tenantID, validIDs)
 	if err != nil {
 		status = "error"
 
@@ -470,11 +540,22 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 		return 0, err
 	}
 
-	// For purge, we need to delete from S3 first.
+	// FSM-gate each item, then delete from S3 for valid ones
+	validIDs := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
 		obj, err := s.objRepo.Get(ctx, tenantID, id)
 		if err != nil {
 			continue // Skip if not found
+		}
+
+		sm := domain.NewObjectFSM(obj.Status)
+		if err := sm.Fire(domain.EventObjectHardDelete); err != nil {
+			logger.FromContext(ctx).Warn("BulkPurge: skipping invalid transition",
+				zap.String("object_id", id.String()),
+				zap.String("current_status", string(obj.Status)),
+				zap.Error(err))
+
+			continue
 		}
 
 		// Delete from S3
@@ -482,10 +563,18 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 			logger.FromContext(ctx).Error("Failed to delete object from S3 during bulk purge",
 				zap.String("object_id", id.String()), zap.Error(err))
 		}
+
+		validIDs = append(validIDs, id)
+	}
+
+	if len(validIDs) == 0 {
+		status = "success"
+
+		return 0, nil
 	}
 
 	// Bulk hard delete from DB
-	count, err := s.objRepo.BulkDelete(ctx, tenantID, ids)
+	count, err := s.objRepo.BulkDelete(ctx, tenantID, validIDs)
 	if err != nil {
 		status = "error"
 

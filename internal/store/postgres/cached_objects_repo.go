@@ -83,6 +83,36 @@ func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID strin
 	return rec, nil
 }
 
+// GetByKey retrieves an object by bucket+key with caching
+func (r *CachedObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	cacheKey := fmt.Sprintf("obj:key:%s:%s:%s", tenantID, bucket, key)
+
+	// Try cache first
+	if rec, ok := r.cache.Get(ctx, cacheKey); ok {
+		metrics.RecordCacheOp(ctx, "get", "hit")
+
+		return rec, nil
+	}
+
+	metrics.RecordCacheOp(ctx, "get", "miss")
+
+	// Cache miss - fetch from database
+	rec, err := r.repo.GetByKey(ctx, tenantID, bucket, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update cache (if found)
+	if rec != nil {
+		_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+		// Also cache by ID
+		idKey := fmt.Sprintf("obj:%s:%s", tenantID, rec.ID.String())
+		_ = r.cache.Set(ctx, idKey, rec, r.ttl)
+	}
+
+	return rec, nil
+}
+
 // Create creates an object and caches it
 func (r *CachedObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	err := r.repo.Create(ctx, rec)

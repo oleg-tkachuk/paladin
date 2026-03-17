@@ -32,6 +32,12 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 		return fmt.Errorf("marshal labels: %w", err)
 	}
 
+	tags, err := marshalStringMap(rec.Tags)
+	if err != nil {
+		status = "error"
+		return fmt.Errorf("marshal tags: %w", err)
+	}
+
 	err = r.db.Queries.CreateObject(ctx,
 		uuidToPgtype(rec.ID),
 		rec.TenantID,
@@ -46,6 +52,7 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 		rec.ExternalRef,
 		rec.Category,
 		rec.Subpath,
+		tags,
 	)
 
 	if err != nil {
@@ -70,11 +77,17 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 			return fmt.Errorf("marshal labels for %s: %w", rec.ID, err)
 		}
 
+		tags, err := marshalStringMap(rec.Tags)
+		if err != nil {
+			status = "error"
+			return fmt.Errorf("marshal tags for %s: %w", rec.ID, err)
+		}
+
 		batch.Queue(`INSERT INTO objects (
 			id, tenant_id, object_key, bucket, content_type, size_bytes,
-			checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+			checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		)`,
 			uuidToPgtype(rec.ID),
 			rec.TenantID,
@@ -89,6 +102,7 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 			rec.ExternalRef,
 			rec.Category,
 			rec.Subpath,
+			tags,
 		)
 	}
 
@@ -275,6 +289,35 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 	obj, err := r.db.Queries.GetObjectByExternalRef(ctx, tenantID, &externalRef)
 	if err != nil {
 		status = "error"
+
+		return nil, mapPgError(err)
+	}
+
+	result, err := mapToDomainObject(obj.Object)
+	if err != nil {
+		status = "error"
+
+		return nil, err
+	}
+
+	status = "success"
+
+	return &result, nil
+}
+
+func (r *ObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "GetObjectByKey", status, start) }()
+
+	obj, err := r.db.Queries.GetObjectByKey(ctx, tenantID, bucket, key)
+	if err != nil {
+		status = "error"
+		if errors.Is(err, pgx.ErrNoRows) {
+			status = "not_found"
+
+			return nil, domain.ErrNotFound
+		}
 
 		return nil, mapPgError(err)
 	}

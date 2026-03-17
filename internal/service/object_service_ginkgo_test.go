@@ -39,6 +39,12 @@ func (m *MockObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string,
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 
+func (m *MockObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	args := m.Called(ctx, tenantID, bucket, key)
+
+	return args.Get(0).(*domain.Object), args.Error(1)
+}
+
 func (m *MockObjectsRepo) MarkActive(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
 	args := m.Called(ctx, tenantID, id)
 
@@ -339,6 +345,12 @@ func (m *MockS3Client) HeadObject(ctx context.Context, key string) (*domain.Head
 
 func (m *MockS3Client) DeleteObject(ctx context.Context, key string) error {
 	args := m.Called(ctx, key)
+
+	return args.Error(0)
+}
+
+func (m *MockS3Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	args := m.Called(ctx, srcKey, dstKey)
 
 	return args.Error(0)
 }

@@ -83,15 +83,18 @@ type ListTenantsFilter struct {
 }
 
 type Object struct {
-	ID              uuid.UUID
-	TenantID        string
-	ObjectKey       string
-	Bucket          string
-	ContentType     string
-	SizeBytes       int64
-	ChecksumSHA256  *string
-	Status          ObjectStatus
-	Labels          map[string]string
+	ID             uuid.UUID
+	TenantID       string
+	ObjectKey      string
+	Bucket         string
+	ContentType    string
+	SizeBytes      int64
+	ChecksumSHA256 *string
+	Status         ObjectStatus
+	Labels         map[string]string
+	// Tags are user-defined classification tags for lifecycle rules and filtering.
+	// Separate from Labels to align with S3 object tagging API.
+	Tags            map[string]string
 	ExternalRef     *string
 	StoredETag      *string
 	StoredSizeBytes *int64
@@ -169,6 +172,17 @@ type ListObjectsFilter struct {
 	// KeyPrefix is an optional prefix filter within tenant/category scope.
 	// The server validates that it cannot escape the tenant+category boundary.
 	KeyPrefix *string
+
+	// Tags filters objects that have ALL provided key-value pairs in their labels.
+	Tags map[string]string
+	// MinSizeBytes filters objects whose size >= this value.
+	MinSizeBytes *int64
+	// MaxSizeBytes filters objects whose size <= this value.
+	MaxSizeBytes *int64
+	// ContentType filters objects by exact content type match.
+	ContentType *string
+	// KeyPattern filters objects whose key matches this pattern (supports * wildcard).
+	KeyPattern *string
 
 	// Sorting
 	SortBy    string // e.g. "created_at"

@@ -24,7 +24,7 @@ type Querier interface {
 	// Multipart queries
 	CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID string, objectID pgtype.UUID, uploadID string, bucket string, objectKey string, contentType string, partSizeBytes int64, status string, expiresAt pgtype.Timestamptz) error
 	// Objects queries
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string, tags []byte) error
 	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
@@ -37,6 +37,7 @@ type Querier interface {
 	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (GetMultipartByUploadIDRow, error)
 	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (GetObjectRow, error)
 	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (GetObjectByExternalRefRow, error)
+	GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error)
 	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)

@@ -49,15 +49,21 @@ const (
 
 // SystemServiceClient is a client for the paladin.v1.SystemService service.
 type SystemServiceClient interface {
-	// Ping is a low-overhead connectivity check.
+	// Ping is a minimal connectivity check that returns immediately.
+	// Use for basic reachability testing only — it does not verify dependencies.
 	Ping(context.Context, *connect.Request[grpc.PingRequest]) (*connect.Response[grpc.PingResponse], error)
-	// GetLivez returns the liveness status of the service.
+	// GetLivez returns the liveness status of the service process.
+	// A non-live service should be restarted by the orchestrator.
 	GetLivez(context.Context, *connect.Request[grpc.GetLivezRequest]) (*connect.Response[grpc.GetLivezResponse], error)
-	// GetReadyz returns the readiness status of the service and its dependencies.
+	// GetReadyz returns the readiness status of the service and all its
+	// dependencies (database, object storage, etc.).
+	// A non-ready service should be removed from the load balancer.
 	GetReadyz(context.Context, *connect.Request[grpc.GetReadyzRequest]) (*connect.Response[grpc.GetReadyzResponse], error)
 	// GetStartupz returns the startup status of the service.
+	// Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
 	GetStartupz(context.Context, *connect.Request[grpc.GetStartupzRequest]) (*connect.Response[grpc.GetStartupzResponse], error)
-	// GetInfo returns detailed information about the service, build, and runtime.
+	// GetInfo returns detailed information about the service build, runtime,
+	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *connect.Request[grpc.GetInfoRequest]) (*connect.Response[grpc.GetInfoResponse], error)
 }
 
@@ -141,15 +147,21 @@ func (c *systemServiceClient) GetInfo(ctx context.Context, req *connect.Request[
 
 // SystemServiceHandler is an implementation of the paladin.v1.SystemService service.
 type SystemServiceHandler interface {
-	// Ping is a low-overhead connectivity check.
+	// Ping is a minimal connectivity check that returns immediately.
+	// Use for basic reachability testing only — it does not verify dependencies.
 	Ping(context.Context, *connect.Request[grpc.PingRequest]) (*connect.Response[grpc.PingResponse], error)
-	// GetLivez returns the liveness status of the service.
+	// GetLivez returns the liveness status of the service process.
+	// A non-live service should be restarted by the orchestrator.
 	GetLivez(context.Context, *connect.Request[grpc.GetLivezRequest]) (*connect.Response[grpc.GetLivezResponse], error)
-	// GetReadyz returns the readiness status of the service and its dependencies.
+	// GetReadyz returns the readiness status of the service and all its
+	// dependencies (database, object storage, etc.).
+	// A non-ready service should be removed from the load balancer.
 	GetReadyz(context.Context, *connect.Request[grpc.GetReadyzRequest]) (*connect.Response[grpc.GetReadyzResponse], error)
 	// GetStartupz returns the startup status of the service.
+	// Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
 	GetStartupz(context.Context, *connect.Request[grpc.GetStartupzRequest]) (*connect.Response[grpc.GetStartupzResponse], error)
-	// GetInfo returns detailed information about the service, build, and runtime.
+	// GetInfo returns detailed information about the service build, runtime,
+	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *connect.Request[grpc.GetInfoRequest]) (*connect.Response[grpc.GetInfoResponse], error)
 }
 

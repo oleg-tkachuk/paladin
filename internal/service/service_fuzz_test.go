@@ -36,6 +36,13 @@ func (m *FuzzMockRepo) GetByExternalRef(ctx context.Context, tID string, ref str
 	}
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
+func (m *FuzzMockRepo) GetByKey(ctx context.Context, tID, bucket, key string) (*domain.Object, error) {
+	args := m.Called(ctx, tID, bucket, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Object), args.Error(1)
+}
 func (m *FuzzMockRepo) Patch(ctx context.Context, tID string, id uuid.UUID, l map[string]string, r *string) (*domain.Object, error) {
 	args := m.Called(ctx, tID, id, l, r)
 	if args.Get(0) == nil {
@@ -131,6 +138,9 @@ func (m *FuzzMockS3Client) HeadObject(ctx context.Context, key string) (*domain.
 	return nil, nil
 }
 func (m *FuzzMockS3Client) DeleteObject(ctx context.Context, key string) error { return nil }
+func (m *FuzzMockS3Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	return nil
+}
 func (m *FuzzMockS3Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
 	return domain.S3PingResult{}, nil
 }

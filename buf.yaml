@@ -4,6 +4,7 @@ modules:
     name: buf.build/acme/paladin
 deps:
   - buf.build/bufbuild/protovalidate
+  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD

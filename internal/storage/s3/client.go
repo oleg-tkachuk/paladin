@@ -336,6 +336,36 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 	return nil
 }
 
+func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "copy_object", status, start) }()
+
+	copySource := fmt.Sprintf("%s/%s", c.Bucket, srcKey)
+
+	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
+		Bucket:     aws.String(c.Bucket),
+		CopySource: aws.String(copySource),
+		Key:        aws.String(dstKey),
+	})
+	if err != nil {
+		status = "error"
+		c.log.Error("S3 copy object error",
+			zap.String("src_key", srcKey),
+			zap.String("dst_key", dstKey),
+			zap.Error(err))
+
+		return fmt.Errorf("copy object: %w", err)
+	}
+
+	status = "success"
+	c.log.Info("S3 object copied",
+		zap.String("src_key", srcKey),
+		zap.String("dst_key", dstKey))
+
+	return nil
+}
+
 func (c *Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
 	if c == nil || c.s3 == nil {
 		return domain.S3PingResult{
