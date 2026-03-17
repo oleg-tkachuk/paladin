@@ -104,3 +104,49 @@ func protoStatusToDomain(s ObjectStatus) domain.ObjectStatus {
 		return domain.ObjectPending
 	}
 }
+
+// categoryToProto converts a domain.Category to the proto Category message.
+func categoryToProto(c *domain.Category) *Category {
+	if c == nil {
+		return nil
+	}
+
+	return &Category{
+		CategoryId:  c.ID.String(),
+		TenantId:    c.TenantID,
+		Slug:        c.Slug,
+		Name:        c.Name,
+		Description: c.Description,
+		CreatedAt:   timestamppb.New(c.CreatedAt),
+		UpdatedAt:   timestamppb.New(c.UpdatedAt),
+	}
+}
+
+// categoryStatsToProto converts domain.CategoryStats to proto CategoryStats.
+func categoryStatsToProto(s *domain.CategoryStats) *CategoryStats {
+	if s == nil {
+		return nil
+	}
+
+	return &CategoryStats{
+		TotalCount:       s.TotalCount,
+		TotalSize:        s.TotalSize,
+		SoftDeletedCount: s.SoftDeletedCount,
+	}
+}
+
+// tenantToProto converts a domain.Tenant to the proto Tenant message.
+func tenantToProto(t *domain.Tenant) *Tenant {
+	if t == nil {
+		return nil
+	}
+
+	return &Tenant{
+		TenantId:    t.TenantID,
+		DisplayName: t.DisplayName,
+		Labels:      t.Labels,
+		Tags:        t.Tags,
+		CreatedAt:   timestamppb.New(t.CreatedAt),
+		UpdatedAt:   timestamppb.New(t.UpdatedAt),
+	}
+}

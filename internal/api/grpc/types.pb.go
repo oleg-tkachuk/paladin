@@ -734,6 +734,371 @@ func (x *ObjectFilter) GetContentType() string {
 	return ""
 }
 
+// Category represents a tenant-scoped object category.
+type Category struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// System-generated unique identifier.
+	CategoryId string `protobuf:"bytes,1,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
+	// Tenant identifier.
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Unique slug for the category (e.g. "documents/invoices").
+	Slug string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	// Human-readable name.
+	Name string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// Optional detailed description.
+	Description *string `protobuf:"bytes,5,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// Timestamp when the category was created.
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Timestamp of the most recent modification.
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Category) Reset() {
+	*x = Category{}
+	mi := &file_paladin_v1_types_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Category) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Category) ProtoMessage() {}
+
+func (x *Category) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_types_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Category.ProtoReflect.Descriptor instead.
+func (*Category) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Category) GetCategoryId() string {
+	if x != nil {
+		return x.CategoryId
+	}
+	return ""
+}
+
+func (x *Category) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *Category) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *Category) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Category) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *Category) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Category) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+// CategoryFilter defines criteria for filtering categories.
+type CategoryFilter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Search matches categories by slug or name.
+	Search        string `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CategoryFilter) Reset() {
+	*x = CategoryFilter{}
+	mi := &file_paladin_v1_types_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CategoryFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CategoryFilter) ProtoMessage() {}
+
+func (x *CategoryFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_types_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CategoryFilter.ProtoReflect.Descriptor instead.
+func (*CategoryFilter) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CategoryFilter) GetSearch() string {
+	if x != nil {
+		return x.Search
+	}
+	return ""
+}
+
+// CategoryStats provides statistics for a single category.
+type CategoryStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Total number of objects in the category.
+	TotalCount int64 `protobuf:"varint,1,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// Total size of all objects in the category in bytes.
+	TotalSize int64 `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	// Number of soft-deleted objects in the category.
+	SoftDeletedCount int64 `protobuf:"varint,3,opt,name=soft_deleted_count,json=softDeletedCount,proto3" json:"soft_deleted_count,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CategoryStats) Reset() {
+	*x = CategoryStats{}
+	mi := &file_paladin_v1_types_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CategoryStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CategoryStats) ProtoMessage() {}
+
+func (x *CategoryStats) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_types_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CategoryStats.ProtoReflect.Descriptor instead.
+func (*CategoryStats) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CategoryStats) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *CategoryStats) GetTotalSize() int64 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+func (x *CategoryStats) GetSoftDeletedCount() int64 {
+	if x != nil {
+		return x.SoftDeletedCount
+	}
+	return 0
+}
+
+// Tenant represents a registered tenant in the system.
+type Tenant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Canonical unique identifier for the tenant (UUID).
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Human-readable name for the tenant.
+	DisplayName *string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	// User-defined metadata key-value pairs.
+	Labels map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Categorical tags for filtering and organization.
+	Tags []string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Timestamp when the tenant was provisioned.
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Timestamp of the most recent modification.
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tenant) Reset() {
+	*x = Tenant{}
+	mi := &file_paladin_v1_types_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tenant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tenant) ProtoMessage() {}
+
+func (x *Tenant) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_types_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tenant.ProtoReflect.Descriptor instead.
+func (*Tenant) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Tenant) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *Tenant) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *Tenant) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *Tenant) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *Tenant) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Tenant) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+// TenantFilter defines criteria for filtering tenants.
+type TenantFilter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Search matches tenants by ID or DisplayName.
+	Search string `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
+	// Filter tenants whose labels match all provided key-value pairs.
+	Labels map[string]string `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Filter tenants that have at least one of the provided tags.
+	Tags          []string `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TenantFilter) Reset() {
+	*x = TenantFilter{}
+	mi := &file_paladin_v1_types_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantFilter) ProtoMessage() {}
+
+func (x *TenantFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_types_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantFilter.ProtoReflect.Descriptor instead.
+func (*TenantFilter) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *TenantFilter) GetSearch() string {
+	if x != nil {
+		return x.Search
+	}
+	return ""
+}
+
+func (x *TenantFilter) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *TenantFilter) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
 // Bucket represents a storage container for objects.
 type Bucket struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -755,7 +1120,7 @@ type Bucket struct {
 
 func (x *Bucket) Reset() {
 	*x = Bucket{}
-	mi := &file_paladin_v1_types_proto_msgTypes[4]
+	mi := &file_paladin_v1_types_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +1132,7 @@ func (x *Bucket) String() string {
 func (*Bucket) ProtoMessage() {}
 
 func (x *Bucket) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[4]
+	mi := &file_paladin_v1_types_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +1145,7 @@ func (x *Bucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Bucket.ProtoReflect.Descriptor instead.
 func (*Bucket) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Bucket) GetName() string {
@@ -840,7 +1205,7 @@ type BucketConfiguration struct {
 
 func (x *BucketConfiguration) Reset() {
 	*x = BucketConfiguration{}
-	mi := &file_paladin_v1_types_proto_msgTypes[5]
+	mi := &file_paladin_v1_types_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -852,7 +1217,7 @@ func (x *BucketConfiguration) String() string {
 func (*BucketConfiguration) ProtoMessage() {}
 
 func (x *BucketConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[5]
+	mi := &file_paladin_v1_types_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -865,7 +1230,7 @@ func (x *BucketConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketConfiguration.ProtoReflect.Descriptor instead.
 func (*BucketConfiguration) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{5}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *BucketConfiguration) GetVersioning() *VersioningConfiguration {
@@ -900,7 +1265,7 @@ type VersioningConfiguration struct {
 
 func (x *VersioningConfiguration) Reset() {
 	*x = VersioningConfiguration{}
-	mi := &file_paladin_v1_types_proto_msgTypes[6]
+	mi := &file_paladin_v1_types_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1277,7 @@ func (x *VersioningConfiguration) String() string {
 func (*VersioningConfiguration) ProtoMessage() {}
 
 func (x *VersioningConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[6]
+	mi := &file_paladin_v1_types_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1290,7 @@ func (x *VersioningConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersioningConfiguration.ProtoReflect.Descriptor instead.
 func (*VersioningConfiguration) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{6}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *VersioningConfiguration) GetEnabled() bool {
@@ -947,7 +1312,7 @@ type LifecycleConfiguration struct {
 
 func (x *LifecycleConfiguration) Reset() {
 	*x = LifecycleConfiguration{}
-	mi := &file_paladin_v1_types_proto_msgTypes[7]
+	mi := &file_paladin_v1_types_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -959,7 +1324,7 @@ func (x *LifecycleConfiguration) String() string {
 func (*LifecycleConfiguration) ProtoMessage() {}
 
 func (x *LifecycleConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[7]
+	mi := &file_paladin_v1_types_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -972,7 +1337,7 @@ func (x *LifecycleConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleConfiguration.ProtoReflect.Descriptor instead.
 func (*LifecycleConfiguration) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{7}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LifecycleConfiguration) GetRules() []*LifecycleRule {
@@ -1001,7 +1366,7 @@ type LifecycleRule struct {
 
 func (x *LifecycleRule) Reset() {
 	*x = LifecycleRule{}
-	mi := &file_paladin_v1_types_proto_msgTypes[8]
+	mi := &file_paladin_v1_types_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1013,7 +1378,7 @@ func (x *LifecycleRule) String() string {
 func (*LifecycleRule) ProtoMessage() {}
 
 func (x *LifecycleRule) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[8]
+	mi := &file_paladin_v1_types_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1026,7 +1391,7 @@ func (x *LifecycleRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleRule.ProtoReflect.Descriptor instead.
 func (*LifecycleRule) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LifecycleRule) GetId() string {
@@ -1081,7 +1446,7 @@ type LifecycleRuleFilter struct {
 
 func (x *LifecycleRuleFilter) Reset() {
 	*x = LifecycleRuleFilter{}
-	mi := &file_paladin_v1_types_proto_msgTypes[9]
+	mi := &file_paladin_v1_types_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1093,7 +1458,7 @@ func (x *LifecycleRuleFilter) String() string {
 func (*LifecycleRuleFilter) ProtoMessage() {}
 
 func (x *LifecycleRuleFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[9]
+	mi := &file_paladin_v1_types_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1106,7 +1471,7 @@ func (x *LifecycleRuleFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleRuleFilter.ProtoReflect.Descriptor instead.
 func (*LifecycleRuleFilter) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LifecycleRuleFilter) GetPrefix() string {
@@ -1150,7 +1515,7 @@ type LifecycleTransition struct {
 
 func (x *LifecycleTransition) Reset() {
 	*x = LifecycleTransition{}
-	mi := &file_paladin_v1_types_proto_msgTypes[10]
+	mi := &file_paladin_v1_types_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1162,7 +1527,7 @@ func (x *LifecycleTransition) String() string {
 func (*LifecycleTransition) ProtoMessage() {}
 
 func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[10]
+	mi := &file_paladin_v1_types_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1175,7 +1540,7 @@ func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleTransition.ProtoReflect.Descriptor instead.
 func (*LifecycleTransition) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LifecycleTransition) GetAfter() *durationpb.Duration {
@@ -1203,7 +1568,7 @@ type LifecycleExpiration struct {
 
 func (x *LifecycleExpiration) Reset() {
 	*x = LifecycleExpiration{}
-	mi := &file_paladin_v1_types_proto_msgTypes[11]
+	mi := &file_paladin_v1_types_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1215,7 +1580,7 @@ func (x *LifecycleExpiration) String() string {
 func (*LifecycleExpiration) ProtoMessage() {}
 
 func (x *LifecycleExpiration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[11]
+	mi := &file_paladin_v1_types_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1228,7 +1593,7 @@ func (x *LifecycleExpiration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleExpiration.ProtoReflect.Descriptor instead.
 func (*LifecycleExpiration) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{11}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *LifecycleExpiration) GetAfter() *durationpb.Duration {
@@ -1249,7 +1614,7 @@ type AccessControlConfiguration struct {
 
 func (x *AccessControlConfiguration) Reset() {
 	*x = AccessControlConfiguration{}
-	mi := &file_paladin_v1_types_proto_msgTypes[12]
+	mi := &file_paladin_v1_types_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1261,7 +1626,7 @@ func (x *AccessControlConfiguration) String() string {
 func (*AccessControlConfiguration) ProtoMessage() {}
 
 func (x *AccessControlConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[12]
+	mi := &file_paladin_v1_types_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1639,7 @@ func (x *AccessControlConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessControlConfiguration.ProtoReflect.Descriptor instead.
 func (*AccessControlConfiguration) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AccessControlConfiguration) GetEntries() []*AccessControlEntry {
@@ -1297,7 +1662,7 @@ type AccessControlEntry struct {
 
 func (x *AccessControlEntry) Reset() {
 	*x = AccessControlEntry{}
-	mi := &file_paladin_v1_types_proto_msgTypes[13]
+	mi := &file_paladin_v1_types_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1309,7 +1674,7 @@ func (x *AccessControlEntry) String() string {
 func (*AccessControlEntry) ProtoMessage() {}
 
 func (x *AccessControlEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[13]
+	mi := &file_paladin_v1_types_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1687,7 @@ func (x *AccessControlEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessControlEntry.ProtoReflect.Descriptor instead.
 func (*AccessControlEntry) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AccessControlEntry) GetGrantee() string {
@@ -1352,7 +1717,7 @@ type CompletedPart struct {
 
 func (x *CompletedPart) Reset() {
 	*x = CompletedPart{}
-	mi := &file_paladin_v1_types_proto_msgTypes[14]
+	mi := &file_paladin_v1_types_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1729,7 @@ func (x *CompletedPart) String() string {
 func (*CompletedPart) ProtoMessage() {}
 
 func (x *CompletedPart) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[14]
+	mi := &file_paladin_v1_types_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1742,7 @@ func (x *CompletedPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletedPart.ProtoReflect.Descriptor instead.
 func (*CompletedPart) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{14}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CompletedPart) GetPartNumber() int32 {
@@ -1411,7 +1776,7 @@ type PartInfo struct {
 
 func (x *PartInfo) Reset() {
 	*x = PartInfo{}
-	mi := &file_paladin_v1_types_proto_msgTypes[15]
+	mi := &file_paladin_v1_types_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1423,7 +1788,7 @@ func (x *PartInfo) String() string {
 func (*PartInfo) ProtoMessage() {}
 
 func (x *PartInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_types_proto_msgTypes[15]
+	mi := &file_paladin_v1_types_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1436,7 +1801,7 @@ func (x *PartInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PartInfo.ProtoReflect.Descriptor instead.
 func (*PartInfo) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_types_proto_rawDescGZIP(), []int{15}
+	return file_paladin_v1_types_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PartInfo) GetPartNumber() int32 {
@@ -1537,7 +1902,47 @@ const file_paladin_v1_types_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
 	"\x0f_min_size_bytesB\x11\n" +
-	"\x0f_max_size_bytes\"\x90\x02\n" +
+	"\x0f_max_size_bytes\"\x9d\x02\n" +
+	"\bCategory\x12\x1f\n" +
+	"\vcategory_id\x18\x01 \x01(\tR\n" +
+	"categoryId\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x05 \x01(\tH\x00R\vdescription\x88\x01\x01\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x0e\n" +
+	"\f_description\"(\n" +
+	"\x0eCategoryFilter\x12\x16\n" +
+	"\x06search\x18\x01 \x01(\tR\x06search\"}\n" +
+	"\rCategoryStats\x12\x1f\n" +
+	"\vtotal_count\x18\x01 \x01(\x03R\n" +
+	"totalCount\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12,\n" +
+	"\x12soft_deleted_count\x18\x03 \x01(\x03R\x10softDeletedCount\"\xd7\x02\n" +
+	"\x06Tenant\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12&\n" +
+	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x122\n" +
+	"\x06labels\x18\x03 \x03(\v2\x1a.paladin.v1.Tenant.LabelsEntryR\x06labels\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
+	"\r_display_name\"\xaf\x01\n" +
+	"\fTenantFilter\x12\x16\n" +
+	"\x06search\x18\x01 \x01(\tR\x06search\x128\n" +
+	"\x06labels\x18\x02 \x03(\v2 .paladin.v1.TenantFilter.LabelsEntryR\x06labels\x12\x12\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x90\x02\n" +
 	"\x06Bucket\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x16\n" +
@@ -1641,7 +2046,7 @@ func file_paladin_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_paladin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_paladin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_paladin_v1_types_proto_goTypes = []any{
 	(ObjectStatus)(0),                  // 0: paladin.v1.ObjectStatus
 	(ChecksumAlgorithm)(0),             // 1: paladin.v1.ChecksumAlgorithm
@@ -1651,63 +2056,76 @@ var file_paladin_v1_types_proto_goTypes = []any{
 	(*ObjectIdentifier)(nil),           // 5: paladin.v1.ObjectIdentifier
 	(*PresignedUrl)(nil),               // 6: paladin.v1.PresignedUrl
 	(*ObjectFilter)(nil),               // 7: paladin.v1.ObjectFilter
-	(*Bucket)(nil),                     // 8: paladin.v1.Bucket
-	(*BucketConfiguration)(nil),        // 9: paladin.v1.BucketConfiguration
-	(*VersioningConfiguration)(nil),    // 10: paladin.v1.VersioningConfiguration
-	(*LifecycleConfiguration)(nil),     // 11: paladin.v1.LifecycleConfiguration
-	(*LifecycleRule)(nil),              // 12: paladin.v1.LifecycleRule
-	(*LifecycleRuleFilter)(nil),        // 13: paladin.v1.LifecycleRuleFilter
-	(*LifecycleTransition)(nil),        // 14: paladin.v1.LifecycleTransition
-	(*LifecycleExpiration)(nil),        // 15: paladin.v1.LifecycleExpiration
-	(*AccessControlConfiguration)(nil), // 16: paladin.v1.AccessControlConfiguration
-	(*AccessControlEntry)(nil),         // 17: paladin.v1.AccessControlEntry
-	(*CompletedPart)(nil),              // 18: paladin.v1.CompletedPart
-	(*PartInfo)(nil),                   // 19: paladin.v1.PartInfo
-	nil,                                // 20: paladin.v1.Object.MetadataEntry
-	nil,                                // 21: paladin.v1.Object.TagsEntry
-	nil,                                // 22: paladin.v1.PresignedUrl.HeadersEntry
-	nil,                                // 23: paladin.v1.ObjectFilter.TagsEntry
-	nil,                                // 24: paladin.v1.LifecycleRuleFilter.TagsEntry
-	(*timestamppb.Timestamp)(nil),      // 25: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),        // 26: google.protobuf.Duration
+	(*Category)(nil),                   // 8: paladin.v1.Category
+	(*CategoryFilter)(nil),             // 9: paladin.v1.CategoryFilter
+	(*CategoryStats)(nil),              // 10: paladin.v1.CategoryStats
+	(*Tenant)(nil),                     // 11: paladin.v1.Tenant
+	(*TenantFilter)(nil),               // 12: paladin.v1.TenantFilter
+	(*Bucket)(nil),                     // 13: paladin.v1.Bucket
+	(*BucketConfiguration)(nil),        // 14: paladin.v1.BucketConfiguration
+	(*VersioningConfiguration)(nil),    // 15: paladin.v1.VersioningConfiguration
+	(*LifecycleConfiguration)(nil),     // 16: paladin.v1.LifecycleConfiguration
+	(*LifecycleRule)(nil),              // 17: paladin.v1.LifecycleRule
+	(*LifecycleRuleFilter)(nil),        // 18: paladin.v1.LifecycleRuleFilter
+	(*LifecycleTransition)(nil),        // 19: paladin.v1.LifecycleTransition
+	(*LifecycleExpiration)(nil),        // 20: paladin.v1.LifecycleExpiration
+	(*AccessControlConfiguration)(nil), // 21: paladin.v1.AccessControlConfiguration
+	(*AccessControlEntry)(nil),         // 22: paladin.v1.AccessControlEntry
+	(*CompletedPart)(nil),              // 23: paladin.v1.CompletedPart
+	(*PartInfo)(nil),                   // 24: paladin.v1.PartInfo
+	nil,                                // 25: paladin.v1.Object.MetadataEntry
+	nil,                                // 26: paladin.v1.Object.TagsEntry
+	nil,                                // 27: paladin.v1.PresignedUrl.HeadersEntry
+	nil,                                // 28: paladin.v1.ObjectFilter.TagsEntry
+	nil,                                // 29: paladin.v1.Tenant.LabelsEntry
+	nil,                                // 30: paladin.v1.TenantFilter.LabelsEntry
+	nil,                                // 31: paladin.v1.LifecycleRuleFilter.TagsEntry
+	(*timestamppb.Timestamp)(nil),      // 32: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 33: google.protobuf.Duration
 }
 var file_paladin_v1_types_proto_depIdxs = []int32{
 	1,  // 0: paladin.v1.Object.checksum_algorithm:type_name -> paladin.v1.ChecksumAlgorithm
 	0,  // 1: paladin.v1.Object.status:type_name -> paladin.v1.ObjectStatus
-	20, // 2: paladin.v1.Object.metadata:type_name -> paladin.v1.Object.MetadataEntry
-	21, // 3: paladin.v1.Object.tags:type_name -> paladin.v1.Object.TagsEntry
-	25, // 4: paladin.v1.Object.created_at:type_name -> google.protobuf.Timestamp
-	25, // 5: paladin.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 6: paladin.v1.Object.completed_at:type_name -> google.protobuf.Timestamp
-	25, // 7: paladin.v1.Object.deleted_at:type_name -> google.protobuf.Timestamp
-	25, // 8: paladin.v1.Object.expires_at:type_name -> google.protobuf.Timestamp
-	22, // 9: paladin.v1.PresignedUrl.headers:type_name -> paladin.v1.PresignedUrl.HeadersEntry
-	25, // 10: paladin.v1.PresignedUrl.expires_at:type_name -> google.protobuf.Timestamp
-	23, // 11: paladin.v1.ObjectFilter.tags:type_name -> paladin.v1.ObjectFilter.TagsEntry
-	25, // 12: paladin.v1.ObjectFilter.modified_after:type_name -> google.protobuf.Timestamp
-	25, // 13: paladin.v1.ObjectFilter.modified_before:type_name -> google.protobuf.Timestamp
+	25, // 2: paladin.v1.Object.metadata:type_name -> paladin.v1.Object.MetadataEntry
+	26, // 3: paladin.v1.Object.tags:type_name -> paladin.v1.Object.TagsEntry
+	32, // 4: paladin.v1.Object.created_at:type_name -> google.protobuf.Timestamp
+	32, // 5: paladin.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
+	32, // 6: paladin.v1.Object.completed_at:type_name -> google.protobuf.Timestamp
+	32, // 7: paladin.v1.Object.deleted_at:type_name -> google.protobuf.Timestamp
+	32, // 8: paladin.v1.Object.expires_at:type_name -> google.protobuf.Timestamp
+	27, // 9: paladin.v1.PresignedUrl.headers:type_name -> paladin.v1.PresignedUrl.HeadersEntry
+	32, // 10: paladin.v1.PresignedUrl.expires_at:type_name -> google.protobuf.Timestamp
+	28, // 11: paladin.v1.ObjectFilter.tags:type_name -> paladin.v1.ObjectFilter.TagsEntry
+	32, // 12: paladin.v1.ObjectFilter.modified_after:type_name -> google.protobuf.Timestamp
+	32, // 13: paladin.v1.ObjectFilter.modified_before:type_name -> google.protobuf.Timestamp
 	0,  // 14: paladin.v1.ObjectFilter.status:type_name -> paladin.v1.ObjectStatus
-	9,  // 15: paladin.v1.Bucket.configuration:type_name -> paladin.v1.BucketConfiguration
-	25, // 16: paladin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	25, // 17: paladin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 18: paladin.v1.BucketConfiguration.versioning:type_name -> paladin.v1.VersioningConfiguration
-	11, // 19: paladin.v1.BucketConfiguration.lifecycle:type_name -> paladin.v1.LifecycleConfiguration
-	16, // 20: paladin.v1.BucketConfiguration.access_control:type_name -> paladin.v1.AccessControlConfiguration
-	12, // 21: paladin.v1.LifecycleConfiguration.rules:type_name -> paladin.v1.LifecycleRule
-	13, // 22: paladin.v1.LifecycleRule.filter:type_name -> paladin.v1.LifecycleRuleFilter
-	14, // 23: paladin.v1.LifecycleRule.transition:type_name -> paladin.v1.LifecycleTransition
-	15, // 24: paladin.v1.LifecycleRule.expiration:type_name -> paladin.v1.LifecycleExpiration
-	24, // 25: paladin.v1.LifecycleRuleFilter.tags:type_name -> paladin.v1.LifecycleRuleFilter.TagsEntry
-	26, // 26: paladin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
-	26, // 27: paladin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
-	17, // 28: paladin.v1.AccessControlConfiguration.entries:type_name -> paladin.v1.AccessControlEntry
-	3,  // 29: paladin.v1.AccessControlEntry.permission:type_name -> paladin.v1.Permission
-	25, // 30: paladin.v1.PartInfo.uploaded_at:type_name -> google.protobuf.Timestamp
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	32, // 15: paladin.v1.Category.created_at:type_name -> google.protobuf.Timestamp
+	32, // 16: paladin.v1.Category.updated_at:type_name -> google.protobuf.Timestamp
+	29, // 17: paladin.v1.Tenant.labels:type_name -> paladin.v1.Tenant.LabelsEntry
+	32, // 18: paladin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	32, // 19: paladin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	30, // 20: paladin.v1.TenantFilter.labels:type_name -> paladin.v1.TenantFilter.LabelsEntry
+	14, // 21: paladin.v1.Bucket.configuration:type_name -> paladin.v1.BucketConfiguration
+	32, // 22: paladin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	32, // 23: paladin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 24: paladin.v1.BucketConfiguration.versioning:type_name -> paladin.v1.VersioningConfiguration
+	16, // 25: paladin.v1.BucketConfiguration.lifecycle:type_name -> paladin.v1.LifecycleConfiguration
+	21, // 26: paladin.v1.BucketConfiguration.access_control:type_name -> paladin.v1.AccessControlConfiguration
+	17, // 27: paladin.v1.LifecycleConfiguration.rules:type_name -> paladin.v1.LifecycleRule
+	18, // 28: paladin.v1.LifecycleRule.filter:type_name -> paladin.v1.LifecycleRuleFilter
+	19, // 29: paladin.v1.LifecycleRule.transition:type_name -> paladin.v1.LifecycleTransition
+	20, // 30: paladin.v1.LifecycleRule.expiration:type_name -> paladin.v1.LifecycleExpiration
+	31, // 31: paladin.v1.LifecycleRuleFilter.tags:type_name -> paladin.v1.LifecycleRuleFilter.TagsEntry
+	33, // 32: paladin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
+	33, // 33: paladin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
+	22, // 34: paladin.v1.AccessControlConfiguration.entries:type_name -> paladin.v1.AccessControlEntry
+	3,  // 35: paladin.v1.AccessControlEntry.permission:type_name -> paladin.v1.Permission
+	32, // 36: paladin.v1.PartInfo.uploaded_at:type_name -> google.protobuf.Timestamp
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_paladin_v1_types_proto_init() }
@@ -1717,15 +2135,17 @@ func file_paladin_v1_types_proto_init() {
 	}
 	file_paladin_v1_types_proto_msgTypes[0].OneofWrappers = []any{}
 	file_paladin_v1_types_proto_msgTypes[3].OneofWrappers = []any{}
-	file_paladin_v1_types_proto_msgTypes[8].OneofWrappers = []any{}
-	file_paladin_v1_types_proto_msgTypes[9].OneofWrappers = []any{}
+	file_paladin_v1_types_proto_msgTypes[4].OneofWrappers = []any{}
+	file_paladin_v1_types_proto_msgTypes[7].OneofWrappers = []any{}
+	file_paladin_v1_types_proto_msgTypes[13].OneofWrappers = []any{}
+	file_paladin_v1_types_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_v1_types_proto_rawDesc), len(file_paladin_v1_types_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   21,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

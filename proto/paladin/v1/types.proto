@@ -189,6 +189,85 @@ message ObjectFilter {
   string content_type = 9;
 }
 
+// ─── Category resource ───────────────────────────────────────────────────────
+
+// Category represents a tenant-scoped object category.
+message Category {
+  // System-generated unique identifier.
+  string category_id = 1;
+
+  // Tenant identifier.
+  string tenant_id = 2;
+
+  // Unique slug for the category (e.g. "documents/invoices").
+  string slug = 3;
+
+  // Human-readable name.
+  string name = 4;
+
+  // Optional detailed description.
+  optional string description = 5;
+
+  // Timestamp when the category was created.
+  google.protobuf.Timestamp created_at = 6;
+
+  // Timestamp of the most recent modification.
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// CategoryFilter defines criteria for filtering categories.
+message CategoryFilter {
+  // Search matches categories by slug or name.
+  string search = 1;
+}
+
+// CategoryStats provides statistics for a single category.
+message CategoryStats {
+  // Total number of objects in the category.
+  int64 total_count = 1;
+
+  // Total size of all objects in the category in bytes.
+  int64 total_size = 2;
+
+  // Number of soft-deleted objects in the category.
+  int64 soft_deleted_count = 3;
+}
+
+// ─── Tenant resource ─────────────────────────────────────────────────────────
+
+// Tenant represents a registered tenant in the system.
+message Tenant {
+  // Canonical unique identifier for the tenant (UUID).
+  string tenant_id = 1;
+
+  // Human-readable name for the tenant.
+  optional string display_name = 2;
+
+  // User-defined metadata key-value pairs.
+  map<string, string> labels = 3;
+
+  // Categorical tags for filtering and organization.
+  repeated string tags = 4;
+
+  // Timestamp when the tenant was provisioned.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Timestamp of the most recent modification.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// TenantFilter defines criteria for filtering tenants.
+message TenantFilter {
+  // Search matches tenants by ID or DisplayName.
+  string search = 1;
+
+  // Filter tenants whose labels match all provided key-value pairs.
+  map<string, string> labels = 2;
+
+  // Filter tenants that have at least one of the provided tags.
+  repeated string tags = 3;
+}
+
 // ─── Bucket resource ─────────────────────────────────────────────────────────
 
 // Bucket represents a storage container for objects.

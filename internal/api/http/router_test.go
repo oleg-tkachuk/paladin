@@ -32,7 +32,9 @@ func TestNewServer(t *testing.T) {
 		},
 	}
 	log := zap.NewNop()
-	svc := &domainmocks.MockObjectsService{}
+	objSvc := &domainmocks.MockObjectsService{}
+	catSvc := &domainmocks.MockCategoryService{}
+	tenantSvc := &domainmocks.MockTenantService{}
 	metadata := domain.AppMetadata{Version: "1.0.0"}
 	hs := &service.HealthService{}
 	var started atomic.Bool
@@ -41,7 +43,7 @@ func TestNewServer(t *testing.T) {
 	auditWriter := middleware.NewAuditBatchWriter(auditRepo, log)
 	defer auditWriter.Close()
 
-	server := NewServer(cfg, log, svc, metadata, hs, &started, startTime, auditWriter)
+	server := NewServer(cfg, log, objSvc, catSvc, tenantSvc, metadata, hs, &started, startTime, auditWriter)
 	assert.NotNil(t, server)
 
 	// Test operational endpoint

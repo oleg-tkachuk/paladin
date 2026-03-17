@@ -28,7 +28,9 @@ type Server struct {
 func NewServer(
 	cfg *config.Config,
 	log *zap.Logger,
-	svc domain.ObjectsService,
+	objSvc domain.ObjectsService,
+	catSvc domain.CategoryService,
+	tenantSvc domain.TenantService,
 	metadata domain.AppMetadata,
 	hs *service.HealthService,
 	started *atomic.Bool,
@@ -40,22 +42,32 @@ func NewServer(
 	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log, auditWriter)...)
 
 	// ─── ObjectService ─────────────────────────────────────────────────────
-	objectHandler := grpcapi.NewObjectHandler(log, svc)
+	objectHandler := grpcapi.NewObjectHandler(log, objSvc)
 	path, handler := grpcapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
 	mux.Handle(path, handler)
 
+	// ─── CategoryService ───────────────────────────────────────────────────
+	categoryHandler := grpcapi.NewCategoryHandler(log, catSvc)
+	path, handler = grpcapiconnect.NewCategoryServiceHandler(categoryHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── TenantService ─────────────────────────────────────────────────────
+	tenantHandler := grpcapi.NewTenantHandler(log, tenantSvc)
+	path, handler = grpcapiconnect.NewTenantServiceHandler(tenantHandler, interceptors)
+	mux.Handle(path, handler)
+
 	// ─── MultipartUploadService ────────────────────────────────────────────
-	multipartHandler := grpcapi.NewMultipartHandler(log, svc)
+	multipartHandler := grpcapi.NewMultipartHandler(log, objSvc)
 	path, handler = grpcapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── PresignService ────────────────────────────────────────────────────
-	presignHandler := grpcapi.NewPresignHandler(log, svc)
+	presignHandler := grpcapi.NewPresignHandler(log, objSvc)
 	path, handler = grpcapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── BulkService ───────────────────────────────────────────────────────
-	bulkHandler := grpcapi.NewBulkHandler(log, svc)
+	bulkHandler := grpcapi.NewBulkHandler(log, objSvc)
 	path, handler = grpcapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
 	mux.Handle(path, handler)
 

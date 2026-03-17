@@ -26,9 +26,14 @@ func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *con
 
 	out, err := h.svc.InitiateMultipart(ctx, msg.TenantId, msg.Bucket, msg.ContentType, msg.SizeBytes, msg.Metadata, nil, 0, &msg.IdempotencyKey)
 	if err != nil {
-		logger.FromContext(ctx).Warn("InitiateMultipartUpload failed", zap.Error(err))
+		logger.FromContext(ctx).Warn("InitiateMultipartUpload: failed", zap.Error(err), zap.String("bucket", msg.Bucket))
 		return nil, grpcError(err)
 	}
+
+	logger.FromContext(ctx).Info("InitiateMultipartUpload: successful",
+		zap.String("object_id", out.ObjectID.String()),
+		zap.String("upload_id", out.UploadID),
+		zap.String("bucket", out.Bucket))
 
 	obj := &Object{
 		ObjectId:    out.ObjectID.String(),
@@ -51,7 +56,7 @@ func (h *MultipartHandler) GeneratePartUploadUrl(ctx context.Context, req *conne
 
 	p, err := h.svc.SignPart(ctx, msg.TenantId, msg.UploadId, msg.PartNumber)
 	if err != nil {
-		logger.FromContext(ctx).Warn("GeneratePartUploadUrl failed", zap.Error(err))
+		logger.FromContext(ctx).Warn("GeneratePartUploadUrl: failed", zap.Error(err), zap.String("upload_id", msg.UploadId), zap.Int32("part", msg.PartNumber))
 		return nil, grpcError(err)
 	}
 
@@ -70,9 +75,13 @@ func (h *MultipartHandler) CompleteMultipartUpload(ctx context.Context, req *con
 
 	rec, err := h.svc.CompleteMultipart(ctx, msg.TenantId, msg.UploadId, parts)
 	if err != nil {
-		logger.FromContext(ctx).Warn("CompleteMultipartUpload failed", zap.Error(err))
+		logger.FromContext(ctx).Warn("CompleteMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
 		return nil, grpcError(err)
 	}
+
+	logger.FromContext(ctx).Info("CompleteMultipartUpload: successful",
+		zap.String("upload_id", msg.UploadId),
+		zap.String("object_id", rec.ID.String()))
 
 	return connect.NewResponse(&CompleteMultipartUploadResponse{
 		Object: objectToProto(rec),
@@ -83,9 +92,11 @@ func (h *MultipartHandler) AbortMultipartUpload(ctx context.Context, req *connec
 	msg := req.Msg
 
 	if err := h.svc.AbortMultipart(ctx, msg.TenantId, msg.UploadId); err != nil {
-		logger.FromContext(ctx).Warn("AbortMultipartUpload failed", zap.Error(err))
+		logger.FromContext(ctx).Warn("AbortMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
 		return nil, grpcError(err)
 	}
+
+	logger.FromContext(ctx).Info("AbortMultipartUpload: successful", zap.String("upload_id", msg.UploadId))
 
 	return connect.NewResponse(&AbortMultipartUploadResponse{}), nil
 }

@@ -135,8 +135,9 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	}
 
 	if updated {
-		logger.FromContext(ctx).Info(LogObjectSoftDeleted, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info("Object soft-deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	} else {
+		logger.FromContext(ctx).Warn("Soft-delete failed: object not found", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 		return apperrors.NotFound("object not found", nil)
 	}
 
@@ -206,7 +207,9 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	}
 
 	if updated {
-		logger.FromContext(ctx).Info(LogObjectRestored, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+		logger.FromContext(ctx).Info("Object restored", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	} else {
+		logger.FromContext(ctx).Warn("Restore failed: object not found", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
 	status = "success"
@@ -311,7 +314,10 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		})
 	}
 
-	logger.FromContext(ctx).Info(LogObjectPurged, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+	logger.FromContext(ctx).Info("Object purged (hard-deleted)",
+		zap.String("tenant_id", tenantID),
+		zap.String("object_id", id.String()),
+		zap.String("object_key", obj.ObjectKey))
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 

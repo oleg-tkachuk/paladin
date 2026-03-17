@@ -239,14 +239,16 @@ func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
 func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
-	svc domain.ObjectsService,
+	objSvc domain.ObjectsService,
+	catSvc domain.CategoryService,
+	tenantSvc domain.TenantService,
 	hs *service.HealthService,
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
 	startTime time.Time,
 	auditWriter *middleware.AuditBatchWriter,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, meta, hs, appStarted, startTime, auditWriter)
+	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, appStarted, startTime, auditWriter)
 }
 
 // ProvideGRPCServer builds the native gRPC server with interceptors and reflection.

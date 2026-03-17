@@ -41,8 +41,11 @@ func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Req
 
 	presigned, err := h.svc.SignUpload(ctx, msg.TenantId, rec.ID, ttl)
 	if err != nil {
+		logger.FromContext(ctx).Warn("GenerateUploadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
 	}
+
+	logger.FromContext(ctx).Info("GenerateUploadUrl: successful", zap.String("object_id", rec.ID.String()))
 
 	return connect.NewResponse(&GenerateUploadUrlResponse{
 		UploadUrl: presignedToProto(presigned),
@@ -65,8 +68,11 @@ func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.R
 
 	presigned, err := h.svc.SignDownload(ctx, msg.TenantId, rec.ID, ttl)
 	if err != nil {
+		logger.FromContext(ctx).Warn("GenerateDownloadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
 	}
+
+	logger.FromContext(ctx).Info("GenerateDownloadUrl: successful", zap.String("object_id", rec.ID.String()))
 
 	return connect.NewResponse(&GenerateDownloadUrlResponse{
 		DownloadUrl: presignedToProto(presigned),

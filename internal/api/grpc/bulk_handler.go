@@ -69,6 +69,11 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		results = append(results, result)
 	}
 
+	logger.FromContext(ctx).Info("BatchDeleteObjects: completed",
+		zap.Int64("success_count", successCount),
+		zap.Int64("failure_count", failureCount),
+		zap.String("bucket", msg.Bucket))
+
 	return connect.NewResponse(&BatchDeleteObjectsResponse{
 		Results:      results,
 		SuccessCount: successCount,
@@ -110,6 +115,11 @@ func (h *BulkHandler) BatchCopyObjects(ctx context.Context, req *connect.Request
 
 		results = append(results, result)
 	}
+
+	logger.FromContext(ctx).Info("BatchCopyObjects: completed",
+		zap.Int64("success_count", successCount),
+		zap.Int64("failure_count", failureCount),
+		zap.String("bucket", msg.Bucket))
 
 	return connect.NewResponse(&BatchCopyObjectsResponse{
 		Results:      results,

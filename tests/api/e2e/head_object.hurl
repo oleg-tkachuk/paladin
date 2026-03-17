@@ -40,7 +40,7 @@ X-Tenant-ID: test-tenant
 HTTP 200
 
 # Test 3: HEAD request for non-existent object
-HEAD {{host}}/v1/objects/00000000-0000-0000-0000-000000000000
+HEAD {{host}}/v1/objects/1eae4beb-cf17-4ddd-908d-299de9614d59
 Host: api.paladin.local
 X-Tenant-ID: test-tenant
 HTTP 404

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -133,6 +134,14 @@ func FromContext(ctx context.Context) *zap.Logger {
 			zap.String("trace_id", sc.TraceID().String()),
 			zap.String("span_id", sc.SpanID().String()),
 		)
+	}
+
+	// Enrich with request and tenant IDs
+	if rid := utils.RequestIDFromContext(ctx, ""); rid != "" {
+		l = l.With(zap.String("request_id", rid))
+	}
+	if tid := utils.TenantIDFromContext(ctx, ""); tid != "" {
+		l = l.With(zap.String("tenant_id", tid))
 	}
 
 	return l

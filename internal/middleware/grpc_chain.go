@@ -165,14 +165,9 @@ func RequestIDInterceptor() grpc.UnaryServerInterceptor {
 // so all downstream log calls automatically include it.
 func ContextLoggerInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		rid := utils.RequestIDFromContext(ctx, "")
-		l := log
-
-		if rid != "" {
-			l = l.With(zap.String("request_id", rid))
-		}
-
-		ctx = logger.WithContext(ctx, l)
+		// Just ensure the base logger is in context.
+		// logger.FromContext will enrich it with request/tenant/trace IDs.
+		ctx = logger.WithContext(ctx, log)
 
 		return handler(ctx, req)
 	}
@@ -356,12 +351,8 @@ func ConnectRequestIDInterceptor() connect.Interceptor {
 func ConnectContextLoggerInterceptor(log *zap.Logger) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			rid := utils.RequestIDFromContext(ctx, "")
-			l := log
-			if rid != "" {
-				l = l.With(zap.String("request_id", rid))
-			}
-			ctx = logger.WithContext(ctx, l)
+			// Just ensure the base logger is in context.
+			ctx = logger.WithContext(ctx, log)
 			return next(ctx, req)
 		}
 	})
@@ -486,11 +477,9 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 		return func(ctx context.Context, req connect.AnyRequest) (res connect.AnyResponse, err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					rid := utils.RequestIDFromContext(ctx, "")
 					stack := debug.Stack()
-					log.Error("Connect RPC panic recovered",
+					logger.FromContext(ctx).Error("Connect RPC panic recovered",
 						zap.Any("panic", r),
-						zap.String("request_id", rid),
 						zap.String("method", req.Spec().Procedure),
 						zap.ByteString("stacktrace", stack),
 					)
