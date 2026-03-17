@@ -1,117 +1,106 @@
-# API Specifications
+# API — Paladin (PALADIN)
 
-The `paladin` exposes both REST (HTTP) and gRPC interfaces for managing object storage and metadata.
+## Interface
 
-## 1. REST API (OpenAPI 3.0.3)
+PALADIN exposes a single Connect RPC API (gRPC + gRPC-Web + HTTP/JSON via transcoding).
+All requests are validated against `buf.validate` proto annotations.
 
-Route prefixes are versioned (e.g., `/v1`).
-All endpoints generally require `Bearer` token authentication unless explicitly marked otherwise. Multi-tenancy is enforced via the `X-Tenant-ID` header (or if trust is enabled, mapped internally).
-
-### Standard Headers
-
-- **X-Request-ID**: Correlation ID (UUID)
-- **Traceparent**: W3C Trace context
-- **Idempotency-Key**: Used for safe retries of state-mutating operations.
-
-### Objects Lifecycle
-
-- **`GET /objects`**
-  - **Purpose**: List objects with filtering (category, status, prefix, external_ref) and pagination.
-- **`POST /objects`**
-  - **Purpose**: Create a single object and return a signed `PUT` URL for upload.
-  - **Idempotency**: Supported.
-- **`GET /objects/{id}`**
-  - **Purpose**: Get object details (without signing download).
-- **`HEAD /objects/{id}`**
-  - **Purpose**: Check object existence headers (size, status, content-type).
-- **`PATCH /objects/{id}`**
-  - **Purpose**: Update object lifecycle status (abort, error). Soft-delete not allowed here.
-  - **Idempotency**: Supported.
-- **`DELETE /objects/{id}`**
-  - **Purpose**: Soft delete an object.
-  - **Idempotency**: Supported.
-- **`POST /objects/{id}/restore`**
-  - **Purpose**: Restore a soft-deleted object.
-  - **Idempotency**: Supported.
-- **`DELETE /objects/{id}/purge`**
-  - **Purpose**: Permanently purge an object (hard delete).
-  - **Idempotency**: Supported.
-
-### Objects Bulk Operations
-
-- **`POST /objects/bulk/delete`**
-  - **Purpose**: Bulk soft delete objects.
-- **`POST /objects/bulk/restore`**
-  - **Purpose**: Bulk restore soft-deleted objects.
-- **`DELETE /objects/bulk/purge`**
-  - **Purpose**: Bulk permanently purge objects.
-
-### Object Metadata & Pre-signing
-
-- **`GET /objects/{id}/meta`**
-  - **Purpose**: Get object metadata only (labels, external references).
-- **`PATCH /objects/{id}/meta`**
-  - **Purpose**: Update object metadata.
-- **`POST /objects/{id}/sign-upload`**
-  - **Purpose**: Re-issue signed upload action for an incomplete single upload.
-- **`POST /objects/{id}/sign-download`**
-  - **Purpose**: Issue signed download action (`GET`).
-- **`POST /objects/{id}/complete`**
-  - **Purpose**: Commit a single object upload. The server validates existence in S3 via `HEAD`.
-
-### Multipart Uploads (Large Files)
-
-- **`POST /multipart`**
-  - **Purpose**: Initiate a multipart upload. Returns `UploadID`.
-  - **Idempotency**: Supported.
-- **`GET /multipart/{upload_id}`**
-  - **Purpose**: Get multipart upload details.
-- **`POST /multipart/{upload_id}/parts/{part_number}/sign`**
-  - **Purpose**: Sign a single part for upload.
-- **`POST /multipart/{upload_id}/parts/sign`**
-  - **Purpose**: Sign multiple parts in batch.
-- **`POST /multipart/{upload_id}/complete`**
-  - **Purpose**: Complete and assemble a multipart upload.
-- **`POST /multipart/{upload_id}/abort`**
-  - **Purpose**: Abort a multipart upload.
-
-### Categories
-
-- **`GET /categories`**: List categories.
-- **`POST /categories`**: Create a category.
-- **`DELETE /categories/{slug}`**: Delete an empty category.
-- **`GET /categories/{slug}/stats`**: Get category use statistics.
-
-### Ops & Admin
-
-- **`GET /ops/stats`**: Get overarching object statistics.
-- **`GET /ops/s3/ping`**: Perform S3 `HEAD Bucket` check.
-- **`GET /admin/audit-logs`**: List audit logs.
-- **`GET /admin/audit-logs/{id}`**: Get audit log by ID.
-- **`GET /admin/config`**: Get runtime configuration (redacted).
-- **`GET /tenants`**: List active tenants.
-- **Health Checks (`/health/livez`, `/health/readyz`, `/health/startupz`)**: Kubernetes probes.
-- **`GET /version`**: Build constraints and versions.
+- **Proto definitions**: `proto/paladin/v1/`
+- **Port**: `:8080` (HTTP/2 via h2c)
+- **Handlers**: `internal/api/grpc/`
 
 ---
 
-## 2. gRPC API (`paladin.v1.Paladin`)
+## Services & RPCs
 
-Defined in `proto/paladin.proto`. Provides equivalent endpoints for internal microservice communication without REST overhead.
+### ObjectService
 
-- `CreateObject`
-- `GetObject`
-- `GetObjectMeta`
-- `CompleteObject`
-- `DeleteObject`
-- `InitiateMultipart`
-- `SignPart`
-- `CompleteMultipart`
-- `AbortMultipart`
+Object lifecycle management.
 
-### Internal Implementation
+| RPC | HTTP | Description |
+|-----|------|-------------|
+| `UploadObject` | `POST /v1/tenants/{tenant_id}/buckets/{bucket}/objects` | Create object + presigned upload URL |
+| `DownloadObject` | `GET /v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}` | Metadata + presigned download URL |
+| `GetObjectMetadata` | `GET /v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}/metadata` | Metadata only (no download URL) |
+| `UpdateObjectMetadata` | `PATCH /v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}/metadata` | Partial metadata update via FieldMask |
+| `DeleteObject` | `DELETE /v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}` | Soft or hard delete (via `permanent` flag) |
+| `CopyObject` | `POST .../objects/{key}:copy` | Server-side S3 copy |
+| `MoveObject` | `POST .../objects/{key}:move` | Copy + soft-delete source |
+| `ListObjects` | `GET /v1/tenants/{tenant_id}/buckets/{bucket}/objects` | Paginated listing with rich filters |
+| `CompleteObject` | `POST .../objects/{key}:complete` | Mark single-part upload as complete |
 
-- Rest API endpoints use standard OpenAPI validation middleware.
-- Handlers exist in `internal/api/http`.
-- gRPC services exist in `internal/api/grpc`.
-- Rate limiting is applied selectively based on tenant contexts.
+### PresignService
+
+Presigned URL generation for existing objects.
+
+| RPC | HTTP | Description |
+|-----|------|-------------|
+| `GenerateUploadUrl` | `POST .../objects/{key}:presign-upload` | Presigned upload URL with optional TTL |
+| `GenerateDownloadUrl` | `POST .../objects/{key}:presign-download` | Presigned download URL with optional TTL |
+
+### MultipartUploadService
+
+Multipart upload management.
+
+| RPC | HTTP | Description |
+|-----|------|-------------|
+| `InitiateMultipartUpload` | `POST /v1/tenants/{tenant_id}/buckets/{bucket}/uploads` | Start multipart session |
+| `GeneratePartUploadUrl` | `POST .../uploads/{upload_id}/parts/{part_number}:sign` | Sign individual part |
+| `CompleteMultipartUpload` | `POST .../uploads/{upload_id}:complete` | Finalize multipart |
+| `AbortMultipartUpload` | `POST .../uploads/{upload_id}:abort` | Cancel multipart |
+| `ListParts` | `GET .../uploads/{upload_id}/parts` | List uploaded parts |
+
+### BulkService
+
+Batch operations.
+
+| RPC | HTTP | Description |
+|-----|------|-------------|
+| `BatchDeleteObjects` | `POST .../objects:batchDelete` | Delete up to 1000 objects |
+| `BatchCopyObjects` | `POST .../objects:batchCopy` | Copy up to 1000 objects |
+
+### SystemService
+
+Health and diagnostics.
+
+| RPC | HTTP | Description |
+|-----|------|-------------|
+| `Healthz` | `GET /paladin.v1.SystemService/Healthz` | Liveness check |
+| `Readyz` | `GET /paladin.v1.SystemService/Readyz` | Readiness check (Postgres + S3) |
+| `Version` | `GET /paladin.v1.SystemService/Version` | Build info |
+
+### BucketService (Stub)
+
+Bucket management — not yet implemented. See `docs/TODO.md`.
+
+---
+
+## Filtering (ListObjects)
+
+The `ObjectFilter` message supports:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prefix` | `string` | Key prefix match |
+| `tags` | `map<string,string>` | All tags must match |
+| `min_size_bytes` | `int64` | Minimum size filter |
+| `max_size_bytes` | `int64` | Maximum size filter |
+| `modified_after` | `Timestamp` | Modified after timestamp |
+| `modified_before` | `Timestamp` | Modified before timestamp |
+| `status` | `ObjectStatus` | Status filter |
+| `key_pattern` | `string` | Wildcard key matching |
+| `content_type` | `string` | Exact content type match |
+
+---
+
+## Authentication & Authorization
+
+- **Tenant Isolation**: Every request must include `tenant_id` as a proto field (validated as UUID).
+- **Admin Key**: `Authorization: Bearer <admin-key>` for system-level access.
+- **Header fallback**: `X-Tenant-Id` header trusted when `Security.TrustTenantIDFromRequest` is enabled.
+- **RBAC**: Handled at the service layer via `domain.Policy` interface.
+
+## Validation
+
+All proto messages are validated at the interceptor level using `buf.build/go/protovalidate`.
+Annotations include: `string.uuid`, `string.min_len`, `int64.gt`, `repeated.min_items`, `repeated.max_items`, `required`.

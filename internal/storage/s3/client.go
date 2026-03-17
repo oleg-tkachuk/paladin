@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -34,7 +32,6 @@ type Client struct {
 
 func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	var optFns []func(*awsconfig.LoadOptions) error
-
 	// If credentials are provided in config, use them.
 	// Otherwise, LoadDefaultConfig will use the default chain (Env, IAM, etc.)
 	if cfg.AccessKey != "" || cfg.SecretKey != "" {
@@ -43,26 +40,10 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	}
 
 	createClient := func(endpoint string) (*s3.Client, error) {
-		resolved, err := url.Parse(endpoint)
-		if err != nil {
-			return nil, fmt.Errorf("invalid s3 endpoint: %w", err)
-		}
-
-		customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-			if strings.EqualFold(service, s3.ServiceID) {
-				return aws.Endpoint{
-					URL:               resolved.String(),
-					HostnameImmutable: true,
-					SigningRegion:     cfg.Region,
-				}, nil
-			}
-			return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-		})
 
 		// Prepare configuration options
 		currentOptFns := []func(*awsconfig.LoadOptions) error{
 			awsconfig.WithRegion(cfg.Region),
-			awsconfig.WithEndpointResolver(customResolver),
 		}
 		currentOptFns = append(currentOptFns, optFns...)
 
@@ -72,6 +53,7 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 		}
 
 		return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
 			o.UsePathStyle = cfg.ForcePathStyle
 		}), nil
 	}
@@ -112,6 +94,7 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	_, err := c.s3.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(c.Bucket)})
 	if err != nil {
 		c.log.Debug("S3 bucket create ignored (likely exists)", zap.String("bucket", c.Bucket), zap.Error(err))
+
 		return nil
 	}
 	c.log.Info("S3 bucket created", zap.String("bucket", c.Bucket))
@@ -142,6 +125,7 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
+
 		return domain.Presigned{}, fmt.Errorf("presign put object: %w", err)
 	}
 
@@ -177,6 +161,7 @@ func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Dura
 	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
 		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
+
 		return domain.Presigned{}, fmt.Errorf("presign get object: %w", err)
 	}
 
@@ -213,6 +198,7 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	if err != nil {
 		status = "error"
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
+
 		return domain.MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
 
@@ -276,11 +262,13 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 	if err != nil {
 		status = "error"
 		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
+
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
 	status = "success"
 	c.log.Info("S3 multipart upload completed", zap.String("key", key), zap.String("upload_id", uploadID))
+
 	return nil
 }
 
@@ -313,10 +301,12 @@ func (c *Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord
 	})
 	if err != nil {
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
+
 	return &domain.HeadRecord{
 		Key:          key,
 		ETag:         aws.ToString(out.ETag),
@@ -337,9 +327,41 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 	})
 	if err != nil {
 		status = "error"
+
 		return err
 	}
 	status = "success"
+
+	return nil
+}
+
+func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordS3Op(ctx, "copy_object", status, start) }()
+
+	copySource := fmt.Sprintf("%s/%s", c.Bucket, srcKey)
+
+	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
+		Bucket:     aws.String(c.Bucket),
+		CopySource: aws.String(copySource),
+		Key:        aws.String(dstKey),
+	})
+	if err != nil {
+		status = "error"
+		c.log.Error("S3 copy object error",
+			zap.String("src_key", srcKey),
+			zap.String("dst_key", dstKey),
+			zap.Error(err))
+
+		return fmt.Errorf("copy object: %w", err)
+	}
+
+	status = "success"
+	c.log.Info("S3 object copied",
+		zap.String("src_key", srcKey),
+		zap.String("dst_key", dstKey))
+
 	return nil
 }
 
@@ -365,6 +387,7 @@ func (c *Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
 		result.Status = "healthy"
 		result.HttpStatus = 200
 		result.Message = fmt.Sprintf("OK (latency: %v)", latency.Round(time.Millisecond))
+
 		return result, nil
 	}
 

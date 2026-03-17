@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/aws/smithy-go"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"google.golang.org/grpc/codes"
@@ -14,8 +16,6 @@ import (
 )
 
 // problemTypeBase is the base URI for RFC 7807 problem types.
-const problemTypeBase = "https://api.paladin.io/problems/"
-
 // Canonical Error Codes
 const (
 	CodeBadRequest            = "bad_request"
@@ -76,6 +76,7 @@ func (e *AppError) Error() string {
 	if e.Err != nil {
 		return fmt.Sprintf("[%s] %s: %v", e.Code, e.Message, e.Err)
 	}
+
 	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 }
 
@@ -99,6 +100,7 @@ func (e *AppError) WithContext(key string, value interface{}) *AppError {
 		e.Details = make(map[string]any)
 	}
 	e.Details[key] = value
+
 	return e
 }
 
@@ -107,6 +109,7 @@ func (e *AppError) WithStack() *AppError {
 	if e.StackTrace == "" {
 		e.StackTrace = string(debug.Stack())
 	}
+
 	return e
 }
 
@@ -120,6 +123,7 @@ func (e *AppError) WithFieldError(field, code, message string) *AppError {
 		Code:    code,
 		Message: message,
 	})
+
 	return e
 }
 
@@ -207,14 +211,18 @@ func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, Pro
 
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
-		// Wrap unknown errors as internal.
-		appErr = Internal("an unexpected error occurred", err)
+		if errors.Is(err, domain.ErrNotFound) {
+			appErr = NotFound("resource not found", err)
+		} else {
+			// Wrap unknown errors as internal.
+			appErr = Internal("an unexpected error occurred", err)
+		}
 	}
 
 	httpStatus := statusCodeForAppError(appErr.Code)
 
 	pd := ProblemDetail{
-		Type:      problemTypeBase + appErr.Code,
+		Type:      ProblemTypeBase + appErr.Code,
 		Title:     titleForCode(appErr.Code),
 		Status:    httpStatus,
 		Detail:    appErr.Message,
@@ -238,6 +246,7 @@ func MapToHTTPProblem(ctx context.Context, err error, instance string) (int, Pro
 // Kept for backward compatibility with non-HTTP layers.
 func MapToHTTP(ctx context.Context, err error) (int, any) {
 	status, pd := MapToHTTPProblem(ctx, err, "")
+
 	return status, pd
 }
 
@@ -245,6 +254,10 @@ func MapToHTTP(ctx context.Context, err error) (int, any) {
 func MapToGRPC(err error) error {
 	var appErr *AppError
 	if !errors.As(err, &appErr) {
+		if errors.Is(err, domain.ErrNotFound) {
+			return status.Error(codes.NotFound, "not found")
+		}
+
 		return status.Error(codes.Internal, "internal server error")
 	}
 
@@ -277,9 +290,24 @@ func MapToGRPC(err error) error {
 
 // IsNotFound checks if the error is a NotFound error.
 func IsNotFound(err error) bool {
+	if errors.Is(err, domain.ErrNotFound) {
+		return true
+	}
+
 	var appErr *AppError
 	if errors.As(err, &appErr) {
 		return appErr.Code == CodeNotFound
+	}
+
+	return false
+}
+
+// IsS3NotFound checks if the error is an S3 NotFound error.
+func IsS3NotFound(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "NotFound" || code == "NoSuchKey" || code == "NoSuchBucket"
 	}
 	return false
 }

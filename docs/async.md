@@ -1,32 +1,32 @@
-# Async & Jobs
+# Async & Jobs - Paladin (PALADIN)
 
-The `paladin` runs lightweight background processes embedded within the same application process to manage data lifecycle and garbage collection. There are no external message brokers (like Kafka or RabbitMQ) natively required by this service; it relies on state tracking within PostgreSQL.
+## Overview
 
-## 1. The Reaper
+PALADIN uses internal background workers to manage object lifecycle tasks that don't need to happen synchronously with request processing.
 
-The primary async worker is the **Reaper**, which runs as a periodic background goroutine.
+## Current Workers
 
-### Trigger
+### 1. Reaper (Object GC)
 
-- **Schedule:** Periodic loop governed by `housekeeping.gc_interval` configuration (e.g., every 5 minutes).
-- **Execution:** Started at app bootstrap (`app.Run()`).
+- **Implementation**: [internal/worker/reaper.go](file:///workspace/internal/worker/reaper.go)
+- **Purpose**: Cleans up metadata and physical objects that are no longer needed.
+- **Triggers**:
+  - `pending_ttl`: Purgers objects stuck in `pending` state for too long.
+  - `multipart_ttl`: Aborts expired multipart upload sessions in S3/SeaweedFS.
+- **Frequency**: Configurable via `housekeeping.gc_interval`.
 
-### Responsibilities & Side Effects
+### 2. Audit Log Archiver (TBD)
 
-1. **Pending/Soft-Deleted Object Cleanup:**
-   - **Trigger State:** Objects in `pending` or `soft_deleted` status where `updated_at < (NOW() - pending_ttl)`.
-   - **Side Effect:** Attempts to invoke `DeleteObject` on the S3 backend (best-effort, though the interface implies it might skip if not supported). Hard deletes the object record (`objRepo.Delete`) from the PostgreSQL database.
+- **Planned**: Move older audit logs from Postgres to cold storage.
 
-2. **Abandoned Multipart Uploads Cleanup:**
-   - **Trigger State:** `multipart_uploads` in `initiated` state where `updated_at < (NOW() - multipart_ttl)`.
-   - **Side Effect:** Invokes `AbortMultipartUpload` on the S3 backend to wipe orphan parts. Marks the DB record as `aborted`.
+## Async Patterns
 
-3. **Audit Log Pruning:**
-   - **Trigger State:** Logs older than `audit_log_ttl`.
-   - **Side Effect:** Hard deletes old records from the `audit_logs` table.
+PALADIN relies on **S3 Post-Object Deletion** and **Pre-signed URLs** to offload heavy I/O tasks.
 
-### Operations Characteristics
+- **Upload Completion**: When a client completes an upload, it notifies PALADIN asynchronously. PALADIN then verifies the size/etag from S3 and updates the metadata record to `active`.
+- **Soft Delete**: Deletion is marked immediately in Postgres. The physical deletion from S3 can happen asynchronously via the Reaper or a scheduled purge request.
 
-- **Retry Policy & Backoff:** The Reaper processes records in batches (e.g., limit 100). If a cleanup action fails (e.g., S3 network timeout), it logs an error but proceeds. The failed record remains in the database and will be retried automatically on the next periodic `gc_interval` tick.
-- **DLQ Behavior:** There is no explicit Dead Letter Queue. Un-deletable records continue to surface in the Reaper's queries until resolved.
-- **Idempotency:** Actionable states (like `AbortMultipartUpload`) are inherently idempotent at the S3 API level. DB actions rely on standard transactional correctness.
+## Resilience
+
+- **Idempotency**: All mutation operations (Complete, Purge, Update) support an optional `Idempotency-Key` to prevent duplicate processing of async tasks.
+- **Retry Mechanism**: The Reaper uses a simple exponential backoff for failed cleanup tasks.

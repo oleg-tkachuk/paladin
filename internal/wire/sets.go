@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
@@ -20,13 +19,14 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/migrations"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/wire"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 type Version string
@@ -49,17 +49,24 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyRepo,
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
+	ProvideTenantRepo,
+	ProvideAuditBatchWriter,
 	ProvideBreakerFactory,
 	ProvideUoWFactory,
 	ProvideCategoryService,
 	ProvideObjectsService,
-	ProvideSystemService,
+	ProvideTenantService,
 	ProvideHealthService,
 	ProvideHTTPServer,
 	ProvideGRPCServer,
+	ProvideStartTime,
 	ProvideReaper,
 	ProvideApp,
 )
+
+func ProvideStartTime() time.Time {
+	return time.Now()
+}
 
 func ProvideConfig(path ConfigPath, log BootstrapLogger) (config.Config, error) {
 	cfg := config.Config{}
@@ -85,6 +92,7 @@ func ProvideLogger(cfg config.Config) (*zap.Logger, error) {
 		return nil, err
 	}
 	logger.ReplaceGlobals(l)
+
 	return l, nil
 }
 
@@ -101,9 +109,11 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 		}
 		if err := d.Ping(ctx); err != nil {
 			d.Close()
+
 			return err
 		}
 		db = d
+
 		return nil
 	}
 	b := backoff.NewExponentialBackOff()
@@ -113,7 +123,7 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 		return nil, nil, err
 	}
 
-	if err := db.RunMigrations(ctx, "/app/migrations"); err != nil {
+	if err := db.RunMigrations(ctx, migrations.FS); err != nil {
 		l.Warn("Migrations failed", zap.Error(err))
 	}
 
@@ -130,6 +140,7 @@ func ProvideS3(ctx context.Context, cfg config.Config, l *zap.Logger) (*s3.Clien
 		return nil, err
 	}
 	_ = s3c.EnsureBucket(ctx)
+
 	return s3c, nil
 }
 
@@ -142,6 +153,7 @@ func ProvideObjectsRepo(db *postgres.DB, cfg config.Config) domain.ObjectsReposi
 	if cfg.Cache.Enabled {
 		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
 	}
+
 	return repo
 }
 
@@ -158,11 +170,16 @@ func ProvideCategoryRepo(db *postgres.DB, cfg config.Config) domain.CategoryRepo
 	if cfg.Cache.Enabled {
 		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
 	}
+
 	return repo
 }
 
 func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
 	return postgres.NewAuditLogRepo(db)
+}
+
+func ProvideAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *middleware.AuditBatchWriter {
+	return middleware.NewAuditBatchWriter(repo, log)
 }
 
 func ProvideBreakerFactory(cfg config.Config) breaker.Factory {
@@ -206,36 +223,41 @@ func ProvideObjectsService(
 	)
 }
 
-func ProvideSystemService(cfg config.Config) domain.SystemService {
-	return service.NewSystemService(&cfg)
-}
-
 func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) *service.HealthService {
 	return service.NewHealthService(db, s3c, brk)
 }
 
+func ProvideTenantRepo(db *postgres.DB) domain.TenantRepository {
+	return postgres.NewTenantRepo(db)
+}
+
+func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
+	return service.NewTenantService(repo)
+}
+
+// ProvideHTTPServer builds the Connect RPC + ops HTTP server.
 func ProvideHTTPServer(
 	cfg config.Config,
 	l *zap.Logger,
-	svc domain.ObjectsService,
+	objSvc domain.ObjectsService,
 	catSvc domain.CategoryService,
-	auditRepo domain.AuditLogRepository,
+	tenantSvc domain.TenantService,
 	hs *service.HealthService,
-	sysSvc domain.SystemService,
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
+	startTime time.Time,
+	auditWriter *middleware.AuditBatchWriter,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, catSvc, auditRepo, meta, hs, sysSvc, appStarted)
+	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, appStarted, startTime, auditWriter)
 }
 
-func ProvideGRPCServer(cfg config.Config, l *zap.Logger, svc domain.ObjectsService) *grpc.Server {
+// ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
+func ProvideGRPCServer(cfg config.Config, l *zap.Logger) *grpc.Server {
 	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
 	srv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(interceptors...),
 	)
-	grpcapi.RegisterPaladinServer(srv, grpcapi.NewServer(l, svc))
-	reflection.Register(srv)
+
 	return srv
 }
 
@@ -253,19 +275,20 @@ func ProvideApp(
 	otelShutdown observability.ShutdownFunc,
 	reaper *worker.Reaper,
 	started *atomic.Bool,
+	auditWriter *middleware.AuditBatchWriter,
 ) (*app.App, func()) {
+	h2s := &http2.Server{}
 	httpSrv := &http.Server{
 		Addr:              cfg.Server.HTTP.Addr,
-		Handler:           httpapiSrv.Handler(),
+		Handler:           h2c.NewHandler(httpapiSrv.Handler(), h2s),
 		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
 	}
-	// Note: We use meta strings directly for container but could pass the whole struct.
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
-		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started,
+		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started, auditWriter,
 	)
 
 	cleanup := func() {

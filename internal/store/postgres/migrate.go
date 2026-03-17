@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"strings"
 
@@ -32,7 +33,7 @@ func (l *gooseLogger) Printf(format string, v ...interface{}) {
 	)
 }
 
-func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
+func (d *DB) RunMigrations(ctx context.Context, fs embed.FS) error {
 	// Create a new *sql.DB just for migrations using the pool's config
 	db := stdlib.OpenDB(*d.Pool.Config().ConnConfig)
 	defer db.Close()
@@ -44,7 +45,8 @@ func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
 	gl := &gooseLogger{log: d.log}
 	goose.SetLogger(gl)
 
-	if err := goose.Up(db, migrationsDir); err != nil {
+	goose.SetBaseFS(fs)
+	if err := goose.Up(db, "."); err != nil {
 		return fmt.Errorf("goose up: %w", err)
 	}
 
@@ -52,5 +54,6 @@ func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
 		zap.String("service", "paladin"),
 		zap.Int("count", gl.count),
 	)
+
 	return nil
 }

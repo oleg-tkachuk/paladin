@@ -106,6 +106,11 @@ policy: {
   object_key_max_len: int | *1024
 }
 
+auth: {
+  enabled: bool | *true
+  admin_key: string | *""
+}
+
 security: {
   trust_tenant_id_from_request: bool | *true
   reject_tenant_mismatch: bool | *true

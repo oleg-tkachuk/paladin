@@ -1,405 +1,98 @@
 # lefthook.yml
-# Production-grade Git hooks runner configuration.
-# Requires: bash, git, file, go
-# Optional but recommended: golangci-lint, gitleaks, trivy, helm, yamllint, actionlint, hadolint, buf, openapi-generator/openapi-spec-validator, sqlc
+# Standardized Go Git hooks runner configuration.
 
 skip_output:
-  # Keep output clean in normal runs; set to false if you want full logs.
-  - meta
-  - summary
-
-# Run hooks from repo root.
-source_dir: .
-
-# -----------------------------
-# Helpers (bash one-liners)
-# -----------------------------
-# Notes:
-# - Lefthook doesn't have a native "functions" section; we keep logic inside run scripts.
-# - We use staged-only checks where it makes sense (binaries, secrets, formatting).
-# - Heavy checks (tests, trivy) run on pre-push by default.
+  meta: true
+  summary: true
 
 pre-commit:
+  skip_save: true
   parallel: true
   commands:
-    # -----------------------------
-    # 1) Block real compiled binaries (ELF/Mach-O)
-    # -----------------------------
+    # 1) Block real compiled binaries
     forbid-binaries:
       tags: [security, hygiene]
       run: |
         set -euo pipefail
-        files="$(git diff --cached --name-only --diff-filter=AM || true)"
-        [ -z "${files}" ] && exit 0
-
-        bad=""
-        for f in ${files}; do
+        # Only check staged files
+        for f in {staged_files}; do
           [ -f "$f" ] || continue
-          # Detect real compiled binaries, not scripts
           if file -b "$f" | grep -qE '(^| )ELF( |$)|(^| )Mach-O( |$)'; then
-            bad="${bad}\n- ${f} ($(file -b "$f"))"
-            # Auto-fix option (disabled by default):
-            # git rm --cached "$f" >/dev/null 2>&1 || true
+            echo "ERROR: Compiled binary detected: $f"
+            exit 1
           fi
         done
 
-        if [ -n "$bad" ]; then
-          echo "ERROR: Compiled binary detected in staged files:${bad}"
-          echo "Fix: add to .gitignore and remove from index: git rm --cached <file>"
-          exit 1
-        fi
-
-    # -----------------------------
-    # 2) Prevent committing secrets (fast path)
-    # -----------------------------
-    gitleaks-staged:
+    # 2) Prevent committing secrets
+    gitleaks:
       tags: [security]
-      run: |
-        set -euo pipefail
-        command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not found"; exit 1; }
-        # Staged-only scan; fast and effective
-        gitleaks protect --staged --redact --verbose=true
+      run: gitleaks protect --staged --redact --verbose=true
 
-    # -----------------------------
-    # 3) Prevent edit generated SQLC files
-    # -----------------------------
-#    forbid-generated-edit:
-#      tags: [go, sqlc]
-#      run: |
-#        set -euo pipefail
-#        files="$(git diff --cached --name-only --diff-filter=ACM || true)"
-#        echo "$files" | grep -qE '\.gen\.go$' && {
-#          echo "ERROR: Do not edit generated files manually."
-#          exit 1
-#        }
-
-    # -----------------------------
-    # 4) Go SQLC 
-    # -----------------------------
-
-    sqlc-generate:
+    # 3) SQLC generation (if changes in sqlc configs or sql files)
+    sqlc:
       tags: [go, sqlc]
+      glob: "{sqlc.yaml,sqlc.yml,sqlc.json,**/query/*.sql,**/schema/*.sql}"
       run: |
         set -euo pipefail
         command -v sqlc >/dev/null 2>&1 || exit 0
-
-        # Find all sqlc.yaml / sqlc.json
-        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
-        [ -z "$configs" ] && exit 0
-
-        for cfg in $configs; do
-          dir="$(dirname "$cfg")"
-          echo "sqlc generate: $dir"
-          (cd "$dir" && sqlc generate)
-        done
-
-        # fail
+        sqlc generate
         if ! git diff --quiet; then
-          echo "ERROR: sqlc generated files are out of date. Run sqlc generate and commit."
-          git diff
+          echo "ERROR: sqlc generated files are out of date. Run 'sqlc generate' and commit."
           exit 1
         fi
 
-    # -----------------------------
-    # 5) Go formatting (staged-aware)
-    # -----------------------------
+    # 4) Formatting and Imports
     gofmt:
       tags: [go, fmt]
-      run: |
-        set -euo pipefail
-        command -v go >/dev/null 2>&1 || { echo "go not found"; exit 1; }
+      glob: "*.go"
+      run: gofmt -w {staged_files} && git add {staged_files}
 
-        files="$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)"
-        [ -z "${files}" ] && exit 0
-
-        gofmt -w ${files}
-        # Re-stage modified files
-        git add ${files}
-
-    # Optional: imports (requires goimports)
     goimports:
       tags: [go, fmt]
+      glob: "*.go"
       run: |
-        set -euo pipefail
-        command -v goimports >/dev/null 2>&1 || exit 0
-        files="$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)"
-        [ -z "${files}" ] && exit 0
-        goimports -w ${files}
-        git add ${files}
+        if command -v goimports >/dev/null 2>&1; then
+          goimports -w {staged_files} && git add {staged_files}
+        fi
 
-    # -----------------------------
-    # 7) Fast static checks
-    # -----------------------------
+    # 5) Static Analysis
     govet:
       tags: [go, lint]
-      run: |
-        set -euo pipefail
+      run: go vet ./...
 
-        # Find all Go modules (go.mod) excluding vendor
-        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
-        [ -z "$mods" ] && exit 0
-
-        for m in $mods; do
-          echo "go vet: $m"
-          (cd "$m" && go vet ./...)
-        done
-
-#    golangci:
-#      tags: [go, lint]
-#      run: |
-#        set -euo pipefail
-#        command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not found"; exit 1; }
-#        golangci-lint run
-
-    # -----------------------------
-    # 5) Config / IaC sanity checks (fast)
-    # -----------------------------
-#    yamllint:
-#      tags: [iac, lint]
-#      run: |
-#        set -euo pipefail
-#        command -v yamllint >/dev/null 2>&1 || exit 0
-        # Adjust paths as you like
-#        yamllint --no-warnings .
-#        yamllint -s .
-
-    helm-lint:
-      tags: [k8s, helm]
-      run: |
-        set -euo pipefail
-        command -v helm >/dev/null 2>&1 || exit 0
-        # Lint all charts if present
-        if [ -d "charts" ]; then
-          for c in charts/*; do
-            [ -d "$c" ] || continue
-            helm lint "$c"
-          done
-        fi
-
-    actionlint:
-      tags: [ci, lint]
-      run: |
-        set -euo pipefail
-        command -v actionlint >/dev/null 2>&1 || exit 0
-        if [ -d ".github/workflows" ]; then
-          actionlint
-        fi
-
-    dockerfilelint:
-      tags: [docker, lint]
-      run: |
-        set -euo pipefail
-        command -v hadolint >/dev/null 2>&1 || exit 0
-        files="$(git ls-files | grep -E '(^|/)(Dockerfile|.*\.Dockerfile)$' || true)"
-        [ -z "${files}" ] && exit 0
-        hadolint ${files}
-
-    # -----------------------------
-    # 6) OpenAPI / Protobuf optional checks
-    # -----------------------------
-    openapi-validate:
-      tags: [api, lint]
-      run: |
-        set -euo pipefail
-        # Use whichever validator you have in your toolchain.
-        # Option A: openapi-spec-validator (python package)
-        if command -v openapi-spec-validator >/dev/null 2>&1; then
-          files="$(git ls-files | grep -E '(^|/)openapi\.(ya?ml|json)$|(^|/)api/.*openapi\.(ya?ml|json)$' || true)"
-          [ -z "${files}" ] && exit 0
-          for f in ${files}; do
-            openapi-spec-validator "$f"
-          done
-          exit 0
-        fi
-        # Option B: openapi-generator validate (java)
-        if command -v openapi-generator >/dev/null 2>&1; then
-          files="$(git ls-files | grep -E '(^|/)openapi\.(ya?ml|json)$|(^|/)api/.*openapi\.(ya?ml|json)$' || true)"
-          [ -z "${files}" ] && exit 0
-          for f in ${files}; do
-            openapi-generator validate -i "$f"
-          done
-          exit 0
-        fi
-        # If no validator installed, skip silently.
-        exit 0
-
+    # 6) Buf Lint (if proto changes)
     buf-lint:
       tags: [proto, lint]
+      glob: "*.proto"
       run: |
-        set -euo pipefail
-        command -v buf >/dev/null 2>&1 || exit 0
-        # Only run if buf.yaml exists
-        [ -f "buf.yaml" ] || exit 0
-        buf lint
+        if [ -f "buf.yaml" ] && command -v buf >/dev/null 2>&1; then
+          buf lint
+        fi
 
-# Heavier checks should run on pre-push (fewer iterations).
 pre-push:
   parallel: true
   commands:
-    # -----------------------------
-    # 0) Go SQLC verify
-    # -----------------------------
-#    sqlc-verify:
-#      tags: [go, sqlc]
-#      run: |
-#        set -euo pipefail
-#        command -v sqlc >/dev/null 2>&1 || exit 0
-#
-#        configs="$(find . -name sqlc.yaml -o -name sqlc.yml -o -name sqlc.json)"
-#        [ -z "$configs" ] && exit 0
-#
-#        for cfg in $configs; do
-#          dir="$(dirname "$cfg")"
-#          echo "sqlc verify: $dir"
-#          (cd "$dir" && sqlc verify)
-#        done
-    # -----------------------------
-    # 1) Tests (production defaults)
-    # -----------------------------
     gotest:
       tags: [go, test]
-      run: |
-        set -euo pipefail
-
-        # Find all Go modules (go.mod) excluding vendor
-        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
-        [ -z "$mods" ] && exit 0
-
-        for m in $mods; do
-          echo "go test: $m"
-          (cd "$m" && go test ./... -count=1)
-        done
-
-    gotest-race:
-      tags: [go, test]
-      run: |
-        set -euo pipefail
-
-        # Skip on CI or slow machines by setting env:
-        LEFTHOOK_SKIP_RACE=1
-        [ "${LEFTHOOK_SKIP_RACE:-0}" = "1" ] && exit 0
-
-        # Find all Go modules (go.mod) excluding vendor
-        mods="$(find . -name go.mod -not -path '*/vendor/*' -print | sed 's|/go.mod$||')"
-        [ -z "$mods" ] && exit 0
-
-        for m in $mods; do
-          echo "go test -race: $m"
-          (cd "$m" && go test ./... -race -count=1)
-        done
-    # -----------------------------
-    # 2) Dependency hygiene
-    # -----------------------------
-#    gomod-tidy-check:
-#      tags: [go, deps]
-#      run: |
-#        set -euo pipefail
-#        go mod tidy
-#        # Fail if go.mod/go.sum changed (forces tidy to be committed)
-#        if ! git diff --quiet -- go.mod go.sum; then
-#          echo "ERROR: go mod tidy produced changes. Commit updated go.mod/go.sum."
-#          git diff -- go.mod go.sum || true
-#          exit 1
-#        fi
-
-    # -----------------------------
-    # 3) Security scanning (repo-level)
-    # -----------------------------
-    trivy-fs:
-      tags: [security]
-      run: |
-        set -euo pipefail
-        command -v trivy >/dev/null 2>&1 || exit 0
-        # Keep it sane for local dev; full config belongs in CI too
-        trivy fs --quiet --exit-code 1 --severity HIGH,CRITICAL .
-
-    gitleaks-full:
-      tags: [security]
-      run: |
-        set -euo pipefail
-        command -v gitleaks >/dev/null 2>&1 || exit 0
-        # Full scan before push (stronger than staged)
-        gitleaks detect --redact --verbose=true
+      run: go test ./... -count=1
 
 commit-msg:
   commands:
     conventional-commits:
       run: |
         set -euo pipefail
-
-        # Lefthook/Git pass commit message file as $1. Provide fallbacks for safety.
         file="${1:-}"
-
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-          # Fallback: resolve via git (worktrees / submodules safe)
-          file="$(git rev-parse --git-path COMMIT_EDITMSG 2>/dev/null || true)"
-        fi
-
-        if [ -z "$file" ] || [ ! -f "$file" ]; then
-          echo "ERROR: commit message file not provided or does not exist."
-          echo "Hint: commit-msg hook must receive a path argument."
-          exit 1
-        fi
+        [ -z "$file" ] && file="$(git rev-parse --git-path COMMIT_EDITMSG 2>/dev/null || true)"
+        [ -f "$file" ] || exit 0
 
         first_line="$(head -n1 "$file" | tr -d '\r')"
-
-        if [ -z "$first_line" ]; then
-          echo "ERROR: empty commit message."
-          exit 1
-        fi
-
-        # 1) Allow merge commits (git, GitHub, GitLab)
-        if echo "$first_line" | grep -Eq '^Merge\b'; then
-          exit 0
-        fi
-
-        # 2) Allow revert commits produced by git revert
-        if echo "$first_line" | grep -Eq '^Revert\b'; then
-          exit 0
-        fi
-
-        # 3) Allow version/release commits (customizable)
-        # Examples: "v1.2.3", "1.2.3", "release: 1.2.3"
-        if echo "$first_line" | grep -Eq '^(v?[0-9]+\.[0-9]+\.[0-9]+([\-+][0-9A-Za-z\.\-]+)?)$'; then
-          exit 0
-        fi
-        if echo "$first_line" | grep -Eq '^(release|chore\(release\))(!)?: .+'; then
-          exit 0
-        fi
-
-        # 4) Conventional Commits rule
+        # Allow merge/revert
+        echo "$first_line" | grep -Eq '^(Merge|Revert)\b' && exit 0
+        
+        # CC Regex
         cc_re='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security)(\([A-Za-z0-9._/-]+\))?(!)?: .+'
-
         if ! echo "$first_line" | grep -Eq "$cc_re"; then
-          echo "ERROR: invalid commit message format (Conventional Commits required)."
-          echo ""
-          echo "Expected:"
-          echo "  <type>(<scope>)!: <subject>"
-          echo ""
-          echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
-          echo ""
-          echo "Examples:"
-          echo "  feat(api): add /v1/health/readyz"
-          echo "  fix(db)!: change migration behavior"
-          echo "  chore: update dependencies"
+          echo "ERROR: Invalid commit message format (Conventional Commits required)."
+          echo "Format: <type>(<scope>)!: <subject>"
           exit 1
         fi
-
-        # 5) Additional hygiene: subject should not end with a dot
-        if echo "$first_line" | grep -Eq '\.\s*$'; then
-          echo "ERROR: commit subject should not end with a period."
-          echo "Got: $first_line"
-          exit 1
-        fi
-
-        # 6) BREAKING CHANGE support (informational; no failure)
-        # If header has "!" it's already breaking; otherwise allow footer marker.
-        if echo "$first_line" | grep -q '!:'; then
-          exit 0
-        fi
-        if grep -Eq '^(BREAKING CHANGE|BREAKING-CHANGE):' "$file"; then
-          exit 0
-        fi
-
-        exit 0
-

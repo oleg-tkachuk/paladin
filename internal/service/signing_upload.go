@@ -30,6 +30,7 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -38,6 +39,7 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -46,18 +48,20 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 		ttl = s.s3.PresignTTLDuration()
 	}
 
-	presigned, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+	presigned, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 		return s.s3.PresignPutObject(ctx, rec.ObjectKey, rec.ContentType, rec.SizeBytes, ttl)
 	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return domain.Presigned{
 		URL:       presigned.URL,
 		Method:    presigned.Method,

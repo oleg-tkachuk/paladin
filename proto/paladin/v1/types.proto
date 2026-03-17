@@ -1,0 +1,427 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// ─── Object resource ─────────────────────────────────────────────────────────
+
+// Object represents a stored object with its full metadata, tags, and lifecycle state.
+message Object {
+  // System-generated unique identifier for the object.
+  string object_id = 1;
+
+  // Name of the bucket containing this object.
+  string bucket = 2;
+
+  // Storage key (path) within the bucket.
+  string key = 3;
+
+  // MIME type of the object content (e.g. "application/pdf").
+  string content_type = 4;
+
+  // Size of the object content in bytes.
+  int64 size_bytes = 5;
+
+  // Entity tag — opaque identifier assigned by the storage backend after upload.
+  string etag = 6;
+
+  // Checksum value computed using the algorithm specified in checksum_algorithm.
+  string checksum = 7;
+
+  // Algorithm used to compute the checksum field.
+  ChecksumAlgorithm checksum_algorithm = 8;
+
+  // Current lifecycle status of the object.
+  ObjectStatus status = 9;
+
+  // User-defined metadata key-value pairs (analogous to S3 x-amz-meta-* headers).
+  // Keys are case-insensitive and limited to ASCII. Values are opaque strings.
+  map<string, string> metadata = 10;
+
+  // User-defined tags for classification, lifecycle rules, and filtering.
+  // Separate from metadata to align with S3 object tagging API.
+  map<string, string> tags = 11;
+
+  // Timestamp when the object record was created.
+  google.protobuf.Timestamp created_at = 12;
+
+  // Timestamp of the most recent modification to the object or its metadata.
+  google.protobuf.Timestamp updated_at = 13;
+
+  // Caller-provided external reference for cross-system correlation.
+  optional string external_ref = 14;
+
+  // Tenant-scoped category slug this object belongs to (e.g. "documents/invoices").
+  string category = 15;
+
+  // Timestamp when the upload was verified and object marked complete.
+  optional google.protobuf.Timestamp completed_at = 16;
+
+  // Timestamp when the object was soft-deleted (if applicable).
+  optional google.protobuf.Timestamp deleted_at = 17;
+
+  // Timestamp when the presigned upload URL expires.
+  optional google.protobuf.Timestamp expires_at = 18;
+
+  // Size in bytes as confirmed by the storage backend on completion.
+  // May differ from size_bytes if the client-provided estimate was inaccurate.
+  optional int64 stored_size_bytes = 19;
+}
+
+// ObjectStatus represents the lifecycle state of an object.
+enum ObjectStatus {
+  // Default value. Must not be used explicitly.
+  OBJECT_STATUS_UNSPECIFIED = 0;
+
+  // Object record created; upload has not started.
+  OBJECT_STATUS_PENDING = 1;
+
+  // Upload is in progress (single or multipart).
+  OBJECT_STATUS_UPLOADING = 2;
+
+  // Object content is fully uploaded and available for download.
+  OBJECT_STATUS_AVAILABLE = 3;
+
+  // Object has been archived (e.g. moved to cold storage tier).
+  OBJECT_STATUS_ARCHIVED = 4;
+
+  // Object has been soft-deleted and can be restored.
+  OBJECT_STATUS_DELETED = 5;
+}
+
+// ObjectIdentifier provides a lightweight reference to an object.
+// Use either (bucket, key) or (bucket, object_id) to identify an object.
+message ObjectIdentifier {
+  // Name of the bucket containing the object.
+  string bucket = 1;
+
+  // Storage key of the object. Mutually exclusive with object_id in most contexts.
+  string key = 2;
+
+  // System-generated unique identifier. Mutually exclusive with key in most contexts.
+  string object_id = 3;
+}
+
+// ─── Presigned URL ───────────────────────────────────────────────────────────
+
+// PresignedUrl contains a time-limited, pre-authenticated URL for direct
+// client-to-storage operations (upload or download).
+message PresignedUrl {
+  // The pre-authenticated URL to use for the operation.
+  string url = 1;
+
+  // HTTP method to use with this URL (e.g. "PUT" for upload, "GET" for download).
+  string method = 2;
+
+  // HTTP headers that MUST be included when making the request to the presigned URL.
+  map<string, string> headers = 3;
+
+  // Timestamp when this presigned URL expires and becomes invalid.
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// ─── Checksum ────────────────────────────────────────────────────────────────
+
+// ChecksumAlgorithm specifies the algorithm used for object content integrity verification.
+enum ChecksumAlgorithm {
+  // Default value. No checksum algorithm specified.
+  CHECKSUM_ALGORITHM_UNSPECIFIED = 0;
+
+  // CRC-32C (Castagnoli) — fast, hardware-accelerated on modern CPUs.
+  CHECKSUM_ALGORITHM_CRC32C = 1;
+
+  // SHA-256 — cryptographic hash for strong integrity guarantees.
+  CHECKSUM_ALGORITHM_SHA256 = 2;
+
+  // MD5 — legacy compatibility with S3 Content-MD5 header.
+  CHECKSUM_ALGORITHM_MD5 = 3;
+}
+
+// ─── Sorting ─────────────────────────────────────────────────────────────────
+
+// SortOrder specifies ascending or descending sort direction.
+enum SortOrder {
+  // Default value. Server chooses the default order.
+  SORT_ORDER_UNSPECIFIED = 0;
+
+  // Ascending order (smallest/oldest first).
+  SORT_ORDER_ASC = 1;
+
+  // Descending order (largest/newest first).
+  SORT_ORDER_DESC = 2;
+}
+
+// ─── Filtering ───────────────────────────────────────────────────────────────
+
+// ObjectFilter defines criteria for filtering objects in list operations.
+// All specified fields are combined with AND logic.
+message ObjectFilter {
+  // Filter objects whose key starts with this prefix.
+  string prefix = 1;
+
+  // Filter objects that have ALL of these tags (key-value match).
+  map<string, string> tags = 2;
+
+  // Filter objects whose size_bytes is >= this value.
+  optional int64 min_size_bytes = 3;
+
+  // Filter objects whose size_bytes is <= this value.
+  optional int64 max_size_bytes = 4;
+
+  // Filter objects modified at or after this timestamp.
+  google.protobuf.Timestamp modified_after = 5;
+
+  // Filter objects modified at or before this timestamp.
+  google.protobuf.Timestamp modified_before = 6;
+
+  // Filter objects by lifecycle status.
+  ObjectStatus status = 7;
+
+  // Filter objects whose key matches this pattern.
+  // Supports '*' wildcard for prefix/suffix matching.
+  string key_pattern = 8;
+
+  // Filter objects by content type (exact match).
+  string content_type = 9;
+}
+
+// ─── Category resource ───────────────────────────────────────────────────────
+
+// Category represents a tenant-scoped object category.
+message Category {
+  // System-generated unique identifier.
+  string category_id = 1;
+
+  // Tenant identifier.
+  string tenant_id = 2;
+
+  // Unique slug for the category (e.g. "documents/invoices").
+  string slug = 3;
+
+  // Human-readable name.
+  string name = 4;
+
+  // Optional detailed description.
+  optional string description = 5;
+
+  // Timestamp when the category was created.
+  google.protobuf.Timestamp created_at = 6;
+
+  // Timestamp of the most recent modification.
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// CategoryFilter defines criteria for filtering categories.
+message CategoryFilter {
+  // Search matches categories by slug or name.
+  string search = 1;
+}
+
+// CategoryStats provides statistics for a single category.
+message CategoryStats {
+  // Total number of objects in the category.
+  int64 total_count = 1;
+
+  // Total size of all objects in the category in bytes.
+  int64 total_size = 2;
+
+  // Number of soft-deleted objects in the category.
+  int64 soft_deleted_count = 3;
+}
+
+// ─── Tenant resource ─────────────────────────────────────────────────────────
+
+// Tenant represents a registered tenant in the system.
+message Tenant {
+  // Canonical unique identifier for the tenant (UUID).
+  string tenant_id = 1;
+
+  // Human-readable name for the tenant.
+  optional string display_name = 2;
+
+  // User-defined metadata key-value pairs.
+  map<string, string> labels = 3;
+
+  // Categorical tags for filtering and organization.
+  repeated string tags = 4;
+
+  // Timestamp when the tenant was provisioned.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Timestamp of the most recent modification.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// TenantFilter defines criteria for filtering tenants.
+message TenantFilter {
+  // Search matches tenants by ID or DisplayName.
+  string search = 1;
+
+  // Filter tenants whose labels match all provided key-value pairs.
+  map<string, string> labels = 2;
+
+  // Filter tenants that have at least one of the provided tags.
+  repeated string tags = 3;
+}
+
+// ─── Bucket resource ─────────────────────────────────────────────────────────
+
+// Bucket represents a storage container for objects.
+message Bucket {
+  // Globally unique name of the bucket.
+  string name = 1;
+
+  // Optional display label for the bucket.
+  string display_name = 2;
+
+  // Optional region or location hint (e.g. "us-east-1").
+  string region = 3;
+
+  // Current configuration for versioning, lifecycle, and access control.
+  BucketConfiguration configuration = 4;
+
+  // Timestamp when the bucket was created.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Timestamp of the most recent modification to the bucket or its configuration.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// BucketConfiguration holds the operational settings for a bucket.
+message BucketConfiguration {
+  // Versioning settings for the bucket.
+  VersioningConfiguration versioning = 1;
+
+  // Object lifecycle management rules.
+  LifecycleConfiguration lifecycle = 2;
+
+  // Access control settings.
+  AccessControlConfiguration access_control = 3;
+}
+
+// VersioningConfiguration controls whether object versioning is enabled.
+message VersioningConfiguration {
+  // Whether versioning is enabled for the bucket.
+  bool enabled = 1;
+}
+
+// LifecycleConfiguration defines automatic object lifecycle management rules.
+message LifecycleConfiguration {
+  // Ordered list of lifecycle rules. Rules are evaluated in order;
+  // the first matching rule is applied.
+  repeated LifecycleRule rules = 1;
+}
+
+// LifecycleRule defines a single lifecycle management rule.
+message LifecycleRule {
+  // Unique identifier for this rule within the bucket.
+  string id = 1;
+
+  // Whether this rule is currently active.
+  bool enabled = 2;
+
+  // Filter that determines which objects this rule applies to.
+  LifecycleRuleFilter filter = 3;
+
+  // Action to transition objects to a different storage class.
+  optional LifecycleTransition transition = 4;
+
+  // Action to expire (delete) objects after a period.
+  optional LifecycleExpiration expiration = 5;
+}
+
+// LifecycleRuleFilter restricts which objects a lifecycle rule applies to.
+message LifecycleRuleFilter {
+  // Apply rule only to objects whose key starts with this prefix.
+  string prefix = 1;
+
+  // Apply rule only to objects that have ALL of these tags.
+  map<string, string> tags = 2;
+
+  // Apply rule only to objects larger than this size in bytes.
+  optional int64 min_size_bytes = 3;
+
+  // Apply rule only to objects smaller than this size in bytes.
+  optional int64 max_size_bytes = 4;
+}
+
+// LifecycleTransition moves objects to a different storage class after a specified duration.
+message LifecycleTransition {
+  // Duration after object creation before transitioning.
+  google.protobuf.Duration after = 1;
+
+  // Target storage class (e.g. "GLACIER", "STANDARD_IA").
+  string storage_class = 2;
+}
+
+// LifecycleExpiration deletes objects after a specified duration.
+message LifecycleExpiration {
+  // Duration after object creation before expiration.
+  google.protobuf.Duration after = 1;
+}
+
+// AccessControlConfiguration defines the access control settings for a bucket.
+message AccessControlConfiguration {
+  // List of access control entries (grants).
+  repeated AccessControlEntry entries = 1;
+}
+
+// AccessControlEntry grants a permission to a specific grantee on the bucket.
+message AccessControlEntry {
+  // Identifier of the grantee (user, group, or special value like "*" for public).
+  string grantee = 1;
+
+  // Permission granted to the grantee.
+  Permission permission = 2;
+}
+
+// Permission defines the level of access granted by an ACL entry.
+enum Permission {
+  // Default value. Must not be used explicitly.
+  PERMISSION_UNSPECIFIED = 0;
+
+  // Read access to objects in the bucket.
+  PERMISSION_READ = 1;
+
+  // Write access to create/modify objects in the bucket.
+  PERMISSION_WRITE = 2;
+
+  // Read access to the bucket's ACL.
+  PERMISSION_READ_ACP = 3;
+
+  // Write access to modify the bucket's ACL.
+  PERMISSION_WRITE_ACP = 4;
+
+  // Full control (all permissions).
+  PERMISSION_FULL_CONTROL = 5;
+}
+
+// ─── Multipart upload part ───────────────────────────────────────────────────
+
+// CompletedPart represents a successfully uploaded part in a multipart upload.
+message CompletedPart {
+  // Sequential part number (starting from 1).
+  int32 part_number = 1;
+
+  // Entity tag returned by the storage backend after the part was uploaded.
+  string etag = 2;
+}
+
+// PartInfo describes a single part within a multipart upload.
+message PartInfo {
+  // Sequential part number.
+  int32 part_number = 1;
+
+  // Size of this part in bytes.
+  int64 size_bytes = 2;
+
+  // Entity tag for this part.
+  string etag = 3;
+
+  // Timestamp when this part was uploaded.
+  google.protobuf.Timestamp uploaded_at = 4;
+}

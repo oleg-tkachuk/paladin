@@ -32,8 +32,10 @@ var auditLogsPruneCmd = &cobra.Command{
 		if err != nil {
 			// Handle simple "30d" format which time.ParseDuration doesn't support
 			if len(retention) > 1 && retention[len(retention)-1] == 'd' {
-				days := 0
-				fmt.Sscanf(retention, "%dd", &days)
+				var days int
+				if _, sErr := fmt.Sscanf(retention, "%dd", &days); sErr != nil {
+					bootstrap.Fatal("Invalid retention format (failed to parse days)", zap.String("retention", retention), zap.Error(sErr))
+				}
 				retentionDuration = time.Duration(days) * 24 * time.Hour
 			} else {
 				bootstrap.Fatal("Invalid retention format", zap.String("retention", retention), zap.Error(err))

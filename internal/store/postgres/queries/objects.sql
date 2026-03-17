@@ -3,9 +3,9 @@
 -- name: CreateObject :exec
 INSERT INTO objects (
     id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, expires_at, labels, external_ref, category, subpath
+    checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 );
 
 -- name: GetObject :one
@@ -17,6 +17,11 @@ WHERE tenant_id = $1 AND id = $2;
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND external_ref = $2;
+
+-- name: GetObjectByKey :one
+SELECT sqlc.embed(objects)
+FROM objects
+WHERE tenant_id = $1 AND bucket = $2 AND object_key = $3;
 
 -- name: MarkObjectComplete :execrows
 UPDATE objects
@@ -60,18 +65,31 @@ WHERE tenant_id = $1
 -- name: ListObjects :many
 SELECT sqlc.embed(objects), COUNT(*) OVER() AS total_count
 FROM objects
-WHERE tenant_id = $1
+WHERE tenant_id = @tenant_id
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('external_ref')::text IS NULL OR external_ref = sqlc.narg('external_ref'))
-  AND (sqlc.narg('created_after')::timestamptz IS NULL OR created_at >= sqlc.narg('created_after'))
-  AND (sqlc.narg('created_before')::timestamptz IS NULL OR created_at < sqlc.narg('created_before'))
-  AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
-  AND (sqlc.narg('category')::text IS NULL OR category = sqlc.narg('category'))
+  AND (@created_after::timestamptz IS NULL OR created_at >= @created_after::timestamptz)
+  AND (@created_before::timestamptz IS NULL OR created_at < @created_before::timestamptz)
+  AND (@cursor::timestamptz IS NULL OR created_at < @cursor::timestamptz)
+  AND (
+    sqlc.narg('category')::text IS NULL OR 
+    (@recursive::bool AND (category = sqlc.narg('category') OR category LIKE sqlc.narg('category') || '/%')) OR
+    category = sqlc.narg('category')
+  )
   AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
 ORDER BY
-    CASE WHEN sqlc.arg('sort_order')::text = 'asc' THEN created_at END ASC,
-    CASE WHEN sqlc.arg('sort_order')::text = 'desc' OR sqlc.arg('sort_order')::text IS NULL THEN created_at END DESC
-LIMIT $2;
+    -- Sorting logic
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'asc' THEN object_key END ASC,
+    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'desc' THEN object_key END DESC,
+    CASE WHEN @sort_by::text = 'category' AND @sort_order::text = 'asc' THEN category END ASC,
+    CASE WHEN @sort_by::text = 'category' AND @sort_order::text = 'desc' THEN category END DESC,
+    CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'asc' THEN size_bytes END ASC,
+    CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'desc' THEN size_bytes END DESC,
+    CASE WHEN @sort_by::text = 'status' AND @sort_order::text = 'asc' THEN status END ASC,
+    CASE WHEN @sort_by::text = 'status' AND @sort_order::text = 'desc' THEN status END DESC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND @sort_order::text = 'asc' THEN created_at END ASC,
+    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND (@sort_order::text = 'desc' OR @sort_order::text IS NULL) THEN created_at END DESC
+LIMIT @limit_val;
 
 -- name: UpdateObjectStatus :execrows
 UPDATE objects

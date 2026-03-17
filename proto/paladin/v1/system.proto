@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// SystemService provides health checks, readiness probes, and service
+// information for infrastructure monitoring and orchestration.
+service SystemService {
+  // Ping is a minimal connectivity check that returns immediately.
+  // Use for basic reachability testing only — it does not verify dependencies.
+  rpc Ping(PingRequest) returns (PingResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/ping"
+    };
+  }
+
+  // GetLivez returns the liveness status of the service process.
+  // A non-live service should be restarted by the orchestrator.
+  rpc GetLivez(GetLivezRequest) returns (GetLivezResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/livez"
+    };
+  }
+
+  // GetReadyz returns the readiness status of the service and all its
+  // dependencies (database, object storage, etc.).
+  // A non-ready service should be removed from the load balancer.
+  rpc GetReadyz(GetReadyzRequest) returns (GetReadyzResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/readyz"
+    };
+  }
+
+  // GetStartupz returns the startup status of the service.
+  // Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
+  rpc GetStartupz(GetStartupzRequest) returns (GetStartupzResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/startupz"
+    };
+  }
+
+  // GetInfo returns detailed information about the service build, runtime,
+  // and environment for debugging and operational visibility.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {
+    option (google.api.http) = {
+      get: "/v1/system/info"
+    };
+  }
+}
+
+// HealthStatus represents the health of the service or a dependency.
+enum HealthStatus {
+  // Default value. Status has not been determined.
+  HEALTH_STATUS_UNSPECIFIED = 0;
+
+  // The component is functioning normally.
+  HEALTH_STATUS_HEALTHY = 1;
+
+  // The component is not functioning and should be restarted or investigated.
+  HEALTH_STATUS_UNHEALTHY = 2;
+
+  // The component is partially functional — some operations may fail.
+  HEALTH_STATUS_DEGRADED = 3;
+
+  // The component has been intentionally disabled.
+  HEALTH_STATUS_DISABLED = 4;
+}
+
+// ─── Ping ────────────────────────────────────────────────────────────────────
+
+// PingRequest is an empty request for the connectivity check.
+message PingRequest {}
+
+// PingResponse contains a simple acknowledgment message.
+message PingResponse {
+  // Human-readable acknowledgment (e.g. "pong").
+  string message = 1;
+}
+
+// ─── Liveness ────────────────────────────────────────────────────────────────
+
+// GetLivezRequest is an empty request for the liveness probe.
+message GetLivezRequest {}
+
+// GetLivezResponse indicates whether the service process is alive.
+message GetLivezResponse {
+  // Human-readable status description.
+  string status = 1;
+
+  // Structured health indicator.
+  HealthStatus health = 2;
+}
+
+// ─── Readiness ───────────────────────────────────────────────────────────────
+
+// GetReadyzRequest is an empty request for the readiness probe.
+message GetReadyzRequest {}
+
+// GetReadyzResponse indicates whether the service is ready to accept traffic.
+message GetReadyzResponse {
+  // Human-readable status description.
+  string status = 1;
+
+  // Structured health indicator for the overall service.
+  HealthStatus health = 2;
+
+  // Status of each dependency checked during the readiness evaluation.
+  repeated DependencyStatus dependencies = 3;
+}
+
+// DependencyStatus reports the health of a single service dependency.
+message DependencyStatus {
+  // Name of the dependency (e.g. "postgres", "s3", "redis").
+  string name = 1;
+
+  // Health status of the dependency.
+  HealthStatus health = 2;
+
+  // Human-readable message with additional detail (e.g. error description).
+  string message = 3;
+
+  // Latency of the health check in milliseconds.
+  int64 latency_ms = 4;
+}
+
+// ─── Startup ─────────────────────────────────────────────────────────────────
+
+// GetStartupzRequest is an empty request for the startup probe.
+message GetStartupzRequest {}
+
+// GetStartupzResponse indicates whether the service has completed startup.
+message GetStartupzResponse {
+  // Human-readable status description.
+  string status = 1;
+
+  // Structured health indicator.
+  HealthStatus health = 2;
+}
+
+// ─── Info ────────────────────────────────────────────────────────────────────
+
+// GetInfoRequest is an empty request for service information.
+message GetInfoRequest {}
+
+// GetInfoResponse contains detailed service, build, and runtime information.
+message GetInfoResponse {
+  // Service identification.
+  ServiceInfo service = 1;
+
+  // Build-time information.
+  BuildInfo build = 2;
+
+  // Runtime environment information.
+  RuntimeInfo runtime = 3;
+
+  // Deployment environment name (e.g. "production", "staging", "development").
+  string environment = 4;
+}
+
+// ServiceInfo identifies the service.
+message ServiceInfo {
+  // Name of the service (e.g. "paladin").
+  string name = 1;
+
+  // Semantic version of the service (e.g. "1.2.3").
+  string version = 2;
+}
+
+// BuildInfo contains build-time metadata.
+message BuildInfo {
+  // Git commit SHA at build time.
+  string commit = 1;
+
+  // Timestamp when the binary was built.
+  google.protobuf.Timestamp build_time = 2;
+}
+
+// RuntimeInfo contains runtime environment details.
+message RuntimeInfo {
+  // Go runtime version (e.g. "go1.25.5").
+  string go_version = 1;
+
+  // Operating system (e.g. "linux").
+  string os = 2;
+
+  // CPU architecture (e.g. "amd64", "arm64").
+  string arch = 3;
+
+  // Timestamp when the service process started.
+  google.protobuf.Timestamp start_time = 4;
+
+  // Human-readable uptime string (e.g. "2h15m30s").
+  string uptime = 5;
+}

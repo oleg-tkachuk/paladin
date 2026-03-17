@@ -7,11 +7,11 @@ app:
 logger:
   level: debug # debug, info, warn, error, dpanic, panic, fatal
   format: json # json, console
-  development: false
+  development: true
   disable_caller: false
   disable_stacktrace: true
   sampling:
-    enabled: true
+    enabled: false
     initial: 100
     thereafter: 100
   # fields default to app.name / app.env — only override when they must differ
@@ -31,7 +31,7 @@ otel:
 # ─── Network ────────────────────────────────────────────────────────────────
 
 server:
-  mode: release # debug | test | release
+  mode: debug # debug | test | release
   name: paladin
 
   http:
@@ -65,7 +65,7 @@ server:
 
   grpc:
     addr: "0.0.0.0:9090"
-    reflection_enabled: false
+    reflection_enabled: true
     max_recv_msg_size: 4194304 # 4 MiB
     max_send_msg_size: 4194304 # 4 MiB
 
@@ -95,7 +95,7 @@ datastores:
     bucket: paladin
     region: us-east-1
     endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
-    public_endpoint: "http://s3.paladin.local"
+    public_endpoint: "https://s3.paladin.local"
     force_path_style: true
     access_key: dummy_access_key # override via secret in non-local envs
     secret_key: dummy_secret_key # override via secret in non-local envs
@@ -125,8 +125,11 @@ policy:
   allowed_content_types:
     - "image/jpeg"
     - "image/png"
-    - "application/pdf"
+    - "image/heic"
+    - "image/heif"
+    - "image/tiff"
     - "text/plain"
+    - "application/pdf"
     - "application/json"
     - "application/octet-stream"
 
@@ -135,6 +138,11 @@ policy:
   labels_max_keys: 10
   external_ref_max_len: 256
   object_key_max_len: 1024
+
+# ─── Auth ───
+auth:
+  enabled: false
+  admin_key: ""
 
 # ─── Security ───────────────────────────────────────────────────────────────
 

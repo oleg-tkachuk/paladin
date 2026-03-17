@@ -33,9 +33,25 @@ func (r *CachedCategoryRepo) Create(ctx context.Context, rec domain.Category) er
 		return err
 	}
 
-	// Invalidate exists cache
+	// Invalidate caches
 	existsKey := fmt.Sprintf("cat:exists:%s:%s", rec.TenantID, rec.Slug)
+	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
 	_ = r.cache.Delete(ctx, existsKey)
+	_ = r.cache.Delete(ctx, getKey)
+
+	return nil
+}
+
+// Update modifies a category and invalidates related caches
+func (r *CachedCategoryRepo) Update(ctx context.Context, rec domain.Category) error {
+	err := r.repo.Update(ctx, rec)
+	if err != nil {
+		return err
+	}
+
+	// Invalidate caches
+	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
+	_ = r.cache.Delete(ctx, getKey)
 
 	return nil
 }
@@ -47,6 +63,7 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if cat, ok := val.(*domain.Category); ok {
 			metrics.RecordCacheOp(ctx, "category_get", "hit")
+
 			return cat, nil
 		}
 	}
@@ -59,12 +76,13 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, cat, r.ttl)
+
 	return cat, nil
 }
 
 // List delegates to underlying repo (no caching for list)
-func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	return r.repo.List(ctx, tenantID, limit, cursor)
+func (r *CachedCategoryRepo) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	return r.repo.List(ctx, tenantID, filter)
 }
 
 // Delete removes a category and invalidates related caches
@@ -92,6 +110,7 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if exists, ok := val.(bool); ok {
 			metrics.RecordCacheOp(ctx, "category_exists", "hit")
+
 			return exists, nil
 		}
 	}
@@ -104,6 +123,7 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, exists, r.ttl)
+
 	return exists, nil
 }
 
@@ -118,6 +138,7 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 	if val, ok := r.cache.Get(ctx, cacheKey); ok {
 		if stats, ok := val.(*domain.CategoryStats); ok {
 			metrics.RecordCacheOp(ctx, "category_stats", "hit")
+
 			return stats, nil
 		}
 	}
@@ -130,6 +151,7 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 	}
 
 	_ = r.cache.Set(ctx, cacheKey, stats, r.ttl)
+
 	return stats, nil
 }
 

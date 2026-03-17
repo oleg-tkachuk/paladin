@@ -13,6 +13,7 @@ type ObjectsService interface {
 	CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
+	GetByKey(ctx context.Context, tenantID, bucket, key string) (*Object, error)
 	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*Object, error)
 	// Delete performs a soft delete
 	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
@@ -24,12 +25,18 @@ type ObjectsService interface {
 	BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error)
 	BulkPurge(ctx context.Context, tenantID string, ids []uuid.UUID, idempotencyKey *string) (int64, error)
+	BulkCreate(ctx context.Context, tenantID string, items []CreateObjectRequest, idempotencyKey *string) ([]CreateObjectResponse, error)
+	BulkPatch(ctx context.Context, tenantID string, items []BulkPatchItem, idempotencyKey *string) (int64, error)
+	BulkSignUploads(ctx context.Context, tenantID string, items []SignUploadItem) ([]CreateObjectResponse, error)
+	BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*Object, error)
 	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
-	List(ctx context.Context, tenantID string, filter ListObjectsFilter, limit int, cursor string) ([]Object, string, int64, error)
+	List(ctx context.Context, tenantID string, filter ListObjectsFilter) ([]Object, string, int64, error)
 	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (Presigned, error)
 	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (Presigned, error)
+	CopyObject(ctx context.Context, tenantID, srcBucket, srcKey, dstBucket, dstKey string, metadata map[string]string) (*Object, error)
+	MoveObject(ctx context.Context, tenantID, srcBucket, srcKey, dstBucket, dstKey string) (*Object, error)
 
 	// InitiateMultipart starts a multipart upload.
 	// category must be a slug of an existing tenant category.
@@ -39,6 +46,7 @@ type ObjectsService interface {
 	SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]SignPartResponse, error)
 	CompleteMultipart(ctx context.Context, tenantID string, uploadID string, parts []CompletePart) (*Object, error)
 	AbortMultipart(ctx context.Context, tenantID string, uploadID string) error
+	ListParts(ctx context.Context, tenantID string, uploadID string) ([]MultipartPart, error)
 	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
 }
 
@@ -55,6 +63,7 @@ const (
 	ActionRead   Action = "read"
 	ActionUpdate Action = "update"
 	ActionDelete Action = "delete"
+	ActionPatch  Action = "patch"
 )
 
 // SystemConfig represents the sanitized system configuration for administrative display.
@@ -100,6 +109,9 @@ type SystemConfig struct {
 		PresignPutTTL       string
 		PresignGetTTL       string
 		AllowedContentTypes []string
+	}
+	Auth struct {
+		Enabled bool
 	}
 	Security struct {
 		TrustTenantIDFromRequest bool

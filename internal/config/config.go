@@ -42,8 +42,8 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	}
 
 	// Load environment variables prefixed with PALADIN_ and replace _ with .
-	if err := k.Load(env.Provider("PALADIN_", ".", func(s string) string {
-		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "PALADIN_")), "_", ".", -1)
+	if err := k.Load(env.Provider(EnvPrefix, ".", func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, EnvPrefix)), "_", ".")
 	}), nil); err != nil {
 		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}
@@ -76,7 +76,7 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	}
 
 	// Resolve secrets if running in a Kubernetes environment
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
 		resolver := NewK8sSecretResolver()
 		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
 			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
@@ -195,6 +195,8 @@ func (c *Config) Sanitize() domain.SystemConfig {
 	sc.Policy.PresignPutTTL = c.Policy.PresignPutTTL.String()
 	sc.Policy.PresignGetTTL = c.Policy.PresignGetTTL.String()
 	sc.Policy.AllowedContentTypes = c.Policy.AllowedContentTypes
+
+	sc.Auth.Enabled = c.Auth.Enabled
 
 	sc.Security.TrustTenantIDFromRequest = c.Security.TrustTenantIDFromRequest
 	sc.Security.RejectTenantMismatch = c.Security.RejectTenantMismatch

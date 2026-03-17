@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dustin/go-humanize"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 )
 
 func ParseSizeString(s string) (int64, error) {
@@ -11,6 +12,5 @@ func ParseSizeString(s string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse size %q: %w", s, err)
 	}
-
-	return int64(b), nil
+	return safecast.Int64(b), nil
 }

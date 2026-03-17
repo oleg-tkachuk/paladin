@@ -1,6 +1,11 @@
 package config
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+
+	yaml "github.com/oasdiff/yaml3"
+)
 
 type Config struct {
 	App          App          `yaml:"app" json:"app"`
@@ -8,6 +13,7 @@ type Config struct {
 	Server       Server       `yaml:"server" json:"server"`
 	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
 	Policy       Policy       `yaml:"policy" json:"policy"`
+	Auth         Auth         `yaml:"auth" json:"auth"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
 	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
@@ -25,6 +31,47 @@ type SecretRef struct {
 	Name      string `yaml:"name" json:"name"`
 	Key       string `yaml:"key" json:"key"` // Defaults to "password" if empty
 	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+// UnmarshalJSON parses either a string (secret name) or an object (full ref).
+func (s *SecretRef) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		s.Name = str
+		s.Key = DefaultSecretKey
+
+		return nil
+	}
+
+	type rawSecretRef SecretRef
+	if err := json.Unmarshal(data, (*rawSecretRef)(s)); err != nil {
+		return err
+	}
+	if s.Key == "" {
+		s.Key = DefaultSecretKey
+	}
+
+	return nil
+}
+
+// UnmarshalYAML parses either a string (secret name) or an object (full ref).
+func (s *SecretRef) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		s.Name = value.Value
+		s.Key = DefaultSecretKey
+
+		return nil
+	}
+
+	type rawSecretRef SecretRef
+	if err := value.Decode((*rawSecretRef)(s)); err != nil {
+		return err
+	}
+	if s.Key == "" {
+		s.Key = DefaultSecretKey
+	}
+
+	return nil
 }
 
 type App struct {
@@ -157,6 +204,11 @@ type Policy struct {
 	ObjectKeyMaxLen       int           `yaml:"object_key_max_len" json:"object_key_max_len"`
 }
 
+type Auth struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	AdminKey string `yaml:"admin_key" json:"admin_key"`
+}
+
 type Security struct {
 	TrustTenantIDFromRequest bool `yaml:"trust_tenant_id_from_request" json:"trust_tenant_id_from_request"`
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
@@ -174,6 +226,7 @@ type Housekeeping struct {
 }
 
 type RateLimit struct {
+	Enabled           bool          `yaml:"enabled" json:"enabled"`
 	RequestsPerSecond float64       `yaml:"requests_per_second" json:"requests_per_second"`
 	Burst             int           `yaml:"burst" json:"burst"`
 	MaxTenants        int           `yaml:"max_tenants" json:"max_tenants"`

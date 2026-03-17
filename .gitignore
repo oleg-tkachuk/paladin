@@ -41,3 +41,8 @@ server
 
 # But do NOT ignore directory named "server"
 !server/
+
+tests/grpcurl/reports
+tests/api/mutations/reports
+tests/api/security/reports
+

@@ -1,25 +1,21 @@
 package middleware
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"hash"
-	"io"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
 )
 
-// auditBatchWriter collects audit log entries and flushes them in batches.
-type auditBatchWriter struct {
+// AuditBatchWriter collects audit log entries and flushes them in batches.
+type AuditBatchWriter struct {
 	ch   chan domain.AuditLog
 	repo domain.AuditLogRepository
 	log  *zap.Logger
@@ -32,19 +28,20 @@ const (
 	auditFlushDelay  = 500 * time.Millisecond
 )
 
-// newAuditBatchWriter starts a background goroutine that batches audit writes.
-func newAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *auditBatchWriter {
-	w := &auditBatchWriter{
+// NewAuditBatchWriter starts a background goroutine that batches audit writes.
+func NewAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *AuditBatchWriter {
+	w := &AuditBatchWriter{
 		ch:   make(chan domain.AuditLog, auditChannelSize),
 		repo: repo,
 		log:  log,
 	}
 	w.wg.Add(1)
 	go w.run()
+
 	return w
 }
 
-func (w *auditBatchWriter) send(entry domain.AuditLog) {
+func (w *AuditBatchWriter) send(entry domain.AuditLog) {
 	select {
 	case w.ch <- entry:
 	default:
@@ -52,7 +49,12 @@ func (w *auditBatchWriter) send(entry domain.AuditLog) {
 	}
 }
 
-func (w *auditBatchWriter) run() {
+func (w *AuditBatchWriter) Close() {
+	close(w.ch)
+	w.wg.Wait()
+}
+
+func (w *AuditBatchWriter) run() {
 	defer w.wg.Done()
 	batch := make([]domain.AuditLog, 0, auditBatchSize)
 	timer := time.NewTimer(auditFlushDelay)
@@ -66,6 +68,7 @@ func (w *auditBatchWriter) run() {
 				if len(batch) > 0 {
 					w.flush(batch)
 				}
+
 				return
 			}
 			batch = append(batch, entry)
@@ -84,7 +87,7 @@ func (w *auditBatchWriter) run() {
 	}
 }
 
-func (w *auditBatchWriter) flush(batch []domain.AuditLog) {
+func (w *AuditBatchWriter) flush(batch []domain.AuditLog) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -98,141 +101,83 @@ func (w *auditBatchWriter) flush(batch []domain.AuditLog) {
 	}
 }
 
-// errorBodyWriter captures response body only for error responses (status >= 400).
-type errorBodyWriter struct {
-	gin.ResponseWriter
-	body       *bytes.Buffer
-	statusCode int
-}
+// ConnectAuditLogInterceptor creates an interceptor that logs RPC requests to the audit writer.
+func ConnectAuditLogInterceptor(writer *AuditBatchWriter) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			start := time.Now()
 
-func (w *errorBodyWriter) WriteHeader(code int) {
-	w.statusCode = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *errorBodyWriter) Write(b []byte) (int, error) {
-	// Only capture body for error responses
-	if w.statusCode >= 400 || w.statusCode == 0 {
-		w.body.Write(b)
-	}
-	return w.ResponseWriter.Write(b)
-}
-
-// AuditLogMiddleware creates audit logging middleware with batched writes and
-// streaming body hashing (no pre-read delay).
-func AuditLogMiddleware(repo domain.AuditLogRepository, log *zap.Logger) gin.HandlerFunc {
-	writer := newAuditBatchWriter(repo, log)
-
-	return func(c *gin.Context) {
-		start := time.Now()
-
-		// 1. Stream-hash request body with TeeReader (no pre-read copy)
-		var bodySize *int64
-		var bodyHash hash.Hash
-
-		if c.Request.Body != nil && c.Request.ContentLength > 0 {
-			size := c.Request.ContentLength
-			bodySize = &size
-
-			bodyHash = sha256.New()
-			c.Request.Body = io.NopCloser(io.TeeReader(c.Request.Body, bodyHash))
-		}
-
-		// Filter sensitive headers
-		safeHeaders := make(map[string]any, 6) // pre-size for known headers
-		allowedHeaders := map[string]bool{
-			"Content-Type":    true,
-			"User-Agent":      true,
-			"Accept":          true,
-			"X-Request-ID":    true,
-			"X-Tenant-ID":     true,
-			"Idempotency-Key": true,
-		}
-		for k, v := range c.Request.Header {
-			if allowedHeaders[k] {
-				safeHeaders[k] = v
+			// Filter sensitive headers
+			safeHeaders := make(map[string]any)
+			allowedHeaders := map[string]bool{
+				"content-type":    true,
+				"user-agent":      true,
+				"accept":          true,
+				"x-request-id":    true,
+				"x-tenant-id":     true,
+				"idempotency-key": true,
 			}
-		}
-
-		// Use error-only body writer (don't capture success response bodies)
-		ebw := &errorBodyWriter{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
-		c.Writer = ebw
-
-		c.Next()
-
-		// 2. Capture response metadata
-		duration := int(time.Since(start).Milliseconds())
-		status := c.Writer.Status()
-
-		// Compute body SHA after handler has consumed the body
-		var bodySHA *string
-		if bodyHash != nil {
-			h := hex.EncodeToString(bodyHash.Sum(nil))
-			bodySHA = &h
-		}
-
-		var responseCode *string
-		var responseStatus *string
-
-		if status >= 400 {
-			responseStatus = ptr("error")
-			// Try to parse response body to find internal error code
-			var errorBody struct {
-				Error struct {
-					Code string `json:"code"`
-				} `json:"error"`
+			for k, v := range req.Header() {
+				if allowedHeaders[strings.ToLower(k)] && len(v) > 0 {
+					safeHeaders[k] = v[0]
+				}
 			}
-			if err := json.Unmarshal(ebw.body.Bytes(), &errorBody); err == nil && errorBody.Error.Code != "" {
-				responseCode = &errorBody.Error.Code
+
+			// Execute handler
+			res, err := next(ctx, req)
+
+			duration := safecast.IntFrom64(time.Since(start).Milliseconds())
+
+			var responseCode *string
+			var responseStatus *string
+			httpStatus := 200
+
+			if err != nil {
+				responseStatus = ptr("error")
+				connectErr := connect.CodeOf(err)
+				strCode := connectErr.String()
+				responseCode = &strCode
+				httpStatus = 500 // roughly, or map codes
+			} else {
+				responseStatus = ptr("success")
 			}
-		} else {
-			responseStatus = ptr("success")
+
+			rid := utils.RequestIDFromContext(ctx, "")
+			tenant := utils.TenantIDFromContext(ctx, "")
+
+			id, _ := uuid.NewV7()
+			if id == uuid.Nil {
+				id = uuid.New()
+			}
+
+			auditLog := domain.AuditLog{
+				ID:             id,
+				TenantID:       tenant,
+				RequestID:      &rid,
+				Method:         "POST", // Connect RPCs are always POST
+				Path:           req.Spec().Procedure,
+				QueryParams:    map[string]any{},
+				RequestHeaders: safeHeaders,
+				HTTPStatus:     &httpStatus,
+				ResponseCode:   responseCode,
+				ResponseStatus: responseStatus,
+				ResponseTimeMS: &duration,
+				ActorType:      domain.ActorTypeUser,
+				ClientIP:       nil, // Not easily available in basic net/http wrapped Connect without extra ctx
+				UserAgent:      ptr(req.Header().Get("User-Agent")),
+				CreatedAt:      start,
+			}
+
+			// Idempotency key
+			if iKey := req.Header().Get("Idempotency-Key"); iKey != "" {
+				auditLog.IdempotencyKey = &iKey
+			}
+
+			writer.send(auditLog)
+
+			return res, err
 		}
-
-		// 3. Assemble Audit Log
-		rid := utils.RequestIDFromContext(c.Request.Context(), "")
-		tenant := utils.TenantIDFromContext(c.Request.Context(), "")
-
-		actorType := domain.ActorTypeUser
-
-		id, _ := uuid.NewV7()
-		if id == uuid.Nil {
-			id = uuid.New()
-		}
-
-		auditLog := domain.AuditLog{
-			ID:                id,
-			TenantID:          tenant,
-			RequestID:         &rid,
-			Method:            c.Request.Method,
-			Path:              c.Request.URL.Path,
-			QueryParams:       make(map[string]any, len(c.Request.URL.Query())),
-			RequestHeaders:    safeHeaders,
-			RequestBodySHA256: bodySHA,
-			RequestSizeBytes:  bodySize,
-			HTTPStatus:        &status,
-			ResponseCode:      responseCode,
-			ResponseStatus:    responseStatus,
-			ResponseTimeMS:    &duration,
-			ActorType:         actorType,
-			ClientIP:          ptr(c.ClientIP()),
-			UserAgent:         ptr(c.Request.UserAgent()),
-			CreatedAt:         start,
-		}
-
-		// Enrich query params
-		for k, v := range c.Request.URL.Query() {
-			auditLog.QueryParams[k] = v
-		}
-
-		// Idempotency key
-		if iKey := c.GetHeader("Idempotency-Key"); iKey != "" {
-			auditLog.IdempotencyKey = &iKey
-		}
-
-		// 4. Send to batch writer (non-blocking)
-		writer.send(auditLog)
-	}
+	})
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -241,5 +186,6 @@ func ptrStr(s *string) string {
 	if s == nil {
 		return ""
 	}
+
 	return *s
 }

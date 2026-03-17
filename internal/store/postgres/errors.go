@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 
 	"github.com/jackc/pgerrcode"
@@ -12,15 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// MapPgError converts pgx errors to domain-appropriate errors
-func MapPgError(err error) error {
+// mapPgError converts pgx errors to domain-appropriate errors
+func mapPgError(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	// No rows found - return nil for Get operations (caller decides if this is an error)
+	// No rows found
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		return domain.ErrNotFound
 	}
 
 	// Check for postgres-specific errors
@@ -95,6 +96,7 @@ func unmarshalJSONB(data []byte) (map[string]any, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal jsonb: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -107,6 +109,7 @@ func marshalJSONB(data map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal jsonb: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -119,6 +122,7 @@ func unmarshalStringMap(data []byte) (map[string]string, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal string map: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -131,5 +135,6 @@ func marshalStringMap(data map[string]string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal string map: %w", err)
 	}
+
 	return result, nil
 }

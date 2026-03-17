@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 )
 
 type AuditLogRepo struct {
@@ -28,6 +29,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	queryParams, err := marshalJSONB(log.QueryParams)
 	if err != nil {
 		status = "error"
+
 		return fmt.Errorf("marshal query params: %w", err)
 	}
 
@@ -38,13 +40,13 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 
 	var httpStatus *int32
 	if log.HTTPStatus != nil {
-		status := int32(*log.HTTPStatus)
+		status := safecast.Int32WithFallback(*log.HTTPStatus, 500)
 		httpStatus = &status
 	}
 
 	var responseTimeMS *int32
 	if log.ResponseTimeMS != nil {
-		ms := int32(*log.ResponseTimeMS)
+		ms := safecast.Int32(*log.ResponseTimeMS)
 		responseTimeMS = &ms
 	}
 
@@ -80,10 +82,12 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 
 	if err != nil {
 		status = "error"
-		return MapPgError(err)
+
+		return mapPgError(err)
 	}
 
 	status = "success"
+
 	return nil
 }
 
@@ -95,16 +99,19 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 	row, err := r.db.Queries.GetAuditLog(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
 		status = "error"
-		return nil, MapPgError(err)
+
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapAuditLogToDomain(row.AuditLog)
+	result, err := mapToDomainAuditLog(row.AuditLog)
 	if err != nil {
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
+
 	return &result, nil
 }
 
@@ -120,7 +127,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	var httpStatus *int32
 	if filter.HTTPStatus != nil {
-		status := int32(*filter.HTTPStatus)
+		status := safecast.Int32WithFallback(*filter.HTTPStatus, 500)
 		httpStatus = &status
 	}
 
@@ -130,7 +137,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	rows, err := r.db.Queries.ListAuditLogs(ctx,
 		tenantID,
-		int32(limit+1),
+		safecast.Int32(limit+1),
 		timestampPtrToPgtype(filter.From),
 		timestampPtrToPgtype(filter.To),
 		filter.Path,
@@ -143,7 +150,8 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 	)
 	if err != nil {
 		opStatus = "error"
-		return nil, "", 0, MapPgError(err)
+
+		return nil, "", 0, mapPgError(err)
 	}
 
 	var totalCount int64
@@ -153,7 +161,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	logs := make([]domain.AuditLog, 0, len(rows))
 	for _, row := range rows {
-		log, err := MapAuditLogToDomain(row.AuditLog)
+		log, err := mapToDomainAuditLog(row.AuditLog)
 		if err != nil {
 			return nil, "", 0, fmt.Errorf("map audit log: %w", err)
 		}
@@ -162,6 +170,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 
 	opStatus = "success"
 
+	opStatus = "success"
 	nextCursor := ""
 	if len(logs) > limit {
 		nextCursor = logs[limit-1].CreatedAt.Format(time.RFC3339Nano)
@@ -176,12 +185,14 @@ func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "PruneAuditLogs", status, start) }()
 
-	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), int32(limit))
+	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), safecast.Int32(limit))
 	if err != nil {
 		status = "error"
-		return 0, MapPgError(err)
+
+		return 0, mapPgError(err)
 	}
 
 	status = "success"
+
 	return rows, nil
 }

@@ -8,11 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// MapObjectToDomain converts sqlc.Object to domain.Object
-func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
+// mapToDomainObject converts sqlc.Object to domain.Object
+func mapToDomainObject(obj sqlc.Object) (domain.Object, error) {
 	id, err := uuidFromPgtype(obj.ID)
 	if err != nil {
 		return domain.Object{}, fmt.Errorf("convert object id: %w", err)
@@ -21,6 +22,11 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 	labels, err := unmarshalStringMap(obj.Labels)
 	if err != nil {
 		return domain.Object{}, fmt.Errorf("unmarshal labels: %w", err)
+	}
+
+	tags, err := unmarshalStringMap(obj.Tags)
+	if err != nil {
+		return domain.Object{}, fmt.Errorf("unmarshal tags: %w", err)
 	}
 
 	return domain.Object{
@@ -33,6 +39,7 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 		ChecksumSHA256:  obj.ChecksumSha256,
 		Status:          domain.ObjectStatus(obj.Status),
 		Labels:          labels,
+		Tags:            tags,
 		ExternalRef:     obj.ExternalRef,
 		StoredETag:      obj.StoredEtag,
 		StoredSizeBytes: obj.StoredSizeBytes,
@@ -46,8 +53,8 @@ func MapObjectToDomain(obj sqlc.Object) (domain.Object, error) {
 	}, nil
 }
 
-// MapMultipartToDomain converts sqlc.MultipartUpload to domain.Multipart
-func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
+// mapToDomainMultipart converts sqlc.MultipartUpload to domain.Multipart
+func mapToDomainMultipart(mp sqlc.MultipartUpload) (domain.Multipart, error) {
 	id, err := uuidFromPgtype(mp.ID)
 	if err != nil {
 		return domain.Multipart{}, fmt.Errorf("convert multipart id: %w", err)
@@ -74,8 +81,8 @@ func MapMultipartToDomain(mp sqlc.MultipartUpload) (domain.Multipart, error) {
 	}, nil
 }
 
-// MapMultipartPartToDomain converts sqlc.MultipartPart to domain.MultipartPart
-func MapMultipartPartToDomain(part sqlc.MultipartPart) (domain.MultipartPart, error) {
+// mapToDomainMultipartPart converts sqlc.MultipartPart to domain.MultipartPart
+func mapToDomainMultipartPart(part sqlc.MultipartPart) (domain.MultipartPart, error) {
 	multipartID, err := uuidFromPgtype(part.MultipartID)
 	if err != nil {
 		return domain.MultipartPart{}, fmt.Errorf("convert multipart id: %w", err)
@@ -83,42 +90,29 @@ func MapMultipartPartToDomain(part sqlc.MultipartPart) (domain.MultipartPart, er
 
 	return domain.MultipartPart{
 		MultipartID: multipartID,
-		PartNumber:  int(part.PartNumber),
+		PartNumber:  safecast.IntFrom32(part.PartNumber),
 		ETag:        part.Etag,
 		SizeBytes:   part.SizeBytes,
 		CreatedAt:   timestampFromPgtype(part.CreatedAt),
 	}, nil
 }
 
-// MapIdempotencyToDomain converts sqlc.IdempotencyKey to domain.IdempotencyRecord
-func MapIdempotencyToDomain(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
+// mapToDomainIdempotency converts sqlc.IdempotencyKey to domain.IdempotencyRecord
+func mapToDomainIdempotency(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	return domain.IdempotencyRecord{
 		TenantID:     key.TenantID,
 		Key:          key.IdempotencyKey,
 		RequestPath:  key.RequestPath,
 		RequestHash:  key.RequestHash,
-		ResponseCode: int(key.ResponseCode),
+		ResponseCode: safecast.IntFrom32(key.ResponseCode),
 		ResponseBody: key.ResponseBody,
 		CreatedAt:    timestampFromPgtype(key.CreatedAt),
 		ExpiresAt:    timestampFromPgtype(key.ExpiresAt),
 	}
 }
 
-// MapListCategoriesRowToDomain converts sqlc.ListCategoriesRow to domain.Category
-func MapListCategoriesRowToDomain(row sqlc.ListCategoriesRow) domain.Category {
-	return domain.Category{
-		ID:          uuid.UUID(row.ID.Bytes),
-		TenantID:    row.TenantID,
-		Slug:        row.Slug,
-		Name:        row.Name,
-		Description: row.Description,
-		CreatedAt:   timestampFromPgtype(row.CreatedAt),
-		UpdatedAt:   timestampFromPgtype(row.UpdatedAt),
-	}
-}
-
-// MapCategoryToDomain converts sqlc.ObjectCategory to domain.Category
-func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
+// mapToDomainCategory converts sqlc.ObjectCategory to domain.Category
+func mapToDomainCategory(c sqlc.ObjectCategory) domain.Category {
 	return domain.Category{
 		ID:          uuid.UUID(c.ID.Bytes),
 		TenantID:    c.TenantID,
@@ -130,9 +124,8 @@ func MapCategoryToDomain(c sqlc.ObjectCategory) domain.Category {
 	}
 }
 
-// MapAuditLogToDomain converts sqlc.AuditLog to domain.AuditLog
-// This is kept for compatibility with Create operations
-func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
+// mapToDomainAuditLog converts sqlc.AuditLog to domain.AuditLog
+func mapToDomainAuditLog(log sqlc.AuditLog) (domain.AuditLog, error) {
 	id, err := uuidFromPgtype(log.ID)
 	if err != nil {
 		return domain.AuditLog{}, fmt.Errorf("convert audit log id: %w", err)
@@ -150,13 +143,13 @@ func MapAuditLogToDomain(log sqlc.AuditLog) (domain.AuditLog, error) {
 
 	var httpStatus *int
 	if log.HttpStatus != nil {
-		status := int(*log.HttpStatus)
+		status := safecast.IntFrom32(*log.HttpStatus)
 		httpStatus = &status
 	}
 
 	var responseTimeMS *int
 	if log.ResponseTimeMs != nil {
-		ms := int(*log.ResponseTimeMs)
+		ms := safecast.IntFrom32(*log.ResponseTimeMs)
 		responseTimeMS = &ms
 	}
 
@@ -189,6 +182,7 @@ func uuidFromPgtype(u pgtype.UUID) (uuid.UUID, error) {
 	if !u.Valid {
 		return uuid.Nil, fmt.Errorf("invalid uuid")
 	}
+
 	return uuid.UUID(u.Bytes), nil
 }
 
@@ -203,6 +197,7 @@ func timestampFromPgtype(t pgtype.Timestamptz) time.Time {
 	if !t.Valid {
 		return time.Time{}
 	}
+
 	return t.Time
 }
 
@@ -211,6 +206,7 @@ func timestampPtrFromPgtype(t pgtype.Timestamptz) *time.Time {
 		return nil
 	}
 	result := t.Time
+
 	return &result
 }
 
@@ -225,6 +221,7 @@ func timestampPtrToPgtype(t *time.Time) pgtype.Timestamptz {
 	if t == nil {
 		return pgtype.Timestamptz{Valid: false}
 	}
+
 	return pgtype.Timestamptz{
 		Time:  *t,
 		Valid: true,
@@ -236,5 +233,6 @@ func clientIPFromNetipAddr(ip *netip.Addr) *string {
 		return nil
 	}
 	str := ip.String()
+
 	return &str
 }

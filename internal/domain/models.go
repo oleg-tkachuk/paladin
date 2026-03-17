@@ -26,28 +26,75 @@ const (
 	ObjectHardDeleted ObjectStatus = "hard_deleted"
 )
 
+const (
+	// CategorySeparator is the character used to separate segments in category slugs.
+	CategorySeparator = "/"
+)
+
 // Category represents a tenant-scoped object category.
 // Category slugs are user-defined and managed via the /categories API.
+//
+// If slug contains slashes, check if parent categories exist
 type Category struct {
-	ID          uuid.UUID
-	TenantID    string
-	Slug        string
-	Name        string
+	ID       uuid.UUID
+	TenantID string
+	// Slug is unique per tenant. Max 63 characters.
+	Slug string
+	// Name is unique per tenant. Max 64 characters.
+	Name string
+	// Description details. Max 128 characters.
 	Description *string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
+// Tenant is a registered tenant in the system.
+// Tenants are first-class entities that must be provisioned before they can
+// store objects. The tenant_id is the canonical identifier used throughout
+// all other tables, headers, and RLS policies.
+type Tenant struct {
+	ID uuid.UUID
+	// TenantID is the unique identifier for the tenant.
+	TenantID string
+	// DisplayName is a human-readable name. Max 64 characters.
+	DisplayName *string
+	// Labels are arbitrary key-value metadata. Max 10 keys, max 4 KiB total.
+	Labels map[string]string
+	// Tags are an unordered set of strings for categorical filtering.
+	Tags      []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// ListTenantsFilter holds optional filter criteria for listing tenants.
+type ListTenantsFilter struct {
+	// LabelSelector matches tenants whose labels contain all provided key-value pairs.
+	LabelSelector map[string]string
+	// TagSelector matches tenants that have at least one of the provided tags.
+	TagSelector []string
+	// Search matches tenants by ID or DisplayName.
+	Search *string
+	// Sorting
+	SortBy    string
+	SortOrder string
+
+	Limit  int
+	Cursor string
+}
+
 type Object struct {
-	ID              uuid.UUID
-	TenantID        string
-	ObjectKey       string
-	Bucket          string
-	ContentType     string
-	SizeBytes       int64
-	ChecksumSHA256  *string
-	Status          ObjectStatus
-	Labels          map[string]string
+	ID             uuid.UUID
+	TenantID       string
+	ObjectKey      string
+	Bucket         string
+	ContentType    string
+	SizeBytes      int64
+	ChecksumSHA256 *string
+	Status         ObjectStatus
+	Labels         map[string]string
+	// Tags are user-defined classification tags for lifecycle rules and filtering.
+	// Separate from Labels to align with S3 object tagging API.
+	Tags            map[string]string
 	ExternalRef     *string
 	StoredETag      *string
 	StoredSizeBytes *int64
@@ -115,22 +162,58 @@ type IdempotencyRecord struct {
 type ListObjectsFilter struct {
 	Status        *ObjectStatus
 	ExternalRef   *string
+	Search        *string
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
 	// Category filters objects to a specific category slug. If nil, all categories are returned.
 	Category *string
+	// Recursive enables prefix matching for category slugs (e.g. 'docs' matches 'docs/invoices').
+	Recursive bool
 	// KeyPrefix is an optional prefix filter within tenant/category scope.
 	// The server validates that it cannot escape the tenant+category boundary.
 	KeyPrefix *string
 
+	// Tags filters objects that have ALL provided key-value pairs in their labels.
+	Tags map[string]string
+	// MinSizeBytes filters objects whose size >= this value.
+	MinSizeBytes *int64
+	// MaxSizeBytes filters objects whose size <= this value.
+	MaxSizeBytes *int64
+	// ContentType filters objects by exact content type match.
+	ContentType *string
+	// KeyPattern filters objects whose key matches this pattern (supports * wildcard).
+	KeyPattern *string
+
 	// Sorting
 	SortBy    string // e.g. "created_at"
 	SortOrder string // "asc" or "desc"
+
+	Limit  int
+	Cursor string
+}
+
+// ListCategoriesFilter holds pagination state for listing categories.
+type ListCategoriesFilter struct {
+	Limit  int
+	Cursor string
+	// Search matches categories by slug or name.
+	Search *string
+	// Sorting
+	SortBy    string
+	SortOrder string
 }
 
 type CategoryStats struct {
-	TotalCount int64
-	TotalSize  int64
+	TotalCount       int64
+	TotalSize        int64
+	SoftDeletedCount int64
+}
+
+// BulkPatchItem carries partial updates for a single object.
+type BulkPatchItem struct {
+	ID          uuid.UUID
+	Labels      map[string]string
+	ExternalRef *string
 }
 
 type CreateObjectResponse struct {
@@ -190,4 +273,20 @@ type Presigned struct {
 	Method    string            `json:"method"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	ExpiresAt time.Time         `json:"expires_at"`
+}
+
+// CreateObjectRequest carries validated input for ObjectsService.CreateSingle and BulkCreate.
+type CreateObjectRequest struct {
+	TenantID    string
+	Category    string
+	ContentType string
+	SizeBytes   int64
+	Labels      map[string]string
+	ExternalRef *string
+}
+
+// SignUploadItem carries input for ObjectsService.BulkSignUploads.
+type SignUploadItem struct {
+	ObjectID  uuid.UUID
+	UploadTTL int
 }

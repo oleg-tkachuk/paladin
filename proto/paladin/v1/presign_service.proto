@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "paladin/v1/types.proto";
+
+// PresignService generates time-limited, pre-authenticated URLs for direct
+// client-to-storage operations.
+//
+// Use this service when the caller needs a presigned URL for an existing object
+// without performing an upload or download through the control plane.
+// For upload initiation with URL generation, use ObjectService.UploadObject instead.
+service PresignService {
+  // GenerateUploadUrl creates a presigned URL for uploading content
+  // to an existing object that is in PENDING or UPLOADING status.
+  rpc GenerateUploadUrl(GenerateUploadUrlRequest) returns (GenerateUploadUrlResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:presign-upload"
+      body: "*"
+    };
+  }
+
+  // GenerateDownloadUrl creates a presigned URL for downloading content
+  // from an existing object that is in AVAILABLE status.
+  rpc GenerateDownloadUrl(GenerateDownloadUrlRequest) returns (GenerateDownloadUrlResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:presign-download"
+      body: "*"
+    };
+  }
+}
+
+// ─── Upload URL ──────────────────────────────────────────────────────────────
+
+// GenerateUploadUrlRequest creates a presigned URL for uploading to an existing object.
+message GenerateUploadUrlRequest {
+  // Tenant identifier for logical isolation (opaque UUID, used as S3 key prefix).
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to upload to.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Custom TTL for the presigned URL.
+  // If omitted, the server uses its default expiration.
+  google.protobuf.Duration ttl = 4;
+
+  // Client-provided idempotency key.
+  string idempotency_key = 5;
+}
+
+// GenerateUploadUrlResponse contains the presigned upload URL.
+message GenerateUploadUrlResponse {
+  // Presigned URL for direct upload to the storage backend.
+  PresignedUrl upload_url = 1;
+}
+
+// ─── Download URL ────────────────────────────────────────────────────────────
+
+// GenerateDownloadUrlRequest creates a presigned URL for downloading from an existing object.
+message GenerateDownloadUrlRequest {
+  // Tenant identifier for logical isolation (opaque UUID, used as S3 key prefix).
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to download.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Custom TTL for the presigned URL.
+  // If omitted, the server uses its default expiration.
+  google.protobuf.Duration ttl = 4;
+
+  // Optional override for the Content-Disposition header in the download response.
+  // Use this to control the filename shown to the end user (e.g. "attachment; filename=\"report.pdf\"").
+  string content_disposition = 5;
+}
+
+// GenerateDownloadUrlResponse contains the presigned download URL.
+message GenerateDownloadUrlResponse {
+  // Presigned URL for direct download from the storage backend.
+  PresignedUrl download_url = 1;
+}

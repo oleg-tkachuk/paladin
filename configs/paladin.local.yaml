@@ -45,7 +45,7 @@ server:
 
   grpc:
     addr: "0.0.0.0:9090"
-    reflection_enabled: false
+    reflection_enabled: true
     max_recv_msg_size: 4194304
     max_send_msg_size: 4194304
 
@@ -54,7 +54,7 @@ server:
 
 datastores:
   postgres:
-    dsn: "postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable"
+    dsn: "postgres://paladin:paladin@paladin-postgres:5432/paladin?sslmode=disable"
     pool:
       max_conns: 50
       min_conns: 5
@@ -98,6 +98,10 @@ policy:
   labels_max_keys: 10
   external_ref_max_len: 256
   object_key_max_len: 1024
+
+auth:
+  enabled: false
+  admin_key: ""
 
 security:
   trust_tenant_id_from_request: true

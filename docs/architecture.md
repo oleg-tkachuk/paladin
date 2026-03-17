@@ -1,71 +1,94 @@
-# Architecture
+# Architecture Snapshot - Paladin (PALADIN)
 
 ## Overview
 
-The `paladin` is a Go-based service providing object storage management and control. It acts as an abstraction over S3-compatible storage, maintaining its own metadata and policies in a PostgreSQL database.
+The Paladin (PALADIN) is a central service in the acme ecosystem responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and robust multi-tenant isolation.
 
-## 1. Inventory Map
+## Inventory Map
 
-- **Language:** Go 1.25
-- **Frameworks:**
-  - HTTP Server: `github.com/gin-gonic/gin`
-  - gRPC Server: `google.golang.org/grpc`
-  - Dependency Injection: `github.com/google/wire`
-  - SQL generation: `github.com/sqlc-dev/sqlc`
-  - OpenAPI Code Generation: `github.com/oapi-codegen/oapi-codegen/v2`
-- **Runtime Entrypoints:** `cmd/server/main.go`
-- **Build System:** `Taskfile.yaml`, `go mod`
-- **Configuration Management:** Custom YAML unmarshaler backing `internal/config.Config`
+- **Language**: Go
+- **Frameworks**:
+  - [Connect RPC](https://connectrpc.com/): gRPC-compatible RPC framework (replaces Gin).
+  - [Protobuf + buf/validate](https://buf.build/bufbuild/protovalidate): Contract-first API with declarative validation.
+  - [SQLC](https://sqlc.dev/): Type-safe SQL generator.
+  - [Google Wire](https://github.com/google/wire): Dependency injection.
+  - [CUE](https://cuelang.org/): Configuration schema validation.
+  - [Koanf](https://github.com/knadh/koanf): Configuration management.
 
-## 2. Service Boundaries
+## Service Topology & Dependencies
 
-### Internal Domain
+### Upstream Dependencies
 
-- **API Layer:** Exposes HTTP (REST) and gRPC endpoints for clients to interact with object metadata and storage operations.
-- **Service Layer:** Business logic for object lifecycle management (upload, part uploads, presiging, deletion, policies).
-- **Storage Layer:** Abstractions over the PostgreSQL database (using `sqlc`) and the S3-compatible backend (using `aws-sdk-go-v2`).
-- **Worker Layer:** Background jobs (e.g., `Reaper`) for data lifecycle management like cleaning up orphaned or pending objects.
+- **PostgreSQL**: Primary metadata store (objects, tenants, audit logs).
+- **S3-compatible Storage (e.g., SeaweedFS)**: Physical object storage.
+- **OpenTelemetry Collector**: For distributed tracing and metrics.
 
-### External Dependencies
+### Downstream Consumers
 
-1. **PostgreSQL:**
-   - Stores metadata about objects, multipart uploads, labels, policies, and audit logs.
-   - Accessed via `pgx/v5` and custom connection pooling.
-2. **S3-Compatible Storage:**
-   - Actually stores the object blobs.
-   - Interactions managed via AWS SDK `s3`.
-3. **OpenTelemetry Collector (Optional):**
-   - For traces and metrics export via OTLP.
+- **acme consumer API**: Consumes PALADIN for document management.
+- **Workflows Workers**: Use PALADIN for hard deletion and object lifecycle management.
+- **Frontend Applications**: Directly consume signed URLs for uploads and downloads.
 
-## 3. Runtime Entry Points
+### Data Flow
 
-The primary entry point is located at `cmd/server/main.go`, which invokes the CLI execution defined in `cmd/server/root.go`.
+1. **Metadata Registration**: Metadata for an object is stored in Postgres.
+2. **Signed Action**: PALADIN provides pre-signed S3 URLs for direct client-to-storage upload/download.
+3. **Completion**: Clients notify PALADIN when an upload is complete to finalize metadata.
+4. **Lifecycle**: Background workers (Reaper) handle cleanup of failed or expired uploads.
 
-**Bootstrap Logic (`internal/app/app.go`):**
+## Transport Layer
 
-1. **Configuration Loading:** Reads configuration from the YAML file specified by the `-c` flag (`/app/configs/paladin.yaml` by default).
-2. **Logger Initialization:** Sets up `zap` logger according to config.
-3. **Telemetry:** Initializes OpenTelemetry providers if enabled.
-4. **Database Connection:** Connects to PostgreSQL and initializes the `pgxpool`.
-5. **Storage Client:** Sets up the AWS S3 client.
-6. **Servers:**
-   - Initializes and starts the gRPC server.
-   - Initializes and starts the HTTP (Gin) server (optionally TLS-enabled).
-7. **Workers:** Starts background processes, like the Reaper.
-8. **Graceful Shutdown:** Listens for `SIGINT`/`SIGTERM` to coordinate graceful termination of servers and dependencies.
+All RPCs are served via Connect RPC on a single HTTP/2 port (`:8080`). The transport layer is organized into per-service handlers:
 
-## 4. Directory Structure Snapshot
+| Handler | File | Service |
+|---------|------|---------|
+| `ObjectHandler` | `internal/api/grpc/object_handler.go` | Object lifecycle (upload, download, copy, move, delete, list) |
+| `MultipartHandler` | `internal/api/grpc/multipart_handler.go` | Multipart upload (initiate, sign parts, complete, abort, list parts) |
+| `PresignHandler` | `internal/api/grpc/presign_handler.go` | Presigned URL generation (upload, download) |
+| `BulkHandler` | `internal/api/grpc/bulk_handler.go` | Batch operations (batch delete, batch copy) |
+| `BucketHandler` | `internal/api/grpc/bucket_handler.go` | Bucket management (stub — see `docs/TODO.md`) |
+| `SystemHandler` | `internal/api/grpc/system_handler.go` | Health, readiness, version, config |
 
-- `/api`: Contains the OpenAPI 3.0 specification (`openapi.yaml`).
-- `/cmd/server`: Application entry points (`main.go`, `root.go`, wire injection).
-- `/configs`: Configuration templates and environment-specific configs.
-- `/docs`: Markdown documentation (where this file resides).
-- `/internal`: Private application code.
-  - `/internal/config`: Configuration schema and parsing.
-  - `/internal/app`: Core application container and bootstrap.
-  - `/internal/domain`: Core domain models.
-  - `/internal/service`: Application business logic.
-  - `/internal/store`: Data access layers (Postgres / S3).
-  - `/internal/worker`: Background jobs.
-- `/migrations`: Goose-compatible PostgreSQL migration files.
-- `/proto`: Protobuf definitions and generated code.
+### Shared Components
+
+| File | Purpose |
+|------|---------|
+| `internal/api/grpc/errors.go` | Domain-error → gRPC-code mapping |
+| `internal/api/grpc/mappers.go` | Domain ↔ proto type converters |
+
+### Interceptor Chain (Connect)
+
+Defined in `internal/middleware/grpc_chain.go`:
+
+1. **Recovery** — panic catch → `CodeInternal`
+2. **RequestID** — extract/generate `x-request-id`
+3. **ContextLogger** — enrich zap logger with request_id
+4. **Auth** — extract tenant from header/admin key
+5. **Logger** — access log (method, code, tenant, latency)
+6. **EnforceTenant** — reject unauthenticated when auth enabled
+7. **Validation** — `buf/validate` proto annotation enforcement via `protovalidate`
+8. **RateLimit** — per-tenant token bucket
+
+## Runtime Entry Points
+
+- **HTTP Server**: `internal/api/http/router.go` — Connect RPC + operational endpoints.
+- **Main**: `cmd/server/main.go` — Service bootstrap.
+- **DI**: `internal/wire/sets.go` — Wire provider graph.
+
+## Configuration Sources
+
+- **YAML**: `configs/paladin.yaml`
+- **Environment Variables**: Prefixed with `PALADIN_`.
+- **K8s Secrets**: Automatically resolved if running in Kubernetes.
+
+## Source Index
+
+- `internal/api/grpc/` — Per-service RPC handlers, mappers, errors.
+- `internal/api/http/` — HTTP server, CORS, operational routes.
+- `internal/service/` — Business logic and orchestrators.
+- `internal/store/` — Database repositories (Postgres + cache).
+- `internal/storage/s3/` — S3 client implementation.
+- `internal/domain/` — Model definitions and interfaces.
+- `internal/middleware/` — Interceptors (auth, logging, validation, rate limit).
+- `internal/worker/` — Background jobs (Reaper).
+- `proto/paladin/v1/` — Protobuf service definitions.

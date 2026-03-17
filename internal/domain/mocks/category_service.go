@@ -336,8 +336,8 @@ func (_c *MockCategoryService_GetStats_Call) RunAndReturn(run func(ctx context.C
 }
 
 // List provides a mock function for the type MockCategoryService
-func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	ret := _mock.Called(ctx, tenantID, limit, cursor)
+func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	ret := _mock.Called(ctx, tenantID, filter)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -347,28 +347,28 @@ func (_mock *MockCategoryService) List(ctx context.Context, tenantID string, lim
 	var r1 string
 	var r2 int64
 	var r3 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) ([]domain.Category, string, int64, error)); ok {
-		return returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListCategoriesFilter) ([]domain.Category, string, int64, error)); ok {
+		return returnFunc(ctx, tenantID, filter)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string) []domain.Category); ok {
-		r0 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.ListCategoriesFilter) []domain.Category); ok {
+		r0 = returnFunc(ctx, tenantID, filter)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]domain.Category)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, string) string); ok {
-		r1 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, domain.ListCategoriesFilter) string); ok {
+		r1 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, int, string) int64); ok {
-		r2 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, domain.ListCategoriesFilter) int64); ok {
+		r2 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r2 = ret.Get(2).(int64)
 	}
-	if returnFunc, ok := ret.Get(3).(func(context.Context, string, int, string) error); ok {
-		r3 = returnFunc(ctx, tenantID, limit, cursor)
+	if returnFunc, ok := ret.Get(3).(func(context.Context, string, domain.ListCategoriesFilter) error); ok {
+		r3 = returnFunc(ctx, tenantID, filter)
 	} else {
 		r3 = ret.Error(3)
 	}
@@ -383,13 +383,12 @@ type MockCategoryService_List_Call struct {
 // List is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - limit int
-//   - cursor string
-func (_e *MockCategoryService_Expecter) List(ctx interface{}, tenantID interface{}, limit interface{}, cursor interface{}) *MockCategoryService_List_Call {
-	return &MockCategoryService_List_Call{Call: _e.mock.On("List", ctx, tenantID, limit, cursor)}
+//   - filter domain.ListCategoriesFilter
+func (_e *MockCategoryService_Expecter) List(ctx interface{}, tenantID interface{}, filter interface{}) *MockCategoryService_List_Call {
+	return &MockCategoryService_List_Call{Call: _e.mock.On("List", ctx, tenantID, filter)}
 }
 
-func (_c *MockCategoryService_List_Call) Run(run func(ctx context.Context, tenantID string, limit int, cursor string)) *MockCategoryService_List_Call {
+func (_c *MockCategoryService_List_Call) Run(run func(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter)) *MockCategoryService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -399,19 +398,14 @@ func (_c *MockCategoryService_List_Call) Run(run func(ctx context.Context, tenan
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 int
+		var arg2 domain.ListCategoriesFilter
 		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg2 = args[2].(domain.ListCategoriesFilter)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
@@ -422,7 +416,7 @@ func (_c *MockCategoryService_List_Call) Return(categorys []domain.Category, s s
 	return _c
 }
 
-func (_c *MockCategoryService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error)) *MockCategoryService_List_Call {
+func (_c *MockCategoryService_List_Call) RunAndReturn(run func(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error)) *MockCategoryService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -509,6 +503,92 @@ func (_c *MockCategoryService_ListTenants_Call) Return(strings []string, s strin
 }
 
 func (_c *MockCategoryService_ListTenants_Call) RunAndReturn(run func(ctx context.Context, limit int, cursor string) ([]string, string, int64, error)) *MockCategoryService_ListTenants_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Update provides a mock function for the type MockCategoryService
+func (_mock *MockCategoryService) Update(ctx context.Context, tenantID string, slug string, name string, description *string) (*domain.Category, error) {
+	ret := _mock.Called(ctx, tenantID, slug, name, description)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Update")
+	}
+
+	var r0 *domain.Category
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) (*domain.Category, error)); ok {
+		return returnFunc(ctx, tenantID, slug, name, description)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, *string) *domain.Category); ok {
+		r0 = returnFunc(ctx, tenantID, slug, name, description)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.Category)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, slug, name, description)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCategoryService_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
+type MockCategoryService_Update_Call struct {
+	*mock.Call
+}
+
+// Update is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - slug string
+//   - name string
+//   - description *string
+func (_e *MockCategoryService_Expecter) Update(ctx interface{}, tenantID interface{}, slug interface{}, name interface{}, description interface{}) *MockCategoryService_Update_Call {
+	return &MockCategoryService_Update_Call{Call: _e.mock.On("Update", ctx, tenantID, slug, name, description)}
+}
+
+func (_c *MockCategoryService_Update_Call) Run(run func(ctx context.Context, tenantID string, slug string, name string, description *string)) *MockCategoryService_Update_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 *string
+		if args[4] != nil {
+			arg4 = args[4].(*string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCategoryService_Update_Call) Return(category *domain.Category, err error) *MockCategoryService_Update_Call {
+	_c.Call.Return(category, err)
+	return _c
+}
+
+func (_c *MockCategoryService_Update_Call) RunAndReturn(run func(ctx context.Context, tenantID string, slug string, name string, description *string) (*domain.Category, error)) *MockCategoryService_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

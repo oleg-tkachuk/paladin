@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -89,8 +90,8 @@ func New(c config.Logger) (*zap.Logger, error) {
 	}
 
 	// Optional: include additional env fields without leaking secrets
-	if v := os.Getenv("K8S_NAMESPACE"); v != "" {
-		fields = append(fields, zap.String("k8s_namespace", v))
+	if v := os.Getenv(config.DefaultK8sNamespaceEnvKey); v != "" {
+		fields = append(fields, zap.String("namespace", v))
 	}
 
 	return log.With(fields...), nil
@@ -133,6 +134,14 @@ func FromContext(ctx context.Context) *zap.Logger {
 			zap.String("trace_id", sc.TraceID().String()),
 			zap.String("span_id", sc.SpanID().String()),
 		)
+	}
+
+	// Enrich with request and tenant IDs
+	if rid := utils.RequestIDFromContext(ctx, ""); rid != "" {
+		l = l.With(zap.String("request_id", rid))
+	}
+	if tid := utils.TenantIDFromContext(ctx, ""); tid != "" {
+		l = l.With(zap.String("tenant_id", tid))
 	}
 
 	return l

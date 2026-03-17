@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "paladin/v1/types.proto";
+
+// TenantService manages the lifecycle and metadata of tenants.
+service TenantService {
+  // CreateTenant provisions a new tenant in the system.
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants"
+      body: "*"
+    };
+  }
+
+  // GetTenant retrieves a tenant's details and metadata.
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}"
+    };
+  }
+
+  // ListTenants returns a paginated list of tenants matching the filter.
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants"
+    };
+  }
+
+  // DeleteTenant removes a tenant record. Fails if the tenant still has objects.
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse) {
+    option (google.api.http) = {
+      delete: "/v1/tenants/{tenant_id}"
+    };
+  }
+
+  // UpdateTenantMetadata performs a partial update of a tenant's labels, tags, or display name.
+  rpc UpdateTenantMetadata(UpdateTenantMetadataRequest) returns (UpdateTenantMetadataResponse) {
+    option (google.api.http) = {
+      patch: "/v1/tenants/{tenant_id}/metadata"
+      body: "*"
+    };
+  }
+}
+
+// ─── Create ──────────────────────────────────────────────────────────────────
+
+message CreateTenantRequest {
+  // Unique identifier for the new tenant.
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Optional human-readable name.
+  optional string display_name = 2;
+
+  // Initial metadata labels.
+  map<string, string> labels = 3;
+
+  // Initial organizational tags.
+  repeated string tags = 4;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+// ─── Get ─────────────────────────────────────────────────────────────────────
+
+message GetTenantRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetTenantResponse {
+  Tenant tenant = 1;
+}
+
+// ─── List ────────────────────────────────────────────────────────────────────
+
+message ListTenantsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  
+  TenantFilter filter = 3;
+  
+  string order_by = 4;
+  SortOrder sort_order = 5;
+}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+  string next_page_token = 2;
+  int64 total_count = 3;
+}
+
+// ─── Delete ──────────────────────────────────────────────────────────────────
+
+message DeleteTenantRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteTenantResponse {}
+
+// ─── Update Metadata ─────────────────────────────────────────────────────────
+
+message UpdateTenantMetadataRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Updated human-readable name.
+  optional string display_name = 2;
+
+  // Labels to update (merged with existing).
+  map<string, string> labels = 3;
+
+  // Tags to replace current set.
+  repeated string tags = 4;
+}
+
+message UpdateTenantMetadataResponse {
+  Tenant tenant = 1;
+}

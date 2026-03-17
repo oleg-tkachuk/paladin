@@ -71,22 +71,26 @@ func (q *Queries) DeleteCategory(ctx context.Context, tenantID string, slug stri
 }
 
 const getCategory = `-- name: GetCategory :one
-SELECT id, tenant_id, slug, name, description, created_at, updated_at
+SELECT object_categories.id, object_categories.tenant_id, object_categories.slug, object_categories.name, object_categories.description, object_categories.created_at, object_categories.updated_at
 FROM object_categories
 WHERE tenant_id = $1 AND slug = $2
 `
 
-func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string) (ObjectCategory, error) {
+type GetCategoryRow struct {
+	ObjectCategory ObjectCategory `json:"object_category"`
+}
+
+func (q *Queries) GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error) {
 	row := q.db.QueryRow(ctx, getCategory, tenantID, slug)
-	var i ObjectCategory
+	var i GetCategoryRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Slug,
-		&i.Name,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.ObjectCategory.ID,
+		&i.ObjectCategory.TenantID,
+		&i.ObjectCategory.Slug,
+		&i.ObjectCategory.Name,
+		&i.ObjectCategory.Description,
+		&i.ObjectCategory.CreatedAt,
+		&i.ObjectCategory.UpdatedAt,
 	)
 	return i, err
 }
@@ -117,9 +121,20 @@ SELECT id, tenant_id, slug, name, description, created_at, updated_at,
        COUNT(*) OVER() AS total_count
 FROM object_categories
 WHERE tenant_id = $1
-  AND ($3::timestamptz IS NULL OR created_at < $3)
-ORDER BY created_at DESC
-LIMIT $2
+  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
+  AND (
+    $3::text IS NULL OR 
+    slug ILIKE '%' || $3 || '%' OR 
+    name ILIKE '%' || $3 || '%'
+  )
+ORDER BY
+    CASE WHEN $4::text = 'slug' AND $5::text = 'asc' THEN slug END ASC,
+    CASE WHEN $4::text = 'slug' AND $5::text = 'desc' THEN slug END DESC,
+    CASE WHEN $4::text = 'name' AND $5::text = 'asc' THEN name END ASC,
+    CASE WHEN $4::text = 'name' AND $5::text = 'desc' THEN name END DESC,
+    CASE WHEN ($4::text = 'created' OR $4::text IS NULL) AND $5::text = 'asc' THEN created_at END ASC,
+    CASE WHEN ($4::text = 'created' OR $4::text IS NULL) AND ($5::text = 'desc' OR $5::text IS NULL) THEN created_at END DESC
+LIMIT $6
 `
 
 type ListCategoriesRow struct {
@@ -133,8 +148,15 @@ type ListCategoriesRow struct {
 	TotalCount  int64              `json:"total_count"`
 }
 
-func (q *Queries) ListCategories(ctx context.Context, tenantID string, limit int32, cursor pgtype.Timestamptz) ([]ListCategoriesRow, error) {
-	rows, err := q.db.Query(ctx, listCategories, tenantID, limit, cursor)
+func (q *Queries) ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listCategories,
+		tenantID,
+		cursor,
+		search,
+		sortBy,
+		sortOrder,
+		limitVal,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -200,4 +222,22 @@ func (q *Queries) ListTenants(ctx context.Context, limit int32, cursor pgtype.Ti
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCategory = `-- name: UpdateCategory :exec
+UPDATE object_categories
+SET name = $3,
+    description = $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND slug = $2
+`
+
+func (q *Queries) UpdateCategory(ctx context.Context, tenantID string, slug string, name string, description *string) error {
+	_, err := q.db.Exec(ctx, updateCategory,
+		tenantID,
+		slug,
+		name,
+		description,
+	)
+	return err
 }

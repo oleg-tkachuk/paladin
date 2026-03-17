@@ -3,105 +3,121 @@ package httpapi
 import (
 	"net/http"
 	"sync/atomic"
+	"time"
 
+	"connectrpc.com/connect"
+	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
+	"github.com/oleg-tkachuk/paladin/internal/api/grpc/grpcapiconnect"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/generated/api"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 
-	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/cors"
 	"go.uber.org/zap"
 )
 
+// Server exposes Connect RPC and operational endpoints (health, metrics, version)
+// on a plain net/http mux — no Gin dependency.
 type Server struct {
-	engine *gin.Engine
+	mux http.Handler
 }
 
-func NewServer(cfg *config.Config, log *zap.Logger, svc domain.ObjectsService, catSvc domain.CategoryService, auditRepo domain.AuditLogRepository, metadata domain.AppMetadata, hs *service.HealthService, sysSvc domain.SystemService, started *atomic.Bool) *Server {
-	gin.SetMode(cfg.Server.Mode)
-	r := gin.New()
+// NewServer creates a ConnectRPC+ops HTTP mux.
+func NewServer(
+	cfg *config.Config,
+	log *zap.Logger,
+	objSvc domain.ObjectsService,
+	catSvc domain.CategoryService,
+	tenantSvc domain.TenantService,
+	metadata domain.AppMetadata,
+	hs *service.HealthService,
+	started *atomic.Bool,
+	startTime time.Time,
+	auditWriter *middleware.AuditBatchWriter,
+) *Server {
+	mux := http.NewServeMux()
 
-	if len(cfg.Server.HTTP.TrustedProxies) > 0 {
-		if err := r.SetTrustedProxies(cfg.Server.HTTP.TrustedProxies); err != nil {
-			log.Warn("Failed to set trusted proxies", zap.Error(err))
-		}
-	} else {
-		_ = r.SetTrustedProxies(nil)
+	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log, auditWriter)...)
+
+	// ─── ObjectService ─────────────────────────────────────────────────────
+	objectHandler := grpcapi.NewObjectHandler(log, objSvc)
+	path, handler := grpcapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── CategoryService ───────────────────────────────────────────────────
+	categoryHandler := grpcapi.NewCategoryHandler(log, catSvc)
+	path, handler = grpcapiconnect.NewCategoryServiceHandler(categoryHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── TenantService ─────────────────────────────────────────────────────
+	tenantHandler := grpcapi.NewTenantHandler(log, tenantSvc)
+	path, handler = grpcapiconnect.NewTenantServiceHandler(tenantHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── MultipartUploadService ────────────────────────────────────────────
+	multipartHandler := grpcapi.NewMultipartHandler(log, objSvc)
+	path, handler = grpcapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── PresignService ────────────────────────────────────────────────────
+	presignHandler := grpcapi.NewPresignHandler(log, objSvc)
+	path, handler = grpcapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── BulkService ───────────────────────────────────────────────────────
+	bulkHandler := grpcapi.NewBulkHandler(log, objSvc)
+	path, handler = grpcapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── BucketService ─────────────────────────────────────────────────────
+	bucketHandler := grpcapi.NewBucketHandler()
+	path, handler = grpcapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── SystemService ─────────────────────────────────────────────────────
+	systemHandler := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg)
+	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
+	mux.Handle(path, handler)
+
+	// ─── Operational endpoints ─────────────────────────────────────────────
+	mux.Handle(RouteMetrics, promhttp.Handler())
+
+	// ─── CORS ──────────────────────────────────────────────────────────────
+	origins := cfg.Server.HTTP.CORSAllowedOrigins
+	if len(origins) == 0 {
+		origins = []string{"*"}
 	}
 
-	// Add API version header to ALL responses (including /version, /health/*, etc.)
-	r.Use(middleware.APIVersionMiddleware(metadata.Version))
-
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
-	r.GET("/health/livez", func(c *gin.Context) {
-		if cfg.Server.LogProbes {
-			log.Debug("Liveness check called")
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "alive"})
+	c := cors.New(cors.Options{
+		AllowedOrigins: origins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Content-Type",
+			"Connect-Protocol-Version",
+			"Connect-Timeout-Ms",
+			"Grpc-Timeout",
+			"X-Grpc-Web",
+			"X-User-Agent",
+			"X-Request-Id",
+			"X-Tenant-Id",
+			"Authorization",
+		},
+		ExposedHeaders: []string{
+			"Grpc-Status",
+			"Grpc-Message",
+			"Grpc-Status-Details-Bin",
+			"X-Request-Id",
+		},
 	})
 
-	r.GET("/health/startupz", func(c *gin.Context) {
-		if cfg.Server.LogProbes {
-			log.Debug("Startup check called")
-		}
-		if !started.Load() {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "starting",
-				"reason": "initialization_in_progress",
-			})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "started"})
-	})
-
-	r.GET("/health/readyz", func(c *gin.Context) {
-		if cfg.Server.LogProbes {
-			log.Debug("Readiness check called")
-		}
-
-		ready, status := hs.CheckReady(c.Request.Context())
-		if !ready {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":       "not_ready",
-				"reason":       "dependency_unavailable",
-				"dependencies": status,
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":       "ready",
-			"dependencies": status,
-		})
-	})
-
-	// Use canonical stack for API routes
-	middleware.SetupHTTPStack(r, cfg, log, auditRepo)
-
-	// Apply rate limiting middleware
-	r.Use(middleware.RateLimitMiddleware(cfg))
-
-	r.GET("/version", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"version":    metadata.Version,
-			"commit":     metadata.Commit,
-			"build_time": metadata.BuildTime,
-		})
-	})
-
-	v1 := r.Group("/v1")
-
-	// Add rate limiting headers (placeholder for future implementation)
-	v1.Use(middleware.RateLimitHeadersMiddleware())
-
-	// Register generated handlers
-	adapter := NewOpenAPIAdapter(cfg, svc, catSvc, auditRepo, hs, sysSvc, started, metadata)
-	api.RegisterHandlers(v1, adapter)
-
-	return &Server{engine: r}
+	return &Server{mux: c.Handler(mux)}
 }
 
-func (s *Server) Handler() http.Handler { return s.engine }
+// Handler returns the composed http.Handler.
+func (s *Server) Handler() http.Handler { return s.mux }

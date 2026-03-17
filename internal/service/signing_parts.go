@@ -6,6 +6,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -17,7 +18,7 @@ import (
 func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPart")
 	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", int(partNumber)))
+	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", safecast.IntFrom32(partNumber)))
 
 	start := time.Now()
 	var status string
@@ -30,6 +31,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
@@ -38,21 +40,24 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
-	presigned, err := executeWithBreakerRet(ctx, s.brk, "s3_presign_part", func() (domain.Presigned, error) {
+	presigned, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 		return s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, partNumber, s.s3.PresignTTLDuration())
 	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return domain.Presigned{}, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return domain.Presigned{
 		URL:       presigned.URL,
 		Method:    presigned.Method,
@@ -78,6 +83,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -86,6 +92,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -96,8 +103,9 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	g.SetLimit(10) // bound concurrency to avoid overwhelming the S3 signer
 
 	for i, pn := range partNumbers {
+		i, pn := i, pn // capture loop variables
 		g.Go(func() error {
-			signed, err := executeWithBreakerRet(gCtx, s.brk, "s3_presign_part", func() (domain.Presigned, error) {
+			signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 				return s.s3.PresignUploadPart(gCtx, multi.ObjectKey, uploadID, pn, ttl)
 			})
 			if err != nil {
@@ -112,6 +120,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 					ExpiresAt: signed.ExpiresAt,
 				},
 			}
+
 			return nil
 		})
 	}
@@ -120,10 +129,12 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return out, nil
 }

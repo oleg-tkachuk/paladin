@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultK8sAPIBaseURL = "https://kubernetes.default.svc"
-	k8sTokenPath         = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	k8sTokenPath         = "/var/run/secrets/kubernetes.io/serviceaccount/token" // #nosec G101
 	k8sNamespacePath     = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	k8sCACertPath        = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	defaultHTTPTimeout   = 5 * time.Second
@@ -51,6 +51,7 @@ func NewK8sSecretResolver() *K8sSecretResolver {
 					RootCAs: caCertPool,
 				},
 			},
+			Timeout: defaultHTTPTimeout,
 		},
 		apiBaseURL: defaultK8sAPIBaseURL,
 		tokenPath:  k8sTokenPath,
@@ -100,7 +101,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 
 	key := ref.Key
 	if key == "" {
-		key = "password"
+		key = DefaultSecretKey
 	}
 
 	namespace := ref.Namespace
@@ -139,6 +140,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		if resp.StatusCode == http.StatusNotFound {
 			return "", fmt.Errorf("secret %s not found in namespace %s", ref.Name, namespace)
 		}
+
 		return "", fmt.Errorf("kubernetes API returned status %d", resp.StatusCode)
 	}
 
@@ -164,6 +166,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 		if err != nil {
 			return "", fmt.Errorf("secret key %s contains invalid base64 data: %w", key, err)
 		}
+
 		return string(decoded), nil
 	}
 

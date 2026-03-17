@@ -4,8 +4,6 @@ package postgres
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,14 +38,7 @@ func TestObjectsRepo_Integration(t *testing.T) {
 		log:     logger,
 	}
 
-	// 3. Run migrations
-	// We need to find the migrations dir.
-	// In the test environment, we might need to go up a few levels.
-	wd, _ := os.Getwd()
-	// internal/store/postgres -> root is 3 levels up
-	migrationsDir := filepath.Join(wd, "../../../migrations")
-
-	err = db.RunMigrations(ctx, migrationsDir)
+	err = db.RunMigrations(ctx, migrations.FS)
 	require.NoError(t, err)
 
 	repo := NewObjectsRepo(db)

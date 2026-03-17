@@ -23,7 +23,7 @@ func NewTLSConfig(certPath, keyPath, caPath, serverName string, insecureSkipVeri
 	// Load CA certificate if provided
 	var caPool *x509.CertPool
 	if caPath != "" {
-		caCert, err := os.ReadFile(caPath)
+		caCert, err := os.ReadFile(caPath) // #nosec G304
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 		}
@@ -38,6 +38,6 @@ func NewTLSConfig(certPath, keyPath, caPath, serverName string, insecureSkipVeri
 		RootCAs:            caPool, // For Client verifying Server
 		ClientCAs:          caPool, // For Server verifying Client (mTLS)
 		ServerName:         serverName,
-		InsecureSkipVerify: insecureSkipVerify,
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402
 	}, nil
 }

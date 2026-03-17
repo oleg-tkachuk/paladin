@@ -3,17 +3,19 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -43,6 +45,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return domain.CreateObjectResponse{}, err
 	}
 
@@ -51,17 +54,17 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	// Validate category slug format server-side before any DB lookup
-	if err := utils.ValidateCategorySlug(category); err != nil {
+	if err := validation.CategorySlug(category); err != nil {
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid category", err)
 	}
 
 	if externalRef != nil {
-		if err := utils.ValidateExternalRef(*externalRef); err != nil {
+		if err := validation.ExternalRef(*externalRef); err != nil {
 			return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
-	if err := utils.ValidateLabels(labels); err != nil {
+	if err := validation.Labels(labels); err != nil {
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
@@ -78,7 +81,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	// external_ref idempotency
 	if externalRef != nil {
 		existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef)
-		if err != nil {
+		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return domain.CreateObjectResponse{}, err
 		}
 		if existing != nil {
@@ -87,29 +90,22 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 				if ttl == 0 {
 					ttl = s.s3.PresignTTLDuration()
 				}
-				signed, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+				signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 					return s.s3.PresignPutObject(ctx, existing.ObjectKey, existing.ContentType, existing.SizeBytes, ttl)
 				})
 				if err != nil {
 					return domain.CreateObjectResponse{}, err
 				}
+
 				return domain.CreateObjectResponse{
 					ID: existing.ID, Key: existing.ObjectKey, Bucket: existing.Bucket,
 					Category: existing.Category,
 					Upload:   domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},
 				}, nil
 			}
+
 			return domain.CreateObjectResponse{}, apperrors.Conflict("object with this external_ref already exists with different parameters", nil)
 		}
-	}
-
-	// Verify the category exists for this tenant
-	exists, err := s.catRepo.Exists(ctx, tenantID, category)
-	if err != nil {
-		return domain.CreateObjectResponse{}, fmt.Errorf("check category: %w", err)
-	}
-	if !exists {
-		return domain.CreateObjectResponse{}, apperrors.NotFound(fmt.Sprintf("category %q not found", category), nil)
 	}
 
 	id := uuid.New()
@@ -121,11 +117,34 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		ttl = s.s3.PresignTTLDuration()
 	}
 
-	signed, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
-		return s.s3.PresignPutObject(ctx, key, contentType, sizeBytes, ttl)
+	// Parallelize S3 presign and Category existence check
+	g, gCtx := errgroup.WithContext(ctx)
+	var catExists bool
+	var signed domain.Presigned
+
+	g.Go(func() error {
+		exists, err := s.catRepo.Exists(gCtx, tenantID, category)
+		if err != nil {
+			return fmt.Errorf("check category: %w", err)
+		}
+		catExists = exists
+		return nil
 	})
-	if err != nil {
+
+	g.Go(func() error {
+		var err error
+		signed, err = executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
+			return s.s3.PresignPutObject(gCtx, key, contentType, sizeBytes, ttl)
+		})
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		return domain.CreateObjectResponse{}, err
+	}
+
+	if !catExists {
+		return domain.CreateObjectResponse{}, apperrors.NotFound(fmt.Sprintf("category %q not found", category), nil)
 	}
 
 	bucket := s.s3.BucketName()
@@ -160,5 +179,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	opStatus = "success"
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", id.String()))
+
 	return res, nil
 }

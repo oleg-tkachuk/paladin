@@ -44,6 +44,16 @@ func TestObjectFSM(t *testing.T) {
 		{"HardDeleted -> Restore (Error)", domain.ObjectHardDeleted, domain.EventObjectRestore, domain.ObjectHardDeleted, true},
 		{"Pending -> Restore (Error)", domain.ObjectPending, domain.EventObjectRestore, domain.ObjectPending, true},
 		{"Complete -> Restore (Error)", domain.ObjectComplete, domain.EventObjectRestore, domain.ObjectComplete, true},
+
+		// Copy (self-transition from live states)
+		{"Pending -> Copy (OK)", domain.ObjectPending, domain.EventObjectCopy, domain.ObjectPending, false},
+		{"Uploading -> Copy (OK)", domain.ObjectUploading, domain.EventObjectCopy, domain.ObjectUploading, false},
+		{"Uploaded -> Copy (OK)", domain.ObjectUploaded, domain.EventObjectCopy, domain.ObjectUploaded, false},
+		{"Complete -> Copy (OK)", domain.ObjectComplete, domain.EventObjectCopy, domain.ObjectComplete, false},
+		{"SoftDeleted -> Copy (Error)", domain.ObjectSoftDeleted, domain.EventObjectCopy, domain.ObjectSoftDeleted, true},
+		{"HardDeleted -> Copy (Error)", domain.ObjectHardDeleted, domain.EventObjectCopy, domain.ObjectHardDeleted, true},
+		{"Aborted -> Copy (Error)", domain.ObjectAborted, domain.EventObjectCopy, domain.ObjectAborted, true},
+		{"Error -> Copy (Error)", domain.ObjectError, domain.EventObjectCopy, domain.ObjectError, true},
 	}
 
 	for _, tt := range tests {

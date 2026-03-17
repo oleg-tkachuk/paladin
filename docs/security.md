@@ -1,47 +1,38 @@
-# Security
+# Security - Paladin (PALADIN)
 
-The `paladin` is designed as an internal microservice, heavily prioritizing structural multi-tenancy and credential safety.
+## Overview
 
-## 1. Authentication & Authorization
+PALADIN is designed with a "Secure by Default" mindset, focusing on tenant isolation and least-privilege access.
 
-### Implemented
+## 1. Authentication
 
-- **Trusted Tenancy:** The service relies on an upstream API Gateway (or service mesh) to authenticate users and assert the tenant context via the `X-Tenant-ID` HTTP header.
-- **Enforcement Middleware:** `middleware.EnforceTenant` strictly rejects requests lacking a valid tenant context (excluding system probes like `/health/livez`).
-- **Path-Tenant Validation:** If the route includes a `:tenant_id` path parameter, the middleware ensures it matches the `X-Tenant-ID` header. This strict matching prevents token-swapping attacks. (Config: `security.reject_tenant_mismatch`).
+Access is controlled via two primary mechanisms:
 
-### Recommendations (Not Implemented)
+- **Tenant Context**: All requests must be associated with a valid `TenantId`. In production, this is usually extracted from a JWT or set by an upstream reverse proxy.
+- **Admin Authentication**: Administrative endpoints (e.g., `/admin/config`) are protected by a shared secret (`auth.admin_key`).
 
-- The service currently accepts `X-Tenant-ID` as a plaintext header. It is highly recommended to ensure the network boundary strips arbitrary client-provided `X-Tenant-ID` headers to prevent tenant spoofing, relying strictly on a trusted API Gateway.
+## 2. Authorization & Isolation
 
-## 2. Data Isolation (Row-Level Security)
+- **Tenant Scoping**: All database queries and storage operations are strictly scoped by `tenant_id`.
+- **Reject Tenant Mismatch**: If enabled (`security.reject_tenant_mismatch`), PALADIN will reject any request where the derived tenant ID doesn't match the one explicitly provided in the request body or path.
+- **RLS (Planned)**: Future support for PostgreSQL Row Level Security to provide an additional layer of isolation at the database level.
 
-- **Implemented:** The Postgres database employs strict **Row-Level Security (RLS)**.
-- Every transaction block initiates with `SET LOCAL app.tenant_id = '<tenant>'`.
-- DB queries cannot accidentally leak rows belonging to a different tenant because the Postgres kernel enforces the `tenant_id` WHERE clause universally on tables like `objects`, `multipart_uploads`, and `audit_logs`.
+## 3. Storage Security
 
-## 3. Secret Management
+- **Signed URLs**: Clients never get direct access to storage credentials. PALADIN issues time-limited pre-signed URLs (HMAC) for specific objects.
+- **SSE (Server Side Encryption)**: PALADIN supports AES-256 or KMS-based encryption for objects at rest in S3/SeaweedFS.
 
-- **Implemented:** The application seamlessly supports Kubernetes Secrets for critical credentials.
-- Config properties like `password_secret` (for Postgres) and `access_key_secret` / `secret_key_secret` (for S3) can reference K8s secrets.
-- An internal HTTP resolver (`internal/config/resolver.go`) queries a sidecar or secret-reader service to securely fetch these secrets at bootstrap, preventing them from being stored in plaintext YAML files or environment variables.
+## 4. Input Validation
 
-## 4. Input Validation & Limits
+- **JSON Schema**: All REST request bodies are validated against the OpenAPI specification.
+- **Content Type Enforcement**: PALADIN rejects uploads with content types not in the `allowed_content_types` whitelist.
+- **Size Limits**: Enforced at the control plane layer (`max_object_size`) and propagated to S3 via pre-signed URL conditions.
 
-- **Implemented:**
-  - **OpenAPI Validation:** Requests are strictly validated against `openapi.yaml` via code-generated middleware (`middleware.OapiRequestValidator`).
-  - **Payload Limits:** Business logic validates file sizes against `policy.max_object_size` and multipart bounds (`min_part_size`, `max_part_size`).
-  - **Content Types:** Allowed MIME types are checked against an explicitly permitted list in configuration.
-  - **Rate Limiting:** Scaffolding exists for tenant-based rate limiting (headers `X-RateLimit-*`), with the ability to cap requests per second (`rate_limit.requests_per_second`).
+## 5. Secret Management
 
-## 5. Audit Logging
+PALADIN integrates with the Kubernetes Secret API to resolve credentials for:
 
-- **Implemented:** All mutable and critical access requests are captured by `middleware.AuditLogger` and stored in the `audit_logs` table. Fields like `actor_type`, `client_ip`, `path`, and HTTP outcomes are immutably recorded for compliance.
-
-## 6. TLS / mTLS
-
-- **Implemented:** The internal HTTP server can be configured to serve traffic over TLS (`server.http.tls.enabled`, `cert_path`, `key_path`). mTLS is assumed to be offloaded to a service mesh (like Linkerd or Istio).
-
-## 7. Protected Data Handling
-
-- **Implemented:** Passwords and credentials are NEVER logged. The main request logger prevents potentially sensitive URL bodies or headers from entering stdout. However, if `security.log_sensitive` is explicitly enabled in dev environments, deeper request introspection is permitted.
+- Postgres Password
+- S3 Access/Secret Keys
+- Admin Tokens
+- SSE KMS Keys

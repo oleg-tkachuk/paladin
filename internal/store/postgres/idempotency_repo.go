@@ -6,6 +6,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 )
 
 type IdempotencyRepo struct {
@@ -22,11 +23,13 @@ func (r *IdempotencyRepo) Get(ctx context.Context, tenantID string, key string) 
 	rec, err := r.db.Queries.GetIdempotencyKey(ctx, tenantID, key)
 	if err != nil {
 		status = "error"
-		return nil, MapPgError(err)
+
+		return nil, mapPgError(err)
 	}
 
 	status = "success"
-	result := MapIdempotencyToDomain(rec.IdempotencyKey)
+	result := mapToDomainIdempotency(rec.IdempotencyKey)
+
 	return &result, nil
 }
 
@@ -40,7 +43,7 @@ func (r *IdempotencyRepo) Save(ctx context.Context, rec domain.IdempotencyRecord
 		rec.Key,
 		rec.RequestPath,
 		rec.RequestHash,
-		int32(rec.ResponseCode),
+		safecast.Int32(rec.ResponseCode),
 		rec.ResponseBody,
 		timestampToPgtype(rec.ExpiresAt),
 	)
@@ -50,7 +53,8 @@ func (r *IdempotencyRepo) Save(ctx context.Context, rec domain.IdempotencyRecord
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }
 
 func (r *IdempotencyRepo) Delete(ctx context.Context, tenantID string, key string) error {
@@ -64,5 +68,6 @@ func (r *IdempotencyRepo) Delete(ctx context.Context, tenantID string, key strin
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }

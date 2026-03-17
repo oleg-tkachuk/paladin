@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/internal/errors"
+	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
@@ -22,7 +23,7 @@ func TestAppError_ErrorAndUnwrap(t *testing.T) {
 
 	appErrNoBase := errors.New(errors.CodeInternal, "something went wrong", nil)
 	assert.Equal(t, "[internal] something went wrong", appErrNoBase.Error())
-	assert.Nil(t, appErrNoBase.Unwrap())
+	assert.NoError(t, appErrNoBase.Unwrap())
 }
 
 func TestAppError_WithContext(t *testing.T) {
@@ -186,7 +187,7 @@ func TestMapToHTTPProblem_RFC7807Fields(t *testing.T) {
 		assert.Equal(t, 404, statusCode)
 		assert.Equal(t, 404, pd.Status)
 		assert.Equal(t, "Not Found", pd.Title)
-		assert.Equal(t, "https://api.paladin.io/problems/not_found", pd.Type)
+		assert.Equal(t, apperrors.ProblemTypeBase+"not_found", pd.Type)
 		assert.Equal(t, "object not found", pd.Detail)
 		assert.Equal(t, "/v1/objects/abc", pd.Instance)
 	})
@@ -217,7 +218,7 @@ func TestMapToHTTPProblem_RFC7807Fields(t *testing.T) {
 		statusCode, pd := errors.MapToHTTPProblem(ctx, goerrors.New("some unexpected error"), "/v1/objects")
 		assert.Equal(t, 500, statusCode)
 		assert.Equal(t, "Internal Server Error", pd.Title)
-		assert.Equal(t, "https://api.paladin.io/problems/internal", pd.Type)
+		assert.Equal(t, apperrors.ProblemTypeBase+"internal", pd.Type)
 	})
 
 	t.Run("AllStatusCodeMappings", func(t *testing.T) {

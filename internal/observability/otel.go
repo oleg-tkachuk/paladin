@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type ShutdownFunc func(context.Context) error
@@ -37,7 +38,7 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 	// Trace Exporter
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(cfg.Endpoint),
-		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 	// Metric Exporter
 	metricExporter, err := otlpmetricgrpc.New(ctx,
 		otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
-		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return nil, err
@@ -75,6 +76,7 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 		if err := mp.Shutdown(ctx); err != nil {
 			errs = errors.Join(errs, err)
 		}
+
 		return errs
 	}
 

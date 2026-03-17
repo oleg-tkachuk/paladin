@@ -1,50 +1,48 @@
-# Telemetry
+# Telemetry - Paladin (PALADIN)
 
-The `paladin` utilizes a dual-stack configuration for observability: **Prometheus** for local/pull-based metrics and **OpenTelemetry (OTel)** for distributed tracing and OTLP metric exports.
+## Overview
 
-## 1. Stack Components
+PALADIN is instrumented with [OpenTelemetry](https://opentelemetry.io/) for distributed tracing and exports metrics for [Prometheus](https://prometheus.io/).
 
-- **Metrics Library:** `github.com/prometheus/client_golang` and `go.opentelemetry.io/otel/metric`
-- **Tracing Library:** `go.opentelemetry.io/otel/trace`
-- **Middleware:** Web frameworks and gRPC servers are instrumented via `otelhttp` and `otelgrpc`.
-- **Exporters:** Metrics and Traces pushed via OTLP (`otlpmetricgrpc`, `otlptracegrpc`) to an OpenTelemetry collector.
+## 1. Metrics
 
-## 2. Health & Readiness Probes
+Accessible via the `/metrics` endpoint if enabled.
 
-Exposed unauthenticated to orchestrators (e.g., Kubernetes):
+### Key Metrics
 
-- `GET /health/livez`: Basic liveness check. Asserts the server is accepting connections.
-- `GET /health/readyz`: Strict readiness check. Verifies the Postgres connection pool is healthy and the S3 backend responds to `HEAD Bucket` (`pingS3`).
-- `GET /health/startupz`: Used during the boot phase to grant the service time to warm up connections.
+- `paladin_http_requests_total`: Counter of HTTP requests (labels: `method`, `path`, `status`).
+- `paladin_http_request_duration_seconds`: Histogram of HTTP request latency.
+- `paladin_db_queries_total`: Counter of database queries (labels: `op`, `status`).
+- `paladin_s3_ops_total`: Counter of S3 operations (labels: `op`, `status`).
+- `paladin_objects_created_total`: Counter of new objects registered.
+- `paladin_storage_usage_bytes`: Gauge of total storage used (per tenant).
 
-The health endpoint payloads return a `status` top-level struct, including `dependencies` statuses detailing component latencies (`postgresql`, `seaweedfs`).
+## 2. Tracing
 
-## 3. Metrics Catalog
+Tracing is automatically propagated across HTTP/gRPC boundaries using the `traceparent` header.
 
-The service defines custom application metrics (`internal/metrics/metrics.go` and `otel.go`).
+### Configuration
 
-| Metric Name | Type | Labels | Description |
-|---|---|---|---|
-| `paladin_object_operation_duration_seconds` | Histogram | `operation`, `status` | Latency and count of logical object operations |
-| `paladin_s3_operation_duration_seconds` | Histogram | `operation`, `status` | Latency and count of external S3 API calls |
-| `paladin_db_query_duration_seconds` | Histogram | `query`, `status` | Latency of internal database interactions |
-| `paladin_db_connections` | Gauge | `state` (`acquired`, `idle`, `max`, `total`) | Connection pool size monitoring |
-| `paladin_cache_operations_total` | Counter | `operation`, `result` (`hit`/`miss`) | Track internal cache effectiveness |
-| `paladin_rate_limiter_tenants` | Gauge | `state` | Track active vs max concurrent rate limiters |
-| `paladin_http_requests_total` | Counter | `method`, `path`, `status` | Raw HTTP inbound volume |
-| `paladin_http_request_duration_seconds` | Histogram | `method`, `path`, `status` | HTTP endpoint tail latencies |
-| `paladin_objects_total` | Gauge | `status` | Overall point-in-time counts of tracked metadata rows |
-| `paladin_multipart_uploads_total` | Gauge | `status` | Active/pending multipart upload workflows |
+- `otel.enabled`: Boolean to enable/disable tracing.
+- `otel.endpoint`: OTLP collector endpoint (e.g., `otel-collector:4317`).
+- `otel.protocol`: `grpc` or `http/protobuf`.
 
-*Note: High cardinality fields like `tenant_id` are intentionally excluded from Prometheus labels to prevent TSDB explosion unless explicitly opted into via configuration.*
+## 3. Health Checks
 
-## 4. Distributed Tracing
+Health information is available at `/health/livez`, `/health/readyz`, and `/health/startupz`.
 
-Tracing is initialized in `internal/observability/otel.go`.
+- **Readiness Check**: Performs a `Ping` to Postgres and a `HEAD` request to a test object in S3.
+- **Dependency Map**: The `readyz` endpoint returns a detailed JSON map of all downstream service statuses.
 
-**Span Structure:**
+### Example Health Response
 
-- Every HTTP/gRPC ingress creates an implicit root span (or continues a propagated trace).
-- `SpanContext` is pushed into the `context.Context` payload.
-- W3C Trace Context standards (`traceparent`, `tracestate`) are parsed from inbound HTTP headers to maintain linkage across microservice boundaries.
-- The logger automatically extracts and prints the `trace_id` for logs emitted within the span.
+```json
+{
+  "status": "ready",
+  "dependencies": {
+    "postgresql": { "status": "ok", "latency_ms": 2 },
+    "seaweedfs": { "status": "ok", "latency_ms": 15 },
+    "breakers": {}
+  }
+}
+```

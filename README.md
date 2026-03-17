@@ -1,36 +1,45 @@
-# Paladin
+# Paladin (PALADIN)
 
-The **Paladin** is a robust, multi-tenant microservice acting as a metadata broker and orchestration layer over S3-compatible blob storage. It does not store binary blobs itself; instead, it tracks object lifecycles in PostgreSQL and issues secure, time-bound pre-signed URLs directly to clients for uploading and downloading content.
+## Overview
 
-## Features
+The Paladin (PALADIN) is a high-performance service for managing object metadata and lifecycle across S3-compatible storage systems. It provides multi-tenant isolation, structured audit logs, and a standardized API for object interactions.
 
-- **Decoupled Storage**: Clients upload binary data directly to S3 using short-lived tokens, bypassing the control plane to save bandwidth.
-- **Strict Multi-Tenancy**: Data isolation is enforced at the database layer using PostgreSQL Row-Level Security (RLS).
-- **Multipart Upload Support**: Full orchestration for files up to 5TB via S3 multipart APIs.
-- **Idempotency**: Built-in support for safely retrying state-mutating requests.
-- **Audit Logging**: Immutable history of all read/write actions.
+## Documentation Index
 
-## Documentation Navigation
+- [Architecture](docs/architecture.md) - High-level design and inventory.
+- [Configuration](docs/configuration.md) - Environment variables and YAML settings.
+- [API](docs/api.md) - REST and gRPC/Connect endpoints.
+- [Database](docs/database.md) - Postgres schema and migrations.
+- [Logging](docs/logging.md) - Structured logging and event taxonomy.
+- [Telemetry](docs/telemetry.md) - Metrics and tracing.
+- [Async & Jobs](docs/async.md) - Reaper worker and background tasks.
+- [Security](docs/security.md) - Auth, isolation, and secret management.
+- [Diagrams](docs/diagrams.md) - Visualizing flows and architecture.
 
-Comprehensive technical documentation is split into domain-specific guides:
+## Getting Started
 
-- **[Architecture](docs/architecture.md)**: System design, boundaries, and codebase inventory.
-- **[Configuration](docs/configuration.md)**: Exhaustive breakdown of YAML configurations and environment mappings.
-- **[API](docs/api.md)**: Endpoints, contracts, and interaction patterns.
-- **[Database](docs/database.md)**: PostgreSQL schemas, RLS policies, and migrations.
-- **[Logging](docs/logging.md)**: Log taxonomy, structured fields, and redaction policies.
-- **[Telemetry](docs/telemetry.md)**: Prometheus metrics, OpenTelemetry spans, and Kubernetes health probes.
-- **[Async & Jobs](docs/async.md)**: Background workers (e.g., the Reaper for garbage collection).
-- **[Security](docs/security.md)**: Tenant isolation, authentication rules, and secret resolution.
-- **[Operations](docs/operations.md)**: Docker packaging, build pipelines, and Kubernetes deployment.
-- **[Diagrams (Mermaid)](docs/diagrams.md)**: Visual context, sequence, ER, and deployment diagrams.
+### Prerequisites
 
-## Quick Start
+- Go 1.21+
+- PostgreSQL 15+
+- S3-compatible storage (e.g., SeaweedFS, MinIO, AWS S3)
 
-To run the full stack locally:
+### Running Locally
 
-```bash
-task up
-```
+1. Copy the example config: `cp configs/paladin.yaml.example configs/paladin.yaml`
+2. Start dependencies (e.g., via Docker Compose).
+3. Run the migrations: `task db:migrate`
+4. Start the server: `go run cmd/server/main.go`
 
-Ensure you have your environment configuration securely populated before starting.
+## Infrastructure
+
+- **K8s Resources**: Deployments, Services, ConfigMaps, Secrets, Ingress.
+- **Helm Values**: See [deploy/helm/values.yaml](file:///workspace/deploy/helm/values.yaml).
+- **CI/CD**: GitHub Actions for building images and running tests.
+
+## Source Index
+
+- [cmd/server/main.go](file:///workspace/cmd/server/main.go) - Entry point.
+- [internal/api/](file:///workspace/internal/api/) - Layered API implementations.
+- [internal/service/](file:///workspace/internal/service/) - Domain services.
+- [internal/store/](file:///workspace/internal/store/) - Postgres repositories.

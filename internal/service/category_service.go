@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/errors"
+	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 )
 
 type categoryService struct {
@@ -20,6 +24,30 @@ func NewCategoryService(repo domain.CategoryRepository) domain.CategoryService {
 }
 
 func (s *categoryService) Create(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	if err := validation.CategorySlug(slug); err != nil {
+		return nil, apperrors.BadRequest("invalid category slug", err)
+	}
+	if err := validation.CategoryName(name); err != nil {
+		return nil, apperrors.BadRequest("invalid category name", err)
+	}
+	if description != nil {
+		if err := validation.CategoryDescription(*description); err != nil {
+			return nil, apperrors.BadRequest("invalid category description", err)
+		}
+	}
+
+	// If slug contains slashes, check if parent categories exist
+	if lastSlash := strings.LastIndex(slug, domain.CategorySeparator); lastSlash > 0 {
+		parentSlug := slug[:lastSlash]
+		exists, err := s.repo.Exists(ctx, tenantID, parentSlug)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.NotFound(fmt.Sprintf("parent category %q not found", parentSlug), nil)
+		}
+	}
+
 	cat := domain.Category{
 		ID:          uuid.New(),
 		TenantID:    tenantID,
@@ -34,12 +62,36 @@ func (s *categoryService) Create(ctx context.Context, tenantID, slug, name strin
 	return s.repo.Get(ctx, tenantID, slug)
 }
 
+func (s *categoryService) Update(ctx context.Context, tenantID, slug, name string, description *string) (*domain.Category, error) {
+	if err := validation.CategoryName(name); err != nil {
+		return nil, apperrors.BadRequest("invalid category name", err)
+	}
+	if description != nil {
+		if err := validation.CategoryDescription(*description); err != nil {
+			return nil, apperrors.BadRequest("invalid category description", err)
+		}
+	}
+
+	cat := domain.Category{
+		TenantID:    tenantID,
+		Slug:        slug,
+		Name:        name,
+		Description: description,
+	}
+
+	if err := s.repo.Update(ctx, cat); err != nil {
+		return nil, err
+	}
+
+	return s.repo.Get(ctx, tenantID, slug)
+}
+
 func (s *categoryService) Get(ctx context.Context, tenantID, slug string) (*domain.Category, error) {
 	return s.repo.Get(ctx, tenantID, slug)
 }
 
-func (s *categoryService) List(ctx context.Context, tenantID string, limit int, cursor string) ([]domain.Category, string, int64, error) {
-	return s.repo.List(ctx, tenantID, limit, cursor)
+func (s *categoryService) List(ctx context.Context, tenantID string, filter domain.ListCategoriesFilter) ([]domain.Category, string, int64, error) {
+	return s.repo.List(ctx, tenantID, filter)
 }
 
 func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) error {
@@ -51,8 +103,15 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 		return errors.Conflict("Cannot delete category because it still contains active objects", nil)
 	}
 
-	_, err = s.repo.Delete(ctx, tenantID, slug)
-	return err
+	deleted, err := s.repo.Delete(ctx, tenantID, slug)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return errors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
+	}
+
+	return nil
 }
 
 func (s *categoryService) GetStats(ctx context.Context, tenantID, slug string) (*domain.CategoryStats, error) {

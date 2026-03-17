@@ -1,0 +1,133 @@
+package grpcapi
+
+import (
+	"context"
+
+	"connectrpc.com/connect"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
+)
+
+// TenantHandler implements grpcapiconnect.TenantServiceHandler.
+type TenantHandler struct {
+	log *zap.Logger
+	svc domain.TenantService
+}
+
+// NewTenantHandler creates a new TenantHandler.
+func NewTenantHandler(log *zap.Logger, svc domain.TenantService) *TenantHandler {
+	return &TenantHandler{log: log, svc: svc}
+}
+
+func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[CreateTenantRequest]) (*connect.Response[CreateTenantResponse], error) {
+	msg := req.Msg
+
+	out, err := h.svc.Create(ctx, msg.TenantId, msg.DisplayName, msg.Labels, msg.Tags)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to create tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+		return nil, grpcError(err)
+	}
+
+	return connect.NewResponse(&CreateTenantResponse{
+		Tenant: tenantToProto(out),
+	}), nil
+}
+
+func (h *TenantHandler) GetTenant(ctx context.Context, req *connect.Request[GetTenantRequest]) (*connect.Response[GetTenantResponse], error) {
+	msg := req.Msg
+
+	out, err := h.svc.Get(ctx, msg.TenantId)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to get tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+		return nil, grpcError(err)
+	}
+
+	return connect.NewResponse(&GetTenantResponse{
+		Tenant: tenantToProto(out),
+	}), nil
+}
+
+func (h *TenantHandler) ListTenants(ctx context.Context, req *connect.Request[ListTenantsRequest]) (*connect.Response[ListTenantsResponse], error) {
+	msg := req.Msg
+
+	filter := domain.ListTenantsFilter{
+		Limit:  int(msg.PageSize),
+		Cursor: msg.PageToken,
+	}
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+
+	if msg.Filter != nil {
+		if msg.Filter.Search != "" {
+			filter.Search = &msg.Filter.Search
+		}
+		if len(msg.Filter.Labels) > 0 {
+			filter.LabelSelector = msg.Filter.Labels
+		}
+		if len(msg.Filter.Tags) > 0 {
+			filter.TagSelector = msg.Filter.Tags
+		}
+	}
+
+	if msg.OrderBy != "" {
+		filter.SortBy = msg.OrderBy
+	}
+	if msg.SortOrder == SortOrder_SORT_ORDER_DESC {
+		filter.SortOrder = "desc"
+	} else if msg.SortOrder == SortOrder_SORT_ORDER_ASC {
+		filter.SortOrder = "asc"
+	}
+
+	tenants, nextCursor, total, err := h.svc.List(ctx, filter)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to list tenants", zap.Error(err))
+		return nil, grpcError(err)
+	}
+
+	items := make([]*Tenant, 0, len(tenants))
+	for i := range tenants {
+		items = append(items, tenantToProto(&tenants[i]))
+	}
+
+	return connect.NewResponse(&ListTenantsResponse{
+		Tenants:       items,
+		NextPageToken: nextCursor,
+		TotalCount:    total,
+	}), nil
+}
+
+func (h *TenantHandler) DeleteTenant(ctx context.Context, req *connect.Request[DeleteTenantRequest]) (*connect.Response[DeleteTenantResponse], error) {
+	msg := req.Msg
+
+	err := h.svc.Delete(ctx, msg.TenantId)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to delete tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+		return nil, grpcError(err)
+	}
+
+	return connect.NewResponse(&DeleteTenantResponse{}), nil
+}
+
+func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.Request[UpdateTenantMetadataRequest]) (*connect.Response[UpdateTenantMetadataResponse], error) {
+	msg := req.Msg
+
+	// domain.TenantService.PatchMetadata takes map[string]interface{} for labelsPatch.
+	// We need to convert map[string]string to map[string]interface{}.
+	labelsPatch := make(map[string]interface{}, len(msg.Labels))
+	for k, v := range msg.Labels {
+		labelsPatch[k] = v
+	}
+
+	out, err := h.svc.PatchMetadata(ctx, msg.TenantId, labelsPatch, msg.Tags, msg.DisplayName)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to update tenant metadata", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+		return nil, grpcError(err)
+	}
+
+	return connect.NewResponse(&UpdateTenantMetadataResponse{
+		Tenant: tenantToProto(out),
+	}), nil
+}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
 	"go.opentelemetry.io/otel"
@@ -30,6 +31,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -38,7 +40,17 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
-		return nil, err
+
+		return nil, errors.BadRequest("invalid upload_id", err)
+	}
+
+	if multi == nil {
+		err = fmt.Errorf("multipart upload not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		status = "error"
+
+		return nil, errors.BadRequest("invalid upload_id", err)
 	}
 
 	// FSM State Transition Check
@@ -48,6 +60,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "conflict"
+
 		return nil, fmt.Errorf("invalid transition: %w", err)
 	}
 
@@ -56,26 +69,30 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		status = "success"
 		span.SetStatus(codes.Ok, "already_completed")
 		rec, _ := s.objRepo.Get(ctx, tenantID, multi.ObjectID)
+
 		return rec, nil
 	}
 
-	if err = s.executeWithBreaker(ctx, "s3_complete_multipart", func() error {
+	err = s.executeWithBreaker("s3_complete_multipart", func() error {
 		return s.s3.CompleteMultipartUpload(ctx, multi.ObjectKey, uploadID, parts)
-	}); err != nil {
+	})
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	// Double check S3 for final ETag/Size
-	head, err := executeWithBreakerRet(ctx, s.brk, "s3_head", func() (*domain.HeadRecord, error) {
+	head, err := executeWithBreakerRet(s.brk, "s3_head_object", func() (*domain.HeadRecord, error) {
 		return s.s3.HeadObject(ctx, multi.ObjectKey)
 	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
 
@@ -85,6 +102,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer uow.Rollback(ctx)
@@ -93,6 +111,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -100,6 +119,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -107,6 +127,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
@@ -115,11 +136,13 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", multi.ObjectID.String()))
+
 	return rec, nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -40,7 +41,8 @@ func (r *MultipartRepo) Create(ctx context.Context, rec domain.Multipart) error 
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {
@@ -51,16 +53,19 @@ func (r *MultipartRepo) GetByUploadID(ctx context.Context, tenantID string, uplo
 	mp, err := r.db.Queries.GetMultipartByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
 		status = "error"
-		return nil, MapPgError(err)
+
+		return nil, mapPgError(err)
 	}
 
-	result, err := MapMultipartToDomain(mp.MultipartUpload)
+	result, err := mapToDomainMultipart(mp.MultipartUpload)
 	if err != nil {
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
+
 	return &result, nil
 }
 
@@ -69,13 +74,17 @@ func (r *MultipartRepo) UpsertPartETag(ctx context.Context, multipartID uuid.UUI
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "UpsertMultipartPart", status, start) }()
 
-	err := r.db.Queries.UpsertMultipartPart(ctx, uuidToPgtype(multipartID), int32(partNumber), &etag, sizeBytes)
+	if partNumber > 2147483647 {
+		return fmt.Errorf("part number %d is too large", partNumber)
+	}
+	err := r.db.Queries.UpsertMultipartPart(ctx, uuidToPgtype(multipartID), safecast.Int32(partNumber), &etag, sizeBytes)
 	if err != nil {
 		status = "error"
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([]domain.MultipartPart, error) {
@@ -86,20 +95,23 @@ func (r *MultipartRepo) ListParts(ctx context.Context, multipartID uuid.UUID) ([
 	rows, err := r.db.Queries.ListMultipartParts(ctx, uuidToPgtype(multipartID))
 	if err != nil {
 		status = "error"
-		return nil, MapPgError(err)
+
+		return nil, mapPgError(err)
 	}
 
 	out := make([]domain.MultipartPart, 0, len(rows))
 	for _, row := range rows {
-		part, err := MapMultipartPartToDomain(row.MultipartPart)
+		part, err := mapToDomainMultipartPart(row.MultipartPart)
 		if err != nil {
 			status = "error"
+
 			return nil, fmt.Errorf("map multipart part: %w", err)
 		}
 		out = append(out, part)
 	}
 
 	status = "success"
+
 	return out, nil
 }
 
@@ -114,7 +126,8 @@ func (r *MultipartRepo) MarkCompleted(ctx context.Context, tenantID string, uplo
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, uploadID string) error {
@@ -128,7 +141,8 @@ func (r *MultipartRepo) MarkAborted(ctx context.Context, tenantID string, upload
 	} else {
 		status = "success"
 	}
-	return MapPgError(err)
+
+	return mapPgError(err)
 }
 
 func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, uploadID string, objectID uuid.UUID) error {
@@ -169,6 +183,7 @@ func (r *MultipartRepo) CompleteUpload(ctx context.Context, tenantID string, upl
 	} else {
 		status = "success"
 	}
+
 	return err
 }
 
@@ -177,22 +192,25 @@ func (r *MultipartRepo) ListExpired(ctx context.Context, limit int) ([]domain.Mu
 	var status string
 	defer func() { metrics.RecordDbQuery(ctx, "ListExpiredMultiparts", status, start) }()
 
-	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, int32(limit))
+	rows, err := r.db.Queries.ListExpiredMultiparts(ctx, safecast.Int32(limit))
 	if err != nil {
 		status = "error"
-		return nil, MapPgError(err)
+
+		return nil, mapPgError(err)
 	}
 
 	out := make([]domain.Multipart, 0, len(rows))
 	for _, row := range rows {
-		mp, err := MapMultipartToDomain(row.MultipartUpload)
+		mp, err := mapToDomainMultipart(row.MultipartUpload)
 		if err != nil {
 			status = "error"
+
 			return nil, fmt.Errorf("map multipart: %w", err)
 		}
 		out = append(out, mp)
 	}
 
 	status = "success"
+
 	return out, nil
 }

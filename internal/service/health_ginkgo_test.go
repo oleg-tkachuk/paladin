@@ -27,6 +27,7 @@ func (m *MockS3HealthChecker) Ping(ctx context.Context) (domain.S3PingResult, er
 	if m.err != nil {
 		return domain.S3PingResult{Status: "unavailable", Message: m.err.Error()}, nil
 	}
+
 	return domain.S3PingResult{Status: "healthy", Message: "OK"}, nil
 }
 

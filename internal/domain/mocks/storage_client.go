@@ -215,6 +215,69 @@ func (_c *MockStorageClient_CompleteMultipartUpload_Call) RunAndReturn(run func(
 	return _c
 }
 
+// CopyObject provides a mock function for the type MockStorageClient
+func (_mock *MockStorageClient) CopyObject(ctx context.Context, srcKey string, dstKey string) error {
+	ret := _mock.Called(ctx, srcKey, dstKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CopyObject")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, srcKey, dstKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockStorageClient_CopyObject_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CopyObject'
+type MockStorageClient_CopyObject_Call struct {
+	*mock.Call
+}
+
+// CopyObject is a helper method to define mock.On call
+//   - ctx context.Context
+//   - srcKey string
+//   - dstKey string
+func (_e *MockStorageClient_Expecter) CopyObject(ctx interface{}, srcKey interface{}, dstKey interface{}) *MockStorageClient_CopyObject_Call {
+	return &MockStorageClient_CopyObject_Call{Call: _e.mock.On("CopyObject", ctx, srcKey, dstKey)}
+}
+
+func (_c *MockStorageClient_CopyObject_Call) Run(run func(ctx context.Context, srcKey string, dstKey string)) *MockStorageClient_CopyObject_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockStorageClient_CopyObject_Call) Return(err error) *MockStorageClient_CopyObject_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockStorageClient_CopyObject_Call) RunAndReturn(run func(ctx context.Context, srcKey string, dstKey string) error) *MockStorageClient_CopyObject_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateMultipartUpload provides a mock function for the type MockStorageClient
 func (_mock *MockStorageClient) CreateMultipartUpload(ctx context.Context, key string, contentType string) (domain.MultipartInit, error) {
 	ret := _mock.Called(ctx, key, contentType)

@@ -30,6 +30,7 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -38,10 +39,12 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return rec, nil
 }

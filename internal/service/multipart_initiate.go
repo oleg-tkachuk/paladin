@@ -9,7 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"github.com/oleg-tkachuk/paladin/internal/validation"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -40,6 +40,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		opStatus = "error"
+
 		return domain.MultipartInitResponse{}, err
 	}
 
@@ -47,17 +48,17 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("validation failed", err)
 	}
 
-	if err := utils.ValidateCategorySlug(category); err != nil {
+	if err := validation.CategorySlug(category); err != nil {
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid category", err)
 	}
 
 	if externalRef != nil {
-		if err := utils.ValidateExternalRef(*externalRef); err != nil {
+		if err := validation.ExternalRef(*externalRef); err != nil {
 			return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid external_ref", err)
 		}
 	}
 
-	if err := utils.ValidateLabels(labels); err != nil {
+	if err := validation.Labels(labels); err != nil {
 		return domain.MultipartInitResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
@@ -90,7 +91,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	id := uuid.New()
 	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
 
-	init, err := executeWithBreakerRet(ctx, s.brk, "s3_initiate_multipart", func() (domain.MultipartInit, error) {
+	init, err := executeWithBreakerRet(s.brk, "s3_init_multipart", func() (domain.MultipartInit, error) {
 		return s.s3.CreateMultipartUpload(ctx, key, contentType)
 	})
 	if err != nil {
@@ -150,5 +151,6 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 
 	opStatus = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return res, nil
 }

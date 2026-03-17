@@ -1,121 +1,74 @@
-package middleware_test
+package middleware
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"sync"
+	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
-
-	"github.com/gin-gonic/gin"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/time/rate"
 )
 
-var _ = Describe("RateLimitMiddleware", func() {
-	var (
-		cfg    *config.Config
-		router *gin.Engine
-	)
+func TestTenantRateLimiter_GetLimiter(t *testing.T) {
+	rl := NewTenantRateLimiter(rate.Limit(10), 20, 100, time.Minute, time.Minute)
 
-	BeforeEach(func() {
-		gin.SetMode(gin.TestMode)
-		cfg = &config.Config{
-			RateLimit: config.RateLimit{
-				RequestsPerSecond: 10,
-				Burst:             5,
-				MaxTenants:        2,
-				CleanupTTL:        100 * time.Millisecond,
-				CleanupInterval:   50 * time.Millisecond,
-			},
-		}
+	l1 := rl.GetLimiter("tenant1")
+	assert.NotNil(t, l1)
+	assert.Equal(t, rate.Limit(10), l1.Limit())
+	assert.Equal(t, 20, l1.Burst())
 
-		router = gin.New()
-		router.Use(middleware.RateLimitMiddleware(cfg))
-		router.GET("/test", func(c *gin.Context) {
-			c.String(http.StatusOK, "ok")
-		})
-	})
+	l2 := rl.GetLimiter("tenant1")
+	assert.Same(t, l1, l2, "should return same limiter for same tenant")
 
-	It("should allow requests within limits", func() {
-		for i := 0; i < 5; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
-			req.Header.Set("X-Tenant-ID", "tenant1")
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			Expect(rec.Code).To(Equal(http.StatusOK))
-		}
-	})
+	l3 := rl.GetLimiter("tenant2")
+	assert.NotSame(t, l1, l3)
+}
 
-	It("should block requests exceeding burst", func() {
-		for i := 0; i < 5; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
-			req.Header.Set("X-Tenant-ID", "tenant1")
-			router.ServeHTTP(httptest.NewRecorder(), req)
-		}
+func TestTenantRateLimiter_Eviction(t *testing.T) {
+	// Max 2 entries
+	rl := NewTenantRateLimiter(rate.Limit(10), 20, 2, time.Minute, time.Minute)
 
-		// 6th request should be blocked
-		req, _ := http.NewRequest("GET", "/test", nil)
-		req.Header.Set("X-Tenant-ID", "tenant1")
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		Expect(rec.Code).To(Equal(http.StatusTooManyRequests))
-	})
+	rl.GetLimiter("tenant1")
+	time.Sleep(10 * time.Millisecond)
+	rl.GetLimiter("tenant2")
+	time.Sleep(10 * time.Millisecond)
 
-	It("should maintain separate limits for different tenants", func() {
-		// Exhaust tenant1
-		for i := 0; i < 10; i++ {
-			req, _ := http.NewRequest("GET", "/test", nil)
-			req.Header.Set("X-Tenant-ID", "tenant1")
-			router.ServeHTTP(httptest.NewRecorder(), req)
-		}
+	assert.Equal(t, 2, len(rl.visitors))
 
-		// tenant2 should still be allowed
-		req, _ := http.NewRequest("GET", "/test", nil)
-		req.Header.Set("X-Tenant-ID", "tenant2")
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		Expect(rec.Code).To(Equal(http.StatusOK))
-	})
+	// This should evict tenant1 (oldest access)
+	rl.GetLimiter("tenant3")
 
-	It("should evict oldest tenant when max tenants reached", func() {
-		// Use small burst to make testing eviction easier
-		cfg.RateLimit.MaxTenants = 1
-		router = gin.New()
-		router.Use(middleware.RateLimitMiddleware(cfg))
-		router.GET("/test", func(c *gin.Context) {
-			c.String(http.StatusOK, "ok")
-		})
+	rl.mu.RLock()
+	_, exists1 := rl.visitors["tenant1"]
+	_, exists2 := rl.visitors["tenant2"]
+	_, exists3 := rl.visitors["tenant3"]
+	rl.mu.RUnlock()
 
-		// 1. Fill with tenant1
-		req1, _ := http.NewRequest("GET", "/test", nil)
-		req1.Header.Set("X-Tenant-ID", "tenant1")
-		router.ServeHTTP(httptest.NewRecorder(), req1)
+	assert.False(t, exists1, "tenant1 should be evicted")
+	assert.True(t, exists2)
+	assert.True(t, exists3)
+}
 
-		// 2. Add tenant2 (should evict tenant1)
-		req2, _ := http.NewRequest("GET", "/test", nil)
-		req2.Header.Set("X-Tenant-ID", "tenant2")
-		router.ServeHTTP(httptest.NewRecorder(), req2)
+func TestTenantRateLimiter_Cleanup(t *testing.T) {
+	// TTL 50ms, cleanup interval 10ms
+	rl := NewTenantRateLimiter(rate.Limit(10), 20, 100, 50*time.Millisecond, 10*time.Millisecond)
 
-		// 3. tenant1 should have new limiter (burst reset)
-		router.ServeHTTP(httptest.NewRecorder(), req1)
-	})
+	rl.GetLimiter("tenant1")
+	assert.Equal(t, 1, len(rl.visitors))
 
-	It("should handle concurrent requests", func() {
-		var wg sync.WaitGroup
-		n := 20
-		wg.Add(n)
+	// Wait for cleanup
+	time.Sleep(150 * time.Millisecond)
 
-		for i := 0; i < n; i++ {
-			go func() {
-				defer wg.Done()
-				req, _ := http.NewRequest("GET", "/test", nil)
-				req.Header.Set("X-Tenant-ID", "concurrent")
-				router.ServeHTTP(httptest.NewRecorder(), req)
-			}()
-		}
-		wg.Wait()
-	})
-})
+	rl.mu.RLock()
+	assert.Equal(t, 0, len(rl.visitors), "limiter should be cleaned up after TTL")
+	rl.mu.RUnlock()
+}
+
+func TestTenantRateLimiter_Stats(t *testing.T) {
+	rl := NewTenantRateLimiter(rate.Limit(10), 20, 100, time.Minute, time.Minute)
+	rl.GetLimiter("tenant1")
+	rl.GetLimiter("tenant2")
+
+	stats := rl.Stats()
+	assert.Equal(t, 2, stats["active_limiters"])
+	assert.Equal(t, 100, stats["max_entries"])
+}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 
@@ -33,6 +34,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -41,6 +43,11 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
+		if errors.IsNotFound(err) || err == domain.ErrNotFound {
+			return nil, errors.NotFound("object not found", err)
+		}
+
 		return nil, err
 	}
 
@@ -51,6 +58,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, fmt.Errorf("invalid transition: %w", err)
 	}
 
@@ -58,6 +66,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if state == domain.ObjectComplete && rec.Status == domain.ObjectComplete {
 		status = "success"
 		span.SetStatus(codes.Ok, "already_complete")
+
 		return rec, nil
 	}
 
@@ -67,6 +76,11 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
+		if errors.IsS3NotFound(err) {
+			return nil, errors.PreconditionFailed("object not yet uploaded to storage", err)
+		}
+
 		return nil, fmt.Errorf("s3 head check: %w", err)
 	}
 
@@ -76,6 +90,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 	// Validate Size if provided
@@ -84,6 +99,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -92,6 +108,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
@@ -104,10 +121,12 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = "error"
+
 		return nil, err
 	}
 
 	status = "success"
 	span.SetStatus(codes.Ok, "")
+
 	return finalRec, nil
 }

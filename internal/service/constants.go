@@ -35,4 +35,8 @@ const (
 	ErrNotFound          = "not found"
 	ErrUnauthorized      = "unauthorized"
 	ErrConflict          = "conflict"
+
+	// Constants for observability and resilience
+	TracerName      = "object-service"
+	S3DeleteBreaker = "s3_delete"
 )
