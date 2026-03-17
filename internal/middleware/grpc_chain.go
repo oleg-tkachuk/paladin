@@ -10,7 +10,7 @@ import (
 	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/config"
-	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
@@ -53,13 +53,6 @@ var grpcSkippedMethods = map[string]bool{
 	"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo":      true,
 }
 
-// GRPCValidator is implemented by request messages that can self-validate.
-// The ValidationInterceptor checks for this interface and calls Validate()
-// before passing the request to the handler.
-type GRPCValidator interface {
-	Validate() error
-}
-
 // SetupGRPCInterceptors returns the ordered unary server interceptor chain.
 // Order matters: each interceptor wraps all subsequent ones.
 func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServerInterceptor {
@@ -83,8 +76,8 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 		LoggerInterceptor(),
 		// 8. Tenant enforcement — reject requests without tenant when auth enabled.
 		EnforceTenantInterceptor(cfg),
-		// 9. Validation — call req.Validate() on messages that implement GRPCValidator.
-		ValidationInterceptor(),
+		// 9. Validation — enforce buf.validate annotations via protovalidate.
+		GRPCProtoValidationInterceptor(),
 	}
 }
 
@@ -296,18 +289,12 @@ func EnforceTenantInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 	}
 }
 
-// ValidationInterceptor calls req.Validate() when the request message
-// implements GRPCValidator. Returns codes.InvalidArgument on failure.
-func ValidationInterceptor() grpc.UnaryServerInterceptor {
+// GRPCProtoValidationInterceptor validates request messages against
+// buf.validate annotations using protovalidate. Returns codes.InvalidArgument on failure.
+func GRPCProtoValidationInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if v, ok := req.(GRPCValidator); ok {
-			if err := v.Validate(); err != nil {
-				var appErr *apperrors.AppError
-				if aerr, yes := err.(*apperrors.AppError); yes {
-					appErr = aerr
-					_ = appErr
-				}
-
+		if msg, ok := req.(protovalidateMessage); ok {
+			if err := protovalidateValidator.Validate(msg); err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
 			}
 		}
@@ -459,19 +446,13 @@ func ConnectEnforceTenantInterceptor(cfg *config.Config) connect.Interceptor {
 	})
 }
 
-// Connect Validation Interceptor — validates proto messages against buf.validate
+// ConnectValidationInterceptor validates proto messages against buf.validate
 // annotations (e.g. string.uuid, string.min_len, repeated.min_items).
 func ConnectValidationInterceptor() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			// Try buf/validate first (new proto messages with annotations).
 			if msg, ok := req.Any().(protovalidateMessage); ok {
 				if err := protovalidateValidator.Validate(msg); err != nil {
-					return nil, connect.NewError(connect.CodeInvalidArgument, err)
-				}
-			} else if v, ok := req.Any().(GRPCValidator); ok {
-				// Fallback for legacy messages with Validate() method.
-				if err := v.Validate(); err != nil {
 					return nil, connect.NewError(connect.CodeInvalidArgument, err)
 				}
 			}
