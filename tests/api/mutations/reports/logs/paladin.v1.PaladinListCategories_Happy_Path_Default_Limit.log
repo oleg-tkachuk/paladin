@@ -1,1 +1,0 @@
-{"level":"info","time":"2026-03-05T22:40:23.243Z","msg":"gRPC request","service":"paladin","env":"local","request_id":"test-run-3fadf189-a54f-4d0e-afaa-fc28cd484ab1","protocol":"grpc","method":"/paladin.v1.Paladin/ListCategories","code":"OK","duration_ms":1.148499,"tenant_id":"default-tenant","request_id":"test-run-3fadf189-a54f-4d0e-afaa-fc28cd484ab1"}

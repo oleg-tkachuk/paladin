@@ -1,8 +1,0 @@
-{
-  "category": {
-    "id": "6145f47a-702a-4558-b30b-f11c2a31cd43",
-    "slug": "test-category-1772750599",
-    "name": "E2E Test Category",
-    "description": "Created by grpcurl e2e tests"
-  }
-}
