@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -34,10 +33,11 @@ func NewServer(
 	hs *service.HealthService,
 	started *atomic.Bool,
 	startTime time.Time,
+	auditWriter *middleware.AuditBatchWriter,
 ) *Server {
 	mux := http.NewServeMux()
 
-	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log)...)
+	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log, auditWriter)...)
 
 	// ─── ObjectService ─────────────────────────────────────────────────────
 	objectHandler := grpcapi.NewObjectHandler(log, svc)
@@ -109,10 +109,3 @@ func NewServer(
 
 // Handler returns the composed http.Handler.
 func (s *Server) Handler() http.Handler { return s.mux }
-
-// writeJSON is a minimal JSON response helper (replaces gin.Context.JSON).
-func writeJSON(w http.ResponseWriter, code int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}

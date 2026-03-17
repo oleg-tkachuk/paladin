@@ -90,7 +90,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 				if ttl == 0 {
 					ttl = s.s3.PresignTTLDuration()
 				}
-				signed, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+				signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 					return s.s3.PresignPutObject(ctx, existing.ObjectKey, existing.ContentType, existing.SizeBytes, ttl)
 				})
 				if err != nil {
@@ -133,7 +133,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 
 	g.Go(func() error {
 		var err error
-		signed, err = executeWithBreakerRet(gCtx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+		signed, err = executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 			return s.s3.PresignPutObject(gCtx, key, contentType, sizeBytes, ttl)
 		})
 		return err

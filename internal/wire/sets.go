@@ -50,6 +50,7 @@ var ProviderSet = wire.NewSet(
 	ProvideCategoryRepo,
 	ProvideAuditRepo,
 	ProvideTenantRepo,
+	ProvideAuditBatchWriter,
 	ProvideBreakerFactory,
 	ProvideUoWFactory,
 	ProvideCategoryService,
@@ -177,6 +178,10 @@ func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
 	return postgres.NewAuditLogRepo(db)
 }
 
+func ProvideAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *middleware.AuditBatchWriter {
+	return middleware.NewAuditBatchWriter(repo, log)
+}
+
 func ProvideBreakerFactory(cfg config.Config) breaker.Factory {
 	return breaker.NewFactory(cfg)
 }
@@ -239,8 +244,9 @@ func ProvideHTTPServer(
 	appStarted *atomic.Bool,
 	meta domain.AppMetadata,
 	startTime time.Time,
+	auditWriter *middleware.AuditBatchWriter,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, svc, meta, hs, appStarted, startTime)
+	return httpapi.NewServer(&cfg, l, svc, meta, hs, appStarted, startTime, auditWriter)
 }
 
 // ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
@@ -267,6 +273,7 @@ func ProvideApp(
 	otelShutdown observability.ShutdownFunc,
 	reaper *worker.Reaper,
 	started *atomic.Bool,
+	auditWriter *middleware.AuditBatchWriter,
 ) (*app.App, func()) {
 	h2s := &http2.Server{}
 	httpSrv := &http.Server{
@@ -279,7 +286,7 @@ func ProvideApp(
 	}
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
-		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started,
+		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started, auditWriter,
 	)
 
 	cleanup := func() {

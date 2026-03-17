@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"google.golang.org/grpc/status"
 )
@@ -18,9 +17,4 @@ func grpcError(err error) error {
 		return connect.NewError(connect.Code(s.Code()), errors.New(s.Message()))
 	}
 	return grpcErr
-}
-
-// parseUUID parses a string as a UUID, returning an error on invalid input.
-func parseUUID(s string) (uuid.UUID, error) {
-	return uuid.Parse(s)
 }

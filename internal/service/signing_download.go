@@ -58,7 +58,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		ttl = s.s3.PresignTTLDuration()
 	}
 
-	presigned, err := executeWithBreakerRet(ctx, s.brk, "s3_presign", func() (domain.Presigned, error) {
+	presigned, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 		return s.s3.PresignGetObject(ctx, rec.ObjectKey, ttl)
 	})
 	if err != nil {

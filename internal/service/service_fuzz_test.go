@@ -229,7 +229,8 @@ func FuzzListObjects(f *testing.F) {
 		mockBreaker := new(FuzzMockBreaker)
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
-		svc := service.NewObjectsService(mockRepo, nil, nil, nil, nil, nil, nil, mockBreaker, 0, 0, 0, 0, 0, 0)
+		mockPolicy := new(FuzzMockPolicy)
+		svc := service.NewObjectsService(mockRepo, nil, nil, mockPolicy, nil, nil, nil, mockBreaker, 0, 0, 0, 0, 0, 0)
 
 		filter := domain.ListObjectsFilter{
 			Category: &category,

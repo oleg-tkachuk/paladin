@@ -31,6 +31,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	if err != nil {
 		return nil, nil, err
 	}
+	server := wire.ProvideGRPCServer(config, logger)
 	db, cleanup, err := wire.ProvideDB(ctx, config, logger)
 	if err != nil {
 		return nil, nil, err
@@ -48,19 +49,19 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	categoryRepository := wire.ProvideCategoryRepo(db, config)
 	factory := wire.ProvideBreakerFactory(config)
 	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config)
-	server := wire.ProvideGRPCServer(config, logger)
 	healthService := wire.ProvideHealthService(db, client, factory)
 	atomicBool := provideStartedBool()
 	time := wire.ProvideStartTime()
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, healthService, atomicBool, appMetadata, time)
+	auditLogRepository := wire.ProvideAuditRepo(db)
+	auditBatchWriter := wire.ProvideAuditBatchWriter(auditLogRepository, logger)
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, healthService, atomicBool, appMetadata, time, auditBatchWriter)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	auditLogRepository := wire.ProvideAuditRepo(db)
 	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, auditLogRepository, client, logger)
-	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool)
+	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool, auditBatchWriter)
 	return appApp, func() {
 		cleanup2()
 		cleanup()

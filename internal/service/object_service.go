@@ -273,7 +273,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	}
 
 	// Delete from S3
-	err = s.executeWithBreaker(ctx, S3DeleteBreaker, func() error {
+	err = s.executeWithBreaker(S3DeleteBreaker, func() error {
 		return s.s3.DeleteObject(ctx, obj.ObjectKey)
 	})
 	if err != nil {
@@ -344,7 +344,7 @@ func (s *objectsService) HardDelete(ctx context.Context, tenantID string, id ope
 }
 
 func (s *objectsService) List(ctx context.Context, tenantID string, filter domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
-	return s.objRepo.List(ctx, tenantID, filter)
+	return s.listObjects(ctx, tenantID, filter)
 }
 
 func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
@@ -395,7 +395,7 @@ func (s *objectsService) ListParts(ctx context.Context, tenantID string, uploadI
 	return s.listParts(ctx, tenantID, uploadID)
 }
 
-func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn func() error) error {
+func (s *objectsService) executeWithBreaker(name string, fn func() error) error {
 	w := s.brk.Get(name)
 	_, err := fault.Execute(w, func() (interface{}, error) {
 		return nil, fn()
@@ -404,7 +404,7 @@ func (s *objectsService) executeWithBreaker(ctx context.Context, name string, fn
 	return err
 }
 
-func executeWithBreakerRet[T any](ctx context.Context, brk breaker.Factory, name string, fn func() (T, error)) (T, error) {
+func executeWithBreakerRet[T any](brk breaker.Factory, name string, fn func() (T, error)) (T, error) {
 	w := brk.Get(name)
 	res, err := fault.Execute(w, func() (interface{}, error) {
 		return fn()

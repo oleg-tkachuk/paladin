@@ -44,7 +44,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		return domain.Presigned{}, err
 	}
 
-	presigned, err := executeWithBreakerRet(ctx, s.brk, "s3_presign_part", func() (domain.Presigned, error) {
+	presigned, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 		return s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, partNumber, s.s3.PresignTTLDuration())
 	})
 	if err != nil {
@@ -103,8 +103,9 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	g.SetLimit(10) // bound concurrency to avoid overwhelming the S3 signer
 
 	for i, pn := range partNumbers {
+		i, pn := i, pn // capture loop variables
 		g.Go(func() error {
-			signed, err := executeWithBreakerRet(gCtx, s.brk, "s3_presign_part", func() (domain.Presigned, error) {
+			signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 				return s.s3.PresignUploadPart(gCtx, multi.ObjectKey, uploadID, pn, ttl)
 			})
 			if err != nil {

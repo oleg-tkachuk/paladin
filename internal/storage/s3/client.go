@@ -32,7 +32,6 @@ type Client struct {
 
 func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	var optFns []func(*awsconfig.LoadOptions) error
-
 	// If credentials are provided in config, use them.
 	// Otherwise, LoadDefaultConfig will use the default chain (Env, IAM, etc.)
 	if cfg.AccessKey != "" || cfg.SecretKey != "" {
