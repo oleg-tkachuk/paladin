@@ -25,6 +25,7 @@ const (
 	BucketService_ListBuckets_FullMethodName               = "/paladin.v1.BucketService/ListBuckets"
 	BucketService_GetBucketConfiguration_FullMethodName    = "/paladin.v1.BucketService/GetBucketConfiguration"
 	BucketService_UpdateBucketConfiguration_FullMethodName = "/paladin.v1.BucketService/UpdateBucketConfiguration"
+	BucketService_GetBucketStats_FullMethodName            = "/paladin.v1.BucketService/GetBucketStats"
 )
 
 // BucketServiceClient is the client API for BucketService service.
@@ -50,6 +51,8 @@ type BucketServiceClient interface {
 	// UpdateBucketConfiguration performs a partial update of a bucket's
 	// configuration using a FieldMask to specify which sections to modify.
 	UpdateBucketConfiguration(ctx context.Context, in *UpdateBucketConfigurationRequest, opts ...grpc.CallOption) (*UpdateBucketConfigurationResponse, error)
+	// GetBucketStats retrieves storage usage statistics for a bucket.
+	GetBucketStats(ctx context.Context, in *GetBucketStatsRequest, opts ...grpc.CallOption) (*GetBucketStatsResponse, error)
 }
 
 type bucketServiceClient struct {
@@ -110,6 +113,16 @@ func (c *bucketServiceClient) UpdateBucketConfiguration(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *bucketServiceClient) GetBucketStats(ctx context.Context, in *GetBucketStatsRequest, opts ...grpc.CallOption) (*GetBucketStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBucketStatsResponse)
+	err := c.cc.Invoke(ctx, BucketService_GetBucketStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BucketServiceServer is the server API for BucketService service.
 // All implementations must embed UnimplementedBucketServiceServer
 // for forward compatibility.
@@ -133,6 +146,8 @@ type BucketServiceServer interface {
 	// UpdateBucketConfiguration performs a partial update of a bucket's
 	// configuration using a FieldMask to specify which sections to modify.
 	UpdateBucketConfiguration(context.Context, *UpdateBucketConfigurationRequest) (*UpdateBucketConfigurationResponse, error)
+	// GetBucketStats retrieves storage usage statistics for a bucket.
+	GetBucketStats(context.Context, *GetBucketStatsRequest) (*GetBucketStatsResponse, error)
 	mustEmbedUnimplementedBucketServiceServer()
 }
 
@@ -157,6 +172,9 @@ func (UnimplementedBucketServiceServer) GetBucketConfiguration(context.Context, 
 }
 func (UnimplementedBucketServiceServer) UpdateBucketConfiguration(context.Context, *UpdateBucketConfigurationRequest) (*UpdateBucketConfigurationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateBucketConfiguration not implemented")
+}
+func (UnimplementedBucketServiceServer) GetBucketStats(context.Context, *GetBucketStatsRequest) (*GetBucketStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBucketStats not implemented")
 }
 func (UnimplementedBucketServiceServer) mustEmbedUnimplementedBucketServiceServer() {}
 func (UnimplementedBucketServiceServer) testEmbeddedByValue()                       {}
@@ -269,6 +287,24 @@ func _BucketService_UpdateBucketConfiguration_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BucketService_GetBucketStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBucketStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BucketServiceServer).GetBucketStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BucketService_GetBucketStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BucketServiceServer).GetBucketStats(ctx, req.(*GetBucketStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BucketService_ServiceDesc is the grpc.ServiceDesc for BucketService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -295,6 +331,10 @@ var BucketService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateBucketConfiguration",
 			Handler:    _BucketService_UpdateBucketConfiguration_Handler,
+		},
+		{
+			MethodName: "GetBucketStats",
+			Handler:    _BucketService_GetBucketStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

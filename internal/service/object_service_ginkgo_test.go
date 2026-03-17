@@ -148,6 +148,11 @@ func (m *MockObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domai
 	return args.Get(0).(*domain.ObjectStats), args.Error(1)
 }
 
+func (m *MockObjectsRepo) GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error) {
+	args := m.Called(ctx, tenantID, bucket)
+	return args.Get(0).(int64), args.Get(1).(int64), args.Error(2)
+}
+
 type MockCategoryRepo struct {
 	mock.Mock
 }

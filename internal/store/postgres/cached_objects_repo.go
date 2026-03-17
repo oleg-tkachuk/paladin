@@ -323,6 +323,10 @@ func (r *CachedObjectsRepo) GetStats(ctx context.Context, tenantID string) (*dom
 	return r.repo.GetStats(ctx, tenantID)
 }
 
+func (r *CachedObjectsRepo) GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error) {
+	return r.repo.GetBucketStats(ctx, tenantID, bucket)
+}
+
 func (r *CachedObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
 	rows, err := r.repo.BulkPatch(ctx, tenantID, items)
 	if err != nil {

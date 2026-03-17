@@ -162,3 +162,10 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'soft_deleted')::bigint as soft_deleted_count
 FROM objects
 WHERE tenant_id = $1;
+
+-- name: GetBucketStats :one
+SELECT 
+    COUNT(*)::bigint as total_objects,
+    COALESCE(SUM(size_bytes), 0)::bigint as total_size_bytes
+FROM objects
+WHERE tenant_id = $1 AND bucket = $2 AND status != 'hard_deleted';

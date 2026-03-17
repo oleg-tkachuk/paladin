@@ -69,7 +69,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	// Idempotency-Key cache check
-	if idempotencyKey != nil && s.idemRepo != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		if cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey); err == nil && cached != nil {
 			var res domain.CreateObjectResponse
 			if err := json.Unmarshal(cached.ResponseBody, &res); err == nil {
@@ -167,7 +167,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		Upload: domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},
 	}
 
-	if idempotencyKey != nil && s.idemRepo != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		body, _ := json.Marshal(res)
 		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 			TenantID: tenantID, Key: *idempotencyKey,

@@ -27,7 +27,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	)
 
 	// Idempotency check
-	if idempotencyKey != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" {
 		span.SetAttributes(attribute.String("idempotency_key", *idempotencyKey))
 		// Check if we have a cached response
 		cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey)
@@ -50,7 +50,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	defer func() {
 		metrics.RecordObjectOp(ctx, "update_status", opStatus, start)
 
-		if idempotencyKey != nil {
+		if idempotencyKey != nil && *idempotencyKey != "" {
 			respCode := 200
 			if err != nil {
 				respCode = 500

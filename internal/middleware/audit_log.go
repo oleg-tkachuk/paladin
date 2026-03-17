@@ -41,6 +41,11 @@ func NewAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *Audit
 	return w
 }
 
+// Repo returns the underlying audit log repository.
+func (w *AuditBatchWriter) Repo() domain.AuditLogRepository {
+	return w.repo
+}
+
 func (w *AuditBatchWriter) send(entry domain.AuditLog) {
 	select {
 	case w.ch <- entry:

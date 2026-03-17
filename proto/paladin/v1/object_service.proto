@@ -93,6 +93,15 @@ service ObjectService {
       body: "*"
     };
   }
+
+  // RestoreObject recovers a soft-deleted object, transitioning it back
+  // to AVAILABLE status.
+  rpc RestoreObject(RestoreObjectRequest) returns (RestoreObjectResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects/{key}:restore"
+      body: "*"
+    };
+  }
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
@@ -375,5 +384,28 @@ message CompleteObjectRequest {
 // CompleteObjectResponse contains the object with its updated status.
 message CompleteObjectResponse {
   // The object resource with status transitioned to AVAILABLE.
+  Object object = 1;
+}
+
+// ─── Restore ─────────────────────────────────────────────────────────────────
+
+// RestoreObjectRequest recovers a soft-deleted object.
+message RestoreObjectRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the object.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage key of the object to restore.
+  string key = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Client-provided idempotency key.
+  string idempotency_key = 4;
+}
+
+// RestoreObjectResponse confirms the restoration.
+message RestoreObjectResponse {
+  // The restored object resource.
   Object object = 1;
 }

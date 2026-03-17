@@ -40,6 +40,9 @@ const (
 	// BulkServiceBatchCopyObjectsProcedure is the fully-qualified name of the BulkService's
 	// BatchCopyObjects RPC.
 	BulkServiceBatchCopyObjectsProcedure = "/paladin.v1.BulkService/BatchCopyObjects"
+	// BulkServiceBatchRestoreObjectsProcedure is the fully-qualified name of the BulkService's
+	// BatchRestoreObjects RPC.
+	BulkServiceBatchRestoreObjectsProcedure = "/paladin.v1.BulkService/BatchRestoreObjects"
 )
 
 // BulkServiceClient is a client for the paladin.v1.BulkService service.
@@ -50,6 +53,9 @@ type BulkServiceClient interface {
 	// BatchCopyObjects copies multiple objects in a single request.
 	// Returns per-item results indicating success or failure for each copy operation.
 	BatchCopyObjects(context.Context, *connect.Request[grpc.BatchCopyObjectsRequest]) (*connect.Response[grpc.BatchCopyObjectsResponse], error)
+	// BatchRestoreObjects recovers multiple soft-deleted objects in a single request.
+	// Returns per-item results indicating success or failure for each object.
+	BatchRestoreObjects(context.Context, *connect.Request[grpc.BatchRestoreObjectsRequest]) (*connect.Response[grpc.BatchRestoreObjectsResponse], error)
 }
 
 // NewBulkServiceClient constructs a client for the paladin.v1.BulkService service. By default, it uses
@@ -75,13 +81,20 @@ func NewBulkServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(bulkServiceMethods.ByName("BatchCopyObjects")),
 			connect.WithClientOptions(opts...),
 		),
+		batchRestoreObjects: connect.NewClient[grpc.BatchRestoreObjectsRequest, grpc.BatchRestoreObjectsResponse](
+			httpClient,
+			baseURL+BulkServiceBatchRestoreObjectsProcedure,
+			connect.WithSchema(bulkServiceMethods.ByName("BatchRestoreObjects")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // bulkServiceClient implements BulkServiceClient.
 type bulkServiceClient struct {
-	batchDeleteObjects *connect.Client[grpc.BatchDeleteObjectsRequest, grpc.BatchDeleteObjectsResponse]
-	batchCopyObjects   *connect.Client[grpc.BatchCopyObjectsRequest, grpc.BatchCopyObjectsResponse]
+	batchDeleteObjects  *connect.Client[grpc.BatchDeleteObjectsRequest, grpc.BatchDeleteObjectsResponse]
+	batchCopyObjects    *connect.Client[grpc.BatchCopyObjectsRequest, grpc.BatchCopyObjectsResponse]
+	batchRestoreObjects *connect.Client[grpc.BatchRestoreObjectsRequest, grpc.BatchRestoreObjectsResponse]
 }
 
 // BatchDeleteObjects calls paladin.v1.BulkService.BatchDeleteObjects.
@@ -94,6 +107,11 @@ func (c *bulkServiceClient) BatchCopyObjects(ctx context.Context, req *connect.R
 	return c.batchCopyObjects.CallUnary(ctx, req)
 }
 
+// BatchRestoreObjects calls paladin.v1.BulkService.BatchRestoreObjects.
+func (c *bulkServiceClient) BatchRestoreObjects(ctx context.Context, req *connect.Request[grpc.BatchRestoreObjectsRequest]) (*connect.Response[grpc.BatchRestoreObjectsResponse], error) {
+	return c.batchRestoreObjects.CallUnary(ctx, req)
+}
+
 // BulkServiceHandler is an implementation of the paladin.v1.BulkService service.
 type BulkServiceHandler interface {
 	// BatchDeleteObjects deletes multiple objects in a single request.
@@ -102,6 +120,9 @@ type BulkServiceHandler interface {
 	// BatchCopyObjects copies multiple objects in a single request.
 	// Returns per-item results indicating success or failure for each copy operation.
 	BatchCopyObjects(context.Context, *connect.Request[grpc.BatchCopyObjectsRequest]) (*connect.Response[grpc.BatchCopyObjectsResponse], error)
+	// BatchRestoreObjects recovers multiple soft-deleted objects in a single request.
+	// Returns per-item results indicating success or failure for each object.
+	BatchRestoreObjects(context.Context, *connect.Request[grpc.BatchRestoreObjectsRequest]) (*connect.Response[grpc.BatchRestoreObjectsResponse], error)
 }
 
 // NewBulkServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -123,12 +144,20 @@ func NewBulkServiceHandler(svc BulkServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(bulkServiceMethods.ByName("BatchCopyObjects")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bulkServiceBatchRestoreObjectsHandler := connect.NewUnaryHandler(
+		BulkServiceBatchRestoreObjectsProcedure,
+		svc.BatchRestoreObjects,
+		connect.WithSchema(bulkServiceMethods.ByName("BatchRestoreObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.BulkService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BulkServiceBatchDeleteObjectsProcedure:
 			bulkServiceBatchDeleteObjectsHandler.ServeHTTP(w, r)
 		case BulkServiceBatchCopyObjectsProcedure:
 			bulkServiceBatchCopyObjectsHandler.ServeHTTP(w, r)
+		case BulkServiceBatchRestoreObjectsProcedure:
+			bulkServiceBatchRestoreObjectsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -144,4 +173,8 @@ func (UnimplementedBulkServiceHandler) BatchDeleteObjects(context.Context, *conn
 
 func (UnimplementedBulkServiceHandler) BatchCopyObjects(context.Context, *connect.Request[grpc.BatchCopyObjectsRequest]) (*connect.Response[grpc.BatchCopyObjectsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BulkService.BatchCopyObjects is not implemented"))
+}
+
+func (UnimplementedBulkServiceHandler) BatchRestoreObjects(context.Context, *connect.Request[grpc.BatchRestoreObjectsRequest]) (*connect.Response[grpc.BatchRestoreObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BulkService.BatchRestoreObjects is not implemented"))
 }

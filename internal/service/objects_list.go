@@ -45,11 +45,16 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 	// Filter out hard_deleted objects
 	// Note: TotalCount from DB includes hard_deleted if they match filter,
 	// but normally filter excludes them.
+	// If filter.Status is nil, we also exclude soft_deleted for a cleaner default view.
 	filtered := make([]domain.Object, 0, len(recs))
 	for _, r := range recs {
-		if r.Status != domain.ObjectHardDeleted {
-			filtered = append(filtered, r)
+		if r.Status == domain.ObjectHardDeleted {
+			continue
 		}
+		if filter.Status == nil && r.Status == domain.ObjectSoftDeleted {
+			continue
+		}
+		filtered = append(filtered, r)
 	}
 
 	status = "success"

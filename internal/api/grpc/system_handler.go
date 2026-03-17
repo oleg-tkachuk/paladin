@@ -2,6 +2,7 @@ package grpcapi
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/process"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -29,6 +33,8 @@ type SystemHandler struct {
 	startTime   time.Time
 	serviceName string
 	environment string
+	cfg         *config.Config
+	auditRepo   domain.AuditLogRepository
 }
 
 // NewSystemHandler creates a new system handler.
@@ -39,6 +45,7 @@ func NewSystemHandler(
 	started *atomic.Bool,
 	startTime time.Time,
 	cfg *config.Config,
+	auditRepo domain.AuditLogRepository,
 ) *SystemHandler {
 	return &SystemHandler{
 		log:         log,
@@ -48,6 +55,8 @@ func NewSystemHandler(
 		startTime:   startTime,
 		serviceName: cfg.Server.Name,
 		environment: cfg.Env,
+		cfg:         cfg,
+		auditRepo:   auditRepo,
 	}
 }
 
@@ -149,12 +158,174 @@ func (h *SystemHandler) GetInfo(ctx context.Context, req *connect.Request[GetInf
 			BuildTime: buildTimeProto,
 		},
 		Runtime: &RuntimeInfo{
-			GoVersion: runtime.Version(),
-			Os:        runtime.GOOS,
-			Arch:      runtime.GOARCH,
-			StartTime: timestamppb.New(h.startTime),
-			Uptime:    time.Since(h.startTime).String(),
+			GoVersion:        runtime.Version(),
+			Os:               runtime.GOOS,
+			Arch:             runtime.GOARCH,
+			StartTime:        timestamppb.New(h.startTime),
+			Uptime:           time.Since(h.startTime).String(),
+			CpuUsagePercent:  h.getCPUUsage(ctx),
+			MemoryRssBytes:   h.getMemoryRSS(),
+			MemoryHeapBytes:  h.getMemoryHeap(),
+			ActiveGoroutines: int32(runtime.NumGoroutine()),
 		},
 		Environment: h.environment,
 	}), nil
+}
+
+func (h *SystemHandler) GetConfig(ctx context.Context, req *connect.Request[GetConfigRequest]) (*connect.Response[GetConfigResponse], error) {
+	c := h.cfg.Sanitize()
+
+	return connect.NewResponse(&GetConfigResponse{
+		Config: &SystemConfig{
+			App: &AppConfig{
+				Name: c.App.Name,
+				Env:  c.App.Env,
+			},
+			Server: &ServerConfig{
+				Name: c.Server.Name,
+				Mode: c.Server.Mode,
+				Http: &HttpConfig{
+					Addr:               c.Server.HTTP.Addr,
+					CorsAllowedOrigins: c.Server.HTTP.CORSAllowedOrigins,
+					ReadTimeout:        c.Server.HTTP.ReadTimeout,
+					WriteTimeout:       c.Server.HTTP.WriteTimeout,
+					RequestIdHeader:    c.Server.HTTP.RequestIDHeader,
+				},
+			},
+			Datastores: &DatastoreConfig{
+				Postgres: &PostgresConfig{
+					Host:    c.Datastores.Postgres.Host,
+					Port:    c.Datastores.Postgres.Port,
+					User:    c.Datastores.Postgres.User,
+					Dbname:  c.Datastores.Postgres.Dbname,
+					SslMode: c.Datastores.Postgres.SslMode,
+				},
+				S3: &S3Config{
+					Bucket:         c.Datastores.S3.Bucket,
+					Endpoint:       c.Datastores.S3.Endpoint,
+					PublicEndpoint: c.Datastores.S3.PublicEndpoint,
+					ForcePathStyle: c.Datastores.S3.ForcePathStyle,
+					PresignTtl:     c.Datastores.S3.PresignTTL,
+					PartSize:       c.Datastores.S3.PartSize,
+					SseType:        c.Datastores.S3.SSEType,
+				},
+			},
+			Policy: &PolicyConfig{
+				MaxObjectSize:       c.Policy.MaxObjectSize,
+				MaxMultipartSize:    c.Policy.MaxMultipartSize,
+				MinPartSize:         c.Policy.MinPartSize,
+				MaxPartSize:         c.Policy.MaxPartSize,
+				PresignPutTtl:       c.Policy.PresignPutTTL,
+				PresignGetTtl:       c.Policy.PresignGetTTL,
+				AllowedContentTypes: c.Policy.AllowedContentTypes,
+			},
+			Security: &SecurityConfig{
+				TrustTenantIdFromRequest: c.Security.TrustTenantIDFromRequest,
+				RejectTenantMismatch:     c.Security.RejectTenantMismatch,
+				EnableRls:                c.Security.EnableRLS,
+			},
+			Housekeeping: &HousekeepingConfig{
+				EnableReaper: c.Housekeeping.EnableReaper,
+				PendingTtl:   c.Housekeeping.PendingTTL,
+				MultipartTtl: c.Housekeeping.MultipartTTL,
+				GcInterval:   c.Housekeeping.GCInterval,
+			},
+			RateLimit: &RateLimitConfig{
+				RequestsPerSecond: c.RateLimit.RequestsPerSecond,
+				Burst:             int32(c.RateLimit.Burst),
+				MaxTenants:        int32(c.RateLimit.MaxTenants),
+			},
+			Cache: &CacheConfig{
+				Enabled: c.Cache.Enabled,
+				MaxSize: int32(c.Cache.MaxSize),
+				Ttl:     c.Cache.TTL,
+			},
+			Timeouts: &TimeoutConfig{
+				FastOperation:    c.Timeouts.FastOperation,
+				DefaultOperation: c.Timeouts.DefaultOperation,
+				S3Operation:      c.Timeouts.S3Operation,
+				LongOperation:    c.Timeouts.LongOperation,
+			},
+			Idempotency: &IdempotencyConfig{
+				Enabled: c.Idempotency.Enabled,
+				Ttl:     c.Idempotency.TTL,
+			},
+			Otel: &OTelConfig{
+				Enabled:  c.OTel.Enabled,
+				Endpoint: c.OTel.Endpoint,
+				Protocol: c.OTel.Protocol,
+				Insecure: c.OTel.Insecure,
+			},
+			AuthEnabled: c.Auth.Enabled,
+		},
+	}), nil
+}
+
+func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[ListAuditLogsRequest]) (*connect.Response[ListAuditLogsResponse], error) {
+	limit := int(req.Msg.Limit)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	logs, nextCursor, totalCount, err := h.auditRepo.List(ctx, req.Msg.TenantId, domain.ListAuditLogsFilter{}, limit, req.Msg.Cursor)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	protoLogs := make([]*AuditLog, 0, len(logs))
+	for _, l := range logs {
+		var httpStatus int32
+		if l.HTTPStatus != nil {
+			httpStatus = int32(*l.HTTPStatus)
+		}
+
+		protoLogs = append(protoLogs, &AuditLog{
+			AuditId:        l.ID.String(),
+			TenantId:       l.TenantID,
+			RequestId:      l.RequestID,
+			ActorSubject:   l.ActorSubject,
+			ActorType:      string(l.ActorType),
+			ClientIp:       l.ClientIP,
+			Method:         l.Method,
+			Path:           l.Path,
+			HttpStatus:     httpStatus,
+			ResponseStatus: l.ResponseStatus,
+			CreatedAt:      timestamppb.New(l.CreatedAt),
+		})
+	}
+
+	return connect.NewResponse(&ListAuditLogsResponse{
+		Logs:       protoLogs,
+		NextCursor: nextCursor,
+		TotalCount: totalCount,
+	}), nil
+}
+
+func (h *SystemHandler) getCPUUsage(ctx context.Context) float64 {
+	perc, err := cpu.PercentWithContext(ctx, 0, false)
+	if err != nil || len(perc) == 0 {
+		return 0
+	}
+	return perc[0]
+}
+
+func (h *SystemHandler) getMemoryRSS() uint64 {
+	p, err := process.NewProcess(int32(os.Getpid()))
+	if err != nil {
+		return 0
+	}
+	info, err := p.MemoryInfoWithContext(context.Background())
+	if err != nil {
+		return 0
+	}
+	return info.RSS
+}
+
+func (h *SystemHandler) getMemoryHeap() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc
 }

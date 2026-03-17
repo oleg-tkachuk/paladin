@@ -61,6 +61,9 @@ const (
 	// ObjectServiceCompleteObjectProcedure is the fully-qualified name of the ObjectService's
 	// CompleteObject RPC.
 	ObjectServiceCompleteObjectProcedure = "/paladin.v1.ObjectService/CompleteObject"
+	// ObjectServiceRestoreObjectProcedure is the fully-qualified name of the ObjectService's
+	// RestoreObject RPC.
+	ObjectServiceRestoreObjectProcedure = "/paladin.v1.ObjectService/RestoreObject"
 )
 
 // ObjectServiceClient is a client for the paladin.v1.ObjectService service.
@@ -94,6 +97,9 @@ type ObjectServiceClient interface {
 	// CompleteObject marks a single-part upload as complete after the client
 	// has finished uploading content via the presigned URL.
 	CompleteObject(context.Context, *connect.Request[grpc.CompleteObjectRequest]) (*connect.Response[grpc.CompleteObjectResponse], error)
+	// RestoreObject recovers a soft-deleted object, transitioning it back
+	// to AVAILABLE status.
+	RestoreObject(context.Context, *connect.Request[grpc.RestoreObjectRequest]) (*connect.Response[grpc.RestoreObjectResponse], error)
 }
 
 // NewObjectServiceClient constructs a client for the paladin.v1.ObjectService service. By default, it
@@ -161,6 +167,12 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(objectServiceMethods.ByName("CompleteObject")),
 			connect.WithClientOptions(opts...),
 		),
+		restoreObject: connect.NewClient[grpc.RestoreObjectRequest, grpc.RestoreObjectResponse](
+			httpClient,
+			baseURL+ObjectServiceRestoreObjectProcedure,
+			connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -175,6 +187,7 @@ type objectServiceClient struct {
 	moveObject           *connect.Client[grpc.MoveObjectRequest, grpc.MoveObjectResponse]
 	listObjects          *connect.Client[grpc.ListObjectsRequest, grpc.ListObjectsResponse]
 	completeObject       *connect.Client[grpc.CompleteObjectRequest, grpc.CompleteObjectResponse]
+	restoreObject        *connect.Client[grpc.RestoreObjectRequest, grpc.RestoreObjectResponse]
 }
 
 // UploadObject calls paladin.v1.ObjectService.UploadObject.
@@ -222,6 +235,11 @@ func (c *objectServiceClient) CompleteObject(ctx context.Context, req *connect.R
 	return c.completeObject.CallUnary(ctx, req)
 }
 
+// RestoreObject calls paladin.v1.ObjectService.RestoreObject.
+func (c *objectServiceClient) RestoreObject(ctx context.Context, req *connect.Request[grpc.RestoreObjectRequest]) (*connect.Response[grpc.RestoreObjectResponse], error) {
+	return c.restoreObject.CallUnary(ctx, req)
+}
+
 // ObjectServiceHandler is an implementation of the paladin.v1.ObjectService service.
 type ObjectServiceHandler interface {
 	// UploadObject creates a new object record and returns a presigned URL
@@ -253,6 +271,9 @@ type ObjectServiceHandler interface {
 	// CompleteObject marks a single-part upload as complete after the client
 	// has finished uploading content via the presigned URL.
 	CompleteObject(context.Context, *connect.Request[grpc.CompleteObjectRequest]) (*connect.Response[grpc.CompleteObjectResponse], error)
+	// RestoreObject recovers a soft-deleted object, transitioning it back
+	// to AVAILABLE status.
+	RestoreObject(context.Context, *connect.Request[grpc.RestoreObjectRequest]) (*connect.Response[grpc.RestoreObjectResponse], error)
 }
 
 // NewObjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -316,6 +337,12 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(objectServiceMethods.ByName("CompleteObject")),
 		connect.WithHandlerOptions(opts...),
 	)
+	objectServiceRestoreObjectHandler := connect.NewUnaryHandler(
+		ObjectServiceRestoreObjectProcedure,
+		svc.RestoreObject,
+		connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.ObjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObjectServiceUploadObjectProcedure:
@@ -336,6 +363,8 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 			objectServiceListObjectsHandler.ServeHTTP(w, r)
 		case ObjectServiceCompleteObjectProcedure:
 			objectServiceCompleteObjectHandler.ServeHTTP(w, r)
+		case ObjectServiceRestoreObjectProcedure:
+			objectServiceRestoreObjectHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -379,4 +408,8 @@ func (UnimplementedObjectServiceHandler) ListObjects(context.Context, *connect.R
 
 func (UnimplementedObjectServiceHandler) CompleteObject(context.Context, *connect.Request[grpc.CompleteObjectRequest]) (*connect.Response[grpc.CompleteObjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.ObjectService.CompleteObject is not implemented"))
+}
+
+func (UnimplementedObjectServiceHandler) RestoreObject(context.Context, *connect.Request[grpc.RestoreObjectRequest]) (*connect.Response[grpc.RestoreObjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.ObjectService.RestoreObject is not implemented"))
 }

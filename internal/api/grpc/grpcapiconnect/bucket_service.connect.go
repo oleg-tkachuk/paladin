@@ -49,6 +49,9 @@ const (
 	// BucketServiceUpdateBucketConfigurationProcedure is the fully-qualified name of the
 	// BucketService's UpdateBucketConfiguration RPC.
 	BucketServiceUpdateBucketConfigurationProcedure = "/paladin.v1.BucketService/UpdateBucketConfiguration"
+	// BucketServiceGetBucketStatsProcedure is the fully-qualified name of the BucketService's
+	// GetBucketStats RPC.
+	BucketServiceGetBucketStatsProcedure = "/paladin.v1.BucketService/GetBucketStats"
 )
 
 // BucketServiceClient is a client for the paladin.v1.BucketService service.
@@ -66,6 +69,8 @@ type BucketServiceClient interface {
 	// UpdateBucketConfiguration performs a partial update of a bucket's
 	// configuration using a FieldMask to specify which sections to modify.
 	UpdateBucketConfiguration(context.Context, *connect.Request[grpc.UpdateBucketConfigurationRequest]) (*connect.Response[grpc.UpdateBucketConfigurationResponse], error)
+	// GetBucketStats retrieves storage usage statistics for a bucket.
+	GetBucketStats(context.Context, *connect.Request[grpc.GetBucketStatsRequest]) (*connect.Response[grpc.GetBucketStatsResponse], error)
 }
 
 // NewBucketServiceClient constructs a client for the paladin.v1.BucketService service. By default, it
@@ -109,6 +114,12 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(bucketServiceMethods.ByName("UpdateBucketConfiguration")),
 			connect.WithClientOptions(opts...),
 		),
+		getBucketStats: connect.NewClient[grpc.GetBucketStatsRequest, grpc.GetBucketStatsResponse](
+			httpClient,
+			baseURL+BucketServiceGetBucketStatsProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("GetBucketStats")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -119,6 +130,7 @@ type bucketServiceClient struct {
 	listBuckets               *connect.Client[grpc.ListBucketsRequest, grpc.ListBucketsResponse]
 	getBucketConfiguration    *connect.Client[grpc.GetBucketConfigurationRequest, grpc.GetBucketConfigurationResponse]
 	updateBucketConfiguration *connect.Client[grpc.UpdateBucketConfigurationRequest, grpc.UpdateBucketConfigurationResponse]
+	getBucketStats            *connect.Client[grpc.GetBucketStatsRequest, grpc.GetBucketStatsResponse]
 }
 
 // CreateBucket calls paladin.v1.BucketService.CreateBucket.
@@ -146,6 +158,11 @@ func (c *bucketServiceClient) UpdateBucketConfiguration(ctx context.Context, req
 	return c.updateBucketConfiguration.CallUnary(ctx, req)
 }
 
+// GetBucketStats calls paladin.v1.BucketService.GetBucketStats.
+func (c *bucketServiceClient) GetBucketStats(ctx context.Context, req *connect.Request[grpc.GetBucketStatsRequest]) (*connect.Response[grpc.GetBucketStatsResponse], error) {
+	return c.getBucketStats.CallUnary(ctx, req)
+}
+
 // BucketServiceHandler is an implementation of the paladin.v1.BucketService service.
 type BucketServiceHandler interface {
 	// CreateBucket provisions a new storage bucket.
@@ -161,6 +178,8 @@ type BucketServiceHandler interface {
 	// UpdateBucketConfiguration performs a partial update of a bucket's
 	// configuration using a FieldMask to specify which sections to modify.
 	UpdateBucketConfiguration(context.Context, *connect.Request[grpc.UpdateBucketConfigurationRequest]) (*connect.Response[grpc.UpdateBucketConfigurationResponse], error)
+	// GetBucketStats retrieves storage usage statistics for a bucket.
+	GetBucketStats(context.Context, *connect.Request[grpc.GetBucketStatsRequest]) (*connect.Response[grpc.GetBucketStatsResponse], error)
 }
 
 // NewBucketServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -200,6 +219,12 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(bucketServiceMethods.ByName("UpdateBucketConfiguration")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bucketServiceGetBucketStatsHandler := connect.NewUnaryHandler(
+		BucketServiceGetBucketStatsProcedure,
+		svc.GetBucketStats,
+		connect.WithSchema(bucketServiceMethods.ByName("GetBucketStats")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.BucketService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BucketServiceCreateBucketProcedure:
@@ -212,6 +237,8 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 			bucketServiceGetBucketConfigurationHandler.ServeHTTP(w, r)
 		case BucketServiceUpdateBucketConfigurationProcedure:
 			bucketServiceUpdateBucketConfigurationHandler.ServeHTTP(w, r)
+		case BucketServiceGetBucketStatsProcedure:
+			bucketServiceGetBucketStatsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -239,4 +266,8 @@ func (UnimplementedBucketServiceHandler) GetBucketConfiguration(context.Context,
 
 func (UnimplementedBucketServiceHandler) UpdateBucketConfiguration(context.Context, *connect.Request[grpc.UpdateBucketConfigurationRequest]) (*connect.Response[grpc.UpdateBucketConfigurationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BucketService.UpdateBucketConfiguration is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) GetBucketStats(context.Context, *connect.Request[grpc.GetBucketStatsRequest]) (*connect.Response[grpc.GetBucketStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BucketService.GetBucketStats is not implemented"))
 }

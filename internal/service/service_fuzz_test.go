@@ -91,6 +91,10 @@ func (m *FuzzMockRepo) UpdateStatus(ctx context.Context, tID string, id uuid.UUI
 	return true, nil
 }
 
+func (m *FuzzMockRepo) GetBucketStats(ctx context.Context, tID, bucket string) (int64, int64, error) {
+	return 0, 0, nil
+}
+
 type FuzzMockMPRepo struct{ mock.Mock }
 
 func (m *FuzzMockMPRepo) Create(ctx context.Context, rec domain.Multipart) error { return nil }

@@ -20,11 +20,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SystemService_Ping_FullMethodName        = "/paladin.v1.SystemService/Ping"
-	SystemService_GetLivez_FullMethodName    = "/paladin.v1.SystemService/GetLivez"
-	SystemService_GetReadyz_FullMethodName   = "/paladin.v1.SystemService/GetReadyz"
-	SystemService_GetStartupz_FullMethodName = "/paladin.v1.SystemService/GetStartupz"
-	SystemService_GetInfo_FullMethodName     = "/paladin.v1.SystemService/GetInfo"
+	SystemService_Ping_FullMethodName          = "/paladin.v1.SystemService/Ping"
+	SystemService_GetLivez_FullMethodName      = "/paladin.v1.SystemService/GetLivez"
+	SystemService_GetReadyz_FullMethodName     = "/paladin.v1.SystemService/GetReadyz"
+	SystemService_GetStartupz_FullMethodName   = "/paladin.v1.SystemService/GetStartupz"
+	SystemService_GetInfo_FullMethodName       = "/paladin.v1.SystemService/GetInfo"
+	SystemService_GetConfig_FullMethodName     = "/paladin.v1.SystemService/GetConfig"
+	SystemService_ListAuditLogs_FullMethodName = "/paladin.v1.SystemService/ListAuditLogs"
 )
 
 // SystemServiceClient is the client API for SystemService service.
@@ -50,6 +52,10 @@ type SystemServiceClient interface {
 	// GetInfo returns detailed information about the service build, runtime,
 	// and environment for debugging and operational visibility.
 	GetInfo(ctx context.Context, in *GetInfoRequest, opts ...grpc.CallOption) (*GetInfoResponse, error)
+	// GetConfig returns the sanitized system configuration for administrative display.
+	GetConfig(ctx context.Context, in *GetConfigRequest, opts ...grpc.CallOption) (*GetConfigResponse, error)
+	// ListAuditLogs returns a paginated list of system activity logs for a tenant.
+	ListAuditLogs(ctx context.Context, in *ListAuditLogsRequest, opts ...grpc.CallOption) (*ListAuditLogsResponse, error)
 }
 
 type systemServiceClient struct {
@@ -110,6 +116,26 @@ func (c *systemServiceClient) GetInfo(ctx context.Context, in *GetInfoRequest, o
 	return out, nil
 }
 
+func (c *systemServiceClient) GetConfig(ctx context.Context, in *GetConfigRequest, opts ...grpc.CallOption) (*GetConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConfigResponse)
+	err := c.cc.Invoke(ctx, SystemService_GetConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *systemServiceClient) ListAuditLogs(ctx context.Context, in *ListAuditLogsRequest, opts ...grpc.CallOption) (*ListAuditLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAuditLogsResponse)
+	err := c.cc.Invoke(ctx, SystemService_ListAuditLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SystemServiceServer is the server API for SystemService service.
 // All implementations must embed UnimplementedSystemServiceServer
 // for forward compatibility.
@@ -133,6 +159,10 @@ type SystemServiceServer interface {
 	// GetInfo returns detailed information about the service build, runtime,
 	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error)
+	// GetConfig returns the sanitized system configuration for administrative display.
+	GetConfig(context.Context, *GetConfigRequest) (*GetConfigResponse, error)
+	// ListAuditLogs returns a paginated list of system activity logs for a tenant.
+	ListAuditLogs(context.Context, *ListAuditLogsRequest) (*ListAuditLogsResponse, error)
 	mustEmbedUnimplementedSystemServiceServer()
 }
 
@@ -157,6 +187,12 @@ func (UnimplementedSystemServiceServer) GetStartupz(context.Context, *GetStartup
 }
 func (UnimplementedSystemServiceServer) GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetInfo not implemented")
+}
+func (UnimplementedSystemServiceServer) GetConfig(context.Context, *GetConfigRequest) (*GetConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetConfig not implemented")
+}
+func (UnimplementedSystemServiceServer) ListAuditLogs(context.Context, *ListAuditLogsRequest) (*ListAuditLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAuditLogs not implemented")
 }
 func (UnimplementedSystemServiceServer) mustEmbedUnimplementedSystemServiceServer() {}
 func (UnimplementedSystemServiceServer) testEmbeddedByValue()                       {}
@@ -269,6 +305,42 @@ func _SystemService_GetInfo_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemService_GetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemServiceServer).GetConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SystemService_GetConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemServiceServer).GetConfig(ctx, req.(*GetConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SystemService_ListAuditLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAuditLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemServiceServer).ListAuditLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SystemService_ListAuditLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemServiceServer).ListAuditLogs(ctx, req.(*ListAuditLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SystemService_ServiceDesc is the grpc.ServiceDesc for SystemService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -295,6 +367,14 @@ var SystemService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInfo",
 			Handler:    _SystemService_GetInfo_Handler,
+		},
+		{
+			MethodName: "GetConfig",
+			Handler:    _SystemService_GetConfig_Handler,
+		},
+		{
+			MethodName: "ListAuditLogs",
+			Handler:    _SystemService_ListAuditLogs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -13,11 +13,12 @@ func TestPathSegment(t *testing.T) {
 	}{
 		{"valid", "my-segment", false},
 		{"valid with numbers", "segment123", false},
+		{"valid with spaces", "my segment", false},
+		{"valid starts with hyphen", "-segment", false},
+		{"valid starts with dot", ".segment", false},
 		{"invalid dots", "..", true},
 		{"invalid dot", ".", true},
-		{"invalid spaces", "my segment", true},
-		{"too long", strings.Repeat("a", 65), true},
-		{"starts with hyphen", "-segment", true},
+		{"too long", strings.Repeat("a", 1025), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -35,9 +36,11 @@ func TestCategorySlug(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid", "my/category", false},
+		{"valid complex", "System (Logs).v1/2024+Production Data", false},
 		{"valid single", "category", false},
 		{"invalid empty", "", true},
 		{"invalid segment", "my/../cat", true},
+		{"too long", strings.Repeat("a", 1000), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

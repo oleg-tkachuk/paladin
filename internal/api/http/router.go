@@ -72,12 +72,12 @@ func NewServer(
 	mux.Handle(path, handler)
 
 	// ─── BucketService ─────────────────────────────────────────────────────
-	bucketHandler := grpcapi.NewBucketHandler()
+	bucketHandler := grpcapi.NewBucketHandler(log, objSvc)
 	path, handler = grpcapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── SystemService ─────────────────────────────────────────────────────
-	systemHandler := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg)
+	systemHandler := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg, auditWriter.Repo())
 	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
 	mux.Handle(path, handler)
 

@@ -563,9 +563,9 @@ var File_paladin_v1_tenant_service_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_tenant_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1bocp/v1/tenant_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x12ocp/v1/types.proto\"\x84\x02\n" +
-	"\x13CreateTenantRequest\x12$\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btenantId\x12&\n" +
+	"\x1bocp/v1/tenant_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x12ocp/v1/types.proto\"\x85\x02\n" +
+	"\x13CreateTenantRequest\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12&\n" +
 	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12?\n" +
 	"\x06labels\x18\x03 \x03(\v2'.paladin.v1.CreateTenantRequest.LabelsEntryR\x06labels\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x1a9\n" +
@@ -574,9 +574,9 @@ const file_paladin_v1_tenant_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
 	"\r_display_name\">\n" +
 	"\x14CreateTenantResponse\x12&\n" +
-	"\x06tenant\x18\x01 \x01(\v2\x0e.paladin.v1.TenantR\x06tenant\"8\n" +
-	"\x10GetTenantRequest\x12$\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btenantId\";\n" +
+	"\x06tenant\x18\x01 \x01(\v2\x0e.paladin.v1.TenantR\x06tenant\"9\n" +
+	"\x10GetTenantRequest\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\";\n" +
 	"\x11GetTenantResponse\x12&\n" +
 	"\x06tenant\x18\x01 \x01(\v2\x0e.paladin.v1.TenantR\x06tenant\"\xcb\x01\n" +
 	"\x12ListTenantsRequest\x12\x1b\n" +
@@ -591,12 +591,12 @@ const file_paladin_v1_tenant_service_proto_rawDesc = "" +
 	"\atenants\x18\x01 \x03(\v2\x0e.paladin.v1.TenantR\atenants\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
-	"totalCount\";\n" +
-	"\x13DeleteTenantRequest\x12$\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btenantId\"\x16\n" +
-	"\x14DeleteTenantResponse\"\x94\x02\n" +
-	"\x1bUpdateTenantMetadataRequest\x12$\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btenantId\x12&\n" +
+	"totalCount\"<\n" +
+	"\x13DeleteTenantRequest\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"\x16\n" +
+	"\x14DeleteTenantResponse\"\x95\x02\n" +
+	"\x1bUpdateTenantMetadataRequest\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12&\n" +
 	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12G\n" +
 	"\x06labels\x18\x03 \x03(\v2/.paladin.v1.UpdateTenantMetadataRequest.LabelsEntryR\x06labels\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x1a9\n" +

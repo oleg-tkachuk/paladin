@@ -18,13 +18,13 @@ const (
 	MaxKeyPrefixLength   = 256
 
 	MaxTenantDisplayNameLength   = 64
-	MaxCategorySlugLength        = 63
+	MaxCategorySlugLength        = 980 // tenant_id (36) + / (1) + slug (980) < 1024
 	MaxCategoryNameLength        = 64
 	MaxCategoryDescriptionLength = 128
 )
 
 var (
-	pathSegmentRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+	pathSegmentRegex = regexp.MustCompile(`^[a-zA-Z0-9!#$&'()*+,.:;=?@\[\]\\ _~-]+$`)
 	contentTypeRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]{0,126}(;.*)?$`)
 	labelKeyRegex    = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
@@ -35,7 +35,7 @@ func init() {
 	v = validator.New()
 	_ = v.RegisterValidation("path_segment", func(fl validator.FieldLevel) bool {
 		s := fl.Field().String()
-		if s == ".." || s == "." {
+		if s == ".." || s == "." || len(s) > MaxCategorySlugLength {
 			return false
 		}
 
@@ -60,8 +60,8 @@ func PathSegment(segment string) error {
 
 // CategorySlug checks a category slug. It allows multiple path segments separated by '/'.
 func CategorySlug(slug string) error {
-	if slug == "" {
-		return fmt.Errorf("category slug cannot be empty")
+	if len(slug) > MaxCategorySlugLength {
+		return fmt.Errorf("category slug too long (max %d characters)", MaxCategorySlugLength)
 	}
 	segments := strings.Split(slug, "/")
 	for _, segment := range segments {

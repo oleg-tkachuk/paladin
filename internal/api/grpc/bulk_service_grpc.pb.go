@@ -20,8 +20,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BulkService_BatchDeleteObjects_FullMethodName = "/paladin.v1.BulkService/BatchDeleteObjects"
-	BulkService_BatchCopyObjects_FullMethodName   = "/paladin.v1.BulkService/BatchCopyObjects"
+	BulkService_BatchDeleteObjects_FullMethodName  = "/paladin.v1.BulkService/BatchDeleteObjects"
+	BulkService_BatchCopyObjects_FullMethodName    = "/paladin.v1.BulkService/BatchCopyObjects"
+	BulkService_BatchRestoreObjects_FullMethodName = "/paladin.v1.BulkService/BatchRestoreObjects"
 )
 
 // BulkServiceClient is the client API for BulkService service.
@@ -40,6 +41,9 @@ type BulkServiceClient interface {
 	// BatchCopyObjects copies multiple objects in a single request.
 	// Returns per-item results indicating success or failure for each copy operation.
 	BatchCopyObjects(ctx context.Context, in *BatchCopyObjectsRequest, opts ...grpc.CallOption) (*BatchCopyObjectsResponse, error)
+	// BatchRestoreObjects recovers multiple soft-deleted objects in a single request.
+	// Returns per-item results indicating success or failure for each object.
+	BatchRestoreObjects(ctx context.Context, in *BatchRestoreObjectsRequest, opts ...grpc.CallOption) (*BatchRestoreObjectsResponse, error)
 }
 
 type bulkServiceClient struct {
@@ -70,6 +74,16 @@ func (c *bulkServiceClient) BatchCopyObjects(ctx context.Context, in *BatchCopyO
 	return out, nil
 }
 
+func (c *bulkServiceClient) BatchRestoreObjects(ctx context.Context, in *BatchRestoreObjectsRequest, opts ...grpc.CallOption) (*BatchRestoreObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchRestoreObjectsResponse)
+	err := c.cc.Invoke(ctx, BulkService_BatchRestoreObjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BulkServiceServer is the server API for BulkService service.
 // All implementations must embed UnimplementedBulkServiceServer
 // for forward compatibility.
@@ -86,6 +100,9 @@ type BulkServiceServer interface {
 	// BatchCopyObjects copies multiple objects in a single request.
 	// Returns per-item results indicating success or failure for each copy operation.
 	BatchCopyObjects(context.Context, *BatchCopyObjectsRequest) (*BatchCopyObjectsResponse, error)
+	// BatchRestoreObjects recovers multiple soft-deleted objects in a single request.
+	// Returns per-item results indicating success or failure for each object.
+	BatchRestoreObjects(context.Context, *BatchRestoreObjectsRequest) (*BatchRestoreObjectsResponse, error)
 	mustEmbedUnimplementedBulkServiceServer()
 }
 
@@ -101,6 +118,9 @@ func (UnimplementedBulkServiceServer) BatchDeleteObjects(context.Context, *Batch
 }
 func (UnimplementedBulkServiceServer) BatchCopyObjects(context.Context, *BatchCopyObjectsRequest) (*BatchCopyObjectsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BatchCopyObjects not implemented")
+}
+func (UnimplementedBulkServiceServer) BatchRestoreObjects(context.Context, *BatchRestoreObjectsRequest) (*BatchRestoreObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchRestoreObjects not implemented")
 }
 func (UnimplementedBulkServiceServer) mustEmbedUnimplementedBulkServiceServer() {}
 func (UnimplementedBulkServiceServer) testEmbeddedByValue()                     {}
@@ -159,6 +179,24 @@ func _BulkService_BatchCopyObjects_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BulkService_BatchRestoreObjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchRestoreObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BulkServiceServer).BatchRestoreObjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BulkService_BatchRestoreObjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BulkServiceServer).BatchRestoreObjects(ctx, req.(*BatchRestoreObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BulkService_ServiceDesc is the grpc.ServiceDesc for BulkService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -173,6 +211,10 @@ var BulkService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BatchCopyObjects",
 			Handler:    _BulkService_BatchCopyObjects_Handler,
+		},
+		{
+			MethodName: "BatchRestoreObjects",
+			Handler:    _BulkService_BatchRestoreObjects_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

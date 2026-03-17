@@ -54,6 +54,13 @@ service BucketService {
       body: "*"
     };
   }
+
+  // GetBucketStats retrieves storage usage statistics for a bucket.
+  rpc GetBucketStats(GetBucketStatsRequest) returns (GetBucketStatsResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{tenant_id}/buckets/{name}/stats"
+    };
+  }
 }
 
 // ─── Create ──────────────────────────────────────────────────────────────────
@@ -180,6 +187,26 @@ message UpdateBucketConfigurationRequest {
 
   // Client-provided idempotency key.
   string idempotency_key = 6;
+}
+
+// ─── Stats ───────────────────────────────────────────────────────────────────
+
+// GetBucketStatsRequest retrieves storage usage statistics for a bucket.
+message GetBucketStatsRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Name of the bucket to get stats for.
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// GetBucketStatsResponse contains the bucket's storage statistics.
+message GetBucketStatsResponse {
+  // Total number of objects in the bucket.
+  int64 total_objects = 1;
+
+  // Total size of all objects in the bucket in bytes.
+  int64 total_size_bytes = 2;
 }
 
 // UpdateBucketConfigurationResponse contains the updated bucket resource.

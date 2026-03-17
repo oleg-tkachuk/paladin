@@ -32,6 +32,15 @@ service BulkService {
       body: "*"
     };
   }
+
+  // BatchRestoreObjects recovers multiple soft-deleted objects in a single request.
+  // Returns per-item results indicating success or failure for each object.
+  rpc BatchRestoreObjects(BatchRestoreObjectsRequest) returns (BatchRestoreObjectsResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/objects:batchRestore"
+      body: "*"
+    };
+  }
 }
 
 // ─── Batch delete ────────────────────────────────────────────────────────────
@@ -144,4 +153,51 @@ message BatchCopyResult {
   // Error details if the copy failed. Absent on success.
   // Uses google.rpc.Status for rich error information.
   google.rpc.Status error = 5;
+}
+
+// ─── Batch restore ───────────────────────────────────────────────────────────
+
+// BatchRestoreObjectsRequest recovers multiple objects by their storage keys.
+message BatchRestoreObjectsRequest {
+  // Tenant identifier for logical isolation.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Bucket containing the objects to restore.
+  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Storage keys of the objects to restore.
+  repeated string keys = 3 [(buf.validate.field).repeated = {
+    min_items: 1,
+    max_items: 1000
+  }];
+
+  // Client-provided idempotency key.
+  string idempotency_key = 4;
+}
+
+// BatchRestoreObjectsResponse contains per-item results for each restoration.
+message BatchRestoreObjectsResponse {
+  // Per-item results in the same order as the request keys.
+  repeated BatchRestoreResult results = 1;
+
+  // Total number of objects successfully restored.
+  int64 success_count = 2;
+
+  // Total number of objects that failed to restore.
+  int64 failure_count = 3;
+}
+
+// BatchRestoreResult contains the outcome of restoring a single object in a batch.
+message BatchRestoreResult {
+  // Storage key of the object this result refers to.
+  string key = 1;
+
+  // True if the restoration succeeded.
+  bool success = 2;
+
+  // The restored object resource. Present only on success.
+  Object object = 3;
+
+  // Error details if the restoration failed. Absent on success.
+  google.rpc.Status error = 4;
 }

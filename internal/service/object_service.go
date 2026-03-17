@@ -239,7 +239,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		return err
 	}
 
-	if idempotencyKey != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" {
 		record, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey)
 		if err == nil && record != nil {
 			return nil // Idempotent success
@@ -305,7 +305,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		return apperrors.NotFound("object not found", nil)
 	}
 
-	if idempotencyKey != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" {
 		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 			Key:       *idempotencyKey,
 			TenantID:  tenantID,
@@ -594,4 +594,8 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 
 func (s *objectsService) GetStats(ctx context.Context, tenantID string) (*domain.ObjectStats, error) {
 	return s.objRepo.GetStats(ctx, tenantID)
+}
+
+func (s *objectsService) GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error) {
+	return s.objRepo.GetBucketStats(ctx, tenantID, bucket)
 }

@@ -30,6 +30,10 @@ type protovalidateMessage = proto.Message
 // protovalidateValidator is the package-level validator for buf.validate annotations.
 var protovalidateValidator, _ = protovalidate.New()
 
+type tenantGetter interface {
+	GetTenantId() string
+}
+
 const (
 	// defaultGRPCTimeout is applied when the caller does not set a deadline.
 	defaultGRPCTimeout = 30 * time.Second
@@ -407,6 +411,15 @@ func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
 
 			if tenantID == "" && !cfg.Auth.Enabled {
 				tenantID = utils.DefaultTenant
+			}
+
+			// If still empty, try to extract from the request message itself.
+			if tenantID == "" || tenantID == utils.DefaultTenant {
+				if msg, ok := req.Any().(tenantGetter); ok {
+					if tid := msg.GetTenantId(); tid != "" {
+						tenantID = tid
+					}
+				}
 			}
 
 			if tenantID != "" {

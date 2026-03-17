@@ -1139,6 +1139,84 @@ func (_c *MockObjectsService_Get_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// GetBucketStats provides a mock function for the type MockObjectsService
+func (_mock *MockObjectsService) GetBucketStats(ctx context.Context, tenantID string, bucket string) (int64, int64, error) {
+	ret := _mock.Called(ctx, tenantID, bucket)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBucketStats")
+	}
+
+	var r0 int64
+	var r1 int64
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (int64, int64, error)); ok {
+		return returnFunc(ctx, tenantID, bucket)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) int64); ok {
+		r0 = returnFunc(ctx, tenantID, bucket)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) int64); ok {
+		r1 = returnFunc(ctx, tenantID, bucket)
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string) error); ok {
+		r2 = returnFunc(ctx, tenantID, bucket)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockObjectsService_GetBucketStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBucketStats'
+type MockObjectsService_GetBucketStats_Call struct {
+	*mock.Call
+}
+
+// GetBucketStats is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - bucket string
+func (_e *MockObjectsService_Expecter) GetBucketStats(ctx interface{}, tenantID interface{}, bucket interface{}) *MockObjectsService_GetBucketStats_Call {
+	return &MockObjectsService_GetBucketStats_Call{Call: _e.mock.On("GetBucketStats", ctx, tenantID, bucket)}
+}
+
+func (_c *MockObjectsService_GetBucketStats_Call) Run(run func(ctx context.Context, tenantID string, bucket string)) *MockObjectsService_GetBucketStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockObjectsService_GetBucketStats_Call) Return(n int64, n1 int64, err error) *MockObjectsService_GetBucketStats_Call {
+	_c.Call.Return(n, n1, err)
+	return _c
+}
+
+func (_c *MockObjectsService_GetBucketStats_Call) RunAndReturn(run func(ctx context.Context, tenantID string, bucket string) (int64, int64, error)) *MockObjectsService_GetBucketStats_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByKey provides a mock function for the type MockObjectsService
 func (_mock *MockObjectsService) GetByKey(ctx context.Context, tenantID string, bucket string, key string) (*domain.Object, error) {
 	ret := _mock.Called(ctx, tenantID, bucket, key)

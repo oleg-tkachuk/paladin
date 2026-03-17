@@ -50,7 +50,7 @@ SELECT EXISTS(
 SELECT COUNT(*)::bigint AS count
 FROM objects
 WHERE tenant_id = $1 AND category = $2
-  AND status NOT IN ('hard_deleted');
+  AND status NOT IN ('hard_deleted', 'soft_deleted');
 
 -- name: ListTenants :many
 SELECT tenant_id,
@@ -71,4 +71,4 @@ SELECT
     COALESCE(SUM(size_bytes), 0)::bigint AS total_size
 FROM objects
 WHERE tenant_id = $1 AND category = $2
-  AND status NOT IN ('hard_deleted');
+  AND status NOT IN ('hard_deleted', 'soft_deleted');

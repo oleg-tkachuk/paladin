@@ -63,7 +63,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	}
 
 	// Idempotency-Key cache check
-	if idempotencyKey != nil && s.idemRepo != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		if cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey); err == nil && cached != nil {
 			var res domain.MultipartInitResponse
 			if err := json.Unmarshal(cached.ResponseBody, &res); err == nil {
@@ -140,7 +140,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		Category: category,
 	}
 
-	if idempotencyKey != nil && s.idemRepo != nil {
+	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		body, _ := json.Marshal(res)
 		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 			TenantID: tenantID, Key: *idempotencyKey,

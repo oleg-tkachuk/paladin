@@ -29,6 +29,7 @@ const (
 	ObjectService_MoveObject_FullMethodName           = "/paladin.v1.ObjectService/MoveObject"
 	ObjectService_ListObjects_FullMethodName          = "/paladin.v1.ObjectService/ListObjects"
 	ObjectService_CompleteObject_FullMethodName       = "/paladin.v1.ObjectService/CompleteObject"
+	ObjectService_RestoreObject_FullMethodName        = "/paladin.v1.ObjectService/RestoreObject"
 )
 
 // ObjectServiceClient is the client API for ObjectService service.
@@ -70,6 +71,9 @@ type ObjectServiceClient interface {
 	// CompleteObject marks a single-part upload as complete after the client
 	// has finished uploading content via the presigned URL.
 	CompleteObject(ctx context.Context, in *CompleteObjectRequest, opts ...grpc.CallOption) (*CompleteObjectResponse, error)
+	// RestoreObject recovers a soft-deleted object, transitioning it back
+	// to AVAILABLE status.
+	RestoreObject(ctx context.Context, in *RestoreObjectRequest, opts ...grpc.CallOption) (*RestoreObjectResponse, error)
 }
 
 type objectServiceClient struct {
@@ -170,6 +174,16 @@ func (c *objectServiceClient) CompleteObject(ctx context.Context, in *CompleteOb
 	return out, nil
 }
 
+func (c *objectServiceClient) RestoreObject(ctx context.Context, in *RestoreObjectRequest, opts ...grpc.CallOption) (*RestoreObjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestoreObjectResponse)
+	err := c.cc.Invoke(ctx, ObjectService_RestoreObject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ObjectServiceServer is the server API for ObjectService service.
 // All implementations must embed UnimplementedObjectServiceServer
 // for forward compatibility.
@@ -209,6 +223,9 @@ type ObjectServiceServer interface {
 	// CompleteObject marks a single-part upload as complete after the client
 	// has finished uploading content via the presigned URL.
 	CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error)
+	// RestoreObject recovers a soft-deleted object, transitioning it back
+	// to AVAILABLE status.
+	RestoreObject(context.Context, *RestoreObjectRequest) (*RestoreObjectResponse, error)
 	mustEmbedUnimplementedObjectServiceServer()
 }
 
@@ -245,6 +262,9 @@ func (UnimplementedObjectServiceServer) ListObjects(context.Context, *ListObject
 }
 func (UnimplementedObjectServiceServer) CompleteObject(context.Context, *CompleteObjectRequest) (*CompleteObjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteObject not implemented")
+}
+func (UnimplementedObjectServiceServer) RestoreObject(context.Context, *RestoreObjectRequest) (*RestoreObjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestoreObject not implemented")
 }
 func (UnimplementedObjectServiceServer) mustEmbedUnimplementedObjectServiceServer() {}
 func (UnimplementedObjectServiceServer) testEmbeddedByValue()                       {}
@@ -429,6 +449,24 @@ func _ObjectService_CompleteObject_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ObjectService_RestoreObject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestoreObjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ObjectServiceServer).RestoreObject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ObjectService_RestoreObject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ObjectServiceServer).RestoreObject(ctx, req.(*RestoreObjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ObjectService_ServiceDesc is the grpc.ServiceDesc for ObjectService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -471,6 +509,10 @@ var ObjectService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteObject",
 			Handler:    _ObjectService_CompleteObject_Handler,
+		},
+		{
+			MethodName: "RestoreObject",
+			Handler:    _ObjectService_RestoreObject_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

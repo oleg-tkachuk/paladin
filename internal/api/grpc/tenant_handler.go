@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // TenantHandler implements grpcapiconnect.TenantServiceHandler.
@@ -23,8 +24,9 @@ func NewTenantHandler(log *zap.Logger, svc domain.TenantService) *TenantHandler 
 
 func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[CreateTenantRequest]) (*connect.Response[CreateTenantResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	out, err := h.svc.Create(ctx, msg.TenantId, msg.DisplayName, msg.Labels, msg.Tags)
+	out, err := h.svc.Create(ctx, tenantID, msg.DisplayName, msg.Labels, msg.Tags)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to create tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
 		return nil, grpcError(err)
@@ -37,8 +39,9 @@ func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[C
 
 func (h *TenantHandler) GetTenant(ctx context.Context, req *connect.Request[GetTenantRequest]) (*connect.Response[GetTenantResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	out, err := h.svc.Get(ctx, msg.TenantId)
+	out, err := h.svc.Get(ctx, tenantID)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
 		return nil, grpcError(err)
@@ -101,8 +104,9 @@ func (h *TenantHandler) ListTenants(ctx context.Context, req *connect.Request[Li
 
 func (h *TenantHandler) DeleteTenant(ctx context.Context, req *connect.Request[DeleteTenantRequest]) (*connect.Response[DeleteTenantResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	err := h.svc.Delete(ctx, msg.TenantId)
+	err := h.svc.Delete(ctx, tenantID)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to delete tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
 		return nil, grpcError(err)
@@ -121,7 +125,7 @@ func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.R
 		labelsPatch[k] = v
 	}
 
-	out, err := h.svc.PatchMetadata(ctx, msg.TenantId, labelsPatch, msg.Tags, msg.DisplayName)
+	out, err := h.svc.PatchMetadata(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), labelsPatch, msg.Tags, msg.DisplayName)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to update tenant metadata", zap.Error(err), zap.String("tenant_id", msg.TenantId))
 		return nil, grpcError(err)

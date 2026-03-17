@@ -105,6 +105,26 @@ func (q *Queries) DeleteObject(ctx context.Context, tenantID string, iD pgtype.U
 	return result.RowsAffected(), nil
 }
 
+const getBucketStats = `-- name: GetBucketStats :one
+SELECT 
+    COUNT(*)::bigint as total_objects,
+    COALESCE(SUM(size_bytes), 0)::bigint as total_size_bytes
+FROM objects
+WHERE tenant_id = $1 AND bucket = $2 AND status != 'hard_deleted'
+`
+
+type GetBucketStatsRow struct {
+	TotalObjects   int64 `json:"total_objects"`
+	TotalSizeBytes int64 `json:"total_size_bytes"`
+}
+
+func (q *Queries) GetBucketStats(ctx context.Context, tenantID string, bucket string) (GetBucketStatsRow, error) {
+	row := q.db.QueryRow(ctx, getBucketStats, tenantID, bucket)
+	var i GetBucketStatsRow
+	err := row.Scan(&i.TotalObjects, &i.TotalSizeBytes)
+	return i, err
+}
+
 const getObject = `-- name: GetObject :one
 SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
 FROM objects

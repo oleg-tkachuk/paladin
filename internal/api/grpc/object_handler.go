@@ -2,12 +2,15 @@ package grpcapi
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // defaultDownloadTTLSeconds is the default presigned download URL expiration.
@@ -28,9 +31,35 @@ func NewObjectHandler(log *zap.Logger, svc domain.ObjectsService) *ObjectHandler
 func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[UploadObjectRequest]) (*connect.Response[UploadObjectResponse], error) {
 	msg := req.Msg
 
-	out, err := h.svc.CreateSingle(ctx, msg.TenantId, msg.Bucket, msg.ContentType, msg.SizeBytes, msg.Metadata, nil, 0, &msg.IdempotencyKey)
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+
+	// Extract category from tags, then metadata, then bucket.
+	category := msg.Tags["category"]
+	if category == "" {
+		category = msg.Metadata["category"]
+	}
+	if category == "" {
+		// Fallback to bucket field if no explicit category tag is provided
+		category = msg.Bucket
+	}
+
+	if category == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("category is required (either in bucket field or as 'category' tag)"))
+	}
+
+	var externalRef *string
+	if ref, ok := msg.Metadata["external_ref"]; ok {
+		externalRef = &ref
+	} else if ref, ok := msg.Tags["external_ref"]; ok {
+		externalRef = &ref
+	}
+
+	out, err := h.svc.CreateSingle(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to create upload record", zap.Error(err), zap.String("bucket", msg.Bucket))
+		logger.FromContext(ctx).Warn("failed to create upload record",
+			zap.Error(err),
+			zap.String("tenant_id", tenantID),
+			zap.String("category", category))
 		return nil, grpcError(err)
 	}
 
@@ -55,16 +84,33 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 	}), nil
 }
 
+func (h *ObjectHandler) getObjectResiliently(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
+	rec, err := h.svc.GetByKey(ctx, tenantID, bucket, key)
+	if err == nil {
+		return rec, nil
+	}
+
+	// Fallback to ID-based lookup if key looks like a UUID
+	if errors.Is(err, domain.ErrNotFound) {
+		if id, parseErr := uuid.Parse(key); parseErr == nil {
+			return h.svc.Get(ctx, tenantID, id)
+		}
+	}
+
+	return nil, err
+}
+
 func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request[DownloadObjectRequest]) (*connect.Response[DownloadObjectResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get record for download", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
 		return nil, grpcError(err)
 	}
 
-	presigned, err := h.svc.SignDownload(ctx, msg.TenantId, rec.ID, defaultDownloadTTLSeconds)
+	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, defaultDownloadTTLSeconds)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to sign download URL", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
@@ -78,8 +124,9 @@ func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request
 
 func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Request[GetObjectMetadataRequest]) (*connect.Response[GetObjectMetadataResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get metadata record", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
 		return nil, grpcError(err)
@@ -92,15 +139,16 @@ func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Requ
 
 func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.Request[UpdateObjectMetadataRequest]) (*connect.Response[UpdateObjectMetadataResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get record for metadata update", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
 		return nil, grpcError(err)
 	}
 
 	// PatchMeta merges labels; the proto sends metadata as the new labels set.
-	updated, err := h.svc.PatchMeta(ctx, msg.TenantId, rec.ID, msg.Metadata, nil)
+	updated, err := h.svc.PatchMeta(ctx, tenantID, rec.ID, msg.Metadata, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to patch object metadata", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
@@ -115,17 +163,18 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 
 func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get record for deletion", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
 		return nil, grpcError(err)
 	}
 
 	if msg.Permanent {
-		err = h.svc.Purge(ctx, msg.TenantId, rec.ID, &msg.IdempotencyKey)
+		err = h.svc.Purge(ctx, tenantID, rec.ID, &msg.IdempotencyKey)
 	} else {
-		err = h.svc.Delete(ctx, msg.TenantId, rec.ID)
+		err = h.svc.Delete(ctx, tenantID, rec.ID)
 	}
 	if err != nil {
 		logger.FromContext(ctx).Warn("object deletion failed", zap.Error(err), zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
@@ -135,7 +184,7 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 	logger.FromContext(ctx).Info("object deleted", zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
 
 	// Re-fetch to get post-delete state (soft-delete updates status)
-	updated, fetchErr := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	updated, fetchErr := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if fetchErr != nil {
 		// For permanent deletes the record is gone — return the pre-delete snapshot.
 		return connect.NewResponse(&DeleteObjectResponse{
@@ -150,13 +199,14 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 
 func (h *ObjectHandler) CopyObject(ctx context.Context, req *connect.Request[CopyObjectRequest]) (*connect.Response[CopyObjectResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
 	dstBucket := msg.DestinationBucket
 	if dstBucket == "" {
 		dstBucket = msg.Bucket
 	}
 
-	copy, err := h.svc.CopyObject(ctx, msg.TenantId, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey, msg.Metadata)
+	copy, err := h.svc.CopyObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey, msg.Metadata)
 	if err != nil {
 		logger.FromContext(ctx).Warn("object copy failed",
 			zap.Error(err),
@@ -179,13 +229,14 @@ func (h *ObjectHandler) CopyObject(ctx context.Context, req *connect.Request[Cop
 
 func (h *ObjectHandler) MoveObject(ctx context.Context, req *connect.Request[MoveObjectRequest]) (*connect.Response[MoveObjectResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
 	dstBucket := msg.DestinationBucket
 	if dstBucket == "" {
 		dstBucket = msg.Bucket
 	}
 
-	moved, err := h.svc.MoveObject(ctx, msg.TenantId, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey)
+	moved, err := h.svc.MoveObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey)
 	if err != nil {
 		logger.FromContext(ctx).Warn("object move failed",
 			zap.Error(err),
@@ -208,6 +259,7 @@ func (h *ObjectHandler) MoveObject(ctx context.Context, req *connect.Request[Mov
 
 func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[ListObjectsRequest]) (*connect.Response[ListObjectsResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
 	filter := domain.ListObjectsFilter{
 		Limit:  int(msg.PageSize),
@@ -262,7 +314,7 @@ func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[Li
 		filter.SortOrder = "asc"
 	}
 
-	objects, nextCursor, total, err := h.svc.List(ctx, msg.TenantId, filter)
+	objects, nextCursor, total, err := h.svc.List(ctx, tenantID, filter)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to list objects", zap.Error(err), zap.String("bucket", msg.Bucket))
 		return nil, grpcError(err)
@@ -283,7 +335,9 @@ func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[Li
 func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request[CompleteObjectRequest]) (*connect.Response[CompleteObjectResponse], error) {
 	msg := req.Msg
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -293,7 +347,7 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 		etag = &msg.Etag
 	}
 
-	updated, err := h.svc.CompleteObject(ctx, msg.TenantId, rec.ID, etag, nil)
+	updated, err := h.svc.CompleteObject(ctx, tenantID, rec.ID, etag, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to complete object upload", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
@@ -302,6 +356,37 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 	logger.FromContext(ctx).Info("object upload completed", zap.String("object_id", rec.ID.String()))
 
 	return connect.NewResponse(&CompleteObjectResponse{
+		Object: objectToProto(updated),
+	}), nil
+}
+
+func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[RestoreObjectRequest]) (*connect.Response[RestoreObjectResponse], error) {
+	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+
+	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to get record for restoration", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
+		return nil, grpcError(err)
+	}
+
+	err = h.svc.Restore(ctx, tenantID, rec.ID)
+	if err != nil {
+		logger.FromContext(ctx).Warn("object restoration failed", zap.Error(err), zap.String("object_id", rec.ID.String()))
+		return nil, grpcError(err)
+	}
+
+	logger.FromContext(ctx).Info("object restored", zap.String("object_id", rec.ID.String()))
+
+	// Re-fetch to get post-restore state (AVAILABLE status)
+	updated, fetchErr := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	if fetchErr != nil {
+		return connect.NewResponse(&RestoreObjectResponse{
+			Object: objectToProto(rec),
+		}), nil
+	}
+
+	return connect.NewResponse(&RestoreObjectResponse{
 		Object: objectToProto(updated),
 	}), nil
 }

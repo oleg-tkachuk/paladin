@@ -45,6 +45,11 @@ const (
 	SystemServiceGetStartupzProcedure = "/paladin.v1.SystemService/GetStartupz"
 	// SystemServiceGetInfoProcedure is the fully-qualified name of the SystemService's GetInfo RPC.
 	SystemServiceGetInfoProcedure = "/paladin.v1.SystemService/GetInfo"
+	// SystemServiceGetConfigProcedure is the fully-qualified name of the SystemService's GetConfig RPC.
+	SystemServiceGetConfigProcedure = "/paladin.v1.SystemService/GetConfig"
+	// SystemServiceListAuditLogsProcedure is the fully-qualified name of the SystemService's
+	// ListAuditLogs RPC.
+	SystemServiceListAuditLogsProcedure = "/paladin.v1.SystemService/ListAuditLogs"
 )
 
 // SystemServiceClient is a client for the paladin.v1.SystemService service.
@@ -65,6 +70,10 @@ type SystemServiceClient interface {
 	// GetInfo returns detailed information about the service build, runtime,
 	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *connect.Request[grpc.GetInfoRequest]) (*connect.Response[grpc.GetInfoResponse], error)
+	// GetConfig returns the sanitized system configuration for administrative display.
+	GetConfig(context.Context, *connect.Request[grpc.GetConfigRequest]) (*connect.Response[grpc.GetConfigResponse], error)
+	// ListAuditLogs returns a paginated list of system activity logs for a tenant.
+	ListAuditLogs(context.Context, *connect.Request[grpc.ListAuditLogsRequest]) (*connect.Response[grpc.ListAuditLogsResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.v1.SystemService service. By default, it
@@ -108,16 +117,30 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("GetInfo")),
 			connect.WithClientOptions(opts...),
 		),
+		getConfig: connect.NewClient[grpc.GetConfigRequest, grpc.GetConfigResponse](
+			httpClient,
+			baseURL+SystemServiceGetConfigProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+			connect.WithClientOptions(opts...),
+		),
+		listAuditLogs: connect.NewClient[grpc.ListAuditLogsRequest, grpc.ListAuditLogsResponse](
+			httpClient,
+			baseURL+SystemServiceListAuditLogsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("ListAuditLogs")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	ping        *connect.Client[grpc.PingRequest, grpc.PingResponse]
-	getLivez    *connect.Client[grpc.GetLivezRequest, grpc.GetLivezResponse]
-	getReadyz   *connect.Client[grpc.GetReadyzRequest, grpc.GetReadyzResponse]
-	getStartupz *connect.Client[grpc.GetStartupzRequest, grpc.GetStartupzResponse]
-	getInfo     *connect.Client[grpc.GetInfoRequest, grpc.GetInfoResponse]
+	ping          *connect.Client[grpc.PingRequest, grpc.PingResponse]
+	getLivez      *connect.Client[grpc.GetLivezRequest, grpc.GetLivezResponse]
+	getReadyz     *connect.Client[grpc.GetReadyzRequest, grpc.GetReadyzResponse]
+	getStartupz   *connect.Client[grpc.GetStartupzRequest, grpc.GetStartupzResponse]
+	getInfo       *connect.Client[grpc.GetInfoRequest, grpc.GetInfoResponse]
+	getConfig     *connect.Client[grpc.GetConfigRequest, grpc.GetConfigResponse]
+	listAuditLogs *connect.Client[grpc.ListAuditLogsRequest, grpc.ListAuditLogsResponse]
 }
 
 // Ping calls paladin.v1.SystemService.Ping.
@@ -145,6 +168,16 @@ func (c *systemServiceClient) GetInfo(ctx context.Context, req *connect.Request[
 	return c.getInfo.CallUnary(ctx, req)
 }
 
+// GetConfig calls paladin.v1.SystemService.GetConfig.
+func (c *systemServiceClient) GetConfig(ctx context.Context, req *connect.Request[grpc.GetConfigRequest]) (*connect.Response[grpc.GetConfigResponse], error) {
+	return c.getConfig.CallUnary(ctx, req)
+}
+
+// ListAuditLogs calls paladin.v1.SystemService.ListAuditLogs.
+func (c *systemServiceClient) ListAuditLogs(ctx context.Context, req *connect.Request[grpc.ListAuditLogsRequest]) (*connect.Response[grpc.ListAuditLogsResponse], error) {
+	return c.listAuditLogs.CallUnary(ctx, req)
+}
+
 // SystemServiceHandler is an implementation of the paladin.v1.SystemService service.
 type SystemServiceHandler interface {
 	// Ping is a minimal connectivity check that returns immediately.
@@ -163,6 +196,10 @@ type SystemServiceHandler interface {
 	// GetInfo returns detailed information about the service build, runtime,
 	// and environment for debugging and operational visibility.
 	GetInfo(context.Context, *connect.Request[grpc.GetInfoRequest]) (*connect.Response[grpc.GetInfoResponse], error)
+	// GetConfig returns the sanitized system configuration for administrative display.
+	GetConfig(context.Context, *connect.Request[grpc.GetConfigRequest]) (*connect.Response[grpc.GetConfigResponse], error)
+	// ListAuditLogs returns a paginated list of system activity logs for a tenant.
+	ListAuditLogs(context.Context, *connect.Request[grpc.ListAuditLogsRequest]) (*connect.Response[grpc.ListAuditLogsResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -202,6 +239,18 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("GetInfo")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceGetConfigHandler := connect.NewUnaryHandler(
+		SystemServiceGetConfigProcedure,
+		svc.GetConfig,
+		connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
+	systemServiceListAuditLogsHandler := connect.NewUnaryHandler(
+		SystemServiceListAuditLogsProcedure,
+		svc.ListAuditLogs,
+		connect.WithSchema(systemServiceMethods.ByName("ListAuditLogs")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServicePingProcedure:
@@ -214,6 +263,10 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceGetStartupzHandler.ServeHTTP(w, r)
 		case SystemServiceGetInfoProcedure:
 			systemServiceGetInfoHandler.ServeHTTP(w, r)
+		case SystemServiceGetConfigProcedure:
+			systemServiceGetConfigHandler.ServeHTTP(w, r)
+		case SystemServiceListAuditLogsProcedure:
+			systemServiceListAuditLogsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -241,4 +294,12 @@ func (UnimplementedSystemServiceHandler) GetStartupz(context.Context, *connect.R
 
 func (UnimplementedSystemServiceHandler) GetInfo(context.Context, *connect.Request[grpc.GetInfoRequest]) (*connect.Response[grpc.GetInfoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.SystemService.GetInfo is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Request[grpc.GetConfigRequest]) (*connect.Response[grpc.GetConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.SystemService.GetConfig is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) ListAuditLogs(context.Context, *connect.Request[grpc.ListAuditLogsRequest]) (*connect.Response[grpc.ListAuditLogsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.SystemService.ListAuditLogs is not implemented"))
 }

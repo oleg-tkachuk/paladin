@@ -52,7 +52,7 @@ service TenantService {
 
 message CreateTenantRequest {
   // Unique identifier for the new tenant.
-  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
   // Optional human-readable name.
   optional string display_name = 2;
@@ -71,7 +71,7 @@ message CreateTenantResponse {
 // ─── Get ─────────────────────────────────────────────────────────────────────
 
 message GetTenantRequest {
-  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 message GetTenantResponse {
@@ -99,7 +99,7 @@ message ListTenantsResponse {
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 message DeleteTenantRequest {
-  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 message DeleteTenantResponse {}
@@ -107,7 +107,7 @@ message DeleteTenantResponse {}
 // ─── Update Metadata ─────────────────────────────────────────────────────────
 
 message UpdateTenantMetadataRequest {
-  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
   // Updated human-readable name.
   optional string display_name = 2;

@@ -9,6 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"go.opentelemetry.io/otel"
@@ -85,7 +86,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	}
 
 	// Validate ETag if provided
-	if etag != nil && *etag != head.ETag {
+	if etag != nil && utils.NormalizeETag(*etag) != utils.NormalizeETag(head.ETag) {
 		err = fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

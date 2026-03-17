@@ -599,6 +599,116 @@ func (x *UpdateBucketConfigurationRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+// GetBucketStatsRequest retrieves storage usage statistics for a bucket.
+type GetBucketStatsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Tenant identifier for logical isolation.
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Name of the bucket to get stats for.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBucketStatsRequest) Reset() {
+	*x = GetBucketStatsRequest{}
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBucketStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBucketStatsRequest) ProtoMessage() {}
+
+func (x *GetBucketStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBucketStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetBucketStatsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetBucketStatsRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *GetBucketStatsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// GetBucketStatsResponse contains the bucket's storage statistics.
+type GetBucketStatsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Total number of objects in the bucket.
+	TotalObjects int64 `protobuf:"varint,1,opt,name=total_objects,json=totalObjects,proto3" json:"total_objects,omitempty"`
+	// Total size of all objects in the bucket in bytes.
+	TotalSizeBytes int64 `protobuf:"varint,2,opt,name=total_size_bytes,json=totalSizeBytes,proto3" json:"total_size_bytes,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetBucketStatsResponse) Reset() {
+	*x = GetBucketStatsResponse{}
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBucketStatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBucketStatsResponse) ProtoMessage() {}
+
+func (x *GetBucketStatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBucketStatsResponse.ProtoReflect.Descriptor instead.
+func (*GetBucketStatsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetBucketStatsResponse) GetTotalObjects() int64 {
+	if x != nil {
+		return x.TotalObjects
+	}
+	return 0
+}
+
+func (x *GetBucketStatsResponse) GetTotalSizeBytes() int64 {
+	if x != nil {
+		return x.TotalSizeBytes
+	}
+	return 0
+}
+
 // UpdateBucketConfigurationResponse contains the updated bucket resource.
 type UpdateBucketConfigurationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -610,7 +720,7 @@ type UpdateBucketConfigurationResponse struct {
 
 func (x *UpdateBucketConfigurationResponse) Reset() {
 	*x = UpdateBucketConfigurationResponse{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[9]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -622,7 +732,7 @@ func (x *UpdateBucketConfigurationResponse) String() string {
 func (*UpdateBucketConfigurationResponse) ProtoMessage() {}
 
 func (x *UpdateBucketConfigurationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[9]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -635,7 +745,7 @@ func (x *UpdateBucketConfigurationResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use UpdateBucketConfigurationResponse.ProtoReflect.Descriptor instead.
 func (*UpdateBucketConfigurationResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{9}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateBucketConfigurationResponse) GetBucket() *Bucket {
@@ -687,15 +797,22 @@ const file_paladin_v1_bucket_service_proto_rawDesc = "" +
 	"updateMask\x12A\n" +
 	"\rconfiguration\x18\x04 \x01(\v2\x1b.paladin.v1.BucketConfigurationR\rconfiguration\x12!\n" +
 	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12'\n" +
-	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\"K\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\"[\n" +
+	"\x15GetBucketStatsRequest\x12%\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1b\n" +
+	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"g\n" +
+	"\x16GetBucketStatsResponse\x12#\n" +
+	"\rtotal_objects\x18\x01 \x01(\x03R\ftotalObjects\x12(\n" +
+	"\x10total_size_bytes\x18\x02 \x01(\x03R\x0etotalSizeBytes\"K\n" +
 	"!UpdateBucketConfigurationResponse\x12&\n" +
-	"\x06bucket\x18\x01 \x01(\v2\x0e.paladin.v1.BucketR\x06bucket2\xce\x05\n" +
+	"\x06bucket\x18\x01 \x01(\v2\x0e.paladin.v1.BucketR\x06bucket2\xd6\x06\n" +
 	"\rBucketService\x12u\n" +
 	"\fCreateBucket\x12\x1b.paladin.v1.CreateBucketRequest\x1a\x1c.paladin.v1.CreateBucketResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/tenants/{tenant_id}/buckets\x12y\n" +
 	"\fDeleteBucket\x12\x1b.paladin.v1.DeleteBucketRequest\x1a\x1c.paladin.v1.DeleteBucketResponse\".\x82\xd3\xe4\x93\x02(*&/v1/tenants/{tenant_id}/buckets/{name}\x12o\n" +
 	"\vListBuckets\x12\x1a.paladin.v1.ListBucketsRequest\x1a\x1b.paladin.v1.ListBucketsResponse\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/tenants/{tenant_id}/buckets\x12\xa5\x01\n" +
 	"\x16GetBucketConfiguration\x12%.paladin.v1.GetBucketConfigurationRequest\x1a&.paladin.v1.GetBucketConfigurationResponse\"<\x82\xd3\xe4\x93\x026\x124/v1/tenants/{tenant_id}/buckets/{name}/configuration\x12\xb1\x01\n" +
-	"\x19UpdateBucketConfiguration\x12(.paladin.v1.UpdateBucketConfigurationRequest\x1a).paladin.v1.UpdateBucketConfigurationResponse\"?\x82\xd3\xe4\x93\x029:\x01*24/v1/tenants/{tenant_id}/buckets/{name}/configurationBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
+	"\x19UpdateBucketConfiguration\x12(.paladin.v1.UpdateBucketConfigurationRequest\x1a).paladin.v1.UpdateBucketConfigurationResponse\"?\x82\xd3\xe4\x93\x029:\x01*24/v1/tenants/{tenant_id}/buckets/{name}/configuration\x12\x85\x01\n" +
+	"\x0eGetBucketStats\x12\x1d.paladin.v1.GetBucketStatsRequest\x1a\x1e.paladin.v1.GetBucketStatsResponse\"4\x82\xd3\xe4\x93\x02.\x12,/v1/tenants/{tenant_id}/buckets/{name}/statsBHZFgithub.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapib\x06proto3"
 
 var (
 	file_paladin_v1_bucket_service_proto_rawDescOnce sync.Once
@@ -709,7 +826,7 @@ func file_paladin_v1_bucket_service_proto_rawDescGZIP() []byte {
 	return file_paladin_v1_bucket_service_proto_rawDescData
 }
 
-var file_paladin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_paladin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_paladin_v1_bucket_service_proto_goTypes = []any{
 	(*CreateBucketRequest)(nil),               // 0: paladin.v1.CreateBucketRequest
 	(*CreateBucketResponse)(nil),              // 1: paladin.v1.CreateBucketResponse
@@ -720,31 +837,35 @@ var file_paladin_v1_bucket_service_proto_goTypes = []any{
 	(*GetBucketConfigurationRequest)(nil),     // 6: paladin.v1.GetBucketConfigurationRequest
 	(*GetBucketConfigurationResponse)(nil),    // 7: paladin.v1.GetBucketConfigurationResponse
 	(*UpdateBucketConfigurationRequest)(nil),  // 8: paladin.v1.UpdateBucketConfigurationRequest
-	(*UpdateBucketConfigurationResponse)(nil), // 9: paladin.v1.UpdateBucketConfigurationResponse
-	(*BucketConfiguration)(nil),               // 10: paladin.v1.BucketConfiguration
-	(*Bucket)(nil),                            // 11: paladin.v1.Bucket
-	(*fieldmaskpb.FieldMask)(nil),             // 12: google.protobuf.FieldMask
+	(*GetBucketStatsRequest)(nil),             // 9: paladin.v1.GetBucketStatsRequest
+	(*GetBucketStatsResponse)(nil),            // 10: paladin.v1.GetBucketStatsResponse
+	(*UpdateBucketConfigurationResponse)(nil), // 11: paladin.v1.UpdateBucketConfigurationResponse
+	(*BucketConfiguration)(nil),               // 12: paladin.v1.BucketConfiguration
+	(*Bucket)(nil),                            // 13: paladin.v1.Bucket
+	(*fieldmaskpb.FieldMask)(nil),             // 14: google.protobuf.FieldMask
 }
 var file_paladin_v1_bucket_service_proto_depIdxs = []int32{
-	10, // 0: paladin.v1.CreateBucketRequest.configuration:type_name -> paladin.v1.BucketConfiguration
-	11, // 1: paladin.v1.CreateBucketResponse.bucket:type_name -> paladin.v1.Bucket
-	11, // 2: paladin.v1.ListBucketsResponse.buckets:type_name -> paladin.v1.Bucket
-	11, // 3: paladin.v1.GetBucketConfigurationResponse.bucket:type_name -> paladin.v1.Bucket
-	12, // 4: paladin.v1.UpdateBucketConfigurationRequest.update_mask:type_name -> google.protobuf.FieldMask
-	10, // 5: paladin.v1.UpdateBucketConfigurationRequest.configuration:type_name -> paladin.v1.BucketConfiguration
-	11, // 6: paladin.v1.UpdateBucketConfigurationResponse.bucket:type_name -> paladin.v1.Bucket
+	12, // 0: paladin.v1.CreateBucketRequest.configuration:type_name -> paladin.v1.BucketConfiguration
+	13, // 1: paladin.v1.CreateBucketResponse.bucket:type_name -> paladin.v1.Bucket
+	13, // 2: paladin.v1.ListBucketsResponse.buckets:type_name -> paladin.v1.Bucket
+	13, // 3: paladin.v1.GetBucketConfigurationResponse.bucket:type_name -> paladin.v1.Bucket
+	14, // 4: paladin.v1.UpdateBucketConfigurationRequest.update_mask:type_name -> google.protobuf.FieldMask
+	12, // 5: paladin.v1.UpdateBucketConfigurationRequest.configuration:type_name -> paladin.v1.BucketConfiguration
+	13, // 6: paladin.v1.UpdateBucketConfigurationResponse.bucket:type_name -> paladin.v1.Bucket
 	0,  // 7: paladin.v1.BucketService.CreateBucket:input_type -> paladin.v1.CreateBucketRequest
 	2,  // 8: paladin.v1.BucketService.DeleteBucket:input_type -> paladin.v1.DeleteBucketRequest
 	4,  // 9: paladin.v1.BucketService.ListBuckets:input_type -> paladin.v1.ListBucketsRequest
 	6,  // 10: paladin.v1.BucketService.GetBucketConfiguration:input_type -> paladin.v1.GetBucketConfigurationRequest
 	8,  // 11: paladin.v1.BucketService.UpdateBucketConfiguration:input_type -> paladin.v1.UpdateBucketConfigurationRequest
-	1,  // 12: paladin.v1.BucketService.CreateBucket:output_type -> paladin.v1.CreateBucketResponse
-	3,  // 13: paladin.v1.BucketService.DeleteBucket:output_type -> paladin.v1.DeleteBucketResponse
-	5,  // 14: paladin.v1.BucketService.ListBuckets:output_type -> paladin.v1.ListBucketsResponse
-	7,  // 15: paladin.v1.BucketService.GetBucketConfiguration:output_type -> paladin.v1.GetBucketConfigurationResponse
-	9,  // 16: paladin.v1.BucketService.UpdateBucketConfiguration:output_type -> paladin.v1.UpdateBucketConfigurationResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
+	9,  // 12: paladin.v1.BucketService.GetBucketStats:input_type -> paladin.v1.GetBucketStatsRequest
+	1,  // 13: paladin.v1.BucketService.CreateBucket:output_type -> paladin.v1.CreateBucketResponse
+	3,  // 14: paladin.v1.BucketService.DeleteBucket:output_type -> paladin.v1.DeleteBucketResponse
+	5,  // 15: paladin.v1.BucketService.ListBuckets:output_type -> paladin.v1.ListBucketsResponse
+	7,  // 16: paladin.v1.BucketService.GetBucketConfiguration:output_type -> paladin.v1.GetBucketConfigurationResponse
+	11, // 17: paladin.v1.BucketService.UpdateBucketConfiguration:output_type -> paladin.v1.UpdateBucketConfigurationResponse
+	10, // 18: paladin.v1.BucketService.GetBucketStats:output_type -> paladin.v1.GetBucketStatsResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -762,7 +883,7 @@ func file_paladin_v1_bucket_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_v1_bucket_service_proto_rawDesc), len(file_paladin_v1_bucket_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

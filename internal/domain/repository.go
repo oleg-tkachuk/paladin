@@ -126,6 +126,7 @@ type ObjectsRepository interface {
 	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
 	ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]Object, error)
 	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
+	GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error)
 }
 
 type ObjectStats struct {

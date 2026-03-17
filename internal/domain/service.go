@@ -48,6 +48,7 @@ type ObjectsService interface {
 	AbortMultipart(ctx context.Context, tenantID string, uploadID string) error
 	ListParts(ctx context.Context, tenantID string, uploadID string) ([]MultipartPart, error)
 	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
+	GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error)
 }
 
 // SystemService defines operations for system-level information and management.

@@ -490,6 +490,23 @@ func (r *ObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.Ob
 	}, nil
 }
 
+func (r *ObjectsRepo) GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error) {
+	start := time.Now()
+	var status string
+	defer func() { metrics.RecordDbQuery(ctx, "GetBucketStats", status, start) }()
+
+	row, err := r.db.Queries.GetBucketStats(ctx, tenantID, bucket)
+	if err != nil {
+		status = "error"
+
+		return 0, 0, mapPgError(err)
+	}
+
+	status = "success"
+
+	return row.TotalObjects, row.TotalSizeBytes, nil
+}
+
 func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem) (int64, error) {
 	start := time.Now()
 	var status string

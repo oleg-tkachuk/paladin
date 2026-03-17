@@ -30,6 +30,7 @@ type Querier interface {
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	DeleteTenant(ctx context.Context, tenantID string) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
+	GetBucketStats(ctx context.Context, tenantID string, bucket string) (GetBucketStatsRow, error)
 	GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error)
 	GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error)
 	// Idempotency queries

@@ -29,7 +29,7 @@ const categoryObjectCount = `-- name: CategoryObjectCount :one
 SELECT COUNT(*)::bigint AS count
 FROM objects
 WHERE tenant_id = $1 AND category = $2
-  AND status NOT IN ('hard_deleted')
+  AND status NOT IN ('hard_deleted', 'soft_deleted')
 `
 
 func (q *Queries) CategoryObjectCount(ctx context.Context, tenantID string, category string) (int64, error) {
@@ -101,7 +101,7 @@ SELECT
     COALESCE(SUM(size_bytes), 0)::bigint AS total_size
 FROM objects
 WHERE tenant_id = $1 AND category = $2
-  AND status NOT IN ('hard_deleted')
+  AND status NOT IN ('hard_deleted', 'soft_deleted')
 `
 
 type GetCategoryStatsRow struct {

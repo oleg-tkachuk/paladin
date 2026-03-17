@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // CategoryHandler implements grpcapiconnect.CategoryServiceHandler.
@@ -23,8 +24,9 @@ func NewCategoryHandler(log *zap.Logger, svc domain.CategoryService) *CategoryHa
 
 func (h *CategoryHandler) CreateCategory(ctx context.Context, req *connect.Request[CreateCategoryRequest]) (*connect.Response[CreateCategoryResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	out, err := h.svc.Create(ctx, msg.TenantId, msg.Slug, msg.Name, msg.Description)
+	out, err := h.svc.Create(ctx, tenantID, msg.Slug, msg.Name, msg.Description)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to create category", zap.Error(err), zap.String("slug", msg.Slug))
 		return nil, grpcError(err)
@@ -37,8 +39,9 @@ func (h *CategoryHandler) CreateCategory(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) GetCategory(ctx context.Context, req *connect.Request[GetCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	out, err := h.svc.Get(ctx, msg.TenantId, msg.Slug)
+	out, err := h.svc.Get(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get category", zap.Error(err), zap.String("slug", msg.Slug))
 		return nil, grpcError(err)
@@ -51,10 +54,11 @@ func (h *CategoryHandler) GetCategory(ctx context.Context, req *connect.Request[
 
 func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Request[UpdateCategoryRequest]) (*connect.Response[UpdateCategoryResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
 	// Note:domain.CategoryService.Update currently expects name, which might be empty if not provided in proto.
 	// We need to handle optionality.
-	existing, err := h.svc.Get(ctx, msg.TenantId, msg.Slug)
+	existing, err := h.svc.Get(ctx, tenantID, msg.Slug)
 	if err != nil {
 		return nil, grpcError(err)
 	}
@@ -69,7 +73,7 @@ func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Reque
 		description = msg.Description
 	}
 
-	out, err := h.svc.Update(ctx, msg.TenantId, msg.Slug, name, description)
+	out, err := h.svc.Update(ctx, tenantID, msg.Slug, name, description)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to update category", zap.Error(err), zap.String("slug", msg.Slug))
 		return nil, grpcError(err)
@@ -82,8 +86,9 @@ func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) DeleteCategory(ctx context.Context, req *connect.Request[DeleteCategoryRequest]) (*connect.Response[DeleteCategoryResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	err := h.svc.Delete(ctx, msg.TenantId, msg.Slug)
+	err := h.svc.Delete(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to delete category", zap.Error(err), zap.String("slug", msg.Slug))
 		return nil, grpcError(err)
@@ -118,7 +123,7 @@ func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Reque
 		filter.SortOrder = "asc"
 	}
 
-	categories, nextCursor, total, err := h.svc.List(ctx, msg.TenantId, filter)
+	categories, nextCursor, total, err := h.svc.List(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), filter)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to list categories", zap.Error(err))
 		return nil, grpcError(err)
@@ -138,8 +143,9 @@ func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) GetCategoryStats(ctx context.Context, req *connect.Request[GetCategoryStatsRequest]) (*connect.Response[GetCategoryStatsResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	out, err := h.svc.GetStats(ctx, msg.TenantId, msg.Slug)
+	out, err := h.svc.GetStats(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get category stats", zap.Error(err), zap.String("slug", msg.Slug))
 		return nil, grpcError(err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // defaultPresignTTLSeconds is the TTL passed to Sign* when the client sends 0 or
@@ -27,8 +28,9 @@ func NewPresignHandler(log *zap.Logger, svc domain.ObjectsService) *PresignHandl
 
 func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Request[GenerateUploadUrlRequest]) (*connect.Response[GenerateUploadUrlResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateUploadUrl: object lookup failed", zap.Error(err))
 		return nil, grpcError(err)
@@ -39,7 +41,7 @@ func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Req
 		ttl = int(msg.Ttl.Seconds)
 	}
 
-	presigned, err := h.svc.SignUpload(ctx, msg.TenantId, rec.ID, ttl)
+	presigned, err := h.svc.SignUpload(ctx, tenantID, rec.ID, ttl)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateUploadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
@@ -54,8 +56,9 @@ func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Req
 
 func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.Request[GenerateDownloadUrlRequest]) (*connect.Response[GenerateDownloadUrlResponse], error) {
 	msg := req.Msg
+	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.svc.GetByKey(ctx, msg.TenantId, msg.Bucket, msg.Key)
+	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateDownloadUrl: object lookup failed", zap.Error(err))
 		return nil, grpcError(err)
@@ -66,7 +69,7 @@ func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.R
 		ttl = int(msg.Ttl.Seconds)
 	}
 
-	presigned, err := h.svc.SignDownload(ctx, msg.TenantId, rec.ID, ttl)
+	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, ttl)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateDownloadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 		return nil, grpcError(err)
