@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -161,13 +162,21 @@ func ConnectAuditLogInterceptor(auditRepo domain.AuditLogRepository) connect.Int
 				uaPtr = &ua
 			}
 
+			var traceIdPtr *string
+			span := trace.SpanFromContext(ctx)
+			if span.SpanContext().HasTraceID() {
+				tid := span.SpanContext().TraceID().String()
+				traceIdPtr = &tid
+			}
+
 			go func(ctx context.Context, l domain.AuditLog) {
 				_ = auditRepo.Create(ctx, l)
 			}(context.WithoutCancel(ctx), domain.AuditLog{
 				ID:             id,
 				TenantID:       tenant,
 				RequestID:      reqIdPtr,
-				Method:         "POST", // Connect RPCs are usually POST
+				TraceID:        traceIdPtr,
+				Method:         req.HTTPMethod(),
 				Path:           procedure,
 				QueryParams:    map[string]any{},
 				RequestHeaders: safeHeaders,

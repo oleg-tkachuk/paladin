@@ -288,6 +288,7 @@ func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[
 			AuditId:        l.ID.String(),
 			TenantId:       l.TenantID,
 			RequestId:      l.RequestID,
+			TraceId:        l.TraceID,
 			ActorSubject:   l.ActorSubject,
 			ActorType:      string(l.ActorType),
 			ClientIp:       l.ClientIP,

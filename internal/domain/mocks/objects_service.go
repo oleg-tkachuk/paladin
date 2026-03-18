@@ -895,8 +895,8 @@ func (_c *MockObjectsService_CopyObject_Call) RunAndReturn(run func(ctx context.
 }
 
 // CreateSingle provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateSingle")
@@ -904,16 +904,16 @@ func (_mock *MockObjectsService) CreateSingle(ctx context.Context, tenantID stri
 
 	var r0 domain.CreateObjectResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) (domain.CreateObjectResponse, error)); ok {
-		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) (domain.CreateObjectResponse, error)); ok {
+		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) domain.CreateObjectResponse); ok {
-		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) domain.CreateObjectResponse); ok {
+		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r0 = ret.Get(0).(domain.CreateObjectResponse)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -932,14 +932,15 @@ type MockObjectsService_CreateSingle_Call struct {
 //   - contentType string
 //   - sizeBytes int64
 //   - labels map[string]string
+//   - tags map[string]string
 //   - externalRef *string
 //   - uploadTTL int
 //   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) CreateSingle(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_CreateSingle_Call {
-	return &MockObjectsService_CreateSingle_Call{Call: _e.mock.On("CreateSingle", ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
+func (_e *MockObjectsService_Expecter) CreateSingle(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, tags interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_CreateSingle_Call {
+	return &MockObjectsService_CreateSingle_Call{Call: _e.mock.On("CreateSingle", ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -965,17 +966,21 @@ func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context
 		if args[5] != nil {
 			arg5 = args[5].(map[string]string)
 		}
-		var arg6 *string
+		var arg6 map[string]string
 		if args[6] != nil {
-			arg6 = args[6].(*string)
+			arg6 = args[6].(map[string]string)
 		}
-		var arg7 int
+		var arg7 *string
 		if args[7] != nil {
-			arg7 = args[7].(int)
+			arg7 = args[7].(*string)
 		}
-		var arg8 *string
+		var arg8 int
 		if args[8] != nil {
-			arg8 = args[8].(*string)
+			arg8 = args[8].(int)
+		}
+		var arg9 *string
+		if args[9] != nil {
+			arg9 = args[9].(*string)
 		}
 		run(
 			arg0,
@@ -987,6 +992,7 @@ func (_c *MockObjectsService_CreateSingle_Call) Run(run func(ctx context.Context
 			arg6,
 			arg7,
 			arg8,
+			arg9,
 		)
 	})
 	return _c
@@ -997,7 +1003,7 @@ func (_c *MockObjectsService_CreateSingle_Call) Return(createObjectResponse doma
 	return _c
 }
 
-func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
+func (_c *MockObjectsService_CreateSingle_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error)) *MockObjectsService_CreateSingle_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1514,8 +1520,8 @@ func (_c *MockObjectsService_GetStats_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // InitiateMultipart provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	ret := _mock.Called(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for InitiateMultipart")
@@ -1523,16 +1529,16 @@ func (_mock *MockObjectsService) InitiateMultipart(ctx context.Context, tenantID
 
 	var r0 domain.MultipartInitResponse
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) (domain.MultipartInitResponse, error)); ok {
-		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) (domain.MultipartInitResponse, error)); ok {
+		return returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) domain.MultipartInitResponse); ok {
-		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) domain.MultipartInitResponse); ok {
+		r0 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r0 = ret.Get(0).(domain.MultipartInitResponse)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, *string, int, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, int64, map[string]string, map[string]string, *string, int, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1551,14 +1557,15 @@ type MockObjectsService_InitiateMultipart_Call struct {
 //   - contentType string
 //   - sizeBytes int64
 //   - labels map[string]string
+//   - tags map[string]string
 //   - externalRef *string
 //   - uploadTTL int
 //   - idempotencyKey *string
-func (_e *MockObjectsService_Expecter) InitiateMultipart(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_InitiateMultipart_Call {
-	return &MockObjectsService_InitiateMultipart_Call{Call: _e.mock.On("InitiateMultipart", ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)}
+func (_e *MockObjectsService_Expecter) InitiateMultipart(ctx interface{}, tenantID interface{}, category interface{}, contentType interface{}, sizeBytes interface{}, labels interface{}, tags interface{}, externalRef interface{}, uploadTTL interface{}, idempotencyKey interface{}) *MockObjectsService_InitiateMultipart_Call {
+	return &MockObjectsService_InitiateMultipart_Call{Call: _e.mock.On("InitiateMultipart", ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)}
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string)) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1584,17 +1591,21 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Co
 		if args[5] != nil {
 			arg5 = args[5].(map[string]string)
 		}
-		var arg6 *string
+		var arg6 map[string]string
 		if args[6] != nil {
-			arg6 = args[6].(*string)
+			arg6 = args[6].(map[string]string)
 		}
-		var arg7 int
+		var arg7 *string
 		if args[7] != nil {
-			arg7 = args[7].(int)
+			arg7 = args[7].(*string)
 		}
-		var arg8 *string
+		var arg8 int
 		if args[8] != nil {
-			arg8 = args[8].(*string)
+			arg8 = args[8].(int)
+		}
+		var arg9 *string
+		if args[9] != nil {
+			arg9 = args[9].(*string)
 		}
 		run(
 			arg0,
@@ -1606,6 +1617,7 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Run(run func(ctx context.Co
 			arg6,
 			arg7,
 			arg8,
+			arg9,
 		)
 	})
 	return _c
@@ -1616,7 +1628,7 @@ func (_c *MockObjectsService_InitiateMultipart_Call) Return(multipartInitRespons
 	return _c
 }
 
-func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
+func (_c *MockObjectsService_InitiateMultipart_Call) RunAndReturn(run func(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error)) *MockObjectsService_InitiateMultipart_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1874,8 +1886,8 @@ func (_c *MockObjectsService_MoveObject_Call) RunAndReturn(run func(ctx context.
 }
 
 // PatchMeta provides a mock function for the type MockObjectsService
-func (_mock *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	ret := _mock.Called(ctx, tenantID, id, labels, externalRef)
+func (_mock *MockObjectsService) PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
+	ret := _mock.Called(ctx, tenantID, id, labels, tags, externalRef)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PatchMeta")
@@ -1883,18 +1895,18 @@ func (_mock *MockObjectsService) PatchMeta(ctx context.Context, tenantID string,
 
 	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) (*domain.Object, error)); ok {
-		return returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) (*domain.Object, error)); ok {
+		return returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) *domain.Object); ok {
-		r0 = returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) *domain.Object); ok {
+		r0 = returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1911,12 +1923,13 @@ type MockObjectsService_PatchMeta_Call struct {
 //   - tenantID string
 //   - id uuid.UUID
 //   - labels map[string]string
+//   - tags map[string]string
 //   - externalRef *string
-func (_e *MockObjectsService_Expecter) PatchMeta(ctx interface{}, tenantID interface{}, id interface{}, labels interface{}, externalRef interface{}) *MockObjectsService_PatchMeta_Call {
-	return &MockObjectsService_PatchMeta_Call{Call: _e.mock.On("PatchMeta", ctx, tenantID, id, labels, externalRef)}
+func (_e *MockObjectsService_Expecter) PatchMeta(ctx interface{}, tenantID interface{}, id interface{}, labels interface{}, tags interface{}, externalRef interface{}) *MockObjectsService_PatchMeta_Call {
+	return &MockObjectsService_PatchMeta_Call{Call: _e.mock.On("PatchMeta", ctx, tenantID, id, labels, tags, externalRef)}
 }
 
-func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string)) *MockObjectsService_PatchMeta_Call {
+func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string)) *MockObjectsService_PatchMeta_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1934,9 +1947,13 @@ func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, t
 		if args[3] != nil {
 			arg3 = args[3].(map[string]string)
 		}
-		var arg4 *string
+		var arg4 map[string]string
 		if args[4] != nil {
-			arg4 = args[4].(*string)
+			arg4 = args[4].(map[string]string)
+		}
+		var arg5 *string
+		if args[5] != nil {
+			arg5 = args[5].(*string)
 		}
 		run(
 			arg0,
@@ -1944,6 +1961,7 @@ func (_c *MockObjectsService_PatchMeta_Call) Run(run func(ctx context.Context, t
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -1954,7 +1972,7 @@ func (_c *MockObjectsService_PatchMeta_Call) Return(object *domain.Object, err e
 	return _c
 }
 
-func (_c *MockObjectsService_PatchMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsService_PatchMeta_Call {
+func (_c *MockObjectsService_PatchMeta_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsService_PatchMeta_Call {
 	_c.Call.Return(run)
 	return _c
 }

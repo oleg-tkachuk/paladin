@@ -49,8 +49,8 @@ func (m *FuzzMockRepo) GetByKey(ctx context.Context, tID, bucket, key string) (*
 
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
-func (m *FuzzMockRepo) Patch(ctx context.Context, tID string, id uuid.UUID, l map[string]string, r *string) (*domain.Object, error) {
-	args := m.Called(ctx, tID, id, l, r)
+func (m *FuzzMockRepo) Patch(ctx context.Context, tID string, id uuid.UUID, l map[string]string, t map[string]string, r *string) (*domain.Object, error) {
+	args := m.Called(ctx, tID, id, l, t, r)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -232,7 +232,7 @@ func FuzzCreateObject(f *testing.F) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		_, _ = svc.CreateSingle(ctx, tenantID, category, contentType, sizeBytes, nil, extRefPtr, 0, nil)
+		_, _ = svc.CreateSingle(ctx, tenantID, category, contentType, sizeBytes, nil, nil, extRefPtr, 0, nil)
 	})
 }
 

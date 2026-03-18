@@ -23,7 +23,7 @@ import (
 
 // createSingle creates a single object upload with a presigned PUT URL.
 // category must be the slug of an existing tenant category.
-func (s *objectsService) createSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+func (s *objectsService) createSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, OpCreateObject)
 	defer span.End()
 
@@ -130,7 +130,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	rec := domain.Object{
 		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: bucket,
 		ContentType: contentType, SizeBytes: sizeBytes,
-		Status: domain.ObjectPending, Labels: labels, ExternalRef: externalRef,
+		Status: domain.ObjectPending, Labels: labels, Tags: tags, ExternalRef: externalRef,
 		ExpiresAt: &expiresAt,
 		Category:  category,
 	}

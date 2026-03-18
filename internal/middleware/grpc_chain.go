@@ -16,6 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -90,7 +91,13 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger, auditRepo domain.AuditLogRepository) []connect.Interceptor {
 	rl := newGRPCRateLimiter(cfg)
 
-	return []connect.Interceptor{
+	interceptors := []connect.Interceptor{}
+
+	if otelInterceptor, err := otelconnect.NewInterceptor(); err == nil {
+		interceptors = append(interceptors, otelInterceptor)
+	}
+
+	interceptors = append(interceptors,
 		ConnectRecoveryInterceptor(log),
 		ConnectRequestIDInterceptor(),
 		ConnectContextLoggerInterceptor(log),
@@ -100,7 +107,9 @@ func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger, auditRepo dom
 		ConnectValidationInterceptor(),
 		ConnectRateLimitInterceptor(cfg, rl),
 		ConnectAuditLogInterceptor(auditRepo),
-	}
+	)
+
+	return interceptors
 }
 
 // RecoveryInterceptor catches panics and translates them to codes.Internal.

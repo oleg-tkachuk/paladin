@@ -54,7 +54,7 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 		externalRef = &ref
 	}
 
-	out, err := h.svc.CreateSingle(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, externalRef, 0, &msg.IdempotencyKey)
+	out, err := h.svc.CreateSingle(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to create upload record",
 			zap.Error(err),
@@ -152,8 +152,8 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 		return nil, grpcError(err)
 	}
 
-	// PatchMeta merges labels; the proto sends metadata as the new labels set.
-	updated, err := h.svc.PatchMeta(ctx, tenantID, rec.ID, msg.Metadata, nil)
+	// PatchMeta merges labels/tags; the proto sends them as the new sets.
+	updated, err := h.svc.PatchMeta(ctx, tenantID, rec.ID, msg.Metadata, msg.Tags, nil)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to patch object metadata", zap.Error(err), zap.String("object_id", rec.ID.String()))
 

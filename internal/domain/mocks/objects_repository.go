@@ -1349,8 +1349,8 @@ func (_c *MockObjectsRepository_MarkSoftDeleted_Call) RunAndReturn(run func(ctx 
 }
 
 // Patch provides a mock function for the type MockObjectsRepository
-func (_mock *MockObjectsRepository) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	ret := _mock.Called(ctx, tenantID, id, labels, externalRef)
+func (_mock *MockObjectsRepository) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
+	ret := _mock.Called(ctx, tenantID, id, labels, tags, externalRef)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Patch")
@@ -1358,18 +1358,18 @@ func (_mock *MockObjectsRepository) Patch(ctx context.Context, tenantID string, 
 
 	var r0 *domain.Object
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) (*domain.Object, error)); ok {
-		return returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) (*domain.Object, error)); ok {
+		return returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, *string) *domain.Object); ok {
-		r0 = returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) *domain.Object); ok {
+		r0 = returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.Object)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, *string) error); ok {
-		r1 = returnFunc(ctx, tenantID, id, labels, externalRef)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, uuid.UUID, map[string]string, map[string]string, *string) error); ok {
+		r1 = returnFunc(ctx, tenantID, id, labels, tags, externalRef)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1386,12 +1386,13 @@ type MockObjectsRepository_Patch_Call struct {
 //   - tenantID string
 //   - id uuid.UUID
 //   - labels map[string]string
+//   - tags map[string]string
 //   - externalRef *string
-func (_e *MockObjectsRepository_Expecter) Patch(ctx interface{}, tenantID interface{}, id interface{}, labels interface{}, externalRef interface{}) *MockObjectsRepository_Patch_Call {
-	return &MockObjectsRepository_Patch_Call{Call: _e.mock.On("Patch", ctx, tenantID, id, labels, externalRef)}
+func (_e *MockObjectsRepository_Expecter) Patch(ctx interface{}, tenantID interface{}, id interface{}, labels interface{}, tags interface{}, externalRef interface{}) *MockObjectsRepository_Patch_Call {
+	return &MockObjectsRepository_Patch_Call{Call: _e.mock.On("Patch", ctx, tenantID, id, labels, tags, externalRef)}
 }
 
-func (_c *MockObjectsRepository_Patch_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string)) *MockObjectsRepository_Patch_Call {
+func (_c *MockObjectsRepository_Patch_Call) Run(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string)) *MockObjectsRepository_Patch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1409,9 +1410,13 @@ func (_c *MockObjectsRepository_Patch_Call) Run(run func(ctx context.Context, te
 		if args[3] != nil {
 			arg3 = args[3].(map[string]string)
 		}
-		var arg4 *string
+		var arg4 map[string]string
 		if args[4] != nil {
-			arg4 = args[4].(*string)
+			arg4 = args[4].(map[string]string)
+		}
+		var arg5 *string
+		if args[5] != nil {
+			arg5 = args[5].(*string)
 		}
 		run(
 			arg0,
@@ -1419,6 +1424,7 @@ func (_c *MockObjectsRepository_Patch_Call) Run(run func(ctx context.Context, te
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -1429,7 +1435,7 @@ func (_c *MockObjectsRepository_Patch_Call) Return(object *domain.Object, err er
 	return _c
 }
 
-func (_c *MockObjectsRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsRepository_Patch_Call {
+func (_c *MockObjectsRepository_Patch_Call) RunAndReturn(run func(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error)) *MockObjectsRepository_Patch_Call {
 	_c.Call.Return(run)
 	return _c
 }

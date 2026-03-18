@@ -75,8 +75,8 @@ func NewObjectsService(
 	}
 }
 
-func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	return s.createSingle(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	return s.createSingle(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 }
 
 // Delete performs a soft delete
@@ -358,8 +358,8 @@ func (s *objectsService) List(ctx context.Context, tenantID string, filter domai
 	return s.listObjects(ctx, tenantID, filter)
 }
 
-func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	return s.patchMeta(ctx, tenantID, id, labels, externalRef)
+func (s *objectsService) PatchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
+	return s.patchMeta(ctx, tenantID, id, labels, tags, externalRef)
 }
 
 func (s *objectsService) SignUpload(ctx context.Context, tenantID string, id openapi_types.UUID, uploadTTL int) (domain.Presigned, error) {
@@ -370,8 +370,8 @@ func (s *objectsService) SignDownload(ctx context.Context, tenantID string, id o
 	return s.signDownload(ctx, tenantID, id, downloadTTL)
 }
 
-func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	return s.initiateMultipart(ctx, tenantID, category, contentType, sizeBytes, labels, externalRef, uploadTTL, idempotencyKey)
+func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	return s.initiateMultipart(ctx, tenantID, category, contentType, sizeBytes, labels, tags, externalRef, uploadTTL, idempotencyKey)
 }
 
 func (s *objectsService) GetMultipart(ctx context.Context, tenantID string, uploadID string) (*domain.Multipart, error) {

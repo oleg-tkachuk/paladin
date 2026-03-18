@@ -6,7 +6,6 @@ package sqlc
 
 import (
 	"context"
-	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -18,7 +17,7 @@ type Querier interface {
 	CategoryExists(ctx context.Context, tenantID string, slug string) (bool, error)
 	CategoryObjectCount(ctx context.Context, tenantID string, category string) (int64, error)
 	// Audit log queries
-	CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz, logType string) error
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	// Category queries
 	CreateCategory(ctx context.Context, iD pgtype.UUID, tenantID string, slug string, name string, description *string) error
 	// Multipart queries
@@ -41,7 +40,7 @@ type Querier interface {
 	GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error)
 	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
-	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
+	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, traceID *string, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
 	ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)
 	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ListExpiredPendingObjectsRow, error)
@@ -57,6 +56,10 @@ type Querier interface {
 	PatchObjectExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, externalRef *string) (PatchObjectExternalRefRow, error)
 	PatchObjectLabels(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte) (PatchObjectLabelsRow, error)
 	PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, externalRef *string) (PatchObjectLabelsAndExternalRefRow, error)
+	PatchObjectLabelsAndTags(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte) (PatchObjectLabelsAndTagsRow, error)
+	PatchObjectLabelsTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte, externalRef *string) (PatchObjectLabelsTagsAndExternalRefRow, error)
+	PatchObjectTags(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte) (PatchObjectTagsRow, error)
+	PatchObjectTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte, externalRef *string) (PatchObjectTagsAndExternalRefRow, error)
 	PruneAuditLogs(ctx context.Context, createdAt pgtype.Timestamptz, limit int32) (int64, error)
 	RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	TenantHasActiveObjects(ctx context.Context, tenantID string) (bool, error)

@@ -44,7 +44,7 @@ func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *con
 		externalRef = &ref
 	}
 
-	out, err := h.svc.InitiateMultipart(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, externalRef, 0, &msg.IdempotencyKey)
+	out, err := h.svc.InitiateMultipart(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
 		logger.FromContext(ctx).Warn("InitiateMultipartUpload: failed",
 			zap.Error(err),

@@ -19,6 +19,7 @@ type AuditLog struct {
 	ID                uuid.UUID      `json:"id"`
 	TenantID          string         `json:"tenant_id"`
 	RequestID         *string        `json:"request_id,omitempty"`
+	TraceID           *string        `json:"trace_id,omitempty"`
 	IdempotencyKey    *string        `json:"idempotency_key,omitempty"`
 	ActorSubject      *string        `json:"actor_subject,omitempty"`
 	ActorType         ActorType      `json:"actor_type"`
@@ -46,6 +47,7 @@ type ListAuditLogsFilter struct {
 	Method         *string
 	HTTPStatus     *int
 	RequestID      *string
+	TraceID        *string
 	IdempotencyKey *string
 	LogType        *string
 }

@@ -15,44 +15,69 @@ import (
 const createAuditLog = `-- name: CreateAuditLog :exec
 
 INSERT INTO audit_logs (
-    id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
+    id, tenant_id, trace_id, request_id, idempotency_key, actor_subject, actor_type,
     client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
     response_status, response_time_ms, created_at, log_type
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 )
 `
 
+type CreateAuditLogParams struct {
+	ID                pgtype.UUID        `json:"id"`
+	TenantID          string             `json:"tenant_id"`
+	TraceID           *string            `json:"trace_id"`
+	RequestID         *string            `json:"request_id"`
+	IdempotencyKey    *string            `json:"idempotency_key"`
+	ActorSubject      *string            `json:"actor_subject"`
+	ActorType         string             `json:"actor_type"`
+	ClientIp          *netip.Addr        `json:"client_ip"`
+	UserAgent         *string            `json:"user_agent"`
+	Method            string             `json:"method"`
+	Path              string             `json:"path"`
+	QueryParams       []byte             `json:"query_params"`
+	RequestHeaders    []byte             `json:"request_headers"`
+	RequestBodySha256 *string            `json:"request_body_sha256"`
+	RequestSizeBytes  *int64             `json:"request_size_bytes"`
+	HttpStatus        *int32             `json:"http_status"`
+	ResponseCode      *string            `json:"response_code"`
+	ResponseStatus    *string            `json:"response_status"`
+	ResponseTimeMs    *int32             `json:"response_time_ms"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LogType           string             `json:"log_type"`
+}
+
 // Audit log queries
-func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz, logType string) error {
+func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
 	_, err := q.db.Exec(ctx, createAuditLog,
-		iD,
-		tenantID,
-		requestID,
-		idempotencyKey,
-		actorSubject,
-		actorType,
-		clientIp,
-		userAgent,
-		method,
-		path,
-		queryParams,
-		requestHeaders,
-		requestBodySha256,
-		requestSizeBytes,
-		httpStatus,
-		responseCode,
-		responseStatus,
-		responseTimeMs,
-		createdAt,
-		logType,
+		arg.ID,
+		arg.TenantID,
+		arg.TraceID,
+		arg.RequestID,
+		arg.IdempotencyKey,
+		arg.ActorSubject,
+		arg.ActorType,
+		arg.ClientIp,
+		arg.UserAgent,
+		arg.Method,
+		arg.Path,
+		arg.QueryParams,
+		arg.RequestHeaders,
+		arg.RequestBodySha256,
+		arg.RequestSizeBytes,
+		arg.HttpStatus,
+		arg.ResponseCode,
+		arg.ResponseStatus,
+		arg.ResponseTimeMs,
+		arg.CreatedAt,
+		arg.LogType,
 	)
 	return err
 }
 
 const getAuditLog = `-- name: GetAuditLog :one
-SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type, audit_logs.trace_id
 FROM audit_logs
 WHERE tenant_id = $1 AND id = $2
 `
@@ -85,12 +110,13 @@ func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UU
 		&i.AuditLog.ResponseTimeMs,
 		&i.AuditLog.CreatedAt,
 		&i.AuditLog.LogType,
+		&i.AuditLog.TraceID,
 	)
 	return i, err
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type, COUNT(*) OVER() AS total_count
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type, audit_logs.trace_id, COUNT(*) OVER() AS total_count
 FROM audit_logs
 WHERE tenant_id = $1
   AND ($3::timestamptz IS NULL OR created_at >= $3)
@@ -99,10 +125,11 @@ WHERE tenant_id = $1
   AND ($6::text IS NULL OR path LIKE $6 || '%')
   AND ($7::text IS NULL OR method = $7)
   AND ($8::int IS NULL OR http_status = $8)
-  AND ($9::text IS NULL OR request_id = $9)
-  AND ($10::text IS NULL OR idempotency_key = $10)
-  AND ($11::text IS NULL OR log_type = $11)
-  AND ($12::timestamptz IS NULL OR created_at < $12)
+  AND ($9::text IS NULL OR trace_id = $9)
+  AND ($10::text IS NULL OR request_id = $10)
+  AND ($11::text IS NULL OR idempotency_key = $11)
+  AND ($12::text IS NULL OR log_type = $12)
+  AND ($13::timestamptz IS NULL OR created_at < $13)
 ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
@@ -112,7 +139,7 @@ type ListAuditLogsRow struct {
 	TotalCount int64    `json:"total_count"`
 }
 
-func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
+func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, traceID *string, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		tenantID,
 		limit,
@@ -122,6 +149,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 		pathPrefix,
 		method,
 		httpStatus,
+		traceID,
 		requestID,
 		idempotencyKey,
 		logType,
@@ -155,6 +183,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 			&i.AuditLog.ResponseTimeMs,
 			&i.AuditLog.CreatedAt,
 			&i.AuditLog.LogType,
+			&i.AuditLog.TraceID,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

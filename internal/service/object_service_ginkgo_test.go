@@ -100,8 +100,8 @@ func (m *MockObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items 
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	args := m.Called(ctx, tenantID, id, labels, externalRef)
+func (m *MockObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
+	args := m.Called(ctx, tenantID, id, labels, tags, externalRef)
 
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
@@ -555,7 +555,7 @@ var _ = Describe("ObjectsService", func() {
 			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes, mock.Anything).Return(domain.Presigned{URL: "http://example.com"}, nil)
 
-			out, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).NotTo(Equal(uuid.Nil))
@@ -576,7 +576,7 @@ var _ = Describe("ObjectsService", func() {
 			mockPolicy.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			mockPolicy.On("Validate", contentType, sizeBytes).Return(fmt.Errorf("content_type not allowed"))
 
-			_, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
+			_, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, nil, 0, nil)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("content_type not allowed"))
@@ -595,7 +595,7 @@ var _ = Describe("ObjectsService", func() {
 			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockUoWf, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
 				time.Second, time.Second, time.Second, time.Second, time.Hour, zap.NewNop())
 
-			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, 0, &key)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, nil, 0, &key)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).To(Equal(res.ID))
@@ -610,7 +610,7 @@ var _ = Describe("ObjectsService", func() {
 			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
 			mockS3.On("PresignPutObject", mock.Anything, "key123", "image/png", int64(100), mock.Anything).Return(domain.Presigned{URL: "http://renewed"}, nil)
 
-			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, &extRef, 0, nil)
+			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, &extRef, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out.ID).To(Equal(existing.ID))
@@ -624,7 +624,7 @@ var _ = Describe("ObjectsService", func() {
 
 			mockRepo.On("GetByExternalRef", mock.Anything, tenantID, extRef).Return(existing, nil)
 
-			_, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 200, nil, &extRef, 0, nil) // Different size
+			_, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 200, nil, nil, &extRef, 0, nil) // Different size
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("conflict"))
@@ -655,7 +655,7 @@ var _ = Describe("ObjectsService", func() {
 			}, nil)
 			mockS3.On("PresignTTLDuration").Return(1 * time.Hour)
 
-			resp, err := svc.InitiateMultipart(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, 0, nil)
+			resp, err := svc.InitiateMultipart(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, nil, 0, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.UploadID).To(Equal("test-upload-id"))

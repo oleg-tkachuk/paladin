@@ -14,7 +14,7 @@ import (
 )
 
 // patchMeta updates object metadata (labels and external_ref)
-func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
+func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id openapi_types.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "PatchMeta")
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("object_id", id.String()))
@@ -34,7 +34,7 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 		return nil, err
 	}
 
-	rec, err := s.objRepo.Patch(ctx, tenantID, id, labels, externalRef)
+	rec, err := s.objRepo.Patch(ctx, tenantID, id, labels, tags, externalRef)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

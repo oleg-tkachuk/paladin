@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 type AuditLogRepo struct {
@@ -58,28 +59,29 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 		}
 	}
 
-	err = r.db.Queries.CreateAuditLog(ctx,
-		uuidToPgtype(log.ID),
-		log.TenantID,
-		log.RequestID,
-		log.IdempotencyKey,
-		log.ActorSubject,
-		string(log.ActorType),
-		clientIP,
-		log.UserAgent,
-		log.Method,
-		log.Path,
-		queryParams,
-		requestHeaders,
-		log.RequestBodySHA256,
-		log.RequestSizeBytes,
-		httpStatus,
-		log.ResponseCode,
-		log.ResponseStatus,
-		responseTimeMS,
-		timestampToPgtype(log.CreatedAt),
-		log.LogType,
-	)
+	err = r.db.Queries.CreateAuditLog(ctx, sqlc.CreateAuditLogParams{
+		ID:                uuidToPgtype(log.ID),
+		TenantID:          log.TenantID,
+		TraceID:           log.TraceID,
+		RequestID:         log.RequestID,
+		IdempotencyKey:    log.IdempotencyKey,
+		ActorSubject:      log.ActorSubject,
+		ActorType:         string(log.ActorType),
+		ClientIp:          clientIP,
+		UserAgent:         log.UserAgent,
+		Method:            log.Method,
+		Path:              log.Path,
+		QueryParams:       queryParams,
+		RequestHeaders:    requestHeaders,
+		RequestBodySha256: log.RequestBodySHA256,
+		RequestSizeBytes:  log.RequestSizeBytes,
+		HttpStatus:        httpStatus,
+		ResponseCode:      log.ResponseCode,
+		ResponseStatus:    log.ResponseStatus,
+		ResponseTimeMs:    responseTimeMS,
+		CreatedAt:         timestampToPgtype(log.CreatedAt),
+		LogType:           log.LogType,
+	})
 
 	if err != nil {
 		status = domain.StatusError
@@ -145,6 +147,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		filter.PathPrefix,
 		filter.Method,
 		httpStatus,
+		filter.TraceID,
 		filter.RequestID,
 		filter.IdempotencyKey,
 		filter.LogType,

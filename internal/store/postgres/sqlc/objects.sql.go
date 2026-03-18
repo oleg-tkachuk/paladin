@@ -607,6 +607,186 @@ func (q *Queries) PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID 
 	return i, err
 }
 
+const patchObjectLabelsAndTags = `-- name: PatchObjectLabelsAndTags :one
+UPDATE objects
+SET labels = labels || $3,
+    tags = tags || $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+`
+
+type PatchObjectLabelsAndTagsRow struct {
+	Object Object `json:"object"`
+}
+
+func (q *Queries) PatchObjectLabelsAndTags(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte) (PatchObjectLabelsAndTagsRow, error) {
+	row := q.db.QueryRow(ctx, patchObjectLabelsAndTags,
+		tenantID,
+		iD,
+		labels,
+		tags,
+	)
+	var i PatchObjectLabelsAndTagsRow
+	err := row.Scan(
+		&i.Object.ID,
+		&i.Object.TenantID,
+		&i.Object.ObjectKey,
+		&i.Object.Bucket,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.ChecksumSha256,
+		&i.Object.Status,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.ExpiresAt,
+		&i.Object.Labels,
+		&i.Object.ExternalRef,
+		&i.Object.StoredEtag,
+		&i.Object.StoredSizeBytes,
+		&i.Object.CompletedAt,
+		&i.Object.DeletedAt,
+		&i.Object.Category,
+		&i.Object.Subpath,
+		&i.Object.Tags,
+	)
+	return i, err
+}
+
+const patchObjectLabelsTagsAndExternalRef = `-- name: PatchObjectLabelsTagsAndExternalRef :one
+UPDATE objects
+SET labels = labels || $3,
+    tags = tags || $4,
+    external_ref = $5,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+`
+
+type PatchObjectLabelsTagsAndExternalRefRow struct {
+	Object Object `json:"object"`
+}
+
+func (q *Queries) PatchObjectLabelsTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte, externalRef *string) (PatchObjectLabelsTagsAndExternalRefRow, error) {
+	row := q.db.QueryRow(ctx, patchObjectLabelsTagsAndExternalRef,
+		tenantID,
+		iD,
+		labels,
+		tags,
+		externalRef,
+	)
+	var i PatchObjectLabelsTagsAndExternalRefRow
+	err := row.Scan(
+		&i.Object.ID,
+		&i.Object.TenantID,
+		&i.Object.ObjectKey,
+		&i.Object.Bucket,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.ChecksumSha256,
+		&i.Object.Status,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.ExpiresAt,
+		&i.Object.Labels,
+		&i.Object.ExternalRef,
+		&i.Object.StoredEtag,
+		&i.Object.StoredSizeBytes,
+		&i.Object.CompletedAt,
+		&i.Object.DeletedAt,
+		&i.Object.Category,
+		&i.Object.Subpath,
+		&i.Object.Tags,
+	)
+	return i, err
+}
+
+const patchObjectTags = `-- name: PatchObjectTags :one
+UPDATE objects
+SET tags = tags || $3,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+`
+
+type PatchObjectTagsRow struct {
+	Object Object `json:"object"`
+}
+
+func (q *Queries) PatchObjectTags(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte) (PatchObjectTagsRow, error) {
+	row := q.db.QueryRow(ctx, patchObjectTags, tenantID, iD, tags)
+	var i PatchObjectTagsRow
+	err := row.Scan(
+		&i.Object.ID,
+		&i.Object.TenantID,
+		&i.Object.ObjectKey,
+		&i.Object.Bucket,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.ChecksumSha256,
+		&i.Object.Status,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.ExpiresAt,
+		&i.Object.Labels,
+		&i.Object.ExternalRef,
+		&i.Object.StoredEtag,
+		&i.Object.StoredSizeBytes,
+		&i.Object.CompletedAt,
+		&i.Object.DeletedAt,
+		&i.Object.Category,
+		&i.Object.Subpath,
+		&i.Object.Tags,
+	)
+	return i, err
+}
+
+const patchObjectTagsAndExternalRef = `-- name: PatchObjectTagsAndExternalRef :one
+UPDATE objects
+SET tags = tags || $3,
+    external_ref = $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+`
+
+type PatchObjectTagsAndExternalRefRow struct {
+	Object Object `json:"object"`
+}
+
+func (q *Queries) PatchObjectTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte, externalRef *string) (PatchObjectTagsAndExternalRefRow, error) {
+	row := q.db.QueryRow(ctx, patchObjectTagsAndExternalRef,
+		tenantID,
+		iD,
+		tags,
+		externalRef,
+	)
+	var i PatchObjectTagsAndExternalRefRow
+	err := row.Scan(
+		&i.Object.ID,
+		&i.Object.TenantID,
+		&i.Object.ObjectKey,
+		&i.Object.Bucket,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.ChecksumSha256,
+		&i.Object.Status,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.ExpiresAt,
+		&i.Object.Labels,
+		&i.Object.ExternalRef,
+		&i.Object.StoredEtag,
+		&i.Object.StoredSizeBytes,
+		&i.Object.CompletedAt,
+		&i.Object.DeletedAt,
+		&i.Object.Category,
+		&i.Object.Subpath,
+		&i.Object.Tags,
+	)
+	return i, err
+}
+
 const restoreObject = `-- name: RestoreObject :execrows
 UPDATE objects
 SET status = 'uploaded',

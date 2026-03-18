@@ -20,7 +20,7 @@ import (
 
 // initiateMultipart initiates a multipart upload.
 // category must be the slug of an existing tenant category.
-func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
 	ctx, span := otel.Tracer("object-service").Start(ctx, "InitiateMultipart")
 	defer span.End()
 	span.SetAttributes(
@@ -108,7 +108,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	objRec := domain.Object{
 		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: s.s3.BucketName(),
 		ContentType: contentType, SizeBytes: sizeBytes,
-		Status: domain.ObjectUploading, Labels: labels, ExternalRef: externalRef,
+		Status: domain.ObjectUploading, Labels: labels, Tags: tags, ExternalRef: externalRef,
 		ExpiresAt: &expiresAt, Category: category,
 	}
 	// Start Unit of Work for transactional creation

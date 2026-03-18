@@ -213,6 +213,7 @@ type CategoryStats struct {
 type BulkPatchItem struct {
 	ID          uuid.UUID
 	Labels      map[string]string
+	Tags        map[string]string
 	ExternalRef *string
 }
 
@@ -282,6 +283,7 @@ type CreateObjectRequest struct {
 	ContentType string
 	SizeBytes   int64
 	Labels      map[string]string
+	Tags        map[string]string
 	ExternalRef *string
 }
 

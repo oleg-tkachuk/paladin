@@ -1093,6 +1093,8 @@ type AuditLog struct {
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// Optional request identifier for tracing.
 	RequestId *string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
+	// Optional trace identifier from distributed tracing.
+	TraceId *string `protobuf:"bytes,13,opt,name=trace_id,json=traceId,proto3,oneof" json:"trace_id,omitempty"`
 	// Optional actor subject (e.g. user email or service name).
 	ActorSubject *string `protobuf:"bytes,4,opt,name=actor_subject,json=actorSubject,proto3,oneof" json:"actor_subject,omitempty"`
 	// Type of actor (e.g. "user", "service", "system").
@@ -1162,6 +1164,13 @@ func (x *AuditLog) GetTenantId() string {
 func (x *AuditLog) GetRequestId() string {
 	if x != nil && x.RequestId != nil {
 		return *x.RequestId
+	}
+	return ""
+}
+
+func (x *AuditLog) GetTraceId() string {
+	if x != nil && x.TraceId != nil {
+		return *x.TraceId
 	}
 	return ""
 }
@@ -2364,26 +2373,28 @@ const file_paladin_v1_system_proto_rawDesc = "" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
 	"nextCursor\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
-	"totalCount\"\xe5\x03\n" +
+	"totalCount\"\x92\x04\n" +
 	"\bAuditLog\x12\x19\n" +
 	"\baudit_id\x18\x01 \x01(\tR\aauditId\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\"\n" +
 	"\n" +
-	"request_id\x18\x03 \x01(\tH\x00R\trequestId\x88\x01\x01\x12(\n" +
-	"\ractor_subject\x18\x04 \x01(\tH\x01R\factorSubject\x88\x01\x01\x12\x1d\n" +
+	"request_id\x18\x03 \x01(\tH\x00R\trequestId\x88\x01\x01\x12\x1e\n" +
+	"\btrace_id\x18\r \x01(\tH\x01R\atraceId\x88\x01\x01\x12(\n" +
+	"\ractor_subject\x18\x04 \x01(\tH\x02R\factorSubject\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"actor_type\x18\x05 \x01(\tR\tactorType\x12 \n" +
-	"\tclient_ip\x18\x06 \x01(\tH\x02R\bclientIp\x88\x01\x01\x12\x16\n" +
+	"\tclient_ip\x18\x06 \x01(\tH\x03R\bclientIp\x88\x01\x01\x12\x16\n" +
 	"\x06method\x18\a \x01(\tR\x06method\x12\x12\n" +
 	"\x04path\x18\b \x01(\tR\x04path\x12\x1f\n" +
 	"\vhttp_status\x18\t \x01(\x05R\n" +
 	"httpStatus\x12,\n" +
 	"\x0fresponse_status\x18\n" +
-	" \x01(\tH\x03R\x0eresponseStatus\x88\x01\x01\x129\n" +
+	" \x01(\tH\x04R\x0eresponseStatus\x88\x01\x01\x129\n" +
 	"\n" +
 	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
 	"\blog_type\x18\f \x01(\tR\alogTypeB\r\n" +
-	"\v_request_idB\x10\n" +
+	"\v_request_idB\v\n" +
+	"\t_trace_idB\x10\n" +
 	"\x0e_actor_subjectB\f\n" +
 	"\n" +
 	"_client_ipB\x12\n" +

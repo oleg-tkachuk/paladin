@@ -239,8 +239,8 @@ func (r *CachedObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, i
 }
 
 // Patch updates object metadata and writes through to cache
-func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
-	rec, err := r.repo.Patch(ctx, tenantID, id, labels, externalRef)
+func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
+	rec, err := r.repo.Patch(ctx, tenantID, id, labels, tags, externalRef)
 	if err != nil {
 		return nil, err
 	}

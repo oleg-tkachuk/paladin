@@ -19,7 +19,7 @@ func (s *objectsService) BulkCreate(ctx context.Context, tenantID string, items 
 	// Simple sequential implementation for now, can be optimized later
 	res := make([]domain.CreateObjectResponse, 0, len(items))
 	for _, item := range items {
-		out, err := s.createSingle(ctx, tenantID, item.Category, item.ContentType, item.SizeBytes, item.Labels, item.ExternalRef, 0, nil)
+		out, err := s.createSingle(ctx, tenantID, item.Category, item.ContentType, item.SizeBytes, item.Labels, item.Tags, item.ExternalRef, 0, nil)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())

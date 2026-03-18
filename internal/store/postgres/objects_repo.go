@@ -527,21 +527,61 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 
 	batch := &pgx.Batch{}
 	for _, item := range items {
-		if item.Labels != nil && item.ExternalRef != nil { //nolint:gocritic
-			labelsJSON, err := marshalStringMap(item.Labels)
+		hasLabels := item.Labels != nil
+		hasTags := item.Tags != nil
+		hasRef := item.ExternalRef != nil
+
+		if hasLabels && hasTags && hasRef {
+			lJSON, err := marshalStringMap(item.Labels)
+			if err != nil {
+				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
+			}
+			tJSON, err := marshalStringMap(item.Tags)
+			if err != nil {
+				return 0, fmt.Errorf("marshal tags for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET labels = labels || $3, tags = tags || $4, external_ref = $5, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), lJSON, tJSON, item.ExternalRef)
+		} else if hasLabels && hasTags {
+			lJSON, err := marshalStringMap(item.Labels)
+			if err != nil {
+				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
+			}
+			tJSON, err := marshalStringMap(item.Tags)
+			if err != nil {
+				return 0, fmt.Errorf("marshal tags for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET labels = labels || $3, tags = tags || $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), lJSON, tJSON)
+		} else if hasLabels && hasRef {
+			lJSON, err := marshalStringMap(item.Labels)
 			if err != nil {
 				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
 			}
 			batch.Queue(`UPDATE objects SET labels = labels || $3, external_ref = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
-				tenantID, uuidToPgtype(item.ID), labelsJSON, item.ExternalRef)
-		} else if item.Labels != nil {
-			labelsJSON, err := marshalStringMap(item.Labels)
+				tenantID, uuidToPgtype(item.ID), lJSON, item.ExternalRef)
+		} else if hasTags && hasRef {
+			tJSON, err := marshalStringMap(item.Tags)
+			if err != nil {
+				return 0, fmt.Errorf("marshal tags for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET tags = tags || $3, external_ref = $4, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), tJSON, item.ExternalRef)
+		} else if hasLabels {
+			lJSON, err := marshalStringMap(item.Labels)
 			if err != nil {
 				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
 			}
 			batch.Queue(`UPDATE objects SET labels = labels || $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
-				tenantID, uuidToPgtype(item.ID), labelsJSON)
-		} else if item.ExternalRef != nil {
+				tenantID, uuidToPgtype(item.ID), lJSON)
+		} else if hasTags {
+			tJSON, err := marshalStringMap(item.Tags)
+			if err != nil {
+				return 0, fmt.Errorf("marshal tags for %s: %w", item.ID, err)
+			}
+			batch.Queue(`UPDATE objects SET tags = tags || $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
+				tenantID, uuidToPgtype(item.ID), tJSON)
+		} else if hasRef {
 			batch.Queue(`UPDATE objects SET external_ref = $3, updated_at = now() WHERE tenant_id = $1 AND id = $2`,
 				tenantID, uuidToPgtype(item.ID), item.ExternalRef)
 		}
@@ -574,7 +614,7 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 	return totalRows, nil
 }
 
-func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*domain.Object, error) {
+func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*domain.Object, error) {
 	var obj sqlc.Object
 	var err error
 
@@ -583,7 +623,46 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 	defer func() { metrics.RecordDbQuery(ctx, "PatchObject", status, start) }()
 
 	// Determine which query to use based on what's being patched
-	if labels != nil && externalRef != nil { //nolint:gocritic,nestif
+	if labels != nil && tags != nil && externalRef != nil {
+		var labelsJSON, tagsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
+		if err == nil {
+			tagsJSON, err = marshalStringMap(tags)
+		}
+		if err != nil {
+			status = domain.StatusError
+
+			return nil, fmt.Errorf("marshal metadata: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectLabelsTagsAndExternalRef(ctx, tenantID, uuidToPgtype(id), labelsJSON, tagsJSON, externalRef)
+		err = errPkg
+		obj = row.Object
+	} else if labels != nil && tags != nil {
+		var labelsJSON, tagsJSON []byte
+		labelsJSON, err = marshalStringMap(labels)
+		if err == nil {
+			tagsJSON, err = marshalStringMap(tags)
+		}
+		if err != nil {
+			status = domain.StatusError
+
+			return nil, fmt.Errorf("marshal metadata: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectLabelsAndTags(ctx, tenantID, uuidToPgtype(id), labelsJSON, tagsJSON)
+		err = errPkg
+		obj = row.Object
+	} else if tags != nil && externalRef != nil {
+		var tagsJSON []byte
+		tagsJSON, err = marshalStringMap(tags)
+		if err != nil {
+			status = domain.StatusError
+
+			return nil, fmt.Errorf("marshal tags: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectTagsAndExternalRef(ctx, tenantID, uuidToPgtype(id), tagsJSON, externalRef)
+		err = errPkg
+		obj = row.Object
+	} else if labels != nil && externalRef != nil {
 		var labelsJSON []byte
 		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
@@ -603,6 +682,17 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
 		row, errPkg := r.db.Queries.PatchObjectLabels(ctx, tenantID, uuidToPgtype(id), labelsJSON)
+		err = errPkg
+		obj = row.Object
+	} else if tags != nil {
+		var tagsJSON []byte
+		tagsJSON, err = marshalStringMap(tags)
+		if err != nil {
+			status = domain.StatusError
+
+			return nil, fmt.Errorf("marshal tags: %w", err)
+		}
+		row, errPkg := r.db.Queries.PatchObjectTags(ctx, tenantID, uuidToPgtype(id), tagsJSON)
 		err = errPkg
 		obj = row.Object
 	} else if externalRef != nil {

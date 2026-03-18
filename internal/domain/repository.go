@@ -125,7 +125,7 @@ type ObjectsRepository interface {
 	BulkPatch(ctx context.Context, tenantID string, items []BulkPatchItem) (int64, error)
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter) ([]Object, string, int64, error)
 
-	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
+	Patch(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*Object, error)
 	ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]Object, error)
 	GetStats(ctx context.Context, tenantID string) (*ObjectStats, error)
 	GetBucketStats(ctx context.Context, tenantID, bucket string) (int64, int64, error)

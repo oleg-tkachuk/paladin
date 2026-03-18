@@ -12,7 +12,7 @@ import (
 type ObjectsService interface {
 	// CreateSingle creates a single-PUT object and returns a presigned upload URL.
 	// category must be a slug of an existing tenant category.
-	CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
+	CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (CreateObjectResponse, error)
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetByKey(ctx context.Context, tenantID, bucket, key string) (*Object, error)
@@ -34,7 +34,7 @@ type ObjectsService interface {
 	// UpdateStatus updates the status of an object (non-delete transitions only)
 	UpdateStatus(ctx context.Context, tenantID string, id uuid.UUID, status string, idempotencyKey *string) error
 	List(ctx context.Context, tenantID string, filter ListObjectsFilter) ([]Object, string, int64, error)
-	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, externalRef *string) (*Object, error)
+	PatchMeta(ctx context.Context, tenantID string, id uuid.UUID, labels map[string]string, tags map[string]string, externalRef *string) (*Object, error)
 	SignUpload(ctx context.Context, tenantID string, id uuid.UUID, uploadTTL int) (Presigned, error)
 	SignDownload(ctx context.Context, tenantID string, id uuid.UUID, downloadTTL int) (Presigned, error)
 	CopyObject(ctx context.Context, tenantID, srcBucket, srcKey, dstBucket, dstKey string, metadata map[string]string) (*Object, error)
@@ -42,7 +42,7 @@ type ObjectsService interface {
 
 	// InitiateMultipart starts a multipart upload.
 	// category must be a slug of an existing tenant category.
-	InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error)
+	InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (MultipartInitResponse, error)
 	GetMultipart(ctx context.Context, tenantID string, uploadID string) (*Multipart, error)
 	SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (Presigned, error)
 	SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]SignPartResponse, error)

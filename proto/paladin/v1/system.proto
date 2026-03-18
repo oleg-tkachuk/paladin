@@ -273,6 +273,9 @@ message AuditLog {
   // Optional request identifier for tracing.
   optional string request_id = 3;
 
+  // Optional trace identifier from distributed tracing.
+  optional string trace_id = 13;
+
   // Optional actor subject (e.g. user email or service name).
   optional string actor_subject = 4;
 

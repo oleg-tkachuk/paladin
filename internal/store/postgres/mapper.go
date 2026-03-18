@@ -157,6 +157,7 @@ func mapToDomainAuditLog(log sqlc.AuditLog) (domain.AuditLog, error) {
 		ID:                id,
 		TenantID:          log.TenantID,
 		RequestID:         log.RequestID,
+		TraceID:           log.TraceID,
 		IdempotencyKey:    log.IdempotencyKey,
 		ActorSubject:      log.ActorSubject,
 		ActorType:         domain.ActorType(log.ActorType),

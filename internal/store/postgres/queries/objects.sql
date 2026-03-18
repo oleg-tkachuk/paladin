@@ -118,6 +118,38 @@ SET labels = labels || $3,
 WHERE tenant_id = $1 AND id = $2
 RETURNING sqlc.embed(objects);
 
+-- name: PatchObjectTags :one
+UPDATE objects
+SET tags = tags || $3,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING sqlc.embed(objects);
+
+-- name: PatchObjectLabelsAndTags :one
+UPDATE objects
+SET labels = labels || $3,
+    tags = tags || $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING sqlc.embed(objects);
+
+-- name: PatchObjectTagsAndExternalRef :one
+UPDATE objects
+SET tags = tags || $3,
+    external_ref = $4,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING sqlc.embed(objects);
+
+-- name: PatchObjectLabelsTagsAndExternalRef :one
+UPDATE objects
+SET labels = labels || $3,
+    tags = tags || $4,
+    external_ref = $5,
+    updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING sqlc.embed(objects);
+
 -- name: ListExpiredPendingObjects :many
 SELECT sqlc.embed(objects)
 FROM objects

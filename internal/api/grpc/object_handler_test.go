@@ -30,7 +30,7 @@ func TestObjectHandler_UploadObject(t *testing.T) {
 	})
 
 	objID := uuid.New()
-	svc.On("CreateSingle", mock.Anything, "tenant-1", "bucket-1", "application/pdf", int64(1024), map[string]string{"foo": "bar"}, (*string)(nil), 0, mock.Anything).
+	svc.On("CreateSingle", mock.Anything, "tenant-1", "bucket-1", "application/pdf", int64(1024), map[string]string{"foo": "bar"}, (map[string]string)(nil), (*string)(nil), 0, mock.Anything).
 		Return(domain.CreateObjectResponse{
 			ID:     objID,
 			Key:    "test-key",
