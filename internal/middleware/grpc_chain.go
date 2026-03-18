@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
-	"strings"
 	"time"
-	"unicode"
 
 	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
@@ -508,34 +506,4 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 			return next(ctx, req)
 		}
 	})
-}
-
-// extractComponentName converts a gRPC method like /paladin.v1.ObjectService/GetObjectMetadata
-// or /grpc.health.v1.Health/Check into a snake_case component name like "object_service".
-func extractComponentName(fullMethod string) string {
-	parts := strings.Split(fullMethod, "/")
-	if len(parts) < 3 {
-		return "grpc"
-	}
-	// Service name is typically at index 1 e.g. "paladin.v1.ObjectService"
-	svcParts := strings.Split(parts[1], ".")
-	svcName := svcParts[len(svcParts)-1]
-
-	// Convert CamelCase to snake_case
-	var result strings.Builder
-	for i, r := range svcName {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				result.WriteByte('_')
-			}
-			result.WriteRune(unicode.ToLower(r))
-		} else {
-			result.WriteRune(r)
-		}
-	}
-
-	if result.Len() == 0 {
-		return "grpc"
-	}
-	return result.String()
 }

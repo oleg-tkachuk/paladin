@@ -116,7 +116,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "conflict"
+		status = ErrConflict
 
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
@@ -189,7 +189,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "conflict"
+		status = ErrConflict
 
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
@@ -267,7 +267,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "conflict"
+		status = ErrConflict
 
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
@@ -429,75 +429,44 @@ func executeWithBreakerRet[T any](brk breaker.Factory, name string, fn func() (T
 	return res.(T), nil
 }
 func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, "BulkDelete")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
-
-	start := time.Now()
-	var status string
-	defer func() { metrics.RecordObjectOperation("bulk_delete", status, time.Since(start).Seconds()) }()
-
-	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
-		status = domain.StatusError
-
-		return 0, err
-	}
-
-	// Filter IDs through FSM — only soft-delete items in valid states
-	validIDs := make([]uuid.UUID, 0, len(ids))
-	for _, id := range ids {
-		obj, err := s.objRepo.Get(ctx, tenantID, id)
-		if err != nil {
-			continue
-		}
-
-		sm := domain.NewObjectFSM(obj.Status)
-		if err := sm.Fire(domain.EventObjectSoftDelete); err != nil {
-			logger.FromContext(ctx).Warn("BulkDelete: skipping invalid transition",
-				zap.String("object_id", id.String()),
-				zap.String("current_status", string(obj.Status)),
-				zap.Error(err))
-
-			continue
-		}
-
-		validIDs = append(validIDs, id)
-	}
-
-	if len(validIDs) == 0 {
-		status = domain.StatusSuccess
-
-		return 0, nil
-	}
-
-	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, validIDs)
-	if err != nil {
-		status = domain.StatusError
-
-		return 0, err
-	}
-
-	status = domain.StatusSuccess
-
-	return count, nil
+	return s.bulkStateTransition(
+		ctx, tenantID, ids,
+		"BulkDelete", "bulk_delete", domain.ActionDelete, domain.EventObjectSoftDelete,
+		s.objRepo.BulkMarkSoftDeleted,
+	)
 }
 
 func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids []uuid.UUID) (int64, error) {
-	ctx, span := otel.Tracer(TracerName).Start(ctx, "BulkRestore")
+	return s.bulkStateTransition(
+		ctx, tenantID, ids,
+		"BulkRestore", "bulk_restore", domain.ActionDelete, domain.EventObjectRestore,
+		s.objRepo.BulkRestore,
+	)
+}
+
+func (s *objectsService) bulkStateTransition(
+	ctx context.Context,
+	tenantID string,
+	ids []uuid.UUID,
+	opName, metricName string,
+	authAction domain.Action,
+	fsmEvent domain.ObjectEvent,
+	repoFunc func(context.Context, string, []uuid.UUID) (int64, error),
+) (int64, error) {
+	ctx, span := otel.Tracer(TracerName).Start(ctx, opName)
 	defer span.End()
 	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
 
 	start := time.Now()
 	var status string
-	defer func() { metrics.RecordObjectOperation("bulk_restore", status, time.Since(start).Seconds()) }()
+	defer func() { metrics.RecordObjectOperation(metricName, status, time.Since(start).Seconds()) }()
 
-	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
+	if err := s.policy.Authorize(ctx, tenantID, authAction); err != nil {
 		status = domain.StatusError
 
 		return 0, err
 	}
 
-	// Filter IDs through FSM — only restore items in valid states
 	validIDs := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
 		obj, err := s.objRepo.Get(ctx, tenantID, id)
@@ -506,8 +475,8 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 		}
 
 		sm := domain.NewObjectFSM(obj.Status)
-		if err := sm.Fire(domain.EventObjectRestore); err != nil {
-			logger.FromContext(ctx).Warn("BulkRestore: skipping invalid transition",
+		if err := sm.Fire(fsmEvent); err != nil {
+			logger.FromContext(ctx).Warn(opName+": skipping invalid transition",
 				zap.String("object_id", id.String()),
 				zap.String("current_status", string(obj.Status)),
 				zap.Error(err))
@@ -524,7 +493,7 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 		return 0, nil
 	}
 
-	count, err := s.objRepo.BulkRestore(ctx, tenantID, validIDs)
+	count, err := repoFunc(ctx, tenantID, validIDs)
 	if err != nil {
 		status = domain.StatusError
 

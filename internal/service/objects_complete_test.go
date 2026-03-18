@@ -15,8 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const testTenantStr = "test-tenant"
+
 func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
-	tenantID := "test-tenant"
+	tenantID := testTenantStr
 	objID := uuid.New()
 	key := "test-key"
 	etagQuoted := "\"quoted-etag\""
@@ -53,59 +55,41 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		return objRepo, s3Client, policy, svc
 	}
 
-	t.Run("Match with unquoted etag", func(t *testing.T) {
-		ctx := context.Background()
-		objRepo, s3Client, policy, svc := setupMock()
+	tests := []struct {
+		name     string
+		sentEtag string
+	}{
+		{"Match with unquoted etag", etagUnquoted},
+		{"Match with quoted etag", etagQuoted},
+	}
 
-		obj := &domain.Object{
-			ID:        objID,
-			TenantID:  tenantID,
-			ObjectKey: key,
-			Status:    domain.ObjectPending,
-		}
-		objCompleted := *obj
-		objCompleted.Status = domain.ObjectComplete
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			objRepo, s3Client, policy, svc := setupMock()
 
-		policy.On("Authorize", mock.Anything, tenantID, domain.ActionUpdate).Return(nil)
-		objRepo.On("Get", mock.Anything, tenantID, objID).Return(obj, nil).Once()
-		s3Client.On("HeadObject", mock.Anything, key).Return(&domain.HeadRecord{
-			ETag:      etagQuoted,
-			SizeBytes: 100,
-		}, nil)
-		objRepo.On("MarkComplete", mock.Anything, tenantID, objID, etagQuoted, int64(100)).Return(true, nil)
-		objRepo.On("Get", mock.Anything, tenantID, objID).Return(&objCompleted, nil).Once()
+			obj := &domain.Object{
+				ID:        objID,
+				TenantID:  tenantID,
+				ObjectKey: key,
+				Status:    domain.ObjectPending,
+			}
+			objCompleted := *obj
+			objCompleted.Status = domain.ObjectComplete
 
-		res, err := svc.CompleteObject(ctx, tenantID, objID, &etagUnquoted, nil)
-		require.NoError(t, err)
-		assert.NotNil(t, res)
-		assert.Equal(t, domain.ObjectComplete, res.Status)
-	})
+			policy.On("Authorize", mock.Anything, tenantID, domain.ActionUpdate).Return(nil)
+			objRepo.On("Get", mock.Anything, tenantID, objID).Return(obj, nil).Once()
+			s3Client.On("HeadObject", mock.Anything, key).Return(&domain.HeadRecord{
+				ETag:      etagQuoted,
+				SizeBytes: 100,
+			}, nil)
+			objRepo.On("MarkComplete", mock.Anything, tenantID, objID, etagQuoted, int64(100)).Return(true, nil)
+			objRepo.On("Get", mock.Anything, tenantID, objID).Return(&objCompleted, nil).Once()
 
-	t.Run("Match with quoted etag", func(t *testing.T) {
-		ctx := context.Background()
-		objRepo, s3Client, policy, svc := setupMock()
-
-		obj := &domain.Object{
-			ID:        objID,
-			TenantID:  tenantID,
-			ObjectKey: key,
-			Status:    domain.ObjectPending,
-		}
-		objCompleted := *obj
-		objCompleted.Status = domain.ObjectComplete
-
-		policy.On("Authorize", mock.Anything, tenantID, domain.ActionUpdate).Return(nil)
-		objRepo.On("Get", mock.Anything, tenantID, objID).Return(obj, nil).Once()
-		s3Client.On("HeadObject", mock.Anything, key).Return(&domain.HeadRecord{
-			ETag:      etagQuoted,
-			SizeBytes: 100,
-		}, nil)
-		objRepo.On("MarkComplete", mock.Anything, tenantID, objID, etagQuoted, int64(100)).Return(true, nil)
-		objRepo.On("Get", mock.Anything, tenantID, objID).Return(&objCompleted, nil).Once()
-
-		res, err := svc.CompleteObject(ctx, tenantID, objID, &etagQuoted, nil)
-		require.NoError(t, err)
-		assert.NotNil(t, res)
-		assert.Equal(t, domain.ObjectComplete, res.Status)
-	})
+			res, err := svc.CompleteObject(ctx, tenantID, objID, &tt.sentEtag, nil)
+			require.NoError(t, err)
+			assert.NotNil(t, res)
+			assert.Equal(t, domain.ObjectComplete, res.Status)
+		})
+	}
 }

@@ -546,7 +546,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("CreateSingle", func() {
 		It("should successfully create a single object upload", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			contentType := "application/json"
 			sizeBytes := int64(100)
 
@@ -567,7 +567,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should fail if policy validation fails", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			contentType := "text/plain"
 			sizeBytes := int64(100)
 
@@ -583,7 +583,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should return cached response for same idempotency key", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			key := "idem-key"
 			res := domain.CreateObjectResponse{ID: uuid.New(), Key: "cached"}
 			body, _ := json.Marshal(res)
@@ -603,7 +603,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should re-presign if object with external_ref exists and parameters match", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			extRef := "ref123"
 			existing := &domain.Object{ID: uuid.New(), ObjectKey: "key123", ContentType: "image/png", SizeBytes: 100}
 
@@ -618,7 +618,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should fail if external_ref exists with different parameters", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			extRef := "ref123"
 			existing := &domain.Object{ID: uuid.New(), ObjectKey: "key123", ContentType: "image/png", SizeBytes: 100}
 
@@ -633,7 +633,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("Multipart Uploads", func() {
 		It("should successfully initiate a multipart upload", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			contentType := "application/json"
 			sizeBytes := int64(10000000) // 10MB
 
@@ -663,7 +663,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should successfully sign a part", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			uploadID := "test-upload-id"
 			partNumber := int32(1)
 
@@ -680,7 +680,7 @@ var _ = Describe("ObjectsService", func() {
 			Expect(p.URL).To(Equal("http://example.com/part1"))
 		})
 		It("should successfully complete a multipart upload", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			uploadID := "test-upload-id"
 			parts := []domain.CompletePart{{PartNumber: 1, ETag: "etag1"}}
 
@@ -720,7 +720,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("SignUpload", func() {
 		It("should successfully generate a presigned upload URL", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{
@@ -740,7 +740,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("SignDownload", func() {
 		It("should successfully generate a presigned download URL for complete objects", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{
@@ -757,7 +757,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should fail for non-complete objects", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{
@@ -774,7 +774,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("Delete", func() {
 		It("should successfully mark object as deleted (soft delete)", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectComplete}, nil)
@@ -785,7 +785,7 @@ var _ = Describe("ObjectsService", func() {
 		})
 
 		It("should return an error if the object is hard deleted", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectHardDeleted}, nil)
@@ -798,7 +798,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("Restore", func() {
 		It("should restore soft deleted object", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			mockRepo.On("Get", mock.Anything, tenantID, objID).Return(&domain.Object{ID: objID, Status: domain.ObjectSoftDeleted}, nil)
@@ -811,7 +811,7 @@ var _ = Describe("ObjectsService", func() {
 
 	Describe("Purge", func() {
 		It("should successfully delete object record and content from S3", func() {
-			tenantID := "test-tenant"
+			tenantID := testTenantStr
 			objID := uuid.New()
 
 			// Expect Delete (and Get before it)

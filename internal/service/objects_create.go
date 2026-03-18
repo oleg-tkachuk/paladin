@@ -78,33 +78,9 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		}
 	}
 
-	// external_ref idempotency
 	if externalRef != nil {
-		existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, *externalRef)
-		if err != nil && !errors.Is(err, domain.ErrNotFound) {
-			return domain.CreateObjectResponse{}, err
-		}
-		if existing != nil {
-			if existing.ContentType == contentType && existing.SizeBytes == sizeBytes {
-				ttl := time.Duration(uploadTTL) * time.Second
-				if ttl == 0 {
-					ttl = s.s3.PresignTTLDuration()
-				}
-				signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
-					return s.s3.PresignPutObject(ctx, existing.ObjectKey, existing.ContentType, existing.SizeBytes, ttl)
-				})
-				if err != nil {
-					return domain.CreateObjectResponse{}, err
-				}
-
-				return domain.CreateObjectResponse{
-					ID: existing.ID, Key: existing.ObjectKey, Bucket: existing.Bucket,
-					Category: existing.Category,
-					Upload:   domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},
-				}, nil
-			}
-
-			return domain.CreateObjectResponse{}, apperrors.Conflict("object with this external_ref already exists with different parameters", nil)
+		if res, handled, err := s.handleExternalRef(ctx, tenantID, *externalRef, contentType, sizeBytes, uploadTTL); handled {
+			return res, err
 		}
 	}
 
@@ -187,4 +163,35 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	span.SetAttributes(attribute.String("object_id", id.String()))
 
 	return res, nil
+}
+
+func (s *objectsService) handleExternalRef(ctx context.Context, tenantID, externalRef, contentType string, sizeBytes int64, uploadTTL int) (domain.CreateObjectResponse, bool, error) {
+	existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, externalRef)
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
+		return domain.CreateObjectResponse{}, true, err
+	}
+	if existing == nil {
+		return domain.CreateObjectResponse{}, false, nil
+	}
+
+	if existing.ContentType != contentType || existing.SizeBytes != sizeBytes {
+		return domain.CreateObjectResponse{}, true, apperrors.Conflict("object with this external_ref already exists with different parameters", nil)
+	}
+
+	ttl := time.Duration(uploadTTL) * time.Second
+	if ttl == 0 {
+		ttl = s.s3.PresignTTLDuration()
+	}
+	signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
+		return s.s3.PresignPutObject(ctx, existing.ObjectKey, existing.ContentType, existing.SizeBytes, ttl)
+	})
+	if err != nil {
+		return domain.CreateObjectResponse{}, true, err
+	}
+
+	return domain.CreateObjectResponse{
+		ID: existing.ID, Key: existing.ObjectKey, Bucket: existing.Bucket,
+		Category: existing.Category,
+		Upload:   domain.Presigned{URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt},
+	}, true, nil
 }

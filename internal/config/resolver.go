@@ -96,6 +96,16 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.S3.SecretKeySecret = nil
 	}
 
+	// Auth Admin Key
+	if cfg.Auth.AdminKeySecret != nil {
+		key, err := r.resolveSecret(ctx, cfg.Auth.AdminKeySecret)
+		if err != nil {
+			return fmt.Errorf("auth.admin_key_secret: %w", err)
+		}
+		cfg.Auth.AdminKey = key
+		cfg.Auth.AdminKeySecret = nil
+	}
+
 	return nil
 }
 

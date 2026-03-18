@@ -107,8 +107,9 @@ policy: {
 }
 
 auth: {
-  enabled: bool | *true
-  admin_key: string | *""
+  enabled:          bool | *true
+  admin_key:        string | *""
+  admin_key_secret?: #SecretRef
 }
 
 security: {

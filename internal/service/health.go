@@ -38,6 +38,10 @@ type PoolStatsProvider interface {
 	HealthWithStats(ctx context.Context) (map[string]interface{}, error)
 }
 
+const (
+	statusDown = "down"
+)
+
 type HealthService struct {
 	db      Pinger
 	s3      S3HealthChecker
@@ -104,7 +108,7 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 
 		if err != nil {
 			metrics.RecordS3Op(gCtx, "health", "error", sStart)
-			status.SeaweedFS.Status = "down"
+			status.SeaweedFS.Status = statusDown
 			status.SeaweedFS.Message = err.Error()
 			ready = false
 		} else {
@@ -119,10 +123,10 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 				// Degraded S3 (e.g. bucket missing) means not ready
 				ready = false
 			case "unavailable":
-				status.SeaweedFS.Status = "down"
+				status.SeaweedFS.Status = statusDown
 				ready = false
 			default:
-				status.SeaweedFS.Status = "down"
+				status.SeaweedFS.Status = statusDown
 				ready = false
 			}
 

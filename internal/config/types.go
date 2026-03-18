@@ -205,8 +205,9 @@ type Policy struct {
 }
 
 type Auth struct {
-	Enabled  bool   `yaml:"enabled" json:"enabled"`
-	AdminKey string `yaml:"admin_key" json:"admin_key"`
+	Enabled        bool       `yaml:"enabled" json:"enabled"`
+	AdminKey       string     `yaml:"admin_key" json:"admin_key"`
+	AdminKeySecret *SecretRef `yaml:"admin_key_secret" json:"admin_key_secret"`
 }
 
 type Security struct {

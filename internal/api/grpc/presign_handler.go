@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -28,60 +29,68 @@ func NewPresignHandler(log *zap.Logger, svc domain.ObjectsService) *PresignHandl
 
 func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Request[GenerateUploadUrlRequest]) (*connect.Response[GenerateUploadUrlResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
-
-	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
-	if err != nil {
-		logger.FromContext(ctx).Warn("GenerateUploadUrl: object lookup failed", zap.Error(err))
-
-		return nil, grpcError(err)
-	}
-
-	ttl := defaultPresignTTLSeconds
+	sec := 0
 	if msg.Ttl != nil {
-		ttl = int(msg.Ttl.Seconds)
+		sec = int(msg.Ttl.Seconds)
 	}
 
-	presigned, err := h.svc.SignUpload(ctx, tenantID, rec.ID, ttl)
+	url, err := h.generatePresignedUrl(ctx, "GenerateUploadUrl", msg.TenantId, msg.Bucket, msg.Key, sec, h.svc.SignUpload)
 	if err != nil {
-		logger.FromContext(ctx).Warn("GenerateUploadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
-
-		return nil, grpcError(err)
+		return nil, err
 	}
-
-	logger.FromContext(ctx).Info("GenerateUploadUrl: successful", zap.String("object_id", rec.ID.String()))
 
 	return connect.NewResponse(&GenerateUploadUrlResponse{
-		UploadUrl: presignedToProto(presigned),
+		UploadUrl: url,
 	}), nil
 }
 
 func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.Request[GenerateDownloadUrlRequest]) (*connect.Response[GenerateDownloadUrlResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	sec := 0
+	if msg.Ttl != nil {
+		sec = int(msg.Ttl.Seconds)
+	}
 
-	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
+	url, err := h.generatePresignedUrl(ctx, "GenerateDownloadUrl", msg.TenantId, msg.Bucket, msg.Key, sec, h.svc.SignDownload)
 	if err != nil {
-		logger.FromContext(ctx).Warn("GenerateDownloadUrl: object lookup failed", zap.Error(err))
+		return nil, err
+	}
+
+	return connect.NewResponse(&GenerateDownloadUrlResponse{
+		DownloadUrl: url,
+	}), nil
+}
+
+func (h *PresignHandler) generatePresignedUrl(
+	ctx context.Context,
+	opName string,
+	reqTenantId string,
+	bucket, key string,
+	ttlDurSeconds int,
+	signFunc func(context.Context, string, uuid.UUID, int) (domain.Presigned, error),
+) (*PresignedUrl, error) {
+	tenantID := utils.TenantIDFromContext(ctx, reqTenantId)
+
+	rec, err := h.svc.GetByKey(ctx, tenantID, bucket, key)
+	if err != nil {
+		logger.FromContext(ctx).Warn(opName+": object lookup failed", zap.Error(err))
 
 		return nil, grpcError(err)
 	}
 
 	ttl := defaultPresignTTLSeconds
-	if msg.Ttl != nil {
-		ttl = int(msg.Ttl.Seconds)
+	if ttlDurSeconds > 0 {
+		ttl = ttlDurSeconds
 	}
 
-	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, ttl)
+	presigned, err := signFunc(ctx, tenantID, rec.ID, ttl)
 	if err != nil {
-		logger.FromContext(ctx).Warn("GenerateDownloadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
+		logger.FromContext(ctx).Warn(opName+": failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 
 		return nil, grpcError(err)
 	}
 
-	logger.FromContext(ctx).Info("GenerateDownloadUrl: successful", zap.String("object_id", rec.ID.String()))
+	logger.FromContext(ctx).Info(opName+": successful", zap.String("object_id", rec.ID.String()))
 
-	return connect.NewResponse(&GenerateDownloadUrlResponse{
-		DownloadUrl: presignedToProto(presigned),
-	}), nil
+	return presignedToProto(presigned), nil
 }

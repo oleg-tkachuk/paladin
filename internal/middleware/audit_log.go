@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -11,41 +10,39 @@ import (
 	"go.uber.org/zap"
 )
 
-var mutatingProcedures = map[string]struct{}{
-	"/paladin.v1.ObjectService/UploadObject":         {},
-	"/paladin.v1.ObjectService/DeleteObject":         {},
-	"/paladin.v1.ObjectService/UpdateObjectMetadata": {},
-	"/paladin.v1.ObjectService/CopyObject":           {},
-	"/paladin.v1.ObjectService/MoveObject":           {},
-	"/paladin.v1.ObjectService/CompleteObject":       {},
-	"/paladin.v1.ObjectService/RestoreObject":        {},
-
-	"/paladin.v1.BucketService/CreateBucket":              {},
-	"/paladin.v1.BucketService/DeleteBucket":              {},
-	"/paladin.v1.BucketService/UpdateBucketConfiguration": {},
-
-	"/paladin.v1.CategoryService/CreateCategory": {},
-	"/paladin.v1.CategoryService/UpdateCategory": {},
-	"/paladin.v1.CategoryService/DeleteCategory": {},
-
-	"/paladin.v1.TenantService/CreateTenant":         {},
-	"/paladin.v1.TenantService/DeleteTenant":         {},
-	"/paladin.v1.TenantService/UpdateTenantMetadata": {},
-
-	"/paladin.v1.MultipartUploadService/InitiateMultipartUpload": {},
-	"/paladin.v1.MultipartUploadService/CompleteMultipartUpload": {},
-	"/paladin.v1.MultipartUploadService/AbortMultipartUpload":    {},
-
-	"/paladin.v1.BulkService/BatchDeleteObjects":  {},
-	"/paladin.v1.BulkService/BatchCopyObjects":    {},
-	"/paladin.v1.BulkService/BatchRestoreObjects": {},
+type AuditInfo struct {
+	Action   string
+	Resource string
 }
 
-// isMutatingProcedure determines if a Connect RPC procedure is mutating
-// and should generate an audit log.
-func isMutatingProcedure(procedure string) bool {
-	_, ok := mutatingProcedures[procedure]
-	return ok
+var mutatingProcedures = map[string]AuditInfo{
+	"/paladin.v1.ObjectService/UploadObject":         {"create", "object"},
+	"/paladin.v1.ObjectService/DeleteObject":         {"delete", "object"},
+	"/paladin.v1.ObjectService/UpdateObjectMetadata": {"update", "object"},
+	"/paladin.v1.ObjectService/CopyObject":           {"create", "object"},
+	"/paladin.v1.ObjectService/MoveObject":           {"update", "object"},
+	"/paladin.v1.ObjectService/CompleteObject":       {"create", "object"},
+	"/paladin.v1.ObjectService/RestoreObject":        {"update", "object"},
+
+	"/paladin.v1.BucketService/CreateBucket":              {"create", "bucket"},
+	"/paladin.v1.BucketService/DeleteBucket":              {"delete", "bucket"},
+	"/paladin.v1.BucketService/UpdateBucketConfiguration": {"update", "bucket"},
+
+	"/paladin.v1.CategoryService/CreateCategory": {"create", "category"},
+	"/paladin.v1.CategoryService/UpdateCategory": {"update", "category"},
+	"/paladin.v1.CategoryService/DeleteCategory": {"delete", "category"},
+
+	"/paladin.v1.TenantService/CreateTenant":         {"create", "tenant"},
+	"/paladin.v1.TenantService/DeleteTenant":         {"delete", "tenant"},
+	"/paladin.v1.TenantService/UpdateTenantMetadata": {"update", "tenant"},
+
+	"/paladin.v1.MultipartUploadService/InitiateMultipartUpload": {"create", "multipart_upload"},
+	"/paladin.v1.MultipartUploadService/CompleteMultipartUpload": {"create", "multipart_upload"},
+	"/paladin.v1.MultipartUploadService/AbortMultipartUpload":    {"delete", "multipart_upload"},
+
+	"/paladin.v1.BulkService/BatchDeleteObjects":  {"delete", "objects"},
+	"/paladin.v1.BulkService/BatchCopyObjects":    {"create", "objects"},
+	"/paladin.v1.BulkService/BatchRestoreObjects": {"update", "objects"},
 }
 
 // Example of how to attach actor and trace ID via context.Context:
@@ -58,18 +55,22 @@ func isMutatingProcedure(procedure string) bool {
 //    defer span.End()
 //    // logger.AuditFromContext(ctx) will intrinsically extract the Trace ID from the span context.
 
+const unknownValue = "unknown"
+
 // ConnectAuditLogInterceptor creates an interceptor that logs mutating RPC requests
 // directly to stdout using the centralized audit logger.
 func ConnectAuditLogInterceptor() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			start := time.Now()
 			procedure := req.Spec().Procedure
 
 			// If it's a non-mutating request, skip audit logging entirely
-			if !isMutatingProcedure(procedure) {
+			auditInfo, isMutating := mutatingProcedures[procedure]
+			if !isMutating {
 				return next(ctx, req)
 			}
+
+			start := time.Now()
 
 			// Execute handler
 			res, err := next(ctx, req)
@@ -87,45 +88,14 @@ func ConnectAuditLogInterceptor() connect.Interceptor {
 				httpStatus = 500
 			}
 
-			// Parse action and resource from the procedure e.g. /paladin.v1.ObjectService/DeleteObject
-			action := "unknown"
-			resource := "unknown"
-			resourceID := "unknown"
-
-			parts := strings.Split(procedure, "/")
-			if len(parts) >= 3 {
-				// E.g. parts[2] = "DeleteObject"
-				methodName := strings.ToLower(parts[2])
-				if strings.HasPrefix(methodName, "create") || strings.HasPrefix(methodName, "upload") || strings.HasPrefix(methodName, "initiate") || strings.HasPrefix(methodName, "complete") {
-					action = "create"
-				} else if strings.HasPrefix(methodName, "update") {
-					action = "update"
-				} else if strings.HasPrefix(methodName, "delete") {
-					action = "delete"
-				} else {
-					action = "update" // fallback for other mutating actions
-				}
-
-				// E.g. parts[1] = "paladin.v1.ObjectService"
-				svcParts := strings.Split(parts[1], ".")
-				resource = strings.ToLower(svcParts[len(svcParts)-1])
-			}
-
-			// Best-effort extraction of Resource ID from standard request fields
-			if msg, ok := req.Any().(interface{ GetId() string }); ok {
-				resourceID = msg.GetId()
-			} else if msg, ok := req.Any().(interface{ GetKey() string }); ok {
-				resourceID = msg.GetKey()
-			} else if msg, ok := req.Any().(interface{ GetName() string }); ok {
-				resourceID = msg.GetName()
-			}
+			resourceID := extractResourceID(req.Any())
 
 			// Base fields specifically required by the specification.
 			// log_type, trace_id, and actor are populated intrinsically by AuditFromContext.
 			// timestamp is intrinsically populated by zap's TimeEncoder.
 			fields := []zap.Field{
-				zap.String("action", action),
-				zap.String("resource", resource),
+				zap.String("action", auditInfo.Action),
+				zap.String("resource", auditInfo.Resource),
 				zap.String("resource_id", resourceID),
 				zap.String("status", responseStatus),
 				zap.String("response_code", responseCode),
@@ -147,4 +117,20 @@ func ConnectAuditLogInterceptor() connect.Interceptor {
 			return res, err
 		}
 	})
+}
+
+// extractResourceID makes a best-effort attempt to extract a resource identifier
+// from standard protobuf request message structures.
+func extractResourceID(msg any) string {
+	if m, ok := msg.(interface{ GetId() string }); ok {
+		return m.GetId()
+	}
+	if m, ok := msg.(interface{ GetKey() string }); ok {
+		return m.GetKey()
+	}
+	if m, ok := msg.(interface{ GetName() string }); ok {
+		return m.GetName()
+	}
+
+	return unknownValue
 }

@@ -142,6 +142,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("s3: cannot specify both secret_key and secret_key_secret")
 	}
 
+	if c.Auth.AdminKey != "" && c.Auth.AdminKeySecret != nil {
+		return fmt.Errorf("auth: cannot specify both admin_key and admin_key_secret")
+	}
+
 	return nil
 }
 

@@ -133,6 +133,7 @@ func ActorFromContext(ctx context.Context) string {
 	if actor, ok := ctx.Value(actorCtxKey{}).(string); ok {
 		return actor
 	}
+
 	return ""
 }
 
@@ -149,6 +150,7 @@ func Named(ctx context.Context, name string) *zap.Logger {
 // WithName adds a component name to the context logger and returns the new context.
 func WithName(ctx context.Context, name string) context.Context {
 	l := FromContext(ctx).Named(name)
+
 	return WithContext(ctx, l)
 }
 

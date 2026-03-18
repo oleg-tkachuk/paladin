@@ -31,7 +31,6 @@ type App struct {
 	Started      *atomic.Bool
 
 	reaper       *worker.Reaper
-	reaperCtx    context.Context
 	reaperCancel context.CancelFunc
 }
 
@@ -46,14 +45,12 @@ func NewContainer(
 	reaper *worker.Reaper,
 	started *atomic.Bool,
 ) *App {
-	rCtx, rCancel := context.WithCancel(context.Background())
-
 	return &App{
 		Version: version, Commit: commit, BuildTime: buildTime,
 		Cfg: cfg, Logger: l,
 		httpSrv: httpSrv, grpcSrv: grpcSrv,
 		db: db, otelShutdown: otelShutdown,
-		reaper: reaper, reaperCtx: rCtx, reaperCancel: rCancel,
+		reaper:  reaper,
 		Started: started,
 	}
 }
@@ -93,7 +90,9 @@ func (a *App) Run() error {
 
 	// Start Reaper
 	if a.reaper != nil {
-		go a.reaper.Start(a.reaperCtx)
+		rCtx, rCancel := context.WithCancel(context.Background())
+		a.reaperCancel = rCancel
+		go a.reaper.Start(rCtx)
 	}
 
 	a.Started.Store(true)
