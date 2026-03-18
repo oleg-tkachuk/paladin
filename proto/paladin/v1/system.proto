@@ -245,6 +245,9 @@ message ListAuditLogsRequest {
 
   // Pagination cursor from a previous response.
   string cursor = 3;
+
+  // Optional filter by log type (e.g. "audit").
+  optional string log_type = 4;
 }
 
 // ListAuditLogsResponse contains the requested activity logs.
@@ -293,6 +296,9 @@ message AuditLog {
 
   // Timestamp when the operation occurred.
   google.protobuf.Timestamp created_at = 11;
+
+  // Distinguishes the type of log (e.g. "audit", "app").
+  string log_type = 12;
 }
 
 // SystemConfig represents the internal operational parameters of the service.

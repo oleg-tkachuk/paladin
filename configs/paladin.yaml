@@ -142,7 +142,10 @@ policy:
 # ─── Auth ───
 auth:
   enabled: false
-  admin_key: ""
+  admin_key_secret:
+    name: paladin-admin-key
+    key: admin-key
+    namespace: paladin
 
 # ─── Security ───────────────────────────────────────────────────────────────
 

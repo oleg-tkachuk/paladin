@@ -10,6 +10,7 @@ import (
 	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
@@ -86,7 +87,7 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 }
 
 // SetupConnectInterceptors returns the ordered interceptor chain for Connect RPC.
-func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger) []connect.Interceptor {
+func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger, auditRepo domain.AuditLogRepository) []connect.Interceptor {
 	rl := newGRPCRateLimiter(cfg)
 
 	return []connect.Interceptor{
@@ -98,7 +99,7 @@ func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger) []connect.Int
 		ConnectEnforceTenantInterceptor(cfg),
 		ConnectValidationInterceptor(),
 		ConnectRateLimitInterceptor(cfg, rl),
-		ConnectAuditLogInterceptor(),
+		ConnectAuditLogInterceptor(auditRepo),
 	}
 }
 

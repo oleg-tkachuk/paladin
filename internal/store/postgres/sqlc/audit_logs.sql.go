@@ -18,14 +18,14 @@ INSERT INTO audit_logs (
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
     client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at
+    response_status, response_time_ms, created_at, log_type
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
 )
 `
 
 // Audit log queries
-func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz) error {
+func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz, logType string) error {
 	_, err := q.db.Exec(ctx, createAuditLog,
 		iD,
 		tenantID,
@@ -46,12 +46,13 @@ func (q *Queries) CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID s
 		responseStatus,
 		responseTimeMs,
 		createdAt,
+		logType,
 	)
 	return err
 }
 
 const getAuditLog = `-- name: GetAuditLog :one
-SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type
 FROM audit_logs
 WHERE tenant_id = $1 AND id = $2
 `
@@ -83,12 +84,13 @@ func (q *Queries) GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UU
 		&i.AuditLog.ResponseStatus,
 		&i.AuditLog.ResponseTimeMs,
 		&i.AuditLog.CreatedAt,
+		&i.AuditLog.LogType,
 	)
 	return i, err
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, COUNT(*) OVER() AS total_count
+SELECT audit_logs.id, audit_logs.tenant_id, audit_logs.request_id, audit_logs.idempotency_key, audit_logs.actor_subject, audit_logs.actor_type, audit_logs.client_ip, audit_logs.user_agent, audit_logs.method, audit_logs.path, audit_logs.query_params, audit_logs.request_headers, audit_logs.request_body_sha256, audit_logs.request_size_bytes, audit_logs.http_status, audit_logs.response_code, audit_logs.response_status, audit_logs.response_time_ms, audit_logs.created_at, audit_logs.log_type, COUNT(*) OVER() AS total_count
 FROM audit_logs
 WHERE tenant_id = $1
   AND ($3::timestamptz IS NULL OR created_at >= $3)
@@ -99,7 +101,8 @@ WHERE tenant_id = $1
   AND ($8::int IS NULL OR http_status = $8)
   AND ($9::text IS NULL OR request_id = $9)
   AND ($10::text IS NULL OR idempotency_key = $10)
-  AND ($11::timestamptz IS NULL OR created_at < $11)
+  AND ($11::text IS NULL OR log_type = $11)
+  AND ($12::timestamptz IS NULL OR created_at < $12)
 ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
@@ -109,7 +112,7 @@ type ListAuditLogsRow struct {
 	TotalCount int64    `json:"total_count"`
 }
 
-func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
+func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		tenantID,
 		limit,
@@ -121,6 +124,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 		httpStatus,
 		requestID,
 		idempotencyKey,
+		logType,
 		cursor,
 	)
 	if err != nil {
@@ -150,6 +154,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, tenantID string, limit int3
 			&i.AuditLog.ResponseStatus,
 			&i.AuditLog.ResponseTimeMs,
 			&i.AuditLog.CreatedAt,
+			&i.AuditLog.LogType,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

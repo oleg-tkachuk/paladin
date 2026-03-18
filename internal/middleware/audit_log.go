@@ -5,8 +5,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -58,8 +61,8 @@ var mutatingProcedures = map[string]AuditInfo{
 const unknownValue = "unknown"
 
 // ConnectAuditLogInterceptor creates an interceptor that logs mutating RPC requests
-// directly to stdout using the centralized audit logger.
-func ConnectAuditLogInterceptor() connect.Interceptor {
+// directly to stdout using the centralized audit logger, and saves them to the database.
+func ConnectAuditLogInterceptor(auditRepo domain.AuditLogRepository) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			procedure := req.Spec().Procedure
@@ -80,11 +83,14 @@ func ConnectAuditLogInterceptor() connect.Interceptor {
 			responseStatus := "success"
 			responseCode := "OK"
 			httpStatus := 200
+			var connectErrCode *string
 
 			if err != nil {
 				responseStatus = "error"
 				connectErr := connect.CodeOf(err)
-				responseCode = connectErr.String()
+				strCode := connectErr.String()
+				responseCode = strCode
+				connectErrCode = &strCode
 				httpStatus = 500
 			}
 
@@ -104,15 +110,78 @@ func ConnectAuditLogInterceptor() connect.Interceptor {
 				zap.String("method", procedure),
 			}
 
-			if iKey := req.Header().Get("Idempotency-Key"); iKey != "" {
+			iKey := req.Header().Get("Idempotency-Key")
+			if iKey != "" {
 				fields = append(fields, zap.String("idempotency_key", iKey))
 			}
-			if ua := req.Header().Get("User-Agent"); ua != "" {
+			ua := req.Header().Get("User-Agent")
+			if ua != "" {
 				fields = append(fields, zap.String("user_agent", ua))
 			}
 
 			// Emit structured JSON directly to stdout
 			logger.AuditFromContext(ctx).Info("audit event", fields...)
+
+			// Construct and save domain.AuditLog to Postgres
+			tenant := utils.TenantIDFromContext(ctx, "")
+			rid := utils.RequestIDFromContext(ctx, "")
+			id, _ := uuid.NewV7()
+			if id == uuid.Nil {
+				id = uuid.New()
+			}
+
+			// Filter sensitive headers
+			safeHeaders := make(map[string]any)
+			allowedHeaders := map[string]bool{
+				"content-type":    true,
+				"user-agent":      true,
+				"accept":          true,
+				"x-request-id":    true,
+				"x-tenant-id":     true,
+				"idempotency-key": true,
+			}
+			for k, v := range req.Header() {
+				if allowedHeaders[k] && len(v) > 0 {
+					safeHeaders[k] = v[0]
+				}
+			}
+
+			var reqIdPtr *string
+			if rid != "" {
+				reqIdPtr = &rid
+			}
+
+			var iKeyPtr *string
+			if iKey != "" {
+				iKeyPtr = &iKey
+			}
+
+			var uaPtr *string
+			if ua != "" {
+				uaPtr = &ua
+			}
+
+			go func(l domain.AuditLog) {
+				// Use context.Background() since the original request context might be cancelled
+				_ = auditRepo.Create(context.Background(), l)
+			}(domain.AuditLog{
+				ID:             id,
+				TenantID:       tenant,
+				RequestID:      reqIdPtr,
+				Method:         "POST", // Connect RPCs are usually POST
+				Path:           procedure,
+				QueryParams:    map[string]any{},
+				RequestHeaders: safeHeaders,
+				HTTPStatus:     &httpStatus,
+				ResponseCode:   connectErrCode,
+				ResponseStatus: &responseStatus,
+				ResponseTimeMS: &duration,
+				ActorType:      domain.ActorTypeUser,
+				UserAgent:      uaPtr,
+				CreatedAt:      start,
+				LogType:        "audit",
+				IdempotencyKey: iKeyPtr,
+			})
 
 			return res, err
 		}

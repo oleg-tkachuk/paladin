@@ -270,7 +270,9 @@ func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[
 		limit = 100
 	}
 
-	logs, nextCursor, totalCount, err := h.auditRepo.List(ctx, req.Msg.TenantId, domain.ListAuditLogsFilter{}, limit, req.Msg.Cursor)
+	logs, nextCursor, totalCount, err := h.auditRepo.List(ctx, req.Msg.TenantId, domain.ListAuditLogsFilter{
+		LogType: req.Msg.LogType,
+	}, limit, req.Msg.Cursor)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -294,6 +296,7 @@ func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[
 			HttpStatus:     httpStatus,
 			ResponseStatus: l.ResponseStatus,
 			CreatedAt:      timestamppb.New(l.CreatedAt),
+			LogType:        l.LogType,
 		})
 	}
 

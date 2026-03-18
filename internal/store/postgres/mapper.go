@@ -173,6 +173,7 @@ func mapToDomainAuditLog(log sqlc.AuditLog) (domain.AuditLog, error) {
 		ResponseStatus:    log.ResponseStatus,
 		ResponseTimeMS:    responseTimeMS,
 		CreatedAt:         timestampFromPgtype(log.CreatedAt),
+		LogType:           log.LogType,
 	}, nil
 }
 

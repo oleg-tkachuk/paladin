@@ -5,9 +5,9 @@ INSERT INTO audit_logs (
     id, tenant_id, request_id, idempotency_key, actor_subject, actor_type,
     client_ip, user_agent, method, path, query_params, request_headers,
     request_body_sha256, request_size_bytes, http_status, response_code,
-    response_status, response_time_ms, created_at
+    response_status, response_time_ms, created_at, log_type
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
 );
 
 -- name: GetAuditLog :one
@@ -27,6 +27,7 @@ WHERE tenant_id = $1
   AND (sqlc.narg('http_status')::int IS NULL OR http_status = sqlc.narg('http_status'))
   AND (sqlc.narg('request_id')::text IS NULL OR request_id = sqlc.narg('request_id'))
   AND (sqlc.narg('idempotency_key')::text IS NULL OR idempotency_key = sqlc.narg('idempotency_key'))
+  AND (sqlc.narg('log_type')::text IS NULL OR log_type = sqlc.narg('log_type'))
   AND (sqlc.narg('cursor')::timestamptz IS NULL OR created_at < sqlc.narg('cursor'))
 ORDER BY created_at DESC, id DESC
 LIMIT $2;

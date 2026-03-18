@@ -49,6 +49,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyRepo,
 	ProvideCategoryRepo,
 	ProvideTenantRepo,
+	ProvideAuditLogRepo,
 	ProvideBreakerFactory,
 	ProvideUoWFactory,
 	ProvideCategoryService,
@@ -64,6 +65,10 @@ var ProviderSet = wire.NewSet(
 
 func ProvideStartTime() time.Time {
 	return time.Now()
+}
+
+func ProvideAuditLogRepo(db *postgres.DB) domain.AuditLogRepository {
+	return postgres.NewAuditLogRepo(db)
 }
 
 func ProvideConfig(path ConfigPath, log BootstrapLogger) (config.Config, error) {
@@ -238,8 +243,9 @@ func ProvideHTTPServer(
 	started *atomic.Bool,
 	meta domain.AppMetadata,
 	startTime time.Time,
+	auditRepo domain.AuditLogRepository,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, started, startTime)
+	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, started, startTime, auditRepo)
 }
 
 // ProvideGRPCServer builds the native gRPC server with interceptors and reflection.

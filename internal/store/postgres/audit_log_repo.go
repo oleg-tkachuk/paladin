@@ -78,6 +78,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 		log.ResponseStatus,
 		responseTimeMS,
 		timestampToPgtype(log.CreatedAt),
+		log.LogType,
 	)
 
 	if err != nil {
@@ -146,6 +147,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		httpStatus,
 		filter.RequestID,
 		filter.IdempotencyKey,
+		filter.LogType,
 		cursorTime,
 	)
 	if err != nil {

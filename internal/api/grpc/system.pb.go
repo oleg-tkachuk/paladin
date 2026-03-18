@@ -955,7 +955,9 @@ type ListAuditLogsRequest struct {
 	// Maximum number of logs to return.
 	Limit int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Pagination cursor from a previous response.
-	Cursor        string `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Cursor string `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Optional filter by log type (e.g. "audit").
+	LogType       *string `protobuf:"bytes,4,opt,name=log_type,json=logType,proto3,oneof" json:"log_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1007,6 +1009,13 @@ func (x *ListAuditLogsRequest) GetLimit() int32 {
 func (x *ListAuditLogsRequest) GetCursor() string {
 	if x != nil {
 		return x.Cursor
+	}
+	return ""
+}
+
+func (x *ListAuditLogsRequest) GetLogType() string {
+	if x != nil && x.LogType != nil {
+		return *x.LogType
 	}
 	return ""
 }
@@ -1099,7 +1108,9 @@ type AuditLog struct {
 	// Optional human-readable response status.
 	ResponseStatus *string `protobuf:"bytes,10,opt,name=response_status,json=responseStatus,proto3,oneof" json:"response_status,omitempty"`
 	// Timestamp when the operation occurred.
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Distinguishes the type of log (e.g. "audit", "app").
+	LogType       string `protobuf:"bytes,12,opt,name=log_type,json=logType,proto3" json:"log_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1209,6 +1220,13 @@ func (x *AuditLog) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *AuditLog) GetLogType() string {
+	if x != nil {
+		return x.LogType
+	}
+	return ""
 }
 
 // SystemConfig represents the internal operational parameters of the service.
@@ -2334,17 +2352,19 @@ const file_paladin_v1_system_proto_rawDesc = "" +
 	"\x11active_goroutines\x18\t \x01(\x05R\x10activeGoroutines\"\x12\n" +
 	"\x10GetConfigRequest\"A\n" +
 	"\x11GetConfigResponse\x12,\n" +
-	"\x06config\x18\x01 \x01(\v2\x14.paladin.v1.SystemConfigR\x06config\"a\n" +
+	"\x06config\x18\x01 \x01(\v2\x14.paladin.v1.SystemConfigR\x06config\"\x8e\x01\n" +
 	"\x14ListAuditLogsRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\x7f\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\x12\x1e\n" +
+	"\blog_type\x18\x04 \x01(\tH\x00R\alogType\x88\x01\x01B\v\n" +
+	"\t_log_type\"\x7f\n" +
 	"\x15ListAuditLogsResponse\x12$\n" +
 	"\x04logs\x18\x01 \x03(\v2\x10.paladin.v1.AuditLogR\x04logs\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
 	"nextCursor\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
-	"totalCount\"\xca\x03\n" +
+	"totalCount\"\xe5\x03\n" +
 	"\bAuditLog\x12\x19\n" +
 	"\baudit_id\x18\x01 \x01(\tR\aauditId\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\"\n" +
@@ -2361,7 +2381,8 @@ const file_paladin_v1_system_proto_rawDesc = "" +
 	"\x0fresponse_status\x18\n" +
 	" \x01(\tH\x03R\x0eresponseStatus\x88\x01\x01\x129\n" +
 	"\n" +
-	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB\r\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
+	"\blog_type\x18\f \x01(\tR\alogTypeB\r\n" +
 	"\v_request_idB\x10\n" +
 	"\x0e_actor_subjectB\f\n" +
 	"\n" +
@@ -2580,6 +2601,7 @@ func file_paladin_v1_system_proto_init() {
 	if File_paladin_v1_system_proto != nil {
 		return
 	}
+	file_paladin_v1_system_proto_msgTypes[16].OneofWrappers = []any{}
 	file_paladin_v1_system_proto_msgTypes[18].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -39,8 +39,9 @@ func TestNewServer(t *testing.T) {
 	hs := &service.HealthService{}
 	var started atomic.Bool
 	startTime := time.Now()
+	auditRepo := &domainmocks.MockAuditLogRepository{}
 
-	server := NewServer(cfg, log, objSvc, catSvc, tenantSvc, metadata, hs, &started, startTime)
+	server := NewServer(cfg, log, objSvc, catSvc, tenantSvc, metadata, hs, &started, startTime, auditRepo)
 	assert.NotNil(t, server)
 
 	// Test operational endpoint

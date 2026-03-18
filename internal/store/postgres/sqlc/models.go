@@ -30,6 +30,7 @@ type AuditLog struct {
 	ResponseStatus    *string            `json:"response_status"`
 	ResponseTimeMs    *int32             `json:"response_time_ms"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	LogType           string             `json:"log_type"`
 }
 
 type IdempotencyKey struct {

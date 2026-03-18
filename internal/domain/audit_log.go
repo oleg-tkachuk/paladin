@@ -35,6 +35,7 @@ type AuditLog struct {
 	ResponseStatus    *string        `json:"response_status,omitempty"`
 	ResponseTimeMS    *int           `json:"response_time_ms,omitempty"`
 	CreatedAt         time.Time      `json:"created_at"`
+	LogType           string         `json:"log_type"`
 }
 
 type ListAuditLogsFilter struct {
@@ -46,6 +47,7 @@ type ListAuditLogsFilter struct {
 	HTTPStatus     *int
 	RequestID      *string
 	IdempotencyKey *string
+	LogType        *string
 }
 
 type AuditLogRepository interface {

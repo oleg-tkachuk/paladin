@@ -35,10 +35,11 @@ func NewServer(
 	hs *service.HealthService,
 	started *atomic.Bool,
 	startTime time.Time,
+	auditRepo domain.AuditLogRepository,
 ) *Server {
 	mux := http.NewServeMux()
 
-	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log.Named("middleware"))...)
+	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log.Named("middleware"), auditRepo)...)
 
 	// ─── ObjectService ─────────────────────────────────────────────────────
 	objectHandler := grpcapi.NewObjectHandler(log.Named("object_handler"), objSvc)
@@ -76,7 +77,7 @@ func NewServer(
 	mux.Handle(path, handler)
 
 	// ─── SystemService ─────────────────────────────────────────────────────
-	systemHandler := grpcapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, nil)
+	systemHandler := grpcapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, auditRepo)
 	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
 	mux.Handle(path, handler)
 

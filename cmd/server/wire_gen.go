@@ -55,7 +55,8 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	healthService := wire.ProvideHealthService(db, client, factory)
 	atomicBool := provideStartedBool()
 	time := wire.ProvideStartTime()
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time)
+	auditLogRepository := wire.ProvideAuditLogRepo(db)
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
