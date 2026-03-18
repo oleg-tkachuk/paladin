@@ -104,6 +104,8 @@ type CreateCategoryRequest struct {
 }
 
 // ObjectsRepository defines persistent object operations.
+//
+//nolint:interfacebloat
 type ObjectsRepository interface {
 	Create(ctx context.Context, rec Object) error
 	Get(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)

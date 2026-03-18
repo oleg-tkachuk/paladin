@@ -28,7 +28,7 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 
 	queryParams, err := marshalJSONB(log.QueryParams)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return fmt.Errorf("marshal query params: %w", err)
 	}
@@ -81,12 +81,12 @@ func (r *AuditLogRepo) Create(ctx context.Context, log domain.AuditLog) error {
 	)
 
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return nil
 }
@@ -98,19 +98,19 @@ func (r *AuditLogRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (
 
 	row, err := r.db.Queries.GetAuditLog(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}
 
 	result, err := mapToDomainAuditLog(row.AuditLog)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &result, nil
 }
@@ -149,7 +149,7 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		cursorTime,
 	)
 	if err != nil {
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return nil, "", 0, mapPgError(err)
 	}
@@ -168,9 +168,9 @@ func (r *AuditLogRepo) List(ctx context.Context, tenantID string, filter domain.
 		logs = append(logs, log)
 	}
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 	nextCursor := ""
 	if len(logs) > limit {
 		nextCursor = logs[limit-1].CreatedAt.Format(time.RFC3339Nano)
@@ -187,12 +187,12 @@ func (r *AuditLogRepo) Prune(ctx context.Context, cutoff time.Time, limit int) (
 
 	rows, err := r.db.Queries.PruneAuditLogs(ctx, timestampToPgtype(cutoff), safecast.Int32(limit))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows, nil
 }

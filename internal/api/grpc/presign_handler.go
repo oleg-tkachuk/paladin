@@ -33,6 +33,7 @@ func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Req
 	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateUploadUrl: object lookup failed", zap.Error(err))
+
 		return nil, grpcError(err)
 	}
 
@@ -44,6 +45,7 @@ func (h *PresignHandler) GenerateUploadUrl(ctx context.Context, req *connect.Req
 	presigned, err := h.svc.SignUpload(ctx, tenantID, rec.ID, ttl)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateUploadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
+
 		return nil, grpcError(err)
 	}
 
@@ -61,6 +63,7 @@ func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.R
 	rec, err := h.svc.GetByKey(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateDownloadUrl: object lookup failed", zap.Error(err))
+
 		return nil, grpcError(err)
 	}
 
@@ -72,6 +75,7 @@ func (h *PresignHandler) GenerateDownloadUrl(ctx context.Context, req *connect.R
 	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, ttl)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GenerateDownloadUrl: failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
+
 		return nil, grpcError(err)
 	}
 

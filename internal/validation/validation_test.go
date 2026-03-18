@@ -127,6 +127,7 @@ func TestLabels(t *testing.T) {
 			for i := 0; i < 51; i++ {
 				m[strings.Repeat("a", i)] = "v"
 			}
+
 			return m
 		}(), true},
 	}

@@ -29,6 +29,7 @@ func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[C
 	out, err := h.svc.Create(ctx, tenantID, msg.DisplayName, msg.Labels, msg.Tags)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to create tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+
 		return nil, grpcError(err)
 	}
 
@@ -44,6 +45,7 @@ func (h *TenantHandler) GetTenant(ctx context.Context, req *connect.Request[GetT
 	out, err := h.svc.Get(ctx, tenantID)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+
 		return nil, grpcError(err)
 	}
 
@@ -78,15 +80,17 @@ func (h *TenantHandler) ListTenants(ctx context.Context, req *connect.Request[Li
 	if msg.OrderBy != "" {
 		filter.SortBy = msg.OrderBy
 	}
-	if msg.SortOrder == SortOrder_SORT_ORDER_DESC {
-		filter.SortOrder = "desc"
-	} else if msg.SortOrder == SortOrder_SORT_ORDER_ASC {
-		filter.SortOrder = "asc"
+	switch msg.SortOrder {
+	case SortOrder_SORT_ORDER_DESC:
+		filter.SortOrder = domain.SortOrderDesc
+	case SortOrder_SORT_ORDER_ASC:
+		filter.SortOrder = domain.SortOrderAsc
 	}
 
 	tenants, nextCursor, total, err := h.svc.List(ctx, filter)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to list tenants", zap.Error(err))
+
 		return nil, grpcError(err)
 	}
 
@@ -109,6 +113,7 @@ func (h *TenantHandler) DeleteTenant(ctx context.Context, req *connect.Request[D
 	err := h.svc.Delete(ctx, tenantID)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to delete tenant", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+
 		return nil, grpcError(err)
 	}
 
@@ -128,6 +133,7 @@ func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.R
 	out, err := h.svc.PatchMetadata(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), labelsPatch, msg.Tags, msg.DisplayName)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to update tenant metadata", zap.Error(err), zap.String("tenant_id", msg.TenantId))
+
 		return nil, grpcError(err)
 	}
 

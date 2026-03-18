@@ -22,12 +22,12 @@ func (r *IdempotencyRepo) Get(ctx context.Context, tenantID string, key string) 
 
 	rec, err := r.db.Queries.GetIdempotencyKey(ctx, tenantID, key)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	result := mapToDomainIdempotency(rec.IdempotencyKey)
 
 	return &result, nil
@@ -49,9 +49,9 @@ func (r *IdempotencyRepo) Save(ctx context.Context, rec domain.IdempotencyRecord
 	)
 
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 	} else {
-		status = "success"
+		status = domain.StatusSuccess
 	}
 
 	return mapPgError(err)
@@ -64,9 +64,9 @@ func (r *IdempotencyRepo) Delete(ctx context.Context, tenantID string, key strin
 
 	err := r.db.Queries.DeleteIdempotencyKey(ctx, tenantID, key)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 	} else {
-		status = "success"
+		status = domain.StatusSuccess
 	}
 
 	return mapPgError(err)

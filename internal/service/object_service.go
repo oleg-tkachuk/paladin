@@ -91,7 +91,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -119,7 +119,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	state, _ := sm.State(ctx)
 	if state == obj.Status { // Idempotent
-		status = "success"
+		status = domain.StatusSuccess
 
 		return nil
 	}
@@ -129,7 +129,7 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -138,10 +138,11 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 		logger.FromContext(ctx).Info("Object soft-deleted", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	} else {
 		logger.FromContext(ctx).Warn("Soft-delete failed: object not found", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
+
 		return apperrors.NotFound("object not found", nil)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return nil
@@ -163,7 +164,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -173,7 +174,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -191,7 +192,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 
 	state, _ := sm.State(ctx)
 	if state == obj.Status { // Idempotent
-		status = "success"
+		status = domain.StatusSuccess
 
 		return nil
 	}
@@ -201,7 +202,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -212,7 +213,7 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 		logger.FromContext(ctx).Warn("Restore failed: object not found", zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return nil
@@ -234,7 +235,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -251,7 +252,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -269,7 +270,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 
 	state, _ := sm.State(ctx)
 	if state == obj.Status { // Idempotent hard-delete
-		status = "success"
+		status = domain.StatusSuccess
 		span.SetStatus(codes.Ok, "already_hard_deleted")
 
 		return nil
@@ -287,7 +288,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 			zap.Error(err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
@@ -297,7 +298,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -318,7 +319,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		zap.String("tenant_id", tenantID),
 		zap.String("object_id", id.String()),
 		zap.String("object_key", obj.ObjectKey))
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return nil
@@ -433,7 +434,7 @@ func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []
 	defer func() { metrics.RecordObjectOperation("bulk_delete", status, time.Since(start).Seconds()) }()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
@@ -460,19 +461,19 @@ func (s *objectsService) BulkDelete(ctx context.Context, tenantID string, ids []
 	}
 
 	if len(validIDs) == 0 {
-		status = "success"
+		status = domain.StatusSuccess
 
 		return 0, nil
 	}
 
 	count, err := s.objRepo.BulkMarkSoftDeleted(ctx, tenantID, validIDs)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return count, nil
 }
@@ -487,7 +488,7 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 	defer func() { metrics.RecordObjectOperation("bulk_restore", status, time.Since(start).Seconds()) }()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
@@ -514,19 +515,19 @@ func (s *objectsService) BulkRestore(ctx context.Context, tenantID string, ids [
 	}
 
 	if len(validIDs) == 0 {
-		status = "success"
+		status = domain.StatusSuccess
 
 		return 0, nil
 	}
 
 	count, err := s.objRepo.BulkRestore(ctx, tenantID, validIDs)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return count, nil
 }
@@ -541,7 +542,7 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 	defer func() { metrics.RecordObjectOperation("bulk_purge", status, time.Since(start).Seconds()) }()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionDelete); err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
@@ -574,7 +575,7 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 	}
 
 	if len(validIDs) == 0 {
-		status = "success"
+		status = domain.StatusSuccess
 
 		return 0, nil
 	}
@@ -582,12 +583,12 @@ func (s *objectsService) BulkPurge(ctx context.Context, tenantID string, ids []u
 	// Bulk hard delete from DB
 	count, err := s.objRepo.BulkDelete(ctx, tenantID, validIDs)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return count, nil
 }

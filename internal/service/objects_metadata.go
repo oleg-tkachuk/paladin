@@ -29,7 +29,7 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -38,12 +38,12 @@ func (s *objectsService) patchMeta(ctx context.Context, tenantID string, id open
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return rec, nil

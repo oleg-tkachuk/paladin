@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/domain"
 )
 
 const (
@@ -131,7 +133,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch secret: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusForbidden {
@@ -174,21 +176,21 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 }
 
 // Obfuscated returns a deep copy of the configuration structure with all resolved secret
-// values replaced by "[REDACTED]". Useful for logging or debugging.
+// values replaced by domain.Redacted. Useful for logging or debugging.
 func (c *Config) Obfuscated() Config {
 	cc := *c
 
 	// Redact Postgres
 	if cc.Datastores.Postgres.Password != "" {
-		cc.Datastores.Postgres.Password = "[REDACTED]"
+		cc.Datastores.Postgres.Password = domain.Redacted
 	}
 
 	// Redact S3
 	if cc.Datastores.S3.AccessKey != "" {
-		cc.Datastores.S3.AccessKey = "[REDACTED]"
+		cc.Datastores.S3.AccessKey = domain.Redacted
 	}
 	if cc.Datastores.S3.SecretKey != "" {
-		cc.Datastores.S3.SecretKey = "[REDACTED]"
+		cc.Datastores.S3.SecretKey = domain.Redacted
 	}
 
 	return cc

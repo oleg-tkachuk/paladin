@@ -10,6 +10,7 @@ import (
 	mockdomain "github.com/oleg-tkachuk/paladin/internal/domain/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCachedObjectsRepo_Get(t *testing.T) {
@@ -25,12 +26,12 @@ func TestCachedObjectsRepo_Get(t *testing.T) {
 	mockRepo.On("Get", mock.Anything, tenantID, id).Return(obj, nil).Once()
 
 	res, err := repo.Get(ctx, tenantID, id)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, obj, res)
 
 	// 2. Cache hit - should NOT call underlying repo
 	res, err = repo.Get(ctx, tenantID, id)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, obj, res)
 
 	mockRepo.AssertExpectations(t)
@@ -46,11 +47,11 @@ func TestCachedObjectsRepo_Create(t *testing.T) {
 	mockRepo.On("Create", mock.Anything, obj).Return(nil).Once()
 
 	err := repo.Create(ctx, obj)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Now it should be in cache
 	res, err := repo.Get(ctx, obj.TenantID, obj.ID)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, &obj, res)
 
 	mockRepo.AssertExpectations(t)
@@ -75,12 +76,12 @@ func TestCachedObjectsRepo_MarkComplete(t *testing.T) {
 	mockRepo.On("Get", mock.Anything, tenantID, id).Return(completedObj, nil).Once() // write-through re-fetch
 
 	updated, err := repo.MarkComplete(ctx, tenantID, id, "etag1", int64(100))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, updated)
 
 	// Should be a cache HIT now (write-through cached the completed object)
 	res, err := repo.Get(ctx, tenantID, id)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, completedObj, res)
 
 	mockRepo.AssertExpectations(t)

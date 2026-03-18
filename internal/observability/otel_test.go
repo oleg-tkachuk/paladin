@@ -7,7 +7,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +21,7 @@ func TestInitOTel_Disabled(t *testing.T) {
 	require.NotNil(t, shutdown)
 
 	err = shutdown(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestInitOTel_Enabled(t *testing.T) {

@@ -39,7 +39,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return domain.MultipartInitResponse{}, err
 	}
@@ -115,7 +115,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		return domain.MultipartInitResponse{}, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer uow.Rollback(ctx)
+	defer func() { _ = uow.Rollback(ctx) }()
 
 	if err := uow.Objects().Create(ctx, objRec); err != nil {
 		return domain.MultipartInitResponse{}, err
@@ -141,15 +141,17 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	}
 
 	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
-		body, _ := json.Marshal(res)
-		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
-			TenantID: tenantID, Key: *idempotencyKey,
-			RequestPath: "/v1/multipart", ResponseBody: body, ResponseCode: 200,
-			ExpiresAt: time.Now().Add(s.idempotencyTTL),
-		})
+		body, err := json.Marshal(res)
+		if err == nil {
+			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
+				TenantID: tenantID, Key: *idempotencyKey,
+				RequestPath: "/v1/multipart", ResponseBody: body, ResponseCode: 200,
+				ExpiresAt: time.Now().Add(s.idempotencyTTL),
+			})
+		}
 	}
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return res, nil

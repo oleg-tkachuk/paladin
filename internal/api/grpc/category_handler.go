@@ -29,6 +29,7 @@ func (h *CategoryHandler) CreateCategory(ctx context.Context, req *connect.Reque
 	out, err := h.svc.Create(ctx, tenantID, msg.Slug, msg.Name, msg.Description)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to create category", zap.Error(err), zap.String("slug", msg.Slug))
+
 		return nil, grpcError(err)
 	}
 
@@ -44,6 +45,7 @@ func (h *CategoryHandler) GetCategory(ctx context.Context, req *connect.Request[
 	out, err := h.svc.Get(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get category", zap.Error(err), zap.String("slug", msg.Slug))
+
 		return nil, grpcError(err)
 	}
 
@@ -76,6 +78,7 @@ func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Reque
 	out, err := h.svc.Update(ctx, tenantID, msg.Slug, name, description)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to update category", zap.Error(err), zap.String("slug", msg.Slug))
+
 		return nil, grpcError(err)
 	}
 
@@ -91,6 +94,7 @@ func (h *CategoryHandler) DeleteCategory(ctx context.Context, req *connect.Reque
 	err := h.svc.Delete(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to delete category", zap.Error(err), zap.String("slug", msg.Slug))
+
 		return nil, grpcError(err)
 	}
 
@@ -117,15 +121,17 @@ func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Reque
 	if msg.OrderBy != "" {
 		filter.SortBy = msg.OrderBy
 	}
-	if msg.SortOrder == SortOrder_SORT_ORDER_DESC {
-		filter.SortOrder = "desc"
-	} else if msg.SortOrder == SortOrder_SORT_ORDER_ASC {
-		filter.SortOrder = "asc"
+	switch msg.SortOrder {
+	case SortOrder_SORT_ORDER_DESC:
+		filter.SortOrder = domain.SortOrderDesc
+	case SortOrder_SORT_ORDER_ASC:
+		filter.SortOrder = domain.SortOrderAsc
 	}
 
 	categories, nextCursor, total, err := h.svc.List(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), filter)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to list categories", zap.Error(err))
+
 		return nil, grpcError(err)
 	}
 
@@ -148,6 +154,7 @@ func (h *CategoryHandler) GetCategoryStats(ctx context.Context, req *connect.Req
 	out, err := h.svc.GetStats(ctx, tenantID, msg.Slug)
 	if err != nil {
 		logger.FromContext(ctx).Warn("failed to get category stats", zap.Error(err), zap.String("slug", msg.Slug))
+
 		return nil, grpcError(err)
 	}
 

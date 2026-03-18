@@ -10,6 +10,7 @@ import (
 	domainmocks "github.com/oleg-tkachuk/paladin/internal/domain/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,7 @@ func TestObjectHandler_UploadObject(t *testing.T) {
 		}, nil)
 
 	res, err := handler.UploadObject(ctx, req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, objID.String(), res.Msg.Object.ObjectId)
 	assert.Equal(t, "http://upload", res.Msg.UploadUrl.Url)
@@ -68,7 +69,7 @@ func TestObjectHandler_GetObjectMetadata(t *testing.T) {
 		}, nil)
 
 	res, err := handler.GetObjectMetadata(ctx, req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, objID.String(), res.Msg.Object.ObjectId)
 

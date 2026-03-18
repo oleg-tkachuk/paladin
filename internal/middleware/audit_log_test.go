@@ -12,8 +12,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	domainmocks "github.com/oleg-tkachuk/paladin/internal/domain/mocks"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -142,7 +142,7 @@ func TestConnectAuditLogInterceptor(t *testing.T) {
 
 	fn := interceptor.WrapUnary(next)
 	_, err := fn(ctx, req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Wait a bit for async send/flush or just close writer to force flush
 
@@ -172,7 +172,7 @@ func TestConnectAuditLogInterceptor_Error(t *testing.T) {
 
 	fn := interceptor.WrapUnary(next)
 	_, err := fn(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	writer.Close()
 	repo.AssertExpectations(t)

@@ -8,7 +8,7 @@ PALADIN uses internal background workers to manage object lifecycle tasks that d
 
 ### 1. Reaper (Object GC)
 
-- **Implementation**: [internal/worker/reaper.go](file:///workspace/internal/worker/reaper.go)
+- **Implementation**: [../internal/worker/reaper.go](../internal/worker/reaper.go)
 - **Purpose**: Cleans up metadata and physical objects that are no longer needed.
 - **Triggers**:
   - `pending_ttl`: Purgers objects stuck in `pending` state for too long.

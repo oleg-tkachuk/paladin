@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/errors"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/validation"
 )
@@ -44,7 +43,7 @@ func (s *categoryService) Create(ctx context.Context, tenantID, slug, name strin
 			return nil, err
 		}
 		if !exists {
-			return nil, errors.NotFound(fmt.Sprintf("parent category %q not found", parentSlug), nil)
+			return nil, apperrors.NotFound(fmt.Sprintf("parent category %q not found", parentSlug), nil)
 		}
 	}
 
@@ -100,7 +99,7 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 		return err
 	}
 	if count > 0 {
-		return errors.Conflict("Cannot delete category because it still contains active objects", nil)
+		return apperrors.Conflict("Cannot delete category because it still contains active objects", nil)
 	}
 
 	deleted, err := s.repo.Delete(ctx, tenantID, slug)
@@ -108,7 +107,7 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 		return err
 	}
 	if !deleted {
-		return errors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
+		return apperrors.NotFound(fmt.Sprintf("category %q not found", slug), nil)
 	}
 
 	return nil

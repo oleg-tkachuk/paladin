@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/migrations"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -58,22 +59,22 @@ func TestObjectsRepo_Integration(t *testing.T) {
 
 	// Create
 	err = repo.Create(ctx, rec)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Get
 	got, err := repo.Get(ctx, tenantID, id)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, rec.ID, got.ID)
 	assert.Equal(t, rec.ObjectKey, got.ObjectKey)
 
 	// Update Status
 	updated, err := repo.MarkComplete(ctx, tenantID, id, "etag-123", 1024)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, updated)
 
 	// Verify update
 	got, err = repo.Get(ctx, tenantID, id)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, domain.ObjectComplete, got.Status)
 }

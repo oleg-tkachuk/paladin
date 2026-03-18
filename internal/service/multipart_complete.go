@@ -30,7 +30,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, errors.BadRequest("invalid upload_id", err)
 	}
@@ -48,7 +48,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 		err = fmt.Errorf("multipart upload not found")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, errors.BadRequest("invalid upload_id", err)
 	}
@@ -66,7 +66,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 
 	state, _ := sm.State(ctx)
 	if state == multi.Status { // Idempotent completion
-		status = "success"
+		status = domain.StatusSuccess
 		span.SetStatus(codes.Ok, "already_completed")
 		rec, _ := s.objRepo.Get(ctx, tenantID, multi.ObjectID)
 
@@ -79,7 +79,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("s3 head after complete: %w", err)
 	}
@@ -101,16 +101,16 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer uow.Rollback(ctx)
+	defer func() { _ = uow.Rollback(ctx) }()
 
 	if _, err = uow.Objects().MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err = uow.Multipart().MarkCompleted(ctx, tenantID, uploadID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err := uow.Commit(ctx); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
@@ -135,12 +135,12 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", multi.ObjectID.String()))
 

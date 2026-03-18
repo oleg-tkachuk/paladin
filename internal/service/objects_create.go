@@ -44,7 +44,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return domain.CreateObjectResponse{}, err
 	}
@@ -128,6 +128,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 			return fmt.Errorf("check category: %w", err)
 		}
 		catExists = exists
+
 		return nil
 	})
 
@@ -136,6 +137,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		signed, err = executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 			return s.s3.PresignPutObject(gCtx, key, contentType, sizeBytes, ttl)
 		})
+
 		return err
 	})
 
@@ -168,15 +170,17 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
-		body, _ := json.Marshal(res)
-		_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
-			TenantID: tenantID, Key: *idempotencyKey,
-			RequestPath: "/v1/objects", ResponseBody: body, ResponseCode: 200,
-			ExpiresAt: time.Now().Add(s.idempotencyTTL),
-		})
+		body, err := json.Marshal(res)
+		if err == nil {
+			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
+				TenantID: tenantID, Key: *idempotencyKey,
+				RequestPath: "/v1/objects", ResponseBody: body, ResponseCode: 200,
+				ExpiresAt: time.Now().Add(s.idempotencyTTL),
+			})
+		}
 	}
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.String("object_id", id.String()))
 

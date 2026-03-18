@@ -346,6 +346,7 @@ func ConnectRequestIDInterceptor() connect.Interceptor {
 			if err == nil && res != nil {
 				res.Header().Set(grpcMetaRequestID, rid)
 			}
+
 			return res, err
 		}
 	})
@@ -357,6 +358,7 @@ func ConnectContextLoggerInterceptor(log *zap.Logger) connect.Interceptor {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			// Just ensure the base logger is in context.
 			ctx = logger.WithContext(ctx, log)
+
 			return next(ctx, req)
 		}
 	})
@@ -390,6 +392,7 @@ func ConnectLoggerInterceptor() connect.Interceptor {
 			} else {
 				log.Info("Connect request", fields...)
 			}
+
 			return res, err
 		}
 	})
@@ -425,6 +428,7 @@ func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
 			if tenantID != "" {
 				ctx = context.WithValue(ctx, utils.TenantIDKey, tenantID)
 			}
+
 			return next(ctx, req)
 		}
 	})
@@ -446,6 +450,7 @@ func ConnectEnforceTenantInterceptor(cfg *config.Config) connect.Interceptor {
 						errors.New("missing tenant: supply x-tenant-id header or a valid Authorization header"))
 				}
 			}
+
 			return next(ctx, req)
 		}
 	})
@@ -461,6 +466,7 @@ func ConnectValidationInterceptor() connect.Interceptor {
 					return nil, connect.NewError(connect.CodeInvalidArgument, err)
 				}
 			}
+
 			return next(ctx, req)
 		}
 	})
@@ -479,6 +485,7 @@ func ConnectRateLimitInterceptor(cfg *config.Config, rl *TenantRateLimiter) conn
 				return nil, connect.NewError(connect.CodeResourceExhausted,
 					fmt.Errorf("rate limit exceeded for tenant %q", tenantID))
 			}
+
 			return next(ctx, req)
 		}
 	})
@@ -499,6 +506,7 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 					err = connect.NewError(connect.CodeInternal, fmt.Errorf("internal server error"))
 				}
 			}()
+
 			return next(ctx, req)
 		}
 	})

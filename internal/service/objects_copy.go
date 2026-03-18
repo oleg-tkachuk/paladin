@@ -36,7 +36,7 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := sm.Fire(domain.EventObjectCopy); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("invalid source state for copy: %w", err)
 	}
@@ -76,7 +76,7 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := s.s3.CopyObject(ctx, src.ObjectKey, dstObjectKey); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("s3 copy: %w", err)
 	}
@@ -110,12 +110,12 @@ func (s *objectsService) copyObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := s.objRepo.Create(ctx, dstObj); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("create destination record: %w", err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return &dstObj, nil
@@ -142,7 +142,7 @@ func (s *objectsService) moveObject(ctx context.Context, tenantID, srcBucket, sr
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *objectsService) moveObject(ctx context.Context, tenantID, srcBucket, sr
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("resolve source for delete: %w", err)
 	}
@@ -162,7 +162,7 @@ func (s *objectsService) moveObject(ctx context.Context, tenantID, srcBucket, sr
 	if err := srcSM.Fire(domain.EventObjectSoftDelete); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("invalid source state for move: %w", err)
 	}
@@ -171,12 +171,12 @@ func (s *objectsService) moveObject(ctx context.Context, tenantID, srcBucket, sr
 	if _, err := s.objRepo.MarkSoftDeleted(ctx, tenantID, src.ID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("soft-delete source: %w", err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return dst, nil

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -47,13 +48,13 @@ func TestNewServer(t *testing.T) {
 	assert.NotNil(t, server)
 
 	// Test operational endpoint
-	req, _ := http.NewRequest(http.MethodGet, "/metrics", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 
 	// Test CORS
-	req2, _ := http.NewRequest(http.MethodOptions, "/paladin.v1.ObjectService/GetObject", nil)
+	req2, _ := http.NewRequestWithContext(context.Background(), http.MethodOptions, "/paladin.v1.ObjectService/GetObject", nil)
 	req2.Header.Set("Origin", "http://localhost:3000")
 	req2.Header.Set("Access-Control-Request-Method", "POST")
 	rr2 := httptest.NewRecorder()

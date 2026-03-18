@@ -7,6 +7,8 @@ import (
 )
 
 // ObjectsService defines business operations on objects.
+//
+//nolint:interfacebloat
 type ObjectsService interface {
 	// CreateSingle creates a single-PUT object and returns a presigned upload URL.
 	// category must be a slug of an existing tenant category.
@@ -57,15 +59,7 @@ type SystemService interface {
 }
 
 // Operation timeouts
-type Action string
-
-const (
-	ActionCreate Action = "create"
-	ActionRead   Action = "read"
-	ActionUpdate Action = "update"
-	ActionDelete Action = "delete"
-	ActionPatch  Action = "patch"
-)
+// (removed Action type and constants - moved to constants.go)
 
 // SystemConfig represents the sanitized system configuration for administrative display.
 type SystemConfig struct {

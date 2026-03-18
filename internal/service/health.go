@@ -76,7 +76,7 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 		pStart := time.Now()
 		if err := s.db.Ping(gCtx); err != nil {
 			metrics.RecordDbQuery(gCtx, "ping", "error", pStart)
-			status.PostgreSQL.Status = "down"
+			status.PostgreSQL.Status = domain.StatusDown
 			status.PostgreSQL.Message = err.Error()
 			ready = false
 		} else {
@@ -91,6 +91,7 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 				}
 			}
 		}
+
 		return nil
 	})
 
@@ -130,6 +131,7 @@ func (s *HealthService) CheckReady(ctx context.Context) (bool, DependencyStatus)
 			}
 			status.SeaweedFS.S3Ping = &pingResult
 		}
+
 		return nil
 	})
 

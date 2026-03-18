@@ -7,6 +7,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -19,7 +20,7 @@ func TestS3Client_Init(t *testing.T) {
 	}
 
 	client, err := s3.New(context.Background(), cfg, logger)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, "test-bucket", client.BucketName())
 }

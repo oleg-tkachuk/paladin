@@ -29,7 +29,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -38,18 +38,18 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
 	if rec.Status == domain.ObjectHardDeleted {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, domain.ErrNotFound
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return rec, nil
@@ -72,12 +72,12 @@ func (s *objectsService) getMeta(ctx context.Context, tenantID string, id openap
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return rec, nil
@@ -103,7 +103,7 @@ func (s *objectsService) getByKey(ctx context.Context, tenantID, bucket, key str
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -112,18 +112,18 @@ func (s *objectsService) getByKey(ctx context.Context, tenantID, bucket, key str
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
 	if rec.Status == domain.ObjectHardDeleted {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, domain.ErrNotFound
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return rec, nil

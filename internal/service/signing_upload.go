@@ -29,7 +29,7 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -38,7 +38,7 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -54,12 +54,12 @@ func (s *objectsService) signUpload(ctx context.Context, tenantID string, id ope
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return domain.Presigned{

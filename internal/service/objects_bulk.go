@@ -23,12 +23,14 @@ func (s *objectsService) BulkCreate(ctx context.Context, tenantID string, items 
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
+
 			return nil, fmt.Errorf("bulk create failed at item: %w", err)
 		}
 		res = append(res, out)
 	}
 
 	span.SetStatus(codes.Ok, "")
+
 	return res, nil
 }
 
@@ -59,6 +61,7 @@ func (s *objectsService) BulkSignUploads(ctx context.Context, tenantID string, i
 	}
 
 	span.SetStatus(codes.Ok, "")
+
 	return res, nil
 }
 
@@ -77,6 +80,7 @@ func (s *objectsService) BulkComplete(ctx context.Context, tenantID string, ids 
 	}
 
 	span.SetStatus(codes.Ok, "")
+
 	return res, nil
 }
 
@@ -88,6 +92,7 @@ func (s *objectsService) BulkPatch(ctx context.Context, tenantID string, items [
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionPatch); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
+
 		return 0, err
 	}
 
@@ -95,9 +100,11 @@ func (s *objectsService) BulkPatch(ctx context.Context, tenantID string, items [
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
+
 		return 0, err
 	}
 
 	span.SetStatus(codes.Ok, "")
+
 	return count, nil
 }

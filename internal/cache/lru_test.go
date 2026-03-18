@@ -34,7 +34,7 @@ func TestLRUCache(t *testing.T) {
 	assert.Equal(t, int64(1), stats.Misses)
 	assert.Equal(t, 1, stats.Size)
 	assert.Equal(t, 10, stats.MaxSize)
-	assert.Equal(t, 0.5, stats.HitRate) // 1 hit / 2 total
+	assert.InDelta(t, 0.5, stats.HitRate, 0.0001) // 1 hit / 2 total
 
 	// Test Delete
 	err = c.Delete(ctx, "key1")
@@ -43,8 +43,8 @@ func TestLRUCache(t *testing.T) {
 	assert.False(t, ok)
 
 	// Test Clear
-	c.Set(ctx, "key2", "value2", 0)
-	c.Set(ctx, "key3", "value3", 0)
+	_ = c.Set(ctx, "key2", "value2", 0)
+	_ = c.Set(ctx, "key3", "value3", 0)
 	err = c.Clear(ctx)
 	require.NoError(t, err)
 
@@ -54,7 +54,7 @@ func TestLRUCache(t *testing.T) {
 	assert.Equal(t, int64(0), statsAfterClear.Misses)
 
 	// Test Expiration
-	c.Set(ctx, "expiring_key", "expiring_val", time.Second)
+	_ = c.Set(ctx, "expiring_key", "expiring_val", time.Second)
 	val, ok = c.Get(ctx, "expiring_key")
 	assert.True(t, ok)
 	assert.Equal(t, "expiring_val", val)

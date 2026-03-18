@@ -36,7 +36,7 @@ func (l *gooseLogger) Printf(format string, v ...interface{}) {
 func (d *DB) RunMigrations(ctx context.Context, fs embed.FS) error {
 	// Create a new *sql.DB just for migrations using the pool's config
 	db := stdlib.OpenDB(*d.Pool.Config().ConnConfig)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("failed to set dialect: %w", err)

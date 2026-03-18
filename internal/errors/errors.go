@@ -307,7 +307,9 @@ func IsS3NotFound(err error) bool {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		code := apiErr.ErrorCode()
+
 		return code == "NotFound" || code == "NoSuchKey" || code == "NoSuchBucket"
 	}
+
 	return false
 }

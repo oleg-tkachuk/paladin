@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	pgmocks "github.com/oleg-tkachuk/paladin/internal/store/postgres/mocks"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +17,6 @@ func TestDB_Ping_Mockery(t *testing.T) {
 	mockPool.On("Ping", ctx).Return(nil).Once()
 
 	err := db.Ping(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	mockPool.AssertExpectations(t)
 }

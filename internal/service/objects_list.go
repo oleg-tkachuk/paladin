@@ -28,7 +28,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, "", 0, err
 	}
@@ -37,7 +37,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, "", 0, err
 	}
@@ -57,7 +57,7 @@ func (s *objectsService) listObjects(ctx context.Context, tenantID string, filte
 		filtered = append(filtered, r)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 	span.SetAttributes(attribute.Int("result_count", len(filtered)))
 

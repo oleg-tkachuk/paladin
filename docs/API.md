@@ -28,6 +28,7 @@ Object lifecycle management.
 | `MoveObject` | `POST .../objects/{key}:move` | Copy + soft-delete source |
 | `ListObjects` | `GET /v1/tenants/{tenant_id}/buckets/{bucket}/objects` | Paginated listing with rich filters |
 | `CompleteObject` | `POST .../objects/{key}:complete` | Mark single-part upload as complete |
+| `RestoreObject` | `POST .../objects/{key}:restore` | Recover a soft-deleted object |
 
 ### PresignService
 
@@ -56,8 +57,8 @@ Batch operations.
 
 | RPC | HTTP | Description |
 |-----|------|-------------|
-| `BatchDeleteObjects` | `POST .../objects:batchDelete` | Delete up to 1000 objects |
-| `BatchCopyObjects` | `POST .../objects:batchCopy` | Copy up to 1000 objects |
+| `BatchDeleteObjects`| `POST .../objects:batchDelete` | Delete up to 1000 objects |
+| `BatchCopyObjects`  | `POST .../objects:batchCopy`   | Copy up to 1000 objects |
 
 ### SystemService
 
@@ -66,8 +67,8 @@ Health and diagnostics.
 | RPC | HTTP | Description |
 |-----|------|-------------|
 | `Healthz` | `GET /paladin.v1.SystemService/Healthz` | Liveness check |
-| `Readyz` | `GET /paladin.v1.SystemService/Readyz` | Readiness check (Postgres + S3) |
-| `Version` | `GET /paladin.v1.SystemService/Version` | Build info |
+| `Readyz` | `GET /paladin.v1.SystemService/Readyz`   | Readiness check (Postgres + S3) |
+| `Version` | `GET /paladin.v1.SystemService/Version`  | Build info |
 
 ### BucketService (Stub)
 

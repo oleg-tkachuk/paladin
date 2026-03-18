@@ -28,7 +28,7 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -37,12 +37,12 @@ func (s *objectsService) getMultipart(ctx context.Context, tenantID string, uplo
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return rec, nil

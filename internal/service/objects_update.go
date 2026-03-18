@@ -86,7 +86,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	if err = s.policy.Authorize(ctx, tenantID, action); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return err
 	}
@@ -112,13 +112,13 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		event = domain.EventObjectFail
 	default:
 		err = fmt.Errorf("unsupported status update: %s", status)
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return err
 	}
 
 	if err = sm.Fire(event); err != nil {
-		opStatus = "conflict"
+		opStatus = domain.StatusConflict
 
 		return fmt.Errorf("%s: %w", ErrInvalidTransition, err)
 	}
@@ -129,7 +129,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	// We check if the expected final status matches the object's current status.
 	// E.g. restoring a complete object, or soft-deleting a soft-deleted object.
 	if state == obj.Status {
-		opStatus = "success"
+		opStatus = domain.StatusSuccess
 
 		return nil
 	}
@@ -138,7 +138,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 	if event == domain.EventObjectAbort || event == domain.EventObjectFail {
 		if _, err = s.objRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 			span.RecordError(err)
-			opStatus = "error"
+			opStatus = domain.StatusError
 
 			return err
 		}
@@ -149,7 +149,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 		zap.String("object_id", id.String()),
 		zap.String("status", status))
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return nil

@@ -175,6 +175,7 @@ func TenantDisplayName(name string) error {
 	if len(name) > MaxTenantDisplayNameLength {
 		return fmt.Errorf("display_name too long (max %d characters)", MaxTenantDisplayNameLength)
 	}
+
 	return nil
 }
 
@@ -186,6 +187,7 @@ func CategoryName(name string) error {
 	if len(name) > MaxCategoryNameLength {
 		return fmt.Errorf("category name too long (max %d characters)", MaxCategoryNameLength)
 	}
+
 	return nil
 }
 
@@ -194,5 +196,6 @@ func CategoryDescription(desc string) error {
 	if len(desc) > MaxCategoryDescriptionLength {
 		return fmt.Errorf("category description too long (max %d characters)", MaxCategoryDescriptionLength)
 	}
+
 	return nil
 }

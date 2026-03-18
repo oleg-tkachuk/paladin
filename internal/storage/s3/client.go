@@ -40,11 +40,10 @@ func New(ctx context.Context, cfg config.S3, log *zap.Logger) (*Client, error) {
 	}
 
 	createClient := func(endpoint string) (*s3.Client, error) {
-
 		// Prepare configuration options
-		currentOptFns := []func(*awsconfig.LoadOptions) error{
-			awsconfig.WithRegion(cfg.Region),
-		}
+		currentOptFns := make([]func(*awsconfig.LoadOptions) error, 0, 1+len(optFns))
+		currentOptFns = append(currentOptFns,
+			awsconfig.WithRegion(cfg.Region))
 		currentOptFns = append(currentOptFns, optFns...)
 
 		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, currentOptFns...)
@@ -196,13 +195,13 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
 
 		return domain.MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	uploadID := aws.ToString(out.UploadId)
 	c.log.Info("S3 multipart upload initiated", zap.String("key", key), zap.String("upload_id", uploadID))
 
@@ -260,13 +259,13 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 	})
 
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
 
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	c.log.Info("S3 multipart upload completed", zap.String("key", key), zap.String("upload_id", uploadID))
 
 	return nil
@@ -300,12 +299,12 @@ func (c *Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &domain.HeadRecord{
 		Key:          key,
@@ -326,11 +325,11 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
-	status = "success"
+	status = domain.StatusSuccess
 
 	return nil
 }
@@ -348,7 +347,7 @@ func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
 		Key:        aws.String(dstKey),
 	})
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 		c.log.Error("S3 copy object error",
 			zap.String("src_key", srcKey),
 			zap.String("dst_key", dstKey),
@@ -357,7 +356,7 @@ func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
 		return fmt.Errorf("copy object: %w", err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	c.log.Info("S3 object copied",
 		zap.String("src_key", srcKey),
 		zap.String("dst_key", dstKey))
@@ -400,13 +399,13 @@ func (c *Client) Ping(ctx context.Context) (domain.S3PingResult, error) {
 			result.Status = "degraded"
 			result.HttpStatus = 404
 		case "Forbidden", "AccessDenied":
-			result.Status = "unavailable"
+			result.Status = domain.StatusUnavailable
 			result.HttpStatus = 403
 		default:
-			result.Status = "unavailable"
+			result.Status = domain.StatusUnavailable
 		}
 	} else {
-		result.Status = "unavailable"
+		result.Status = domain.StatusUnavailable
 		result.Message = err.Error()
 	}
 

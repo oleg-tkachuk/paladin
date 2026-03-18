@@ -50,6 +50,7 @@ func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *con
 			zap.Error(err),
 			zap.String("tenant_id", tenantID),
 			zap.String("category", category))
+
 		return nil, grpcError(err)
 	}
 
@@ -81,6 +82,7 @@ func (h *MultipartHandler) GeneratePartUploadUrl(ctx context.Context, req *conne
 	p, err := h.svc.SignPart(ctx, tenantID, msg.UploadId, msg.PartNumber)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GeneratePartUploadUrl: failed", zap.Error(err), zap.String("upload_id", msg.UploadId), zap.Int32("part", msg.PartNumber))
+
 		return nil, grpcError(err)
 	}
 
@@ -101,6 +103,7 @@ func (h *MultipartHandler) CompleteMultipartUpload(ctx context.Context, req *con
 	rec, err := h.svc.CompleteMultipart(ctx, tenantID, msg.UploadId, parts)
 	if err != nil {
 		logger.FromContext(ctx).Warn("CompleteMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
+
 		return nil, grpcError(err)
 	}
 
@@ -119,6 +122,7 @@ func (h *MultipartHandler) AbortMultipartUpload(ctx context.Context, req *connec
 
 	if err := h.svc.AbortMultipart(ctx, tenantID, msg.UploadId); err != nil {
 		logger.FromContext(ctx).Warn("AbortMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
+
 		return nil, grpcError(err)
 	}
 
@@ -134,13 +138,14 @@ func (h *MultipartHandler) ListParts(ctx context.Context, req *connect.Request[L
 	parts, err := h.svc.ListParts(ctx, tenantID, msg.UploadId)
 	if err != nil {
 		logger.FromContext(ctx).Warn("ListParts failed", zap.Error(err))
+
 		return nil, grpcError(err)
 	}
 
 	protoItems := make([]*PartInfo, 0, len(parts))
 	for _, p := range parts {
 		item := &PartInfo{
-			PartNumber: int32(p.PartNumber),
+			PartNumber: int32(p.PartNumber), //nolint:gosec
 		}
 		if p.ETag != nil {
 			item.Etag = *p.ETag

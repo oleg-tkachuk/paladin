@@ -32,7 +32,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -41,7 +41,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 		// Return BadRequest for invalid/unknown upload IDs (API contract)
 		return errors.BadRequest("invalid upload_id", err)
 	}
@@ -50,7 +50,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 		err = fmt.Errorf("multipart upload not found")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return errors.BadRequest("invalid upload_id", err)
 	}
@@ -68,7 +68,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 
 	state, _ := sm.State(ctx)
 	if state == multi.Status { // Idempotent abort
-		status = "success"
+		status = domain.StatusSuccess
 		span.SetStatus(codes.Ok, "already_aborted")
 
 		return nil
@@ -80,7 +80,7 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
@@ -89,14 +89,14 @@ func (s *objectsService) abortMultipart(ctx context.Context, tenantID string, up
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return err
 	}
 
 	logger.FromContext(ctx).Info("Multipart Upload Aborted", zap.String("tenant_id", tenantID), zap.String("upload_id", uploadID))
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return nil

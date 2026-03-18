@@ -100,7 +100,7 @@ func (r *CategoryRepo) List(ctx context.Context, tenantID string, filter domain.
 		safecast.Int32(filter.Limit+1),
 	)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, "", 0, mapPgError(err)
 	}

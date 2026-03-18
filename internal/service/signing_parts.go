@@ -30,7 +30,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -39,7 +39,7 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -50,12 +50,12 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return domain.Presigned{
@@ -82,7 +82,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -128,12 +128,12 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	if err := g.Wait(); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return out, nil

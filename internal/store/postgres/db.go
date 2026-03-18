@@ -121,7 +121,7 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := d.Queries.WithTx(tx)
 	if err := fn(qtx); err != nil {

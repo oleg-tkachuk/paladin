@@ -35,7 +35,7 @@ func TestCircuitBreaker(t *testing.T) {
 	res, err := fault.Execute(cb, func() (interface{}, error) {
 		return "success", nil
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "success", res)
 	assert.Equal(t, "closed", cb.State())
 
@@ -44,25 +44,25 @@ func TestCircuitBreaker(t *testing.T) {
 
 	// Fail 1
 	_, err = fault.Execute(cb, func() (interface{}, error) { return nil, expectedErr })
-	assert.ErrorIs(t, err, expectedErr)
+	require.ErrorIs(t, err, expectedErr)
 	assert.Equal(t, "closed", cb.State()) // Might be half-open or closed depending on thresholds
 
 	// Fail 2
 	_, err = fault.Execute(cb, func() (interface{}, error) { return nil, expectedErr })
-	assert.ErrorIs(t, err, expectedErr)
+	require.ErrorIs(t, err, expectedErr)
 
 	// Check again if state string tripped
 	if cb.State() != "open" { // Depending on the execution limits it might require more requests. Wait, MaxConsecutiveFails is 2!
-		// But we set `WithFailureThreshold(2)`. So it should trip on 2 consecutive fails.
+		assert.Equal(t, "open", cb.State())
 	}
 
 	// Next execution should fail with ErrOpen automatically
 	_, err = fault.Execute(cb, func() (interface{}, error) {
 		assert.Fail(t, "should not be called")
 
-		return nil, nil
+		return nil, goerrors.New("unimplemented/mock")
 	})
-	assert.ErrorIs(t, err, circuitbreaker.ErrOpen)
+	require.ErrorIs(t, err, circuitbreaker.ErrOpen)
 
 	// Test All / AllBreakers
 	all := fault.AllBreakers()
@@ -72,7 +72,7 @@ func TestCircuitBreaker(t *testing.T) {
 
 	// Execute with Nil Wrapper explicitly
 	nilRes, nilErr := fault.Execute(nil, func() (interface{}, error) { return "nil-wrapper-fallback", nil })
-	assert.NoError(t, nilErr)
+	require.NoError(t, nilErr)
 	assert.Equal(t, "nil-wrapper-fallback", nilRes)
 
 	var nilWrapper *fault.CircuitBreakerWrapper

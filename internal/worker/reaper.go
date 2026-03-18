@@ -62,14 +62,17 @@ func (r *Reaper) runCleanup(ctx context.Context) {
 
 	g.Go(func() error {
 		r.cleanupPending(ctx)
+
 		return nil
 	})
 	g.Go(func() error {
 		r.cleanupMultipart(ctx)
+
 		return nil
 	})
 	g.Go(func() error {
 		r.cleanupAuditLogs(ctx)
+
 		return nil
 	})
 
@@ -124,8 +127,10 @@ func (r *Reaper) cleanupPending(ctx context.Context) {
 			// Physically delete from DB (S3 deletion logic omitted as noted in file)
 			if _, err := r.objRepo.Delete(ctx, obj.TenantID, obj.ID); err != nil {
 				r.log.Error("Failed to physically delete object", zap.String("id", obj.ID.String()), zap.Error(err))
+
 				return err
 			}
+
 			return nil
 		})
 	}
@@ -165,8 +170,10 @@ func (r *Reaper) cleanupMultipart(ctx context.Context) {
 			// 2. Mark aborted in DB
 			if err := r.mpRepo.MarkAborted(ctx, m.TenantID, m.UploadID); err != nil {
 				r.log.Error("Failed to mark multipart aborted", zap.String("upload_id", m.UploadID), zap.Error(err))
+
 				return err
 			}
+
 			return nil
 		})
 	}

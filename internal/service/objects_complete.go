@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	stderrs "errors"
 	"fmt"
 	"time"
 
@@ -34,7 +35,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -43,9 +44,9 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
-		if errors.IsNotFound(err) || err == domain.ErrNotFound {
+		if errors.IsNotFound(err) || stderrs.Is(err, domain.ErrNotFound) {
 			return nil, errors.NotFound("object not found", err)
 		}
 
@@ -58,14 +59,14 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, fmt.Errorf("invalid transition: %w", err)
 	}
 
 	state, _ := sm.State(ctx)
 	if state == domain.ObjectComplete && rec.Status == domain.ObjectComplete {
-		status = "success"
+		status = domain.StatusSuccess
 		span.SetStatus(codes.Ok, "already_complete")
 
 		return rec, nil
@@ -76,7 +77,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		if errors.IsS3NotFound(err) {
 			return nil, errors.PreconditionFailed("object not yet uploaded to storage", err)
@@ -90,7 +91,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		err = fmt.Errorf("etag mismatch: expected %s, got %s", *etag, head.ETag)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 		err = fmt.Errorf("size mismatch: expected %d, got %d", *sizeBytes, head.SizeBytes)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
@@ -121,12 +122,12 @@ func (s *objectsService) completeObject(ctx context.Context, tenantID string, id
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return finalRec, nil

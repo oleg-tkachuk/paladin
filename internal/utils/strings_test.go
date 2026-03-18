@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseSizeString(t *testing.T) {
@@ -23,9 +24,9 @@ func TestParseSizeString(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			got, err := ParseSizeString(tt.input)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, got)
 			}
 		})

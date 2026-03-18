@@ -28,13 +28,15 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 
 	labels, err := marshalStringMap(rec.Labels)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
+
 		return fmt.Errorf("marshal labels: %w", err)
 	}
 
 	tags, err := marshalStringMap(rec.Tags)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
+
 		return fmt.Errorf("marshal tags: %w", err)
 	}
 
@@ -56,9 +58,9 @@ func (r *ObjectsRepo) Create(ctx context.Context, rec domain.Object) error {
 	)
 
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 	} else {
-		status = "success"
+		status = domain.StatusSuccess
 	}
 
 	return mapPgError(err)
@@ -73,13 +75,15 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 	for _, rec := range objects {
 		labels, err := marshalStringMap(rec.Labels)
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
+
 			return fmt.Errorf("marshal labels for %s: %w", rec.ID, err)
 		}
 
 		tags, err := marshalStringMap(rec.Tags)
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
+
 			return fmt.Errorf("marshal tags for %s: %w", rec.ID, err)
 		}
 
@@ -107,17 +111,19 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 	}
 
 	br := r.db.Pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	for i := 0; i < len(objects); i++ {
 		_, err := br.Exec()
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
+
 			return mapPgError(err)
 		}
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
+
 	return nil
 }
 
@@ -128,7 +134,7 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 
 	rows, err := r.db.Queries.ListExpiredPendingObjects(ctx, timestampToPgtype(cutoff), safecast.Int32(limit))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}
@@ -142,7 +148,7 @@ func (r *ObjectsRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, 
 		out = append(out, obj)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return out, nil
 }
@@ -154,9 +160,9 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*
 
 	obj, err := r.db.Queries.GetObject(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 		if errors.Is(err, pgx.ErrNoRows) {
-			status = "not_found"
+			status = domain.StatusNotFound
 
 			return nil, domain.ErrNotFound
 		}
@@ -166,12 +172,12 @@ func (r *ObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*
 
 	result, err := mapToDomainObject(obj.Object)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &result, nil
 }
@@ -183,12 +189,12 @@ func (r *ObjectsRepo) MarkComplete(ctx context.Context, tenantID string, id uuid
 
 	rows, err := r.db.Queries.MarkObjectComplete(ctx, tenantID, uuidToPgtype(id), &etag, &sizeBytes)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return false, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -200,12 +206,12 @@ func (r *ObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string, id u
 
 	rows, err := r.db.Queries.MarkObjectSoftDeleted(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return false, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -217,12 +223,12 @@ func (r *ObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string, id u
 
 	rows, err := r.db.Queries.MarkObjectHardDeleted(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return false, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -234,12 +240,12 @@ func (r *ObjectsRepo) Restore(ctx context.Context, tenantID string, id uuid.UUID
 
 	rows, err := r.db.Queries.RestoreObject(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return false, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -255,12 +261,12 @@ func (r *ObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID)
 
 	rows, err := r.db.Queries.DeleteObject(ctx, tenantID, uuidToPgtype(id))
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return false, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -272,11 +278,11 @@ func (r *ObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, id uuid
 
 	rows, err := r.db.Queries.UpdateObjectStatus(ctx, tenantID, uuidToPgtype(id), status)
 	if err != nil {
-		opStatus = "error"
+		opStatus = domain.StatusError
 
 		return false, mapPgError(err)
 	}
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
 
 	return rows > 0, nil
 }
@@ -288,19 +294,19 @@ func (r *ObjectsRepo) GetByExternalRef(ctx context.Context, tenantID string, ext
 
 	obj, err := r.db.Queries.GetObjectByExternalRef(ctx, tenantID, &externalRef)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}
 
 	result, err := mapToDomainObject(obj.Object)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &result, nil
 }
@@ -312,9 +318,9 @@ func (r *ObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key string
 
 	obj, err := r.db.Queries.GetObjectByKey(ctx, tenantID, bucket, key)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 		if errors.Is(err, pgx.ErrNoRows) {
-			status = "not_found"
+			status = domain.StatusNotFound
 
 			return nil, domain.ErrNotFound
 		}
@@ -324,12 +330,12 @@ func (r *ObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key string
 
 	result, err := mapToDomainObject(obj.Object)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &result, nil
 }
@@ -368,7 +374,8 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		safecast.Int32(filter.Limit+1),
 	)
 	if err != nil {
-		opStatus = "error"
+		opStatus = domain.StatusError
+
 		return nil, "", 0, mapPgError(err)
 	}
 
@@ -395,7 +402,8 @@ func (r *ObjectsRepo) List(ctx context.Context, tenantID string, filter domain.L
 		total = rows[0].TotalCount
 	}
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
+
 	return out, nextCursor, total, nil
 }
 
@@ -411,12 +419,12 @@ func (r *ObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID string, 
 
 	rows, err := r.db.Queries.BulkMarkObjectSoftDeleted(ctx, tenantID, pgIds)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows, nil
 }
@@ -433,12 +441,12 @@ func (r *ObjectsRepo) BulkRestore(ctx context.Context, tenantID string, ids []uu
 
 	rows, err := r.db.Queries.BulkRestoreObject(ctx, tenantID, pgIds)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows, nil
 }
@@ -455,12 +463,12 @@ func (r *ObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids []uui
 
 	rows, err := r.db.Queries.BulkDeleteObject(ctx, tenantID, pgIds)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return rows, nil
 }
@@ -472,12 +480,12 @@ func (r *ObjectsRepo) GetStats(ctx context.Context, tenantID string) (*domain.Ob
 
 	row, err := r.db.Queries.GetObjectStats(ctx, tenantID)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return &domain.ObjectStats{
 		TotalCount:       row.TotalCount,
@@ -497,12 +505,12 @@ func (r *ObjectsRepo) GetBucketStats(ctx context.Context, tenantID, bucket strin
 
 	row, err := r.db.Queries.GetBucketStats(ctx, tenantID, bucket)
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return 0, 0, mapPgError(err)
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 
 	return row.TotalObjects, row.TotalSizeBytes, nil
 }
@@ -514,7 +522,7 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 
 	batch := &pgx.Batch{}
 	for _, item := range items {
-		if item.Labels != nil && item.ExternalRef != nil {
+		if item.Labels != nil && item.ExternalRef != nil { //nolint:gocritic
 			labelsJSON, err := marshalStringMap(item.Labels)
 			if err != nil {
 				return 0, fmt.Errorf("marshal labels for %s: %w", item.ID, err)
@@ -539,19 +547,21 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 	}
 
 	br := r.db.Pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	var totalRows int64
 	for i := 0; i < batch.Len(); i++ {
 		ct, err := br.Exec()
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
+
 			return totalRows, mapPgError(err)
 		}
 		totalRows += ct.RowsAffected()
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
+
 	return totalRows, nil
 }
 
@@ -564,11 +574,11 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 	defer func() { metrics.RecordDbQuery(ctx, "PatchObject", status, start) }()
 
 	// Determine which query to use based on what's being patched
-	if labels != nil && externalRef != nil {
+	if labels != nil && externalRef != nil { //nolint:gocritic,nestif
 		var labelsJSON []byte
 		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
 
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
@@ -579,7 +589,7 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 		var labelsJSON []byte
 		labelsJSON, err = marshalStringMap(labels)
 		if err != nil {
-			status = "error"
+			status = domain.StatusError
 
 			return nil, fmt.Errorf("marshal labels: %w", err)
 		}
@@ -592,13 +602,13 @@ func (r *ObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.UUID, 
 		obj = row.Object
 	} else {
 		// Nothing to patch, just fetch the current object
-		status = "success"
+		status = domain.StatusSuccess
 
 		return r.Get(ctx, tenantID, id)
 	}
 
 	if err != nil {
-		status = "error"
+		status = domain.StatusError
 
 		return nil, mapPgError(err)
 	}

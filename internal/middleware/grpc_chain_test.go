@@ -9,6 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConnectRequestIDInterceptor(t *testing.T) {
@@ -21,12 +22,13 @@ func TestConnectRequestIDInterceptor(t *testing.T) {
 	next1 := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		rid := utils.RequestIDFromContext(ctx, "")
 		assert.Equal(t, "existing-id", rid)
+
 		return &connect.Response[any]{}, nil
 	}
 
 	fn1 := interceptor.WrapUnary(next1)
 	res1, err := fn1(context.Background(), req1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "existing-id", res1.Header().Get("X-Request-ID"))
 
 	// 2. New Request ID
@@ -34,12 +36,13 @@ func TestConnectRequestIDInterceptor(t *testing.T) {
 	next2 := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		rid := utils.RequestIDFromContext(ctx, "")
 		assert.NotEmpty(t, rid)
+
 		return &connect.Response[any]{}, nil
 	}
 
 	fn2 := interceptor.WrapUnary(next2)
 	res2, err := fn2(context.Background(), req2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, res2.Header().Get("X-Request-ID"))
 }
 
@@ -63,12 +66,13 @@ func TestConnectAuthInterceptor(t *testing.T) {
 	next1 := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		tenant := utils.TenantIDFromContext(ctx, "")
 		assert.Equal(t, "tenant-123", tenant)
+
 		return &connect.Response[any]{}, nil
 	}
 
 	fn1 := interceptor.WrapUnary(next1)
 	_, err := fn1(context.Background(), req1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// 2. Admin Key
 	req2 := &connect.Request[any]{}
@@ -77,12 +81,13 @@ func TestConnectAuthInterceptor(t *testing.T) {
 	next2 := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		tenant := utils.TenantIDFromContext(ctx, "")
 		assert.Equal(t, utils.SystemAdminTenant, tenant)
+
 		return &connect.Response[any]{}, nil
 	}
 
 	fn2 := interceptor.WrapUnary(next2)
 	_, err = fn2(context.Background(), req2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// 3. Auth Disabled -> Default Tenant
 	cfgDisabled := &config.Config{Auth: config.Auth{Enabled: false}}
@@ -92,12 +97,13 @@ func TestConnectAuthInterceptor(t *testing.T) {
 	next3 := func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		tenant := utils.TenantIDFromContext(ctx, "")
 		assert.Equal(t, utils.DefaultTenant, tenant)
+
 		return &connect.Response[any]{}, nil
 	}
 
 	fn3 := interceptorDisabled.WrapUnary(next3)
 	_, err = fn3(context.Background(), req3)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestConnectEnforceTenantInterceptor(t *testing.T) {
@@ -114,7 +120,7 @@ func TestConnectEnforceTenantInterceptor(t *testing.T) {
 
 	fn1 := interceptor.WrapUnary(next)
 	_, err := fn1(ctx1, req1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// 2. Failure without tenant
 	req2 := &connect.Request[any]{}
@@ -122,7 +128,7 @@ func TestConnectEnforceTenantInterceptor(t *testing.T) {
 
 	fn2 := interceptor.WrapUnary(next)
 	_, err = fn2(ctx2, req2)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
@@ -140,7 +146,7 @@ func TestConnectRateLimitInterceptor(t *testing.T) {
 	ctx1 := context.WithValue(context.Background(), utils.TenantIDKey, "tenant-1")
 	fn1 := interceptor.WrapUnary(next)
 	_, err := fn1(ctx1, req1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// 2. Rate limited (using a tiny bucket for test)
 	rl_limited := NewTenantRateLimiter(1, 1, 100, time.Minute, time.Minute)
@@ -148,10 +154,10 @@ func TestConnectRateLimitInterceptor(t *testing.T) {
 
 	fn2 := interceptor_limited.WrapUnary(next)
 	_, err = fn2(ctx1, req1)
-	assert.NoError(t, err) // first allowed
+	require.NoError(t, err) // first allowed
 
 	_, err = fn2(ctx1, req1)
-	assert.Error(t, err) // second limited
+	require.Error(t, err) // second limited
 	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+//nolint:interfacebloat
 type StorageClient interface {
 	BucketName() string
 	PresignTTLDuration() time.Duration

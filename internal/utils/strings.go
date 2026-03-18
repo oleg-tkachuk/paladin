@@ -13,6 +13,7 @@ func ParseSizeString(s string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse size %q: %w", s, err)
 	}
+
 	return safecast.Int64(b), nil
 }
 

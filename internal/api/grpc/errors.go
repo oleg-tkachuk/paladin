@@ -16,5 +16,6 @@ func grpcError(err error) error {
 	if s, ok := status.FromError(grpcErr); ok {
 		return connect.NewError(connect.Code(s.Code()), errors.New(s.Message()))
 	}
+
 	return grpcErr
 }

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,10 +24,12 @@ func (m *FuzzMockRepo) Get(ctx context.Context, tID string, id uuid.UUID) (*doma
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 func (m *FuzzMockRepo) List(ctx context.Context, tID string, f domain.ListObjectsFilter) ([]domain.Object, string, int64, error) {
 	args := m.Called(ctx, tID, f)
+
 	return args.Get(0).([]domain.Object), args.String(1), args.Get(2).(int64), args.Error(3)
 }
 func (m *FuzzMockRepo) GetByExternalRef(ctx context.Context, tID string, ref string) (*domain.Object, error) {
@@ -34,6 +37,7 @@ func (m *FuzzMockRepo) GetByExternalRef(ctx context.Context, tID string, ref str
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 func (m *FuzzMockRepo) GetByKey(ctx context.Context, tID, bucket, key string) (*domain.Object, error) {
@@ -41,6 +45,7 @@ func (m *FuzzMockRepo) GetByKey(ctx context.Context, tID, bucket, key string) (*
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 func (m *FuzzMockRepo) Patch(ctx context.Context, tID string, id uuid.UUID, l map[string]string, r *string) (*domain.Object, error) {
@@ -48,6 +53,7 @@ func (m *FuzzMockRepo) Patch(ctx context.Context, tID string, id uuid.UUID, l ma
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Object), args.Error(1)
 }
 func (m *FuzzMockRepo) BulkCreate(ctx context.Context, items []domain.Object) error { return nil }
@@ -55,7 +61,7 @@ func (m *FuzzMockRepo) BulkPatch(ctx context.Context, tID string, items []domain
 	return 0, nil
 }
 func (m *FuzzMockRepo) ListExpiredPending(ctx context.Context, cutoff time.Time, limit int) ([]domain.Object, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockRepo) MarkComplete(ctx context.Context, tID string, id uuid.UUID, etag string, size int64) (bool, error) {
 	return true, nil
@@ -85,7 +91,7 @@ func (m *FuzzMockRepo) BulkRestore(ctx context.Context, tID string, ids []uuid.U
 	return 0, nil
 }
 func (m *FuzzMockRepo) GetStats(ctx context.Context, tID string) (*domain.ObjectStats, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockRepo) UpdateStatus(ctx context.Context, tID string, id uuid.UUID, s string) (bool, error) {
 	return true, nil
@@ -99,7 +105,7 @@ type FuzzMockMPRepo struct{ mock.Mock }
 
 func (m *FuzzMockMPRepo) Create(ctx context.Context, rec domain.Multipart) error { return nil }
 func (m *FuzzMockMPRepo) GetByUploadID(ctx context.Context, tID string, uID string) (*domain.Multipart, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockMPRepo) UpsertPartETag(ctx context.Context, mID uuid.UUID, pN int, e string, sB *int64) error {
 	return nil
@@ -107,10 +113,10 @@ func (m *FuzzMockMPRepo) UpsertPartETag(ctx context.Context, mID uuid.UUID, pN i
 func (m *FuzzMockMPRepo) MarkCompleted(ctx context.Context, tID string, uID string) error { return nil }
 func (m *FuzzMockMPRepo) MarkAborted(ctx context.Context, tID string, uID string) error   { return nil }
 func (m *FuzzMockMPRepo) ListExpired(ctx context.Context, limit int) ([]domain.Multipart, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockMPRepo) ListParts(ctx context.Context, mID uuid.UUID) ([]domain.MultipartPart, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockMPRepo) CompleteUpload(ctx context.Context, tID string, uID string, oID uuid.UUID) error {
 	return nil
@@ -139,7 +145,7 @@ func (m *FuzzMockS3Client) AbortMultipartUpload(ctx context.Context, key, upload
 	return nil
 }
 func (m *FuzzMockS3Client) HeadObject(ctx context.Context, key string) (*domain.HeadRecord, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockS3Client) DeleteObject(ctx context.Context, key string) error { return nil }
 func (m *FuzzMockS3Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
@@ -158,17 +164,19 @@ func (m *FuzzMockPolicy) Validate(contentType string, sizeBytes int64) error { r
 
 type FuzzMockUoWFactory struct{ mock.Mock }
 
-func (m *FuzzMockUoWFactory) Begin(ctx context.Context) (domain.UnitOfWork, error) { return nil, nil }
+func (m *FuzzMockUoWFactory) Begin(ctx context.Context) (domain.UnitOfWork, error) {
+	return nil, errors.New("unimplemented/mock")
+}
 
 type FuzzMockCategoryRepo struct{ mock.Mock }
 
 func (m *FuzzMockCategoryRepo) Create(ctx context.Context, cat domain.Category) error { return nil }
 func (m *FuzzMockCategoryRepo) Update(ctx context.Context, cat domain.Category) error { return nil }
 func (m *FuzzMockCategoryRepo) Get(ctx context.Context, tID, id string) (*domain.Category, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockCategoryRepo) GetBySlug(ctx context.Context, tID, slug string) (*domain.Category, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 func (m *FuzzMockCategoryRepo) Exists(ctx context.Context, tID, slug string) (bool, error) {
 	return true, nil
@@ -186,13 +194,14 @@ func (m *FuzzMockCategoryRepo) ListTenants(ctx context.Context, limit int, curso
 	return nil, "", 0, nil
 }
 func (m *FuzzMockCategoryRepo) GetStats(ctx context.Context, tID, slug string) (*domain.CategoryStats, error) {
-	return nil, nil
+	return nil, errors.New("unimplemented/mock")
 }
 
 type FuzzMockBreaker struct{ mock.Mock }
 
 func (m *FuzzMockBreaker) Get(name string) *fault.CircuitBreakerWrapper {
 	args := m.Called(name)
+
 	return args.Get(0).(*fault.CircuitBreakerWrapper)
 }
 func (m *FuzzMockBreaker) CheckHealth() map[string]string { return nil }

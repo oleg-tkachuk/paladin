@@ -244,7 +244,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 	if cursor != "" {
 		t, err := time.Parse(time.RFC3339, cursor)
 		if err != nil {
-			opStatus = "error"
+			opStatus = domain.StatusError
+
 			return nil, "", 0, fmt.Errorf("invalid cursor: %w", err)
 		}
 		pgCursor = timestampToPgtype(t)
@@ -255,7 +256,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 		var err error
 		labelFilterJSON, err = json.Marshal(filter.LabelSelector)
 		if err != nil {
-			opStatus = "error"
+			opStatus = domain.StatusError
+
 			return nil, "", 0, fmt.Errorf("marshal label filter: %w", err)
 		}
 	}
@@ -275,7 +277,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 		safecast.Int32(limit+1),
 	)
 	if err != nil {
-		opStatus = "error"
+		opStatus = domain.StatusError
+
 		return nil, "", 0, fmt.Errorf("list tenants: %w", err)
 	}
 
@@ -288,7 +291,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 	for _, row := range rows {
 		t, err := mapToDomainTenant(row)
 		if err != nil {
-			opStatus = "error"
+			opStatus = domain.StatusError
+
 			return nil, "", 0, fmt.Errorf("map tenant: %w", err)
 		}
 		out = append(out, t)
@@ -300,7 +304,8 @@ func (r *TenantRepo) List(ctx context.Context, filter domain.ListTenantsFilter) 
 		out = out[:limit]
 	}
 
-	opStatus = "success"
+	opStatus = domain.StatusSuccess
+
 	return out, nextCursor, totalCount, nil
 }
 

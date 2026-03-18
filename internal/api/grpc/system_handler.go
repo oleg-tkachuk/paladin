@@ -96,7 +96,7 @@ func (h *SystemHandler) GetReadyz(ctx context.Context, req *connect.Request[GetR
 		healthStatus = "not_ready"
 	}
 
-	var protoDeps []*DependencyStatus
+	protoDeps := make([]*DependencyStatus, 0, 2)
 
 	// Map PostgreSQL dependency.
 	pgDep := &DependencyStatus{
@@ -164,9 +164,9 @@ func (h *SystemHandler) GetInfo(ctx context.Context, req *connect.Request[GetInf
 			StartTime:        timestamppb.New(h.startTime),
 			Uptime:           time.Since(h.startTime).String(),
 			CpuUsagePercent:  h.getCPUUsage(ctx),
-			MemoryRssBytes:   h.getMemoryRSS(),
+			MemoryRssBytes:   h.getMemoryRSS(ctx),
 			MemoryHeapBytes:  h.getMemoryHeap(),
-			ActiveGoroutines: int32(runtime.NumGoroutine()),
+			ActiveGoroutines: int32(runtime.NumGoroutine()), //nolint:gosec // Always fits in int32
 		},
 		Environment: h.environment,
 	}), nil
@@ -232,12 +232,12 @@ func (h *SystemHandler) GetConfig(ctx context.Context, req *connect.Request[GetC
 			},
 			RateLimit: &RateLimitConfig{
 				RequestsPerSecond: c.RateLimit.RequestsPerSecond,
-				Burst:             int32(c.RateLimit.Burst),
-				MaxTenants:        int32(c.RateLimit.MaxTenants),
+				Burst:             int32(c.RateLimit.Burst),      //nolint:gosec
+				MaxTenants:        int32(c.RateLimit.MaxTenants), //nolint:gosec
 			},
 			Cache: &CacheConfig{
 				Enabled: c.Cache.Enabled,
-				MaxSize: int32(c.Cache.MaxSize),
+				MaxSize: int32(c.Cache.MaxSize), //nolint:gosec
 				Ttl:     c.Cache.TTL,
 			},
 			Timeouts: &TimeoutConfig{
@@ -279,7 +279,7 @@ func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[
 	for _, l := range logs {
 		var httpStatus int32
 		if l.HTTPStatus != nil {
-			httpStatus = int32(*l.HTTPStatus)
+			httpStatus = int32(*l.HTTPStatus) //nolint:gosec
 		}
 
 		protoLogs = append(protoLogs, &AuditLog{
@@ -309,23 +309,26 @@ func (h *SystemHandler) getCPUUsage(ctx context.Context) float64 {
 	if err != nil || len(perc) == 0 {
 		return 0
 	}
+
 	return perc[0]
 }
 
-func (h *SystemHandler) getMemoryRSS() uint64 {
-	p, err := process.NewProcess(int32(os.Getpid()))
+func (h *SystemHandler) getMemoryRSS(ctx context.Context) uint64 {
+	p, err := process.NewProcess(int32(os.Getpid())) //nolint:gosec
 	if err != nil {
 		return 0
 	}
-	info, err := p.MemoryInfoWithContext(context.Background())
+	info, err := p.MemoryInfoWithContext(ctx)
 	if err != nil {
 		return 0
 	}
+
 	return info.RSS
 }
 
 func (h *SystemHandler) getMemoryHeap() uint64 {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
+
 	return m.HeapAlloc
 }

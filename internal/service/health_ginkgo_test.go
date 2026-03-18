@@ -25,7 +25,7 @@ type MockS3HealthChecker struct {
 
 func (m *MockS3HealthChecker) Ping(ctx context.Context) (domain.S3PingResult, error) {
 	if m.err != nil {
-		return domain.S3PingResult{Status: "unavailable", Message: m.err.Error()}, nil
+		return domain.S3PingResult{Status: "unavailable", Message: m.err.Error()}, nil //nolint:nilerr
 	}
 
 	return domain.S3PingResult{Status: "healthy", Message: "OK"}, nil

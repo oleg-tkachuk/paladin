@@ -30,7 +30,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionRead); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -39,7 +39,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -48,7 +48,7 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 		err := errors.Conflict("object not complete", nil)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
@@ -64,12 +64,12 @@ func (s *objectsService) signDownload(ctx context.Context, tenantID string, id o
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		status = "error"
+		status = domain.StatusError
 
 		return domain.Presigned{}, err
 	}
 
-	status = "success"
+	status = domain.StatusSuccess
 	span.SetStatus(codes.Ok, "")
 
 	return domain.Presigned{

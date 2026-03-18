@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
@@ -33,6 +34,7 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 			objRepo, multiRepo, s3Client, policy, uowf, idemRepo, catRepo, breakerFactory,
 			5*1024*1024, 0, 0, 0, 0, 0,
 		)
+
 		return objRepo, s3Client, policy, svc
 	}
 
@@ -59,7 +61,7 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		objRepo.On("Get", mock.Anything, tenantID, objID).Return(&objCompleted, nil).Once()
 
 		res, err := svc.CompleteObject(ctx, tenantID, objID, &etagUnquoted, nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, domain.ObjectComplete, res.Status)
 	})
@@ -87,7 +89,7 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		objRepo.On("Get", mock.Anything, tenantID, objID).Return(&objCompleted, nil).Once()
 
 		res, err := svc.CompleteObject(ctx, tenantID, objID, &etagQuoted, nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, domain.ObjectComplete, res.Status)
 	})
