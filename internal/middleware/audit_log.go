@@ -161,10 +161,9 @@ func ConnectAuditLogInterceptor(auditRepo domain.AuditLogRepository) connect.Int
 				uaPtr = &ua
 			}
 
-			go func(l domain.AuditLog) {
-				// Use context.Background() since the original request context might be cancelled
-				_ = auditRepo.Create(context.Background(), l)
-			}(domain.AuditLog{
+			go func(ctx context.Context, l domain.AuditLog) {
+				_ = auditRepo.Create(ctx, l)
+			}(context.WithoutCancel(ctx), domain.AuditLog{
 				ID:             id,
 				TenantID:       tenant,
 				RequestID:      reqIdPtr,
