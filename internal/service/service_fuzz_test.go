@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/zap"
 )
 
 // Minimal Mocks for Fuzzing
@@ -219,7 +220,7 @@ func FuzzCreateObject(f *testing.F) {
 
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
-		svc := service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, nil, nil, mockCatRepo, mockBreaker, 0, 0, 0, 0, 0, 0)
+		svc := service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, nil, nil, mockCatRepo, mockBreaker, 0, 0, 0, 0, 0, 0, zap.NewNop())
 
 		mockRepo.On("GetByExternalRef", mock.Anything, mock.Anything, mock.Anything).Return((*domain.Object)(nil), nil).Maybe()
 		mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -243,7 +244,7 @@ func FuzzListObjects(f *testing.F) {
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
 		mockPolicy := new(FuzzMockPolicy)
-		svc := service.NewObjectsService(mockRepo, nil, nil, mockPolicy, nil, nil, nil, mockBreaker, 0, 0, 0, 0, 0, 0)
+		svc := service.NewObjectsService(mockRepo, nil, nil, mockPolicy, nil, nil, nil, mockBreaker, 0, 0, 0, 0, 0, 0, zap.NewNop())
 
 		filter := domain.ListObjectsFilter{
 			Category: &category,

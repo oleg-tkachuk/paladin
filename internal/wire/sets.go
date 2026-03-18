@@ -48,9 +48,7 @@ var ProviderSet = wire.NewSet(
 	ProvideMultipartRepo,
 	ProvideIdempotencyRepo,
 	ProvideCategoryRepo,
-	ProvideAuditRepo,
 	ProvideTenantRepo,
-	ProvideAuditBatchWriter,
 	ProvideBreakerFactory,
 	ProvideUoWFactory,
 	ProvideCategoryService,
@@ -93,7 +91,7 @@ func ProvideLogger(cfg config.Config) (*zap.Logger, error) {
 	}
 	logger.ReplaceGlobals(l)
 
-	return l, nil
+	return zap.L(), nil
 }
 
 func ProvideOTel(ctx context.Context, cfg config.Config) (observability.ShutdownFunc, error) {
@@ -103,7 +101,7 @@ func ProvideOTel(ctx context.Context, cfg config.Config) (observability.Shutdown
 func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres.DB, func(), error) {
 	var db *postgres.DB
 	op := func() error {
-		d, err := postgres.New(ctx, cfg.Datastores.Postgres, l)
+		d, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres_db"))
 		if err != nil {
 			return err
 		}
@@ -135,7 +133,7 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 }
 
 func ProvideS3(ctx context.Context, cfg config.Config, l *zap.Logger) (*s3.Client, error) {
-	s3c, err := s3.New(ctx, cfg.Datastores.S3, l)
+	s3c, err := s3.New(ctx, cfg.Datastores.S3, l.Named("s3_client"))
 	if err != nil {
 		return nil, err
 	}
@@ -148,10 +146,10 @@ func ProvidePolicy(cfg config.Config) domain.Policy {
 	return service.NewPolicy(cfg.Policy)
 }
 
-func ProvideObjectsRepo(db *postgres.DB, cfg config.Config) domain.ObjectsRepository {
+func ProvideObjectsRepo(db *postgres.DB, cfg config.Config, l *zap.Logger) domain.ObjectsRepository {
 	repo := postgres.NewObjectsRepo(db)
 	if cfg.Cache.Enabled {
-		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+		return postgres.NewCachedObjectsRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL, l.Named("cached_objects_repo"))
 	}
 
 	return repo
@@ -165,21 +163,17 @@ func ProvideIdempotencyRepo(db *postgres.DB) domain.IdempotencyRepository {
 	return postgres.NewIdempotencyRepo(db)
 }
 
-func ProvideCategoryRepo(db *postgres.DB, cfg config.Config) domain.CategoryRepository {
+func ProvideCategoryRepo(db *postgres.DB, cfg config.Config, l *zap.Logger) domain.CategoryRepository {
 	repo := postgres.NewCategoryRepo(db)
 	if cfg.Cache.Enabled {
-		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL)
+		return postgres.NewCachedCategoryRepo(repo, cfg.Cache.MaxSize, cfg.Cache.TTL, l.Named("cached_category_repo"))
 	}
 
 	return repo
 }
 
-func ProvideAuditRepo(db *postgres.DB) domain.AuditLogRepository {
-	return postgres.NewAuditLogRepo(db)
-}
-
-func ProvideAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *middleware.AuditBatchWriter {
-	return middleware.NewAuditBatchWriter(repo, log)
+func ProvideTenantRepo(db *postgres.DB) domain.TenantRepository {
+	return postgres.NewTenantRepo(db)
 }
 
 func ProvideBreakerFactory(cfg config.Config) breaker.Factory {
@@ -204,6 +198,7 @@ func ProvideObjectsService(
 	catRepo domain.CategoryRepository,
 	brk breaker.Factory,
 	cfg config.Config,
+	l *zap.Logger,
 ) domain.ObjectsService {
 	return service.NewObjectsService(
 		objRepo,
@@ -220,15 +215,12 @@ func ProvideObjectsService(
 		cfg.Timeouts.S3Operation,
 		cfg.Timeouts.LongOperation,
 		cfg.Idempotency.TTL,
+		l.Named("objects_service"),
 	)
 }
 
 func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) *service.HealthService {
 	return service.NewHealthService(db, s3c, brk)
-}
-
-func ProvideTenantRepo(db *postgres.DB) domain.TenantRepository {
-	return postgres.NewTenantRepo(db)
 }
 
 func ProvideTenantService(repo domain.TenantRepository) domain.TenantService {
@@ -243,12 +235,11 @@ func ProvideHTTPServer(
 	catSvc domain.CategoryService,
 	tenantSvc domain.TenantService,
 	hs *service.HealthService,
-	appStarted *atomic.Bool,
+	started *atomic.Bool,
 	meta domain.AppMetadata,
 	startTime time.Time,
-	auditWriter *middleware.AuditBatchWriter,
 ) *httpapi.Server {
-	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, appStarted, startTime, auditWriter)
+	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, started, startTime)
 }
 
 // ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
@@ -261,8 +252,8 @@ func ProvideGRPCServer(cfg config.Config, l *zap.Logger) *grpc.Server {
 	return srv
 }
 
-func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, auditRepo domain.AuditLogRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
-	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, auditRepo, s3c, l)
+func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
+	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l.Named("reaper"))
 }
 
 func ProvideApp(
@@ -275,7 +266,6 @@ func ProvideApp(
 	otelShutdown observability.ShutdownFunc,
 	reaper *worker.Reaper,
 	started *atomic.Bool,
-	auditWriter *middleware.AuditBatchWriter,
 ) (*app.App, func()) {
 	h2s := &http2.Server{}
 	httpSrv := &http.Server{
@@ -288,7 +278,7 @@ func ProvideApp(
 	}
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
-		cfg, l, httpSrv, grpcSrv, db, otelShutdown, reaper, started, auditWriter,
+		cfg, l.Named("container"), httpSrv, grpcSrv, db, otelShutdown, reaper, started,
 	)
 
 	cleanup := func() {

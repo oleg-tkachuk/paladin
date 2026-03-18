@@ -11,11 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestCachedObjectsRepo_Get(t *testing.T) {
 	mockRepo := new(mockdomain.MockObjectsRepository)
-	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute)
+	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute, zap.NewNop())
 	ctx := context.Background()
 
 	id := uuid.New()
@@ -39,7 +40,7 @@ func TestCachedObjectsRepo_Get(t *testing.T) {
 
 func TestCachedObjectsRepo_Create(t *testing.T) {
 	mockRepo := new(mockdomain.MockObjectsRepository)
-	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute)
+	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute, zap.NewNop())
 	ctx := context.Background()
 
 	obj := domain.Object{ID: uuid.New(), TenantID: "test-tenant", ObjectKey: "key1"}
@@ -59,7 +60,7 @@ func TestCachedObjectsRepo_Create(t *testing.T) {
 
 func TestCachedObjectsRepo_MarkComplete(t *testing.T) {
 	mockRepo := new(mockdomain.MockObjectsRepository)
-	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute)
+	repo := NewCachedObjectsRepo(mockRepo, 10, 1*time.Minute, zap.NewNop())
 	ctx := context.Background()
 
 	id := uuid.New()

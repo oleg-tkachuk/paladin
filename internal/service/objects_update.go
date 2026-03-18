@@ -60,13 +60,15 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 				// Since we return generic error, we can't be perfect without custom error types.
 			}
 			// Store result (best effort)
-			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
+			if err := s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 				TenantID:     tenantID,
 				Key:          *idempotencyKey,
 				RequestPath:  "PATCH",
 				ResponseCode: respCode,
 				ExpiresAt:    time.Now().Add(s.idempotencyTTL),
-			})
+			}); err != nil {
+				s.log.Error("save idempotency record failed", zap.Error(err))
+			}
 		}
 	}()
 

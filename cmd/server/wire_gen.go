@@ -36,7 +36,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	if err != nil {
 		return nil, nil, err
 	}
-	objectsRepository := wire.ProvideObjectsRepo(db, config)
+	objectsRepository := wire.ProvideObjectsRepo(db, config, logger)
 	multipartRepository := wire.ProvideMultipartRepo(db)
 	client, err := wire.ProvideS3(ctx, config, logger)
 	if err != nil {
@@ -46,25 +46,23 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	policy := wire.ProvidePolicy(config)
 	uoWFactory := wire.ProvideUoWFactory(db)
 	idempotencyRepository := wire.ProvideIdempotencyRepo(db)
-	categoryRepository := wire.ProvideCategoryRepo(db, config)
+	categoryRepository := wire.ProvideCategoryRepo(db, config, logger)
 	factory := wire.ProvideBreakerFactory(config)
-	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config)
+	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config, logger)
 	categoryService := wire.ProvideCategoryService(categoryRepository)
 	tenantRepository := wire.ProvideTenantRepo(db)
 	tenantService := wire.ProvideTenantService(tenantRepository)
 	healthService := wire.ProvideHealthService(db, client, factory)
 	atomicBool := provideStartedBool()
 	time := wire.ProvideStartTime()
-	auditLogRepository := wire.ProvideAuditRepo(db)
-	auditBatchWriter := wire.ProvideAuditBatchWriter(auditLogRepository, logger)
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditBatchWriter)
+	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, auditLogRepository, client, logger)
-	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool, auditBatchWriter)
+	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, client, logger)
+	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool)
 	return appApp, func() {
 		cleanup2()
 		cleanup()

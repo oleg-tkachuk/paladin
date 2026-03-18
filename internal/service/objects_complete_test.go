@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
@@ -31,8 +33,21 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		breakerFactory := &MockBreakerFactory{}
 
 		svc := service.NewObjectsService(
-			objRepo, multiRepo, s3Client, policy, uowf, idemRepo, catRepo, breakerFactory,
-			5*1024*1024, 0, 0, 0, 0, 0,
+			objRepo,
+			multiRepo,
+			s3Client,
+			policy,
+			uowf,
+			idemRepo,
+			catRepo,
+			breakerFactory,
+			1024*1024,
+			2*time.Second,
+			2*time.Second,
+			2*time.Second,
+			2*time.Second,
+			0,
+			zap.NewNop(),
 		)
 
 		return objRepo, s3Client, policy, svc

@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -34,8 +33,6 @@ type App struct {
 	reaper       *worker.Reaper
 	reaperCtx    context.Context
 	reaperCancel context.CancelFunc
-
-	auditWriter *middleware.AuditBatchWriter
 }
 
 func NewContainer(
@@ -48,7 +45,6 @@ func NewContainer(
 	otelShutdown observability.ShutdownFunc,
 	reaper *worker.Reaper,
 	started *atomic.Bool,
-	auditWriter *middleware.AuditBatchWriter,
 ) *App {
 	rCtx, rCancel := context.WithCancel(context.Background())
 
@@ -58,8 +54,7 @@ func NewContainer(
 		httpSrv: httpSrv, grpcSrv: grpcSrv,
 		db: db, otelShutdown: otelShutdown,
 		reaper: reaper, reaperCtx: rCtx, reaperCancel: rCancel,
-		Started:     started,
-		auditWriter: auditWriter,
+		Started: started,
 	}
 }
 
@@ -130,10 +125,6 @@ func (a *App) Shutdown() {
 
 	if a.reaperCancel != nil {
 		a.reaperCancel()
-	}
-
-	if a.auditWriter != nil {
-		a.auditWriter.Close()
 	}
 
 	_ = a.Logger.Sync()

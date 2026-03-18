@@ -77,7 +77,7 @@ func Load(path string, log *zap.Logger) (Config, error) {
 
 	// Resolve secrets if running in a Kubernetes environment
 	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
-		resolver := NewK8sSecretResolver()
+		resolver := NewK8sSecretResolver(log)
 		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
 			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
 		}

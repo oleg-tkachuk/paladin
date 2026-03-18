@@ -97,9 +97,17 @@ func New(c config.Logger) (*zap.Logger, error) {
 	return log.With(fields...), nil
 }
 
+var (
+	globalAppLogger   *zap.Logger
+	globalAuditLogger *zap.Logger
+)
+
 // ReplaceGlobals replaces the global zap logger and sugared logger.
+// It creates segregated "app" and "audit" loggers natively using zap.With.
 func ReplaceGlobals(log *zap.Logger) {
-	zap.ReplaceGlobals(log)
+	globalAppLogger = log.With(zap.String("log_type", "app"))
+	globalAuditLogger = log.With(zap.String("log_type", "audit"))
+	zap.ReplaceGlobals(globalAppLogger)
 }
 
 // NewBootstrapLogger returns a simple logger for early startup.
@@ -113,10 +121,35 @@ func NewBootstrapLogger() *zap.Logger {
 }
 
 type ctxKey struct{}
+type actorCtxKey struct{}
+
+// WithActor adds an actor identity to the context.
+func WithActor(ctx context.Context, actor string) context.Context {
+	return context.WithValue(ctx, actorCtxKey{}, actor)
+}
+
+// ActorFromContext retrieves the actor identity from the context.
+func ActorFromContext(ctx context.Context) string {
+	if actor, ok := ctx.Value(actorCtxKey{}).(string); ok {
+		return actor
+	}
+	return ""
+}
 
 // WithContext returns a new context with the given logger attached.
 func WithContext(ctx context.Context, l *zap.Logger) context.Context {
 	return context.WithValue(ctx, ctxKey{}, l)
+}
+
+// Named returns the logger from the context, adding the given name to it.
+func Named(ctx context.Context, name string) *zap.Logger {
+	return FromContext(ctx).Named(name)
+}
+
+// WithName adds a component name to the context logger and returns the new context.
+func WithName(ctx context.Context, name string) context.Context {
+	l := FromContext(ctx).Named(name)
+	return WithContext(ctx, l)
 }
 
 // FromContext returns the logger attached to the context, or the global logger if none is found.
@@ -142,6 +175,36 @@ func FromContext(ctx context.Context) *zap.Logger {
 	}
 	if tid := utils.TenantIDFromContext(ctx, ""); tid != "" {
 		l = l.With(zap.String("tenant_id", tid))
+	}
+
+	return l
+}
+
+// AuditFromContext returns the global audit logger enriched with trace context, tenant, request, and actor.
+func AuditFromContext(ctx context.Context) *zap.Logger {
+	l := globalAuditLogger
+	if l == nil {
+		l = zap.L().With(zap.String("log_type", "audit"))
+	}
+
+	// Always attempt to enrich with current trace context
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		sc := span.SpanContext()
+		l = l.With(
+			zap.String("trace_id", sc.TraceID().String()),
+			zap.String("span_id", sc.SpanID().String()),
+		)
+	}
+
+	// Enrich with request, tenant IDs and actor
+	if rid := utils.RequestIDFromContext(ctx, ""); rid != "" {
+		l = l.With(zap.String("request_id", rid))
+	}
+	if tid := utils.TenantIDFromContext(ctx, ""); tid != "" {
+		l = l.With(zap.String("tenant_id", tid))
+	}
+	if actor := ActorFromContext(ctx); actor != "" {
+		l = l.With(zap.String("actor", actor))
 	}
 
 	return l

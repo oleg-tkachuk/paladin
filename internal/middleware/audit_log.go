@@ -3,129 +3,72 @@ package middleware
 import (
 	"context"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
-	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
-	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"go.uber.org/zap"
 )
 
-// AuditBatchWriter collects audit log entries and flushes them in batches.
-type AuditBatchWriter struct {
-	ch   chan domain.AuditLog
-	repo domain.AuditLogRepository
-	log  *zap.Logger
-	wg   sync.WaitGroup
+var mutatingProcedures = map[string]struct{}{
+	"/paladin.v1.ObjectService/UploadObject":         {},
+	"/paladin.v1.ObjectService/DeleteObject":         {},
+	"/paladin.v1.ObjectService/UpdateObjectMetadata": {},
+	"/paladin.v1.ObjectService/CopyObject":           {},
+	"/paladin.v1.ObjectService/MoveObject":           {},
+	"/paladin.v1.ObjectService/CompleteObject":       {},
+	"/paladin.v1.ObjectService/RestoreObject":        {},
+
+	"/paladin.v1.BucketService/CreateBucket":              {},
+	"/paladin.v1.BucketService/DeleteBucket":              {},
+	"/paladin.v1.BucketService/UpdateBucketConfiguration": {},
+
+	"/paladin.v1.CategoryService/CreateCategory": {},
+	"/paladin.v1.CategoryService/UpdateCategory": {},
+	"/paladin.v1.CategoryService/DeleteCategory": {},
+
+	"/paladin.v1.TenantService/CreateTenant":         {},
+	"/paladin.v1.TenantService/DeleteTenant":         {},
+	"/paladin.v1.TenantService/UpdateTenantMetadata": {},
+
+	"/paladin.v1.MultipartUploadService/InitiateMultipartUpload": {},
+	"/paladin.v1.MultipartUploadService/CompleteMultipartUpload": {},
+	"/paladin.v1.MultipartUploadService/AbortMultipartUpload":    {},
+
+	"/paladin.v1.BulkService/BatchDeleteObjects":  {},
+	"/paladin.v1.BulkService/BatchCopyObjects":    {},
+	"/paladin.v1.BulkService/BatchRestoreObjects": {},
 }
 
-const (
-	auditChannelSize = 4096
-	auditBatchSize   = 100
-	auditFlushDelay  = 500 * time.Millisecond
-)
-
-// NewAuditBatchWriter starts a background goroutine that batches audit writes.
-func NewAuditBatchWriter(repo domain.AuditLogRepository, log *zap.Logger) *AuditBatchWriter {
-	w := &AuditBatchWriter{
-		ch:   make(chan domain.AuditLog, auditChannelSize),
-		repo: repo,
-		log:  log,
-	}
-	w.wg.Add(1)
-	go w.run()
-
-	return w
+// isMutatingProcedure determines if a Connect RPC procedure is mutating
+// and should generate an audit log.
+func isMutatingProcedure(procedure string) bool {
+	_, ok := mutatingProcedures[procedure]
+	return ok
 }
 
-// Repo returns the underlying audit log repository.
-func (w *AuditBatchWriter) Repo() domain.AuditLogRepository {
-	return w.repo
-}
+// Example of how to attach actor and trace ID via context.Context:
+//
+// 1. Attaching Actor (usually in an AuthInterceptor):
+//    ctx = logger.WithActor(ctx, "user-123")
+//
+// 2. Attaching Trace ID (usually done automatically by OpenTelemetry interceptors):
+//    ctx, span := tracer.Start(ctx, "operation")
+//    defer span.End()
+//    // logger.AuditFromContext(ctx) will intrinsically extract the Trace ID from the span context.
 
-func (w *AuditBatchWriter) send(entry domain.AuditLog) {
-	select {
-	case w.ch <- entry:
-	default:
-		w.log.Warn("audit log channel full, dropping entry")
-	}
-}
-
-func (w *AuditBatchWriter) Close() {
-	close(w.ch)
-	w.wg.Wait()
-}
-
-func (w *AuditBatchWriter) run() {
-	defer w.wg.Done()
-	batch := make([]domain.AuditLog, 0, auditBatchSize)
-	timer := time.NewTimer(auditFlushDelay)
-	defer timer.Stop()
-
-	for {
-		select {
-		case entry, ok := <-w.ch:
-			if !ok {
-				// Channel closed, flush remaining
-				if len(batch) > 0 {
-					w.flush(batch)
-				}
-
-				return
-			}
-			batch = append(batch, entry)
-			if len(batch) >= auditBatchSize {
-				w.flush(batch)
-				batch = batch[:0]
-				timer.Reset(auditFlushDelay)
-			}
-		case <-timer.C:
-			if len(batch) > 0 {
-				w.flush(batch)
-				batch = batch[:0]
-			}
-			timer.Reset(auditFlushDelay)
-		}
-	}
-}
-
-func (w *AuditBatchWriter) flush(batch []domain.AuditLog) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	for _, entry := range batch {
-		if err := w.repo.Create(ctx, entry); err != nil {
-			w.log.Warn("failed to save audit log",
-				zap.Error(err),
-				zap.String("request_id", ptrStr(entry.RequestID)),
-			)
-		}
-	}
-}
-
-// ConnectAuditLogInterceptor creates an interceptor that logs RPC requests to the audit writer.
-func ConnectAuditLogInterceptor(writer *AuditBatchWriter) connect.Interceptor {
+// ConnectAuditLogInterceptor creates an interceptor that logs mutating RPC requests
+// directly to stdout using the centralized audit logger.
+func ConnectAuditLogInterceptor() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			start := time.Now()
+			procedure := req.Spec().Procedure
 
-			// Filter sensitive headers
-			safeHeaders := make(map[string]any)
-			allowedHeaders := map[string]bool{
-				"content-type":    true,
-				"user-agent":      true,
-				"accept":          true,
-				"x-request-id":    true,
-				"x-tenant-id":     true,
-				"idempotency-key": true,
-			}
-			for k, v := range req.Header() {
-				if allowedHeaders[strings.ToLower(k)] && len(v) > 0 {
-					safeHeaders[k] = v[0]
-				}
+			// If it's a non-mutating request, skip audit logging entirely
+			if !isMutatingProcedure(procedure) {
+				return next(ctx, req)
 			}
 
 			// Execute handler
@@ -133,64 +76,75 @@ func ConnectAuditLogInterceptor(writer *AuditBatchWriter) connect.Interceptor {
 
 			duration := safecast.IntFrom64(time.Since(start).Milliseconds())
 
-			var responseCode *string
-			var responseStatus *string
+			responseStatus := "success"
+			responseCode := "OK"
 			httpStatus := 200
 
 			if err != nil {
-				responseStatus = ptr("error")
+				responseStatus = "error"
 				connectErr := connect.CodeOf(err)
-				strCode := connectErr.String()
-				responseCode = &strCode
-				httpStatus = 500 // roughly, or map codes
-			} else {
-				responseStatus = ptr("success")
+				responseCode = connectErr.String()
+				httpStatus = 500
 			}
 
-			rid := utils.RequestIDFromContext(ctx, "")
-			tenant := utils.TenantIDFromContext(ctx, "")
+			// Parse action and resource from the procedure e.g. /paladin.v1.ObjectService/DeleteObject
+			action := "unknown"
+			resource := "unknown"
+			resourceID := "unknown"
 
-			id, _ := uuid.NewV7()
-			if id == uuid.Nil {
-				id = uuid.New()
+			parts := strings.Split(procedure, "/")
+			if len(parts) >= 3 {
+				// E.g. parts[2] = "DeleteObject"
+				methodName := strings.ToLower(parts[2])
+				if strings.HasPrefix(methodName, "create") || strings.HasPrefix(methodName, "upload") || strings.HasPrefix(methodName, "initiate") || strings.HasPrefix(methodName, "complete") {
+					action = "create"
+				} else if strings.HasPrefix(methodName, "update") {
+					action = "update"
+				} else if strings.HasPrefix(methodName, "delete") {
+					action = "delete"
+				} else {
+					action = "update" // fallback for other mutating actions
+				}
+
+				// E.g. parts[1] = "paladin.v1.ObjectService"
+				svcParts := strings.Split(parts[1], ".")
+				resource = strings.ToLower(svcParts[len(svcParts)-1])
 			}
 
-			auditLog := domain.AuditLog{
-				ID:             id,
-				TenantID:       tenant,
-				RequestID:      &rid,
-				Method:         "POST", // Connect RPCs are always POST
-				Path:           req.Spec().Procedure,
-				QueryParams:    map[string]any{},
-				RequestHeaders: safeHeaders,
-				HTTPStatus:     &httpStatus,
-				ResponseCode:   responseCode,
-				ResponseStatus: responseStatus,
-				ResponseTimeMS: &duration,
-				ActorType:      domain.ActorTypeUser,
-				ClientIP:       nil, // Not easily available in basic net/http wrapped Connect without extra ctx
-				UserAgent:      ptr(req.Header().Get("User-Agent")),
-				CreatedAt:      start,
+			// Best-effort extraction of Resource ID from standard request fields
+			if msg, ok := req.Any().(interface{ GetId() string }); ok {
+				resourceID = msg.GetId()
+			} else if msg, ok := req.Any().(interface{ GetKey() string }); ok {
+				resourceID = msg.GetKey()
+			} else if msg, ok := req.Any().(interface{ GetName() string }); ok {
+				resourceID = msg.GetName()
 			}
 
-			// Idempotency key
+			// Base fields specifically required by the specification.
+			// log_type, trace_id, and actor are populated intrinsically by AuditFromContext.
+			// timestamp is intrinsically populated by zap's TimeEncoder.
+			fields := []zap.Field{
+				zap.String("action", action),
+				zap.String("resource", resource),
+				zap.String("resource_id", resourceID),
+				zap.String("status", responseStatus),
+				zap.String("response_code", responseCode),
+				zap.Int("http_status", httpStatus),
+				zap.Int("duration_ms", duration),
+				zap.String("method", procedure),
+			}
+
 			if iKey := req.Header().Get("Idempotency-Key"); iKey != "" {
-				auditLog.IdempotencyKey = &iKey
+				fields = append(fields, zap.String("idempotency_key", iKey))
+			}
+			if ua := req.Header().Get("User-Agent"); ua != "" {
+				fields = append(fields, zap.String("user_agent", ua))
 			}
 
-			writer.send(auditLog)
+			// Emit structured JSON directly to stdout
+			logger.AuditFromContext(ctx).Info("audit event", fields...)
 
 			return res, err
 		}
 	})
-}
-
-func ptr[T any](v T) *T { return &v }
-
-func ptrStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-
-	return *s
 }

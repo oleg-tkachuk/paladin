@@ -8,20 +8,23 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/cache"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"go.uber.org/zap"
 )
 
 // CachedCategoryRepo wraps CategoryRepo with an LRU cache
 type CachedCategoryRepo struct {
+	log   *zap.Logger
 	repo  domain.CategoryRepository
 	cache *cache.Cache[string, any] // stores either *domain.Category or bool
 	ttl   time.Duration
 }
 
 // NewCachedCategoryRepo creates a cached repository wrapper for categories
-func NewCachedCategoryRepo(repo domain.CategoryRepository, cacheSize int, ttl time.Duration) *CachedCategoryRepo {
+func NewCachedCategoryRepo(repo domain.CategoryRepository, cacheSize int, ttl time.Duration, log *zap.Logger) *CachedCategoryRepo {
 	return &CachedCategoryRepo{
 		repo:  repo,
 		cache: cache.NewCache[string, any](cacheSize, ttl),
+		log:   log,
 		ttl:   ttl,
 	}
 }
@@ -36,8 +39,12 @@ func (r *CachedCategoryRepo) Create(ctx context.Context, rec domain.Category) er
 	// Invalidate caches
 	existsKey := fmt.Sprintf("cat:exists:%s:%s", rec.TenantID, rec.Slug)
 	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
-	_ = r.cache.Delete(ctx, existsKey)
-	_ = r.cache.Delete(ctx, getKey)
+	if err := r.cache.Delete(ctx, existsKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
+	if err := r.cache.Delete(ctx, getKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return nil
 }
@@ -51,7 +58,9 @@ func (r *CachedCategoryRepo) Update(ctx context.Context, rec domain.Category) er
 
 	// Invalidate caches
 	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
-	_ = r.cache.Delete(ctx, getKey)
+	if err := r.cache.Delete(ctx, getKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return nil
 }
@@ -75,7 +84,9 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 		return nil, err
 	}
 
-	_ = r.cache.Set(ctx, cacheKey, cat, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, cat, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	return cat, nil
 }
@@ -96,8 +107,12 @@ func (r *CachedCategoryRepo) Delete(ctx context.Context, tenantID, slug string) 
 		// Invalidate caches
 		existsKey := fmt.Sprintf("cat:exists:%s:%s", tenantID, slug)
 		getKey := fmt.Sprintf("cat:get:%s:%s", tenantID, slug)
-		_ = r.cache.Delete(ctx, existsKey)
-		_ = r.cache.Delete(ctx, getKey)
+		if err := r.cache.Delete(ctx, existsKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
+		if err := r.cache.Delete(ctx, getKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
 	}
 
 	return deleted, nil
@@ -122,7 +137,9 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 		return false, err
 	}
 
-	_ = r.cache.Set(ctx, cacheKey, exists, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, exists, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	return exists, nil
 }
@@ -150,7 +167,9 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 		return nil, err
 	}
 
-	_ = r.cache.Set(ctx, cacheKey, stats, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, stats, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	return stats, nil
 }

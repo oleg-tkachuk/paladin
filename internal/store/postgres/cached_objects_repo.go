@@ -8,6 +8,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/cache"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 )
@@ -16,14 +17,16 @@ import (
 type CachedObjectsRepo struct {
 	repo  domain.ObjectsRepository
 	cache *cache.Cache[string, *domain.Object]
+	log   *zap.Logger
 	ttl   time.Duration
 }
 
 // NewCachedObjectsRepo creates a cached repository wrapper
-func NewCachedObjectsRepo(repo domain.ObjectsRepository, cacheSize int, ttl time.Duration) *CachedObjectsRepo {
+func NewCachedObjectsRepo(repo domain.ObjectsRepository, cacheSize int, ttl time.Duration, log *zap.Logger) *CachedObjectsRepo {
 	return &CachedObjectsRepo{
 		repo:  repo,
 		cache: cache.NewCache[string, *domain.Object](cacheSize, ttl),
+		log:   log,
 		ttl:   ttl,
 	}
 }
@@ -48,7 +51,9 @@ func (r *CachedObjectsRepo) Get(ctx context.Context, tenantID string, id uuid.UU
 	}
 
 	// Update cache
-	_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, rec, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	return rec, nil
 }
@@ -74,10 +79,14 @@ func (r *CachedObjectsRepo) GetByExternalRef(ctx context.Context, tenantID strin
 
 	// Update cache (if found)
 	if rec != nil {
-		_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+		if err := r.cache.Set(ctx, cacheKey, rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 		// Also cache by ID
 		idKey := fmt.Sprintf("obj:%s:%s", tenantID, rec.ID.String())
-		_ = r.cache.Set(ctx, idKey, rec, r.ttl)
+		if err := r.cache.Set(ctx, idKey, rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 	}
 
 	return rec, nil
@@ -104,10 +113,14 @@ func (r *CachedObjectsRepo) GetByKey(ctx context.Context, tenantID, bucket, key 
 
 	// Update cache (if found)
 	if rec != nil {
-		_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+		if err := r.cache.Set(ctx, cacheKey, rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 		// Also cache by ID
 		idKey := fmt.Sprintf("obj:%s:%s", tenantID, rec.ID.String())
-		_ = r.cache.Set(ctx, idKey, rec, r.ttl)
+		if err := r.cache.Set(ctx, idKey, rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 	}
 
 	return rec, nil
@@ -122,7 +135,9 @@ func (r *CachedObjectsRepo) Create(ctx context.Context, rec domain.Object) error
 
 	// Cache the newly created object
 	cacheKey := fmt.Sprintf("obj:%s:%s", rec.TenantID, rec.ID.String())
-	_ = r.cache.Set(ctx, cacheKey, &rec, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, &rec, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	return nil
 }
@@ -138,7 +153,9 @@ func (r *CachedObjectsRepo) MarkComplete(ctx context.Context, tenantID string, i
 	if updated {
 		if rec, err := r.repo.Get(ctx, tenantID, id); err == nil {
 			cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-			_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+			if err := r.cache.Set(ctx, cacheKey, rec, r.ttl); err != nil {
+				r.log.Error("cache set failed", zap.Error(err))
+			}
 		}
 	}
 
@@ -153,7 +170,9 @@ func (r *CachedObjectsRepo) MarkSoftDeleted(ctx context.Context, tenantID string
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -166,7 +185,9 @@ func (r *CachedObjectsRepo) MarkHardDeleted(ctx context.Context, tenantID string
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -179,7 +200,9 @@ func (r *CachedObjectsRepo) Restore(ctx context.Context, tenantID string, id uui
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -193,7 +216,9 @@ func (r *CachedObjectsRepo) MarkDeleted(ctx context.Context, tenantID string, id
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -206,7 +231,9 @@ func (r *CachedObjectsRepo) UpdateStatus(ctx context.Context, tenantID string, i
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -220,12 +247,16 @@ func (r *CachedObjectsRepo) Patch(ctx context.Context, tenantID string, id uuid.
 
 	// Write-through: cache the updated result
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Set(ctx, cacheKey, rec, r.ttl)
+	if err := r.cache.Set(ctx, cacheKey, rec, r.ttl); err != nil {
+		r.log.Error("cache set failed", zap.Error(err))
+	}
 
 	// If external_ref changed, update external_ref cache too
 	if externalRef != nil {
 		extKey := fmt.Sprintf("obj:ext:%s:%s", tenantID, *externalRef)
-		_ = r.cache.Set(ctx, extKey, rec, r.ttl)
+		if err := r.cache.Set(ctx, extKey, rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 	}
 
 	return rec, nil
@@ -250,7 +281,9 @@ func (r *CachedObjectsRepo) Delete(ctx context.Context, tenantID string, id uuid
 
 	// Invalidate cache
 	cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-	_ = r.cache.Delete(ctx, cacheKey)
+	if err := r.cache.Delete(ctx, cacheKey); err != nil {
+		r.log.Error("cache delete failed", zap.Error(err))
+	}
 
 	return updated, nil
 }
@@ -268,7 +301,9 @@ func (r *CachedObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Obj
 	// Cache the newly created objects
 	for _, rec := range objects {
 		cacheKey := fmt.Sprintf("obj:%s:%s", rec.TenantID, rec.ID.String())
-		_ = r.cache.Set(ctx, cacheKey, &rec, r.ttl)
+		if err := r.cache.Set(ctx, cacheKey, &rec, r.ttl); err != nil {
+			r.log.Error("cache set failed", zap.Error(err))
+		}
 	}
 
 	return nil
@@ -283,7 +318,9 @@ func (r *CachedObjectsRepo) BulkMarkSoftDeleted(ctx context.Context, tenantID st
 	// Invalidate cache for all affected IDs
 	for _, id := range ids {
 		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-		_ = r.cache.Delete(ctx, cacheKey)
+		if err := r.cache.Delete(ctx, cacheKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
 	}
 
 	return rows, nil
@@ -298,7 +335,9 @@ func (r *CachedObjectsRepo) BulkRestore(ctx context.Context, tenantID string, id
 	// Invalidate cache for all affected IDs
 	for _, id := range ids {
 		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-		_ = r.cache.Delete(ctx, cacheKey)
+		if err := r.cache.Delete(ctx, cacheKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
 	}
 
 	return rows, nil
@@ -313,7 +352,9 @@ func (r *CachedObjectsRepo) BulkDelete(ctx context.Context, tenantID string, ids
 	// Invalidate cache for all affected IDs
 	for _, id := range ids {
 		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, id.String())
-		_ = r.cache.Delete(ctx, cacheKey)
+		if err := r.cache.Delete(ctx, cacheKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
 	}
 
 	return rows, nil
@@ -336,7 +377,9 @@ func (r *CachedObjectsRepo) BulkPatch(ctx context.Context, tenantID string, item
 	// Invalidate cache for all affected IDs
 	for _, item := range items {
 		cacheKey := fmt.Sprintf("obj:%s:%s", tenantID, item.ID.String())
-		_ = r.cache.Delete(ctx, cacheKey)
+		if err := r.cache.Delete(ctx, cacheKey); err != nil {
+			r.log.Error("cache delete failed", zap.Error(err))
+		}
 
 		// Also invalidate by external_ref if we know it, or just let it expire.
 		// Since we don't know the OLD external_ref here without fetching,
@@ -344,7 +387,9 @@ func (r *CachedObjectsRepo) BulkPatch(ctx context.Context, tenantID string, item
 		// in case it was pointing to something else (unlikely but safe).
 		if item.ExternalRef != nil {
 			extKey := fmt.Sprintf("obj:ext:%s:%s", tenantID, *item.ExternalRef)
-			_ = r.cache.Delete(ctx, extKey)
+			if err := r.cache.Delete(ctx, extKey); err != nil {
+				r.log.Error("cache delete failed", zap.Error(err))
+			}
 		}
 	}
 

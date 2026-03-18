@@ -9,6 +9,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/fault"
 	"github.com/oleg-tkachuk/paladin/internal/service"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -531,6 +532,7 @@ var _ = Describe("ObjectsService", func() {
 			60*time.Second, // s3 timeout
 			2*time.Minute,  // long timeout
 			24*time.Hour,   // idempotency TTL
+			zap.NewNop(),
 		)
 		ctx = context.Background()
 
@@ -591,7 +593,7 @@ var _ = Describe("ObjectsService", func() {
 
 			// Re-create service with mockIdem and mockPolicy
 			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockUoWf, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
-				time.Second, time.Second, time.Second, time.Second, time.Hour)
+				time.Second, time.Second, time.Second, time.Second, time.Hour, zap.NewNop())
 
 			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, 0, &key)
 

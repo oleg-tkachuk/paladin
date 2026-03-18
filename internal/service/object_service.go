@@ -32,6 +32,8 @@ type objectsService struct {
 	brk       breaker.Factory
 	partSize  int64
 
+	log *zap.Logger
+
 	// Configurable timeouts
 	fastOperationTimeout    time.Duration
 	defaultOperationTimeout time.Duration
@@ -52,6 +54,7 @@ func NewObjectsService(
 	partSize int64,
 	fastTimeout, defaultTimeout, s3Timeout, longTimeout time.Duration,
 	idempotencyTTL time.Duration,
+	log *zap.Logger,
 ) domain.ObjectsService {
 	return &objectsService{
 		objRepo:                 objRepo,
@@ -68,6 +71,7 @@ func NewObjectsService(
 		s3OperationTimeout:      s3Timeout,
 		longOperationTimeout:    longTimeout,
 		idempotencyTTL:          idempotencyTTL,
+		log:                     log,
 	}
 }
 

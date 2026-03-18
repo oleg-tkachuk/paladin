@@ -35,49 +35,48 @@ func NewServer(
 	hs *service.HealthService,
 	started *atomic.Bool,
 	startTime time.Time,
-	auditWriter *middleware.AuditBatchWriter,
 ) *Server {
 	mux := http.NewServeMux()
 
-	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log, auditWriter)...)
+	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log.Named("middleware"))...)
 
 	// ─── ObjectService ─────────────────────────────────────────────────────
-	objectHandler := grpcapi.NewObjectHandler(log, objSvc)
+	objectHandler := grpcapi.NewObjectHandler(log.Named("object_handler"), objSvc)
 	path, handler := grpcapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── CategoryService ───────────────────────────────────────────────────
-	categoryHandler := grpcapi.NewCategoryHandler(log, catSvc)
+	categoryHandler := grpcapi.NewCategoryHandler(log.Named("category_handler"), catSvc)
 	path, handler = grpcapiconnect.NewCategoryServiceHandler(categoryHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── TenantService ─────────────────────────────────────────────────────
-	tenantHandler := grpcapi.NewTenantHandler(log, tenantSvc)
+	tenantHandler := grpcapi.NewTenantHandler(log.Named("tenant_handler"), tenantSvc)
 	path, handler = grpcapiconnect.NewTenantServiceHandler(tenantHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── MultipartUploadService ────────────────────────────────────────────
-	multipartHandler := grpcapi.NewMultipartHandler(log, objSvc)
+	multipartHandler := grpcapi.NewMultipartHandler(log.Named("multipart_handler"), objSvc)
 	path, handler = grpcapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── PresignService ────────────────────────────────────────────────────
-	presignHandler := grpcapi.NewPresignHandler(log, objSvc)
+	presignHandler := grpcapi.NewPresignHandler(log.Named("presign_handler"), objSvc)
 	path, handler = grpcapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── BulkService ───────────────────────────────────────────────────────
-	bulkHandler := grpcapi.NewBulkHandler(log, objSvc)
+	bulkHandler := grpcapi.NewBulkHandler(log.Named("bulk_handler"), objSvc)
 	path, handler = grpcapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── BucketService ─────────────────────────────────────────────────────
-	bucketHandler := grpcapi.NewBucketHandler(log, objSvc)
+	bucketHandler := grpcapi.NewBucketHandler(log.Named("bucket_handler"), objSvc)
 	path, handler = grpcapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── SystemService ─────────────────────────────────────────────────────
-	systemHandler := grpcapi.NewSystemHandler(log, hs, metadata, started, startTime, cfg, auditWriter.Repo())
+	systemHandler := grpcapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, nil)
 	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
 	mux.Handle(path, handler)
 

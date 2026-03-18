@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"time"
+	"unicode"
 
 	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
@@ -86,7 +88,7 @@ func SetupGRPCInterceptors(cfg *config.Config, log *zap.Logger) []grpc.UnaryServ
 }
 
 // SetupConnectInterceptors returns the ordered interceptor chain for Connect RPC.
-func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger, auditWriter *AuditBatchWriter) []connect.Interceptor {
+func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger) []connect.Interceptor {
 	rl := newGRPCRateLimiter(cfg)
 
 	return []connect.Interceptor{
@@ -98,7 +100,7 @@ func SetupConnectInterceptors(cfg *config.Config, log *zap.Logger, auditWriter *
 		ConnectEnforceTenantInterceptor(cfg),
 		ConnectValidationInterceptor(),
 		ConnectRateLimitInterceptor(cfg, rl),
-		ConnectAuditLogInterceptor(auditWriter),
+		ConnectAuditLogInterceptor(),
 	}
 }
 
@@ -371,8 +373,6 @@ func ConnectLoggerInterceptor() connect.Interceptor {
 			start := time.Now()
 			res, err := next(ctx, req)
 			durationMs := float64(time.Since(start).Nanoseconds()) / 1e6
-			tenantID := utils.TenantIDFromContext(ctx, "")
-			rid := utils.RequestIDFromContext(ctx, "")
 
 			// Use context-enriched logger
 			log := logger.FromContext(ctx)
@@ -381,8 +381,6 @@ func ConnectLoggerInterceptor() connect.Interceptor {
 				zap.String("protocol", "connect"),
 				zap.String("method", req.Spec().Procedure),
 				zap.Float64("duration_ms", durationMs),
-				zap.String("tenant_id", tenantID),
-				zap.String("request_id", rid),
 			}
 
 			if err != nil {
@@ -510,4 +508,34 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 			return next(ctx, req)
 		}
 	})
+}
+
+// extractComponentName converts a gRPC method like /paladin.v1.ObjectService/GetObjectMetadata
+// or /grpc.health.v1.Health/Check into a snake_case component name like "object_service".
+func extractComponentName(fullMethod string) string {
+	parts := strings.Split(fullMethod, "/")
+	if len(parts) < 3 {
+		return "grpc"
+	}
+	// Service name is typically at index 1 e.g. "paladin.v1.ObjectService"
+	svcParts := strings.Split(parts[1], ".")
+	svcName := svcParts[len(svcParts)-1]
+
+	// Convert CamelCase to snake_case
+	var result strings.Builder
+	for i, r := range svcName {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				result.WriteByte('_')
+			}
+			result.WriteRune(unicode.ToLower(r))
+		} else {
+			result.WriteRune(r)
+		}
+	}
+
+	if result.Len() == 0 {
+		return "grpc"
+	}
+	return result.String()
 }

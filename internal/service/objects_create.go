@@ -172,11 +172,13 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		body, err := json.Marshal(res)
 		if err == nil {
-			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
+			if err := s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 				TenantID: tenantID, Key: *idempotencyKey,
 				RequestPath: "/v1/objects", ResponseBody: body, ResponseCode: 200,
 				ExpiresAt: time.Now().Add(s.idempotencyTTL),
-			})
+			}); err != nil {
+				s.log.Error("save idempotency record failed", zap.Error(err))
+			}
 		}
 	}
 

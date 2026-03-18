@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
+	"go.uber.org/zap"
 )
 
 const (
@@ -31,6 +32,7 @@ type Resolver interface {
 // K8sSecretResolver resolves Kubernetes secrets by reading the projected token
 // and calling the Kubernetes API.
 type K8sSecretResolver struct {
+	log        *zap.Logger
 	client     *http.Client
 	apiBaseURL string
 	tokenPath  string
@@ -39,7 +41,7 @@ type K8sSecretResolver struct {
 
 // NewK8sSecretResolver creates a new K8s Secret resolver.
 // It configures TLS using the projected cluster CA.
-func NewK8sSecretResolver() *K8sSecretResolver {
+func NewK8sSecretResolver(log *zap.Logger) *K8sSecretResolver {
 	caCertPool := x509.NewCertPool()
 	caCert, err := os.ReadFile(k8sCACertPath)
 	if err == nil {
@@ -58,6 +60,7 @@ func NewK8sSecretResolver() *K8sSecretResolver {
 		apiBaseURL: defaultK8sAPIBaseURL,
 		tokenPath:  k8sTokenPath,
 		nsPath:     k8sNamespacePath,
+		log:        log,
 	}
 }
 
@@ -133,7 +136,11 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch secret: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			r.log.Error("close response body failed", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusForbidden {

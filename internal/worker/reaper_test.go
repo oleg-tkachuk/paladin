@@ -24,7 +24,6 @@ func TestReaper(t *testing.T) {
 
 	objRepo := mocks.NewMockObjectsRepository(t)
 	mpRepo := mocks.NewMockMultipartRepository(t)
-	auditRepo := mocks.NewMockAuditLogRepository(t)
 	s3c := mocks.NewMockStorageClient(t)
 	logger := zap.NewNop()
 
@@ -47,10 +46,7 @@ func TestReaper(t *testing.T) {
 	mpRepo.On("MarkAborted", mock.Anything, "t1", "up1").
 		Return(nil).Maybe()
 
-	auditRepo.On("Prune", mock.Anything, mock.Anything, 1000).
-		Return(int64(1), nil).Maybe()
-
-	r := worker.NewReaper(cfg, objRepo, mpRepo, auditRepo, s3c, logger)
+	r := worker.NewReaper(cfg, objRepo, mpRepo, s3c, logger)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 
@@ -60,7 +56,7 @@ func TestReaper(t *testing.T) {
 func TestReaperDisabled(t *testing.T) {
 	cfg := config.Housekeeping{EnableReaper: false}
 
-	r := worker.NewReaper(cfg, nil, nil, nil, nil, zap.NewNop())
+	r := worker.NewReaper(cfg, nil, nil, nil, zap.NewNop())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 

@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"go.uber.org/zap"
 )
 
 type ObjectsRepo struct {
@@ -111,7 +112,11 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 	}
 
 	br := r.db.Pool.SendBatch(ctx, batch)
-	defer func() { _ = br.Close() }()
+	defer func() {
+		if err := br.Close(); err != nil {
+			r.db.log.Error("close batch results failed", zap.Error(err))
+		}
+	}()
 
 	for i := 0; i < len(objects); i++ {
 		_, err := br.Exec()
@@ -547,7 +552,11 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 	}
 
 	br := r.db.Pool.SendBatch(ctx, batch)
-	defer func() { _ = br.Close() }()
+	defer func() {
+		if err := br.Close(); err != nil {
+			r.db.log.Error("close batch results failed", zap.Error(err))
+		}
+	}()
 
 	var totalRows int64
 	for i := 0; i < batch.Len(); i++ {

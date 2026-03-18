@@ -8,6 +8,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
+	"go.uber.org/zap"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -105,7 +106,11 @@ func (s *objectsService) completeMultipart(ctx context.Context, tenantID string,
 
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func() { _ = uow.Rollback(ctx) }()
+	defer func() {
+		if err := uow.Rollback(ctx); err != nil {
+			s.log.Error("rollback transaction failed", zap.Error(err))
+		}
+	}()
 
 	if _, err = uow.Objects().MarkComplete(ctx, tenantID, multi.ObjectID, head.ETag, head.SizeBytes); err != nil {
 		span.RecordError(err)

@@ -10,6 +10,7 @@ import (
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/validation"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -115,7 +116,11 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if err != nil {
 		return domain.MultipartInitResponse{}, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func() { _ = uow.Rollback(ctx) }()
+	defer func() {
+		if err := uow.Rollback(ctx); err != nil {
+			s.log.Error("rollback transaction failed", zap.Error(err))
+		}
+	}()
 
 	if err := uow.Objects().Create(ctx, objRec); err != nil {
 		return domain.MultipartInitResponse{}, err
@@ -143,11 +148,13 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		body, err := json.Marshal(res)
 		if err == nil {
-			_ = s.idemRepo.Save(ctx, domain.IdempotencyRecord{
+			if err := s.idemRepo.Save(ctx, domain.IdempotencyRecord{
 				TenantID: tenantID, Key: *idempotencyKey,
 				RequestPath: "/v1/multipart", ResponseBody: body, ResponseCode: 200,
 				ExpiresAt: time.Now().Add(s.idempotencyTTL),
-			})
+			}); err != nil {
+				s.log.Error("save idempotency record failed", zap.Error(err))
+			}
 		}
 	}
 
