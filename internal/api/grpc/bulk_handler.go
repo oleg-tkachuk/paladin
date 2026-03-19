@@ -76,10 +76,8 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		}
 
 		if err != nil {
-			logger.FromContext(ctx).Warn("BatchDeleteObjects item failed",
-				zap.String("key", key), zap.Error(err))
 			result.Success = false
-			result.Error = &status.Status{Code: grpcCodeInternal, Message: err.Error()}
+			result.Error = &status.Status{Code: grpcCodeInternal, Message: "internal error"}
 			failureCount++
 		} else {
 			result.Success = true
@@ -121,12 +119,8 @@ func (h *BulkHandler) BatchCopyObjects(ctx context.Context, req *connect.Request
 
 		copied, err := h.svc.CopyObject(ctx, tenantID, msg.Bucket, entry.SourceKey, dstBucket, entry.DestinationKey, nil)
 		if err != nil {
-			logger.FromContext(ctx).Warn("BatchCopyObjects item failed",
-				zap.String("source_key", entry.SourceKey),
-				zap.String("destination_key", entry.DestinationKey),
-				zap.Error(err))
 			result.Success = false
-			result.Error = &status.Status{Code: grpcCodeInternal, Message: err.Error()}
+			result.Error = &status.Status{Code: grpcCodeInternal, Message: "internal error"}
 			failureCount++
 		} else {
 			result.Success = true
@@ -174,10 +168,8 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 
 		err = h.svc.Restore(ctx, tenantID, obj.ID)
 		if err != nil {
-			logger.FromContext(ctx).Warn("BatchRestoreObjects: item failed",
-				zap.String("key", key), zap.Error(err))
 			result.Success = false
-			result.Error = &status.Status{Code: grpcCodeInternal, Message: err.Error()}
+			result.Error = &status.Status{Code: grpcCodeInternal, Message: "internal error"}
 			failureCount++
 		} else {
 			result.Success = true

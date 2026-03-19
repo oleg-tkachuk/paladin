@@ -101,7 +101,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	g.Go(func() error {
 		exists, err := s.catRepo.Exists(gCtx, tenantID, category)
 		if err != nil {
-			return fmt.Errorf("check category: %w", err)
+			return fmt.Errorf("check category existence category=%s: %w", category, err)
 		}
 		catExists = exists
 
@@ -136,7 +136,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	if err := s.objRepo.Create(ctx, rec); err != nil {
-		return domain.CreateObjectResponse{}, fmt.Errorf("create object: %w", err)
+		return domain.CreateObjectResponse{}, fmt.Errorf("create object record objectID=%s: %w", id.String(), err)
 	}
 
 	logger.FromContext(ctx).Info(LogObjectCreated, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
@@ -153,7 +153,7 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 				RequestPath: "/v1/objects", ResponseBody: body, ResponseCode: 200,
 				ExpiresAt: time.Now().Add(s.idempotencyTTL),
 			}); err != nil {
-				s.log.Error("save idempotency record failed", zap.Error(err))
+				s.log.Warn("save idempotency record failed", zap.Error(err))
 			}
 		}
 	}

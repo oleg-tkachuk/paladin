@@ -40,10 +40,10 @@ func (r *CachedCategoryRepo) Create(ctx context.Context, rec domain.Category) er
 	existsKey := fmt.Sprintf("cat:exists:%s:%s", rec.TenantID, rec.Slug)
 	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
 	if err := r.cache.Delete(ctx, existsKey); err != nil {
-		r.log.Error("cache delete failed", zap.Error(err))
+		r.log.Warn("cache delete failed", zap.Error(err))
 	}
 	if err := r.cache.Delete(ctx, getKey); err != nil {
-		r.log.Error("cache delete failed", zap.Error(err))
+		r.log.Warn("cache delete failed", zap.Error(err))
 	}
 
 	return nil
@@ -59,7 +59,7 @@ func (r *CachedCategoryRepo) Update(ctx context.Context, rec domain.Category) er
 	// Invalidate caches
 	getKey := fmt.Sprintf("cat:get:%s:%s", rec.TenantID, rec.Slug)
 	if err := r.cache.Delete(ctx, getKey); err != nil {
-		r.log.Error("cache delete failed", zap.Error(err))
+		r.log.Warn("cache delete failed", zap.Error(err))
 	}
 
 	return nil
@@ -85,7 +85,7 @@ func (r *CachedCategoryRepo) Get(ctx context.Context, tenantID, slug string) (*d
 	}
 
 	if err := r.cache.Set(ctx, cacheKey, cat, r.ttl); err != nil {
-		r.log.Error("cache set failed", zap.Error(err))
+		r.log.Warn("cache set failed", zap.Error(err))
 	}
 
 	return cat, nil
@@ -108,10 +108,10 @@ func (r *CachedCategoryRepo) Delete(ctx context.Context, tenantID, slug string) 
 		existsKey := fmt.Sprintf("cat:exists:%s:%s", tenantID, slug)
 		getKey := fmt.Sprintf("cat:get:%s:%s", tenantID, slug)
 		if err := r.cache.Delete(ctx, existsKey); err != nil {
-			r.log.Error("cache delete failed", zap.Error(err))
+			r.log.Warn("cache delete failed", zap.Error(err))
 		}
 		if err := r.cache.Delete(ctx, getKey); err != nil {
-			r.log.Error("cache delete failed", zap.Error(err))
+			r.log.Warn("cache delete failed", zap.Error(err))
 		}
 	}
 
@@ -138,7 +138,7 @@ func (r *CachedCategoryRepo) Exists(ctx context.Context, tenantID, slug string) 
 	}
 
 	if err := r.cache.Set(ctx, cacheKey, exists, r.ttl); err != nil {
-		r.log.Error("cache set failed", zap.Error(err))
+		r.log.Warn("cache set failed", zap.Error(err))
 	}
 
 	return exists, nil
@@ -168,7 +168,7 @@ func (r *CachedCategoryRepo) GetStats(ctx context.Context, tenantID, slug string
 	}
 
 	if err := r.cache.Set(ctx, cacheKey, stats, r.ttl); err != nil {
-		r.log.Error("cache set failed", zap.Error(err))
+		r.log.Warn("cache set failed", zap.Error(err))
 	}
 
 	return stats, nil

@@ -112,8 +112,11 @@ func (s *objectsService) Delete(ctx context.Context, tenantID string, id uuid.UU
 
 	// FSM State Transition Check
 	sm := domain.NewObjectFSM(obj.Status)
-	err = sm.Fire(domain.EventObjectSoftDelete)
-	if err != nil {
+	if err := sm.Fire(domain.EventObjectSoftDelete); err != nil {
+		logger.FromContext(ctx).Error("Invalid state transition for soft delete",
+			zap.Error(err),
+			zap.String("object_id", id.String()),
+			zap.String("current_status", string(obj.Status)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = ErrConflict
@@ -185,8 +188,11 @@ func (s *objectsService) Restore(ctx context.Context, tenantID string, id uuid.U
 
 	// FSM State Transition Check
 	sm := domain.NewObjectFSM(obj.Status)
-	err = sm.Fire(domain.EventObjectRestore)
-	if err != nil {
+	if err := sm.Fire(domain.EventObjectRestore); err != nil {
+		logger.FromContext(ctx).Error("Invalid state transition for restore",
+			zap.Error(err),
+			zap.String("object_id", id.String()),
+			zap.String("current_status", string(obj.Status)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = ErrConflict
@@ -263,8 +269,11 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 
 	// FSM State Transition Check
 	sm := domain.NewObjectFSM(obj.Status)
-	err = sm.Fire(domain.EventObjectHardDelete)
-	if err != nil {
+	if err := sm.Fire(domain.EventObjectHardDelete); err != nil {
+		logger.FromContext(ctx).Error("Invalid state transition for purge",
+			zap.Error(err),
+			zap.String("object_id", id.String()),
+			zap.String("current_status", string(obj.Status)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		status = ErrConflict
@@ -294,7 +303,7 @@ func (s *objectsService) Purge(ctx context.Context, tenantID string, id uuid.UUI
 		span.SetStatus(codes.Error, err.Error())
 		status = domain.StatusError
 
-		return fmt.Errorf("failed to delete from S3: %w", err)
+		return err
 	}
 
 	// Permanently delete record from database

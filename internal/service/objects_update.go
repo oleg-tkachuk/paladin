@@ -67,7 +67,7 @@ func (s *objectsService) updateObjectStatus(ctx context.Context, tenantID string
 				ResponseCode: respCode,
 				ExpiresAt:    time.Now().Add(s.idempotencyTTL),
 			}); err != nil {
-				s.log.Error("save idempotency record failed", zap.Error(err))
+				s.log.Warn("save idempotency record failed", zap.Error(err))
 			}
 		}
 	}()

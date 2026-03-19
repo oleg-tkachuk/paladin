@@ -56,11 +56,6 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 
 	out, err := h.svc.CreateSingle(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to create upload record",
-			zap.Error(err),
-			zap.String("tenant_id", tenantID),
-			zap.String("category", category))
-
 		return nil, grpcError(err)
 	}
 
@@ -107,15 +102,11 @@ func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request
 
 	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to get record for download", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
-
 		return nil, grpcError(err)
 	}
 
 	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, defaultDownloadTTLSeconds)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to sign download URL", zap.Error(err), zap.String("object_id", rec.ID.String()))
-
 		return nil, grpcError(err)
 	}
 
@@ -131,8 +122,6 @@ func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Requ
 
 	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to get metadata record", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
-
 		return nil, grpcError(err)
 	}
 
@@ -147,16 +136,12 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 
 	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to get record for metadata update", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
-
 		return nil, grpcError(err)
 	}
 
 	// PatchMeta merges labels/tags; the proto sends them as the new sets.
 	updated, err := h.svc.PatchMeta(ctx, tenantID, rec.ID, msg.Metadata, msg.Tags, nil)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to patch object metadata", zap.Error(err), zap.String("object_id", rec.ID.String()))
-
 		return nil, grpcError(err)
 	}
 
@@ -173,8 +158,6 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 
 	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to get record for deletion", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
-
 		return nil, grpcError(err)
 	}
 
@@ -184,8 +167,6 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 		err = h.svc.Delete(ctx, tenantID, rec.ID)
 	}
 	if err != nil {
-		logger.FromContext(ctx).Warn("object deletion failed", zap.Error(err), zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
-
 		return nil, grpcError(err)
 	}
 
@@ -217,13 +198,6 @@ func (h *ObjectHandler) CopyObject(ctx context.Context, req *connect.Request[Cop
 
 	copied, err := h.svc.CopyObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey, msg.Metadata)
 	if err != nil {
-		logger.FromContext(ctx).Warn("object copy failed",
-			zap.Error(err),
-			zap.String("src_bucket", msg.Bucket),
-			zap.String("src_key", msg.Key),
-			zap.String("dst_bucket", dstBucket),
-			zap.String("dst_key", msg.DestinationKey))
-
 		return nil, grpcError(err)
 	}
 
@@ -248,13 +222,6 @@ func (h *ObjectHandler) MoveObject(ctx context.Context, req *connect.Request[Mov
 
 	moved, err := h.svc.MoveObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey)
 	if err != nil {
-		logger.FromContext(ctx).Warn("object move failed",
-			zap.Error(err),
-			zap.String("src_bucket", msg.Bucket),
-			zap.String("src_key", msg.Key),
-			zap.String("dst_bucket", dstBucket),
-			zap.String("dst_key", msg.DestinationKey))
-
 		return nil, grpcError(err)
 	}
 
@@ -329,8 +296,6 @@ func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[Li
 
 	objects, nextCursor, total, err := h.svc.List(ctx, tenantID, filter)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to list objects", zap.Error(err), zap.String("bucket", msg.Bucket))
-
 		return nil, grpcError(err)
 	}
 
@@ -363,8 +328,6 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 
 	updated, err := h.svc.CompleteObject(ctx, tenantID, rec.ID, etag, nil)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to complete object upload", zap.Error(err), zap.String("object_id", rec.ID.String()))
-
 		return nil, grpcError(err)
 	}
 
@@ -381,15 +344,11 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 
 	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
-		logger.FromContext(ctx).Warn("failed to get record for restoration", zap.Error(err), zap.String("bucket", msg.Bucket), zap.String("key", msg.Key))
-
 		return nil, grpcError(err)
 	}
 
 	err = h.svc.Restore(ctx, tenantID, rec.ID)
 	if err != nil {
-		logger.FromContext(ctx).Warn("object restoration failed", zap.Error(err), zap.String("object_id", rec.ID.String()))
-
 		return nil, grpcError(err)
 	}
 

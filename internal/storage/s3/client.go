@@ -123,8 +123,6 @@ func (c *Client) PresignPutObject(ctx context.Context, key string, contentType s
 
 	out, err := c.presigner.PresignPutObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
-		c.log.Error("S3 presign PUT error", zap.String("key", key), zap.Error(err))
-
 		return domain.Presigned{}, fmt.Errorf("presign put object: %w", err)
 	}
 
@@ -159,8 +157,6 @@ func (c *Client) PresignGetObject(ctx context.Context, key string, ttl time.Dura
 
 	out, err := c.presigner.PresignGetObject(ctx, in, s3.WithPresignExpires(expiry))
 	if err != nil {
-		c.log.Error("S3 presign GET error", zap.String("key", key), zap.Error(err))
-
 		return domain.Presigned{}, fmt.Errorf("presign get object: %w", err)
 	}
 
@@ -196,7 +192,6 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, key string, contentT
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
 		status = domain.StatusError
-		c.log.Error("S3 create multipart error", zap.String("key", key), zap.Error(err))
 
 		return domain.MultipartInit{}, fmt.Errorf("create multipart upload: %w", err)
 	}
@@ -260,7 +255,6 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, key, uploadID stri
 
 	if err != nil {
 		status = domain.StatusError
-		c.log.Error("S3 complete multipart error", zap.String("key", key), zap.String("upload_id", uploadID), zap.Error(err))
 
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
@@ -348,10 +342,6 @@ func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
 	})
 	if err != nil {
 		status = domain.StatusError
-		c.log.Error("S3 copy object error",
-			zap.String("src_key", srcKey),
-			zap.String("dst_key", dstKey),
-			zap.Error(err))
 
 		return fmt.Errorf("copy object: %w", err)
 	}

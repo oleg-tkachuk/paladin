@@ -118,7 +118,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 	}
 	defer func() {
 		if err := uow.Rollback(ctx); err != nil {
-			s.log.Error("rollback transaction failed", zap.Error(err))
+			s.log.Warn("rollback transaction failed", zap.Error(err))
 		}
 	}()
 
@@ -153,7 +153,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 				RequestPath: "/v1/multipart", ResponseBody: body, ResponseCode: 200,
 				ExpiresAt: time.Now().Add(s.idempotencyTTL),
 			}); err != nil {
-				s.log.Error("save idempotency record failed", zap.Error(err))
+				s.log.Warn("save idempotency record failed", zap.Error(err))
 			}
 		}
 	}

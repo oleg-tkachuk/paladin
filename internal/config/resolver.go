@@ -97,7 +97,7 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 	}
 
 	// Auth Admin Key
-	if cfg.Auth.AdminKeySecret != nil {
+	if cfg.Auth.Enabled && cfg.Auth.AdminKeySecret != nil {
 		key, err := r.resolveSecret(ctx, cfg.Auth.AdminKeySecret)
 		if err != nil {
 			return fmt.Errorf("auth.admin_key_secret: %w", err)

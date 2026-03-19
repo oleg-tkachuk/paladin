@@ -114,7 +114,7 @@ func (r *ObjectsRepo) BulkCreate(ctx context.Context, objects []domain.Object) e
 	br := r.db.Pool.SendBatch(ctx, batch)
 	defer func() {
 		if err := br.Close(); err != nil {
-			r.db.log.Error("close batch results failed", zap.Error(err))
+			r.db.log.Warn("close batch results failed", zap.Error(err))
 		}
 	}()
 
@@ -594,7 +594,7 @@ func (r *ObjectsRepo) BulkPatch(ctx context.Context, tenantID string, items []do
 	br := r.db.Pool.SendBatch(ctx, batch)
 	defer func() {
 		if err := br.Close(); err != nil {
-			r.db.log.Error("close batch results failed", zap.Error(err))
+			r.db.log.Warn("close batch results failed", zap.Error(err))
 		}
 	}()
 

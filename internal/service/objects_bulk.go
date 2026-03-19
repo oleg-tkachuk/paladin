@@ -2,13 +2,15 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 )
 
 func (s *objectsService) BulkCreate(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string) ([]domain.CreateObjectResponse, error) {
@@ -21,10 +23,11 @@ func (s *objectsService) BulkCreate(ctx context.Context, tenantID string, items 
 	for _, item := range items {
 		out, err := s.createSingle(ctx, tenantID, item.Category, item.ContentType, item.SizeBytes, item.Labels, item.Tags, item.ExternalRef, 0, nil)
 		if err != nil {
+			logger.FromContext(ctx).Error("Bulk create failed at item", zap.Error(err), zap.String("category", item.Category))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 
-			return nil, fmt.Errorf("bulk create failed at item: %w", err)
+			return nil, err
 		}
 		res = append(res, out)
 	}
@@ -43,12 +46,14 @@ func (s *objectsService) BulkSignUploads(ctx context.Context, tenantID string, i
 	for _, item := range items {
 		obj, err := s.objRepo.Get(ctx, tenantID, item.ObjectID)
 		if err != nil {
-			return nil, fmt.Errorf("get object %s: %w", item.ObjectID, err)
+			logger.FromContext(ctx).Error("Bulk sign upload failed: get object", zap.Error(err), zap.String("object_id", item.ObjectID.String()))
+			return nil, err
 		}
 
 		signed, err := s.signUpload(ctx, tenantID, item.ObjectID, item.UploadTTL)
 		if err != nil {
-			return nil, fmt.Errorf("sign upload %s: %w", item.ObjectID, err)
+			logger.FromContext(ctx).Error("Bulk sign upload failed: sign", zap.Error(err), zap.String("object_id", item.ObjectID.String()))
+			return nil, err
 		}
 
 		res = append(res, domain.CreateObjectResponse{
@@ -74,7 +79,8 @@ func (s *objectsService) BulkComplete(ctx context.Context, tenantID string, ids 
 	for _, id := range ids {
 		obj, err := s.completeObject(ctx, tenantID, id, nil, nil)
 		if err != nil {
-			return nil, fmt.Errorf("complete object %s: %w", id, err)
+			logger.FromContext(ctx).Error("Bulk complete failed", zap.Error(err), zap.String("object_id", id.String()))
+			return nil, err
 		}
 		res = append(res, obj)
 	}

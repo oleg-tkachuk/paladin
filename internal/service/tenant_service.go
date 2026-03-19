@@ -54,7 +54,7 @@ func (s *tenantService) Create(ctx context.Context, tenantID string, displayName
 
 	t, err := s.repo.Create(ctx, rec)
 	if err != nil {
-		return nil, fmt.Errorf("create tenant: %w", err)
+		return nil, fmt.Errorf("create tenant tenantID=%s: %w", tenantID, err)
 	}
 
 	return t, nil
@@ -64,7 +64,7 @@ func (s *tenantService) Create(ctx context.Context, tenantID string, displayName
 func (s *tenantService) Get(ctx context.Context, tenantID string) (*domain.Tenant, error) {
 	t, err := s.repo.Get(ctx, tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("get tenant: %w", err)
+		return nil, fmt.Errorf("get tenant tenantID=%s: %w", tenantID, err)
 	}
 
 	return t, nil
@@ -79,7 +79,7 @@ func (s *tenantService) Delete(ctx context.Context, tenantID string) error {
 
 	hasActive, err := s.repo.HasActiveObjects(ctx, tenantID)
 	if err != nil {
-		return fmt.Errorf("delete tenant: check active objects: %w", err)
+		return fmt.Errorf("check active objects tenantID=%s: %w", tenantID, err)
 	}
 
 	if hasActive {
@@ -91,7 +91,7 @@ func (s *tenantService) Delete(ctx context.Context, tenantID string) error {
 
 	deleted, err := s.repo.Delete(ctx, tenantID)
 	if err != nil {
-		return fmt.Errorf("delete tenant: %w", err)
+		return fmt.Errorf("delete tenant tenantID=%s: %w", tenantID, err)
 	}
 	if !deleted {
 		return apperrors.NotFound("tenant not found", nil)
@@ -130,7 +130,7 @@ func (s *tenantService) PatchMetadata(ctx context.Context, tenantID string, labe
 
 	t, err := s.repo.UpdateMetadata(ctx, tenantID, labelsPatch, normalizeTags(tags), displayName)
 	if err != nil {
-		return nil, fmt.Errorf("patch tenant metadata: %w", err)
+		return nil, fmt.Errorf("patch tenant metadata tenantID=%s: %w", tenantID, err)
 	}
 
 	return t, nil

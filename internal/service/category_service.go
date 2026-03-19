@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
+	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/validation"
+	"go.uber.org/zap"
 )
 
 type categoryService struct {
@@ -40,6 +42,7 @@ func (s *categoryService) Create(ctx context.Context, tenantID, slug, name strin
 		parentSlug := slug[:lastSlash]
 		exists, err := s.repo.Exists(ctx, tenantID, parentSlug)
 		if err != nil {
+			logger.FromContext(ctx).Error("Failed to check parent category existence", zap.Error(err), zap.String("parent_slug", parentSlug))
 			return nil, err
 		}
 		if !exists {
@@ -55,6 +58,7 @@ func (s *categoryService) Create(ctx context.Context, tenantID, slug, name strin
 		Description: description,
 	}
 	if err := s.repo.Create(ctx, cat); err != nil {
+		logger.FromContext(ctx).Error("Failed to create category", zap.Error(err), zap.String("slug", slug))
 		return nil, err
 	}
 	// Fetch back to get created_at / updated_at / id
@@ -96,6 +100,7 @@ func (s *categoryService) List(ctx context.Context, tenantID string, filter doma
 func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) error {
 	count, err := s.repo.ObjectCount(ctx, tenantID, slug)
 	if err != nil {
+		logger.FromContext(ctx).Error("Failed to count objects in category", zap.Error(err), zap.String("slug", slug))
 		return err
 	}
 	if count > 0 {
@@ -104,6 +109,7 @@ func (s *categoryService) Delete(ctx context.Context, tenantID, slug string) err
 
 	deleted, err := s.repo.Delete(ctx, tenantID, slug)
 	if err != nil {
+		logger.FromContext(ctx).Error("Failed to delete category", zap.Error(err), zap.String("slug", slug))
 		return err
 	}
 	if !deleted {

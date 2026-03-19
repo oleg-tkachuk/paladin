@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -40,7 +41,7 @@ func (s *objectsService) get(ctx context.Context, tenantID string, id openapi_ty
 		span.SetStatus(codes.Error, err.Error())
 		status = domain.StatusError
 
-		return nil, err
+		return nil, fmt.Errorf("get object record objectID=%s: %w", id.String(), err)
 	}
 
 	if rec.Status == domain.ObjectHardDeleted {
