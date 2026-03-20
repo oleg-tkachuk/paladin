@@ -138,7 +138,7 @@ COPY --from=builder --chown=nonroot:nonroot /app/migrations /app/migrations
 COPY --from=builder --chown=nonroot:nonroot /app/configs /app/configs
 
 # EXPOSE is documentation; you may keep constants or use args
-EXPOSE 8080 9090
+EXPOSE 8080 50051 9090
 
 USER nonroot:nonroot
 ENTRYPOINT ["/app/bin/paladin"]
