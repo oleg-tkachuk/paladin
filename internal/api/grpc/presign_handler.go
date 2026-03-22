@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // defaultPresignTTLSeconds is the TTL passed to Sign* when the client sends 0 or
@@ -93,4 +94,34 @@ func (h *PresignHandler) generatePresignedUrl(
 	logger.FromContext(ctx).Info(opName+": successful", zap.String("object_id", rec.ID.String()))
 
 	return presignedToProto(presigned), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type presignGRPCServer struct {
+	UnimplementedPresignServiceServer
+	h *PresignHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *PresignHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterPresignServiceServer(srv, &presignGRPCServer{h: h})
+}
+
+func (s *presignGRPCServer) GenerateUploadUrl(ctx context.Context, req *GenerateUploadUrlRequest) (*GenerateUploadUrlResponse, error) {
+	res, err := s.h.GenerateUploadUrl(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *presignGRPCServer) GenerateDownloadUrl(ctx context.Context, req *GenerateDownloadUrlRequest) (*GenerateDownloadUrlResponse, error) {
+	res, err := s.h.GenerateDownloadUrl(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }

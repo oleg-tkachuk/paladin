@@ -44,7 +44,7 @@ server:
       insecure_skip_verify: false
 
   grpc:
-    addr: "0.0.0.0:9090"
+    addr: "0.0.0.0:50051"
     reflection_enabled: true
     max_recv_msg_size: 4194304
     max_send_msg_size: 4194304

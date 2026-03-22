@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // BulkHandler implements grpcapiconnect.BulkServiceHandler.
@@ -194,4 +195,42 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		SuccessCount: successCount,
 		FailureCount: failureCount,
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type bulkGRPCServer struct {
+	UnimplementedBulkServiceServer
+	h *BulkHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *BulkHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterBulkServiceServer(srv, &bulkGRPCServer{h: h})
+}
+
+func (s *bulkGRPCServer) BatchDeleteObjects(ctx context.Context, req *BatchDeleteObjectsRequest) (*BatchDeleteObjectsResponse, error) {
+	res, err := s.h.BatchDeleteObjects(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *bulkGRPCServer) BatchCopyObjects(ctx context.Context, req *BatchCopyObjectsRequest) (*BatchCopyObjectsResponse, error) {
+	res, err := s.h.BatchCopyObjects(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *bulkGRPCServer) BatchRestoreObjects(ctx context.Context, req *BatchRestoreObjectsRequest) (*BatchRestoreObjectsResponse, error) {
+	res, err := s.h.BatchRestoreObjects(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }

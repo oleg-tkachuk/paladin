@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // defaultDownloadTTLSeconds is the default presigned download URL expiration.
@@ -366,4 +367,98 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(&RestoreObjectResponse{
 		Object: objectToProto(updated),
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type objectGRPCServer struct {
+	UnimplementedObjectServiceServer
+	h *ObjectHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *ObjectHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterObjectServiceServer(srv, &objectGRPCServer{h: h})
+}
+
+func (s *objectGRPCServer) UploadObject(ctx context.Context, req *UploadObjectRequest) (*UploadObjectResponse, error) {
+	res, err := s.h.UploadObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) DownloadObject(ctx context.Context, req *DownloadObjectRequest) (*DownloadObjectResponse, error) {
+	res, err := s.h.DownloadObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) GetObjectMetadata(ctx context.Context, req *GetObjectMetadataRequest) (*GetObjectMetadataResponse, error) {
+	res, err := s.h.GetObjectMetadata(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) UpdateObjectMetadata(ctx context.Context, req *UpdateObjectMetadataRequest) (*UpdateObjectMetadataResponse, error) {
+	res, err := s.h.UpdateObjectMetadata(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) DeleteObject(ctx context.Context, req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
+	res, err := s.h.DeleteObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) CopyObject(ctx context.Context, req *CopyObjectRequest) (*CopyObjectResponse, error) {
+	res, err := s.h.CopyObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) MoveObject(ctx context.Context, req *MoveObjectRequest) (*MoveObjectResponse, error) {
+	res, err := s.h.MoveObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) ListObjects(ctx context.Context, req *ListObjectsRequest) (*ListObjectsResponse, error) {
+	res, err := s.h.ListObjects(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) CompleteObject(ctx context.Context, req *CompleteObjectRequest) (*CompleteObjectResponse, error) {
+	res, err := s.h.CompleteObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *objectGRPCServer) RestoreObject(ctx context.Context, req *RestoreObjectRequest) (*RestoreObjectResponse, error) {
+	res, err := s.h.RestoreObject(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }

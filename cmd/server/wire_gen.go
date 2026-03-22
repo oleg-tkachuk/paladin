@@ -31,7 +31,6 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	if err != nil {
 		return nil, nil, err
 	}
-	server := wire.ProvideGRPCServer(config, logger)
 	db, cleanup, err := wire.ProvideDB(ctx, config, logger)
 	if err != nil {
 		return nil, nil, err
@@ -56,6 +55,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	atomicBool := provideStartedBool()
 	time := wire.ProvideStartTime()
 	auditLogRepository := wire.ProvideAuditLogRepo(db)
+	server := wire.ProvideGRPCServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
 	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {

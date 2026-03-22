@@ -58,7 +58,7 @@ ARG BUILD_TIME=undefined
 
 # Runtime ports (documentation only)
 ARG HTTP_PORT=8080
-ARG GRPC_PORT=9090
+ARG GRPC_PORT=50051
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \

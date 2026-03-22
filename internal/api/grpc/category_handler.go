@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // CategoryHandler implements grpcapiconnect.CategoryServiceHandler.
@@ -148,4 +149,66 @@ func (h *CategoryHandler) GetCategoryStats(ctx context.Context, req *connect.Req
 	return connect.NewResponse(&GetCategoryStatsResponse{
 		Stats: categoryStatsToProto(out),
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type categoryGRPCServer struct {
+	UnimplementedCategoryServiceServer
+	h *CategoryHandler
+}
+
+// RegisterCategoryServiceServer registers the handler as a native gRPC server.
+func (h *CategoryHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterCategoryServiceServer(srv, &categoryGRPCServer{h: h})
+}
+
+func (s *categoryGRPCServer) CreateCategory(ctx context.Context, req *CreateCategoryRequest) (*CreateCategoryResponse, error) {
+	res, err := s.h.CreateCategory(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *categoryGRPCServer) GetCategory(ctx context.Context, req *GetCategoryRequest) (*GetCategoryResponse, error) {
+	res, err := s.h.GetCategory(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *categoryGRPCServer) UpdateCategory(ctx context.Context, req *UpdateCategoryRequest) (*UpdateCategoryResponse, error) {
+	res, err := s.h.UpdateCategory(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *categoryGRPCServer) DeleteCategory(ctx context.Context, req *DeleteCategoryRequest) (*DeleteCategoryResponse, error) {
+	res, err := s.h.DeleteCategory(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *categoryGRPCServer) ListCategories(ctx context.Context, req *ListCategoriesRequest) (*ListCategoriesResponse, error) {
+	res, err := s.h.ListCategories(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *categoryGRPCServer) GetCategoryStats(ctx context.Context, req *GetCategoryStatsRequest) (*GetCategoryStatsResponse, error) {
+	res, err := s.h.GetCategoryStats(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }

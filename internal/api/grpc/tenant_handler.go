@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // TenantHandler implements grpcapiconnect.TenantServiceHandler.
@@ -129,4 +130,58 @@ func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.R
 	return connect.NewResponse(&UpdateTenantMetadataResponse{
 		Tenant: tenantToProto(out),
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type tenantGRPCServer struct {
+	UnimplementedTenantServiceServer
+	h *TenantHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *TenantHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterTenantServiceServer(srv, &tenantGRPCServer{h: h})
+}
+
+func (s *tenantGRPCServer) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*CreateTenantResponse, error) {
+	res, err := s.h.CreateTenant(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *tenantGRPCServer) GetTenant(ctx context.Context, req *GetTenantRequest) (*GetTenantResponse, error) {
+	res, err := s.h.GetTenant(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *tenantGRPCServer) ListTenants(ctx context.Context, req *ListTenantsRequest) (*ListTenantsResponse, error) {
+	res, err := s.h.ListTenants(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *tenantGRPCServer) DeleteTenant(ctx context.Context, req *DeleteTenantRequest) (*DeleteTenantResponse, error) {
+	res, err := s.h.DeleteTenant(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *tenantGRPCServer) UpdateTenantMetadata(ctx context.Context, req *UpdateTenantMetadataRequest) (*UpdateTenantMetadataResponse, error) {
+	res, err := s.h.UpdateTenantMetadata(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }

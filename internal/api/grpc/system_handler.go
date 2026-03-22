@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/service"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -306,6 +307,76 @@ func (h *SystemHandler) ListAuditLogs(ctx context.Context, req *connect.Request[
 		NextCursor: nextCursor,
 		TotalCount: totalCount,
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type systemGRPCServer struct {
+	UnimplementedSystemServiceServer
+	h *SystemHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *SystemHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterSystemServiceServer(srv, &systemGRPCServer{h: h})
+}
+
+func (s *systemGRPCServer) Ping(ctx context.Context, req *PingRequest) (*PingResponse, error) {
+	res, err := s.h.Ping(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) GetLivez(ctx context.Context, req *GetLivezRequest) (*GetLivezResponse, error) {
+	res, err := s.h.GetLivez(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) GetStartupz(ctx context.Context, req *GetStartupzRequest) (*GetStartupzResponse, error) {
+	res, err := s.h.GetStartupz(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) GetReadyz(ctx context.Context, req *GetReadyzRequest) (*GetReadyzResponse, error) {
+	res, err := s.h.GetReadyz(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) GetInfo(ctx context.Context, req *GetInfoRequest) (*GetInfoResponse, error) {
+	res, err := s.h.GetInfo(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) GetConfig(ctx context.Context, req *GetConfigRequest) (*GetConfigResponse, error) {
+	res, err := s.h.GetConfig(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *systemGRPCServer) ListAuditLogs(ctx context.Context, req *ListAuditLogsRequest) (*ListAuditLogsResponse, error) {
+	res, err := s.h.ListAuditLogs(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }
 
 func (h *SystemHandler) getCPUUsage(ctx context.Context) float64 {

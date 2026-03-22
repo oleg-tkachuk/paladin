@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
+	"google.golang.org/grpc"
 )
 
 // MultipartHandler implements grpcapiconnect.MultipartUploadServiceHandler.
@@ -159,4 +160,58 @@ func (h *MultipartHandler) ListParts(ctx context.Context, req *connect.Request[L
 	return connect.NewResponse(&ListPartsResponse{
 		Parts: protoItems,
 	}), nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Bridge
+// ────────────────────────────────────────────────────────────────────────────
+
+type multipartGRPCServer struct {
+	UnimplementedMultipartUploadServiceServer
+	h *MultipartHandler
+}
+
+// RegisterGRPC registers the handler as a native gRPC server.
+func (h *MultipartHandler) RegisterGRPC(srv *grpc.Server) {
+	RegisterMultipartUploadServiceServer(srv, &multipartGRPCServer{h: h})
+}
+
+func (s *multipartGRPCServer) InitiateMultipartUpload(ctx context.Context, req *InitiateMultipartUploadRequest) (*InitiateMultipartUploadResponse, error) {
+	res, err := s.h.InitiateMultipartUpload(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *multipartGRPCServer) GeneratePartUploadUrl(ctx context.Context, req *GeneratePartUploadUrlRequest) (*GeneratePartUploadUrlResponse, error) {
+	res, err := s.h.GeneratePartUploadUrl(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *multipartGRPCServer) CompleteMultipartUpload(ctx context.Context, req *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResponse, error) {
+	res, err := s.h.CompleteMultipartUpload(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *multipartGRPCServer) AbortMultipartUpload(ctx context.Context, req *AbortMultipartUploadRequest) (*AbortMultipartUploadResponse, error) {
+	res, err := s.h.AbortMultipartUpload(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
+}
+
+func (s *multipartGRPCServer) ListParts(ctx context.Context, req *ListPartsRequest) (*ListPartsResponse, error) {
+	res, err := s.h.ListParts(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.Msg, nil
 }
