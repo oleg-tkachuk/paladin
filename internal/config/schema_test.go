@@ -24,8 +24,6 @@ server:
   name: "test-app"
   http:
     addr: ":8080"
-  grpc:
-    addr: ":9090"
 datastores:
   postgres:
     dsn: "host=localhost"

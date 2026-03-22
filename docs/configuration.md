@@ -15,8 +15,7 @@ PALADIN uses [Koanf](https://github.com/knadh/koanf) to load and merge configura
 ### 1. App & Server
 
 - `app.env`: Execution environment (development, production).
-- `server.http.addr`: Address for the application server (HTTP/JSON/gRPC via Connect) (default: `:8080`).
-- `server.grpc.addr`: Address for the standard gRPC server (default: `:8081`).
+- `server.http.addr`: Address for the application server (HTTP/JSON/Connect via Connect) (default: `:8080`).
 
 ### 2. Datastores
 

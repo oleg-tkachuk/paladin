@@ -10,9 +10,6 @@ import (
 	"github.com/aws/smithy-go"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // problemTypeBase is the base URI for RFC 7807 problem types.
@@ -248,44 +245,6 @@ func MapToHTTP(ctx context.Context, err error) (int, any) {
 	status, pd := MapToHTTPProblem(ctx, err, "")
 
 	return status, pd
-}
-
-// MapToGRPC maps an error to a gRPC status error.
-func MapToGRPC(err error) error {
-	var appErr *AppError
-	if !errors.As(err, &appErr) {
-		if errors.Is(err, domain.ErrNotFound) {
-			return status.Error(codes.NotFound, "not found")
-		}
-
-		return status.Error(codes.Internal, "internal server error")
-	}
-
-	var code codes.Code
-	switch appErr.Code {
-	case CodeBadRequest, CodeValidationFailed:
-		code = codes.InvalidArgument
-	case CodeUnauthorized:
-		code = codes.Unauthenticated
-	case CodeForbidden:
-		code = codes.PermissionDenied
-	case CodeNotFound:
-		code = codes.NotFound
-	case CodeConflict:
-		code = codes.Aborted
-	case CodePreconditionFailed:
-		code = codes.FailedPrecondition
-	case CodeTooLarge, CodeRateLimited:
-		code = codes.ResourceExhausted
-	case CodeTimeout:
-		code = codes.DeadlineExceeded
-	case CodeDependencyUnavailable:
-		code = codes.Unavailable
-	default:
-		code = codes.Internal
-	}
-
-	return status.Error(code, appErr.Message)
 }
 
 // IsNotFound checks if the error is a NotFound error.

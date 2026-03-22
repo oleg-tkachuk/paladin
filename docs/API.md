@@ -2,12 +2,12 @@
 
 ## Interface
 
-PALADIN exposes a single Connect RPC API (gRPC + gRPC-Web + HTTP/JSON via transcoding).
+PALADIN exposes a single Connect RPC API (Connect + Connect-Web + HTTP/JSON via transcoding).
 All requests are validated against `buf.validate` proto annotations.
 
 - **Proto definitions**: `proto/paladin/v1/`
 - **Port**: `:8080` (HTTP/2 via h2c)
-- **Handlers**: `internal/api/grpc/`
+- **Handlers**: `internal/api/connect/`
 
 ---
 

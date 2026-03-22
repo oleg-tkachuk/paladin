@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
-	"github.com/oleg-tkachuk/paladin/internal/api/grpc/grpcapiconnect"
+	"github.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi"
+	"github.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi/paladinapiconnect"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
@@ -42,43 +42,43 @@ func NewServer(
 	interceptors := connect.WithInterceptors(middleware.SetupConnectInterceptors(cfg, log.Named("middleware"), auditRepo)...)
 
 	// ─── ObjectService ─────────────────────────────────────────────────────
-	objectHandler := grpcapi.NewObjectHandler(log.Named("object_handler"), objSvc)
-	path, handler := grpcapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
+	objectHandler := paladinapi.NewObjectHandler(log.Named("object_handler"), objSvc)
+	path, handler := paladinapiconnect.NewObjectServiceHandler(objectHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── CategoryService ───────────────────────────────────────────────────
-	categoryHandler := grpcapi.NewCategoryHandler(log.Named("category_handler"), catSvc)
-	path, handler = grpcapiconnect.NewCategoryServiceHandler(categoryHandler, interceptors)
+	categoryHandler := paladinapi.NewCategoryHandler(log.Named("category_handler"), catSvc)
+	path, handler = paladinapiconnect.NewCategoryServiceHandler(categoryHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── TenantService ─────────────────────────────────────────────────────
-	tenantHandler := grpcapi.NewTenantHandler(log.Named("tenant_handler"), tenantSvc)
-	path, handler = grpcapiconnect.NewTenantServiceHandler(tenantHandler, interceptors)
+	tenantHandler := paladinapi.NewTenantHandler(log.Named("tenant_handler"), tenantSvc)
+	path, handler = paladinapiconnect.NewTenantServiceHandler(tenantHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── MultipartUploadService ────────────────────────────────────────────
-	multipartHandler := grpcapi.NewMultipartHandler(log.Named("multipart_handler"), objSvc)
-	path, handler = grpcapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
+	multipartHandler := paladinapi.NewMultipartHandler(log.Named("multipart_handler"), objSvc)
+	path, handler = paladinapiconnect.NewMultipartUploadServiceHandler(multipartHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── PresignService ────────────────────────────────────────────────────
-	presignHandler := grpcapi.NewPresignHandler(log.Named("presign_handler"), objSvc)
-	path, handler = grpcapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
+	presignHandler := paladinapi.NewPresignHandler(log.Named("presign_handler"), objSvc)
+	path, handler = paladinapiconnect.NewPresignServiceHandler(presignHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── BulkService ───────────────────────────────────────────────────────
-	bulkHandler := grpcapi.NewBulkHandler(log.Named("bulk_handler"), objSvc)
-	path, handler = grpcapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
+	bulkHandler := paladinapi.NewBulkHandler(log.Named("bulk_handler"), objSvc)
+	path, handler = paladinapiconnect.NewBulkServiceHandler(bulkHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── BucketService ─────────────────────────────────────────────────────
-	bucketHandler := grpcapi.NewBucketHandler(log.Named("bucket_handler"), objSvc)
-	path, handler = grpcapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
+	bucketHandler := paladinapi.NewBucketHandler(log.Named("bucket_handler"), objSvc)
+	path, handler = paladinapiconnect.NewBucketServiceHandler(bucketHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── SystemService ─────────────────────────────────────────────────────
-	systemHandler := grpcapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, auditRepo)
-	path, handler = grpcapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
+	systemHandler := paladinapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, auditRepo)
+	path, handler = paladinapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
 	mux.Handle(path, handler)
 
 	// ─── Operational endpoints ─────────────────────────────────────────────
@@ -101,17 +101,12 @@ func NewServer(
 			"Content-Type",
 			"Connect-Protocol-Version",
 			"Connect-Timeout-Ms",
-			"Grpc-Timeout",
-			"X-Grpc-Web",
 			"X-User-Agent",
 			"X-Request-Id",
 			"X-Tenant-Id",
 			"Authorization",
 		},
 		ExposedHeaders: []string{
-			"Grpc-Status",
-			"Grpc-Message",
-			"Grpc-Status-Details-Bin",
 			"X-Request-Id",
 		},
 	})

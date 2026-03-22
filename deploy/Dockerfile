@@ -16,7 +16,6 @@ FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS tools
 
 # Tool versions MUST be pinned for reproducible builds
 ARG PROTOC_GEN_GO_VERSION=latest
-ARG PROTOC_GEN_GO_GRPC_VERSION=latest
 ARG WIRE_VERSION=latest
 ARG PROTOC_GEN_CONNECT_GO_VERSION=latest
 ARG SQLC_VERSION=latest
@@ -37,7 +36,6 @@ RUN mkdir -p /go_workspace/pkg /go_workspace/cache /go_workspace/tmp /go_workspa
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} && \
-    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION} && \
     go install github.com/google/wire/cmd/wire@${WIRE_VERSION} && \
     go install connectrpc.com/connect/cmd/protoc-gen-connect-go@${PROTOC_GEN_CONNECT_GO_VERSION} && \
     go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION} && \
@@ -58,7 +56,6 @@ ARG BUILD_TIME=undefined
 
 # Runtime ports (documentation only)
 ARG HTTP_PORT=8080
-ARG GRPC_PORT=50051
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -118,14 +115,13 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
 
 ARG HTTP_PORT=8080
-ARG GRPC_PORT=9090
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
 
 # OCI image labels
 LABEL org.opencontainers.image.title="paladin" \
-    org.opencontainers.image.description="acme PALADIN API — Connect RPC + gRPC service" \
+    org.opencontainers.image.description="acme PALADIN API — Connect RPC service" \
     org.opencontainers.image.version="${APP_VERSION}" \
     org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
     org.opencontainers.image.created="${BUILD_TIME}" \
@@ -138,7 +134,7 @@ COPY --from=builder --chown=nonroot:nonroot /app/migrations /app/migrations
 COPY --from=builder --chown=nonroot:nonroot /app/configs /app/configs
 
 # EXPOSE is documentation; you may keep constants or use args
-EXPOSE 8080 50051 9090
+EXPOSE 8080
 
 USER nonroot:nonroot
 ENTRYPOINT ["/app/bin/paladin"]

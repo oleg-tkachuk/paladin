@@ -2,13 +2,11 @@ package app
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"sync/atomic"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
@@ -24,7 +22,6 @@ type App struct {
 	Logger *zap.Logger
 
 	httpSrv *http.Server
-	grpcSrv *grpc.Server
 
 	db           *postgres.DB
 	otelShutdown observability.ShutdownFunc
@@ -39,7 +36,6 @@ func NewContainer(
 	cfg config.Config,
 	l *zap.Logger,
 	httpSrv *http.Server,
-	grpcSrv *grpc.Server,
 	db *postgres.DB,
 	otelShutdown observability.ShutdownFunc,
 	reaper *worker.Reaper,
@@ -48,28 +44,15 @@ func NewContainer(
 	return &App{
 		Version: version, Commit: commit, BuildTime: buildTime,
 		Cfg: cfg, Logger: l,
-		httpSrv: httpSrv, grpcSrv: grpcSrv,
-		db: db, otelShutdown: otelShutdown,
+		httpSrv: httpSrv,
+		db:      db, otelShutdown: otelShutdown,
 		reaper:  reaper,
 		Started: started,
 	}
 }
 
 func (a *App) Run() error {
-	a.Logger.Info("Starting gRPC server", zap.String("addr", a.Cfg.Server.GRPC.Addr))
-
-	errCh := make(chan error, 2)
-
-	go func() {
-		lc := net.ListenConfig{}
-		ln, err := lc.Listen(context.Background(), "tcp", a.Cfg.Server.GRPC.Addr)
-		if err != nil {
-			errCh <- err
-
-			return
-		}
-		errCh <- a.grpcSrv.Serve(ln)
-	}()
+	errCh := make(chan error, 1)
 
 	go func() {
 		if a.Cfg.Server.HTTP.TLS.Enabled {
@@ -78,12 +61,12 @@ func (a *App) Run() error {
 				zap.String("cert_path", a.Cfg.Server.HTTP.TLS.CertPath),
 			)
 			if err := a.httpSrv.ListenAndServeTLS(a.Cfg.Server.HTTP.TLS.CertPath, a.Cfg.Server.HTTP.TLS.KeyPath); err != nil && err != http.ErrServerClosed {
-				a.Logger.Fatal("HTTPS server listen failed", zap.Error(err))
+				errCh <- err
 			}
 		} else {
 			a.Logger.Info("Starting HTTP server", zap.String("addr", a.httpSrv.Addr))
 			if err := a.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				a.Logger.Fatal("HTTP server listen failed", zap.Error(err))
+				errCh <- err
 			}
 		}
 	}()
@@ -105,10 +88,6 @@ func (a *App) Shutdown() {
 	defer cancel()
 
 	a.Logger.Info("Shutting down...")
-
-	if a.grpcSrv != nil {
-		a.grpcSrv.GracefulStop()
-	}
 
 	if a.httpSrv != nil {
 		_ = a.httpSrv.Shutdown(ctx)

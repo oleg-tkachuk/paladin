@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package paladin.v1;
 
-option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi;paladinapi";
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";

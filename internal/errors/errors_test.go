@@ -10,8 +10,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func TestAppError_ErrorAndUnwrap(t *testing.T) {
@@ -130,45 +128,6 @@ func TestMapToHTTP(t *testing.T) {
 	for err, expCode := range mappings {
 		c, _ := apperrors.MapToHTTP(context.Background(), err)
 		assert.Equal(t, expCode, c, "expected %d for %s", expCode, err.Code)
-	}
-}
-
-func TestMapToGRPC(t *testing.T) {
-	t.Run("AppError", func(t *testing.T) {
-		err := apperrors.MapToGRPC(apperrors.NotFound("not found", nil))
-		st, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.NotFound, st.Code())
-		assert.Equal(t, "not found", st.Message())
-	})
-
-	t.Run("UnknownError", func(t *testing.T) {
-		err := apperrors.MapToGRPC(goerrors.New("raw error"))
-		st, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Internal, st.Code())
-	})
-
-	// Check mappings
-	mappings := map[*apperrors.AppError]codes.Code{
-		apperrors.BadRequest("m", nil):         codes.InvalidArgument,
-		apperrors.ValidationFailed("m", nil):   codes.InvalidArgument,
-		apperrors.Unauthorized("m", nil):       codes.Unauthenticated,
-		apperrors.Forbidden("m", nil):          codes.PermissionDenied,
-		apperrors.Conflict("m", nil):           codes.Aborted,
-		apperrors.PreconditionFailed("m", nil): codes.FailedPrecondition,
-		apperrors.TooLarge("m", nil):           codes.ResourceExhausted,
-		apperrors.RateLimited("m", nil):        codes.ResourceExhausted,
-		apperrors.Timeout("m", nil):            codes.DeadlineExceeded,
-		apperrors.ServiceUnavailable("m", nil): codes.Unavailable,
-		apperrors.Internal("m", nil):           codes.Internal,
-		apperrors.New("unknown", "m", nil):     codes.Internal,
-	}
-
-	for err, expCode := range mappings {
-		grpcErr := apperrors.MapToGRPC(err)
-		st, _ := status.FromError(grpcErr)
-		assert.Equal(t, expCode, st.Code(), "expected %v for %s", expCode, err.Code)
 	}
 }
 

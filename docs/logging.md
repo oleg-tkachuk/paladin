@@ -20,7 +20,7 @@ All structured logs include the following fields where applicable:
 - `request_id`: Unique ID for tracing the request.
 - `tenant_id`: The ID of the tenant making the request.
 - `user_id`: If authenticated, the user ID.
-- `method`: HTTP/gRPC method.
+- `method`: HTTP/Connect method.
 - `path`: Request path.
 - `status`: Response status code.
 - `duration_ms`: Latency.
@@ -46,5 +46,5 @@ All structured logs include the following fields where applicable:
 
 - **Access Logs**: Emitted by Gin/Connect middleware for every request.
 - **Dependency Logs**: Connectivity issues with Postgres or S3.
-- **Error Logs**: Validated by `internal/errors` and mapped to HTTP/gRPC codes.
+- **Error Logs**: Validated by `internal/errors` and mapped to HTTP/Connect codes.
 - **Housekeeping Logs**: Produced by the Reaper worker during cleanup.

@@ -43,12 +43,6 @@ server:
       server_name: ""
       insecure_skip_verify: false
 
-  grpc:
-    addr: "0.0.0.0:50051"
-    reflection_enabled: true
-    max_recv_msg_size: 4194304
-    max_send_msg_size: 4194304
-
   shutdown_timeout: 20s
   log_probes: false
 
@@ -141,7 +135,7 @@ idempotency:
 otel:
   enabled: false
   endpoint: "otel-collector:4317"
-  protocol: grpc
+  protocol: http
   insecure: true
   resource:
     service.name: paladin

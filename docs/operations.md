@@ -100,7 +100,7 @@ In Kubernetes, the service is deployed with:
 - A `Deployment` running the compiled binary
 - A `ConfigMap` mounting the YAML config to `/app/configs/paladin.yaml`
 - `Secret` objects referenced in the config for DB password and S3 credentials
-- Two `Services`: one for HTTP (`:8080`), one for gRPC (`:9090`)
+- Two `Services`: one for HTTP (`:8080`), one for Connect (`:9090`)
 - Liveness probe: `GET /health/livez`
 - Readiness probe: `GET /health/readyz`
 - Startup probe: `GET /health/startupz`
@@ -119,13 +119,13 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `internal/config/config.go` | Config loader (YAML → struct) |
 | `internal/config/resolver.go` | Kubernetes secret resolver |
 | `internal/config/schema.cue` | CUE schema for config validation |
-| `internal/api/grpc/server.go` | gRPC server implementation |
-| `internal/api/grpc/tenant_types.go` | gRPC tenant RPC message mappers |
-| `internal/api/grpc/validation.go` | gRPC request validation logic |
+| `internal/api/connect/server.go` | Connect server implementation |
+| `internal/api/connect/tenant_types.go` | Connect tenant RPC message mappers |
+| `internal/api/connect/validation.go` | Connect request validation logic |
 | `internal/api/http/router.go` | Gin HTTP router setup |
 | `internal/api/http/adapter.go` | OpenAPI → domain service adapter (all HTTP handler implementations) |
 | `internal/middleware/http_stack.go` | HTTP middleware chain setup |
-| `internal/middleware/grpc_chain.go` | gRPC interceptor chain setup |
+| `internal/middleware/connect_chain.go` | Connect interceptor chain setup |
 | `internal/middleware/auth.go` | HTTP tenant enforcement middleware |
 | `internal/middleware/ratelimit.go` | Per-tenant token bucket rate limiter |
 | `internal/middleware/audit_log.go` | HTTP audit logging middleware |
@@ -146,7 +146,7 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `migrations/004_v1_1_0_refactor.sql` | Status expansion, idempotency_keys table |
 | `migrations/007_audit_logs.sql` | audit_logs table |
 | `migrations/010_category_support.sql` | object_categories table, category/subpath columns |
-| `proto/paladin.proto` | gRPC service and message definitions |
+| `proto/paladin.proto` | Connect service and message definitions |
 | `configs/paladin.yaml` | Default config (local environment) |
 | `deploy/Dockerfile` | Multi-stage Docker build |
 | `deploy/docker-compose.yaml` | Local development stack |

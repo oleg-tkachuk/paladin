@@ -104,7 +104,6 @@ type Server struct {
 	Mode            string        `yaml:"mode" json:"mode"`
 	Name            string        `yaml:"name" json:"name"`
 	HTTP            HTTPServer    `yaml:"http" json:"http"`
-	GRPC            GRPCServer    `yaml:"grpc" json:"grpc"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
@@ -131,13 +130,6 @@ type TLS struct {
 	CaPath             string `yaml:"ca_path" json:"ca_path"`
 	ServerName         string `yaml:"server_name" json:"server_name"`
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
-}
-
-type GRPCServer struct {
-	Addr              string `yaml:"addr" json:"addr"`
-	ReflectionEnabled bool   `yaml:"reflection_enabled" json:"reflection_enabled"`
-	MaxRecvMsgSize    int    `yaml:"max_recv_msg_size" json:"max_recv_msg_size"`
-	MaxSendMsgSize    int    `yaml:"max_send_msg_size" json:"max_send_msg_size"`
 }
 
 type Datastores struct {

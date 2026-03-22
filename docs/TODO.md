@@ -2,7 +2,7 @@
 
 ## BucketService Domain Layer
 
-The `BucketService` gRPC service (5 RPCs) is currently stubbed with `Unimplemented` responses.
+The `BucketService` Connect service (5 RPCs) is currently stubbed with `Unimplemented` responses.
 Implementing it requires a new bucket domain layer that does not exist yet.
 
 ### Stubbed RPCs
@@ -20,7 +20,7 @@ Implementing it requires a new bucket domain layer that does not exist yet.
 1. **Domain model**: `Bucket`, `BucketConfiguration`, `VersioningConfiguration`, `LifecycleRule`, `AccessControlEntry`
 2. **Repository**: `BucketRepository` interface + Postgres implementation + migrations
 3. **Service**: `BucketService` domain interface + implementation with authorization
-4. **Handler**: Replace stubs in `internal/api/grpc/bucket_handler.go`
+4. **Handler**: Replace stubs in `internal/api/connect/bucket_handler.go`
 5. **DI**: Wire the new service into the dependency graph (`wire/sets.go`, `wire_gen.go`)
 
 ### Proto Definitions

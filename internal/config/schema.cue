@@ -44,12 +44,6 @@ server: {
        insecure_skip_verify: bool | *false
     }
   }
-  grpc: { 
-  	addr: string 
-    reflection_enabled: bool | *false
-    max_recv_msg_size: int | *4194304
-    max_send_msg_size: int | *4194304
-  }
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
   log_probes: bool | *true
 }
@@ -156,7 +150,7 @@ housekeeping: {
 otel: {
   enabled: bool | *false
   endpoint: string
-  protocol: "grpc" | "http" | *"grpc"
+  protocol: "grpc" | "http" | *"http"
   insecure: bool | *true
   resource: {
     "service.name": string

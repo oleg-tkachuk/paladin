@@ -6,14 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	grpcapi "github.com/oleg-tkachuk/paladin/internal/api/grpc"
 	httpapi "github.com/oleg-tkachuk/paladin/internal/api/http"
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/breaker"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/service"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3"
@@ -27,8 +25,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 type Version string
@@ -59,7 +55,6 @@ var ProviderSet = wire.NewSet(
 	ProvideTenantService,
 	ProvideHealthService,
 	ProvideHTTPServer,
-	ProvideGRPCServer,
 	ProvideStartTime,
 	ProvideReaper,
 	ProvideApp,
@@ -250,63 +245,6 @@ func ProvideHTTPServer(
 	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, started, startTime, auditRepo)
 }
 
-// ProvideGRPCServer builds the native gRPC server with interceptors and reflection.
-func ProvideGRPCServer(
-	cfg config.Config,
-	l *zap.Logger,
-	objSvc domain.ObjectsService,
-	catSvc domain.CategoryService,
-	tenantSvc domain.TenantService,
-	hs *service.HealthService,
-	started *atomic.Bool,
-	meta domain.AppMetadata,
-	startTime time.Time,
-	auditRepo domain.AuditLogRepository,
-) *grpc.Server {
-	interceptors := middleware.SetupGRPCInterceptors(&cfg, l)
-	srv := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(interceptors...),
-	)
-
-	// ─── ObjectService ─────────────────────────────────────────────────────
-	objectHandler := grpcapi.NewObjectHandler(l.Named("object_handler"), objSvc)
-	objectHandler.RegisterGRPC(srv)
-
-	// ─── CategoryService ───────────────────────────────────────────────────
-	categoryHandler := grpcapi.NewCategoryHandler(l.Named("category_handler"), catSvc)
-	categoryHandler.RegisterGRPC(srv)
-
-	// ─── TenantService ─────────────────────────────────────────────────────
-	tenantHandler := grpcapi.NewTenantHandler(l.Named("tenant_handler"), tenantSvc)
-	tenantHandler.RegisterGRPC(srv)
-
-	// ─── MultipartUploadService ────────────────────────────────────────────
-	multipartHandler := grpcapi.NewMultipartHandler(l.Named("multipart_handler"), objSvc)
-	multipartHandler.RegisterGRPC(srv)
-
-	// ─── PresignService ────────────────────────────────────────────────────
-	presignHandler := grpcapi.NewPresignHandler(l.Named("presign_handler"), objSvc)
-	presignHandler.RegisterGRPC(srv)
-
-	// ─── BulkService ───────────────────────────────────────────────────────
-	bulkHandler := grpcapi.NewBulkHandler(l.Named("bulk_handler"), objSvc)
-	bulkHandler.RegisterGRPC(srv)
-
-	// ─── BucketService ─────────────────────────────────────────────────────
-	bucketHandler := grpcapi.NewBucketHandler(l.Named("bucket_handler"), objSvc)
-	bucketHandler.RegisterGRPC(srv)
-
-	// ─── SystemService ─────────────────────────────────────────────────────
-	systemHandler := grpcapi.NewSystemHandler(l.Named("system_handler"), hs, meta, started, startTime, &cfg, auditRepo)
-	systemHandler.RegisterGRPC(srv)
-
-	if cfg.Server.GRPC.ReflectionEnabled {
-		reflection.Register(srv)
-	}
-
-	return srv
-}
-
 func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
 	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l.Named("reaper"))
 }
@@ -315,7 +253,6 @@ func ProvideApp(
 	meta domain.AppMetadata,
 	cfg config.Config,
 	l *zap.Logger,
-	grpcSrv *grpc.Server,
 	httpapiSrv *httpapi.Server,
 	db *postgres.DB,
 	otelShutdown observability.ShutdownFunc,
@@ -333,7 +270,7 @@ func ProvideApp(
 	}
 	a := app.NewContainer(
 		meta.Version, meta.Commit, meta.BuildTime,
-		cfg, l.Named("container"), httpSrv, grpcSrv, db, otelShutdown, reaper, started,
+		cfg, l.Named("container"), httpSrv, db, otelShutdown, reaper, started,
 	)
 
 	cleanup := func() {

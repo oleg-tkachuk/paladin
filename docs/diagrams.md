@@ -4,7 +4,7 @@
 
 ```mermaid
 graph TD
-    User["User/Application"] -- "REST/gRPC" --> PALADIN["Paladin (PALADIN)"]
+    User["User/Application"] -- "REST/Connect" --> PALADIN["Paladin (PALADIN)"]
     PALADIN -- "Metadata" --> DB["PostgreSQL"]
     PALADIN -- "Pre-signed URLs" --> User
     User -- "Direct Upload/Download" --> S3["S3 / SeaweedFS"]

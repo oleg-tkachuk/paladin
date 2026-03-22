@@ -55,15 +55,14 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	atomicBool := provideStartedBool()
 	time := wire.ProvideStartTime()
 	auditLogRepository := wire.ProvideAuditLogRepo(db)
-	server := wire.ProvideGRPCServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
-	httpapiServer := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
+	server := wire.ProvideHTTPServer(config, logger, objectsService, categoryService, tenantService, healthService, atomicBool, appMetadata, time, auditLogRepository)
 	shutdownFunc, err := wire.ProvideOTel(ctx, config)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, client, logger)
-	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, httpapiServer, db, shutdownFunc, reaper, atomicBool)
+	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, db, shutdownFunc, reaper, atomicBool)
 	return appApp, func() {
 		cleanup2()
 		cleanup()
