@@ -3,6 +3,7 @@ package paladinapi
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
@@ -30,7 +31,20 @@ func NewObjectHandler(log *zap.Logger, svc domain.ObjectsService) *ObjectHandler
 func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[UploadObjectRequest]) (*connect.Response[UploadObjectResponse], error) {
 	msg := req.Msg
 
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant (local dev), or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot upload objects for other tenants"))
+	}
 
 	// Extract category from tags, then metadata, then bucket.
 	category := msg.Tags["category"]
@@ -53,7 +67,7 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 		externalRef = &ref
 	}
 
-	out, err := h.svc.CreateSingle(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
+	out, err := h.svc.CreateSingle(ctx, requestedTenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -81,14 +95,27 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 
 func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request[DownloadObjectRequest]) (*connect.Response[DownloadObjectResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot download objects of other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
 
-	presigned, err := h.svc.SignDownload(ctx, tenantID, rec.ID, defaultDownloadTTLSeconds)
+	presigned, err := h.svc.SignDownload(ctx, requestedTenantID, rec.ID, defaultDownloadTTLSeconds)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -101,9 +128,22 @@ func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request
 
 func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Request[GetObjectMetadataRequest]) (*connect.Response[GetObjectMetadataResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot access metadata of other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -115,15 +155,28 @@ func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Requ
 
 func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.Request[UpdateObjectMetadataRequest]) (*connect.Response[UpdateObjectMetadataResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot update metadata of other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
 
 	// PatchMeta merges labels/tags; the proto sends them as the new sets.
-	updated, err := h.svc.PatchMeta(ctx, tenantID, rec.ID, msg.Metadata, msg.Tags, nil)
+	updated, err := h.svc.PatchMeta(ctx, requestedTenantID, rec.ID, msg.Metadata, msg.Tags, nil)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -137,17 +190,30 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 
 func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[DeleteObjectRequest]) (*connect.Response[DeleteObjectResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot delete objects of other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
 
 	if msg.Permanent {
-		err = h.svc.Purge(ctx, tenantID, rec.ID, &msg.IdempotencyKey)
+		err = h.svc.Purge(ctx, requestedTenantID, rec.ID, &msg.IdempotencyKey)
 	} else {
-		err = h.svc.Delete(ctx, tenantID, rec.ID)
+		err = h.svc.Delete(ctx, requestedTenantID, rec.ID)
 	}
 	if err != nil {
 		return nil, mapError(err)
@@ -156,7 +222,7 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 	logger.FromContext(ctx).Info("object deleted", zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
 
 	// Re-fetch to get post-delete state (soft-delete updates status)
-	updated, fetchErr := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	updated, fetchErr := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if fetchErr != nil {
 		// For permanent deletes the record is gone — return the pre-delete snapshot.
 		//nolint:nilerr
@@ -172,14 +238,27 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 
 func (h *ObjectHandler) CopyObject(ctx context.Context, req *connect.Request[CopyObjectRequest]) (*connect.Response[CopyObjectResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot copy objects for other tenants"))
+	}
 
 	dstBucket := msg.DestinationBucket
 	if dstBucket == "" {
 		dstBucket = msg.Bucket
 	}
 
-	copied, err := h.svc.CopyObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey, msg.Metadata)
+	copied, err := h.svc.CopyObject(ctx, requestedTenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey, msg.Metadata)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -196,14 +275,27 @@ func (h *ObjectHandler) CopyObject(ctx context.Context, req *connect.Request[Cop
 
 func (h *ObjectHandler) MoveObject(ctx context.Context, req *connect.Request[MoveObjectRequest]) (*connect.Response[MoveObjectResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot move objects for other tenants"))
+	}
 
 	dstBucket := msg.DestinationBucket
 	if dstBucket == "" {
 		dstBucket = msg.Bucket
 	}
 
-	moved, err := h.svc.MoveObject(ctx, tenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey)
+	moved, err := h.svc.MoveObject(ctx, requestedTenantID, msg.Bucket, msg.Key, dstBucket, msg.DestinationKey)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -220,7 +312,20 @@ func (h *ObjectHandler) MoveObject(ctx context.Context, req *connect.Request[Mov
 
 func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[ListObjectsRequest]) (*connect.Response[ListObjectsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot list objects of other tenants"))
+	}
 
 	filter := domain.ListObjectsFilter{
 		Limit:  int(msg.PageSize),
@@ -277,7 +382,7 @@ func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[Li
 		filter.SortOrder = domain.SortOrderAsc
 	}
 
-	objects, nextCursor, total, err := h.svc.List(ctx, tenantID, filter)
+	objects, nextCursor, total, err := h.svc.List(ctx, requestedTenantID, filter)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -297,9 +402,22 @@ func (h *ObjectHandler) ListObjects(ctx context.Context, req *connect.Request[Li
 func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request[CompleteObjectRequest]) (*connect.Response[CompleteObjectResponse], error) {
 	msg := req.Msg
 
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot complete objects for other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -309,7 +427,7 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 		etag = &msg.Etag
 	}
 
-	updated, err := h.svc.CompleteObject(ctx, tenantID, rec.ID, etag, nil)
+	updated, err := h.svc.CompleteObject(ctx, requestedTenantID, rec.ID, etag, nil)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -323,14 +441,27 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 
 func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[RestoreObjectRequest]) (*connect.Response[RestoreObjectResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot restore objects of other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
 
-	err = h.svc.Restore(ctx, tenantID, rec.ID)
+	err = h.svc.Restore(ctx, requestedTenantID, rec.ID)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -338,7 +469,7 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 	logger.FromContext(ctx).Info("object restored", zap.String("object_id", rec.ID.String()))
 
 	// Re-fetch to get post-restore state (AVAILABLE status)
-	updated, fetchErr := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
+	updated, fetchErr := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
 	if fetchErr != nil {
 		//nolint:nilerr
 		return connect.NewResponse(&RestoreObjectResponse{

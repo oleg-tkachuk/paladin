@@ -2,6 +2,7 @@ package paladinapi
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
@@ -23,9 +24,23 @@ func NewTenantHandler(log *zap.Logger, svc domain.TenantService) *TenantHandler 
 
 func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[CreateTenantRequest]) (*connect.Response[CreateTenantResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	out, err := h.svc.Create(ctx, tenantID, msg.DisplayName, msg.Labels, msg.Tags)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization: only SystemAdmin or DefaultTenant (local dev) can create any tenant.
+	// Regular tenants can only "re-create" (upsert) themselves if they already have an ID.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot create or update other tenants"))
+	}
+
+	out, err := h.svc.Create(ctx, requestedTenantID, msg.DisplayName, msg.Labels, msg.Tags)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -37,9 +52,22 @@ func (h *TenantHandler) CreateTenant(ctx context.Context, req *connect.Request[C
 
 func (h *TenantHandler) GetTenant(ctx context.Context, req *connect.Request[GetTenantRequest]) (*connect.Response[GetTenantResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	out, err := h.svc.Get(ctx, tenantID)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot access other tenants"))
+	}
+
+	out, err := h.svc.Get(ctx, requestedTenantID)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -101,9 +129,22 @@ func (h *TenantHandler) ListTenants(ctx context.Context, req *connect.Request[Li
 
 func (h *TenantHandler) DeleteTenant(ctx context.Context, req *connect.Request[DeleteTenantRequest]) (*connect.Response[DeleteTenantResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	err := h.svc.Delete(ctx, tenantID)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot delete other tenants"))
+	}
+
+	err := h.svc.Delete(ctx, requestedTenantID)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -113,6 +154,20 @@ func (h *TenantHandler) DeleteTenant(ctx context.Context, req *connect.Request[D
 
 func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.Request[UpdateTenantMetadataRequest]) (*connect.Response[UpdateTenantMetadataResponse], error) {
 	msg := req.Msg
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot update other tenants"))
+	}
 
 	// domain.TenantService.PatchMetadata takes map[string]interface{} for labelsPatch.
 	// We need to convert map[string]string to map[string]interface{}.
@@ -121,7 +176,7 @@ func (h *TenantHandler) UpdateTenantMetadata(ctx context.Context, req *connect.R
 		labelsPatch[k] = v
 	}
 
-	out, err := h.svc.PatchMetadata(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), labelsPatch, msg.Tags, msg.DisplayName)
+	out, err := h.svc.PatchMetadata(ctx, requestedTenantID, labelsPatch, msg.Tags, msg.DisplayName)
 	if err != nil {
 		return nil, mapError(err)
 	}

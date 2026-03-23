@@ -2,6 +2,7 @@ package paladinapi
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -69,9 +70,22 @@ func (h *PresignHandler) generatePresignedUrl(
 	ttlDurSeconds int,
 	signFunc func(context.Context, string, uuid.UUID, int) (domain.Presigned, error),
 ) (*PresignedUrl, error) {
-	tenantID := utils.TenantIDFromContext(ctx, reqTenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := reqTenantId
 
-	rec, err := getObjectResiliently(ctx, h.svc, tenantID, bucket, key)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant (local dev), or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot generate URLs for other tenants"))
+	}
+
+	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, bucket, key)
 	if err != nil {
 		logger.FromContext(ctx).Warn(opName+": object lookup failed", zap.Error(err))
 
@@ -83,7 +97,7 @@ func (h *PresignHandler) generatePresignedUrl(
 		ttl = ttlDurSeconds
 	}
 
-	presigned, err := signFunc(ctx, tenantID, rec.ID, ttl)
+	presigned, err := signFunc(ctx, requestedTenantID, rec.ID, ttl)
 	if err != nil {
 		logger.FromContext(ctx).Warn(opName+": failed to sign", zap.Error(err), zap.String("object_id", rec.ID.String()))
 

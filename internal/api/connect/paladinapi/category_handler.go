@@ -2,6 +2,7 @@ package paladinapi
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
@@ -23,9 +24,22 @@ func NewCategoryHandler(log *zap.Logger, svc domain.CategoryService) *CategoryHa
 
 func (h *CategoryHandler) CreateCategory(ctx context.Context, req *connect.Request[CreateCategoryRequest]) (*connect.Response[CreateCategoryResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	out, err := h.svc.Create(ctx, tenantID, msg.Slug, msg.Name, msg.Description)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant (local dev), or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot create or update categories for other tenants"))
+	}
+
+	out, err := h.svc.Create(ctx, requestedTenantID, msg.Slug, msg.Name, msg.Description)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -37,9 +51,22 @@ func (h *CategoryHandler) CreateCategory(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) GetCategory(ctx context.Context, req *connect.Request[GetCategoryRequest]) (*connect.Response[GetCategoryResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	out, err := h.svc.Get(ctx, tenantID, msg.Slug)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot access categories of other tenants"))
+	}
+
+	out, err := h.svc.Get(ctx, requestedTenantID, msg.Slug)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -51,11 +78,24 @@ func (h *CategoryHandler) GetCategory(ctx context.Context, req *connect.Request[
 
 func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Request[UpdateCategoryRequest]) (*connect.Response[UpdateCategoryResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot update categories of other tenants"))
+	}
 
 	// Note:domain.CategoryService.Update currently expects name, which might be empty if not provided in proto.
 	// We need to handle optionality.
-	existing, err := h.svc.Get(ctx, tenantID, msg.Slug)
+	existing, err := h.svc.Get(ctx, requestedTenantID, msg.Slug)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -70,7 +110,7 @@ func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Reque
 		description = msg.Description
 	}
 
-	out, err := h.svc.Update(ctx, tenantID, msg.Slug, name, description)
+	out, err := h.svc.Update(ctx, requestedTenantID, msg.Slug, name, description)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -82,9 +122,22 @@ func (h *CategoryHandler) UpdateCategory(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) DeleteCategory(ctx context.Context, req *connect.Request[DeleteCategoryRequest]) (*connect.Response[DeleteCategoryResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	err := h.svc.Delete(ctx, tenantID, msg.Slug)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot delete categories of other tenants"))
+	}
+
+	err := h.svc.Delete(ctx, requestedTenantID, msg.Slug)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -94,6 +147,20 @@ func (h *CategoryHandler) DeleteCategory(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Request[ListCategoriesRequest]) (*connect.Response[ListCategoriesResponse], error) {
 	msg := req.Msg
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot list categories of other tenants"))
+	}
 
 	filter := domain.ListCategoriesFilter{
 		Limit:  int(msg.PageSize),
@@ -119,7 +186,7 @@ func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Reque
 		filter.SortOrder = domain.SortOrderAsc
 	}
 
-	categories, nextCursor, total, err := h.svc.List(ctx, utils.TenantIDFromContext(ctx, msg.TenantId), filter)
+	categories, nextCursor, total, err := h.svc.List(ctx, requestedTenantID, filter)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -138,9 +205,22 @@ func (h *CategoryHandler) ListCategories(ctx context.Context, req *connect.Reque
 
 func (h *CategoryHandler) GetCategoryStats(ctx context.Context, req *connect.Request[GetCategoryStatsRequest]) (*connect.Response[GetCategoryStatsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	out, err := h.svc.GetStats(ctx, tenantID, msg.Slug)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot access statistics of other tenants"))
+	}
+
+	out, err := h.svc.GetStats(ctx, requestedTenantID, msg.Slug)
 	if err != nil {
 		return nil, mapError(err)
 	}

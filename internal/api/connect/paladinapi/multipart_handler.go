@@ -3,6 +3,7 @@ package paladinapi
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
@@ -25,7 +26,20 @@ func NewMultipartHandler(log *zap.Logger, svc domain.ObjectsService) *MultipartH
 
 func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *connect.Request[InitiateMultipartUploadRequest]) (*connect.Response[InitiateMultipartUploadResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant (local dev), or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot initiate multipart uploads for other tenants"))
+	}
 
 	// Extract category from tags, then metadata, then bucket (if available in future).
 	category := msg.Tags["category"]
@@ -44,11 +58,11 @@ func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *con
 		externalRef = &ref
 	}
 
-	out, err := h.svc.InitiateMultipart(ctx, tenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
+	out, err := h.svc.InitiateMultipart(ctx, requestedTenantID, category, msg.ContentType, msg.SizeBytes, msg.Metadata, msg.Tags, externalRef, 0, &msg.IdempotencyKey)
 	if err != nil {
 		logger.FromContext(ctx).Warn("InitiateMultipartUpload: failed",
 			zap.Error(err),
-			zap.String("tenant_id", tenantID),
+			zap.String("tenant_id", requestedTenantID),
 			zap.String("category", category))
 
 		return nil, mapError(err)
@@ -77,9 +91,22 @@ func (h *MultipartHandler) InitiateMultipartUpload(ctx context.Context, req *con
 
 func (h *MultipartHandler) GeneratePartUploadUrl(ctx context.Context, req *connect.Request[GeneratePartUploadUrlRequest]) (*connect.Response[GeneratePartUploadUrlResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	p, err := h.svc.SignPart(ctx, tenantID, msg.UploadId, msg.PartNumber)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot generate part URLs for other tenants"))
+	}
+
+	p, err := h.svc.SignPart(ctx, requestedTenantID, msg.UploadId, msg.PartNumber)
 	if err != nil {
 		logger.FromContext(ctx).Warn("GeneratePartUploadUrl: failed", zap.Error(err), zap.String("upload_id", msg.UploadId), zap.Int32("part", msg.PartNumber))
 
@@ -93,14 +120,27 @@ func (h *MultipartHandler) GeneratePartUploadUrl(ctx context.Context, req *conne
 
 func (h *MultipartHandler) CompleteMultipartUpload(ctx context.Context, req *connect.Request[CompleteMultipartUploadRequest]) (*connect.Response[CompleteMultipartUploadResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot complete multipart uploads for other tenants"))
+	}
 
 	parts := make([]domain.CompletePart, 0, len(msg.Parts))
 	for _, p := range msg.Parts {
 		parts = append(parts, domain.CompletePart{PartNumber: p.PartNumber, ETag: p.Etag})
 	}
 
-	rec, err := h.svc.CompleteMultipart(ctx, tenantID, msg.UploadId, parts)
+	rec, err := h.svc.CompleteMultipart(ctx, requestedTenantID, msg.UploadId, parts)
 	if err != nil {
 		logger.FromContext(ctx).Warn("CompleteMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
 
@@ -118,9 +158,22 @@ func (h *MultipartHandler) CompleteMultipartUpload(ctx context.Context, req *con
 
 func (h *MultipartHandler) AbortMultipartUpload(ctx context.Context, req *connect.Request[AbortMultipartUploadRequest]) (*connect.Response[AbortMultipartUploadResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	if err := h.svc.AbortMultipart(ctx, tenantID, msg.UploadId); err != nil {
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot abort multipart uploads for other tenants"))
+	}
+
+	if err := h.svc.AbortMultipart(ctx, requestedTenantID, msg.UploadId); err != nil {
 		logger.FromContext(ctx).Warn("AbortMultipartUpload: failed", zap.Error(err), zap.String("upload_id", msg.UploadId))
 
 		return nil, mapError(err)
@@ -133,9 +186,22 @@ func (h *MultipartHandler) AbortMultipartUpload(ctx context.Context, req *connec
 
 func (h *MultipartHandler) ListParts(ctx context.Context, req *connect.Request[ListPartsRequest]) (*connect.Response[ListPartsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
 
-	parts, err := h.svc.ListParts(ctx, tenantID, msg.UploadId)
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot list parts for other tenants"))
+	}
+
+	parts, err := h.svc.ListParts(ctx, requestedTenantID, msg.UploadId)
 	if err != nil {
 		logger.FromContext(ctx).Warn("ListParts failed", zap.Error(err))
 

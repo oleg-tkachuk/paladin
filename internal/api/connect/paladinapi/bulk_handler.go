@@ -2,6 +2,7 @@ package paladinapi
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
@@ -31,7 +32,20 @@ const (
 
 func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Request[BatchDeleteObjectsRequest]) (*connect.Response[BatchDeleteObjectsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant (local dev), or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot delete objects of other tenants"))
+	}
 
 	var successCount, failureCount int64
 	results := make([]*BatchDeleteResult, 0, len(msg.Keys))
@@ -40,7 +54,7 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		result := &BatchDeleteResult{Key: key}
 
 		// Resolve object by key-based addressing (with resilient fallback)
-		obj, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
+		obj, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, key)
 		if err != nil {
 			result.Success = false
 			result.Error = &status.Status{Code: codeNotFound, Message: "object not found: " + key}
@@ -52,9 +66,9 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 
 		// Delete or Purge based on permanent flag
 		if msg.Permanent {
-			err = h.svc.Purge(ctx, tenantID, obj.ID, &msg.IdempotencyKey)
+			err = h.svc.Purge(ctx, requestedTenantID, obj.ID, &msg.IdempotencyKey)
 		} else {
-			err = h.svc.Delete(ctx, tenantID, obj.ID)
+			err = h.svc.Delete(ctx, requestedTenantID, obj.ID)
 		}
 
 		if err != nil {
@@ -83,7 +97,20 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 
 func (h *BulkHandler) BatchCopyObjects(ctx context.Context, req *connect.Request[BatchCopyObjectsRequest]) (*connect.Response[BatchCopyObjectsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot copy objects for other tenants"))
+	}
 
 	var successCount, failureCount int64
 	results := make([]*BatchCopyResult, 0, len(msg.Entries))
@@ -99,7 +126,7 @@ func (h *BulkHandler) BatchCopyObjects(ctx context.Context, req *connect.Request
 			dstBucket = msg.Bucket
 		}
 
-		copied, err := h.svc.CopyObject(ctx, tenantID, msg.Bucket, entry.SourceKey, dstBucket, entry.DestinationKey, nil)
+		copied, err := h.svc.CopyObject(ctx, requestedTenantID, msg.Bucket, entry.SourceKey, dstBucket, entry.DestinationKey, nil)
 		if err != nil {
 			result.Success = false
 			result.Error = &status.Status{Code: codeInternal, Message: "internal error"}
@@ -127,7 +154,20 @@ func (h *BulkHandler) BatchCopyObjects(ctx context.Context, req *connect.Request
 
 func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Request[BatchRestoreObjectsRequest]) (*connect.Response[BatchRestoreObjectsResponse], error) {
 	msg := req.Msg
-	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
+	authorizedTenantID := utils.TenantIDFromContext(ctx, "")
+	requestedTenantID := msg.TenantId
+
+	if requestedTenantID == "" {
+		requestedTenantID = authorizedTenantID
+	}
+
+	// Authorization check: only SystemAdmin, DefaultTenant, or the tenant themselves.
+	if authorizedTenantID != "" &&
+		authorizedTenantID != utils.SystemAdminTenant &&
+		authorizedTenantID != utils.DefaultTenant &&
+		authorizedTenantID != requestedTenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot restore objects of other tenants"))
+	}
 
 	var successCount, failureCount int64
 	results := make([]*BatchRestoreResult, 0, len(msg.Keys))
@@ -136,7 +176,7 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		result := &BatchRestoreResult{Key: key}
 
 		// Resolve object by key-based addressing (with resilient fallback)
-		obj, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
+		obj, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, key)
 		if err != nil {
 			logger.FromContext(ctx).Warn("BatchRestoreObjects: object not found",
 				zap.String("key", key), zap.Error(err))
@@ -148,7 +188,7 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 			continue
 		}
 
-		err = h.svc.Restore(ctx, tenantID, obj.ID)
+		err = h.svc.Restore(ctx, requestedTenantID, obj.ID)
 		if err != nil {
 			result.Success = false
 			result.Error = &status.Status{Code: codeInternal, Message: "internal error"}
@@ -156,7 +196,7 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		} else {
 			result.Success = true
 			// Re-fetch to get status: AVAILABLE
-			updated, _ := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
+			updated, _ := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, key)
 			if updated != nil {
 				result.Object = objectToProto(updated)
 			}
