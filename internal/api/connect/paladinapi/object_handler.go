@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -80,27 +79,11 @@ func (h *ObjectHandler) UploadObject(ctx context.Context, req *connect.Request[U
 	}), nil
 }
 
-func (h *ObjectHandler) getObjectResiliently(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
-	rec, err := h.svc.GetByKey(ctx, tenantID, bucket, key)
-	if err == nil {
-		return rec, nil
-	}
-
-	// Fallback to ID-based lookup if key looks like a UUID
-	if errors.Is(err, domain.ErrNotFound) {
-		if id, parseErr := uuid.Parse(key); parseErr == nil {
-			return h.svc.Get(ctx, tenantID, id)
-		}
-	}
-
-	return nil, err
-}
-
 func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request[DownloadObjectRequest]) (*connect.Response[DownloadObjectResponse], error) {
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -120,7 +103,7 @@ func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Requ
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -134,7 +117,7 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -156,7 +139,7 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -173,7 +156,7 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 	logger.FromContext(ctx).Info("object deleted", zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
 
 	// Re-fetch to get post-delete state (soft-delete updates status)
-	updated, fetchErr := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	updated, fetchErr := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if fetchErr != nil {
 		// For permanent deletes the record is gone — return the pre-delete snapshot.
 		//nolint:nilerr
@@ -316,7 +299,7 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -342,7 +325,7 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
 
-	rec, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -355,7 +338,7 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 	logger.FromContext(ctx).Info("object restored", zap.String("object_id", rec.ID.String()))
 
 	// Re-fetch to get post-restore state (AVAILABLE status)
-	updated, fetchErr := h.getObjectResiliently(ctx, tenantID, msg.Bucket, msg.Key)
+	updated, fetchErr := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, msg.Key)
 	if fetchErr != nil {
 		//nolint:nilerr
 		return connect.NewResponse(&RestoreObjectResponse{

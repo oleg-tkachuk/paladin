@@ -49,7 +49,7 @@ func ConnectRequestIDInterceptor() connect.Interceptor {
 
 			ctx = context.WithValue(ctx, utils.RequestIDKey, requestID)
 			res, err := next(ctx, req)
-			if res != nil {
+			if err == nil && res != nil {
 				res.Header().Set("X-Request-ID", requestID)
 			}
 			return res, err
@@ -135,7 +135,7 @@ func ConnectRateLimitInterceptor(cfg *config.Config, rl *TenantRateLimiter) conn
 // ConnectRecoveryInterceptor recovers from panics in handlers.
 func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		return func(ctx context.Context, req connect.AnyRequest) (_ connect.AnyResponse, err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Error("recovered from panic in Connect handler",
@@ -143,6 +143,7 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 						zap.String("stack", string(debug.Stack())),
 						zap.String("procedure", req.Spec().Procedure),
 					)
+					err = connect.NewError(connect.CodeInternal, fmt.Errorf("internal server error"))
 				}
 			}()
 			return next(ctx, req)

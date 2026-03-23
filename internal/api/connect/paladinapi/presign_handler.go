@@ -71,7 +71,7 @@ func (h *PresignHandler) generatePresignedUrl(
 ) (*PresignedUrl, error) {
 	tenantID := utils.TenantIDFromContext(ctx, reqTenantId)
 
-	rec, err := h.svc.GetByKey(ctx, tenantID, bucket, key)
+	rec, err := getObjectResiliently(ctx, h.svc, tenantID, bucket, key)
 	if err != nil {
 		logger.FromContext(ctx).Warn(opName+": object lookup failed", zap.Error(err))
 

@@ -2,10 +2,8 @@ package paladinapi
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/status"
 
@@ -31,22 +29,6 @@ const (
 	codeInternal = 13
 )
 
-func (h *BulkHandler) getObjectResiliently(ctx context.Context, tenantID, bucket, key string) (*domain.Object, error) {
-	rec, err := h.svc.GetByKey(ctx, tenantID, bucket, key)
-	if err == nil {
-		return rec, nil
-	}
-
-	// Fallback to ID-based lookup if key looks like a UUID
-	if errors.Is(err, domain.ErrNotFound) {
-		if id, parseErr := uuid.Parse(key); parseErr == nil {
-			return h.svc.Get(ctx, tenantID, id)
-		}
-	}
-
-	return nil, err
-}
-
 func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Request[BatchDeleteObjectsRequest]) (*connect.Response[BatchDeleteObjectsResponse], error) {
 	msg := req.Msg
 	tenantID := utils.TenantIDFromContext(ctx, msg.TenantId)
@@ -58,7 +40,7 @@ func (h *BulkHandler) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		result := &BatchDeleteResult{Key: key}
 
 		// Resolve object by key-based addressing (with resilient fallback)
-		obj, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, key)
+		obj, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
 		if err != nil {
 			result.Success = false
 			result.Error = &status.Status{Code: codeNotFound, Message: "object not found: " + key}
@@ -154,7 +136,7 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		result := &BatchRestoreResult{Key: key}
 
 		// Resolve object by key-based addressing (with resilient fallback)
-		obj, err := h.getObjectResiliently(ctx, tenantID, msg.Bucket, key)
+		obj, err := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
 		if err != nil {
 			logger.FromContext(ctx).Warn("BatchRestoreObjects: object not found",
 				zap.String("key", key), zap.Error(err))
@@ -174,7 +156,7 @@ func (h *BulkHandler) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 		} else {
 			result.Success = true
 			// Re-fetch to get status: AVAILABLE
-			updated, _ := h.getObjectResiliently(ctx, tenantID, msg.Bucket, key)
+			updated, _ := getObjectResiliently(ctx, h.svc, tenantID, msg.Bucket, key)
 			if updated != nil {
 				result.Object = objectToProto(updated)
 			}

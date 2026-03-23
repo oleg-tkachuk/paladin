@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"connectrpc.com/connect"
@@ -92,7 +93,7 @@ func ConnectAuditLogInterceptor(auditRepo domain.AuditLogRepository) connect.Int
 				strCode := connectErr.String()
 				responseCode = strCode
 				connectErrCode = &strCode
-				httpStatus = 500
+				httpStatus = connectCodeToHTTP(connectErr)
 			}
 
 			resourceID := extractResourceID(req.Any())
@@ -194,6 +195,46 @@ func ConnectAuditLogInterceptor(auditRepo domain.AuditLogRepository) connect.Int
 			return res, err
 		}
 	})
+}
+
+// connectCodeToHTTP maps a Connect/gRPC code to the most appropriate HTTP status.
+func connectCodeToHTTP(code connect.Code) int {
+	switch code {
+	case connect.CodeCanceled:
+		return 499 // Client Closed Request
+	case connect.CodeUnknown:
+		return http.StatusInternalServerError
+	case connect.CodeInvalidArgument:
+		return http.StatusBadRequest
+	case connect.CodeDeadlineExceeded:
+		return http.StatusGatewayTimeout
+	case connect.CodeNotFound:
+		return http.StatusNotFound
+	case connect.CodeAlreadyExists:
+		return http.StatusConflict
+	case connect.CodePermissionDenied:
+		return http.StatusForbidden
+	case connect.CodeResourceExhausted:
+		return http.StatusTooManyRequests
+	case connect.CodeFailedPrecondition:
+		return http.StatusBadRequest
+	case connect.CodeAborted:
+		return http.StatusConflict
+	case connect.CodeOutOfRange:
+		return http.StatusBadRequest
+	case connect.CodeUnimplemented:
+		return http.StatusNotImplemented
+	case connect.CodeInternal:
+		return http.StatusInternalServerError
+	case connect.CodeUnavailable:
+		return http.StatusServiceUnavailable
+	case connect.CodeDataLoss:
+		return http.StatusInternalServerError
+	case connect.CodeUnauthenticated:
+		return http.StatusUnauthorized
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // extractResourceID makes a best-effort attempt to extract a resource identifier
