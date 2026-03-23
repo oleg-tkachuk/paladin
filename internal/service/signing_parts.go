@@ -2,45 +2,33 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/safecast"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
 )
 
-// signPart generates a presigned URL for uploading a single multipart part
-func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPart")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_number", safecast.IntFrom32(partNumber)))
-
-	start := time.Now()
-	var status string
-	defer func() { metrics.RecordObjectOp(ctx, "sign_part", status, start) }()
+func (s *objectsService) SignPart(ctx context.Context, tenantID string, uploadID string, partNumber int32) (domain.Presigned, error) {
+	ctx, op := beginOp(ctx, "SignPart", "sign_part",
+		attribute.String("tenant_id", tenantID),
+		attribute.String("upload_id", uploadID),
+		attribute.Int("part_number", safecast.IntFrom32(partNumber)),
+	)
+	defer op.end()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return domain.Presigned{}, err
 	}
 
 	multi, err := s.multiRepo.GetByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return domain.Presigned{}, err
 	}
 
@@ -48,51 +36,33 @@ func (s *objectsService) signPart(ctx context.Context, tenantID string, uploadID
 		return s.s3.PresignUploadPart(ctx, multi.ObjectKey, uploadID, partNumber, s.s3.PresignTTLDuration())
 	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return domain.Presigned{}, err
 	}
 
-	status = domain.StatusSuccess
-	span.SetStatus(codes.Ok, "")
-
-	return domain.Presigned{
-		URL:       presigned.URL,
-		Method:    presigned.Method,
-		Headers:   presigned.Headers,
-		ExpiresAt: presigned.ExpiresAt,
-	}, nil
+	op.succeed()
+	return presigned, nil
 }
 
-// signPartsBatch generates presigned URLs for uploading multiple multipart parts concurrently
-func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "SignPartsBatch")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.String("upload_id", uploadID), attribute.Int("part_count", len(partNumbers)))
-
-	start := time.Now()
-	var status string
-	defer func() { metrics.RecordObjectOp(ctx, "sign_parts_batch", status, start) }()
+func (s *objectsService) SignPartsBatch(ctx context.Context, tenantID string, uploadID string, partNumbers []int32) ([]domain.SignPartResponse, error) {
+	ctx, op := beginOp(ctx, "SignPartsBatch", "sign_parts_batch",
+		attribute.String("tenant_id", tenantID),
+		attribute.String("upload_id", uploadID),
+		attribute.Int("part_count", len(partNumbers)),
+	)
+	defer op.end()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionUpdate); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return nil, err
 	}
 
 	multi, err := s.multiRepo.GetByUploadID(ctx, tenantID, uploadID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return nil, err
 	}
 
@@ -100,10 +70,10 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 	out := make([]domain.SignPartResponse, len(partNumbers))
 
 	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(10) // bound concurrency to avoid overwhelming the S3 signer
+	g.SetLimit(10)
 
 	for i, pn := range partNumbers {
-		i, pn := i, pn // capture loop variables
+		i, pn := i, pn
 		g.Go(func() error {
 			signed, err := executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 				return s.s3.PresignUploadPart(gCtx, multi.ObjectKey, uploadID, pn, ttl)
@@ -113,28 +83,17 @@ func (s *objectsService) signPartsBatch(ctx context.Context, tenantID string, up
 			}
 			out[i] = domain.SignPartResponse{
 				PartNumber: pn,
-				Upload: domain.Presigned{
-					URL:       signed.URL,
-					Method:    signed.Method,
-					Headers:   signed.Headers,
-					ExpiresAt: signed.ExpiresAt,
-				},
+				Upload:     signed,
 			}
-
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		status = domain.StatusError
-
+		op.fail(err)
 		return nil, err
 	}
 
-	status = domain.StatusSuccess
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return out, nil
 }

@@ -13,6 +13,11 @@ type Factory interface {
 	CheckHealth() map[string]string
 }
 
+const (
+	defaultTimeout        = 10 * time.Second
+	defaultWindowDuration = 1 * time.Minute
+)
+
 type lazyBreaker struct {
 	once sync.Once
 	cb   *fault.CircuitBreakerWrapper
@@ -41,10 +46,10 @@ func (f *factory) Get(name string) *fault.CircuitBreakerWrapper {
 	lb.once.Do(func() {
 		lb.cb = fault.GetWithConfig(fault.BreakerConfig{
 			Name:                name,
-			Timeout:             10 * time.Second,
+			Timeout:             defaultTimeout,
 			MaxConsecutiveFails: 3,
 			FailureRatio:        0.6,
-			WindowDuration:      1 * time.Minute,
+			WindowDuration:      defaultWindowDuration,
 			Persistent:          false,
 		})
 	})

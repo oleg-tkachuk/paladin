@@ -35,6 +35,8 @@ type ConfigPath string
 // BootstrapLogger is a type alias to help Wire distinguish between early and late loggers.
 type BootstrapLogger *zap.Logger
 
+const defaultMaxElapsedTime = 30 * time.Second
+
 var ProviderSet = wire.NewSet(
 	ProvideConfig,
 	ProvideLogger,
@@ -117,7 +119,7 @@ func ProvideDB(ctx context.Context, cfg config.Config, l *zap.Logger) (*postgres
 		return nil
 	}
 	b := backoff.NewExponentialBackOff()
-	b.MaxElapsedTime = 30 * time.Second
+	b.MaxElapsedTime = defaultMaxElapsedTime
 
 	if err := backoff.Retry(op, b); err != nil {
 		return nil, nil, err
@@ -202,23 +204,23 @@ func ProvideObjectsService(
 	cfg config.Config,
 	l *zap.Logger,
 ) domain.ObjectsService {
-	return service.NewObjectsService(
-		objRepo,
-		mpRepo,
-		s3c,
-		policy,
-		uowf,
-		idemRepo,
-		catRepo,
-		brk,
-		cfg.Datastores.S3.PartSizeBytes,
-		cfg.Timeouts.FastOperation,
-		cfg.Timeouts.DefaultOperation,
-		cfg.Timeouts.S3Operation,
-		cfg.Timeouts.LongOperation,
-		cfg.Idempotency.TTL,
-		l.Named("objects_service"),
-	)
+	return service.NewObjectsService(service.ObjectsServiceConfig{
+		ObjRepo:        objRepo,
+		MultiRepo:      mpRepo,
+		S3:             s3c,
+		Policy:         policy,
+		UoWF:           uowf,
+		IdemRepo:       idemRepo,
+		CatRepo:        catRepo,
+		Breaker:        brk,
+		PartSize:       cfg.Datastores.S3.PartSizeBytes,
+		FastTimeout:    cfg.Timeouts.FastOperation,
+		DefaultTimeout: cfg.Timeouts.DefaultOperation,
+		S3Timeout:      cfg.Timeouts.S3Operation,
+		LongTimeout:    cfg.Timeouts.LongOperation,
+		IdempotencyTTL: cfg.Idempotency.TTL,
+		Log:            l.Named("objects_service"),
+	})
 }
 
 func ProvideHealthService(db *postgres.DB, s3c *s3.Client, brk breaker.Factory) *service.HealthService {

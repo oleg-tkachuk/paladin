@@ -517,23 +517,23 @@ var _ = Describe("ObjectsService", func() {
 			Persistent:          false,
 		})).Maybe()
 
-		svc = service.NewObjectsService(
-			mockRepo,
-			mockMPRepo,
-			mockS3,
-			mockPolicy,
-			mockUoWf,
-			nil, // idempotency repo
-			mockCatRepo,
-			mockBreaker,
-			5*1024*1024,    // part size
-			5*time.Second,  // fast timeout
-			30*time.Second, // default timeout
-			60*time.Second, // s3 timeout
-			2*time.Minute,  // long timeout
-			24*time.Hour,   // idempotency TTL
-			zap.NewNop(),
-		)
+		svc = service.NewObjectsService(service.ObjectsServiceConfig{
+			ObjRepo:        mockRepo,
+			MultiRepo:      mockMPRepo,
+			S3:             mockS3,
+			Policy:         mockPolicy,
+			UoWF:           mockUoWf,
+			IdemRepo:       nil,
+			CatRepo:        mockCatRepo,
+			Breaker:        mockBreaker,
+			PartSize:       5 * 1024 * 1024,
+			FastTimeout:    5 * time.Second,
+			DefaultTimeout: 30 * time.Second,
+			S3Timeout:      60 * time.Second,
+			LongTimeout:    2 * time.Minute,
+			IdempotencyTTL: 24 * time.Hour,
+			Log:            zap.NewNop(),
+		})
 		ctx = context.Background()
 
 		// Default expectations for common calls
@@ -592,8 +592,12 @@ var _ = Describe("ObjectsService", func() {
 			mockIdem.On("Get", mock.Anything, tenantID, key).Return(&domain.IdempotencyRecord{ResponseBody: body}, nil)
 
 			// Re-create service with mockIdem and mockPolicy
-			svc = service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, mockUoWf, mockIdem, mockCatRepo, mockBreaker, 1024*1024,
-				time.Second, time.Second, time.Second, time.Second, time.Hour, zap.NewNop())
+			svc = service.NewObjectsService(service.ObjectsServiceConfig{
+				ObjRepo: mockRepo, MultiRepo: mockMPRepo, S3: mockS3, Policy: mockPolicy,
+				UoWF: mockUoWf, IdemRepo: mockIdem, CatRepo: mockCatRepo, Breaker: mockBreaker,
+				PartSize: 1024 * 1024, FastTimeout: time.Second, DefaultTimeout: time.Second,
+				S3Timeout: time.Second, LongTimeout: time.Second, IdempotencyTTL: time.Hour, Log: zap.NewNop(),
+			})
 
 			out, err := svc.CreateSingle(ctx, tenantID, "objects", "image/png", 100, nil, nil, nil, 0, &key)
 

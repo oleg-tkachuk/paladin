@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultConfigPath = "/app/configs/paladin.yaml"
+const defaultConfigPath = "/app/configs/config.yaml"
 
 var (
 	configPath string

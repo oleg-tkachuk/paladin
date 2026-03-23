@@ -34,23 +34,12 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		catRepo := &domainmocks.MockCategoryRepository{}
 		breakerFactory := &MockBreakerFactory{}
 
-		svc := service.NewObjectsService(
-			objRepo,
-			multiRepo,
-			s3Client,
-			policy,
-			uowf,
-			idemRepo,
-			catRepo,
-			breakerFactory,
-			1024*1024,
-			2*time.Second,
-			2*time.Second,
-			2*time.Second,
-			2*time.Second,
-			0,
-			zap.NewNop(),
-		)
+		svc := service.NewObjectsService(service.ObjectsServiceConfig{
+			ObjRepo: objRepo, MultiRepo: multiRepo, S3: s3Client, Policy: policy,
+			UoWF: uowf, IdemRepo: idemRepo, CatRepo: catRepo, Breaker: breakerFactory,
+			PartSize: 1024 * 1024, FastTimeout: 2 * time.Second, DefaultTimeout: 2 * time.Second,
+			S3Timeout: 2 * time.Second, LongTimeout: 2 * time.Second, Log: zap.NewNop(),
+		})
 
 		return objRepo, s3Client, policy, svc
 	}

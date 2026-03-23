@@ -220,7 +220,10 @@ func FuzzCreateObject(f *testing.F) {
 
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
-		svc := service.NewObjectsService(mockRepo, mockMPRepo, mockS3, mockPolicy, nil, nil, mockCatRepo, mockBreaker, 0, 0, 0, 0, 0, 0, zap.NewNop())
+		svc := service.NewObjectsService(service.ObjectsServiceConfig{
+			ObjRepo: mockRepo, MultiRepo: mockMPRepo, S3: mockS3, Policy: mockPolicy,
+			CatRepo: mockCatRepo, Breaker: mockBreaker, Log: zap.NewNop(),
+		})
 
 		mockRepo.On("GetByExternalRef", mock.Anything, mock.Anything, mock.Anything).Return((*domain.Object)(nil), nil).Maybe()
 		mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -244,7 +247,9 @@ func FuzzListObjects(f *testing.F) {
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
 		mockPolicy := new(FuzzMockPolicy)
-		svc := service.NewObjectsService(mockRepo, nil, nil, mockPolicy, nil, nil, nil, mockBreaker, 0, 0, 0, 0, 0, 0, zap.NewNop())
+		svc := service.NewObjectsService(service.ObjectsServiceConfig{
+			ObjRepo: mockRepo, Policy: mockPolicy, Breaker: mockBreaker, Log: zap.NewNop(),
+		})
 
 		filter := domain.ListObjectsFilter{
 			Category: &category,

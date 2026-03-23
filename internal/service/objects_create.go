@@ -11,41 +11,26 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/validation"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 )
 
-// createSingle creates a single object upload with a presigned PUT URL.
-// category must be the slug of an existing tenant category.
-func (s *objectsService) createSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, OpCreateObject)
-	defer span.End()
-
-	span.SetAttributes(
+func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
+	ctx, op := beginOp(ctx, OpCreateObject, "create_single",
 		attribute.String("tenant_id", tenantID),
 		attribute.String("category", category),
 		attribute.String("content_type", contentType),
 		attribute.Int64("size_bytes", sizeBytes),
 	)
-
-	start := time.Now()
-	var opStatus string
-	defer func() { metrics.RecordObjectOp(ctx, "create_single", opStatus, start) }()
+	defer op.end()
 
 	ctx, cancel := context.WithTimeout(ctx, s.defaultOperationTimeout)
 	defer cancel()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		opStatus = domain.StatusError
-
+		op.fail(err)
 		return domain.CreateObjectResponse{}, err
 	}
 
@@ -53,7 +38,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("validation failed", err)
 	}
 
-	// Validate category slug format server-side before any DB lookup
 	if err := validation.CategorySlug(category); err != nil {
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid category", err)
 	}
@@ -85,7 +69,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 	}
 
 	id := uuid.New()
-	// Key is computed by DB trigger, but we pass the intended value for consistency in presign
 	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
 
 	ttl := time.Duration(uploadTTL) * time.Second
@@ -104,7 +87,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 			return fmt.Errorf("check category existence category=%s: %w", category, err)
 		}
 		catExists = exists
-
 		return nil
 	})
 
@@ -113,7 +95,6 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		signed, err = executeWithBreakerRet(s.brk, "s3_presign", func() (domain.Presigned, error) {
 			return s.s3.PresignPutObject(gCtx, key, contentType, sizeBytes, ttl)
 		})
-
 		return err
 	})
 
@@ -158,10 +139,8 @@ func (s *objectsService) createSingle(ctx context.Context, tenantID string, cate
 		}
 	}
 
-	opStatus = domain.StatusSuccess
-	span.SetStatus(codes.Ok, "")
-	span.SetAttributes(attribute.String("object_id", id.String()))
-
+	op.succeed()
+	op.addAttrs(attribute.String("object_id", id.String()))
 	return res, nil
 }
 

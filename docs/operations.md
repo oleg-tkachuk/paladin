@@ -73,7 +73,7 @@ Multi-stage build:
 docker build -f deploy/Dockerfile -t paladin:dev .
 ```
 
-Default runtime config path inside the image: `/app/configs/paladin.yaml`
+Default runtime config path inside the image: `/app/configs/config.yaml`
 
 ## Taskfile Commands
 
@@ -98,7 +98,7 @@ Common tasks include:
 In Kubernetes, the service is deployed with:
 
 - A `Deployment` running the compiled binary
-- A `ConfigMap` mounting the YAML config to `/app/configs/paladin.yaml`
+- A `ConfigMap` mounting the YAML config to `/app/configs/config.yaml`
 - `Secret` objects referenced in the config for DB password and S3 credentials
 - Two `Services`: one for HTTP (`:8080`), one for Connect (`:9090`)
 - Liveness probe: `GET /health/livez`
@@ -147,6 +147,6 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `migrations/007_audit_logs.sql` | audit_logs table |
 | `migrations/010_category_support.sql` | object_categories table, category/subpath columns |
 | `proto/paladin.proto` | Connect service and message definitions |
-| `configs/paladin.yaml` | Default config (local environment) |
+| `configs/config.yaml` | Default config (local environment) |
 | `deploy/Dockerfile` | Multi-stage Docker build |
 | `deploy/docker-compose.yaml` | Local development stack |

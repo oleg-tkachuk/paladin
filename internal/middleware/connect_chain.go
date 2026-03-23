@@ -52,6 +52,7 @@ func ConnectRequestIDInterceptor() connect.Interceptor {
 			if err == nil && res != nil {
 				res.Header().Set("X-Request-ID", requestID)
 			}
+
 			return res, err
 		}
 	})
@@ -63,6 +64,7 @@ func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			if !cfg.Auth.Enabled {
 				ctx = context.WithValue(ctx, utils.TenantIDKey, utils.DefaultTenant)
+
 				return next(ctx, req)
 			}
 
@@ -73,6 +75,7 @@ func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
 				if token == cfg.Auth.AdminKey {
 					ctx = context.WithValue(ctx, utils.TenantIDKey, utils.SystemAdminTenant)
 					ctx = logger.WithActor(ctx, "system-admin")
+
 					return next(ctx, req)
 				}
 			}
@@ -82,6 +85,7 @@ func ConnectAuthInterceptor(cfg *config.Config) connect.Interceptor {
 				tenantID := req.Header().Get("X-Tenant-ID")
 				if tenantID != "" {
 					ctx = context.WithValue(ctx, utils.TenantIDKey, tenantID)
+
 					return next(ctx, req)
 				}
 			}
@@ -146,6 +150,7 @@ func ConnectRecoveryInterceptor(log *zap.Logger) connect.Interceptor {
 					err = connect.NewError(connect.CodeInternal, fmt.Errorf("internal server error"))
 				}
 			}()
+
 			return next(ctx, req)
 		}
 	})

@@ -8,40 +8,27 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
 	apperrors "github.com/oleg-tkachuk/paladin/internal/errors"
-	"github.com/oleg-tkachuk/paladin/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/internal/validation"
 	"go.uber.org/zap"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 )
 
-// initiateMultipart initiates a multipart upload.
-// category must be the slug of an existing tenant category.
-func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "InitiateMultipart")
-	defer span.End()
-	span.SetAttributes(
+func (s *objectsService) InitiateMultipart(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.MultipartInitResponse, error) {
+	ctx, op := beginOp(ctx, "InitiateMultipart", "initiate_multipart",
 		attribute.String("tenant_id", tenantID),
 		attribute.String("category", category),
 		attribute.String("content_type", contentType),
 		attribute.Int64("size_bytes", sizeBytes),
 	)
-
-	start := time.Now()
-	var opStatus string
-	defer func() { metrics.RecordObjectOp(ctx, "initiate_multipart", opStatus, start) }()
+	defer op.end()
 
 	ctx, cancel := context.WithTimeout(ctx, s.s3OperationTimeout)
 	defer cancel()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionCreate); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		opStatus = domain.StatusError
-
+		op.fail(err)
 		return domain.MultipartInitResponse{}, err
 	}
 
@@ -80,7 +67,6 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		}
 	}
 
-	// Verify the category exists for this tenant
 	exists, err := s.catRepo.Exists(ctx, tenantID, category)
 	if err != nil {
 		return domain.MultipartInitResponse{}, fmt.Errorf("check category: %w", err)
@@ -111,7 +97,7 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		Status: domain.ObjectUploading, Labels: labels, Tags: tags, ExternalRef: externalRef,
 		ExpiresAt: &expiresAt, Category: category,
 	}
-	// Start Unit of Work for transactional creation
+
 	uow, err := s.uowf.Begin(ctx)
 	if err != nil {
 		return domain.MultipartInitResponse{}, fmt.Errorf("begin transaction: %w", err)
@@ -158,8 +144,6 @@ func (s *objectsService) initiateMultipart(ctx context.Context, tenantID string,
 		}
 	}
 
-	opStatus = domain.StatusSuccess
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return res, nil
 }

@@ -2,58 +2,51 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/domain"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.uber.org/zap"
-
-	"github.com/oleg-tkachuk/paladin/internal/logger"
 )
 
 func (s *objectsService) BulkCreate(ctx context.Context, tenantID string, items []domain.CreateObjectRequest, idempotencyKey *string) ([]domain.CreateObjectResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkCreate")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("items_count", len(items)))
+	ctx, op := beginOp(ctx, "BulkCreate", "bulk_create",
+		attribute.String("tenant_id", tenantID),
+		attribute.Int("items_count", len(items)),
+	)
+	defer op.end()
 
-	// Simple sequential implementation for now, can be optimized later
 	res := make([]domain.CreateObjectResponse, 0, len(items))
 	for _, item := range items {
-		out, err := s.createSingle(ctx, tenantID, item.Category, item.ContentType, item.SizeBytes, item.Labels, item.Tags, item.ExternalRef, 0, nil)
+		out, err := s.CreateSingle(ctx, tenantID, item.Category, item.ContentType, item.SizeBytes, item.Labels, item.Tags, item.ExternalRef, 0, nil)
 		if err != nil {
-			logger.FromContext(ctx).Error("Bulk create failed at item", zap.Error(err), zap.String("category", item.Category))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-
-			return nil, err
+			op.fail(err)
+			return nil, fmt.Errorf("bulk create failed at item category %s: %w", item.Category, err)
 		}
 		res = append(res, out)
 	}
 
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return res, nil
 }
 
 func (s *objectsService) BulkSignUploads(ctx context.Context, tenantID string, items []domain.SignUploadItem) ([]domain.CreateObjectResponse, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkSignUploads")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("items_count", len(items)))
+	ctx, op := beginOp(ctx, "BulkSignUploads", "bulk_sign_uploads",
+		attribute.String("tenant_id", tenantID),
+		attribute.Int("items_count", len(items)),
+	)
+	defer op.end()
 
 	res := make([]domain.CreateObjectResponse, 0, len(items))
 	for _, item := range items {
 		obj, err := s.objRepo.Get(ctx, tenantID, item.ObjectID)
 		if err != nil {
-			logger.FromContext(ctx).Error("Bulk sign upload failed: get object", zap.Error(err), zap.String("object_id", item.ObjectID.String()))
-			return nil, err
+			return nil, fmt.Errorf("bulk sign upload failed getting object %s: %w", item.ObjectID, err)
 		}
 
-		signed, err := s.signUpload(ctx, tenantID, item.ObjectID, item.UploadTTL)
+		signed, err := s.SignUpload(ctx, tenantID, item.ObjectID, item.UploadTTL)
 		if err != nil {
-			logger.FromContext(ctx).Error("Bulk sign upload failed: sign", zap.Error(err), zap.String("object_id", item.ObjectID.String()))
-			return nil, err
+			return nil, fmt.Errorf("bulk sign upload failed signing %s: %w", item.ObjectID, err)
 		}
 
 		res = append(res, domain.CreateObjectResponse{
@@ -65,52 +58,48 @@ func (s *objectsService) BulkSignUploads(ctx context.Context, tenantID string, i
 		})
 	}
 
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return res, nil
 }
 
 func (s *objectsService) BulkComplete(ctx context.Context, tenantID string, ids []uuid.UUID) ([]*domain.Object, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkComplete")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("ids_count", len(ids)))
+	ctx, op := beginOp(ctx, "BulkComplete", "bulk_complete",
+		attribute.String("tenant_id", tenantID),
+		attribute.Int("ids_count", len(ids)),
+	)
+	defer op.end()
 
 	res := make([]*domain.Object, 0, len(ids))
 	for _, id := range ids {
-		obj, err := s.completeObject(ctx, tenantID, id, nil, nil)
+		obj, err := s.CompleteObject(ctx, tenantID, id, nil, nil)
 		if err != nil {
-			logger.FromContext(ctx).Error("Bulk complete failed", zap.Error(err), zap.String("object_id", id.String()))
-			return nil, err
+			return nil, fmt.Errorf("bulk complete failed for object %s: %w", id.String(), err)
 		}
 		res = append(res, obj)
 	}
 
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return res, nil
 }
 
 func (s *objectsService) BulkPatch(ctx context.Context, tenantID string, items []domain.BulkPatchItem, idempotencyKey *string) (int64, error) {
-	ctx, span := otel.Tracer("object-service").Start(ctx, "BulkPatch")
-	defer span.End()
-	span.SetAttributes(attribute.String("tenant_id", tenantID), attribute.Int("items_count", len(items)))
+	ctx, op := beginOp(ctx, "BulkPatch", "bulk_patch",
+		attribute.String("tenant_id", tenantID),
+		attribute.Int("items_count", len(items)),
+	)
+	defer op.end()
 
 	if err := s.policy.Authorize(ctx, tenantID, domain.ActionPatch); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
+		op.fail(err)
 		return 0, err
 	}
 
 	count, err := s.objRepo.BulkPatch(ctx, tenantID, items)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
+		op.fail(err)
 		return 0, err
 	}
 
-	span.SetStatus(codes.Ok, "")
-
+	op.succeed()
 	return count, nil
 }
