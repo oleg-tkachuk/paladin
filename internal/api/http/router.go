@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"encoding/json"
+
 	"connectrpc.com/connect"
 	"github.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi"
 	"github.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi/paladinapiconnect"
@@ -78,8 +80,35 @@ func NewServer(
 
 	// ─── SystemService ─────────────────────────────────────────────────────
 	systemHandler := paladinapi.NewSystemHandler(log.Named("system_handler"), hs, metadata, started, startTime, cfg, auditRepo)
-	path, handler = paladinapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
-	mux.Handle(path, handler)
+	systemPath, systemConnectHandler := paladinapiconnect.NewSystemServiceHandler(systemHandler, interceptors)
+
+	// Unified handler to support both standard HTTP GET probes (Kubelet)
+	// and native Connect RPC protocol requests.
+	mux.HandleFunc(systemPath, func(w http.ResponseWriter, r *http.Request) {
+		// If it's a standard GET probe without protocol signals, handle it directly.
+		if r.Method == http.MethodGet && r.URL.Query().Get("connect") == "" {
+			switch r.URL.Path {
+			case systemPath + "GetLivez":
+				resp, _ := systemHandler.GetLivez(r.Context(), connect.NewRequest(&paladinapi.GetLivezRequest{}))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(resp.Msg)
+				return
+			case systemPath + "GetReadyz":
+				resp, _ := systemHandler.GetReadyz(r.Context(), connect.NewRequest(&paladinapi.GetReadyzRequest{}))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(resp.Msg)
+				return
+			case systemPath + "GetStartupz":
+				resp, _ := systemHandler.GetStartupz(r.Context(), connect.NewRequest(&paladinapi.GetStartupzRequest{}))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(resp.Msg)
+				return
+			}
+		}
+
+		// Otherwise, delegate to the standard Connect RPC handler.
+		systemConnectHandler.ServeHTTP(w, r)
+	})
 
 	// ─── Operational endpoints ─────────────────────────────────────────────
 	mux.Handle(RouteMetrics, promhttp.Handler())

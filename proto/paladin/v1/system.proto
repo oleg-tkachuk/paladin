@@ -21,6 +21,7 @@ service SystemService {
   // GetLivez returns the liveness status of the service process.
   // A non-live service should be restarted by the orchestrator.
   rpc GetLivez(GetLivezRequest) returns (GetLivezResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (google.api.http) = {
       get: "/v1/system/livez"
     };
@@ -30,6 +31,7 @@ service SystemService {
   // dependencies (database, object storage, etc.).
   // A non-ready service should be removed from the load balancer.
   rpc GetReadyz(GetReadyzRequest) returns (GetReadyzResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (google.api.http) = {
       get: "/v1/system/readyz"
     };
@@ -38,6 +40,7 @@ service SystemService {
   // GetStartupz returns the startup status of the service.
   // Indicates whether initial bootstrap (migrations, cache warming, etc.) is complete.
   rpc GetStartupz(GetStartupzRequest) returns (GetStartupzResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (google.api.http) = {
       get: "/v1/system/startupz"
     };

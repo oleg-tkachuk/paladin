@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # -----------------------------
 # Runtime stage
 # -----------------------------
-FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static:nonroot
 
 ARG HTTP_PORT=8080
 ARG APP_VERSION=undefined

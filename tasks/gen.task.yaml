@@ -1,0 +1,17 @@
+version: "3"
+
+tasks:
+  all:
+    desc: "Generate all code (Proto, Mocks, SQLC)"
+    silent: true
+    cmds:
+      - cmd: |-
+          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, proto, sqlc)...\n"
+      - cmd: |-
+          time go run github.com/vektra/mockery/v3 --config .mockery.yaml
+      - cmd: |-
+          time buf generate
+      - cmd: |-
+          time go generate ./...
+      - cmd: |-
+          if [ -f sqlc.yaml ]; then time sqlc generate; fi

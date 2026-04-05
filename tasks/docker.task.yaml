@@ -1,0 +1,79 @@
+version: "3"
+
+vars:
+  TAG: latest
+
+tasks:
+  build:
+    desc: "Build and push {{.PROJECT_NAME}} image + Helm chart to OCI registry"
+    deps: [":core:tools:check"]
+    vars:
+      IMAGE: "{{.OCI_REGISTRY}}/{{.PROJECT_NAME}}"
+      # Auto-generated version from info.env
+      _TAG_AUTO: { sh: "grep 'APP_VERSION=' {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2" }
+      # Final tag to use (CLI/Global TAG -> fallback to info.env)
+      _TAG: '{{.TAG | default ._TAG_AUTO}}'
+      _COMMIT: { sh: "git rev-parse --short HEAD" }
+      _TIME: { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+      # Chart version must be SemVer. Helm fails on 'latest'.
+      _CHART_VER: '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "[OCI] Building {{.PROJECT_NAME}} {{._TAG}} (chart: {{._CHART_VER}}) in Minikube..." }
+      - |
+        docker build \
+          --network=host \
+          --tag {{.IMAGE}}:{{._TAG}} \
+          --file {{.DOCKERFILE}} \
+          --build-arg APP_VERSION={{._TAG}} \
+          --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
+          --build-arg BUILD_TIME="{{._TIME}}" \
+          .
+        docker push {{.IMAGE}}:{{._TAG}}
+      - |
+        helm package {{.CHART_DIR}} \
+          --version {{._CHART_VER}} \
+          --app-version {{._TAG}}
+      - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
+      - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
+      - task: ":core:banner"
+        vars: { MESSAGE: "[OCI] Pushed {{.PROJECT_NAME}} image + chart {{._TAG}}" }
+
+  build-local:
+    desc: "Build {{.PROJECT_NAME}} image directly in Minikube (Zero-push flow)"
+    deps: [":core:tools:check"]
+    vars:
+      IMAGE: "{{.OCI_REGISTRY}}/{{.PROJECT_NAME}}"
+      _TAG_AUTO: { sh: "grep 'APP_VERSION=' {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2" }
+      _TAG: '{{.TAG | default ._TAG_AUTO}}'
+      _COMMIT: { sh: "git rev-parse --short HEAD" }
+      _TIME: { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "[LOCAL] Building {{.PROJECT_NAME}} {{._TAG}} in Minikube..." }
+      - |
+        eval "$(minikube docker-env)"
+        docker build \
+          --network=host \
+          --tag {{.IMAGE}}:{{._TAG}} \
+          --file {{.DOCKERFILE}} \
+          --build-arg APP_VERSION={{._TAG}} \
+          --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
+          --build-arg BUILD_TIME="{{._TIME}}" \
+          .
+      - task: ":core:banner"
+        vars: { MESSAGE: "[LOCAL] Built {{.PROJECT_NAME}} {{._TAG}} in Minikube" }
+
+  up:
+    desc: "Start the local stack via Docker Compose"
+    silent: true
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "Starting local stack..." }
+      - cmd: |-
+          time docker compose \
+            --progress={{.PROGRESS | default "auto"}} \
+            -f {{.COMPOSE_FILE}} \
+            -p {{.PROJECT_NAME}} \
+            --env-file {{.DEPLOY_INFO_ENV_FILE}} \
+            up -d --build

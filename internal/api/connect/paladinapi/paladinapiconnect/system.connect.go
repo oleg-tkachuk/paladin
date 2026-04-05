@@ -97,18 +97,21 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+SystemServiceGetLivezProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetLivez")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getReadyz: connect.NewClient[paladinapi.GetReadyzRequest, paladinapi.GetReadyzResponse](
 			httpClient,
 			baseURL+SystemServiceGetReadyzProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetReadyz")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getStartupz: connect.NewClient[paladinapi.GetStartupzRequest, paladinapi.GetStartupzResponse](
 			httpClient,
 			baseURL+SystemServiceGetStartupzProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("GetStartupz")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getInfo: connect.NewClient[paladinapi.GetInfoRequest, paladinapi.GetInfoResponse](
@@ -219,18 +222,21 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		SystemServiceGetLivezProcedure,
 		svc.GetLivez,
 		connect.WithSchema(systemServiceMethods.ByName("GetLivez")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceGetReadyzHandler := connect.NewUnaryHandler(
 		SystemServiceGetReadyzProcedure,
 		svc.GetReadyz,
 		connect.WithSchema(systemServiceMethods.ByName("GetReadyz")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceGetStartupzHandler := connect.NewUnaryHandler(
 		SystemServiceGetStartupzProcedure,
 		svc.GetStartupz,
 		connect.WithSchema(systemServiceMethods.ByName("GetStartupz")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceGetInfoHandler := connect.NewUnaryHandler(

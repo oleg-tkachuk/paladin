@@ -2496,12 +2496,12 @@ const file_paladin_v1_system_proto_rawDesc = "" +
 	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1b\n" +
 	"\x17HEALTH_STATUS_UNHEALTHY\x10\x02\x12\x1a\n" +
 	"\x16HEALTH_STATUS_DEGRADED\x10\x03\x12\x1a\n" +
-	"\x16HEALTH_STATUS_DISABLED\x10\x042\x90\x05\n" +
+	"\x16HEALTH_STATUS_DISABLED\x10\x042\x99\x05\n" +
 	"\rSystemService\x12J\n" +
-	"\x04Ping\x12\x13.paladin.v1.PingRequest\x1a\x14.paladin.v1.PingResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/system/ping\x12W\n" +
-	"\bGetLivez\x12\x17.paladin.v1.GetLivezRequest\x1a\x18.paladin.v1.GetLivezResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/system/livez\x12[\n" +
-	"\tGetReadyz\x12\x18.paladin.v1.GetReadyzRequest\x1a\x19.paladin.v1.GetReadyzResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/system/readyz\x12c\n" +
-	"\vGetStartupz\x12\x1a.paladin.v1.GetStartupzRequest\x1a\x1b.paladin.v1.GetStartupzResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/system/startupz\x12S\n" +
+	"\x04Ping\x12\x13.paladin.v1.PingRequest\x1a\x14.paladin.v1.PingResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/system/ping\x12Z\n" +
+	"\bGetLivez\x12\x17.paladin.v1.GetLivezRequest\x1a\x18.paladin.v1.GetLivezResponse\"\x1b\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/system/livez\x90\x02\x01\x12^\n" +
+	"\tGetReadyz\x12\x18.paladin.v1.GetReadyzRequest\x1a\x19.paladin.v1.GetReadyzResponse\"\x1c\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/system/readyz\x90\x02\x01\x12f\n" +
+	"\vGetStartupz\x12\x1a.paladin.v1.GetStartupzRequest\x1a\x1b.paladin.v1.GetStartupzResponse\"\x1e\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/system/startupz\x90\x02\x01\x12S\n" +
 	"\aGetInfo\x12\x16.paladin.v1.GetInfoRequest\x1a\x17.paladin.v1.GetInfoResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/system/info\x12[\n" +
 	"\tGetConfig\x12\x18.paladin.v1.GetConfigRequest\x1a\x19.paladin.v1.GetConfigResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/system/config\x12f\n" +
 	"\rListAuditLogs\x12\x1c.paladin.v1.ListAuditLogsRequest\x1a\x1d.paladin.v1.ListAuditLogsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/system/auditBQZOgithub.com/oleg-tkachuk/paladin/internal/api/connect/paladinapi;paladinapib\x06proto3"
