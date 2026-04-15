@@ -95,7 +95,7 @@ datastores:
     secret_key: dummy_secret_key # override via secret in non-local envs
     presign_ttl: 15m
     part_size: "8MB"
-    sse_type: "AES256" # AES256 | aws:kms
+    sse_type: "" # "" | AES256 | aws:kms
     sse_key_id: "" # KMS Key ID; required when sse_type=aws:kms
 
 # ─── Request Policy ─────────────────────────────────────────────────────────
