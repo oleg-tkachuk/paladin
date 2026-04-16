@@ -427,6 +427,55 @@ func (m *MockPolicy) Validate(contentType string, sizeBytes int64) error {
 	return args.Error(0)
 }
 
+type MockUploadIntentsRepo struct {
+	mock.Mock
+}
+
+func (m *MockUploadIntentsRepo) Create(ctx context.Context, rec domain.UploadIntent) error {
+	args := m.Called(ctx, rec)
+
+	return args.Error(0)
+}
+
+func (m *MockUploadIntentsRepo) Get(ctx context.Context, tenantID string, id uuid.UUID) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tenantID, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+
+func (m *MockUploadIntentsRepo) GetByKey(ctx context.Context, tenantID, bucket, objectKey string) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tenantID, bucket, objectKey)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+
+func (m *MockUploadIntentsRepo) GetByIdempotencyKey(ctx context.Context, tenantID, idempotencyKey string) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tenantID, idempotencyKey)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+
+func (m *MockUploadIntentsRepo) Delete(ctx context.Context, tenantID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tenantID, id)
+
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockUploadIntentsRepo) DeleteExpired(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	args := m.Called(ctx, cutoff, limit)
+
+	return args.Get(0).(int64), args.Error(1)
+}
+
 type MockUoWFactory struct {
 	mock.Mock
 }
@@ -474,6 +523,12 @@ func (m *MockUnitOfWork) Categories() domain.CategoryRepository {
 	return args.Get(0).(domain.CategoryRepository)
 }
 
+func (m *MockUnitOfWork) UploadIntents() domain.UploadIntentsRepository {
+	args := m.Called()
+
+	return args.Get(0).(domain.UploadIntentsRepository)
+}
+
 func (m *MockUnitOfWork) Commit(ctx context.Context) error {
 	args := m.Called(ctx)
 
@@ -488,20 +543,22 @@ func (m *MockUnitOfWork) Rollback(ctx context.Context) error {
 
 var _ = Describe("ObjectsService", func() {
 	var (
-		mockRepo    *MockObjectsRepo
-		mockMPRepo  *MockMultipartRepo
-		mockS3      *MockS3Client
-		mockPolicy  *MockPolicy
-		mockUoWf    *MockUoWFactory
-		mockCatRepo *MockCategoryRepo
-		mockBreaker *MockBreakerFactory
-		svc         domain.ObjectsService
-		ctx         context.Context
+		mockRepo       *MockObjectsRepo
+		mockMPRepo     *MockMultipartRepo
+		mockIntentRepo *MockUploadIntentsRepo
+		mockS3         *MockS3Client
+		mockPolicy     *MockPolicy
+		mockUoWf       *MockUoWFactory
+		mockCatRepo    *MockCategoryRepo
+		mockBreaker    *MockBreakerFactory
+		svc            domain.ObjectsService
+		ctx            context.Context
 	)
 
 	BeforeEach(func() {
 		mockRepo = new(MockObjectsRepo)
 		mockMPRepo = new(MockMultipartRepo)
+		mockIntentRepo = new(MockUploadIntentsRepo)
 		mockS3 = new(MockS3Client)
 		mockPolicy = new(MockPolicy)
 		mockUoWf = new(MockUoWFactory)
@@ -520,6 +577,7 @@ var _ = Describe("ObjectsService", func() {
 		svc = service.NewObjectsService(service.ObjectsServiceConfig{
 			ObjRepo:        mockRepo,
 			MultiRepo:      mockMPRepo,
+			IntentRepo:     mockIntentRepo,
 			S3:             mockS3,
 			Policy:         mockPolicy,
 			UoWF:           mockUoWf,
@@ -552,7 +610,7 @@ var _ = Describe("ObjectsService", func() {
 
 			mockS3.On("BucketName").Return("test-bucket")
 			mockS3.On("PresignTTLDuration").Return(15 * time.Minute)
-			mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+			mockIntentRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			mockS3.On("PresignPutObject", mock.Anything, mock.Anything, contentType, sizeBytes, mock.Anything).Return(domain.Presigned{URL: "http://example.com"}, nil)
 
 			out, err := svc.CreateSingle(ctx, tenantID, "objects", contentType, sizeBytes, nil, nil, nil, 0, nil)
@@ -562,7 +620,7 @@ var _ = Describe("ObjectsService", func() {
 			Expect(out.Key).To(ContainSubstring(tenantID))
 			Expect(out.Upload.URL).To(Equal("http://example.com"))
 
-			mockRepo.AssertExpectations(GinkgoT())
+			mockIntentRepo.AssertExpectations(GinkgoT())
 			mockS3.AssertExpectations(GinkgoT())
 		})
 

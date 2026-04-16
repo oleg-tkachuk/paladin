@@ -24,10 +24,19 @@ type Querier interface {
 	CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID string, objectID pgtype.UUID, uploadID string, bucket string, objectKey string, contentType string, partSizeBytes int64, status string, expiresAt pgtype.Timestamptz) error
 	// Objects queries
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string, tags []byte) error
+	// Object upload intent queries
+	//
+	// Intents hold the server-generated upload intent produced by UploadObject
+	// until the client confirms success via CompleteObject. No object exists in
+	// the `objects` table while an intent is outstanding; on completion the
+	// intent is deleted and an object row is INSERTed in the same transaction.
+	CreateUploadIntent(ctx context.Context, iD pgtype.UUID, tenantID string, bucket string, objectKey string, category string, subpath *string, contentType string, sizeBytes int64, labels []byte, tags []byte, externalRef *string, idempotencyKey *string, expiresAt pgtype.Timestamptz) error
 	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
+	DeleteExpiredUploadIntents(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) (int64, error)
 	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
 	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	DeleteTenant(ctx context.Context, tenantID string) (int64, error)
+	DeleteUploadIntent(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
 	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
 	GetBucketStats(ctx context.Context, tenantID string, bucket string) (GetBucketStatsRow, error)
 	GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error)
@@ -40,6 +49,9 @@ type Querier interface {
 	GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error)
 	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
 	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
+	GetUploadIntent(ctx context.Context, tenantID string, iD pgtype.UUID) (GetUploadIntentRow, error)
+	GetUploadIntentByIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey *string) (GetUploadIntentByIdempotencyKeyRow, error)
+	GetUploadIntentByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetUploadIntentByKeyRow, error)
 	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, traceID *string, requestID *string, idempotencyKey *string, logType *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
 	ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error)
 	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)

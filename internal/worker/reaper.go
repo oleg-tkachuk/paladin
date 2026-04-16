@@ -11,20 +11,22 @@ import (
 )
 
 type Reaper struct {
-	cfg     config.Housekeeping
-	objRepo domain.ObjectsRepository
-	mpRepo  domain.MultipartRepository
-	s3      domain.StorageClient
-	log     *zap.Logger
+	cfg        config.Housekeeping
+	objRepo    domain.ObjectsRepository
+	mpRepo     domain.MultipartRepository
+	intentRepo domain.UploadIntentsRepository
+	s3         domain.StorageClient
+	log        *zap.Logger
 }
 
-func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c domain.StorageClient, log *zap.Logger) *Reaper {
+func NewReaper(cfg config.Housekeeping, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, intentRepo domain.UploadIntentsRepository, s3c domain.StorageClient, log *zap.Logger) *Reaper {
 	return &Reaper{
-		cfg:     cfg,
-		objRepo: objRepo,
-		mpRepo:  mpRepo,
-		s3:      s3c,
-		log:     log,
+		cfg:        cfg,
+		objRepo:    objRepo,
+		mpRepo:     mpRepo,
+		intentRepo: intentRepo,
+		s3:         s3c,
+		log:        log,
 	}
 }
 
@@ -65,6 +67,11 @@ func (r *Reaper) runCleanup(ctx context.Context) {
 	})
 	g.Go(func() error {
 		r.cleanupMultipart(ctx)
+
+		return nil
+	})
+	g.Go(func() error {
+		r.cleanupExpiredIntents(ctx)
 
 		return nil
 	})
@@ -153,5 +160,24 @@ func (r *Reaper) cleanupMultipart(ctx context.Context) {
 
 	if err := g.Wait(); err != nil {
 		r.log.Warn("Some multipart uploads failed to clean up", zap.Error(err))
+	}
+}
+
+// cleanupExpiredIntents removes upload intents whose TTL has elapsed.
+// Unlike pending objects, intents never had an S3 object created by the
+// server, so there is nothing to delete in S3 — only the DB row.
+func (r *Reaper) cleanupExpiredIntents(ctx context.Context) {
+	cutoff := time.Now()
+	limit := 100
+
+	deleted, err := r.intentRepo.DeleteExpired(ctx, cutoff, limit)
+	if err != nil {
+		r.log.Error("Failed to delete expired upload intents", zap.Error(err))
+
+		return
+	}
+
+	if deleted > 0 {
+		r.log.Info("Cleaned up expired upload intents", zap.Int64("count", deleted))
 	}
 }

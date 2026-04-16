@@ -97,6 +97,41 @@ func mapToDomainMultipartPart(part sqlc.MultipartPart) (domain.MultipartPart, er
 	}, nil
 }
 
+// mapToDomainUploadIntent converts sqlc.ObjectUploadIntent to domain.UploadIntent.
+func mapToDomainUploadIntent(in sqlc.ObjectUploadIntent) (domain.UploadIntent, error) {
+	id, err := uuidFromPgtype(in.ID)
+	if err != nil {
+		return domain.UploadIntent{}, fmt.Errorf("convert upload intent id: %w", err)
+	}
+
+	labels, err := unmarshalStringMap(in.Labels)
+	if err != nil {
+		return domain.UploadIntent{}, fmt.Errorf("unmarshal labels: %w", err)
+	}
+
+	tags, err := unmarshalStringMap(in.Tags)
+	if err != nil {
+		return domain.UploadIntent{}, fmt.Errorf("unmarshal tags: %w", err)
+	}
+
+	return domain.UploadIntent{
+		ID:             id,
+		TenantID:       in.TenantID,
+		Bucket:         in.Bucket,
+		ObjectKey:      in.ObjectKey,
+		Category:       in.Category,
+		Subpath:        in.Subpath,
+		ContentType:    in.ContentType,
+		SizeBytes:      in.SizeBytes,
+		Labels:         labels,
+		Tags:           tags,
+		ExternalRef:    in.ExternalRef,
+		IdempotencyKey: in.IdempotencyKey,
+		CreatedAt:      timestampFromPgtype(in.CreatedAt),
+		ExpiresAt:      timestampFromPgtype(in.ExpiresAt),
+	}, nil
+}
+
 // mapToDomainIdempotency converts sqlc.IdempotencyKey to domain.IdempotencyRecord
 func mapToDomainIdempotency(key sqlc.IdempotencyKey) domain.IdempotencyRecord {
 	return domain.IdempotencyRecord{

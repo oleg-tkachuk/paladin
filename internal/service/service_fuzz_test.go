@@ -198,6 +198,46 @@ func (m *FuzzMockCategoryRepo) GetStats(ctx context.Context, tID, slug string) (
 	return nil, errors.New("unimplemented/mock")
 }
 
+type FuzzMockIntentRepo struct{ mock.Mock }
+
+func (m *FuzzMockIntentRepo) Create(ctx context.Context, rec domain.UploadIntent) error {
+	return m.Called(ctx, rec).Error(0)
+}
+func (m *FuzzMockIntentRepo) Get(ctx context.Context, tID string, id uuid.UUID) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tID, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+func (m *FuzzMockIntentRepo) GetByKey(ctx context.Context, tID, bucket, key string) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tID, bucket, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+func (m *FuzzMockIntentRepo) GetByIdempotencyKey(ctx context.Context, tID, key string) (*domain.UploadIntent, error) {
+	args := m.Called(ctx, tID, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*domain.UploadIntent), args.Error(1)
+}
+func (m *FuzzMockIntentRepo) Delete(ctx context.Context, tID string, id uuid.UUID) (bool, error) {
+	args := m.Called(ctx, tID, id)
+
+	return args.Bool(0), args.Error(1)
+}
+func (m *FuzzMockIntentRepo) DeleteExpired(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	args := m.Called(ctx, cutoff, limit)
+
+	return args.Get(0).(int64), args.Error(1)
+}
+
 type FuzzMockBreaker struct{ mock.Mock }
 
 func (m *FuzzMockBreaker) Get(name string) *fault.CircuitBreakerWrapper {
@@ -213,6 +253,7 @@ func FuzzCreateObject(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tenantID, category, contentType string, sizeBytes int64, externalRef string) {
 		mockRepo := new(FuzzMockRepo)
 		mockMPRepo := new(FuzzMockMPRepo)
+		mockIntentRepo := new(FuzzMockIntentRepo)
 		mockS3 := new(FuzzMockS3Client)
 		mockPolicy := new(FuzzMockPolicy)
 		mockCatRepo := new(FuzzMockCategoryRepo)
@@ -221,12 +262,12 @@ func FuzzCreateObject(f *testing.F) {
 		mockBreaker.On("Get", mock.Anything).Return(fault.GetWithConfig(fault.BreakerConfig{Name: "fuzz"})).Maybe()
 
 		svc := service.NewObjectsService(service.ObjectsServiceConfig{
-			ObjRepo: mockRepo, MultiRepo: mockMPRepo, S3: mockS3, Policy: mockPolicy,
+			ObjRepo: mockRepo, MultiRepo: mockMPRepo, IntentRepo: mockIntentRepo, S3: mockS3, Policy: mockPolicy,
 			CatRepo: mockCatRepo, Breaker: mockBreaker, Log: zap.NewNop(),
 		})
 
 		mockRepo.On("GetByExternalRef", mock.Anything, mock.Anything, mock.Anything).Return((*domain.Object)(nil), nil).Maybe()
-		mockRepo.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
+		mockIntentRepo.On("Create", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 		var extRefPtr *string
 		if externalRef != "" {

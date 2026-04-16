@@ -17,6 +17,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// CreateSingle issues an upload intent for a single-PUT object. No row is
+// written to the `objects` table — the intent records everything the server
+// needs to materialize the object when the client reports success via
+// CompleteObject. If the client never completes, the intent expires and the
+// Reaper removes it, so the `objects` table never contains pending rows.
 func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, category string, contentType string, sizeBytes int64, labels map[string]string, tags map[string]string, externalRef *string, uploadTTL int, idempotencyKey *string) (domain.CreateObjectResponse, error) {
 	ctx, op := beginOp(ctx, OpCreateObject, "create_single",
 		attribute.String("tenant_id", tenantID),
@@ -52,7 +57,9 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 		return domain.CreateObjectResponse{}, apperrors.ValidationFailed("invalid labels", err)
 	}
 
-	// Idempotency-Key cache check
+	// Idempotency-Key cache check — a cached CreateObjectResponse means a
+	// prior call already issued an intent (or completed an object) for this
+	// key; return the cached response verbatim.
 	if idempotencyKey != nil && *idempotencyKey != "" && s.idemRepo != nil {
 		if cached, err := s.idemRepo.Get(ctx, tenantID, *idempotencyKey); err == nil && cached != nil {
 			var res domain.CreateObjectResponse
@@ -69,6 +76,9 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 	}
 
 	id := uuid.New()
+	// Key follows the trg_objects_enforce_key trigger formula so that when
+	// the intent is later promoted into `objects` the computed object_key
+	// matches what we presigned against.
 	key := fmt.Sprintf("%s/%s/%s", tenantID, category, id.String())
 
 	ttl := time.Duration(uploadTTL) * time.Second
@@ -108,16 +118,24 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 
 	bucket := s.s3.BucketName()
 	expiresAt := time.Now().Add(ttl)
-	rec := domain.Object{
-		ID: id, TenantID: tenantID, ObjectKey: key, Bucket: bucket,
-		ContentType: contentType, SizeBytes: sizeBytes,
-		Status: domain.ObjectPending, Labels: labels, Tags: tags, ExternalRef: externalRef,
-		ExpiresAt: &expiresAt,
-		Category:  category,
+
+	intent := domain.UploadIntent{
+		ID:             id,
+		TenantID:       tenantID,
+		Bucket:         bucket,
+		ObjectKey:      key,
+		Category:       category,
+		ContentType:    contentType,
+		SizeBytes:      sizeBytes,
+		Labels:         labels,
+		Tags:           tags,
+		ExternalRef:    externalRef,
+		IdempotencyKey: idempotencyKey,
+		ExpiresAt:      expiresAt,
 	}
 
-	if err := s.objRepo.Create(ctx, rec); err != nil {
-		return domain.CreateObjectResponse{}, fmt.Errorf("create object record objectID=%s: %w", id.String(), err)
+	if err := s.intentRepo.Create(ctx, intent); err != nil {
+		return domain.CreateObjectResponse{}, fmt.Errorf("create upload intent objectID=%s: %w", id.String(), err)
 	}
 
 	logger.FromContext(ctx).Info(LogObjectCreated, zap.String("tenant_id", tenantID), zap.String("object_id", id.String()))
@@ -144,6 +162,10 @@ func (s *objectsService) CreateSingle(ctx context.Context, tenantID string, cate
 	return res, nil
 }
 
+// handleExternalRef short-circuits when an object with the given external_ref
+// already exists (i.e. a previous upload has completed). It re-presigns an
+// upload URL against the existing key so callers can retry failed PUTs
+// without creating a duplicate object.
 func (s *objectsService) handleExternalRef(ctx context.Context, tenantID, externalRef, contentType string, sizeBytes int64, uploadTTL int) (domain.CreateObjectResponse, bool, error) {
 	existing, err := s.objRepo.GetByExternalRef(ctx, tenantID, externalRef)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {

@@ -67,6 +67,10 @@ func (u *pgUoW) Categories() domain.CategoryRepository {
 	return NewCategoryRepo(u.dbTx)
 }
 
+func (u *pgUoW) UploadIntents() domain.UploadIntentsRepository {
+	return NewUploadIntentsRepo(u.dbTx)
+}
+
 func (u *pgUoW) Commit(ctx context.Context) error {
 	if err := u.tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)

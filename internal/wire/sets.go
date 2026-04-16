@@ -47,6 +47,7 @@ var ProviderSet = wire.NewSet(
 	ProvideObjectsRepo,
 	ProvideMultipartRepo,
 	ProvideIdempotencyRepo,
+	ProvideUploadIntentsRepo,
 	ProvideCategoryRepo,
 	ProvideTenantRepo,
 	ProvideAuditLogRepo,
@@ -167,6 +168,10 @@ func ProvideIdempotencyRepo(db *postgres.DB) domain.IdempotencyRepository {
 	return postgres.NewIdempotencyRepo(db)
 }
 
+func ProvideUploadIntentsRepo(db *postgres.DB) domain.UploadIntentsRepository {
+	return postgres.NewUploadIntentsRepo(db)
+}
+
 func ProvideCategoryRepo(db *postgres.DB, cfg config.Config, l *zap.Logger) domain.CategoryRepository {
 	repo := postgres.NewCategoryRepo(db)
 	if cfg.Cache.Enabled {
@@ -195,6 +200,7 @@ func ProvideUoWFactory(db *postgres.DB) domain.UoWFactory {
 func ProvideObjectsService(
 	objRepo domain.ObjectsRepository,
 	mpRepo domain.MultipartRepository,
+	intentRepo domain.UploadIntentsRepository,
 	s3c *s3.Client,
 	policy domain.Policy,
 	uowf domain.UoWFactory,
@@ -207,6 +213,7 @@ func ProvideObjectsService(
 	return service.NewObjectsService(service.ObjectsServiceConfig{
 		ObjRepo:        objRepo,
 		MultiRepo:      mpRepo,
+		IntentRepo:     intentRepo,
 		S3:             s3c,
 		Policy:         policy,
 		UoWF:           uowf,
@@ -247,8 +254,8 @@ func ProvideHTTPServer(
 	return httpapi.NewServer(&cfg, l, objSvc, catSvc, tenantSvc, meta, hs, started, startTime, auditRepo)
 }
 
-func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
-	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, s3c, l.Named("reaper"))
+func ProvideReaper(cfg config.Config, objRepo domain.ObjectsRepository, mpRepo domain.MultipartRepository, intentRepo domain.UploadIntentsRepository, s3c *s3.Client, l *zap.Logger) *worker.Reaper {
+	return worker.NewReaper(cfg.Housekeeping, objRepo, mpRepo, intentRepo, s3c, l.Named("reaper"))
 }
 
 func ProvideApp(

@@ -14,6 +14,7 @@ type UnitOfWork interface {
 	Idempotency() IdempotencyRepository
 	AuditLogs() AuditLogRepository
 	Categories() CategoryRepository
+	UploadIntents() UploadIntentsRepository
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
 }

@@ -24,9 +24,10 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 	etagQuoted := "\"quoted-etag\""
 	etagUnquoted := "quoted-etag"
 
-	setupMock := func() (*domainmocks.MockObjectsRepository, *domainmocks.MockStorageClient, *domainmocks.MockPolicy, domain.ObjectsService) {
+	setupMock := func() (*domainmocks.MockObjectsRepository, *domainmocks.MockStorageClient, *domainmocks.MockPolicy, *domainmocks.MockUploadIntentsRepository, domain.ObjectsService) {
 		objRepo := &domainmocks.MockObjectsRepository{}
 		multiRepo := &domainmocks.MockMultipartRepository{}
+		intentRepo := &domainmocks.MockUploadIntentsRepository{}
 		s3Client := &domainmocks.MockStorageClient{}
 		policy := &domainmocks.MockPolicy{}
 		uowf := &domainmocks.MockUoWFactory{}
@@ -35,13 +36,13 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 		breakerFactory := &MockBreakerFactory{}
 
 		svc := service.NewObjectsService(service.ObjectsServiceConfig{
-			ObjRepo: objRepo, MultiRepo: multiRepo, S3: s3Client, Policy: policy,
+			ObjRepo: objRepo, MultiRepo: multiRepo, IntentRepo: intentRepo, S3: s3Client, Policy: policy,
 			UoWF: uowf, IdemRepo: idemRepo, CatRepo: catRepo, Breaker: breakerFactory,
 			PartSize: 1024 * 1024, FastTimeout: 2 * time.Second, DefaultTimeout: 2 * time.Second,
 			S3Timeout: 2 * time.Second, LongTimeout: 2 * time.Second, Log: zap.NewNop(),
 		})
 
-		return objRepo, s3Client, policy, svc
+		return objRepo, s3Client, policy, intentRepo, svc
 	}
 
 	tests := []struct {
@@ -55,7 +56,7 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			objRepo, s3Client, policy, svc := setupMock()
+			objRepo, s3Client, policy, intentRepo, svc := setupMock()
 
 			obj := &domain.Object{
 				ID:        objID,
@@ -67,6 +68,8 @@ func TestObjectsService_CompleteObject_ETagNormalization(t *testing.T) {
 			objCompleted.Status = domain.ObjectComplete
 
 			policy.On("Authorize", mock.Anything, tenantID, domain.ActionUpdate).Return(nil)
+			// Intent lookup returns not-found, so legacy path is taken.
+			intentRepo.On("Get", mock.Anything, tenantID, objID).Return(nil, domain.ErrNotFound)
 			objRepo.On("Get", mock.Anything, tenantID, objID).Return(obj, nil).Once()
 			s3Client.On("HeadObject", mock.Anything, key).Return(&domain.HeadRecord{
 				ETag:      etagQuoted,

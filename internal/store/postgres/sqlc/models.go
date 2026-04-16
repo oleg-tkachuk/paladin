@@ -101,6 +101,23 @@ type ObjectCategory struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ObjectUploadIntent struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       string             `json:"tenant_id"`
+	Bucket         string             `json:"bucket"`
+	ObjectKey      string             `json:"object_key"`
+	Category       string             `json:"category"`
+	Subpath        *string            `json:"subpath"`
+	ContentType    string             `json:"content_type"`
+	SizeBytes      int64              `json:"size_bytes"`
+	Labels         []byte             `json:"labels"`
+	Tags           []byte             `json:"tags"`
+	ExternalRef    *string            `json:"external_ref"`
+	IdempotencyKey *string            `json:"idempotency_key"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
 type Tenant struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    string             `json:"tenant_id"`

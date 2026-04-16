@@ -20,16 +20,17 @@ import (
 
 // ObjectsServiceConfig holds all dependencies and configuration for the objects service.
 type ObjectsServiceConfig struct {
-	ObjRepo   domain.ObjectsRepository
-	MultiRepo domain.MultipartRepository
-	S3        domain.StorageClient
-	Policy    domain.Policy
-	UoWF      domain.UoWFactory
-	IdemRepo  domain.IdempotencyRepository
-	CatRepo   domain.CategoryRepository
-	Breaker   breaker.Factory
-	PartSize  int64
-	Log       *zap.Logger
+	ObjRepo    domain.ObjectsRepository
+	MultiRepo  domain.MultipartRepository
+	IntentRepo domain.UploadIntentsRepository
+	S3         domain.StorageClient
+	Policy     domain.Policy
+	UoWF       domain.UoWFactory
+	IdemRepo   domain.IdempotencyRepository
+	CatRepo    domain.CategoryRepository
+	Breaker    breaker.Factory
+	PartSize   int64
+	Log        *zap.Logger
 
 	FastTimeout    time.Duration
 	DefaultTimeout time.Duration
@@ -39,15 +40,16 @@ type ObjectsServiceConfig struct {
 }
 
 type objectsService struct {
-	objRepo   domain.ObjectsRepository
-	multiRepo domain.MultipartRepository
-	s3        domain.StorageClient
-	policy    domain.Policy
-	uowf      domain.UoWFactory
-	idemRepo  domain.IdempotencyRepository
-	catRepo   domain.CategoryRepository
-	brk       breaker.Factory
-	partSize  int64
+	objRepo    domain.ObjectsRepository
+	multiRepo  domain.MultipartRepository
+	intentRepo domain.UploadIntentsRepository
+	s3         domain.StorageClient
+	policy     domain.Policy
+	uowf       domain.UoWFactory
+	idemRepo   domain.IdempotencyRepository
+	catRepo    domain.CategoryRepository
+	brk        breaker.Factory
+	partSize   int64
 
 	log *zap.Logger
 
@@ -62,6 +64,7 @@ func NewObjectsService(cfg ObjectsServiceConfig) domain.ObjectsService {
 	return &objectsService{
 		objRepo:                 cfg.ObjRepo,
 		multiRepo:               cfg.MultiRepo,
+		intentRepo:              cfg.IntentRepo,
 		s3:                      cfg.S3,
 		policy:                  cfg.Policy,
 		uowf:                    cfg.UoWF,

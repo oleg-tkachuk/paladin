@@ -17,6 +17,10 @@ type ObjectsService interface {
 	GetMeta(ctx context.Context, tenantID string, id uuid.UUID) (*Object, error)
 	GetByKey(ctx context.Context, tenantID, bucket, key string) (*Object, error)
 	CompleteObject(ctx context.Context, tenantID string, id uuid.UUID, etag *string, sizeBytes *int64) (*Object, error)
+	// CompleteObjectByKey resolves an upload intent by (bucket, key) and
+	// promotes it into a completed object. Used by the handler layer which
+	// receives the key from the client.
+	CompleteObjectByKey(ctx context.Context, tenantID, bucket, key string, etag *string, sizeBytes *int64) (*Object, error)
 	// Delete performs a soft delete
 	Delete(ctx context.Context, tenantID string, id uuid.UUID) error
 	// Restore brings back a soft-deleted object

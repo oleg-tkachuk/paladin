@@ -47,7 +47,8 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 	idempotencyRepository := wire.ProvideIdempotencyRepo(db)
 	categoryRepository := wire.ProvideCategoryRepo(db, config, logger)
 	factory := wire.ProvideBreakerFactory(config)
-	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config, logger)
+	uploadIntentsRepository := wire.ProvideUploadIntentsRepo(db)
+	objectsService := wire.ProvideObjectsService(objectsRepository, multipartRepository, uploadIntentsRepository, client, policy, uoWFactory, idempotencyRepository, categoryRepository, factory, config, logger)
 	categoryService := wire.ProvideCategoryService(categoryRepository)
 	tenantRepository := wire.ProvideTenantRepo(db)
 	tenantService := wire.ProvideTenantService(tenantRepository)
@@ -61,7 +62,7 @@ func InitializeApp(ctx context.Context, version2 wire.Version, commit2 wire.Comm
 		cleanup()
 		return nil, nil, err
 	}
-	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, client, logger)
+	reaper := wire.ProvideReaper(config, objectsRepository, multipartRepository, uploadIntentsRepository, client, logger)
 	appApp, cleanup2 := wire.ProvideApp(appMetadata, config, logger, server, db, shutdownFunc, reaper, atomicBool)
 	return appApp, func() {
 		cleanup2()

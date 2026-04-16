@@ -417,22 +417,19 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot complete objects for other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
-	if err != nil {
-		return nil, mapError(err)
-	}
-
 	var etag *string
 	if msg.Etag != "" {
 		etag = &msg.Etag
 	}
 
-	updated, err := h.svc.CompleteObject(ctx, requestedTenantID, rec.ID, etag, nil)
+	// Use the intent-aware CompleteObjectByKey which first resolves from the
+	// upload_intents table and falls back to the legacy objects table.
+	updated, err := h.svc.CompleteObjectByKey(ctx, requestedTenantID, msg.Bucket, msg.Key, etag, nil)
 	if err != nil {
 		return nil, mapError(err)
 	}
 
-	logger.FromContext(ctx).Info("object upload completed", zap.String("object_id", rec.ID.String()))
+	logger.FromContext(ctx).Info("object upload completed", zap.String("object_id", updated.ID.String()))
 
 	return connect.NewResponse(&CompleteObjectResponse{
 		Object: objectToProto(updated),
