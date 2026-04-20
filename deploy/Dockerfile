@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # `docker/dockerfile:1` — Recommended stable track; BuildKit will pull the latest minor/patch updates.
 
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26.0
 
 # BuildKit automatically passes these args (for multi-arch builds).
 ARG TARGETOS
@@ -15,11 +15,11 @@ ARG TARGETPLATFORM
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS tools
 
 # Tool versions MUST be pinned for reproducible builds
-ARG PROTOC_GEN_GO_VERSION=latest
-ARG WIRE_VERSION=latest
-ARG PROTOC_GEN_CONNECT_GO_VERSION=latest
-ARG SQLC_VERSION=latest
-ARG BUF_VERSION=latest
+ARG PROTOC_GEN_GO_VERSION=v1.36.11
+ARG WIRE_VERSION=v0.7.0
+ARG PROTOC_GEN_CONNECT_GO_VERSION=v1.19.1
+ARG SQLC_VERSION=v1.30.0
+ARG BUF_VERSION=v1.50.0
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
