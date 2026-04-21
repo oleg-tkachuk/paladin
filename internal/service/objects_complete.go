@@ -100,9 +100,27 @@ func (s *objectsService) CompleteObjectByKey(ctx context.Context, tenantID, buck
 	// Fallback: try existing object by key (already completed, or legacy pending).
 	rec, err := s.objRepo.GetByKey(ctx, tenantID, bucket, key)
 	if err != nil {
-		// Also try UUID-based fallback if key looks like a UUID.
+		// UUID-based fallback. Some callers mistakenly pass the object/intent
+		// UUID in the `key` field instead of the full S3 object key. When that
+		// happens we try the intent repo by ID first (uploads not yet
+		// completed), then fall back to completeLegacy (already-pending
+		// objects).
 		if stderrs.Is(err, domain.ErrNotFound) {
 			if id, parseErr := uuid.Parse(key); parseErr == nil {
+				// Try intent-by-UUID first so freshly-initiated uploads resolve.
+				if intentByID, intentErr := s.intentRepo.Get(ctx, tenantID, id); intentErr == nil && intentByID != nil {
+					obj, completeErr := s.completeFromIntent(ctx, tenantID, intentByID, etag, sizeBytes)
+					if completeErr != nil {
+						op.fail(completeErr)
+						return nil, completeErr
+					}
+					op.succeed()
+					return obj, nil
+				} else if intentErr != nil && !stderrs.Is(intentErr, domain.ErrNotFound) {
+					op.fail(intentErr)
+					return nil, intentErr
+				}
+
 				obj, legacyErr := s.completeLegacy(ctx, op, tenantID, id, etag, sizeBytes)
 				if legacyErr != nil {
 					op.fail(legacyErr)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/domain"
@@ -110,7 +111,11 @@ func (h *ObjectHandler) DownloadObject(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot download objects of other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	rec, err := resolveObject(ctx, h.svc, requestedTenantID, identity{
+		ObjectID: msg.ObjectId,
+		Bucket:   msg.Bucket,
+		Key:      msg.Key,
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -143,7 +148,11 @@ func (h *ObjectHandler) GetObjectMetadata(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot access metadata of other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	rec, err := resolveObject(ctx, h.svc, requestedTenantID, identity{
+		ObjectID: msg.ObjectId,
+		Bucket:   msg.Bucket,
+		Key:      msg.Key,
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -170,7 +179,11 @@ func (h *ObjectHandler) UpdateObjectMetadata(ctx context.Context, req *connect.R
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot update metadata of other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	rec, err := resolveObject(ctx, h.svc, requestedTenantID, identity{
+		ObjectID: msg.ObjectId,
+		Bucket:   msg.Bucket,
+		Key:      msg.Key,
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -205,7 +218,11 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot delete objects of other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	rec, err := resolveObject(ctx, h.svc, requestedTenantID, identity{
+		ObjectID: msg.ObjectId,
+		Bucket:   msg.Bucket,
+		Key:      msg.Key,
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -221,8 +238,10 @@ func (h *ObjectHandler) DeleteObject(ctx context.Context, req *connect.Request[D
 
 	logger.FromContext(ctx).Info("object deleted", zap.String("object_id", rec.ID.String()), zap.Bool("permanent", msg.Permanent))
 
-	// Re-fetch to get post-delete state (soft-delete updates status)
-	updated, fetchErr := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	// Re-fetch to get post-delete state (soft-delete updates status).
+	// Use the resolved object's ID — the row we just deleted may no longer be
+	// reachable by (bucket, key) on the primary path, so ID is authoritative.
+	updated, fetchErr := h.svc.Get(ctx, requestedTenantID, rec.ID)
 	if fetchErr != nil {
 		// For permanent deletes the record is gone — return the pre-delete snapshot.
 		//nolint:nilerr
@@ -422,9 +441,27 @@ func (h *ObjectHandler) CompleteObject(ctx context.Context, req *connect.Request
 		etag = &msg.Etag
 	}
 
-	// Use the intent-aware CompleteObjectByKey which first resolves from the
-	// upload_intents table and falls back to the legacy objects table.
-	updated, err := h.svc.CompleteObjectByKey(ctx, requestedTenantID, msg.Bucket, msg.Key, etag, nil)
+	// Preferred path: complete directly by object_id.
+	// Fallback: (bucket, key) for older / external clients.
+	var (
+		updated *domain.Object
+		err     error
+	)
+	switch {
+	case msg.ObjectId != "":
+		id, parseErr := uuid.Parse(msg.ObjectId)
+		if parseErr != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("object_id is not a valid UUID: %w", parseErr))
+		}
+		updated, err = h.svc.CompleteObject(ctx, requestedTenantID, id, etag, nil)
+	case msg.Bucket != "" && msg.Key != "":
+		// Intent-aware: resolves upload_intents first, falls back to objects.
+		updated, err = h.svc.CompleteObjectByKey(ctx, requestedTenantID, msg.Bucket, msg.Key, etag, nil)
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("either object_id or (bucket + key) must be provided"))
+	}
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -453,7 +490,11 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("cannot restore objects of other tenants"))
 	}
 
-	rec, err := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	rec, err := resolveObject(ctx, h.svc, requestedTenantID, identity{
+		ObjectID: msg.ObjectId,
+		Bucket:   msg.Bucket,
+		Key:      msg.Key,
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -465,8 +506,8 @@ func (h *ObjectHandler) RestoreObject(ctx context.Context, req *connect.Request[
 
 	logger.FromContext(ctx).Info("object restored", zap.String("object_id", rec.ID.String()))
 
-	// Re-fetch to get post-restore state (AVAILABLE status)
-	updated, fetchErr := getObjectResiliently(ctx, h.svc, requestedTenantID, msg.Bucket, msg.Key)
+	// Re-fetch by ID (authoritative) to get post-restore state.
+	updated, fetchErr := h.svc.Get(ctx, requestedTenantID, rec.ID)
 	if fetchErr != nil {
 		//nolint:nilerr
 		return connect.NewResponse(&RestoreObjectResponse{

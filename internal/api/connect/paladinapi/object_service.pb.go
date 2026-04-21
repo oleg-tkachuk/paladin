@@ -201,14 +201,22 @@ func (x *UploadObjectResponse) GetUploadUrl() *PresignedUrl {
 }
 
 // DownloadObjectRequest retrieves an object's metadata and a presigned download URL.
+//
+// Address the target object with ONE of:
+//   - object_id (preferred — stable UUID returned by UploadObject)
+//   - bucket + key (fallback — useful for external reconciliation tools that
+//     only know the storage path)
 type DownloadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object to download.
-	Key           string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// Storage key of the object to download. Required if object_id is unset.
+	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// Stable object identifier returned from UploadObject. Preferred.
+	// Mutually exclusive complement to (bucket, key).
+	ObjectId      string `protobuf:"bytes,4,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -260,6 +268,13 @@ func (x *DownloadObjectRequest) GetBucket() string {
 func (x *DownloadObjectRequest) GetKey() string {
 	if x != nil {
 		return x.Key
+	}
+	return ""
+}
+
+func (x *DownloadObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
 	}
 	return ""
 }
@@ -320,14 +335,20 @@ func (x *DownloadObjectResponse) GetDownloadUrl() *PresignedUrl {
 }
 
 // GetObjectMetadataRequest retrieves metadata and tags without generating a download URL.
+//
+// Address the target object with ONE of:
+//   - object_id (preferred)
+//   - bucket + key (fallback)
 type GetObjectMetadataRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object.
-	Key           string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// Storage key of the object. Required if object_id is unset.
+	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// Stable object identifier. Preferred.
+	ObjectId      string `protobuf:"bytes,4,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -383,6 +404,13 @@ func (x *GetObjectMetadataRequest) GetKey() string {
 	return ""
 }
 
+func (x *GetObjectMetadataRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
 // GetObjectMetadataResponse contains the object resource without a download URL.
 type GetObjectMetadataResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -430,13 +458,17 @@ func (x *GetObjectMetadataResponse) GetObject() *Object {
 }
 
 // UpdateObjectMetadataRequest performs a partial update of object metadata and/or tags.
+//
+// Address the target object with ONE of:
+//   - object_id (preferred)
+//   - bucket + key (fallback)
 type UpdateObjectMetadataRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object.
+	// Storage key of the object. Required if object_id is unset.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Fields to update. Supports paths: "metadata", "tags", "content_type".
 	// Only the specified fields are modified; unspecified fields remain unchanged.
@@ -449,8 +481,10 @@ type UpdateObjectMetadataRequest struct {
 	ContentType string `protobuf:"bytes,7,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	// Client-provided idempotency key.
 	IdempotencyKey string `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable object identifier. Preferred.
+	ObjectId      string `protobuf:"bytes,9,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateObjectMetadataRequest) Reset() {
@@ -539,6 +573,13 @@ func (x *UpdateObjectMetadataRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *UpdateObjectMetadataRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
 // UpdateObjectMetadataResponse contains the updated object resource.
 type UpdateObjectMetadataResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -586,21 +627,27 @@ func (x *UpdateObjectMetadataResponse) GetObject() *Object {
 }
 
 // DeleteObjectRequest removes an object from a bucket.
+//
+// Address the target object with ONE of:
+//   - object_id (preferred)
+//   - bucket + key (fallback)
 type DeleteObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object to delete.
+	// Storage key of the object to delete. Required if object_id is unset.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// If true, permanently deletes the object and its content from the storage backend.
 	// If false (default), performs a soft-delete that can be reversed.
 	Permanent bool `protobuf:"varint,4,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	// Client-provided idempotency key.
 	IdempotencyKey string `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable object identifier. Preferred.
+	ObjectId      string `protobuf:"bytes,6,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteObjectRequest) Reset() {
@@ -664,6 +711,13 @@ func (x *DeleteObjectRequest) GetPermanent() bool {
 func (x *DeleteObjectRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *DeleteObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
 	}
 	return ""
 }
@@ -1174,13 +1228,17 @@ func (x *ListObjectsResponse) GetTotalCount() int64 {
 }
 
 // CompleteObjectRequest marks a single-part upload as complete.
+//
+// Address the target upload with ONE of:
+//   - object_id (preferred — stable UUID returned by UploadObject)
+//   - bucket + key (fallback)
 type CompleteObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object to complete.
+	// Storage key of the object to complete. Required if object_id is unset.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Entity tag returned by the storage backend after upload.
 	Etag string `protobuf:"bytes,4,opt,name=etag,proto3" json:"etag,omitempty"`
@@ -1188,8 +1246,10 @@ type CompleteObjectRequest struct {
 	Checksum string `protobuf:"bytes,5,opt,name=checksum,proto3" json:"checksum,omitempty"`
 	// Client-provided idempotency key.
 	IdempotencyKey string `protobuf:"bytes,6,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable object identifier returned from UploadObject. Preferred.
+	ObjectId      string `protobuf:"bytes,7,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteObjectRequest) Reset() {
@@ -1264,6 +1324,13 @@ func (x *CompleteObjectRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *CompleteObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
 // CompleteObjectResponse contains the object with its updated status.
 type CompleteObjectResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1311,18 +1378,24 @@ func (x *CompleteObjectResponse) GetObject() *Object {
 }
 
 // RestoreObjectRequest recovers a soft-deleted object.
+//
+// Address the target object with ONE of:
+//   - object_id (preferred)
+//   - bucket + key (fallback)
 type RestoreObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tenant identifier for logical isolation.
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Bucket containing the object.
+	// Bucket containing the object. Required if object_id is unset.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key of the object to restore.
+	// Storage key of the object to restore. Required if object_id is unset.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Client-provided idempotency key.
 	IdempotencyKey string `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable object identifier. Preferred.
+	ObjectId      string `protobuf:"bytes,5,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestoreObjectRequest) Reset() {
@@ -1379,6 +1452,13 @@ func (x *RestoreObjectRequest) GetKey() string {
 func (x *RestoreObjectRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *RestoreObjectRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
 	}
 	return ""
 }
@@ -1454,30 +1534,33 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\x14UploadObjectResponse\x12&\n" +
 	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\x123\n" +
 	"\n" +
-	"upload_url\x18\x02 \x01(\v2\x14.paladin.v1.PresignedUrlR\tuploadUrl\"z\n" +
+	"upload_url\x18\x02 \x01(\v2\x14.paladin.v1.PresignedUrlR\tuploadUrl\"\x85\x01\n" +
 	"\x15DownloadObjectRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"y\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x1b\n" +
+	"\tobject_id\x18\x04 \x01(\tR\bobjectId\"y\n" +
 	"\x16DownloadObjectResponse\x12&\n" +
 	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\x127\n" +
-	"\fdownload_url\x18\x02 \x01(\v2\x14.paladin.v1.PresignedUrlR\vdownloadUrl\"}\n" +
+	"\fdownload_url\x18\x02 \x01(\v2\x14.paladin.v1.PresignedUrlR\vdownloadUrl\"\x88\x01\n" +
 	"\x18GetObjectMetadataRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"C\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x1b\n" +
+	"\tobject_id\x18\x04 \x01(\tR\bobjectId\"C\n" +
 	"\x19GetObjectMetadataResponse\x12&\n" +
-	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\x99\x04\n" +
+	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xa4\x04\n" +
 	"\x1bUpdateObjectMetadataRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12C\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12C\n" +
 	"\vupdate_mask\x18\x04 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12M\n" +
 	"\bmetadata\x18\x05 \x03(\v21.paladin.v1.UpdateObjectMetadataRequest.MetadataEntryR\bmetadata\x12A\n" +
 	"\x04tags\x18\x06 \x03(\v2-.paladin.v1.UpdateObjectMetadataRequest.TagsEntryR\x04tags\x12!\n" +
 	"\fcontent_type\x18\a \x01(\tR\vcontentType\x12'\n" +
-	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x1a;\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
+	"\tobject_id\x18\t \x01(\tR\bobjectId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
@@ -1485,13 +1568,14 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"F\n" +
 	"\x1cUpdateObjectMetadataResponse\x12&\n" +
-	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xbf\x01\n" +
+	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xca\x01\n" +
 	"\x13DeleteObjectRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x1c\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x1c\n" +
 	"\tpermanent\x18\x04 \x01(\bR\tpermanent\x12'\n" +
-	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\">\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
+	"\tobject_id\x18\x06 \x01(\tR\bobjectId\">\n" +
 	"\x14DeleteObjectResponse\x12&\n" +
 	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xf4\x03\n" +
 	"\x11CopyObjectRequest\x12%\n" +
@@ -1534,21 +1618,23 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\aobjects\x18\x01 \x03(\v2\x0e.paladin.v1.ObjectR\aobjects\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
-	"totalCount\"\xd3\x01\n" +
+	"totalCount\"\xde\x01\n" +
 	"\x15CompleteObjectRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x12\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x12\n" +
 	"\x04etag\x18\x04 \x01(\tR\x04etag\x12\x1a\n" +
 	"\bchecksum\x18\x05 \x01(\tR\bchecksum\x12'\n" +
-	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\"@\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
+	"\tobject_id\x18\a \x01(\tR\bobjectId\"@\n" +
 	"\x16CompleteObjectResponse\x12&\n" +
-	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xa2\x01\n" +
+	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\"\xad\x01\n" +
 	"\x14RestoreObjectRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x1f\n" +
-	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
-	"\x03key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12'\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"?\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12'\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
+	"\tobject_id\x18\x05 \x01(\tR\bobjectId\"?\n" +
 	"\x15RestoreObjectResponse\x12&\n" +
 	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object2\xe1\v\n" +
 	"\rObjectService\x12\x86\x01\n" +

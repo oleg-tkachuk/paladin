@@ -150,15 +150,24 @@ message UploadObjectResponse {
 // ─── Download ────────────────────────────────────────────────────────────────
 
 // DownloadObjectRequest retrieves an object's metadata and a presigned download URL.
+//
+// Address the target object with ONE of:
+//   * object_id (preferred — stable UUID returned by UploadObject)
+//   * bucket + key (fallback — useful for external reconciliation tools that
+//     only know the storage path)
 message DownloadObjectRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object to download.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object to download. Required if object_id is unset.
+  string key = 3;
+
+  // Stable object identifier returned from UploadObject. Preferred.
+  // Mutually exclusive complement to (bucket, key).
+  string object_id = 4;
 }
 
 // DownloadObjectResponse contains the object metadata and a presigned download URL.
@@ -173,15 +182,22 @@ message DownloadObjectResponse {
 // ─── Get metadata ────────────────────────────────────────────────────────────
 
 // GetObjectMetadataRequest retrieves metadata and tags without generating a download URL.
+//
+// Address the target object with ONE of:
+//   * object_id (preferred)
+//   * bucket + key (fallback)
 message GetObjectMetadataRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object. Required if object_id is unset.
+  string key = 3;
+
+  // Stable object identifier. Preferred.
+  string object_id = 4;
 }
 
 // GetObjectMetadataResponse contains the object resource without a download URL.
@@ -193,15 +209,19 @@ message GetObjectMetadataResponse {
 // ─── Update metadata ────────────────────────────────────────────────────────
 
 // UpdateObjectMetadataRequest performs a partial update of object metadata and/or tags.
+//
+// Address the target object with ONE of:
+//   * object_id (preferred)
+//   * bucket + key (fallback)
 message UpdateObjectMetadataRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object. Required if object_id is unset.
+  string key = 3;
 
   // Fields to update. Supports paths: "metadata", "tags", "content_type".
   // Only the specified fields are modified; unspecified fields remain unchanged.
@@ -218,6 +238,9 @@ message UpdateObjectMetadataRequest {
 
   // Client-provided idempotency key.
   string idempotency_key = 8;
+
+  // Stable object identifier. Preferred.
+  string object_id = 9;
 }
 
 // UpdateObjectMetadataResponse contains the updated object resource.
@@ -229,15 +252,19 @@ message UpdateObjectMetadataResponse {
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 // DeleteObjectRequest removes an object from a bucket.
+//
+// Address the target object with ONE of:
+//   * object_id (preferred)
+//   * bucket + key (fallback)
 message DeleteObjectRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object to delete.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object to delete. Required if object_id is unset.
+  string key = 3;
 
   // If true, permanently deletes the object and its content from the storage backend.
   // If false (default), performs a soft-delete that can be reversed.
@@ -245,6 +272,9 @@ message DeleteObjectRequest {
 
   // Client-provided idempotency key.
   string idempotency_key = 5;
+
+  // Stable object identifier. Preferred.
+  string object_id = 6;
 }
 
 // DeleteObjectResponse confirms the deletion.
@@ -361,15 +391,19 @@ message ListObjectsResponse {
 // ─── Complete ────────────────────────────────────────────────────────────────
 
 // CompleteObjectRequest marks a single-part upload as complete.
+//
+// Address the target upload with ONE of:
+//   * object_id (preferred — stable UUID returned by UploadObject)
+//   * bucket + key (fallback)
 message CompleteObjectRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object to complete.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object to complete. Required if object_id is unset.
+  string key = 3;
 
   // Entity tag returned by the storage backend after upload.
   string etag = 4;
@@ -379,6 +413,9 @@ message CompleteObjectRequest {
 
   // Client-provided idempotency key.
   string idempotency_key = 6;
+
+  // Stable object identifier returned from UploadObject. Preferred.
+  string object_id = 7;
 }
 
 // CompleteObjectResponse contains the object with its updated status.
@@ -390,18 +427,25 @@ message CompleteObjectResponse {
 // ─── Restore ─────────────────────────────────────────────────────────────────
 
 // RestoreObjectRequest recovers a soft-deleted object.
+//
+// Address the target object with ONE of:
+//   * object_id (preferred)
+//   * bucket + key (fallback)
 message RestoreObjectRequest {
   // Tenant identifier for logical isolation.
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // Bucket containing the object.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
+  // Bucket containing the object. Required if object_id is unset.
+  string bucket = 2;
 
-  // Storage key of the object to restore.
-  string key = 3 [(buf.validate.field).string.min_len = 1];
+  // Storage key of the object to restore. Required if object_id is unset.
+  string key = 3;
 
   // Client-provided idempotency key.
   string idempotency_key = 4;
+
+  // Stable object identifier. Preferred.
+  string object_id = 5;
 }
 
 // RestoreObjectResponse confirms the restoration.
