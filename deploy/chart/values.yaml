@@ -142,13 +142,15 @@ config:
     external_ref_max_len: 256
     object_key_max_len: 1024
 
-  # ─── Auth ───
+  # ─── Auth ─────────────────────────────────────────────────────────────────
+  # JWT verification for Connect RPCs. One of jwks_url or hmac_secret must
+  # be set when auth is enforced. `leeway` tolerates small clock skew.
   auth:
-    enabled: false
-    admin_key_secret:
-      name: paladin-admin-key
-      key: admin-key
-      namespace: paladin
+    issuer: ""
+    audience: "paladin-api"
+    jwks_url: ""
+    hmac_secret: "" # dev-only; prefer jwks_url in staging/prod
+    leeway: 30s
 
   # ─── Security ───────────────────────────────────────────────────────────────
 
@@ -196,6 +198,40 @@ config:
     gc_interval: "1h"
     # WARNING: set to true in production to reclaim S3 storage from aborted multipart uploads.
     delete_orphaned_parts: false
+
+  # ─── Storage Backends ─────────────────────────────────────────────────────
+  # Physical object-storage backends. Each logical bucket (buckets.storage_backend)
+  # references a key here. `events.enabled=true` bypasses CompleteObject —
+  # object promotion happens automatically via the S3 event stream.
+  storage_backends:
+    primary:
+      kind: s3-compatible # aws-s3 | s3-compatible | gcs
+      region: us-east-1
+      endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
+      events:
+        enabled: false # SeaweedFS has no S3 event notifications → EXPLICIT mode
+        target: "none" # sqs | redis | none
+        queue_url: ""
+        poll_interval: 20s
+
+  # ─── Presign Policy ───────────────────────────────────────────────────────
+  # Applies to UploadObject, PresignPut, PresignGet, PresignPart.
+  presign:
+    default_ttl: 15m
+    max_ttl: 168h # 7d — Go time.Duration has no "d" unit
+    default_max_size: 5368709120 # 5 GiB
+
+  # ─── Reconciler ───────────────────────────────────────────────────────────
+  # Covers gaps when S3 events are unavailable or lost.
+  reconciler:
+    poll_interval: 30s
+    pending_grace_ttl: 2h # only PENDING rows older than this are reconciled
+    batch_size: 100
+
+  # ─── Cedar ────────────────────────────────────────────────────────────────
+  # Short TTL so a missed LISTEN/NOTIFY self-corrects.
+  cedar:
+    policy_cache_ttl: 30s
 
 image:
   repository: registry.local/paladin

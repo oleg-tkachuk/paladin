@@ -1,203 +1,103 @@
--- Objects queries
+-- Object queries.
 
 -- name: CreateObject :exec
 INSERT INTO objects (
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
+    object_id, tenant_id, bucket_id, key, state,
+    content_type, size_bytes, checksum_algorithm, checksum,
+    metadata, tags, external_ref, presign_expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11, $12, $13
 );
 
 -- name: GetObject :one
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND id = $2;
+WHERE tenant_id = $1 AND object_id = $2;
 
--- name: GetObjectByExternalRef :one
+-- name: LookupObjectByKey :one
+-- Used by resource-name resolution: buckets/{b}/objects-by-key/{key} → object_id.
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND external_ref = $2;
+WHERE tenant_id = $1 AND bucket_id = $2 AND key = $3 AND state <> 'DELETED';
 
--- name: GetObjectByKey :one
-SELECT sqlc.embed(objects)
-FROM objects
-WHERE tenant_id = $1 AND bucket = $2 AND object_key = $3;
-
--- name: MarkObjectComplete :execrows
+-- name: PromoteObject :execrows
+-- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
+-- out-of-order S3 events + reconciler + RPC calls from regressing state.
+-- If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
+-- strictly greater than the stored sequencer (or either is NULL).
 UPDATE objects
-SET status = 'complete',
-    stored_etag = $3,
-    stored_size_bytes = $4,
-    completed_at = now(),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND (status = 'pending' OR status = 'uploading');
+SET state      = 'AVAILABLE',
+    size_bytes = sqlc.arg('size_bytes'),
+    etag       = sqlc.arg('etag'),
+    checksum   = sqlc.narg('checksum'),
+    sequencer  = sqlc.narg('sequencer'),
+    committed_at = COALESCE(committed_at, now())
+WHERE object_id = $1
+  AND state IN ('PENDING', 'AVAILABLE')
+  AND (sqlc.narg('sequencer')::text IS NULL
+       OR sequencer IS NULL
+       OR sqlc.narg('sequencer')::text > sequencer);
 
--- name: MarkObjectSoftDeleted :execrows
+-- name: MarkObjectFailed :execrows
 UPDATE objects
-SET status = 'soft_deleted',
-    deleted_at = now(),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status != 'soft_deleted'
-  AND status != 'hard_deleted';
+SET state         = 'FAILED',
+    terminated_at = now()
+WHERE object_id = $1
+  AND state = 'PENDING';
+
+-- name: SoftDeleteObject :execrows
+UPDATE objects
+SET state         = 'DELETED',
+    terminated_at = now()
+WHERE tenant_id = $1 AND object_id = $2
+  AND state IN ('AVAILABLE', 'PENDING')
+  AND resource_version = sqlc.arg('expected_version');
 
 -- name: RestoreObject :execrows
+-- Undeletes a soft-deleted object iff no live row exists with the same
+-- (tenant, bucket, key). Caller is expected to verify uniqueness first;
+-- a UNIQUE partial index still catches the race at commit time.
 UPDATE objects
-SET status = 'uploaded',
-    deleted_at = NULL,
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status = 'soft_deleted';
-
--- name: MarkObjectHardDeleted :execrows
-UPDATE objects
-SET status = 'hard_deleted',
-    deleted_at = COALESCE(deleted_at, now()),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status != 'hard_deleted';
+SET state         = 'AVAILABLE',
+    terminated_at = NULL
+WHERE tenant_id = $1 AND object_id = $2
+  AND state = 'DELETED';
 
 -- name: ListObjects :many
-SELECT sqlc.embed(objects), COUNT(*) OVER() AS total_count
-FROM objects
-WHERE tenant_id = @tenant_id
-  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
-  AND (sqlc.narg('external_ref')::text IS NULL OR external_ref = sqlc.narg('external_ref'))
-  AND (@created_after::timestamptz IS NULL OR created_at >= @created_after::timestamptz)
-  AND (@created_before::timestamptz IS NULL OR created_at < @created_before::timestamptz)
-  AND (@cursor::timestamptz IS NULL OR created_at < @cursor::timestamptz)
-  AND (
-    sqlc.narg('category')::text IS NULL OR 
-    (@recursive::bool AND (category = sqlc.narg('category') OR category LIKE sqlc.narg('category') || '/%')) OR
-    category = sqlc.narg('category')
-  )
-  AND (sqlc.narg('key_prefix')::text IS NULL OR object_key LIKE sqlc.narg('key_prefix') || '%')
-ORDER BY
-    -- Sorting logic
-    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'asc' THEN object_key END ASC,
-    CASE WHEN @sort_by::text = 'name' AND @sort_order::text = 'desc' THEN object_key END DESC,
-    CASE WHEN @sort_by::text = 'category' AND @sort_order::text = 'asc' THEN category END ASC,
-    CASE WHEN @sort_by::text = 'category' AND @sort_order::text = 'desc' THEN category END DESC,
-    CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'asc' THEN size_bytes END ASC,
-    CASE WHEN @sort_by::text = 'size' AND @sort_order::text = 'desc' THEN size_bytes END DESC,
-    CASE WHEN @sort_by::text = 'status' AND @sort_order::text = 'asc' THEN status END ASC,
-    CASE WHEN @sort_by::text = 'status' AND @sort_order::text = 'desc' THEN status END DESC,
-    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND @sort_order::text = 'asc' THEN created_at END ASC,
-    CASE WHEN (@sort_by::text = 'created' OR @sort_by::text IS NULL) AND (@sort_order::text = 'desc' OR @sort_order::text IS NULL) THEN created_at END DESC
-LIMIT @limit_val;
-
--- name: UpdateObjectStatus :execrows
-UPDATE objects
-SET status = $3, updated_at = NOW()
-WHERE tenant_id = $1 AND id = $2;
-
--- name: PatchObjectLabels :one
-UPDATE objects
-SET labels = labels || $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectExternalRef :one
-UPDATE objects
-SET external_ref = $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectLabelsAndExternalRef :one
-UPDATE objects
-SET labels = labels || $3,
-    external_ref = $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectTags :one
-UPDATE objects
-SET tags = tags || $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectLabelsAndTags :one
-UPDATE objects
-SET labels = labels || $3,
-    tags = tags || $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectTagsAndExternalRef :one
-UPDATE objects
-SET tags = tags || $3,
-    external_ref = $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: PatchObjectLabelsTagsAndExternalRef :one
-UPDATE objects
-SET labels = labels || $3,
-    tags = tags || $4,
-    external_ref = $5,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING sqlc.embed(objects);
-
--- name: ListExpiredPendingObjects :many
+-- CEL filter is applied by the caller post-load. Keyset page uses object_id
+-- (UUIDv7) which is monotonic-by-time.
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE status = 'pending' AND expires_at < $1
-LIMIT $2;
-
--- name: DeleteObject :execrows
-DELETE FROM objects
-WHERE tenant_id = $1 AND id = $2;
-
--- name: BulkMarkObjectSoftDeleted :execrows
-UPDATE objects
-SET status = 'soft_deleted',
-    deleted_at = now(),
-    updated_at = now()
 WHERE tenant_id = $1
-  AND id = ANY($2::uuid[])
-  AND status != 'soft_deleted'
-  AND status != 'hard_deleted';
+  AND bucket_id = $2
+  AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
+  AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
+  AND (sqlc.narg('after_id')::uuid IS NULL OR object_id > sqlc.narg('after_id')::uuid)
+ORDER BY object_id
+LIMIT sqlc.arg('page_size');
 
--- name: BulkRestoreObject :execrows
+-- name: CountObjects :one
+SELECT COUNT(*) AS n
+FROM objects
+WHERE tenant_id = $1 AND bucket_id = $2
+  AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state);
+
+-- name: ScanPendingExpired :many
+-- Reconciler picks up PENDING rows whose presign has expired.
+SELECT sqlc.embed(objects)
+FROM objects
+WHERE state = 'PENDING'
+  AND presign_expires_at < now()
+ORDER BY presign_expires_at
+LIMIT sqlc.arg('batch_size');
+
+-- name: UpdateObjectMetadata :execrows
 UPDATE objects
-SET status = 'uploaded',
-    deleted_at = NULL,
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = ANY($2::uuid[])
-  AND status = 'soft_deleted';
-
--- name: BulkDeleteObject :execrows
-DELETE FROM objects
-WHERE tenant_id = $1 AND id = ANY($2::uuid[]);
-
--- name: GetObjectStats :one
-SELECT 
-    COUNT(*)::bigint as total_count,
-    COALESCE(SUM(size_bytes), 0)::bigint as total_size,
-    COUNT(*) FILTER (WHERE status = 'pending')::bigint as pending_count,
-    COUNT(*) FILTER (WHERE status = 'uploading')::bigint as uploading_count,
-    COUNT(*) FILTER (WHERE status = 'uploaded')::bigint as uploaded_count,
-    COUNT(*) FILTER (WHERE status = 'complete')::bigint as complete_count,
-    COUNT(*) FILTER (WHERE status = 'soft_deleted')::bigint as soft_deleted_count
-FROM objects
-WHERE tenant_id = $1;
-
--- name: GetBucketStats :one
-SELECT 
-    COUNT(*)::bigint as total_objects,
-    COALESCE(SUM(size_bytes), 0)::bigint as total_size_bytes
-FROM objects
-WHERE tenant_id = $1 AND bucket = $2 AND status != 'hard_deleted';
+SET metadata     = COALESCE(sqlc.narg('metadata'), metadata),
+    tags         = COALESCE(sqlc.narg('tags'),     tags),
+    external_ref = COALESCE(sqlc.narg('external_ref'), external_ref)
+WHERE tenant_id = $1 AND object_id = $2
+  AND state = 'AVAILABLE'
+  AND resource_version = sqlc.arg('expected_version');

@@ -5,14 +5,17 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
+// App is the top-level runtime container. It owns every long-lived resource
+// (HTTP server, DB pool, background workers, telemetry shutdown) and is the
+// single point of orderly startup/shutdown.
 type App struct {
 	Version   string
 	Commit    string
@@ -27,8 +30,8 @@ type App struct {
 	otelShutdown observability.ShutdownFunc
 	Started      *atomic.Bool
 
-	reaper       *worker.Reaper
-	reaperCancel context.CancelFunc
+	reconciler       *worker.ReconcilerV2
+	reconcilerCancel context.CancelFunc
 }
 
 func NewContainer(
@@ -38,16 +41,20 @@ func NewContainer(
 	httpSrv *http.Server,
 	db *postgres.DB,
 	otelShutdown observability.ShutdownFunc,
-	reaper *worker.Reaper,
+	reconciler *worker.ReconcilerV2,
 	started *atomic.Bool,
 ) *App {
 	return &App{
-		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: l,
-		httpSrv: httpSrv,
-		db:      db, otelShutdown: otelShutdown,
-		reaper:  reaper,
-		Started: started,
+		Version:      version,
+		Commit:       commit,
+		BuildTime:    buildTime,
+		Cfg:          cfg,
+		Logger:       l,
+		httpSrv:      httpSrv,
+		db:           db,
+		otelShutdown: otelShutdown,
+		reconciler:   reconciler,
+		Started:      started,
 	}
 }
 
@@ -71,11 +78,10 @@ func (a *App) Run() error {
 		}
 	}()
 
-	// Start Reaper
-	if a.reaper != nil {
-		rCtx, rCancel := context.WithCancel(context.Background())
-		a.reaperCancel = rCancel
-		go a.reaper.Start(rCtx)
+	if a.reconciler != nil {
+		rctx, cancel := context.WithCancel(context.Background())
+		a.reconcilerCancel = cancel
+		go func() { _ = a.reconciler.Run(rctx) }()
 	}
 
 	a.Started.Store(true)
@@ -89,6 +95,10 @@ func (a *App) Shutdown() {
 
 	a.Logger.Info("Shutting down...")
 
+	if a.reconcilerCancel != nil {
+		a.reconcilerCancel()
+	}
+
 	if a.httpSrv != nil {
 		_ = a.httpSrv.Shutdown(ctx)
 	}
@@ -99,10 +109,6 @@ func (a *App) Shutdown() {
 
 	if a.otelShutdown != nil {
 		_ = a.otelShutdown(ctx)
-	}
-
-	if a.reaperCancel != nil {
-		a.reaperCancel()
 	}
 
 	_ = a.Logger.Sync()

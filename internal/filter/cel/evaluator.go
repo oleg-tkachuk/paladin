@@ -1,0 +1,140 @@
+// Package cel compiles and evaluates AIP-160-style CEL filter expressions
+// used by ListObjects, ListBuckets, ListTenants, ListOperations.
+//
+// Separation from Cedar (policy): CEL answers "does this row match?" for
+// database queries; Cedar answers "may the caller perform this action?"
+// for authorization. Don't conflate them.
+package cel
+
+import (
+	"fmt"
+	"sync"
+
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
+)
+
+// Program is re-exported so callers outside this package don't need to import
+// google/cel-go directly just to hold a compiled handle.
+type Program = cel.Program
+
+// Schema describes the variable names and types exposed to filter authors.
+//
+// Example: for ObjectSchema, a user can write:
+//
+//	state == "AVAILABLE" && size_bytes > 1048576 && tags["type"] == "invoice"
+type Schema struct {
+	Name string
+	// Declarations are returned by buildEnv — a concrete wiring lives below.
+	vars map[string]*cel.Type
+}
+
+// ObjectSchema is exposed to filters against Object rows.
+var ObjectSchema = &Schema{
+	Name: "Object",
+	vars: map[string]*cel.Type{
+		"state":        cel.StringType,
+		"key":          cel.StringType,
+		"content_type": cel.StringType,
+		"size_bytes":   cel.IntType,
+		"tags":         cel.MapType(cel.StringType, cel.StringType),
+		"metadata":     cel.MapType(cel.StringType, cel.StringType),
+		"created_at":   cel.TimestampType,
+		"updated_at":   cel.TimestampType,
+		"committed_at": cel.TimestampType,
+		"external_ref": cel.StringType,
+	},
+}
+
+// BucketSchema is exposed to filters against Bucket rows.
+var BucketSchema = &Schema{
+	Name: "Bucket",
+	vars: map[string]*cel.Type{
+		"bucket_id":       cel.StringType,
+		"storage_backend": cel.StringType,
+		"display_name":    cel.StringType,
+		"created_at":      cel.TimestampType,
+	},
+}
+
+// Evaluator compiles and caches CEL programs per schema+expression.
+type Evaluator struct {
+	cache sync.Map // key = schema.Name + "\x00" + expr; val = cel.Program
+}
+
+// NewEvaluator returns an Evaluator with empty cache.
+func NewEvaluator() *Evaluator {
+	return &Evaluator{}
+}
+
+// Compile returns a cached Program or compiles a new one for expr under schema.
+// An empty expr returns a program that always evaluates to true.
+func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
+	if expr == "" {
+		return alwaysTrueProgram, nil
+	}
+	key := schema.Name + "\x00" + expr
+	if v, ok := e.cache.Load(key); ok {
+		return v.(cel.Program), nil
+	}
+
+	env, err := buildEnv(schema)
+	if err != nil {
+		return nil, fmt.Errorf("cel: build env: %w", err)
+	}
+	ast, iss := env.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		return nil, fmt.Errorf("cel: compile %q: %w", expr, iss.Err())
+	}
+	if ast.OutputType() != cel.BoolType {
+		return nil, fmt.Errorf("cel: expression %q must return bool, got %s", expr, ast.OutputType())
+	}
+	prog, err := env.Program(ast)
+	if err != nil {
+		return nil, fmt.Errorf("cel: program: %w", err)
+	}
+	e.cache.Store(key, prog)
+	return prog, nil
+}
+
+// Match runs a compiled program against a row represented as a map.
+func Match(prog cel.Program, row map[string]any) (bool, error) {
+	out, _, err := prog.Eval(row)
+	if err != nil {
+		return false, fmt.Errorf("cel: eval: %w", err)
+	}
+	b, ok := out.(ref.Val).Value().(bool)
+	if !ok {
+		return false, fmt.Errorf("cel: expression did not yield bool")
+	}
+	return b, nil
+}
+
+func buildEnv(schema *Schema) (*cel.Env, error) {
+	opts := make([]cel.EnvOption, 0, len(schema.vars))
+	for name, typ := range schema.vars {
+		opts = append(opts, cel.Variable(name, typ))
+	}
+	return cel.NewEnv(opts...)
+}
+
+// alwaysTrueProgram is lazily initialized and shared.
+var alwaysTrueProgram cel.Program
+
+func init() {
+	env, err := cel.NewEnv()
+	if err != nil {
+		panic(err)
+	}
+	ast, iss := env.Compile("true")
+	if iss != nil && iss.Err() != nil {
+		panic(iss.Err())
+	}
+	prog, err := env.Program(ast)
+	if err != nil {
+		panic(err)
+	}
+	alwaysTrueProgram = prog
+	_ = types.Bool(true) // keep types pulled in
+}

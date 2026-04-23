@@ -12,9 +12,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"go.uber.org/zap"
 )
+
+// Redacted is the placeholder used in Obfuscated() for sensitive fields.
+const Redacted = "***"
 
 const (
 	defaultK8sAPIBaseURL = "https://kubernetes.default.svc"
@@ -76,34 +78,25 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.PasswordSecret = nil
 	}
 
-	// S3 Access Key
-	if cfg.Datastores.S3.AccessKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Datastores.S3.AccessKeySecret)
-		if err != nil {
-			return fmt.Errorf("s3.access_key_secret: %w", err)
+	// Per-backend credential secrets.
+	for name, b := range cfg.Storage.Backends {
+		if b.AccessKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.AccessKeySecret)
+			if err != nil {
+				return fmt.Errorf("storage.backends.%s.access_key_secret: %w", name, err)
+			}
+			b.AccessKey = key
+			b.AccessKeySecret = nil
 		}
-		cfg.Datastores.S3.AccessKey = key
-		cfg.Datastores.S3.AccessKeySecret = nil
-	}
-
-	// S3 Secret Key
-	if cfg.Datastores.S3.SecretKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Datastores.S3.SecretKeySecret)
-		if err != nil {
-			return fmt.Errorf("s3.secret_key_secret: %w", err)
+		if b.SecretKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.SecretKeySecret)
+			if err != nil {
+				return fmt.Errorf("storage.backends.%s.secret_key_secret: %w", name, err)
+			}
+			b.SecretKey = key
+			b.SecretKeySecret = nil
 		}
-		cfg.Datastores.S3.SecretKey = key
-		cfg.Datastores.S3.SecretKeySecret = nil
-	}
-
-	// Auth Admin Key
-	if cfg.Auth.Enabled && cfg.Auth.AdminKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Auth.AdminKeySecret)
-		if err != nil {
-			return fmt.Errorf("auth.admin_key_secret: %w", err)
-		}
-		cfg.Auth.AdminKey = key
-		cfg.Auth.AdminKeySecret = nil
+		cfg.Storage.Backends[name] = b
 	}
 
 	return nil
@@ -193,21 +186,28 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 }
 
 // Obfuscated returns a deep copy of the configuration structure with all resolved secret
-// values replaced by domain.Redacted. Useful for logging or debugging.
+// values replaced by Redacted. Useful for logging or debugging.
 func (c *Config) Obfuscated() Config {
 	cc := *c
 
 	// Redact Postgres
 	if cc.Datastores.Postgres.Password != "" {
-		cc.Datastores.Postgres.Password = domain.Redacted
+		cc.Datastores.Postgres.Password = Redacted
 	}
 
-	// Redact S3
-	if cc.Datastores.S3.AccessKey != "" {
-		cc.Datastores.S3.AccessKey = domain.Redacted
-	}
-	if cc.Datastores.S3.SecretKey != "" {
-		cc.Datastores.S3.SecretKey = domain.Redacted
+	// Redact per-backend creds. Copy the map so we don't mutate the source.
+	if len(cc.Storage.Backends) > 0 {
+		redacted := make(map[string]StorageBackend, len(cc.Storage.Backends))
+		for name, b := range cc.Storage.Backends {
+			if b.AccessKey != "" {
+				b.AccessKey = Redacted
+			}
+			if b.SecretKey != "" {
+				b.SecretKey = Redacted
+			}
+			redacted[name] = b
+		}
+		cc.Storage.Backends = redacted
 	}
 
 	return cc

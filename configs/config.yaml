@@ -85,19 +85,6 @@ datastores:
       statement: 0s # 0s = disabled; code must check for zero before enforcing
     healthcheck_period: 30s
 
-  s3:
-    bucket: paladin
-    region: us-east-1
-    endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
-    public_endpoint: "https://s3.paladin.local"
-    force_path_style: true
-    access_key: dummy_access_key # override via secret in non-local envs
-    secret_key: dummy_secret_key # override via secret in non-local envs
-    presign_ttl: 15m
-    part_size: "8MB"
-    sse_type: "" # "" | AES256 | aws:kms
-    sse_key_id: "" # KMS Key ID; required when sse_type=aws:kms
-
 # ─── Request Policy ─────────────────────────────────────────────────────────
 
 policy:
@@ -133,13 +120,23 @@ policy:
   external_ref_max_len: 256
   object_key_max_len: 1024
 
-# ─── Auth ───
+# ─── Auth ───────────────────────────────────────────────────────────────────
+# JWT verification for Connect RPCs. Exactly one of jwks_url / hmac_secret
+# must be set; `leeway` tolerates small clock skew.
+#
+# dev-mode (HS256, shared secret):
+#   - set hmac_secret; leave jwks_url empty.
+#   - client signs JWT with the same secret; required claims:
+#       iss=<issuer>, aud=<audience>, exp=<future>, sub=<user>,
+#       tenant=<uuid>, roles=["admin"] (for TenantService cross-tenant RPCs).
+#   - empty issuer/audience disables that claim's verification.
+# staging/prod: replace with `jwks_url` + a real IdP; drop `hmac_secret`.
 auth:
-  enabled: false
-  admin_key_secret:
-    name: paladin-admin-key
-    key: admin-key
-    namespace: paladin
+  issuer: "paladin-dev"
+  audience: "paladin-api"
+  jwks_url: ""
+  hmac_secret: "dev-secret-change-me-32-bytes-min"
+  leeway: 30s
 
 # ─── Security ───────────────────────────────────────────────────────────────
 
@@ -187,3 +184,49 @@ housekeeping:
   gc_interval: "1h"
   # WARNING: set to true in production to reclaim S3 storage from aborted multipart uploads.
   delete_orphaned_parts: false
+
+# ─── Storage Backends ───────────────────────────────────────────────────────
+# Registry of physical object-storage backends. Each logical bucket picks one
+# by name via `buckets.storage_backend`; when that column is empty the service
+# falls back to `storage.default_backend`. `events.enabled=true` flips
+# CompletionMode to IMPLICIT (promotion via S3 event stream).
+storage:
+  default_backend: primary
+  backends:
+    primary:
+      kind: s3-compatible # aws-s3 | s3-compatible | gcs
+      region: us-east-1
+      endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
+      public_endpoint: "https://s3.paladin.local"
+      force_path_style: true
+      access_key: dummy_access_key # override via access_key_secret in non-local
+      secret_key: dummy_secret_key # override via secret_key_secret in non-local
+      presign_ttl: 15m
+      part_size: "8MB"
+      sse:
+        type: "" # "" | AES256 | aws:kms
+        key_id: "" # required when sse.type=aws:kms
+      events:
+        enabled: false # SeaweedFS has no S3 event notifications → EXPLICIT mode
+        target: "none" # sqs | redis | none
+        queue_url: ""
+        poll_interval: 20s
+
+# ─── Presign Policy ─────────────────────────────────────────────────────────
+# Applies to UploadObject, PresignPut, PresignGet, PresignPart.
+presign:
+  default_ttl: 15m
+  max_ttl: 168h # 7d — Go time.Duration has no "d" unit
+  default_max_size: 5368709120 # 5 GiB; upper bound for POST policy content-length-range
+
+# ─── Reconciler ─────────────────────────────────────────────────────────────
+# Covers gaps when S3 events are unavailable or lost.
+reconciler:
+  poll_interval: 30s
+  pending_grace_ttl: 2h # only PENDING rows older than this are reconciled
+  batch_size: 100
+
+# ─── Cedar ──────────────────────────────────────────────────────────────────
+# Short TTL so a missed LISTEN/NOTIFY self-corrects.
+cedar:
+  policy_cache_ttl: 30s

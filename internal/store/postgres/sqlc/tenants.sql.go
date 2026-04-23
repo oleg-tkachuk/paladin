@@ -11,13 +11,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTenant = `-- name: CreateTenant :exec
+
+INSERT INTO tenants (tenant_id, display_name, labels, inherited_cedar_policy)
+VALUES ($1, $2, $3, $4)
+`
+
+// Tenant queries.
+func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error {
+	_, err := q.db.Exec(ctx, createTenant,
+		tenantID,
+		displayName,
+		labels,
+		inheritedCedarPolicy,
+	)
+	return err
+}
+
 const deleteTenant = `-- name: DeleteTenant :execrows
 DELETE FROM tenants
 WHERE tenant_id = $1
+  AND resource_version = $2
 `
 
-func (q *Queries) DeleteTenant(ctx context.Context, tenantID string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteTenant, tenantID)
+func (q *Queries) DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTenant, tenantID, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -25,99 +43,61 @@ func (q *Queries) DeleteTenant(ctx context.Context, tenantID string) (int64, err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
 FROM tenants
 WHERE tenant_id = $1
 `
 
 type GetTenantRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	DisplayName *string            `json:"display_name"`
-	Labels      []byte             `json:"labels"`
-	Tags        []string           `json:"tags"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Tenant Tenant `json:"tenant"`
 }
 
-func (q *Queries) GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error) {
+func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error) {
 	row := q.db.QueryRow(ctx, getTenant, tenantID)
 	var i GetTenantRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.DisplayName,
-		&i.Labels,
-		&i.Tags,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.Tenant.TenantID,
+		&i.Tenant.DisplayName,
+		&i.Tenant.Labels,
+		&i.Tenant.InheritedCedarPolicy,
+		&i.Tenant.InheritedPolicyHash,
+		&i.Tenant.ResourceVersion,
+		&i.Tenant.CreatedAt,
+		&i.Tenant.UpdatedAt,
 	)
 	return i, err
 }
 
-const listTenantsPaginated = `-- name: ListTenantsPaginated :many
-SELECT id, tenant_id, display_name, labels, tags, created_at, updated_at,
-       COUNT(*) OVER () AS total_count
+const listTenants = `-- name: ListTenants :many
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
 FROM tenants
-WHERE
-    -- cursor: only return rows created before this timestamp (DESC ordering)
-    ($1::timestamptz IS NULL OR created_at < $1::timestamptz)
-    -- label containment filter: tenant.labels must contain all provided key-value pairs
-    AND ($2::jsonb IS NULL OR labels @> $2::jsonb)
-    -- tag overlap filter: tenant.tags must have at least one tag from the list
-    AND ($3::text[] IS NULL OR tags && $3::text[])
-    -- search filter
-    AND (
-        $4::text IS NULL OR
-        tenant_id ILIKE '%' || $4 || '%' OR
-        display_name ILIKE '%' || $4 || '%'
-    )
-ORDER BY
-    -- Sorting logic
-    CASE WHEN $5::text = 'name' AND $6::text = 'asc' THEN display_name END ASC,
-    CASE WHEN $5::text = 'name' AND $6::text = 'desc' THEN display_name END DESC,
-    CASE WHEN ($5::text = 'created' OR $5::text IS NULL) AND $6::text = 'asc' THEN created_at END ASC,
-    CASE WHEN ($5::text = 'created' OR $5::text IS NULL) AND ($6::text = 'desc' OR $6::text IS NULL) THEN created_at END DESC
-LIMIT $7
+WHERE ($1::uuid IS NULL OR tenant_id > $1::uuid)
+ORDER BY tenant_id
+LIMIT $2
 `
 
-type ListTenantsPaginatedRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	DisplayName *string            `json:"display_name"`
-	Labels      []byte             `json:"labels"`
-	Tags        []string           `json:"tags"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	TotalCount  int64              `json:"total_count"`
+type ListTenantsRow struct {
+	Tenant Tenant `json:"tenant"`
 }
 
-func (q *Queries) ListTenantsPaginated(ctx context.Context, cursor pgtype.Timestamptz, labelSelector []byte, tagSelector []string, search string, sortBy string, sortOrder string, limitVal int32) ([]ListTenantsPaginatedRow, error) {
-	rows, err := q.db.Query(ctx, listTenantsPaginated,
-		cursor,
-		labelSelector,
-		tagSelector,
-		search,
-		sortBy,
-		sortOrder,
-		limitVal,
-	)
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error) {
+	rows, err := q.db.Query(ctx, listTenants, afterID, pageSize)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListTenantsPaginatedRow
+	var items []ListTenantsRow
 	for rows.Next() {
-		var i ListTenantsPaginatedRow
+		var i ListTenantsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.DisplayName,
-			&i.Labels,
-			&i.Tags,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.TotalCount,
+			&i.Tenant.TenantID,
+			&i.Tenant.DisplayName,
+			&i.Tenant.Labels,
+			&i.Tenant.InheritedCedarPolicy,
+			&i.Tenant.InheritedPolicyHash,
+			&i.Tenant.ResourceVersion,
+			&i.Tenant.CreatedAt,
+			&i.Tenant.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -129,107 +109,29 @@ func (q *Queries) ListTenantsPaginated(ctx context.Context, cursor pgtype.Timest
 	return items, nil
 }
 
-const tenantHasActiveObjects = `-- name: TenantHasActiveObjects :one
-SELECT EXISTS(
-    SELECT 1
-    FROM objects
-    WHERE tenant_id = $1
-      AND status NOT IN ('hard_deleted')
-) AS has_active_objects
-`
-
-func (q *Queries) TenantHasActiveObjects(ctx context.Context, tenantID string) (bool, error) {
-	row := q.db.QueryRow(ctx, tenantHasActiveObjects, tenantID)
-	var has_active_objects bool
-	err := row.Scan(&has_active_objects)
-	return has_active_objects, err
-}
-
-const updateTenantMetadata = `-- name: UpdateTenantMetadata :one
+const updateTenant = `-- name: UpdateTenant :execrows
 UPDATE tenants
-SET labels = jsonb_strip_nulls(labels || $2),
-    tags = $3,
-    display_name = COALESCE($4, display_name),
-    updated_at = now()
+SET display_name           = COALESCE($2, display_name),
+    labels                 = COALESCE($3,       labels),
+    inherited_cedar_policy = COALESCE($4,       inherited_cedar_policy),
+    inherited_policy_hash  = CASE WHEN $4 IS NULL
+                                  THEN inherited_policy_hash
+                                  ELSE $5 END
 WHERE tenant_id = $1
-RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at
+  AND resource_version = $6
 `
 
-type UpdateTenantMetadataRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	DisplayName *string            `json:"display_name"`
-	Labels      []byte             `json:"labels"`
-	Tags        []string           `json:"tags"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Labels patch: merge existing labels with the patch, stripping null values.
-// This means:
-//   - Provided keys overwrite existing keys.
-//   - Provided keys with JSON null values are removed.
-//   - Keys absent from the patch are preserved.
-func (q *Queries) UpdateTenantMetadata(ctx context.Context, tenantID string, labels []byte, tags []string, displayName *string) (UpdateTenantMetadataRow, error) {
-	row := q.db.QueryRow(ctx, updateTenantMetadata,
-		tenantID,
-		labels,
-		tags,
-		displayName,
-	)
-	var i UpdateTenantMetadataRow
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.DisplayName,
-		&i.Labels,
-		&i.Tags,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertTenant = `-- name: UpsertTenant :one
-
-INSERT INTO tenants (id, tenant_id, display_name, labels, tags)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (tenant_id) DO UPDATE
-    SET display_name = EXCLUDED.display_name,
-        labels       = EXCLUDED.labels,
-        tags         = EXCLUDED.tags,
-        updated_at   = now()
-RETURNING id, tenant_id, display_name, labels, tags, created_at, updated_at
-`
-
-type UpsertTenantRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	DisplayName *string            `json:"display_name"`
-	Labels      []byte             `json:"labels"`
-	Tags        []string           `json:"tags"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Tenant queries
-func (q *Queries) UpsertTenant(ctx context.Context, iD pgtype.UUID, tenantID string, displayName *string, labels []byte, tags []string) (UpsertTenantRow, error) {
-	row := q.db.QueryRow(ctx, upsertTenant,
-		iD,
+func (q *Queries) UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, updateTenant,
 		tenantID,
 		displayName,
 		labels,
-		tags,
+		policy,
+		policyHash,
+		expectedVersion,
 	)
-	var i UpsertTenantRow
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.DisplayName,
-		&i.Labels,
-		&i.Tags,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

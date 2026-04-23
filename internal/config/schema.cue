@@ -23,8 +23,8 @@ logger: {
 server: {
   mode: "debug" | "test" | *"release"
   name: string
-  http: { 
-  	addr: string 
+  http: {
+  	addr: string
     read_header_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
     read_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     write_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
@@ -66,21 +66,6 @@ datastores: {
     healthcheck_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
 	}
 
-	s3: {
-	  bucket: string
-	  region: string
-	  endpoint: string
-	  public_endpoint: string | *""
-	  force_path_style: bool | *true
-	  access_key: string | *""
-	  access_key_secret?: #SecretRef
-	  secret_key: string | *""
-	  secret_key_secret?: #SecretRef
-	  presign_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-	  part_size: =~"^[0-9]+(B|KB|MB|GB)$" | *"8MB"
-	  sse_type: string | *"AES256"
-	  sse_key_id: string | *""
-	}
 }
 
 
@@ -100,10 +85,14 @@ policy: {
   object_key_max_len: int | *1024
 }
 
+// JWT verification for incoming RPCs. Either jwks_url or hmac_secret must
+// be set; jwks_url wins when both are present.
 auth: {
-  enabled:          bool | *true
-  admin_key:        string | *""
-  admin_key_secret?: #SecretRef
+  issuer:      string | *""
+  audience:    string | *""
+  jwks_url:    string | *""
+  hmac_secret: string | *""
+  leeway:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
 }
 
 security: {
@@ -156,6 +145,52 @@ otel: {
     "service.name": string
     "deployment.environment" : string
   }
+}
+
+// Registry of physical object-storage backends. Each logical bucket picks
+// one by name via `buckets.storage_backend`; when that column is empty the
+// service falls back to storage.default_backend.
+storage: {
+  default_backend: string | *"primary"
+  backends: [string]: {
+    kind:              "aws-s3" | "s3-compatible" | "gcs"
+    region:            string | *""
+    endpoint:          string | *""
+    public_endpoint:   string | *""
+    force_path_style:  bool | *true
+    access_key:        string | *""
+    access_key_secret?: #SecretRef
+    secret_key:        string | *""
+    secret_key_secret?: #SecretRef
+    presign_ttl:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+    part_size:         =~"^[0-9]+(B|KB|MB|GB)$" | *"8MB"
+    sse: {
+      type:   "" | "AES256" | "aws:kms" | *""
+      key_id: string | *""
+    }
+    events: {
+      enabled:       bool | *false
+      target:        "sqs" | "redis" | "none" | *"none"
+      queue_url:     string | *""
+      poll_interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10s"
+    }
+  }
+}
+
+presign: {
+  default_ttl:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
+  default_max_size: int & >= 1 | *5368709120
+}
+
+reconciler: {
+  poll_interval:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  pending_grace_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2h"
+  batch_size:        int & >= 1 | *100
+}
+
+cedar: {
+  policy_cache_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
 }
 
 

@@ -11,373 +11,117 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const bulkDeleteObject = `-- name: BulkDeleteObject :execrows
-DELETE FROM objects
-WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+const countObjects = `-- name: CountObjects :one
+SELECT COUNT(*) AS n
+FROM objects
+WHERE tenant_id = $1 AND bucket_id = $2
+  AND ($3::object_state IS NULL OR state = $3::object_state)
 `
 
-func (q *Queries) BulkDeleteObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, bulkDeleteObject, tenantID, column2)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const bulkMarkObjectSoftDeleted = `-- name: BulkMarkObjectSoftDeleted :execrows
-UPDATE objects
-SET status = 'soft_deleted',
-    deleted_at = now(),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = ANY($2::uuid[])
-  AND status != 'soft_deleted'
-  AND status != 'hard_deleted'
-`
-
-func (q *Queries) BulkMarkObjectSoftDeleted(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, bulkMarkObjectSoftDeleted, tenantID, column2)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const bulkRestoreObject = `-- name: BulkRestoreObject :execrows
-UPDATE objects
-SET status = 'uploaded',
-    deleted_at = NULL,
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = ANY($2::uuid[])
-  AND status = 'soft_deleted'
-`
-
-func (q *Queries) BulkRestoreObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, bulkRestoreObject, tenantID, column2)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects, tenantID, bucketID, state)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
 }
 
 const createObject = `-- name: CreateObject :exec
 
 INSERT INTO objects (
-    id, tenant_id, object_key, bucket, content_type, size_bytes,
-    checksum_sha256, status, expires_at, labels, external_ref, category, subpath, tags
+    object_id, tenant_id, bucket_id, key, state,
+    content_type, size_bytes, checksum_algorithm, checksum,
+    metadata, tags, external_ref, presign_expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11, $12, $13
 )
 `
 
-// Objects queries
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string, tags []byte) error {
+// Object queries.
+func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, bucketID string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
-		iD,
+		objectID,
 		tenantID,
-		objectKey,
-		bucket,
+		bucketID,
+		key,
+		state,
 		contentType,
 		sizeBytes,
-		checksumSha256,
-		status,
-		expiresAt,
-		labels,
-		externalRef,
-		category,
-		subpath,
+		checksumAlgorithm,
+		checksum,
+		metadata,
 		tags,
+		externalRef,
+		presignExpiresAt,
 	)
 	return err
 }
 
-const deleteObject = `-- name: DeleteObject :execrows
-DELETE FROM objects
-WHERE tenant_id = $1 AND id = $2
-`
-
-func (q *Queries) DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteObject, tenantID, iD)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const getBucketStats = `-- name: GetBucketStats :one
-SELECT 
-    COUNT(*)::bigint as total_objects,
-    COALESCE(SUM(size_bytes), 0)::bigint as total_size_bytes
-FROM objects
-WHERE tenant_id = $1 AND bucket = $2 AND status != 'hard_deleted'
-`
-
-type GetBucketStatsRow struct {
-	TotalObjects   int64 `json:"total_objects"`
-	TotalSizeBytes int64 `json:"total_size_bytes"`
-}
-
-func (q *Queries) GetBucketStats(ctx context.Context, tenantID string, bucket string) (GetBucketStatsRow, error) {
-	row := q.db.QueryRow(ctx, getBucketStats, tenantID, bucket)
-	var i GetBucketStatsRow
-	err := row.Scan(&i.TotalObjects, &i.TotalSizeBytes)
-	return i, err
-}
-
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
+SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
-WHERE tenant_id = $1 AND id = $2
+WHERE tenant_id = $1 AND object_id = $2
 `
 
 type GetObjectRow struct {
 	Object Object `json:"object"`
 }
 
-func (q *Queries) GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (GetObjectRow, error) {
-	row := q.db.QueryRow(ctx, getObject, tenantID, iD)
+func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error) {
+	row := q.db.QueryRow(ctx, getObject, tenantID, objectID)
 	var i GetObjectRow
 	err := row.Scan(
-		&i.Object.ID,
+		&i.Object.ObjectID,
 		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
+		&i.Object.BucketID,
+		&i.Object.Key,
+		&i.Object.State,
 		&i.Object.ContentType,
 		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
+		&i.Object.Etag,
+		&i.Object.ChecksumAlgorithm,
+		&i.Object.Checksum,
+		&i.Object.Sequencer,
+		&i.Object.Metadata,
+		&i.Object.Tags,
+		&i.Object.ExternalRef,
+		&i.Object.ResourceVersion,
 		&i.Object.CreatedAt,
 		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
+		&i.Object.CommittedAt,
+		&i.Object.TerminatedAt,
+		&i.Object.PresignExpiresAt,
 	)
 	return i, err
-}
-
-const getObjectByExternalRef = `-- name: GetObjectByExternalRef :one
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-FROM objects
-WHERE tenant_id = $1 AND external_ref = $2
-`
-
-type GetObjectByExternalRefRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (GetObjectByExternalRefRow, error) {
-	row := q.db.QueryRow(ctx, getObjectByExternalRef, tenantID, externalRef)
-	var i GetObjectByExternalRefRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const getObjectByKey = `-- name: GetObjectByKey :one
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-FROM objects
-WHERE tenant_id = $1 AND bucket = $2 AND object_key = $3
-`
-
-type GetObjectByKeyRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error) {
-	row := q.db.QueryRow(ctx, getObjectByKey, tenantID, bucket, objectKey)
-	var i GetObjectByKeyRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const getObjectStats = `-- name: GetObjectStats :one
-SELECT 
-    COUNT(*)::bigint as total_count,
-    COALESCE(SUM(size_bytes), 0)::bigint as total_size,
-    COUNT(*) FILTER (WHERE status = 'pending')::bigint as pending_count,
-    COUNT(*) FILTER (WHERE status = 'uploading')::bigint as uploading_count,
-    COUNT(*) FILTER (WHERE status = 'uploaded')::bigint as uploaded_count,
-    COUNT(*) FILTER (WHERE status = 'complete')::bigint as complete_count,
-    COUNT(*) FILTER (WHERE status = 'soft_deleted')::bigint as soft_deleted_count
-FROM objects
-WHERE tenant_id = $1
-`
-
-type GetObjectStatsRow struct {
-	TotalCount       int64 `json:"total_count"`
-	TotalSize        int64 `json:"total_size"`
-	PendingCount     int64 `json:"pending_count"`
-	UploadingCount   int64 `json:"uploading_count"`
-	UploadedCount    int64 `json:"uploaded_count"`
-	CompleteCount    int64 `json:"complete_count"`
-	SoftDeletedCount int64 `json:"soft_deleted_count"`
-}
-
-func (q *Queries) GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error) {
-	row := q.db.QueryRow(ctx, getObjectStats, tenantID)
-	var i GetObjectStatsRow
-	err := row.Scan(
-		&i.TotalCount,
-		&i.TotalSize,
-		&i.PendingCount,
-		&i.UploadingCount,
-		&i.UploadedCount,
-		&i.CompleteCount,
-		&i.SoftDeletedCount,
-	)
-	return i, err
-}
-
-const listExpiredPendingObjects = `-- name: ListExpiredPendingObjects :many
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-FROM objects
-WHERE status = 'pending' AND expires_at < $1
-LIMIT $2
-`
-
-type ListExpiredPendingObjectsRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ListExpiredPendingObjectsRow, error) {
-	rows, err := q.db.Query(ctx, listExpiredPendingObjects, expiresAt, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListExpiredPendingObjectsRow
-	for rows.Next() {
-		var i ListExpiredPendingObjectsRow
-		if err := rows.Scan(
-			&i.Object.ID,
-			&i.Object.TenantID,
-			&i.Object.ObjectKey,
-			&i.Object.Bucket,
-			&i.Object.ContentType,
-			&i.Object.SizeBytes,
-			&i.Object.ChecksumSha256,
-			&i.Object.Status,
-			&i.Object.CreatedAt,
-			&i.Object.UpdatedAt,
-			&i.Object.ExpiresAt,
-			&i.Object.Labels,
-			&i.Object.ExternalRef,
-			&i.Object.StoredEtag,
-			&i.Object.StoredSizeBytes,
-			&i.Object.CompletedAt,
-			&i.Object.DeletedAt,
-			&i.Object.Category,
-			&i.Object.Subpath,
-			&i.Object.Tags,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags, COUNT(*) OVER() AS total_count
+SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE tenant_id = $1
-  AND ($2::text IS NULL OR status = $2)
-  AND ($3::text IS NULL OR external_ref = $3)
-  AND ($4::timestamptz IS NULL OR created_at >= $4::timestamptz)
-  AND ($5::timestamptz IS NULL OR created_at < $5::timestamptz)
-  AND ($6::timestamptz IS NULL OR created_at < $6::timestamptz)
-  AND (
-    $7::text IS NULL OR 
-    ($8::bool AND (category = $7 OR category LIKE $7 || '/%')) OR
-    category = $7
-  )
-  AND ($9::text IS NULL OR object_key LIKE $9 || '%')
-ORDER BY
-    -- Sorting logic
-    CASE WHEN $10::text = 'name' AND $11::text = 'asc' THEN object_key END ASC,
-    CASE WHEN $10::text = 'name' AND $11::text = 'desc' THEN object_key END DESC,
-    CASE WHEN $10::text = 'category' AND $11::text = 'asc' THEN category END ASC,
-    CASE WHEN $10::text = 'category' AND $11::text = 'desc' THEN category END DESC,
-    CASE WHEN $10::text = 'size' AND $11::text = 'asc' THEN size_bytes END ASC,
-    CASE WHEN $10::text = 'size' AND $11::text = 'desc' THEN size_bytes END DESC,
-    CASE WHEN $10::text = 'status' AND $11::text = 'asc' THEN status END ASC,
-    CASE WHEN $10::text = 'status' AND $11::text = 'desc' THEN status END DESC,
-    CASE WHEN ($10::text = 'created' OR $10::text IS NULL) AND $11::text = 'asc' THEN created_at END ASC,
-    CASE WHEN ($10::text = 'created' OR $10::text IS NULL) AND ($11::text = 'desc' OR $11::text IS NULL) THEN created_at END DESC
-LIMIT $12
+  AND bucket_id = $2
+  AND ($3::object_state IS NULL OR state = $3::object_state)
+  AND ($4::text IS NULL OR key LIKE $4::text || '%')
+  AND ($5::uuid IS NULL OR object_id > $5::uuid)
+ORDER BY object_id
+LIMIT $6
 `
 
 type ListObjectsRow struct {
-	Object     Object `json:"object"`
-	TotalCount int64  `json:"total_count"`
+	Object Object `json:"object"`
 }
 
-func (q *Queries) ListObjects(ctx context.Context, tenantID string, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error) {
+// CEL filter is applied by the caller post-load. Keyset page uses object_id
+// (UUIDv7) which is monotonic-by-time.
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		status,
-		externalRef,
-		createdAfter,
-		createdBefore,
-		cursor,
-		category,
-		recursive,
-		keyPrefix,
-		sortBy,
-		sortOrder,
-		limitVal,
+		bucketID,
+		state,
+		prefix,
+		afterID,
+		pageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -387,27 +131,26 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID string, status *stri
 	for rows.Next() {
 		var i ListObjectsRow
 		if err := rows.Scan(
-			&i.Object.ID,
+			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.ObjectKey,
-			&i.Object.Bucket,
+			&i.Object.BucketID,
+			&i.Object.Key,
+			&i.Object.State,
 			&i.Object.ContentType,
 			&i.Object.SizeBytes,
-			&i.Object.ChecksumSha256,
-			&i.Object.Status,
+			&i.Object.Etag,
+			&i.Object.ChecksumAlgorithm,
+			&i.Object.Checksum,
+			&i.Object.Sequencer,
+			&i.Object.Metadata,
+			&i.Object.Tags,
+			&i.Object.ExternalRef,
+			&i.Object.ResourceVersion,
 			&i.Object.CreatedAt,
 			&i.Object.UpdatedAt,
-			&i.Object.ExpiresAt,
-			&i.Object.Labels,
-			&i.Object.ExternalRef,
-			&i.Object.StoredEtag,
-			&i.Object.StoredSizeBytes,
-			&i.Object.CompletedAt,
-			&i.Object.DeletedAt,
-			&i.Object.Category,
-			&i.Object.Subpath,
-			&i.Object.Tags,
-			&i.TotalCount,
+			&i.Object.CommittedAt,
+			&i.Object.TerminatedAt,
+			&i.Object.PresignExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -419,400 +162,204 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID string, status *stri
 	return items, nil
 }
 
-const markObjectComplete = `-- name: MarkObjectComplete :execrows
-UPDATE objects
-SET status = 'complete',
-    stored_etag = $3,
-    stored_size_bytes = $4,
-    completed_at = now(),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND (status = 'pending' OR status = 'uploading')
+const lookupObjectByKey = `-- name: LookupObjectByKey :one
+SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+FROM objects
+WHERE tenant_id = $1 AND bucket_id = $2 AND key = $3 AND state <> 'DELETED'
 `
 
-func (q *Queries) MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error) {
-	result, err := q.db.Exec(ctx, markObjectComplete,
-		tenantID,
-		iD,
-		storedEtag,
-		storedSizeBytes,
+type LookupObjectByKeyRow struct {
+	Object Object `json:"object"`
+}
+
+// Used by resource-name resolution: buckets/{b}/objects-by-key/{key} → object_id.
+func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, bucketID string, key string) (LookupObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, bucketID, key)
+	var i LookupObjectByKeyRow
+	err := row.Scan(
+		&i.Object.ObjectID,
+		&i.Object.TenantID,
+		&i.Object.BucketID,
+		&i.Object.Key,
+		&i.Object.State,
+		&i.Object.ContentType,
+		&i.Object.SizeBytes,
+		&i.Object.Etag,
+		&i.Object.ChecksumAlgorithm,
+		&i.Object.Checksum,
+		&i.Object.Sequencer,
+		&i.Object.Metadata,
+		&i.Object.Tags,
+		&i.Object.ExternalRef,
+		&i.Object.ResourceVersion,
+		&i.Object.CreatedAt,
+		&i.Object.UpdatedAt,
+		&i.Object.CommittedAt,
+		&i.Object.TerminatedAt,
+		&i.Object.PresignExpiresAt,
 	)
+	return i, err
+}
+
+const markObjectFailed = `-- name: MarkObjectFailed :execrows
+UPDATE objects
+SET state         = 'FAILED',
+    terminated_at = now()
+WHERE object_id = $1
+  AND state = 'PENDING'
+`
+
+func (q *Queries) MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markObjectFailed, objectID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const markObjectHardDeleted = `-- name: MarkObjectHardDeleted :execrows
+const promoteObject = `-- name: PromoteObject :execrows
 UPDATE objects
-SET status = 'hard_deleted',
-    deleted_at = COALESCE(deleted_at, now()),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status != 'hard_deleted'
+SET state      = 'AVAILABLE',
+    size_bytes = $2,
+    etag       = $3,
+    checksum   = $4,
+    sequencer  = $5,
+    committed_at = COALESCE(committed_at, now())
+WHERE object_id = $1
+  AND state IN ('PENDING', 'AVAILABLE')
+  AND ($5::text IS NULL
+       OR sequencer IS NULL
+       OR $5::text > sequencer)
 `
 
-func (q *Queries) MarkObjectHardDeleted(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markObjectHardDeleted, tenantID, iD)
+// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
+// out-of-order S3 events + reconciler + RPC calls from regressing state.
+// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
+// strictly greater than the stored sequencer (or either is NULL).
+func (q *Queries) PromoteObject(ctx context.Context, objectID pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error) {
+	result, err := q.db.Exec(ctx, promoteObject,
+		objectID,
+		sizeBytes,
+		etag,
+		checksum,
+		sequencer,
+	)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const markObjectSoftDeleted = `-- name: MarkObjectSoftDeleted :execrows
-UPDATE objects
-SET status = 'soft_deleted',
-    deleted_at = now(),
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status != 'soft_deleted'
-  AND status != 'hard_deleted'
-`
-
-func (q *Queries) MarkObjectSoftDeleted(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markObjectSoftDeleted, tenantID, iD)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const patchObjectExternalRef = `-- name: PatchObjectExternalRef :one
-UPDATE objects
-SET external_ref = $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectExternalRefRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, externalRef *string) (PatchObjectExternalRefRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectExternalRef, tenantID, iD, externalRef)
-	var i PatchObjectExternalRefRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectLabels = `-- name: PatchObjectLabels :one
-UPDATE objects
-SET labels = labels || $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectLabelsRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectLabels(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte) (PatchObjectLabelsRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectLabels, tenantID, iD, labels)
-	var i PatchObjectLabelsRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectLabelsAndExternalRef = `-- name: PatchObjectLabelsAndExternalRef :one
-UPDATE objects
-SET labels = labels || $3,
-    external_ref = $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectLabelsAndExternalRefRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, externalRef *string) (PatchObjectLabelsAndExternalRefRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectLabelsAndExternalRef,
-		tenantID,
-		iD,
-		labels,
-		externalRef,
-	)
-	var i PatchObjectLabelsAndExternalRefRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectLabelsAndTags = `-- name: PatchObjectLabelsAndTags :one
-UPDATE objects
-SET labels = labels || $3,
-    tags = tags || $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectLabelsAndTagsRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectLabelsAndTags(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte) (PatchObjectLabelsAndTagsRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectLabelsAndTags,
-		tenantID,
-		iD,
-		labels,
-		tags,
-	)
-	var i PatchObjectLabelsAndTagsRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectLabelsTagsAndExternalRef = `-- name: PatchObjectLabelsTagsAndExternalRef :one
-UPDATE objects
-SET labels = labels || $3,
-    tags = tags || $4,
-    external_ref = $5,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectLabelsTagsAndExternalRefRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectLabelsTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, tags []byte, externalRef *string) (PatchObjectLabelsTagsAndExternalRefRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectLabelsTagsAndExternalRef,
-		tenantID,
-		iD,
-		labels,
-		tags,
-		externalRef,
-	)
-	var i PatchObjectLabelsTagsAndExternalRefRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectTags = `-- name: PatchObjectTags :one
-UPDATE objects
-SET tags = tags || $3,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectTagsRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectTags(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte) (PatchObjectTagsRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectTags, tenantID, iD, tags)
-	var i PatchObjectTagsRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
-}
-
-const patchObjectTagsAndExternalRef = `-- name: PatchObjectTagsAndExternalRef :one
-UPDATE objects
-SET tags = tags || $3,
-    external_ref = $4,
-    updated_at = now()
-WHERE tenant_id = $1 AND id = $2
-RETURNING objects.id, objects.tenant_id, objects.object_key, objects.bucket, objects.content_type, objects.size_bytes, objects.checksum_sha256, objects.status, objects.created_at, objects.updated_at, objects.expires_at, objects.labels, objects.external_ref, objects.stored_etag, objects.stored_size_bytes, objects.completed_at, objects.deleted_at, objects.category, objects.subpath, objects.tags
-`
-
-type PatchObjectTagsAndExternalRefRow struct {
-	Object Object `json:"object"`
-}
-
-func (q *Queries) PatchObjectTagsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, tags []byte, externalRef *string) (PatchObjectTagsAndExternalRefRow, error) {
-	row := q.db.QueryRow(ctx, patchObjectTagsAndExternalRef,
-		tenantID,
-		iD,
-		tags,
-		externalRef,
-	)
-	var i PatchObjectTagsAndExternalRefRow
-	err := row.Scan(
-		&i.Object.ID,
-		&i.Object.TenantID,
-		&i.Object.ObjectKey,
-		&i.Object.Bucket,
-		&i.Object.ContentType,
-		&i.Object.SizeBytes,
-		&i.Object.ChecksumSha256,
-		&i.Object.Status,
-		&i.Object.CreatedAt,
-		&i.Object.UpdatedAt,
-		&i.Object.ExpiresAt,
-		&i.Object.Labels,
-		&i.Object.ExternalRef,
-		&i.Object.StoredEtag,
-		&i.Object.StoredSizeBytes,
-		&i.Object.CompletedAt,
-		&i.Object.DeletedAt,
-		&i.Object.Category,
-		&i.Object.Subpath,
-		&i.Object.Tags,
-	)
-	return i, err
 }
 
 const restoreObject = `-- name: RestoreObject :execrows
 UPDATE objects
-SET status = 'uploaded',
-    deleted_at = NULL,
-    updated_at = now()
-WHERE tenant_id = $1
-  AND id = $2
-  AND status = 'soft_deleted'
+SET state         = 'AVAILABLE',
+    terminated_at = NULL
+WHERE tenant_id = $1 AND object_id = $2
+  AND state = 'DELETED'
 `
 
-func (q *Queries) RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, restoreObject, tenantID, iD)
+// Undeletes a soft-deleted object iff no live row exists with the same
+// (tenant, bucket, key). Caller is expected to verify uniqueness first;
+// a UNIQUE partial index still catches the race at commit time.
+func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreObject, tenantID, objectID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const updateObjectStatus = `-- name: UpdateObjectStatus :execrows
-UPDATE objects
-SET status = $3, updated_at = NOW()
-WHERE tenant_id = $1 AND id = $2
+const scanPendingExpired = `-- name: ScanPendingExpired :many
+SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+FROM objects
+WHERE state = 'PENDING'
+  AND presign_expires_at < now()
+ORDER BY presign_expires_at
+LIMIT $1
 `
 
-func (q *Queries) UpdateObjectStatus(ctx context.Context, tenantID string, iD pgtype.UUID, status string) (int64, error) {
-	result, err := q.db.Exec(ctx, updateObjectStatus, tenantID, iD, status)
+type ScanPendingExpiredRow struct {
+	Object Object `json:"object"`
+}
+
+// Reconciler picks up PENDING rows whose presign has expired.
+func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error) {
+	rows, err := q.db.Query(ctx, scanPendingExpired, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScanPendingExpiredRow
+	for rows.Next() {
+		var i ScanPendingExpiredRow
+		if err := rows.Scan(
+			&i.Object.ObjectID,
+			&i.Object.TenantID,
+			&i.Object.BucketID,
+			&i.Object.Key,
+			&i.Object.State,
+			&i.Object.ContentType,
+			&i.Object.SizeBytes,
+			&i.Object.Etag,
+			&i.Object.ChecksumAlgorithm,
+			&i.Object.Checksum,
+			&i.Object.Sequencer,
+			&i.Object.Metadata,
+			&i.Object.Tags,
+			&i.Object.ExternalRef,
+			&i.Object.ResourceVersion,
+			&i.Object.CreatedAt,
+			&i.Object.UpdatedAt,
+			&i.Object.CommittedAt,
+			&i.Object.TerminatedAt,
+			&i.Object.PresignExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteObject = `-- name: SoftDeleteObject :execrows
+UPDATE objects
+SET state         = 'DELETED',
+    terminated_at = now()
+WHERE tenant_id = $1 AND object_id = $2
+  AND state IN ('AVAILABLE', 'PENDING')
+  AND resource_version = $3
+`
+
+func (q *Queries) SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteObject, tenantID, objectID, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateObjectMetadata = `-- name: UpdateObjectMetadata :execrows
+UPDATE objects
+SET metadata     = COALESCE($3, metadata),
+    tags         = COALESCE($4,     tags),
+    external_ref = COALESCE($5, external_ref)
+WHERE tenant_id = $1 AND object_id = $2
+  AND state = 'AVAILABLE'
+  AND resource_version = $6
+`
+
+func (q *Queries) UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, updateObjectMetadata,
+		tenantID,
+		objectID,
+		metadata,
+		tags,
+		externalRef,
+		expectedVersion,
+	)
 	if err != nil {
 		return 0, err
 	}
