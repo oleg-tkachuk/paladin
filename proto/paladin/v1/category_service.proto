@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "paladin/v1/types.proto";
+
+// CategoryService manages tenant-scoped taxonomy entries. Objects are NOT
+// linked to categories via FK in this revision — clients should reference
+// categories from object labels (or another cross-cutting mechanism).
+// Deleting a category therefore has no object-side effects.
+service CategoryService {
+  rpc CreateCategory(CreateCategoryRequest) returns (Category);
+  rpc GetCategory(GetCategoryRequest) returns (Category);
+  rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
+  rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+}
+
+message Category {
+  // Resource name: "categories/{slug}".
+  string name = 1;
+  // Tenant-unique slug.
+  string slug = 2;
+  string display_name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+  string resource_version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message CreateCategoryRequest {
+  string slug = 1 [(buf.validate.field).string = {
+    min_len: 3,
+    max_len: 63,
+    pattern: "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$"
+  }];
+  string display_name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+}
+
+message GetCategoryRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateCategoryRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  string display_name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+}
+
+message DeleteCategoryRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+}
+
+message DeleteCategoryResponse {}
+
+message ListCategoriesRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+  string page_token = 2;
+  string order_by = 3;
+  SortOrder sort_order = 4;
+}
+
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+  string next_page_token = 2;
+}

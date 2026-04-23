@@ -113,6 +113,17 @@ type Bucket struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Category struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Slug            string             `json:"slug"`
+	DisplayName     *string            `json:"display_name"`
+	Description     string             `json:"description"`
+	Labels          []byte             `json:"labels"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type IdempotencyKey struct {
 	TenantID    pgtype.UUID        `json:"tenant_id"`
 	Method      string             `json:"method"`

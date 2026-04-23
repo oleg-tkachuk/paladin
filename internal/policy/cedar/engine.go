@@ -199,6 +199,13 @@ func compile(text string) (*cedar.PolicySet, error) {
 	return cedar.NewPolicySetFromBytes("", []byte(text))
 }
 
+// Validate parses the policy text and returns the parser error (or nil).
+// Exposed for pre-save UI validation; does not persist or compile into cache.
+func Validate(text string) error {
+	_, err := compile(text)
+	return err
+}
+
 func userUID(p *Principal) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeUser, cedartypes.String(p.Subject))
 }

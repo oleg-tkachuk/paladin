@@ -27,6 +27,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/category"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
@@ -61,6 +62,7 @@ var ProviderSet = wire.NewSet(
 
 	ProvideBucketHandler,
 	ProvideTenantHandler,
+	ProvideCategoryHandler,
 	ProvideOperationHandler,
 	ProvideBatchHandler,
 	ProvideObjectHandler,
@@ -108,6 +110,7 @@ type Repos struct {
 	Object    object.Repository
 	Bucket    bucket.Repository
 	Tenant    tenant.Repository
+	Category  category.Repository
 	Presign   presign.Repository
 	Multipart multipart.Repository
 	Operation operation.Repository
@@ -144,6 +147,10 @@ func ProvideBucketHandler(repos Repos, pe *policy.Engine) *bucket.Handler {
 
 func ProvideTenantHandler(repos Repos) *tenant.Handler {
 	return tenant.NewHandler(repos.Tenant)
+}
+
+func ProvideCategoryHandler(repos Repos) *category.Handler {
+	return category.NewHandler(repos.Category)
 }
 
 func ProvideOperationHandler(repos Repos) *operation.Handler {

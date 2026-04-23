@@ -289,21 +289,21 @@ resources: {}
 
 livenessProbe:
   httpGet:
-    path: /paladin.v1.SystemService/GetLivez
+    path: /livez
     port: http
   initialDelaySeconds: 15
   periodSeconds: 20
 
 readinessProbe:
   httpGet:
-    path: /paladin.v1.SystemService/GetReadyz
+    path: /readyz
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
 
 startupProbe:
   httpGet:
-    path: /paladin.v1.SystemService/GetStartupz
+    path: /startupz
     port: http
   initialDelaySeconds: 5
   periodSeconds: 5

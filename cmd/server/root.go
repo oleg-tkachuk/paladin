@@ -21,6 +21,8 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/v1/paladinv1connect"
+	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
+	systemh "github.com/oleg-tkachuk/paladin/internal/api/v1/system"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
@@ -154,6 +156,7 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 		Object:    adapters.NewObjectRepo(db.Queries, pool),
 		Bucket:    adapters.NewBucketRepo(db.Queries, pool),
 		Tenant:    adapters.NewTenantRepo(db.Queries),
+		Category:  adapters.NewCategoryRepo(db.Queries),
 		Presign:   adapters.NewPresignRepo(db.Queries, pool),
 		Multipart: adapters.NewMultipartRepo(db.Queries, pool),
 		Operation: adapters.NewOperationRepo(db.Queries),
@@ -177,10 +180,22 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, celEval, sm, cfg)
 	bucketH := wire.ProvideBucketHandler(repos, polEngine)
 	tenantH := wire.ProvideTenantHandler(repos)
+	categoryH := wire.ProvideCategoryHandler(repos)
 	opH := wire.ProvideOperationHandler(repos)
 	batchH := wire.ProvideBatchHandler(opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, sm)
+	policyH := policyh.NewHandler()
+
+	var buildT time.Time
+	if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
+		buildT = t
+	}
+	systemH := systemh.NewHandler(systemh.Info{
+		Version:   version,
+		Commit:    commit,
+		BuildTime: buildT,
+	}, db)
 
 	verifier, err := buildVerifier(cfg.Auth)
 	if err != nil {
@@ -189,13 +204,36 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	opts := connect.WithInterceptors(auth.Interceptor(verifier))
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(r.Context()); err != nil {
+			http.Error(w, "db: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("GET /startupz", func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(r.Context()); err != nil {
+			http.Error(w, "db: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	mux.Handle(paladinv1connect.NewTenantServiceHandler(connectshim.NewTenantServer(tenantH), opts))
+	mux.Handle(paladinv1connect.NewCategoryServiceHandler(connectshim.NewCategoryServer(categoryH), opts))
 	mux.Handle(paladinv1connect.NewBucketServiceHandler(connectshim.NewBucketServer(bucketH), opts))
 	mux.Handle(paladinv1connect.NewObjectServiceHandler(connectshim.NewObjectServer(objH), opts))
 	mux.Handle(paladinv1connect.NewPresignServiceHandler(connectshim.NewPresignServer(presignH), opts))
 	mux.Handle(paladinv1connect.NewMultipartUploadServiceHandler(connectshim.NewMultipartServer(mpH), opts))
 	mux.Handle(paladinv1connect.NewOperationServiceHandler(connectshim.NewOperationServer(opH), opts))
 	mux.Handle(paladinv1connect.NewBatchServiceHandler(connectshim.NewBatchServer(batchH), opts))
+	mux.Handle(paladinv1connect.NewPolicyServiceHandler(connectshim.NewPolicyServer(policyH), opts))
+	mux.Handle(paladinv1connect.NewSystemServiceHandler(connectshim.NewSystemServer(systemH), opts))
 
 	handler := h2c.NewHandler(mux, &http2.Server{})
 

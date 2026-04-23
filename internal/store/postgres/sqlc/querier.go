@@ -15,6 +15,8 @@ type Querier interface {
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState) (int64, error)
 	// Bucket queries.
 	CreateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, storageBackend string, cedarPolicy string, lifecycleRules []byte) error
+	// Category queries. Tenant-scoped; addressed by (tenant_id, slug).
+	CreateCategory(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Multipart upload queries.
 	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
 	// Object queries.
@@ -25,9 +27,11 @@ type Querier interface {
 	// Tenant queries.
 	CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error
 	DeleteBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, expectedVersion int64) (int64, error)
+	DeleteCategory(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeleteMultipartUpload(ctx context.Context, uploadID string) error
 	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	GetBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string) (GetBucketRow, error)
+	GetCategory(ctx context.Context, tenantID pgtype.UUID, slug string) (GetCategoryRow, error)
 	// Returns tenant-inherited policy concatenated with the bucket-specific policy.
 	// Order is: tenant policies first, then bucket — Cedar treats them as a single
 	// policy set; ordering only affects diagnostic output.
@@ -40,6 +44,7 @@ type Querier interface {
 	GetStorageBackend(ctx context.Context, id string) (StorageBackend, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
 	ListBuckets(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListBucketsRow, error)
+	ListCategories(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListCategoriesRow, error)
 	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
 	// CEL filter is applied by the caller post-load. Keyset page uses object_id
 	// (UUIDv7) which is monotonic-by-time.
@@ -65,6 +70,7 @@ type Querier interface {
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	UpdateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
+	UpdateCategory(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
 	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
 	UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)

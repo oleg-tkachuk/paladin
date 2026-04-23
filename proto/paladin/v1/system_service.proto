@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1";
+
+import "google/protobuf/timestamp.proto";
+
+// SystemService exposes build/health information for dashboards and ops
+// tooling. Kubernetes liveness/readiness use plain HTTP probes at /livez,
+// /readyz, /startupz — not these RPCs.
+service SystemService {
+  rpc GetVersion(GetVersionRequest) returns (VersionInfo);
+  rpc GetHealth(GetHealthRequest) returns (HealthInfo);
+}
+
+message GetVersionRequest {}
+
+message VersionInfo {
+  // ldflag-injected build metadata.
+  string version = 1;
+  string commit = 2;
+  google.protobuf.Timestamp build_time = 3;
+  // Go runtime reports ("go1.26.0", etc.) — best-effort.
+  string go_version = 4;
+}
+
+message GetHealthRequest {}
+
+message HealthInfo {
+  // OK | DEGRADED | UNHEALTHY — whole-service rollup.
+  string status = 1;
+  // Per-component checks.
+  repeated ComponentHealth components = 2;
+  google.protobuf.Timestamp checked_at = 3;
+}
+
+message ComponentHealth {
+  // e.g. "postgres", "storage".
+  string name = 1;
+  // OK | DEGRADED | UNHEALTHY.
+  string status = 2;
+  // Optional human-readable detail (error text when not OK).
+  string message = 3;
+  // Last check latency in milliseconds.
+  int64 latency_ms = 4;
+}
