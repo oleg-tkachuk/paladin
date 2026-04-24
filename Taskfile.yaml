@@ -107,7 +107,7 @@ tasks:
       - task: gen:all
 
   auth:mint-token:
-    desc: "Mint HS256 JWT for local dev (override JWT_SECRET/JWT_ISS/JWT_AUD/JWT_SUB/JWT_ROLES/JWT_TTL_SECONDS)"
+    desc: "Mint HS256 JWT for local dev (override JWT_SECRET/JWT_ISS/JWT_AUD/JWT_SUB/JWT_ROLES/JWT_TENANT/JWT_TTL_SECONDS)"
     vars:
       JWT_SECRET: "dev-secret-change-me-32-bytes-min"
       JWT_ISS: "paladin-dev"
@@ -115,6 +115,9 @@ tasks:
       JWT_SUB: "dev-user"
       # Comma-separated list. platform-admin is required by TenantService RPCs.
       JWT_ROLES: "platform-admin"
+      # Tenant UUID. Required by per-tenant RPCs (Bucket, Category, Object...).
+      # Leave empty for cross-tenant admin-only tokens.
+      JWT_TENANT: "00000000-0000-0000-0000-000000000001"
       JWT_TTL_SECONDS: "604800" # 7 days
     cmds:
       - cmd: |-
@@ -129,10 +132,14 @@ tasks:
             }
             printf "]"
           }')
+          TENANT_JSON=""
+          if [ -n "{{.JWT_TENANT}}" ]; then
+            TENANT_JSON=$(printf ',"tenant":"%s"' "{{.JWT_TENANT}}")
+          fi
           b64() { openssl base64 -e -A | tr '+/' '-_' | tr -d '='; }
           HEADER=$(printf '%s' '{"alg":"HS256","typ":"JWT"}' | b64)
-          PAYLOAD=$(printf '{"iss":"%s","aud":"%s","sub":"%s","iat":%d,"nbf":%d,"exp":%d,"roles":%s}' \
-            "{{.JWT_ISS}}" "{{.JWT_AUD}}" "{{.JWT_SUB}}" "$NOW" "$NOW" "$EXP" "$ROLES_JSON" | b64)
+          PAYLOAD=$(printf '{"iss":"%s","aud":"%s","sub":"%s","iat":%d,"nbf":%d,"exp":%d,"roles":%s%s}' \
+            "{{.JWT_ISS}}" "{{.JWT_AUD}}" "{{.JWT_SUB}}" "$NOW" "$NOW" "$EXP" "$ROLES_JSON" "$TENANT_JSON" | b64)
           SIG=$(printf '%s' "${HEADER}.${PAYLOAD}" | openssl dgst -binary -sha256 -hmac "{{.JWT_SECRET}}" | b64)
           printf '%s.%s.%s\n' "$HEADER" "$PAYLOAD" "$SIG"
 
