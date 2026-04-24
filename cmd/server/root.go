@@ -32,6 +32,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
 	"github.com/oleg-tkachuk/paladin/migrations"
 )
@@ -87,6 +88,10 @@ var rootCmd = &cobra.Command{
 
 		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
 			l.Warn("Migrations failed", zap.Error(err))
+		}
+
+		if err := seedStorageBackends(ctx, db.Queries, cfg.Storage); err != nil {
+			l.Fatal("Failed to seed storage backends", zap.Error(err))
 		}
 
 		srv, err := buildServer(ctx, cfg, db, l)
@@ -249,6 +254,31 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 			return logger.WithContext(context.Background(), l)
 		},
 	}, nil
+}
+
+// seedStorageBackends upserts the storage_backends registry from config so
+// that `buckets.storage_backend` FK references resolve for buckets created at
+// runtime. Idempotent — re-runs on every startup to pick up config edits.
+func seedStorageBackends(ctx context.Context, q *sqlc.Queries, s config.Storage) error {
+	for name, b := range s.Backends {
+		var endpoint, region, eventsTarget *string
+		if b.Endpoint != "" {
+			e := b.Endpoint
+			endpoint = &e
+		}
+		if b.Region != "" {
+			r := b.Region
+			region = &r
+		}
+		if b.Events.Target != "" {
+			t := b.Events.Target
+			eventsTarget = &t
+		}
+		if err := q.CreateStorageBackend(ctx, name, b.Kind, endpoint, region, b.Events.Enabled, eventsTarget); err != nil {
+			return fmt.Errorf("seed storage backend %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // buildVerifier constructs a JWTVerifier from Auth config. JWKSURL takes
