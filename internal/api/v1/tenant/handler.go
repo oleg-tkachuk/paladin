@@ -120,6 +120,9 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
+		if errors.Is(err, ErrNotFound) {
+			return connect.NewError(connect.CodeNotFound, err)
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	return nil
@@ -156,3 +159,8 @@ func requirePlatformAdmin(ctx context.Context) error {
 
 // ErrVersionMismatch — OCC failure surfaced by Repository.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
+
+// ErrNotFound — Repository returns this when the target row does not exist
+// and the operation did not use an OCC guard (so a 0-rows result is an
+// unambiguous "missing", not a version conflict).
+var ErrNotFound = errors.New("tenant not found")

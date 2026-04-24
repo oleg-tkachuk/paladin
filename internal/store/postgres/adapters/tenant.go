@@ -6,17 +6,24 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// TenantRepo satisfies tenant.Repository.
+// TenantRepo satisfies tenant.Repository. The raw pool is needed because the
+// sqlc DeleteTenant query bakes in an OCC guard (`AND resource_version = $2`)
+// and the current DeleteTenantRequest proto has no resource_version field —
+// see Delete below for the unconditional path.
 type TenantRepo struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
-func NewTenantRepo(q *sqlc.Queries) *TenantRepo { return &TenantRepo{q: q} }
+func NewTenantRepo(q *sqlc.Queries, pool *pgxpool.Pool) *TenantRepo {
+	return &TenantRepo{q: q, pool: pool}
+}
 
 var _ tenant.Repository = (*TenantRepo)(nil)
 
@@ -64,6 +71,19 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 }
 
 func (r *TenantRepo) Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
+	// expectedVersion == 0 means "no OCC guard" — DeleteTenantRequest doesn't
+	// carry a resource_version, so the connect shim always passes 0. Drop the
+	// version predicate in that case; sqlc's DeleteTenant hardcodes it.
+	if expectedVersion == 0 {
+		tag, err := r.pool.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, pgUUID(tenantID))
+		if err != nil {
+			return fmt.Errorf("delete tenant: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return tenant.ErrNotFound
+		}
+		return nil
+	}
 	rows, err := r.q.DeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("delete tenant: %w", err)

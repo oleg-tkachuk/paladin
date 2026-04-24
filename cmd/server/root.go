@@ -155,7 +155,7 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	repos := wire.Repos{
 		Object:    adapters.NewObjectRepo(db.Queries, pool),
 		Bucket:    adapters.NewBucketRepo(db.Queries, pool),
-		Tenant:    adapters.NewTenantRepo(db.Queries),
+		Tenant:    adapters.NewTenantRepo(db.Queries, pool),
 		Category:  adapters.NewCategoryRepo(db.Queries),
 		Presign:   adapters.NewPresignRepo(db.Queries, pool),
 		Multipart: adapters.NewMultipartRepo(db.Queries, pool),
