@@ -183,7 +183,7 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	celEval := cel.NewEvaluator()
 
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, celEval, sm, cfg)
-	bucketH := wire.ProvideBucketHandler(repos, polEngine)
+	bucketH := wire.ProvideBucketHandler(repos, polEngine, cfg)
 	tenantH := wire.ProvideTenantHandler(repos)
 	categoryH := wire.ProvideCategoryHandler(repos)
 	opH := wire.ProvideOperationHandler(repos)

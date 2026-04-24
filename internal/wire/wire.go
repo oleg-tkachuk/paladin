@@ -141,8 +141,8 @@ func ProvideObjectHandler(
 	})
 }
 
-func ProvideBucketHandler(repos Repos, pe *policy.Engine) *bucket.Handler {
-	return bucket.NewHandler(repos.Bucket, pe)
+func ProvideBucketHandler(repos Repos, pe *policy.Engine, cfg config.Config) *bucket.Handler {
+	return bucket.NewHandler(repos.Bucket, pe, cfg.Storage.DefaultBackend)
 }
 
 func ProvideTenantHandler(repos Repos) *tenant.Handler {

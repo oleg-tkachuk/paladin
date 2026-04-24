@@ -71,12 +71,13 @@ type Repository interface {
 }
 
 type Handler struct {
-	repo   Repository
-	policy *cedar.Engine
+	repo           Repository
+	policy         *cedar.Engine
+	defaultBackend string
 }
 
-func NewHandler(repo Repository, policy *cedar.Engine) *Handler {
-	return &Handler{repo: repo, policy: policy}
+func NewHandler(repo Repository, policy *cedar.Engine, defaultBackend string) *Handler {
+	return &Handler{repo: repo, policy: policy, defaultBackend: defaultBackend}
 }
 
 func (h *Handler) CreateBucket(ctx context.Context, args CreateBucketArgs) (*Bucket, error) {
@@ -85,6 +86,12 @@ func (h *Handler) CreateBucket(ctx context.Context, args CreateBucketArgs) (*Buc
 		return nil, err
 	}
 	args.TenantID = tenantID
+	// Fall back to the configured default backend when the caller omits it.
+	// The backend name is a FK to storage_backends.id, so an empty string
+	// would fail the constraint.
+	if args.StorageBackend == "" {
+		args.StorageBackend = h.defaultBackend
+	}
 	if err := h.authorize(ctx, principal, tenantID, args.BucketID, cedar.ActionAdminBucket); err != nil {
 		return nil, err
 	}
