@@ -106,6 +106,26 @@ tasks:
     cmds:
       - task: gen:all
 
+  auth:mint-token:
+    desc: "Mint HS256 JWT for local dev (override JWT_SECRET/JWT_ISS/JWT_AUD/JWT_SUB/JWT_TTL_SECONDS)"
+    vars:
+      JWT_SECRET: "dev-secret-change-me-32-bytes-min"
+      JWT_ISS: "paladin-dev"
+      JWT_AUD: "paladin-api"
+      JWT_SUB: "dev-user"
+      JWT_TTL_SECONDS: "86400"
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+          step crypto jwt sign \
+            --alg HS256 \
+            --key <(printf '%s' "{{.JWT_SECRET}}") \
+            --iss "{{.JWT_ISS}}" \
+            --aud "{{.JWT_AUD}}" \
+            --sub "{{.JWT_SUB}}" \
+            --exp $(($(date +%s) + {{.JWT_TTL_SECONDS}})) \
+            --subtle
+
   # -------------------------
   # Legacy Aliases / Utility
   # -------------------------
