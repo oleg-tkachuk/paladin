@@ -44,4 +44,15 @@ func (s *SystemServer) GetHealth(ctx context.Context, _ *connect.Request[pb.GetH
 	return connect.NewResponse(out), nil
 }
 
+func (s *SystemServer) GetConfig(ctx context.Context, _ *connect.Request[pb.GetConfigRequest]) (*connect.Response[pb.ConfigInfo], error) {
+	cv, err := s.H.GetConfig(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&pb.ConfigInfo{
+		Yaml: cv.YAML,
+		Path: cv.Path,
+	}), nil
+}
+
 var _ paladinv1connect.SystemServiceHandler = (*SystemServer)(nil)

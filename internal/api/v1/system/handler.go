@@ -5,8 +5,13 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
 // Pinger is the minimum contract for a component health check.
@@ -34,16 +39,23 @@ type Health struct {
 	CheckedAt  time.Time
 }
 
-type Handler struct {
-	info Info
-	db   Pinger
+type ConfigView struct {
+	YAML string
+	Path string
 }
 
-func NewHandler(info Info, db Pinger) *Handler {
+type Handler struct {
+	info       Info
+	db         Pinger
+	cfg        config.Config
+	configPath string
+}
+
+func NewHandler(info Info, db Pinger, cfg config.Config, configPath string) *Handler {
 	if info.GoVersion == "" {
 		info.GoVersion = runtime.Version()
 	}
-	return &Handler{info: info, db: db}
+	return &Handler{info: info, db: db, cfg: cfg, configPath: configPath}
 }
 
 func (h *Handler) GetVersion(_ context.Context) Info {
@@ -65,6 +77,18 @@ func (h *Handler) GetHealth(ctx context.Context) Health {
 		}
 	}
 	return Health{Status: rollup, Components: checks, CheckedAt: now}
+}
+
+// GetConfig returns a YAML serialization of the loaded service configuration
+// with secrets (Postgres password, S3 keys, JWT HMAC secret) redacted via
+// Config.Obfuscated. Surfaced to the UI's /config page.
+func (h *Handler) GetConfig(_ context.Context) (ConfigView, error) {
+	safe := h.cfg.Obfuscated()
+	out, err := yaml.Marshal(&safe)
+	if err != nil {
+		return ConfigView{}, fmt.Errorf("marshal config: %w", err)
+	}
+	return ConfigView{YAML: string(out), Path: h.configPath}, nil
 }
 
 func (h *Handler) checkDB(ctx context.Context) ComponentStatus {

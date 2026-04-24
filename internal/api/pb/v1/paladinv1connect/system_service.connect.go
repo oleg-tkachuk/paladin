@@ -39,12 +39,15 @@ const (
 	SystemServiceGetVersionProcedure = "/paladin.v1.SystemService/GetVersion"
 	// SystemServiceGetHealthProcedure is the fully-qualified name of the SystemService's GetHealth RPC.
 	SystemServiceGetHealthProcedure = "/paladin.v1.SystemService/GetHealth"
+	// SystemServiceGetConfigProcedure is the fully-qualified name of the SystemService's GetConfig RPC.
+	SystemServiceGetConfigProcedure = "/paladin.v1.SystemService/GetConfig"
 )
 
 // SystemServiceClient is a client for the paladin.v1.SystemService service.
 type SystemServiceClient interface {
 	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error)
 	GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error)
+	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.ConfigInfo], error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.v1.SystemService service. By default, it
@@ -70,6 +73,12 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("GetHealth")),
 			connect.WithClientOptions(opts...),
 		),
+		getConfig: connect.NewClient[v1.GetConfigRequest, v1.ConfigInfo](
+			httpClient,
+			baseURL+SystemServiceGetConfigProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -77,6 +86,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type systemServiceClient struct {
 	getVersion *connect.Client[v1.GetVersionRequest, v1.VersionInfo]
 	getHealth  *connect.Client[v1.GetHealthRequest, v1.HealthInfo]
+	getConfig  *connect.Client[v1.GetConfigRequest, v1.ConfigInfo]
 }
 
 // GetVersion calls paladin.v1.SystemService.GetVersion.
@@ -89,10 +99,16 @@ func (c *systemServiceClient) GetHealth(ctx context.Context, req *connect.Reques
 	return c.getHealth.CallUnary(ctx, req)
 }
 
+// GetConfig calls paladin.v1.SystemService.GetConfig.
+func (c *systemServiceClient) GetConfig(ctx context.Context, req *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.ConfigInfo], error) {
+	return c.getConfig.CallUnary(ctx, req)
+}
+
 // SystemServiceHandler is an implementation of the paladin.v1.SystemService service.
 type SystemServiceHandler interface {
 	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error)
 	GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error)
+	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.ConfigInfo], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -114,12 +130,20 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("GetHealth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceGetConfigHandler := connect.NewUnaryHandler(
+		SystemServiceGetConfigProcedure,
+		svc.GetConfig,
+		connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServiceGetVersionProcedure:
 			systemServiceGetVersionHandler.ServeHTTP(w, r)
 		case SystemServiceGetHealthProcedure:
 			systemServiceGetHealthHandler.ServeHTTP(w, r)
+		case SystemServiceGetConfigProcedure:
+			systemServiceGetConfigHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -135,4 +159,8 @@ func (UnimplementedSystemServiceHandler) GetVersion(context.Context, *connect.Re
 
 func (UnimplementedSystemServiceHandler) GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.SystemService.GetHealth is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.ConfigInfo], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.SystemService.GetConfig is not implemented"))
 }

@@ -210,5 +210,9 @@ func (c *Config) Obfuscated() Config {
 		cc.Storage.Backends = redacted
 	}
 
+	if cc.Auth.HMACSecret != "" {
+		cc.Auth.HMACSecret = Redacted
+	}
+
 	return cc
 }

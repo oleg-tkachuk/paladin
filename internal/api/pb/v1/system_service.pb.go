@@ -299,6 +299,99 @@ func (x *ComponentHealth) GetLatencyMs() int64 {
 	return 0
 }
 
+type GetConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetConfigRequest) Reset() {
+	*x = GetConfigRequest{}
+	mi := &file_paladin_v1_system_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConfigRequest) ProtoMessage() {}
+
+func (x *GetConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_system_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConfigRequest.ProtoReflect.Descriptor instead.
+func (*GetConfigRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_system_service_proto_rawDescGZIP(), []int{5}
+}
+
+type ConfigInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Serialized obfuscated configuration of the running service. Secrets
+	// (Postgres password, S3 access/secret keys, JWT HMAC secret) are
+	// redacted to "***" before serialization.
+	Yaml string `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	// Filesystem path the config was loaded from (best-effort, absolute when
+	// resolvable). Useful for dashboards that want to show the source of truth.
+	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigInfo) Reset() {
+	*x = ConfigInfo{}
+	mi := &file_paladin_v1_system_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigInfo) ProtoMessage() {}
+
+func (x *ConfigInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_system_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigInfo.ProtoReflect.Descriptor instead.
+func (*ConfigInfo) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_system_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ConfigInfo) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+func (x *ConfigInfo) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
 var File_paladin_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_system_service_proto_rawDesc = "" +
@@ -326,11 +419,17 @@ const file_paladin_v1_system_service_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs2\x88\x01\n" +
+	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\"\x12\n" +
+	"\x10GetConfigRequest\"4\n" +
+	"\n" +
+	"ConfigInfo\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path2\xc3\x01\n" +
 	"\rSystemService\x12<\n" +
 	"\n" +
 	"GetVersion\x12\x19.paladin.v1.GetVersionRequest\x1a\x13.paladin.v1.VersionInfo\x129\n" +
-	"\tGetHealth\x12\x18.paladin.v1.GetHealthRequest\x1a\x12.paladin.v1.HealthInfoBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1b\x06proto3"
+	"\tGetHealth\x12\x18.paladin.v1.GetHealthRequest\x1a\x12.paladin.v1.HealthInfo\x129\n" +
+	"\tGetConfig\x12\x18.paladin.v1.GetConfigRequest\x1a\x12.paladin.v1.ConfigInfoBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1b\x06proto3"
 
 var (
 	file_paladin_v1_system_service_proto_rawDescOnce sync.Once
@@ -344,25 +443,29 @@ func file_paladin_v1_system_service_proto_rawDescGZIP() []byte {
 	return file_paladin_v1_system_service_proto_rawDescData
 }
 
-var file_paladin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_paladin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_paladin_v1_system_service_proto_goTypes = []any{
 	(*GetVersionRequest)(nil),     // 0: paladin.v1.GetVersionRequest
 	(*VersionInfo)(nil),           // 1: paladin.v1.VersionInfo
 	(*GetHealthRequest)(nil),      // 2: paladin.v1.GetHealthRequest
 	(*HealthInfo)(nil),            // 3: paladin.v1.HealthInfo
 	(*ComponentHealth)(nil),       // 4: paladin.v1.ComponentHealth
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*GetConfigRequest)(nil),      // 5: paladin.v1.GetConfigRequest
+	(*ConfigInfo)(nil),            // 6: paladin.v1.ConfigInfo
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 }
 var file_paladin_v1_system_service_proto_depIdxs = []int32{
-	5, // 0: paladin.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
+	7, // 0: paladin.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
 	4, // 1: paladin.v1.HealthInfo.components:type_name -> paladin.v1.ComponentHealth
-	5, // 2: paladin.v1.HealthInfo.checked_at:type_name -> google.protobuf.Timestamp
+	7, // 2: paladin.v1.HealthInfo.checked_at:type_name -> google.protobuf.Timestamp
 	0, // 3: paladin.v1.SystemService.GetVersion:input_type -> paladin.v1.GetVersionRequest
 	2, // 4: paladin.v1.SystemService.GetHealth:input_type -> paladin.v1.GetHealthRequest
-	1, // 5: paladin.v1.SystemService.GetVersion:output_type -> paladin.v1.VersionInfo
-	3, // 6: paladin.v1.SystemService.GetHealth:output_type -> paladin.v1.HealthInfo
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
+	5, // 5: paladin.v1.SystemService.GetConfig:input_type -> paladin.v1.GetConfigRequest
+	1, // 6: paladin.v1.SystemService.GetVersion:output_type -> paladin.v1.VersionInfo
+	3, // 7: paladin.v1.SystemService.GetHealth:output_type -> paladin.v1.HealthInfo
+	6, // 8: paladin.v1.SystemService.GetConfig:output_type -> paladin.v1.ConfigInfo
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
 	3, // [3:3] is the sub-list for extension extendee
 	0, // [0:3] is the sub-list for field type_name
@@ -379,7 +482,7 @@ func file_paladin_v1_system_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_v1_system_service_proto_rawDesc), len(file_paladin_v1_system_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

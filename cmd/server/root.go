@@ -195,7 +195,7 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 		Version:   version,
 		Commit:    commit,
 		BuildTime: buildT,
-	}, db)
+	}, db, cfg, configPath)
 
 	verifier, err := buildVerifier(cfg.Auth)
 	if err != nil {

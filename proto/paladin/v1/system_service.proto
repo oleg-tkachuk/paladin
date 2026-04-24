@@ -12,6 +12,7 @@ import "google/protobuf/timestamp.proto";
 service SystemService {
   rpc GetVersion(GetVersionRequest) returns (VersionInfo);
   rpc GetHealth(GetHealthRequest) returns (HealthInfo);
+  rpc GetConfig(GetConfigRequest) returns (ConfigInfo);
 }
 
 message GetVersionRequest {}
@@ -44,4 +45,16 @@ message ComponentHealth {
   string message = 3;
   // Last check latency in milliseconds.
   int64 latency_ms = 4;
+}
+
+message GetConfigRequest {}
+
+message ConfigInfo {
+  // Serialized obfuscated configuration of the running service. Secrets
+  // (Postgres password, S3 access/secret keys, JWT HMAC secret) are
+  // redacted to "***" before serialization.
+  string yaml = 1;
+  // Filesystem path the config was loaded from (best-effort, absolute when
+  // resolvable). Useful for dashboards that want to show the source of truth.
+  string path = 2;
 }
