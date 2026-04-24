@@ -145,6 +145,65 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	return out, next, nil
 }
 
+// countScanCap bounds how many rows CountObjects will scan when a CEL
+// filter is supplied. Above this limit the partial match count is returned
+// with exact=false so the caller can render "N+ matches" rather than lie.
+const countScanCap = 10000
+
+// CountObjects returns the number of matching rows. No filter → single
+// COUNT(*) query (exact). With filter → paginated keyset scan applying CEL
+// in-process, capped at countScanCap.
+func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsArgs) (int64, bool, error) {
+	if args.CompiledCEL == nil {
+		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Bucket, sqlc.NullObjectState{})
+		if err != nil {
+			return 0, false, fmt.Errorf("count objects: %w", err)
+		}
+		return n, true, nil
+	}
+
+	const pageSize int32 = 500
+	var (
+		matched int64
+		scanned int64
+		afterID uuid.UUID
+	)
+	for {
+		rows, err := r.q.ListObjects(ctx,
+			pgUUID(args.TenantID),
+			args.Bucket,
+			sqlc.NullObjectState{},
+			nil,
+			pgUUID(afterID),
+			pageSize,
+		)
+		if err != nil {
+			return 0, false, fmt.Errorf("count objects scan: %w", err)
+		}
+		if len(rows) == 0 {
+			return matched, true, nil
+		}
+		for _, row := range rows {
+			o := objectFromSQLC(row.Object)
+			ok, evalErr := cel.Match(args.CompiledCEL, celVars(o))
+			if evalErr != nil {
+				return 0, false, fmt.Errorf("cel eval: %w", evalErr)
+			}
+			if ok {
+				matched++
+			}
+			scanned++
+			afterID = o.ObjectID
+			if scanned >= countScanCap {
+				return matched, false, nil
+			}
+		}
+		if int32(len(rows)) < pageSize {
+			return matched, true, nil
+		}
+	}
+}
+
 // BucketCompletionMode reads the storage backend tied to the bucket and
 // returns Implicit when events are enabled on that backend, otherwise
 // Explicit. Unknown bucket → Unspecified + error.

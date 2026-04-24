@@ -88,6 +88,7 @@ type Repository interface {
 	FindByPath(ctx context.Context, tenantID uuid.UUID, bucket, key string) (Object, error)
 	UpdateMetadata(ctx context.Context, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
+	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
 	BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, bucket string) (CompletionMode, error)
 }
 
@@ -145,6 +146,16 @@ type ListObjectsArgs struct {
 	CompiledCEL cel.Program // pre-compiled; nil = no filter
 	OrderBy     string
 	SortDesc    bool
+}
+
+// CountObjectsArgs carries the inputs for Repository.CountObjects. When
+// CompiledCEL is nil the adapter can short-circuit to a COUNT(*) query and
+// return exact=true; otherwise it iterates the table applying the filter and
+// may return an approximate (capped) count.
+type CountObjectsArgs struct {
+	TenantID    uuid.UUID
+	Bucket      string
+	CompiledCEL cel.Program
 }
 
 // Handler is the Connect service implementation.
@@ -378,6 +389,84 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &fresh, nil
+}
+
+// ─── ListObjects ────────────────────────────────────────────────────────────
+
+type ListObjectsInput struct {
+	Bucket    string
+	PageSize  int32
+	PageToken string
+	Filter    string
+	OrderBy   string
+	SortDesc  bool
+}
+
+// ListObjects returns a page of objects in the bucket, optionally filtered by
+// a CEL expression against ObjectSchema. Per-row Cedar authorization is
+// skipped — listing is permitted for any authenticated tenant member to keep
+// pagination cheap (same contract as ListBuckets).
+func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
+	tenantID, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	prog, err := h.filter.Compile(cel.ObjectSchema, in.Filter)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
+	objs, next, err := h.repo.ListObjects(ctx, ListObjectsArgs{
+		TenantID:    tenantID,
+		Bucket:      in.Bucket,
+		PageSize:    in.PageSize,
+		PageToken:   in.PageToken,
+		CompiledCEL: prog,
+		OrderBy:     in.OrderBy,
+		SortDesc:    in.SortDesc,
+	})
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInternal, err)
+	}
+	return objs, next, nil
+}
+
+// ─── CountObjects ───────────────────────────────────────────────────────────
+
+type CountObjectsInput struct {
+	Bucket string
+	Filter string
+}
+
+type CountObjectsOutput struct {
+	ApproximateCount int64
+	Exact            bool
+}
+
+// CountObjects returns the number of objects in the bucket matching an
+// optional CEL filter. With no filter the adapter uses a direct COUNT(*) and
+// returns exact=true; with a filter it iterates rows applying CEL and may
+// return an approximate result when the scan cap is hit.
+func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
+	tenantID, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	prog, err := h.filter.Compile(cel.ObjectSchema, in.Filter)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
+	// Compile always returns an always-true program for empty expr; detect
+	// the "no filter" case at the caller boundary instead, so the adapter
+	// can pick the cheap COUNT(*) path.
+	args := CountObjectsArgs{TenantID: tenantID, Bucket: in.Bucket}
+	if in.Filter != "" {
+		args.CompiledCEL = prog
+	}
+	n, exact, err := h.repo.CountObjects(ctx, args)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &CountObjectsOutput{ApproximateCount: n, Exact: exact}, nil
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

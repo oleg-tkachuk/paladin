@@ -70,4 +70,38 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(objectToProto(obj)), nil
 }
 
+func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.ListObjectsRequest]) (*connect.Response[pb.ListObjectsResponse], error) {
+	m := req.Msg
+	objs, next, err := s.H.ListObjects(ctx, object.ListObjectsInput{
+		Bucket:    m.GetBucket(),
+		PageSize:  m.GetPageSize(),
+		PageToken: m.GetPageToken(),
+		Filter:    m.GetFilter(),
+		OrderBy:   m.GetOrderBy(),
+		SortDesc:  m.GetSortOrder() == pb.SortOrder_SORT_ORDER_DESC,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListObjectsResponse{NextPageToken: next}
+	for i := range objs {
+		out.Objects = append(out.Objects, objectToProto(&objs[i]))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *ObjectServer) CountObjects(ctx context.Context, req *connect.Request[pb.CountObjectsRequest]) (*connect.Response[pb.CountObjectsResponse], error) {
+	out, err := s.H.CountObjects(ctx, object.CountObjectsInput{
+		Bucket: req.Msg.GetBucket(),
+		Filter: req.Msg.GetFilter(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.CountObjectsResponse{
+		ApproximateCount: out.ApproximateCount,
+		Exact:            out.Exact,
+	}), nil
+}
+
 var _ paladinv1connect.ObjectServiceHandler = (*ObjectServer)(nil)
