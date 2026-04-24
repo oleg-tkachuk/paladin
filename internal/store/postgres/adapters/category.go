@@ -20,12 +20,19 @@ func NewCategoryRepo(q *sqlc.Queries) *CategoryRepo { return &CategoryRepo{q: q}
 var _ category.Repository = (*CategoryRepo)(nil)
 
 func (r *CategoryRepo) Create(ctx context.Context, args category.CreateArgs) (category.Category, error) {
+	// categories.labels is JSONB NOT NULL DEFAULT '{}'. The INSERT binds it
+	// explicitly, so a nil []byte becomes SQL NULL and violates the
+	// constraint. Normalize to an empty JSON object.
+	labels := args.Labels
+	if len(labels) == 0 {
+		labels = []byte("{}")
+	}
 	if err := r.q.CreateCategory(ctx,
 		pgUUID(args.TenantID),
 		args.Slug,
 		strPtr(args.DisplayName),
 		args.Description,
-		args.Labels,
+		labels,
 	); err != nil {
 		return category.Category{}, fmt.Errorf("create category: %w", err)
 	}

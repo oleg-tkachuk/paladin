@@ -73,6 +73,12 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.TenantID == uuid.Nil {
 		args.TenantID = uuid.Must(uuid.NewV7())
 	}
+	// A tenant with no inherited policy would be deny-all at the Cedar layer
+	// (empty policy set → no permit rule matches). Seed a sensible default so
+	// newly-created tenants can immediately read/write their own objects.
+	if args.InheritedCedarPolicy == "" {
+		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID)
+	}
 	t, err := h.repo.Create(ctx, args)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))

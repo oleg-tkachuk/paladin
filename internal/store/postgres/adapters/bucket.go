@@ -27,13 +27,20 @@ func NewBucketRepo(q *sqlc.Queries, pool *pgxpool.Pool) *BucketRepo {
 var _ bucket.Repository = (*BucketRepo)(nil)
 
 func (r *BucketRepo) Create(ctx context.Context, args bucket.CreateBucketArgs) (bucket.Bucket, error) {
+	// buckets.lifecycle_rules is JSONB NOT NULL with default '[]'. The SQL
+	// INSERT binds this column explicitly, so a nil []byte would surface as
+	// NULL and violate the constraint. Normalize to an empty JSON array.
+	rules := args.LifecycleRules
+	if len(rules) == 0 {
+		rules = []byte("[]")
+	}
 	if err := r.q.CreateBucket(ctx,
 		pgUUID(args.TenantID),
 		args.BucketID,
 		strPtr(args.DisplayName),
 		args.StorageBackend,
 		args.CedarPolicy,
-		args.LifecycleRules,
+		rules,
 	); err != nil {
 		return bucket.Bucket{}, fmt.Errorf("create bucket: %w", err)
 	}

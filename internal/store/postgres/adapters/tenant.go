@@ -28,10 +28,17 @@ func NewTenantRepo(q *sqlc.Queries, pool *pgxpool.Pool) *TenantRepo {
 var _ tenant.Repository = (*TenantRepo)(nil)
 
 func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (tenant.Tenant, error) {
+	// tenants.labels is JSONB NOT NULL DEFAULT '{}'. The INSERT binds it
+	// explicitly, so a nil []byte becomes SQL NULL and violates the
+	// constraint. Normalize to an empty JSON object.
+	labels := args.Labels
+	if len(labels) == 0 {
+		labels = []byte("{}")
+	}
 	if err := r.q.CreateTenant(ctx,
 		pgUUID(args.TenantID),
 		strPtr(args.DisplayName),
-		args.Labels,
+		labels,
 		args.InheritedCedarPolicy,
 	); err != nil {
 		return tenant.Tenant{}, fmt.Errorf("create tenant: %w", err)
