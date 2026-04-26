@@ -12,6 +12,9 @@ import (
 
 type Querier interface {
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
+	// True when a non-DELETED row already exists at (tenant, object_key, key).
+	// Used by RestoreObject to refuse restoring into a slot that's been reused.
+	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
@@ -55,6 +58,10 @@ type Querier interface {
 	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetStorageBackend(ctx context.Context, id string) (StorageBackend, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
+	// Removes the row outright. Caller is responsible for first deleting the
+	// object from the storage backend (S3 DeleteObject). Allowed from any
+	// state. expected_version=0 skips the OCC guard.
+	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
 	ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListObjectKeysRow, error)
@@ -81,6 +88,7 @@ type Querier interface {
 	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
+	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	// expected_version=0 disables the OCC guard (force update).
 	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)

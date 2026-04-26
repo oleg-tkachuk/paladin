@@ -11,13 +11,9 @@
 #   ObjectService.CountObjects
 #   PresignService.RegenerateUploadUrl
 #   PresignService.PresignDownload
-#
-# NOT YET WIRED in connectshim — covered by a sibling TODO and skipped here:
 #   ObjectService.GetObject / LookupObject / DownloadObject
 #   ObjectService.UpdateObject
-#   ObjectService.DeleteObject  / RestoreObject / CopyObject
-# Once those land, extend this flow to soft-delete → restore → purge and
-# round-trip the body via DownloadObject.
+#   ObjectService.DeleteObject  / RestoreObject
 
 # 1. UploadObject — server records PENDING row, returns presigned PUT URL.
 POST {{host}}/paladin.v1.ObjectService/UploadObject
@@ -78,11 +74,94 @@ HTTP 200
 [Asserts]
 jsonpath "$.approximateCount" exists
 
-# 6. PresignDownload — not yet hooked to a working object lookup, but the
-# RPC itself is wired and should reject an unknown name with NotFound.
+# 6. PresignDownload — issues a GET URL for the AVAILABLE object.
 POST {{host}}/paladin.v1.PresignService/PresignDownload
 Content-Type: application/json
 Connect-Protocol-Version: 1
 Authorization: Bearer {{jwt}}
 {"name": "{{object_name}}"}
-HTTP *
+HTTP 200
+[Asserts]
+jsonpath "$.downloadUrl.url" exists
+
+# 7. GetObject — fetch by resource name.
+POST {{host}}/paladin.v1.ObjectService/GetObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"name": "{{object_name}}"}
+HTTP 200
+[Captures]
+resource_version: jsonpath "$.resourceVersion"
+[Asserts]
+jsonpath "$.state" == "OBJECT_STATE_AVAILABLE"
+jsonpath "$.key"   == "{{key}}"
+
+# 8. LookupObject — resolve (object_key, key) → Object.
+POST {{host}}/paladin.v1.ObjectService/LookupObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"object_key": "{{object_key}}", "key": "{{key}}"}
+HTTP 200
+[Asserts]
+jsonpath "$.name" == "{{object_name}}"
+
+# 9. DownloadObject — handler bundles object metadata + presigned GET URL.
+POST {{host}}/paladin.v1.ObjectService/DownloadObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"name": "{{object_name}}"}
+HTTP 200
+[Captures]
+download_url: jsonpath "$.downloadUrl.url"
+[Asserts]
+jsonpath "$.object.name" == "{{object_name}}"
+
+# 10. Round-trip the body through the presigned URL.
+GET {{download_url}}
+HTTP 200
+[Asserts]
+bytes count == {{payload_len}}
+
+# 11. UpdateObject — mutate metadata via FieldMask.
+POST {{host}}/paladin.v1.ObjectService/UpdateObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{
+    "name": "{{object_name}}",
+    "resource_version": "{{resource_version}}",
+    "update_mask": "metadata",
+    "metadata": {"author": "hurl-e2e"}
+}
+HTTP 200
+[Asserts]
+jsonpath "$.metadata.author" == "hurl-e2e"
+
+# 12. Soft-delete (default).
+POST {{host}}/paladin.v1.ObjectService/DeleteObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"name": "{{object_name}}"}
+HTTP 200
+
+# 13. RestoreObject — un-delete the slot we just freed.
+POST {{host}}/paladin.v1.ObjectService/RestoreObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"name": "{{object_name}}"}
+HTTP 200
+[Asserts]
+jsonpath "$.state" == "OBJECT_STATE_AVAILABLE"
+
+# 14. Permanent delete — drops the row and the S3 body.
+POST {{host}}/paladin.v1.ObjectService/DeleteObject
+Content-Type: application/json
+Connect-Protocol-Version: 1
+Authorization: Bearer {{jwt}}
+{"name": "{{object_name}}", "permanent": true}
+HTTP 200

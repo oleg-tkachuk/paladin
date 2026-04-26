@@ -93,4 +93,38 @@ func planParts(size int64) (totalParts int32, partSize int64) {
 	return int32(n), partSize
 }
 
+func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[pb.PresignPartRequest]) (*connect.Response[pb.PresignPartResponse], error) {
+	m := req.Msg
+	url, headers, expires, err := s.H.PresignPart(ctx, m.GetUploadId(), m.GetPartNumber(), m.GetTtl().AsDuration())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.PresignPartResponse{
+		UploadUrl: &pb.PresignedUrl{
+			Url:             url,
+			Method:          "PUT",
+			RequiredHeaders: headers,
+			ExpiresAt:       tsProto(expires),
+		},
+	}), nil
+}
+
+func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb.ListPartsRequest]) (*connect.Response[pb.ListPartsResponse], error) {
+	m := req.Msg
+	parts, next, err := s.H.ListParts(ctx, m.GetUploadId(), m.GetPageSize(), m.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListPartsResponse{NextPageToken: next}
+	for _, p := range parts {
+		out.Parts = append(out.Parts, &pb.PartInfo{
+			PartNumber: p.PartNumber,
+			SizeBytes:  p.SizeBytes,
+			Etag:       p.ETag,
+			UploadedAt: tsProto(p.UploadedAt),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
 var _ paladinv1connect.MultipartUploadServiceHandler = (*MultipartServer)(nil)

@@ -378,6 +378,13 @@ func (p *PresignView) PresignPart(ctx context.Context, bucket string, tenantID u
 	return req.URL, signedHeaders(req), time.Now().Add(ttl), nil
 }
 
+// PresignPart on *Client delegates to the PresignView so that *Client also
+// satisfies multipart.Storage (which needs the part-presign capability for
+// the MultipartUploadService.PresignPart RPC).
+func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	return (&PresignView{c: c}).PresignPart(ctx, bucket, tenantID, storageUploadID, objectKey, key, partNumber, ttl)
+}
+
 // ─── object.StreamSink ─────────────────────────────────────────────────────
 
 var _ object.StreamSink = (*Client)(nil)

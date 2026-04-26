@@ -243,6 +243,28 @@ func (r *ObjectRepo) BucketCompletionMode(ctx context.Context, tenantID uuid.UUI
 	return object.CompletionModeExplicit, nil
 }
 
+// HardDelete removes the row. expectedVersion=0 disables the OCC guard.
+// ErrVersionMismatch when no rows match (either gone or version drift).
+func (r *ObjectRepo) HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+	rows, err := r.q.HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
+	if err != nil {
+		return fmt.Errorf("hard delete: %w", err)
+	}
+	if rows == 0 {
+		return object.ErrVersionMismatch
+	}
+	return nil
+}
+
+// LiveCollision reports whether a non-DELETED row exists at (tenant, objectKey, key).
+func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (bool, error) {
+	exists, err := r.q.CheckLiveCollision(ctx, pgUUID(tenantID), objectKey, key)
+	if err != nil {
+		return false, fmt.Errorf("live collision check: %w", err)
+	}
+	return exists, nil
+}
+
 func (r *ObjectRepo) getByID(ctx context.Context, tenantID, objectID uuid.UUID) (object.Object, error) {
 	row, err := r.q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
 	if err != nil {

@@ -23,6 +23,16 @@ type Storage interface {
 	InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (storageUploadID string, err error)
 	CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
 	AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
+	PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+}
+
+// Part is a record of an uploaded multipart part as stored in multipart_parts.
+type Part struct {
+	PartNumber int32
+	SizeBytes  int64
+	ETag       string
+	Checksum   string
+	UploadedAt time.Time
 }
 
 type PartETag struct {
@@ -71,6 +81,9 @@ type Repository interface {
 	// LookupBucket returns the physical S3 bucket bound to the ObjectKey.
 	// Used to route storage calls to the right bucket.
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
+	// ListParts returns recorded parts for an upload, ordered by part_number.
+	// Pagination is keyset on part_number; pageToken is the last seen number.
+	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
 }
 
 type Handler struct {
@@ -184,6 +197,66 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 		_ = err
 	}
 	return nil
+}
+
+// PresignPart issues a presigned URL for uploading a single part of an
+// in-flight multipart session. Authorization is checked against the underlying
+// object's (objectKey, key); the storage URL targets the bucket bound to that
+// ObjectKey.
+func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	tenantID, p, err := callerContext(ctx)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	sess, err := h.repo.GetSession(ctx, uploadID)
+	if err != nil {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	if sess.TenantID != tenantID {
+		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("part_number %d out of range (1..%d)", partNumber, sess.TotalParts))
+	}
+	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPresignPut, 0, ""); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	bucket := sess.Bucket
+	if bucket == "" {
+		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
+		if err != nil {
+			return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		}
+	}
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+	return h.storage.PresignPart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, partNumber, ttl)
+}
+
+// ListParts returns the parts already recorded for an upload session. Used
+// during resumption to figure out which part numbers still need uploading.
+func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	sess, err := h.repo.GetSession(ctx, uploadID)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeNotFound, err)
+	}
+	if sess.TenantID != tenantID {
+		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if pageSize <= 0 || pageSize > 1000 {
+		pageSize = 100
+	}
+	parts, next, err := h.repo.ListParts(ctx, uploadID, pageSize, pageToken)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInternal, err)
+	}
+	return parts, next, nil
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string, sizeBytes int64, contentType string) error {

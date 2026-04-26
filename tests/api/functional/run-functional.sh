@@ -190,9 +190,18 @@ UPLOAD_ID=$(jq -r '.uploadId' <<<"$resp")
 MP_OBJECT_NAME=$(jq -r '.object.name' <<<"$resp")
 echo "  ✓ InitiateMultipartUpload (upload_id=$UPLOAD_ID)"
 
-# PresignPart is defined in proto but not yet wired in connectshim
-# (returns CodeUnimplemented). Skip until the bridge lands.
-echo "  - PresignPart (skipped: not wired in connectshim yet)"
+rpc paladin.v1.MultipartUploadService/PresignPart "{
+    \"object_name\":\"$MP_OBJECT_NAME\",
+    \"upload_id\":\"$UPLOAD_ID\",
+    \"part_number\":1
+}" >/dev/null
+echo "  ✓ PresignPart"
+
+rpc paladin.v1.MultipartUploadService/ListParts "{
+    \"object_name\":\"$MP_OBJECT_NAME\",
+    \"upload_id\":\"$UPLOAD_ID\"
+}" >/dev/null
+echo "  ✓ ListParts"
 
 rpc paladin.v1.MultipartUploadService/AbortMultipartUpload "{
     \"object_name\":\"$MP_OBJECT_NAME\",

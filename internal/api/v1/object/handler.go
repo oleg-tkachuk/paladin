@@ -106,6 +106,14 @@ type Repository interface {
 	// string means the row exists but no bucket has been bound — the
 	// storage adapter falls back to its configured default in that case.
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
+	// HardDelete removes the row outright; caller is responsible for
+	// having already deleted the storage-side object. expectedVersion=0
+	// skips OCC. Returns ErrVersionMismatch if no rows affected.
+	HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
+	// LiveCollision reports whether a non-DELETED row already occupies
+	// (tenant, object_key, key); used to refuse RestoreObject when the
+	// slot has been reused by a fresh upload.
+	LiveCollision(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (bool, error)
 }
 
 type Object struct {
@@ -502,6 +510,375 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &CountObjectsOutput{ApproximateCount: n, Exact: exact}, nil
+}
+
+// ─── Read RPCs ──────────────────────────────────────────────────────────────
+
+// GetObject returns metadata for an object addressed by its resource name.
+func (h *Handler) GetObject(ctx context.Context, name string) (*Object, error) {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	objectKey, objectID, err := parseResourceName(name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return &obj, nil
+}
+
+// LookupObject resolves an object by (object_key, key) instead of object_id —
+// useful when callers only have the path-style identifier (S3-style).
+func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Object, error) {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if objectKey == "" || key == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("object_key and key are both required"))
+	}
+	obj, err := h.repo.FindByPath(ctx, tenantID, objectKey, key)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return &obj, nil
+}
+
+// ─── DownloadObject ─────────────────────────────────────────────────────────
+
+type DownloadObjectOutput struct {
+	Object             Object
+	URL                string
+	Headers            map[string]string
+	ExpiresAt          time.Time
+	ContentDisposition string
+}
+
+// DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
+// object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
+func (h *Handler) DownloadObject(ctx context.Context, name string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
+	tenantID, principal, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	objectKey, objectID, err := parseResourceName(name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if obj.State != statemachine.StateAvailable {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("object state %s does not allow download", obj.State))
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
+	}
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if ttl <= 0 {
+		ttl = h.presign.DefaultTTL
+	}
+	url, headers, expires, err := h.storage.PresignGet(ctx, PresignGetArgs{
+		TenantID:           tenantID,
+		Bucket:             bucket,
+		ObjectKey:          objectKey,
+		Key:                obj.Key,
+		TTL:                ttl,
+		ContentDisposition: disposition,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign get: %w", err))
+	}
+	return &DownloadObjectOutput{
+		Object: obj, URL: url, Headers: headers, ExpiresAt: expires,
+		ContentDisposition: disposition,
+	}, nil
+}
+
+// ─── UpdateObject ───────────────────────────────────────────────────────────
+
+// UpdateObjectInput is the patch shape used by UpdateObject. UpdatedFields
+// is the FieldMask: only the named fields are written. Unknown field names
+// are silently ignored (matches AIP-134).
+type UpdateObjectInput struct {
+	Name            string // resource name
+	ResourceVersion int64  // 0 = skip OCC
+	UpdatedFields   []string
+	Metadata        map[string]string
+	Tags            map[string]string
+	ContentType     string
+	ExternalRef     string
+}
+
+func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	_, objectID, err := parseResourceName(in.Name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	obj, err := h.repo.UpdateMetadata(ctx, UpdateMetadataArgs{
+		TenantID:        tenantID,
+		ObjectID:        objectID,
+		ResourceVersion: in.ResourceVersion,
+		UpdatedFields:   in.UpdatedFields,
+		Metadata:        in.Metadata,
+		Tags:            in.Tags,
+		ContentType:     in.ContentType,
+		ExternalRef:     in.ExternalRef,
+	})
+	if err != nil {
+		if errors.Is(err, ErrVersionMismatch) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &obj, nil
+}
+
+// ─── DeleteObject (soft + hard) ─────────────────────────────────────────────
+
+// DeleteObject performs a soft-delete by default; permanent=true removes
+// the object from S3 first, then drops the row.
+func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string, permanent bool) error {
+	tenantID, principal, err := callerContext(ctx)
+	if err != nil {
+		return err
+	}
+	objectKey, objectID, err := parseResourceName(name)
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	if err != nil {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionDeleteObject, obj.SizeBytes, obj.ContentType); err != nil {
+		return err
+	}
+	rv, _ := parseInt64(resourceVersion)
+	if !permanent {
+		if err := h.sm.SoftDelete(ctx, objectID, rv); err != nil {
+			if errors.Is(err, statemachine.ErrConflict) {
+				return connect.NewError(connect.CodeAborted, err)
+			}
+			return connect.NewError(connect.CodeInternal, err)
+		}
+		return nil
+	}
+	// Permanent: remove from storage backend first, then drop the row.
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	if err != nil {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage delete: %w", err))
+	}
+	if err := h.repo.HardDelete(ctx, tenantID, objectID, rv); err != nil {
+		if errors.Is(err, ErrVersionMismatch) {
+			return connect.NewError(connect.CodeAborted, err)
+		}
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	return nil
+}
+
+// ─── RestoreObject ──────────────────────────────────────────────────────────
+
+func (h *Handler) RestoreObject(ctx context.Context, name string) (*Object, error) {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	objectKey, objectID, err := parseResourceName(name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if obj.State != statemachine.StateDeleted {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot restore from state %s", obj.State))
+	}
+	collision, err := h.repo.LiveCollision(ctx, tenantID, objectKey, obj.Key)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if collision {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("a live object already occupies %s/%s", objectKey, obj.Key))
+	}
+	if err := h.sm.Restore(ctx, objectID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &fresh, nil
+}
+
+// ─── CopyObject ─────────────────────────────────────────────────────────────
+
+// CopyObjectInput identifies a server-side copy. Source is addressed by
+// resource name; destination by (object_key, key). When DestKey is empty
+// the source's storage key is reused.
+type CopyObjectInput struct {
+	SourceName    string
+	DestObjectKey string
+	DestKey       string
+	Metadata      map[string]string
+	Tags          map[string]string
+}
+
+func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
+	tenantID, principal, err := callerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	srcObjectKey, srcObjectID, err := parseResourceName(in.SourceName)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if in.DestObjectKey == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("dest_object_key is required"))
+	}
+	src, err := h.repo.FindByName(ctx, tenantID, srcObjectKey, srcObjectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if src.State != statemachine.StateAvailable {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot copy from state %s", src.State))
+	}
+	destKey := in.DestKey
+	if destKey == "" {
+		destKey = src.Key
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: in.DestObjectKey, Key: destKey,
+		ContentType: src.ContentType, SizeBytes: src.SizeBytes, Tags: in.Tags,
+	}, cedar.ActionCopyObject, src.SizeBytes, src.ContentType); err != nil {
+		return nil, err
+	}
+
+	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, srcObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+
+	// Insert the destination row up-front so the FK to object_keys is
+	// validated before we issue the S3 copy.
+	dst, err := h.repo.CreateObject(ctx, CreateObjectArgs{
+		TenantID:         tenantID,
+		ObjectKey:        in.DestObjectKey,
+		Key:              destKey,
+		ContentType:      src.ContentType,
+		SizeHint:         src.SizeBytes,
+		ChecksumAlgo:     "", // copied object inherits source's algo via HEAD
+		Metadata:         coalesceMap(in.Metadata, src.Metadata),
+		Tags:             coalesceMap(in.Tags, src.Tags),
+		ExternalRef:      src.ExternalRef,
+		PresignExpiresAt: time.Now().Add(h.presign.DefaultTTL),
+	})
+	if err != nil {
+		return nil, mapCreateErr(err)
+	}
+	if err := h.storage.CopyObject(ctx, Location{
+		TenantID: tenantID, Bucket: srcBucket, ObjectKey: srcObjectKey, Key: src.Key,
+	}, Location{
+		TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
+	}
+	if _, err := h.sm.PromoteToAvailable(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
+		src.Checksum, "", statemachine.SourceRPC); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestObjectKey, dst.ObjectID.String())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &fresh, nil
+}
+
+// ─── shared internals ──────────────────────────────────────────────────────
+
+func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
+	tenantID, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	return tenantID, p, nil
+}
+
+func (h *Handler) authorize(
+	ctx context.Context,
+	principal *auth.Principal,
+	tenantID uuid.UUID,
+	res *cedar.Resource,
+	action string,
+	sizeBytes int64,
+	contentType string,
+) error {
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, Roles: principal.Roles},
+		action,
+		res,
+		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
+}
+
+func parseInt64(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	var n int64
+	_, err := fmt.Sscanf(s, "%d", &n)
+	return n, err
+}
+
+func coalesceMap(primary, fallback map[string]string) map[string]string {
+	if len(primary) > 0 {
+		return primary
+	}
+	return fallback
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

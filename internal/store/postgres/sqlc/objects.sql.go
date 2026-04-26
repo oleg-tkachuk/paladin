@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkLiveCollision = `-- name: CheckLiveCollision :one
+SELECT EXISTS(
+    SELECT 1 FROM objects
+    WHERE tenant_id = $1
+      AND object_key = $2
+      AND key = $3
+      AND state <> 'DELETED'
+)::boolean AS exists
+`
+
+// True when a non-DELETED row already exists at (tenant, object_key, key).
+// Used by RestoreObject to refuse restoring into a slot that's been reused.
+func (q *Queries) CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkLiveCollision, tenantID, objectKey, key)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
@@ -94,6 +113,24 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 		&i.Object.PresignExpiresAt,
 	)
 	return i, err
+}
+
+const hardDeleteObject = `-- name: HardDeleteObject :execrows
+DELETE FROM objects
+WHERE tenant_id = $1 AND object_id = $2
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
+`
+
+// Removes the row outright. Caller is responsible for first deleting the
+// object from the storage backend (S3 DeleteObject). Allowed from any
+// state. expected_version=0 skips the OCC guard.
+func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteObject, tenantID, objectID, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listObjects = `-- name: ListObjects :many
@@ -330,9 +367,11 @@ SET state         = 'DELETED',
     terminated_at = now()
 WHERE tenant_id = $1 AND object_id = $2
   AND state IN ('AVAILABLE', 'PENDING')
-  AND resource_version = $3
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
 `
 
+// expected_version=0 disables the OCC guard (force).
 func (q *Queries) SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteObject, tenantID, objectID, expectedVersion)
 	if err != nil {

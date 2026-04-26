@@ -48,12 +48,14 @@ WHERE object_id = $1
   AND state = 'PENDING';
 
 -- name: SoftDeleteObject :execrows
+-- expected_version=0 disables the OCC guard (force).
 UPDATE objects
 SET state         = 'DELETED',
     terminated_at = now()
 WHERE tenant_id = $1 AND object_id = $2
   AND state IN ('AVAILABLE', 'PENDING')
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: RestoreObject :execrows
 -- Undeletes a soft-deleted object iff no live row exists with the same
@@ -64,6 +66,26 @@ SET state         = 'AVAILABLE',
     terminated_at = NULL
 WHERE tenant_id = $1 AND object_id = $2
   AND state = 'DELETED';
+
+-- name: HardDeleteObject :execrows
+-- Removes the row outright. Caller is responsible for first deleting the
+-- object from the storage backend (S3 DeleteObject). Allowed from any
+-- state. expected_version=0 skips the OCC guard.
+DELETE FROM objects
+WHERE tenant_id = $1 AND object_id = $2
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: CheckLiveCollision :one
+-- True when a non-DELETED row already exists at (tenant, object_key, key).
+-- Used by RestoreObject to refuse restoring into a slot that's been reused.
+SELECT EXISTS(
+    SELECT 1 FROM objects
+    WHERE tenant_id = $1
+      AND object_key = $2
+      AND key = $3
+      AND state <> 'DELETED'
+)::boolean AS exists;
 
 -- name: ListObjects :many
 -- CEL filter is applied by the caller post-load. Keyset page uses object_id
