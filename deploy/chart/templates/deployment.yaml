@@ -44,6 +44,13 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            - name: APP_VERSION
+              value: {{ .Values.metadata.version | default .Chart.AppVersion | quote }}
+            - name: GIT_COMMIT_HASH
+              value: {{ .Values.metadata.commit | quote }}
+            - name: BUILD_TIME
+              value: {{ .Values.metadata.buildTime | quote }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

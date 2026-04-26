@@ -1,4 +1,8 @@
 replicaCount: 1
+metadata:
+  version: ""
+  commit: "unknown"
+  buildTime: "unknown"
 
 config:
   app:
