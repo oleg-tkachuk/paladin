@@ -30,6 +30,7 @@ tasks:
           --build-arg BUILD_TIME="{{._TIME}}" \
           .
         docker push {{.IMAGE}}:{{._TAG}}
+        docker push {{.IMAGE}}:latest
       - |
         helm package {{.CHART_DIR}} \
           --version {{._CHART_VER}} \
