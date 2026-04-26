@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/v1/types.proto";
+
+// ObjectKeyService manages tenant-scoped logical object_keys.
+//
+// Buckets are NOT provisioned as physical S3 object_keys — they're Postgres rows
+// that map to prefixes inside the tenant's allocation in a shared storage
+// backend. Creation is fast (no IAM, no S3 create-object_key) and cheap.
+service ObjectKeyService {
+  rpc CreateObjectKey(CreateObjectKeyRequest) returns (ObjectKey);
+  rpc GetObjectKey(GetObjectKeyRequest) returns (ObjectKey);
+  rpc UpdateObjectKey(UpdateObjectKeyRequest) returns (ObjectKey);
+  rpc DeleteObjectKey(DeleteObjectKeyRequest) returns (DeleteObjectKeyResponse);
+  rpc ListObjectKeys(ListObjectKeysRequest) returns (ListObjectKeysResponse);
+
+  // GetObjectKeyStats returns approximate usage stats (counts, bytes).
+  rpc GetObjectKeyStats(GetObjectKeyStatsRequest) returns (ObjectKeyStats);
+}
+
+message CreateObjectKeyRequest {
+  // Tenant-unique logical name.
+  string object_key = 1 [(buf.validate.field).string = {
+    min_len: 3,
+    max_len: 63,
+    pattern: "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$"
+  }];
+
+  string display_name = 2;
+
+  // Storage backend (FK to storage_backends.id). If empty, server picks the
+  // tenant's default backend.
+  string backend_id = 3;
+
+  // Bucket inside the chosen storage backend. Must reference an existing
+  // row in `buckets` (created via BucketService.CreateBucket). If empty,
+  // server falls back to `storage.backends.<backend_id>.bucket`.
+  string bucket_name = 5;
+
+  ObjectKeyPolicy policy = 4;
+}
+
+message GetObjectKeyRequest {
+  // Resource name: "object_keys/{object_key}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateObjectKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  string display_name = 4;
+  ObjectKeyPolicy policy = 5;
+}
+
+message DeleteObjectKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // If true, deletes even when the object_key contains objects (starts an
+  // asynchronous purge Operation). Default is to reject non-empty object_keys.
+  bool force = 3;
+}
+
+message DeleteObjectKeyResponse {
+  // Present if force=true and deletion is asynchronous.
+  string operation_name = 1;
+}
+
+message ListObjectKeysRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+  string page_token = 2;
+  // CEL filter over ObjectKey fields.
+  string filter = 3;
+  string order_by = 4;
+  SortOrder sort_order = 5;
+}
+
+message ListObjectKeysResponse {
+  repeated ObjectKey object_keys = 1;
+  string next_page_token = 2;
+}
+
+message GetObjectKeyStatsRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ObjectKeyStats {
+  int64 approximate_object_count = 1;
+  int64 approximate_total_bytes = 2;
+  // Breakdown by state.
+  map<string, int64> object_count_by_state = 3;
+}

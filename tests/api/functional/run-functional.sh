@@ -38,32 +38,32 @@ buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -d "{\"tenant_id\": \"$TENANT_ID\", \"labels_patch_json\": \"{\\\"env\\\": \\\"test\\\"}\"}" \
   "$HOST/paladin.v1.Paladin/PatchTenantMetadata"
 
-# 2. Category Management
-separator "2. Category Management"
+# 2. ObjectTag Management
+separator "2. ObjectTag Management"
 
-echo "Creating Category..."
+echo "Creating ObjectTag..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -H "$AUTH_HEADER" \
-  -d "{\"tenant_id\": \"$TENANT_ID\", \"slug\": \"full-test-cat\", \"name\": \"Full Test Category\"}" \
-  "$HOST/paladin.v1.Paladin/CreateCategory"
+  -d "{\"tenant_id\": \"$TENANT_ID\", \"slug\": \"full-test-cat\", \"name\": \"Full Test ObjectTag\"}" \
+  "$HOST/paladin.v1.Paladin/CreateObjectTag"
 
-echo "Getting Category..."
+echo "Getting ObjectTag..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -H "$AUTH_HEADER" \
   -d "{\"tenant_id\": \"$TENANT_ID\", \"slug\": \"full-test-cat\"}" \
-  "$HOST/paladin.v1.Paladin/GetCategory"
+  "$HOST/paladin.v1.Paladin/GetObjectTag"
 
-echo "Listing Categories..."
+echo "Listing ObjectTags..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -H "$AUTH_HEADER" \
   -d "{\"tenant_id\": \"$TENANT_ID\", \"limit\": 10}" \
-  "$HOST/paladin.v1.Paladin/ListCategories"
+  "$HOST/paladin.v1.Paladin/ListObjectTags"
 
-echo "Getting Category Stats..."
+echo "Getting ObjectTag Stats..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -H "$AUTH_HEADER" \
   -d "{\"tenant_id\": \"$TENANT_ID\", \"slug\": \"full-test-cat\"}" \
-  "$HOST/paladin.v1.Paladin/GetCategoryStats"
+  "$HOST/paladin.v1.Paladin/GetObjectTagStats"
 
 # 3. Object Upload Flows (Single)
 separator "3. Object Upload Flow (Single)"
@@ -171,11 +171,11 @@ buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
 # 7. Cleanup
 separator "7. Cleanup"
 
-echo "Deleting Category..."
+echo "Deleting ObjectTag..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \
   -H "$AUTH_HEADER" \
   -d "{\"tenant_id\": \"$TENANT_ID\", \"slug\": \"full-test-cat\"}" \
-  "$HOST/paladin.v1.Paladin/DeleteCategory"
+  "$HOST/paladin.v1.Paladin/DeleteObjectTag"
 
 echo "Deleting Tenant..."
 buf curl --schema "$PROTO" --protocol connect --http2-prior-knowledge \

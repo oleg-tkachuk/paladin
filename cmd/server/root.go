@@ -86,12 +86,32 @@ var rootCmd = &cobra.Command{
 			l.Fatal("Database ping failed", zap.Error(err))
 		}
 
-		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
-			l.Warn("Migrations failed", zap.Error(err))
+		// Two-phase migration: schema first, then seed + backfill, then the
+		// constraints that depend on backfilled data. Migration 005 enforces
+		// NOT NULL on object_keys.bucket_name and would fail on legacy DBs
+		// without the backfill in between.
+		if err := db.RunMigrationsTo(ctx, migrations.FS, 4); err != nil && !errors.Is(err, context.Canceled) {
+			l.Fatal("Phase-1 migrations failed", zap.Error(err))
 		}
 
 		if err := seedStorageBackends(ctx, db.Queries, cfg.Storage); err != nil {
 			l.Fatal("Failed to seed storage backends", zap.Error(err))
+		}
+
+		if err := seedDefaultBuckets(ctx, db.Pool, cfg.Storage); err != nil {
+			l.Fatal("Failed to seed default buckets", zap.Error(err))
+		}
+
+		if n, err := backfillObjectKeyBuckets(ctx, db.Pool, cfg.Storage); err != nil {
+			l.Fatal("Failed to backfill object_keys.bucket_name", zap.Error(err))
+		} else if n > 0 {
+			l.Info("Backfilled bucket_name for legacy object_keys",
+				zap.Int64("rows", n),
+			)
+		}
+
+		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
+			l.Fatal("Phase-2 migrations failed", zap.Error(err))
 		}
 
 		srv, err := buildServer(ctx, cfg, db, l)
@@ -159,18 +179,20 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 
 	repos := wire.Repos{
 		Object:    adapters.NewObjectRepo(db.Queries, pool),
-		Bucket:    adapters.NewBucketRepo(db.Queries, pool),
+		ObjectKey: adapters.NewObjectKeyRepo(db.Queries, pool),
+		Bucket:    adapters.NewBucketRepo(db.Queries),
 		Tenant:    adapters.NewTenantRepo(db.Queries, pool),
-		Category:  adapters.NewCategoryRepo(db.Queries),
+		ObjectTag: adapters.NewObjectTagRepo(db.Queries),
 		Presign:   adapters.NewPresignRepo(db.Queries, pool),
 		Multipart: adapters.NewMultipartRepo(db.Queries, pool),
 		Operation: adapters.NewOperationRepo(db.Queries),
 	}
 	storage := wire.Storage{
-		Object:    s3c,
-		Multipart: s3c,
-		Presign:   s3c.Presign(),
-		Stream:    s3c,
+		Object:      s3c,
+		Multipart:   s3c,
+		Presign:     s3c.Presign(),
+		Stream:      s3c,
+		Provisioner: s3c,
 	}
 
 	polStore := policy.NewPostgresStore(pool)
@@ -183,9 +205,10 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	celEval := cel.NewEvaluator()
 
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, celEval, sm, cfg)
-	bucketH := wire.ProvideBucketHandler(repos, polEngine, cfg)
+	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
+	bucketH := wire.ProvideBucketHandler(repos, storage, cfg)
 	tenantH := wire.ProvideTenantHandler(repos)
-	categoryH := wire.ProvideCategoryHandler(repos)
+	objectTagH := wire.ProvideObjectTagHandler(repos)
 	opH := wire.ProvideOperationHandler(repos)
 	batchH := wire.ProvideBatchHandler(opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
@@ -230,7 +253,8 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.Handle(paladinv1connect.NewTenantServiceHandler(connectshim.NewTenantServer(tenantH), opts))
-	mux.Handle(paladinv1connect.NewCategoryServiceHandler(connectshim.NewCategoryServer(categoryH), opts))
+	mux.Handle(paladinv1connect.NewObjectTagServiceHandler(connectshim.NewObjectTagServer(objectTagH), opts))
+	mux.Handle(paladinv1connect.NewObjectKeyServiceHandler(connectshim.NewObjectKeyServer(objectKeyH), opts))
 	mux.Handle(paladinv1connect.NewBucketServiceHandler(connectshim.NewBucketServer(bucketH), opts))
 	mux.Handle(paladinv1connect.NewObjectServiceHandler(connectshim.NewObjectServer(objH), opts))
 	mux.Handle(paladinv1connect.NewPresignServiceHandler(connectshim.NewPresignServer(presignH), opts))
@@ -256,8 +280,63 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	}, nil
 }
 
+// seedDefaultBuckets ensures every backend with a `bucket:` value in config
+// has a corresponding row in the `buckets` table. The S3 bucket itself is
+// expected to be pre-created out-of-band by the operator (or via the
+// BucketService API at runtime); this seed only records the mapping so
+// ObjectKey rows can FK to it. Idempotent via ON CONFLICT DO NOTHING.
+func seedDefaultBuckets(ctx context.Context, pool postgres.PgxPool, s config.Storage) error {
+	for name, b := range s.Backends {
+		if b.Bucket == "" {
+			continue
+		}
+		const q = `
+			INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
+			VALUES ($1, $2, $3, $4, '{}'::jsonb)
+			ON CONFLICT (backend_id, bucket_name) DO NOTHING
+		`
+		var displayName, region *string
+		if d := "Default bucket for " + name; d != "" {
+			displayName = &d
+		}
+		if b.Region != "" {
+			r := b.Region
+			region = &r
+		}
+		if _, err := pool.Exec(ctx, q, name, b.Bucket, displayName, region); err != nil {
+			return fmt.Errorf("seed default bucket %q in backend %q: %w", b.Bucket, name, err)
+		}
+	}
+	return nil
+}
+
+// backfillObjectKeyBuckets fills in object_keys.bucket_name for any rows
+// where it is NULL, using the configured default bucket for the row's
+// backend_id. This bridges legacy installs (where ObjectKey predates the
+// bucket model) onto the new schema; once every row has a value, migration
+// 005 can flip the column to NOT NULL.
+func backfillObjectKeyBuckets(ctx context.Context, pool postgres.PgxPool, s config.Storage) (int64, error) {
+	var total int64
+	for name, b := range s.Backends {
+		if b.Bucket == "" {
+			continue
+		}
+		const q = `
+			UPDATE object_keys
+			SET bucket_name = $1
+			WHERE backend_id = $2 AND bucket_name IS NULL
+		`
+		tag, err := pool.Exec(ctx, q, b.Bucket, name)
+		if err != nil {
+			return total, fmt.Errorf("backfill backend %q: %w", name, err)
+		}
+		total += tag.RowsAffected()
+	}
+	return total, nil
+}
+
 // seedStorageBackends upserts the storage_backends registry from config so
-// that `buckets.storage_backend` FK references resolve for buckets created at
+// that `object_keys.backend_id` FK references resolve for object_keys created at
 // runtime. Idempotent — re-runs on every startup to pick up config edits.
 func seedStorageBackends(ctx context.Context, q *sqlc.Queries, s config.Storage) error {
 	for name, b := range s.Backends {

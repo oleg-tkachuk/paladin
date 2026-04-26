@@ -25,14 +25,17 @@ type Config struct {
 }
 
 type Storage interface {
-	PresignGet(ctx context.Context, bucket, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPut(ctx context.Context, bucket, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPart(ctx context.Context, storageUploadID, bucket, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 type Repository interface {
-	LookupObjectByName(ctx context.Context, tenantID uuid.UUID, bucketID string, objectID uuid.UUID) (bucket, key, state string, err error)
-	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, bucket, key string, err error)
+	LookupObjectByName(ctx context.Context, tenantID uuid.UUID, objectKey string, objectID uuid.UUID) (resolvedObjectKey, key, state string, err error)
+	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, objectKey, key string, err error)
+	// LookupBucket returns the physical S3 bucket bound to an ObjectKey.
+	// Used to route presign URLs to the correct bucket.
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
 }
 
 type Handler struct {
@@ -51,11 +54,11 @@ func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Du
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucketID, objectID, err := parseObjectName(objectName)
+	objectKey, objectID, err := parseObjectName(objectName)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	bucket, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, bucketID, objectID)
+	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -63,10 +66,14 @@ func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Du
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow GET", state))
 	}
-	if err := h.authorize(ctx, p, tenantID, bucketID, key, cedar.ActionPresignGet); err != nil {
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignGet(ctx, bucket, key, h.resolveTTL(ttl), disposition)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	if err != nil {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	return h.storage.PresignGet(ctx, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
 }
 
 func (h *Handler) PresignPut(ctx context.Context, objectName, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
@@ -74,18 +81,22 @@ func (h *Handler) PresignPut(ctx context.Context, objectName, contentType, check
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucketID, objectID, err := parseObjectName(objectName)
+	objectKey, objectID, err := parseObjectName(objectName)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	bucket, key, _, err := h.repo.LookupObjectByName(ctx, tenantID, bucketID, objectID)
+	objectKey, key, _, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
-	if err := h.authorize(ctx, p, tenantID, bucketID, key, cedar.ActionPresignPut); err != nil {
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPut(ctx, bucket, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	if err != nil {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	return h.storage.PresignPut(ctx, bucket, tenantID, objectKey, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
 }
 
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
@@ -93,14 +104,18 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	storageUploadID, bucket, key, err := h.repo.LookupMultipartSession(ctx, uploadID)
+	storageUploadID, objectKey, key, err := h.repo.LookupMultipartSession(ctx, uploadID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
-	if err := h.authorize(ctx, p, tenantID, bucket, key, cedar.ActionPresignPut); err != nil {
+	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPart(ctx, storageUploadID, bucket, key, partNumber, h.resolveTTL(ttl))
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	if err != nil {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	return h.storage.PresignPart(ctx, bucket, tenantID, storageUploadID, objectKey, key, partNumber, h.resolveTTL(ttl))
 }
 
 func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
@@ -113,11 +128,11 @@ func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
 	return requested
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, bucketID, key, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
 		action,
-		&cedar.Resource{TenantID: tenantID, BucketID: bucketID, Key: key},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
@@ -141,9 +156,9 @@ func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
 	return t, p, nil
 }
 
-// parseObjectName parses "buckets/{bucket}/objects/{object_id}".
+// parseObjectName parses "object_keys/{objectKey}/objects/{object_id}".
 func parseObjectName(name string) (string, uuid.UUID, error) {
-	const prefix = "buckets/"
+	const prefix = "object_keys/"
 	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
 		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
 	}
@@ -158,7 +173,7 @@ func parseObjectName(name string) (string, uuid.UUID, error) {
 	if sep <= 0 {
 		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
 	}
-	bucket := rest[:sep]
+	objectKey := rest[:sep]
 	remainder := rest[sep+1:]
 	const objects = "objects/"
 	if len(remainder) <= len(objects) || remainder[:len(objects)] != objects {
@@ -168,5 +183,5 @@ func parseObjectName(name string) (string, uuid.UUID, error) {
 	if err != nil {
 		return "", uuid.Nil, fmt.Errorf("invalid object_id: %w", err)
 	}
-	return bucket, id, nil
+	return objectKey, id, nil
 }

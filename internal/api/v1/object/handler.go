@@ -8,7 +8,7 @@
 //   - Storage (presign / HEAD / copy)
 //   - State machine (idempotent promotion / delete / restore)
 //
-// Other services (Bucket, Presign, Multipart, Batch, Tenant, Operation)
+// Other services (ObjectKey, Presign, Multipart, Batch, Tenant, Operation)
 // follow the same shape.
 package object
 
@@ -33,12 +33,12 @@ type Storage interface {
 	PresignPut(ctx context.Context, args PresignPutArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 	PresignPost(ctx context.Context, args PresignPostArgs) (action string, fields map[string]string, expiresAt time.Time, err error)
 	PresignGet(ctx context.Context, args PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
-	Head(ctx context.Context, bucket, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	Head(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
 	// DeleteObject is optional — for permanent deletes only.
-	DeleteObject(ctx context.Context, bucket, key string) error
-	// CompletionMode is derived from the bucket's storage backend config.
-	CompletionMode(bucketID string) CompletionMode
+	DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error
+	// CompletionMode is derived from the objectKey's storage backend config.
+	CompletionMode(objectKey string) CompletionMode
 }
 
 type CompletionMode uint8
@@ -49,13 +49,20 @@ const (
 	CompletionModeExplicit
 )
 
+// Location identifies an S3 object: the physical bucket plus the
+// composed key (tenant_id/object_key/key). Bucket may be empty, in
+// which case the storage adapter falls back to its configured default.
 type Location struct {
-	Bucket string
-	Key    string
+	TenantID  uuid.UUID
+	Bucket    string // physical S3 bucket
+	ObjectKey string // PALADIN namespace within the bucket
+	Key       string // storage key inside the prefix
 }
 
 type PresignPutArgs struct {
-	Bucket          string
+	TenantID        uuid.UUID
+	Bucket          string // physical S3 bucket; resolved from ObjectKey row
+	ObjectKey       string
 	Key             string
 	ContentType     string
 	ChecksumAlgo    string
@@ -65,7 +72,9 @@ type PresignPutArgs struct {
 }
 
 type PresignPostArgs struct {
+	TenantID     uuid.UUID
 	Bucket       string
+	ObjectKey    string
 	Key          string
 	ContentType  string
 	MaxSizeBytes int64
@@ -74,7 +83,9 @@ type PresignPostArgs struct {
 }
 
 type PresignGetArgs struct {
+	TenantID           uuid.UUID
 	Bucket             string
+	ObjectKey          string
 	Key                string
 	TTL                time.Duration
 	ContentDisposition string
@@ -84,18 +95,25 @@ type PresignGetArgs struct {
 // (sqlc-backed). Keeping it local to this package keeps handler tests lean.
 type Repository interface {
 	CreateObject(ctx context.Context, args CreateObjectArgs) (Object, error)
-	FindByName(ctx context.Context, tenantID uuid.UUID, bucket, objectID string) (Object, error)
-	FindByPath(ctx context.Context, tenantID uuid.UUID, bucket, key string) (Object, error)
+	FindByName(ctx context.Context, tenantID uuid.UUID, objectKey, objectID string) (Object, error)
+	FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (Object, error)
 	UpdateMetadata(ctx context.Context, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
-	BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, bucket string) (CompletionMode, error)
+	BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, objectKey string) (CompletionMode, error)
+	// LookupBucket returns the physical S3 bucket for a tenant's ObjectKey.
+	// Cheap lookup (covered by idx_object_keys_bucket_routing). Empty
+	// string means the row exists but no bucket has been bound — the
+	// storage adapter falls back to its configured default in that case.
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
 }
 
 type Object struct {
 	ObjectID         uuid.UUID
 	TenantID         uuid.UUID
-	Bucket           string
+	BackendID        string // FK column from object_keys; populated when JOINed
+	Bucket           string // physical S3 bucket; populated when JOINed
+	ObjectKey        string
 	Key              string
 	State            statemachine.State
 	ContentType      string
@@ -116,7 +134,7 @@ type Object struct {
 
 type CreateObjectArgs struct {
 	TenantID         uuid.UUID
-	Bucket           string
+	ObjectKey        string
 	Key              string
 	ContentType      string
 	SizeHint         int64
@@ -140,7 +158,7 @@ type UpdateMetadataArgs struct {
 
 type ListObjectsArgs struct {
 	TenantID    uuid.UUID
-	Bucket      string
+	ObjectKey   string
 	PageSize    int32
 	PageToken   string
 	CompiledCEL cel.Program // pre-compiled; nil = no filter
@@ -154,7 +172,7 @@ type ListObjectsArgs struct {
 // may return an approximate (capped) count.
 type CountObjectsArgs struct {
 	TenantID    uuid.UUID
-	Bucket      string
+	ObjectKey   string
 	CompiledCEL cel.Program
 }
 
@@ -199,7 +217,7 @@ func NewHandler(
 // UploadObjectInput is the decoded request. In production wiring, this comes
 // from the generated Connect stub (paladinv1.UploadObjectRequest).
 type UploadObjectInput struct {
-	Bucket        string
+	ObjectKey     string
 	Key           string
 	ContentType   string
 	SizeHint      int64
@@ -238,7 +256,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		cedar.ActionPresignPut,
 		&cedar.Resource{
 			TenantID:    tenantID,
-			BucketID:    in.Bucket,
+			ObjectKey:   in.ObjectKey,
 			Key:         in.Key,
 			ContentType: in.ContentType,
 			SizeBytes:   in.SizeHint,
@@ -257,8 +275,17 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 
-	// 2. Determine completion mode from bucket's storage backend.
-	completion, err := h.repo.BucketCompletionMode(ctx, tenantID, in.Bucket)
+	// 2. Determine completion mode from objectKey's storage backend.
+	completion, err := h.repo.BucketCompletionMode(ctx, tenantID, in.ObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+
+	// 2a. Resolve the physical S3 bucket the ObjectKey is bound to.
+	//     Empty string means "row exists but bucket_name is NULL" — the
+	//     storage adapter will fall back to its configured default. After
+	//     migration 005 / startup backfill this case is impossible.
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -275,7 +302,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	presignExp := time.Now().Add(ttl)
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID:         tenantID,
-		Bucket:           in.Bucket,
+		ObjectKey:        in.ObjectKey,
 		Key:              key,
 		ContentType:      in.ContentType,
 		SizeHint:         in.SizeHint,
@@ -297,7 +324,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	}
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
-			Bucket:       in.Bucket,
+			TenantID:     tenantID,
+			Bucket:       bucket,
+			ObjectKey:    in.ObjectKey,
 			Key:          key,
 			ContentType:  in.ContentType,
 			MaxSizeBytes: resolveMaxSize(h.presign.DefaultMaxSize, in.SizeHint),
@@ -313,7 +342,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		out.ExpiresAt = exp
 	} else {
 		url, headers, exp, err := h.storage.PresignPut(ctx, PresignPutArgs{
-			Bucket:          in.Bucket,
+			TenantID:        tenantID,
+			Bucket:          bucket,
+			ObjectKey:       in.ObjectKey,
 			Key:             key,
 			ContentType:     in.ContentType,
 			ChecksumAlgo:    in.ChecksumAlgo,
@@ -335,7 +366,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 // ─── Exemplar RPC: CompleteObject ────────────────────────────────────────────
 
 type CompleteObjectInput struct {
-	Name     string // "buckets/{bucket}/objects/{object_id}"
+	Name     string // "object_keys/{objectKey}/objects/{object_id}"
 	ETag     string
 	Checksum string
 }
@@ -349,12 +380,12 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	bucket, objectID, err := parseResourceName(in.Name)
+	objectKey, objectID, err := parseResourceName(in.Name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	obj, err := h.repo.FindByName(ctx, tenantID, bucket, objectID.String())
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -368,8 +399,12 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 			fmt.Errorf("cannot complete in state %s", obj.State))
 	}
 
-	// Materialize authoritative values via HEAD.
-	etag, size, checksum, seq, err := h.storage.Head(ctx, obj.Bucket, obj.Key)
+	// Materialize authoritative values via HEAD against the object's bucket.
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	etag, size, checksum, seq, err := h.storage.Head(ctx, bucket, tenantID, obj.ObjectKey, obj.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object not uploaded yet: %w", err))
@@ -384,7 +419,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	_ = changed // idempotent — either way, return fresh object
-	fresh, err := h.repo.FindByName(ctx, tenantID, bucket, objectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -394,7 +429,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 // ─── ListObjects ────────────────────────────────────────────────────────────
 
 type ListObjectsInput struct {
-	Bucket    string
+	ObjectKey string
 	PageSize  int32
 	PageToken string
 	Filter    string
@@ -402,10 +437,10 @@ type ListObjectsInput struct {
 	SortDesc  bool
 }
 
-// ListObjects returns a page of objects in the bucket, optionally filtered by
+// ListObjects returns a page of objects in the objectKey, optionally filtered by
 // a CEL expression against ObjectSchema. Per-row Cedar authorization is
 // skipped — listing is permitted for any authenticated tenant member to keep
-// pagination cheap (same contract as ListBuckets).
+// pagination cheap (same contract as ListObjectKeys).
 func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
@@ -417,7 +452,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	}
 	objs, next, err := h.repo.ListObjects(ctx, ListObjectsArgs{
 		TenantID:    tenantID,
-		Bucket:      in.Bucket,
+		ObjectKey:   in.ObjectKey,
 		PageSize:    in.PageSize,
 		PageToken:   in.PageToken,
 		CompiledCEL: prog,
@@ -433,8 +468,8 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 // ─── CountObjects ───────────────────────────────────────────────────────────
 
 type CountObjectsInput struct {
-	Bucket string
-	Filter string
+	ObjectKey string
+	Filter    string
 }
 
 type CountObjectsOutput struct {
@@ -442,7 +477,7 @@ type CountObjectsOutput struct {
 	Exact            bool
 }
 
-// CountObjects returns the number of objects in the bucket matching an
+// CountObjects returns the number of objects in the objectKey matching an
 // optional CEL filter. With no filter the adapter uses a direct COUNT(*) and
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
@@ -458,7 +493,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	// Compile always returns an always-true program for empty expr; detect
 	// the "no filter" case at the caller boundary instead, so the adapter
 	// can pick the cheap COUNT(*) path.
-	args := CountObjectsArgs{TenantID: tenantID, Bucket: in.Bucket}
+	args := CountObjectsArgs{TenantID: tenantID, ObjectKey: in.ObjectKey}
 	if in.Filter != "" {
 		args.CompiledCEL = prog
 	}
@@ -471,9 +506,9 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// parseResourceName parses "buckets/{bucket}/objects/{object_id}".
-func parseResourceName(name string) (bucket string, objectID uuid.UUID, err error) {
-	const prefix = "buckets/"
+// parseResourceName parses "object_keys/{objectKey}/objects/{object_id}".
+func parseResourceName(name string) (objectKey string, objectID uuid.UUID, err error) {
+	const prefix = "object_keys/"
 	if len(name) < len(prefix) || name[:len(prefix)] != prefix {
 		return "", uuid.Nil, fmt.Errorf("invalid resource name %q", name)
 	}
@@ -488,7 +523,7 @@ func parseResourceName(name string) (bucket string, objectID uuid.UUID, err erro
 	if sep < 0 {
 		return "", uuid.Nil, fmt.Errorf("invalid resource name %q", name)
 	}
-	bucket = rest[:sep]
+	objectKey = rest[:sep]
 	remainder := rest[sep+1:]
 	const objects = "objects/"
 	if len(remainder) < len(objects) || remainder[:len(objects)] != objects {
@@ -498,7 +533,7 @@ func parseResourceName(name string) (bucket string, objectID uuid.UUID, err erro
 	if err != nil {
 		return "", uuid.Nil, fmt.Errorf("invalid object_id in %q: %w", name, err)
 	}
-	return bucket, id, nil
+	return objectKey, id, nil
 }
 
 func resolveMaxSize(defaultMax, hint int64) int64 {

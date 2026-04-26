@@ -12,24 +12,33 @@ import "google/protobuf/any.proto";
 
 // Object is the canonical representation of a stored object.
 //
-// Resource name: buckets/{bucket}/objects/{object_id}
-//   - {bucket} is a tenant-scoped logical namespace, not a physical S3 bucket.
+// Resource name: object_keys/{object_key}/objects/{object_id}
+//   - {object_key} is a tenant-scoped logical namespace, not a physical S3 object_key.
 //   - {object_id} is a stable UUIDv7 assigned on upload initiation.
 //
 // Tenancy: implied by auth context (JWT claim `tenant`). Never accept
 // tenant_id in request bodies for object-scoped RPCs.
 message Object {
-  // Fully-qualified resource name: "buckets/{bucket}/objects/{object_id}".
+  // Fully-qualified resource name: "object_keys/{object_key}/objects/{object_id}".
   string name = 1;
 
   // Stable object identifier (UUIDv7). Sortable by creation time.
   string object_id = 2;
 
-  // Logical bucket (namespace) name.
-  string bucket = 3;
+  // Logical object_key (namespace) name.
+  string object_key = 3;
 
-  // Storage key (path) within the bucket.
+  // Storage key (path) within the object_key.
   string key = 4;
+
+  // Storage backend ID (FK to storage_backends.id). Surfaced on responses
+  // when the server JOINs object_keys; may be empty on bulk list endpoints
+  // that prioritise pagination cost over reflection completeness.
+  string backend_id = 21;
+
+  // Physical S3 bucket name (FK to buckets.bucket_name). Same caveat as
+  // backend_id — populated when the server JOINs object_keys.
+  string bucket_name = 22;
 
   // Lifecycle state.
   ObjectState state = 5;
@@ -109,7 +118,7 @@ enum ChecksumAlgorithm {
 // CompletionMode communicates to the client how the object will be
 // transitioned from PENDING to AVAILABLE.
 //
-// Derived server-side from bucket.storage_backend.events configuration.
+// Derived server-side from object_key.storage_backend.events configuration.
 enum CompletionMode {
   COMPLETION_MODE_UNSPECIFIED = 0;
   // Server derives completion from storage events (S3 notifications).
@@ -141,7 +150,7 @@ message PresignedUrl {
 message PresignedPostPolicy {
   // Form fields to include in the multipart/form-data upload.
   map<string, string> fields = 1;
-  // Action URL (bucket endpoint) to POST to.
+  // Action URL (object_key endpoint) to POST to.
   string action = 2;
 }
 
@@ -153,37 +162,41 @@ enum SortOrder {
   SORT_ORDER_DESC = 2;
 }
 
-// ─── Bucket ──────────────────────────────────────────────────────────────────
+// ─── ObjectKey ──────────────────────────────────────────────────────────────────
 
-// Bucket is a tenant-scoped logical namespace.
+// ObjectKey is a tenant-scoped logical namespace.
 //
 // Buckets map to prefixes inside a physical storage backend; they are
-// NOT provisioned as real S3 buckets. Creating a bucket is a Postgres
+// NOT provisioned as real S3 object_keys. Creating a object_key is a Postgres
 // INSERT, not an IAM/S3 operation.
-message Bucket {
-  // Fully-qualified resource name: "buckets/{bucket}".
+message ObjectKey {
+  // Fully-qualified resource name: "object_keys/{object_key}".
   string name = 1;
   // Human-friendly display label.
   string display_name = 2;
   // Logical name; tenant-unique; matches the S3 key-prefix component.
   // Constraints: [a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?
-  string bucket_id = 3;
-  // Storage backend identifier (from server-side config).
-  string storage_backend = 4;
-  // Effective completion mode (derived from storage_backend.events config).
+  string object_key = 3;
+  // Storage backend identifier (from server-side config); FK to
+  // storage_backends.id.
+  string backend_id = 4;
+  // Effective completion mode (derived from backend.events config).
   CompletionMode completion_mode = 5;
-  BucketPolicy policy = 6;
+  ObjectKeyPolicy policy = 6;
   string resource_version = 7;
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
+  // Physical S3 bucket holding objects for this ObjectKey. References
+  // a row in the `buckets` table created via BucketService.CreateBucket.
+  string bucket_name = 10;
 }
 
-// BucketPolicy carries bucket-level authorization and lifecycle rules.
+// ObjectKeyPolicy carries object_key-level authorization and lifecycle rules.
 //
 // Path authorization is expressed as Cedar policies (text blob), compiled
 // and cached at load time. Lifecycle rules map to native S3 lifecycle
 // configuration on the underlying backend.
-message BucketPolicy {
+message ObjectKeyPolicy {
   // Cedar policy text. Compiled server-side; validated on write.
   string cedar_policy = 1;
   // Object lifecycle rules.
@@ -219,7 +232,7 @@ message Tenant {
   string tenant_id = 2;
   string display_name = 3;
   map<string, string> labels = 4;
-  // Cedar policy text inherited by all buckets in this tenant.
+  // Cedar policy text inherited by all object_keys in this tenant.
   string inherited_cedar_policy = 5;
   string resource_version = 6;
   google.protobuf.Timestamp created_at = 7;
@@ -231,7 +244,7 @@ message Tenant {
 message CompletedPart {
   int32 part_number = 1;
   string etag = 2;
-  // Optional part-level checksum, when the bucket uses composite checksums.
+  // Optional part-level checksum, when the object_key uses composite checksums.
   string checksum = 3;
 }
 

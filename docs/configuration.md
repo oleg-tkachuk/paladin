@@ -20,7 +20,7 @@ PALADIN uses [Koanf](https://github.com/knadh/koanf) to load and merge configura
 ### 2. Datastores
 
 - **Postgres**: Connection DSN and pool settings. Supports `password_secret` for K8s integration.
-- **S3**: Configuration for S3-compatible storage (endpoint, bucket, region, access/secret keys). Supports `secret` suffixes for K8s.
+- **S3**: Configuration for S3-compatible storage (endpoint, object_key, region, access/secret keys). Supports `secret` suffixes for K8s.
 
 ### 3. Policy
 

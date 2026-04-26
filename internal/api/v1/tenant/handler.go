@@ -1,7 +1,7 @@
 // Package tenant implements the TenantService business logic.
 //
 // Tenant creation is an admin-only operation. The AdminBucket action (with an
-// empty bucket) is reused as the "administrative" guard for tenant writes —
+// empty objectKey) is reused as the "administrative" guard for tenant writes —
 // production deployments can swap this for a dedicated platform-admin role
 // check if Cedar gets a separate Tenant action.
 package tenant
@@ -159,7 +159,7 @@ func requirePlatformAdmin(ctx context.Context) error {
 		return connect.NewError(connect.CodePermissionDenied,
 			errors.New("platform-admin role required"))
 	}
-	_ = cedar.ActionAdminBucket // reserved for tenant-level Cedar rollout
+	_ = cedar.ActionAdminObjectKey // reserved for tenant-level Cedar rollout
 	return nil
 }
 

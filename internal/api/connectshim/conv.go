@@ -45,19 +45,19 @@ func parseTenantName(name string) (uuid.UUID, error) {
 	return uuid.Parse(name)
 }
 
-// parseBucketName extracts bucket_id from "buckets/{bucket_id}".
-func parseBucketName(name string) (string, error) {
-	const prefix = "buckets/"
+// parseObjectKeyName extracts objectKey from "object_keys/{objectKey}".
+func parseObjectKeyName(name string) (string, error) {
+	const prefix = "object_keys/"
 	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
-		return "", fmt.Errorf("invalid bucket name %q", name)
+		return "", fmt.Errorf("invalid objectKey name %q", name)
 	}
 	return name[len(prefix):], nil
 }
 
-// parseObjectName extracts (bucket, object_id) from
-// "buckets/{bucket}/objects/{object_id}".
+// parseObjectName extracts (objectKey, object_id) from
+// "object_keys/{objectKey}/objects/{object_id}".
 func parseObjectName(name string) (string, uuid.UUID, error) {
-	const prefix = "buckets/"
+	const prefix = "object_keys/"
 	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
 		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
 	}
@@ -72,7 +72,7 @@ func parseObjectName(name string) (string, uuid.UUID, error) {
 	if sep <= 0 {
 		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
 	}
-	bucket := rest[:sep]
+	objectKey := rest[:sep]
 	remainder := rest[sep+1:]
 	const objects = "objects/"
 	if len(remainder) <= len(objects) || remainder[:len(objects)] != objects {
@@ -82,7 +82,7 @@ func parseObjectName(name string) (string, uuid.UUID, error) {
 	if err != nil {
 		return "", uuid.Nil, fmt.Errorf("invalid object_id: %w", err)
 	}
-	return bucket, id, nil
+	return objectKey, id, nil
 }
 
 // parseOperationName extracts operation_id from "operations/{operation_id}".
@@ -147,9 +147,9 @@ func objectToProto(o *object.Object) *pb.Object {
 		return nil
 	}
 	return &pb.Object{
-		Name:              fmt.Sprintf("buckets/%s/objects/%s", o.Bucket, o.ObjectID),
+		Name:              fmt.Sprintf("object_keys/%s/objects/%s", o.ObjectKey, o.ObjectID),
 		ObjectId:          o.ObjectID.String(),
-		Bucket:            o.Bucket,
+		ObjectKey:         o.ObjectKey,
 		Key:               o.Key,
 		State:             objectStateProto(o.State),
 		ContentType:       o.ContentType,

@@ -24,7 +24,7 @@ message CreateTenantRequest {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
   string display_name = 2;
   map<string, string> labels = 3;
-  // Inherited Cedar policy applied to all buckets under this tenant.
+  // Inherited Cedar policy applied to all object_keys under this tenant.
   string inherited_cedar_policy = 4;
 }
 

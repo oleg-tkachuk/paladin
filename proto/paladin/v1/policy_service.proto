@@ -7,7 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv
 import "buf/validate/validate.proto";
 
 // PolicyService provides thin helpers around Cedar policy text so the UI
-// editor can pre-validate before writing via TenantService / BucketService
+// editor can pre-validate before writing via TenantService / ObjectKeyService
 // (which own the actual persistence).
 service PolicyService {
   // ValidatePolicy parses a Cedar policy text and reports syntax errors

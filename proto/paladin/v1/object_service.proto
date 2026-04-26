@@ -13,7 +13,7 @@ import "paladin/v1/types.proto";
 //
 // Tenancy is implicit from auth context — never provided in requests.
 // Objects are addressed by their stable resource name
-// "buckets/{bucket}/objects/{object_id}". Path-based lookup is a separate RPC
+// "object_keys/{object_key}/objects/{object_id}". Path-based lookup is a separate RPC
 // (LookupObject) to avoid dual-addressing ambiguity.
 //
 // Uploads use a capability-driven protocol: the server advertises the
@@ -25,7 +25,7 @@ service ObjectService {
   rpc UploadObject(UploadObjectRequest) returns (UploadObjectResponse);
 
   // UploadSmall streams bytes directly through the control plane to storage.
-  // Only valid when total payload < bucket.small_upload_limit_bytes
+  // Only valid when total payload < object_key.small_upload_limit_bytes
   // (default 1 MiB). Useful for synchronous write-then-read-immediate use-cases.
   rpc UploadSmall(stream UploadSmallRequest) returns (UploadSmallResponse);
 
@@ -35,7 +35,7 @@ service ObjectService {
   // GetObject retrieves object metadata only (no presign).
   rpc GetObject(GetObjectRequest) returns (Object);
 
-  // LookupObject resolves a (bucket, key) pair to an Object by name.
+  // LookupObject resolves a (object_key, key) pair to an Object by name.
   // Separate RPC to keep all other operations single-addressing.
   rpc LookupObject(LookupObjectRequest) returns (Object);
 
@@ -43,9 +43,9 @@ service ObjectService {
   // concurrency control via resource_version (If-Match).
   rpc UpdateObject(UpdateObjectRequest) returns (Object);
 
-  // CompleteObject is a no-op when bucket uses IMPLICIT completion and the
+  // CompleteObject is a no-op when object_key uses IMPLICIT completion and the
   // storage event has already arrived. Otherwise, promotes PENDING to AVAILABLE
-  // (after HEAD verification). Required for buckets with EXPLICIT completion.
+  // (after HEAD verification). Required for object_keys with EXPLICIT completion.
   rpc CompleteObject(CompleteObjectRequest) returns (Object);
 
   // DeleteObject soft-deletes by default; permanent=true hard-deletes after
@@ -70,8 +70,8 @@ service ObjectService {
 // ─── UploadObject ────────────────────────────────────────────────────────────
 
 message UploadObjectRequest {
-  // Target bucket.
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  // Target object_key.
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
 
   // Desired storage key. If empty, server generates `<object_id>` under the
   // tenant's default prefix.
@@ -127,7 +127,7 @@ message UploadSmallRequest {
 }
 
 message UploadSmallInit {
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2;
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
   ChecksumAlgorithm checksum_algorithm = 4;
@@ -143,7 +143,7 @@ message UploadSmallResponse {
 // ─── DownloadObject ──────────────────────────────────────────────────────────
 
 message DownloadObjectRequest {
-  // Resource name: "buckets/{bucket}/objects/{object_id}".
+  // Resource name: "object_keys/{object_key}/objects/{object_id}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
   google.protobuf.Duration ttl = 2;
   // Override for Content-Disposition on the download response.
@@ -162,7 +162,7 @@ message GetObjectRequest {
 }
 
 message LookupObjectRequest {
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2 [(buf.validate.field).string.min_len = 1];
 }
 
@@ -230,7 +230,7 @@ message TagsOverride {
 // ─── ListObjects ─────────────────────────────────────────────────────────────
 
 message ListObjectsRequest {
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
 
   int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
 
@@ -253,7 +253,7 @@ message ListObjectsResponse {
 }
 
 message CountObjectsRequest {
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
   string filter = 2;
 }
 

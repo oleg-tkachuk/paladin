@@ -82,7 +82,7 @@ policy: {
   labels_max_bytes: int | *4096
   labels_max_keys: int | *10
   external_ref_max_len: int | *256
-  object_key_max_len: int | *1024
+  object_tag_max_len: int | *1024
 }
 
 // JWT verification for incoming RPCs. Either jwks_url or hmac_secret must
@@ -147,13 +147,16 @@ otel: {
   }
 }
 
-// Registry of physical object-storage backends. Each logical bucket picks
-// one by name via `buckets.storage_backend`; when that column is empty the
+// Registry of physical object-storage backends. Each logical object_key picks
+// one by name via `object_keys.storage_backend`; when that column is empty the
 // service falls back to storage.default_backend.
 storage: {
   default_backend: string | *"primary"
   backends: [string]: {
     kind:              "aws-s3" | "s3-compatible" | "gcs"
+    // Physical S3 bucket. PALADIN ObjectKey entries are tenant-scoped prefixes
+    // inside this bucket; full S3 key = "<tenant_id>/<object_key>/<key>".
+    bucket:            string | *""
     region:            string | *""
     endpoint:          string | *""
     public_endpoint:   string | *""

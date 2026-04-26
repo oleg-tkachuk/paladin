@@ -9,20 +9,20 @@ import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/v1/types.proto";
 
-// CategoryService manages tenant-scoped taxonomy entries. Objects are NOT
-// linked to categories via FK in this revision — clients should reference
-// categories from object labels (or another cross-cutting mechanism).
-// Deleting a category therefore has no object-side effects.
-service CategoryService {
-  rpc CreateCategory(CreateCategoryRequest) returns (Category);
-  rpc GetCategory(GetCategoryRequest) returns (Category);
-  rpc UpdateCategory(UpdateCategoryRequest) returns (Category);
-  rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryResponse);
-  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+// ObjectTagService manages tenant-scoped taxonomy entries. Objects are NOT
+// linked to object tags via FK in this revision — clients should reference
+// object tags from object labels (or another cross-cutting mechanism).
+// Deleting an object tag therefore has no object-side effects.
+service ObjectTagService {
+  rpc CreateObjectTag(CreateObjectTagRequest) returns (ObjectTag);
+  rpc GetObjectTag(GetObjectTagRequest) returns (ObjectTag);
+  rpc UpdateObjectTag(UpdateObjectTagRequest) returns (ObjectTag);
+  rpc DeleteObjectTag(DeleteObjectTagRequest) returns (DeleteObjectTagResponse);
+  rpc ListObjectTags(ListObjectTagsRequest) returns (ListObjectTagsResponse);
 }
 
-message Category {
-  // Resource name: "categories/{slug}".
+message ObjectTag {
+  // Resource name: "object_tags/{slug}".
   string name = 1;
   // Tenant-unique slug.
   string slug = 2;
@@ -34,7 +34,7 @@ message Category {
   google.protobuf.Timestamp updated_at = 8;
 }
 
-message CreateCategoryRequest {
+message CreateObjectTagRequest {
   string slug = 1 [(buf.validate.field).string = {
     min_len: 3,
     max_len: 63,
@@ -45,11 +45,11 @@ message CreateCategoryRequest {
   map<string, string> labels = 4;
 }
 
-message GetCategoryRequest {
+message GetObjectTagRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-message UpdateCategoryRequest {
+message UpdateObjectTagRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
@@ -58,21 +58,21 @@ message UpdateCategoryRequest {
   map<string, string> labels = 6;
 }
 
-message DeleteCategoryRequest {
+message DeleteObjectTagRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
 }
 
-message DeleteCategoryResponse {}
+message DeleteObjectTagResponse {}
 
-message ListCategoriesRequest {
+message ListObjectTagsRequest {
   int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
   string page_token = 2;
   string order_by = 3;
   SortOrder sort_order = 4;
 }
 
-message ListCategoriesResponse {
-  repeated Category categories = 1;
+message ListObjectTagsResponse {
+  repeated ObjectTag object_tags = 1;
   string next_page_token = 2;
 }

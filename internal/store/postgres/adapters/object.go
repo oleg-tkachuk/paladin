@@ -14,7 +14,7 @@ import (
 )
 
 // ObjectRepo satisfies object.Repository. BucketCompletionMode walks the
-// bucket → storage_backend path, so the adapter needs the raw pool.
+// objectKey → storage_backend path, so the adapter needs the raw pool.
 type ObjectRepo struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool
@@ -36,7 +36,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 	if err := r.q.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
-		args.Bucket,
+		args.ObjectKey,
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,
@@ -53,7 +53,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args object.CreateObjectA
 	return r.getByID(ctx, args.TenantID, objectID)
 }
 
-func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, bucket, objectID string) (object.Object, error) {
+func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, objectKey, objectID string) (object.Object, error) {
 	id, err := uuid.Parse(objectID)
 	if err != nil {
 		return object.Object{}, fmt.Errorf("parse object_id: %w", err)
@@ -61,8 +61,8 @@ func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, bucket,
 	return r.getByID(ctx, tenantID, id)
 }
 
-func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, bucketID, key string) (object.Object, error) {
-	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), bucketID, key)
+func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (object.Object, error) {
+	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), objectKey, key)
 	if err != nil {
 		return object.Object{}, err
 	}
@@ -115,7 +115,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 	}
 	rows, err := r.q.ListObjects(ctx,
 		pgUUID(args.TenantID),
-		args.Bucket,
+		args.ObjectKey,
 		sqlc.NullObjectState{}, // no state filter from handler yet
 		nil,                    // prefix
 		pgUUID(afterID),
@@ -155,7 +155,7 @@ const countScanCap = 10000
 // in-process, capped at countScanCap.
 func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsArgs) (int64, bool, error) {
 	if args.CompiledCEL == nil {
-		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Bucket, sqlc.NullObjectState{})
+		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.ObjectKey, sqlc.NullObjectState{})
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects: %w", err)
 		}
@@ -171,7 +171,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	for {
 		rows, err := r.q.ListObjects(ctx,
 			pgUUID(args.TenantID),
-			args.Bucket,
+			args.ObjectKey,
 			sqlc.NullObjectState{},
 			nil,
 			pgUUID(afterID),
@@ -204,22 +204,38 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	}
 }
 
-// BucketCompletionMode reads the storage backend tied to the bucket and
+// LookupBucket returns the physical S3 bucket bound to a tenant's
+// ObjectKey. Hits idx_object_keys_bucket_routing. After migration 005
+// bucket_name is NOT NULL so a successful lookup always returns a
+// non-empty string.
+func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error) {
+	const q = `SELECT bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`
+	var bucket string
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket); err != nil {
+		if isNoRows(err) {
+			return "", fmt.Errorf("objectKey %q not found", objectKey)
+		}
+		return "", fmt.Errorf("lookup bucket: %w", err)
+	}
+	return bucket, nil
+}
+
+// BucketCompletionMode reads the storage backend tied to the objectKey and
 // returns Implicit when events are enabled on that backend, otherwise
-// Explicit. Unknown bucket → Unspecified + error.
-func (r *ObjectRepo) BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, bucketID string) (object.CompletionMode, error) {
+// Explicit. Unknown objectKey → Unspecified + error.
+func (r *ObjectRepo) BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.CompletionMode, error) {
 	const q = `
 		SELECT sb.events_enabled
-		FROM buckets b
-		JOIN storage_backends sb ON sb.id = b.storage_backend
-		WHERE b.tenant_id = $1 AND b.bucket_id = $2
+		FROM object_keys b
+		JOIN storage_backends sb ON sb.id = b.backend_id
+		WHERE b.tenant_id = $1 AND b.object_key = $2
 	`
 	var eventsEnabled bool
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), bucketID).Scan(&eventsEnabled); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&eventsEnabled); err != nil {
 		if isNoRows(err) {
-			return object.CompletionModeUnspecified, fmt.Errorf("bucket %q not found", bucketID)
+			return object.CompletionModeUnspecified, fmt.Errorf("objectKey %q not found", objectKey)
 		}
-		return object.CompletionModeUnspecified, fmt.Errorf("bucket completion mode: %w", err)
+		return object.CompletionModeUnspecified, fmt.Errorf("objectKey completion mode: %w", err)
 	}
 	if eventsEnabled {
 		return object.CompletionModeImplicit, nil
@@ -243,7 +259,7 @@ func objectFromSQLC(o sqlc.Object) object.Object {
 	return object.Object{
 		ObjectID:         uuidFrom(o.ObjectID),
 		TenantID:         uuidFrom(o.TenantID),
-		Bucket:           o.BucketID,
+		ObjectKey:        o.ObjectKey,
 		Key:              o.Key,
 		State:            statemachine.State(string(o.State)),
 		ContentType:      o.ContentType,

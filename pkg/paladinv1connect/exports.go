@@ -25,15 +25,25 @@ type PresignServiceHandler = internal.PresignServiceHandler
 
 var NewPresignServiceHandler = internal.NewPresignServiceHandler
 
-// ─── CategoryService ─────────────────────────────────────────────────────────
+// ─── ObjectTagService ────────────────────────────────────────────────────────
 
-type CategoryServiceClient = internal.CategoryServiceClient
+type ObjectTagServiceClient = internal.ObjectTagServiceClient
 
-var NewCategoryServiceClient = internal.NewCategoryServiceClient
+var NewObjectTagServiceClient = internal.NewObjectTagServiceClient
 
-type CategoryServiceHandler = internal.CategoryServiceHandler
+type ObjectTagServiceHandler = internal.ObjectTagServiceHandler
 
-var NewCategoryServiceHandler = internal.NewCategoryServiceHandler
+var NewObjectTagServiceHandler = internal.NewObjectTagServiceHandler
+
+// ─── BucketService ───────────────────────────────────────────────────────────
+
+type BucketServiceClient = internal.BucketServiceClient
+
+var NewBucketServiceClient = internal.NewBucketServiceClient
+
+type BucketServiceHandler = internal.BucketServiceHandler
+
+var NewBucketServiceHandler = internal.NewBucketServiceHandler
 
 // ─── MultipartUploadService ──────────────────────────────────────────────────
 
@@ -45,15 +55,15 @@ type MultipartUploadServiceHandler = internal.MultipartUploadServiceHandler
 
 var NewMultipartUploadServiceHandler = internal.NewMultipartUploadServiceHandler
 
-// ─── BucketService ───────────────────────────────────────────────────────────
+// ─── ObjectKeyService ───────────────────────────────────────────────────────────
 
-type BucketServiceClient = internal.BucketServiceClient
+type ObjectKeyServiceClient = internal.ObjectKeyServiceClient
 
-var NewBucketServiceClient = internal.NewBucketServiceClient
+var NewObjectKeyServiceClient = internal.NewObjectKeyServiceClient
 
-type BucketServiceHandler = internal.BucketServiceHandler
+type ObjectKeyServiceHandler = internal.ObjectKeyServiceHandler
 
-var NewBucketServiceHandler = internal.NewBucketServiceHandler
+var NewObjectKeyServiceHandler = internal.NewObjectKeyServiceHandler
 
 // ─── TenantService ───────────────────────────────────────────────────────────
 

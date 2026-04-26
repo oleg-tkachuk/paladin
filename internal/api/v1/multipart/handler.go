@@ -20,9 +20,9 @@ import (
 )
 
 type Storage interface {
-	InitiateMultipart(ctx context.Context, bucket, key, contentType string) (storageUploadID string, err error)
-	CompleteMultipart(ctx context.Context, storageUploadID, bucket, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
-	AbortMultipart(ctx context.Context, storageUploadID, bucket, key string) error
+	InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (storageUploadID string, err error)
+	CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
+	AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
 }
 
 type PartETag struct {
@@ -33,7 +33,9 @@ type PartETag struct {
 type Session struct {
 	UploadID        string
 	ObjectID        uuid.UUID
-	Bucket          string
+	TenantID        uuid.UUID
+	Bucket          string // physical S3 bucket; resolved from ObjectKey row at lookup
+	ObjectKey       string
 	Key             string
 	StorageUploadID string
 	PartSizeBytes   int64
@@ -43,7 +45,7 @@ type Session struct {
 
 type InitiateArgs struct {
 	TenantID      uuid.UUID
-	BucketID      string
+	ObjectKey     string
 	Key           string
 	ContentType   string
 	TotalParts    int32
@@ -65,7 +67,10 @@ type Repository interface {
 	GetSession(ctx context.Context, uploadID string) (Session, error)
 	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
-	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (bucket, key string, err error)
+	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (objectKey, key string, err error)
+	// LookupBucket returns the physical S3 bucket bound to the ObjectKey.
+	// Used to route storage calls to the right bucket.
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
 }
 
 type Handler struct {
@@ -92,11 +97,16 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("size_bytes is required for multipart uploads"))
 	}
-	if err := h.authorize(ctx, p, tenantID, args.BucketID, args.Key, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, args.Key, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
 		return nil, err
 	}
 
-	storageUploadID, err := h.storage.InitiateMultipart(ctx, args.BucketID, args.Key, args.ContentType)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+
+	storageUploadID, err := h.storage.InitiateMultipart(ctx, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
@@ -106,7 +116,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
-		_ = h.storage.AbortMultipart(ctx, storageUploadID, args.BucketID, args.Key)
+		_ = h.storage.AbortMultipart(ctx, bucket, tenantID, storageUploadID, args.ObjectKey, args.Key)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &session, nil
@@ -123,7 +133,14 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	etag, size, err := h.storage.CompleteMultipart(ctx, sess.StorageUploadID, sess.Bucket, sess.Key, args.Parts)
+	bucket := sess.Bucket
+	if bucket == "" {
+		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
+		if err != nil {
+			return connect.NewError(connect.CodeNotFound, err)
+		}
+	}
+	etag, size, err := h.storage.CompleteMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, args.Parts)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
@@ -141,14 +158,22 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 }
 
 func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) error {
-	if _, _, err := callerContext(ctx); err != nil {
+	tenantID, _, err := callerContext(ctx)
+	if err != nil {
 		return err
 	}
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	if err := h.storage.AbortMultipart(ctx, sess.StorageUploadID, sess.Bucket, sess.Key); err != nil {
+	bucket := sess.Bucket
+	if bucket == "" {
+		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
+		if err != nil {
+			return connect.NewError(connect.CodeNotFound, err)
+		}
+	}
+	if err := h.storage.AbortMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	// Mark the underlying object FAILED so reconciler won't promote it.
@@ -161,11 +186,11 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	return nil
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, bucketID, key, action string, sizeBytes int64, contentType string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
 		action,
-		&cedar.Resource{TenantID: tenantID, BucketID: bucketID, Key: key, SizeBytes: sizeBytes, ContentType: contentType},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key, SizeBytes: sizeBytes, ContentType: contentType},
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
 	)
 	if err != nil {

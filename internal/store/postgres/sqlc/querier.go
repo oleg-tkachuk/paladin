@@ -12,47 +12,55 @@ import (
 
 type Querier interface {
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
-	CountObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState) (int64, error)
-	// Bucket queries.
-	CreateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, storageBackend string, cedarPolicy string, lifecycleRules []byte) error
-	// Category queries. Tenant-scoped; addressed by (tenant_id, slug).
-	CreateCategory(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
+	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
+	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
+	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
+	// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
+	// (backend_id, bucket_name) composite key.
+	CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error
 	// Multipart upload queries.
 	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
 	// Object queries.
-	CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, bucketID string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, objectKey string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	// ObjectKey queries.
+	CreateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, backendID string, bucketName string, cedarPolicy string, lifecycleRules []byte) error
+	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
+	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// Tenant queries.
 	CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error
-	DeleteBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, expectedVersion int64) (int64, error)
-	DeleteCategory(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
+	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	DeleteMultipartUpload(ctx context.Context, uploadID string) error
+	DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error)
+	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
-	GetBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string) (GetBucketRow, error)
-	GetCategory(ctx context.Context, tenantID pgtype.UUID, slug string) (GetCategoryRow, error)
-	// Returns tenant-inherited policy concatenated with the bucket-specific policy.
-	// Order is: tenant policies first, then bucket — Cedar treats them as a single
+	GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error)
+	// Returns tenant-inherited policy concatenated with the object_key-specific policy.
+	// Order is: tenant policies first, then object_key — Cedar treats them as a single
 	// policy set; ordering only affects diagnostic output.
-	GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, bucketID *string) (GetEffectivePolicyRow, error)
+	GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, objectKey *string) (GetEffectivePolicyRow, error)
 	// Idempotency-key queries. Scoped per (tenant, rpc method, key).
 	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (IdempotencyKey, error)
 	GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error)
 	GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error)
+	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (GetObjectKeyRow, error)
+	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
 	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetStorageBackend(ctx context.Context, id string) (StorageBackend, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
-	ListBuckets(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListBucketsRow, error)
-	ListCategories(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListCategoriesRow, error)
+	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
+	ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListObjectKeysRow, error)
+	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// CEL filter is applied by the caller post-load. Keyset page uses object_id
 	// (UUIDv7) which is monotonic-by-time.
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
-	// Used by resource-name resolution: buckets/{b}/objects-by-key/{key} → object_id.
-	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, bucketID string, key string) (LookupObjectByKeyRow, error)
+	// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error)
 	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.
@@ -63,15 +71,16 @@ type Querier interface {
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
 	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
 	// Undeletes a soft-deleted object iff no live row exists with the same
-	// (tenant, bucket, key). Caller is expected to verify uniqueness first;
+	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.
 	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
-	UpdateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
-	UpdateCategory(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
+	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
+	UpdateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
 	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
+	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
 	UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 }

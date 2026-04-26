@@ -27,22 +27,22 @@ const (
 
 // Action identifiers mirror the Cedar schema (policies/schema.cedarschema).
 const (
-	ActionPutObject     = "PutObject"
-	ActionPresignPut    = "PresignPut"
-	ActionGetObject     = "GetObject"
-	ActionPresignGet    = "PresignGet"
-	ActionHeadObject    = "HeadObject"
-	ActionDeleteObject  = "DeleteObject"
-	ActionRestoreObject = "RestoreObject"
-	ActionUpdateObject  = "UpdateObject"
-	ActionCopyObject    = "CopyObject"
-	ActionAdminBucket   = "AdminBucket"
+	ActionPutObject      = "PutObject"
+	ActionPresignPut     = "PresignPut"
+	ActionGetObject      = "GetObject"
+	ActionPresignGet     = "PresignGet"
+	ActionHeadObject     = "HeadObject"
+	ActionDeleteObject   = "DeleteObject"
+	ActionRestoreObject  = "RestoreObject"
+	ActionUpdateObject   = "UpdateObject"
+	ActionCopyObject     = "CopyObject"
+	ActionAdminObjectKey = "AdminBucket"
 )
 
 // Entity type names — must match the Cedar schema exactly.
 const (
 	entityTypeTenant = "Tenant"
-	entityTypeBucket = "Bucket"
+	entityTypeBucket = "ObjectKey"
 	entityTypeObject = "Object"
 	entityTypeUser   = "User"
 	entityTypeAction = "Action"
@@ -55,11 +55,11 @@ type Principal struct {
 	Roles    []string
 }
 
-// Resource is the object or bucket under authorization.
+// Resource is the object or objectKey under authorization.
 type Resource struct {
 	TenantID    uuid.UUID
-	BucketID    string
-	Key         string // empty for bucket-level actions
+	ObjectKey   string
+	Key         string // empty for objectKey-level actions
 	ObjectID    uuid.UUID
 	State       string
 	SizeBytes   int64
@@ -77,7 +77,7 @@ type RequestContext struct {
 
 // Engine is a thread-safe Cedar authorizer with a compiled-policy cache.
 //
-// The cache is keyed by (tenant, bucket). Empty bucket means "tenant-level
+// The cache is keyed by (tenant, objectKey). Empty objectKey means "tenant-level
 // inherited policy only". Cache entries are invalidated by Store.Watch
 // events.
 type Engine struct {
@@ -94,8 +94,8 @@ type Engine struct {
 }
 
 type cacheKey struct {
-	tenant uuid.UUID
-	bucket string
+	tenant    uuid.UUID
+	objectKey string
 }
 
 type compiledPolicy struct {
@@ -127,7 +127,7 @@ func (e *Engine) Start(ctx context.Context) error {
 				if !ok {
 					return
 				}
-				e.compiled.Delete(cacheKey{tenant: ev.TenantID, bucket: ev.BucketID})
+				e.compiled.Delete(cacheKey{tenant: ev.TenantID, objectKey: ev.ObjectKey})
 			}
 		}
 	}()
@@ -139,7 +139,7 @@ func (e *Engine) Start(ctx context.Context) error {
 // Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
 // Errors indicate engine faults (policy fetch/compile), not denials.
 func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
-	set, err := e.compiledFor(ctx, r.TenantID, r.BucketID)
+	set, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
 	if err != nil {
 		e.m.compileErrs.Add(1)
 		return DecisionDeny, err
@@ -162,8 +162,8 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 	return DecisionDeny, nil
 }
 
-func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, bucketID string) (*cedar.PolicySet, error) {
-	key := cacheKey{tenant: tenantID, bucket: bucketID}
+func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, error) {
+	key := cacheKey{tenant: tenantID, objectKey: objectKey}
 	if v, ok := e.compiled.Load(key); ok {
 		cp := v.(*compiledPolicy)
 		if time.Now().Before(cp.expiresAt) {
@@ -173,7 +173,7 @@ func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, bucketID s
 	}
 	e.m.cacheMisses.Add(1)
 
-	text, hash, err := e.store.Fetch(ctx, tenantID, bucketID)
+	text, hash, err := e.store.Fetch(ctx, tenantID, objectKey)
 	if err != nil {
 		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
 	}
@@ -214,18 +214,18 @@ func tenantUID(tenantID uuid.UUID) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(tenantID.String()))
 }
 
-func bucketUID(tenantID uuid.UUID, bucketID string) cedartypes.EntityUID {
-	// Namespace by tenant to keep bucket IDs unique across tenants.
-	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(tenantID.String()+"/"+bucketID))
+func bucketUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
+	// Namespace by tenant to keep objectKey IDs unique across tenants.
+	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(tenantID.String()+"/"+objectKey))
 }
 
 func resourceUID(r *Resource) cedartypes.EntityUID {
 	if r.Key == "" && r.ObjectID == uuid.Nil {
-		return bucketUID(r.TenantID, r.BucketID)
+		return bucketUID(r.TenantID, r.ObjectKey)
 	}
 	id := r.ObjectID.String()
 	if r.ObjectID == uuid.Nil {
-		id = r.BucketID + "/" + r.Key
+		id = r.ObjectKey + "/" + r.Key
 	}
 	return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
 }
@@ -239,7 +239,7 @@ func actionUID(name string) cedartypes.EntityUID {
 // long-lived entities in cedar-go.
 func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 	tUID := tenantUID(r.TenantID)
-	bUID := bucketUID(r.TenantID, r.BucketID)
+	bUID := bucketUID(r.TenantID, r.ObjectKey)
 	uUID := userUID(p)
 
 	tenantEntity := cedartypes.Entity{
@@ -254,7 +254,7 @@ func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 		UID:     bUID,
 		Parents: cedartypes.NewEntityUIDSet(tUID),
 		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-			"bucket_id":       cedartypes.String(r.BucketID),
+			"objectKey":       cedartypes.String(r.ObjectKey),
 			"storage_backend": cedartypes.String(""),
 		}),
 	}

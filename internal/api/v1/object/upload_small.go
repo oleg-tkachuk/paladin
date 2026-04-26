@@ -4,7 +4,7 @@
 //
 // The stream contract:
 //
-//   - Message #1 carries InitMetadata (bucket, key, content_type, size_hint,
+//   - Message #1 carries InitMetadata (objectKey, key, content_type, size_hint,
 //     tags, …).
 //   - Subsequent messages carry raw chunk bytes (recommended 256 KiB each).
 //   - The terminal message sets Final=true and may include a client-computed
@@ -39,7 +39,7 @@ import (
 // StreamSink is the storage-side sink for UploadSmall. Implementations may
 // pick PutObject (small) or multipart (large) based on total size.
 type StreamSink interface {
-	Open(ctx context.Context, bucket, key, contentType string, sizeHint int64) (StreamWriter, error)
+	Open(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string, sizeHint int64) (StreamWriter, error)
 }
 
 // StreamWriter is the per-upload handle returned by StreamSink.Open.
@@ -55,7 +55,7 @@ type StreamWriter interface {
 // StreamInit mirrors the proto `UploadSmall.InitMetadata` message. Decoded by
 // the Connect adapter before handing off here.
 type StreamInit struct {
-	Bucket       string
+	ObjectKey    string
 	Key          string
 	ContentType  string
 	SizeHint     int64
@@ -108,7 +108,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, Roles: principal.Roles},
 		cedar.ActionPutObject,
 		&cedar.Resource{
-			TenantID: tenantID, BucketID: init.Bucket, Key: init.Key,
+			TenantID: tenantID, ObjectKey: init.ObjectKey, Key: init.Key,
 			ContentType: init.ContentType, SizeBytes: init.SizeHint, Tags: init.Tags,
 		},
 		cedar.RequestContext{
@@ -131,7 +131,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	}
 	ttl := h.presign.DefaultTTL
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
-		TenantID: tenantID, Bucket: init.Bucket, Key: key,
+		TenantID: tenantID, ObjectKey: init.ObjectKey, Key: key,
 		ContentType: init.ContentType, SizeHint: init.SizeHint,
 		ChecksumAlgo: init.ChecksumAlgo, Metadata: init.Metadata,
 		Tags: init.Tags, ExternalRef: init.ExternalRef,
@@ -141,7 +141,11 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, mapCreateErr(err)
 	}
 
-	writer, err := deps.Sink.Open(ctx, init.Bucket, key, init.ContentType, init.SizeHint)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	writer, err := deps.Sink.Open(ctx, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open sink: %w", err))
 	}
@@ -181,7 +185,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	if _, err := h.sm.PromoteToAvailable(ctx, obj.ObjectID, etag, finalSize, checksum, "", statemachine.SourceRPC); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, init.Bucket, obj.ObjectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, init.ObjectKey, obj.ObjectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

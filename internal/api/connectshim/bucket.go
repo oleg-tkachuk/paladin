@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
 )
 
+// BucketServer bridges generated Connect to bucket.Handler.
 type BucketServer struct {
 	paladinv1connect.UnimplementedBucketServiceHandler
 	H *bucket.Handler
@@ -19,35 +21,15 @@ type BucketServer struct {
 
 func NewBucketServer(h *bucket.Handler) *BucketServer { return &BucketServer{H: h} }
 
-func bucketToProto(b *bucket.Bucket) *pb.Bucket {
-	if b == nil {
-		return nil
-	}
-	return &pb.Bucket{
-		Name:            fmt.Sprintf("buckets/%s", b.BucketID),
-		DisplayName:     b.DisplayName,
-		BucketId:        b.BucketID,
-		StorageBackend:  b.StorageBackend,
-		Policy:          &pb.BucketPolicy{CedarPolicy: b.CedarPolicy},
-		ResourceVersion: resourceVersion(b.ResourceVersion),
-		CreatedAt:       tsProto(b.CreatedAt),
-		UpdatedAt:       tsProto(b.UpdatedAt),
-	}
-}
-
 func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb.CreateBucketRequest]) (*connect.Response[pb.Bucket], error) {
 	m := req.Msg
-	pol := m.GetPolicy()
-	var rules []byte
-	if pol != nil && len(pol.GetLifecycleRules()) > 0 {
-		rules, _ = json.Marshal(pol.GetLifecycleRules())
-	}
-	b, err := s.H.CreateBucket(ctx, bucket.CreateBucketArgs{
-		BucketID:       m.GetBucketId(),
-		DisplayName:    m.GetDisplayName(),
-		StorageBackend: m.GetStorageBackend(),
-		CedarPolicy:    pol.GetCedarPolicy(),
-		LifecycleRules: rules,
+	labelBytes, _ := json.Marshal(m.GetLabels())
+	b, err := s.H.CreateBucket(ctx, bucket.CreateArgs{
+		BackendID:   m.GetBackendId(),
+		BucketName:  m.GetBucketName(),
+		DisplayName: m.GetDisplayName(),
+		Region:      m.GetRegion(),
+		Labels:      labelBytes,
 	})
 	if err != nil {
 		return nil, err
@@ -56,11 +38,11 @@ func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *BucketServer) GetBucket(ctx context.Context, req *connect.Request[pb.GetBucketRequest]) (*connect.Response[pb.Bucket], error) {
-	bid, err := parseBucketName(req.Msg.GetName())
+	backendID, bucketName, err := parseBucketName(req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	b, err := s.H.GetBucket(ctx, bid)
+	b, err := s.H.GetBucket(ctx, backendID, bucketName)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +51,7 @@ func (s *BucketServer) GetBucket(ctx context.Context, req *connect.Request[pb.Ge
 
 func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb.UpdateBucketRequest]) (*connect.Response[pb.Bucket], error) {
 	m := req.Msg
-	bid, err := parseBucketName(m.GetName())
+	backendID, bucketName, err := parseBucketName(m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -77,18 +59,15 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	args := bucket.UpdateBucketArgs{BucketID: bid, ExpectedVersion: rv}
+	args := bucket.UpdateArgs{BackendID: backendID, BucketName: bucketName, ExpectedVersion: rv}
 	for _, path := range m.GetUpdateMask().GetPaths() {
 		switch path {
 		case "display_name":
 			v := m.GetDisplayName()
 			args.DisplayName = &v
-		case "policy.cedar_policy":
-			v := m.GetPolicy().GetCedarPolicy()
-			args.CedarPolicy = &v
-		case "policy.lifecycle_rules":
-			b, _ := json.Marshal(m.GetPolicy().GetLifecycleRules())
-			args.LifecycleRules = b
+		case "labels":
+			lb, _ := json.Marshal(m.GetLabels())
+			args.Labels = lb
 		}
 	}
 	b, err := s.H.UpdateBucket(ctx, args)
@@ -99,7 +78,7 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb.DeleteBucketRequest]) (*connect.Response[pb.DeleteBucketResponse], error) {
-	bid, err := parseBucketName(req.Msg.GetName())
+	backendID, bucketName, err := parseBucketName(req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -107,17 +86,23 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := s.H.DeleteBucket(ctx, bid, rv); err != nil {
+	if err := s.H.DeleteBucket(ctx, backendID, bucketName, rv, req.Msg.GetDeleteRemote()); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteBucketResponse{}), nil
 }
 
 func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.ListBucketsRequest]) (*connect.Response[pb.ListBucketsResponse], error) {
-	bs, next, err := s.H.ListBuckets(ctx, bucket.ListBucketsArgs{
-		PageSize:  req.Msg.GetPageSize(),
-		PageToken: req.Msg.GetPageToken(),
-	})
+	m := req.Msg
+	args := bucket.ListArgs{
+		PageSize:  m.GetPageSize(),
+		PageToken: m.GetPageToken(),
+	}
+	if m.GetBackendId() != "" {
+		bid := m.GetBackendId()
+		args.BackendID = &bid
+	}
+	bs, next, err := s.H.ListBuckets(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -128,24 +113,46 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 	return connect.NewResponse(out), nil
 }
 
-func (s *BucketServer) GetBucketStats(ctx context.Context, req *connect.Request[pb.GetBucketStatsRequest]) (*connect.Response[pb.BucketStats], error) {
-	bid, err := parseBucketName(req.Msg.GetName())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+var _ paladinv1connect.BucketServiceHandler = (*BucketServer)(nil)
+
+// parseBucketName extracts (backendID, bucketName) from
+// "backends/{backend_id}/buckets/{bucket_name}".
+func parseBucketName(name string) (string, string, error) {
+	const backendsPrefix = "backends/"
+	const bucketsSep = "/buckets/"
+	if !strings.HasPrefix(name, backendsPrefix) {
+		return "", "", fmt.Errorf("invalid bucket name %q", name)
 	}
-	st, err := s.H.GetBucketStats(ctx, bid)
-	if err != nil {
-		return nil, err
+	rest := name[len(backendsPrefix):]
+	idx := strings.Index(rest, bucketsSep)
+	if idx <= 0 {
+		return "", "", fmt.Errorf("invalid bucket name %q", name)
 	}
-	return connect.NewResponse(&pb.BucketStats{
-		ApproximateObjectCount: st.ObjectCountAvailable + st.ObjectCountPending + st.ObjectCountDeleted,
-		ApproximateTotalBytes:  st.SizeBytesAvailable,
-		ObjectCountByState: map[string]int64{
-			"AVAILABLE": st.ObjectCountAvailable,
-			"PENDING":   st.ObjectCountPending,
-			"DELETED":   st.ObjectCountDeleted,
-		},
-	}), nil
+	backendID := rest[:idx]
+	bucketName := rest[idx+len(bucketsSep):]
+	if bucketName == "" {
+		return "", "", fmt.Errorf("invalid bucket name %q", name)
+	}
+	return backendID, bucketName, nil
 }
 
-var _ paladinv1connect.BucketServiceHandler = (*BucketServer)(nil)
+func bucketToProto(b *bucket.Bucket) *pb.Bucket {
+	if b == nil {
+		return nil
+	}
+	var labels map[string]string
+	if len(b.Labels) > 0 {
+		_ = json.Unmarshal(b.Labels, &labels)
+	}
+	return &pb.Bucket{
+		Name:            fmt.Sprintf("backends/%s/buckets/%s", b.BackendID, b.BucketName),
+		BackendId:       b.BackendID,
+		BucketName:      b.BucketName,
+		DisplayName:     b.DisplayName,
+		Region:          b.Region,
+		Labels:          labels,
+		ResourceVersion: resourceVersion(b.ResourceVersion),
+		CreatedAt:       tsProto(b.CreatedAt),
+		UpdatedAt:       tsProto(b.UpdatedAt),
+	}
+}

@@ -22,7 +22,7 @@ import (
 
 type BatchDeleteArgs struct {
 	TenantID  uuid.UUID
-	BucketID  string
+	ObjectKey string
 	ObjectIDs []uuid.UUID
 }
 
@@ -36,7 +36,7 @@ type BatchCopyArgs struct {
 
 type BatchUpdateTagsArgs struct {
 	TenantID  uuid.UUID
-	BucketID  string
+	ObjectKey string
 	ObjectIDs []uuid.UUID
 	Tags      map[string]string
 }
@@ -71,9 +71,9 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	// Bucket-level authorization. Per-object authorization happens inside
+	// ObjectKey-level authorization. Per-object authorization happens inside
 	// the worker on each row (slower but safer).
-	if err := h.authorize(ctx, p, tenantID, args.BucketID, cedar.ActionDeleteObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionDeleteObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
@@ -94,7 +94,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	// Require copy on source and put on destination — bucket-level check.
+	// Require copy on source and put on destination — objectKey-level check.
 	if err := h.authorize(ctx, p, tenantID, args.SrcBucket, cedar.ActionCopyObject); err != nil {
 		return uuid.Nil, err
 	}
@@ -115,18 +115,18 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("object_ids must be non-empty"))
 	}
-	if err := h.authorize(ctx, p, tenantID, args.BucketID, cedar.ActionUpdateObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionUpdateObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
 	return h.submitter.Submit(ctx, "BatchUpdateTags", md)
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, bucketID, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
 		action,
-		&cedar.Resource{TenantID: tenantID, BucketID: bucketID},
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {

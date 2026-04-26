@@ -22,7 +22,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	m := req.Msg
 	totalParts, partSize := planParts(m.GetSizeBytes())
 	session, err := s.H.InitiateMultipartUpload(ctx, multipart.InitiateArgs{
-		BucketID:      m.GetBucket(),
+		ObjectKey:     m.GetObjectKey(),
 		Key:           m.GetKey(),
 		ContentType:   m.GetContentType(),
 		SizeHint:      m.GetSizeBytes(),
@@ -37,11 +37,11 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	}
 	return connect.NewResponse(&pb.InitiateMultipartUploadResponse{
 		Object: &pb.Object{
-			Name:     fmt.Sprintf("buckets/%s/objects/%s", session.Bucket, session.ObjectID),
-			ObjectId: session.ObjectID.String(),
-			Bucket:   session.Bucket,
-			Key:      session.Key,
-			State:    pb.ObjectState_OBJECT_STATE_PENDING,
+			Name:      fmt.Sprintf("object_keys/%s/objects/%s", session.ObjectKey, session.ObjectID),
+			ObjectId:  session.ObjectID.String(),
+			ObjectKey: session.ObjectKey,
+			Key:       session.Key,
+			State:     pb.ObjectState_OBJECT_STATE_PENDING,
 		},
 		UploadId:            session.UploadID,
 		RecommendedPartSize: session.PartSizeBytes,

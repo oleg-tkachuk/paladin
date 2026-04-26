@@ -1,6 +1,6 @@
 // Package adapters wires the v2 handler-facing Repository interfaces onto the
 // sqlc-generated Queries layer. Each file here maps one handler package:
-// tenant, bucket, object, presign, multipart, operation. The adapters live in
+// tenant, objectKey, object, presign, multipart, operation. The adapters live in
 // their own package so the handler packages stay free of pgx/sqlc imports.
 package adapters
 

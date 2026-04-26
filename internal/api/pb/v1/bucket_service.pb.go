@@ -15,6 +15,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -24,22 +25,135 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Bucket struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resource name: "backends/{backend_id}/buckets/{bucket_name}".
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// ID of the configured storage backend (storage.backends.<id>).
+	BackendId string `protobuf:"bytes,2,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	// Physical S3 bucket name (validates against S3 naming rules).
+	BucketName      string                 `protobuf:"bytes,3,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	DisplayName     string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Region          string                 `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
+	Labels          map[string]string      `protobuf:"bytes,6,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ResourceVersion string                 `protobuf:"bytes,7,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Bucket) Reset() {
+	*x = Bucket{}
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Bucket) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Bucket) ProtoMessage() {}
+
+func (x *Bucket) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Bucket.ProtoReflect.Descriptor instead.
+func (*Bucket) Descriptor() ([]byte, []int) {
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Bucket) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Bucket) GetBackendId() string {
+	if x != nil {
+		return x.BackendId
+	}
+	return ""
+}
+
+func (x *Bucket) GetBucketName() string {
+	if x != nil {
+		return x.BucketName
+	}
+	return ""
+}
+
+func (x *Bucket) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *Bucket) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *Bucket) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *Bucket) GetResourceVersion() string {
+	if x != nil {
+		return x.ResourceVersion
+	}
+	return ""
+}
+
+func (x *Bucket) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Bucket) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 type CreateBucketRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-unique logical name.
-	BucketId    string `protobuf:"bytes,1,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
-	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	// Storage backend (references server config). If empty, server picks the
-	// tenant's default backend.
-	StorageBackend string        `protobuf:"bytes,3,opt,name=storage_backend,json=storageBackend,proto3" json:"storage_backend,omitempty"`
-	Policy         *BucketPolicy `protobuf:"bytes,4,opt,name=policy,proto3" json:"policy,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Storage backend to provision the bucket inside. Must reference a
+	// configured entry under `storage.backends`. Empty → server picks the
+	// default backend.
+	BackendId   string `protobuf:"bytes,1,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	BucketName  string `protobuf:"bytes,2,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	DisplayName string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Optional region override; falls back to the backend's configured region.
+	Region        string            `protobuf:"bytes,4,opt,name=region,proto3" json:"region,omitempty"`
+	Labels        map[string]string `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateBucketRequest) Reset() {
 	*x = CreateBucketRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[0]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -51,7 +165,7 @@ func (x *CreateBucketRequest) String() string {
 func (*CreateBucketRequest) ProtoMessage() {}
 
 func (x *CreateBucketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[0]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -64,12 +178,19 @@ func (x *CreateBucketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBucketRequest.ProtoReflect.Descriptor instead.
 func (*CreateBucketRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{0}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CreateBucketRequest) GetBucketId() string {
+func (x *CreateBucketRequest) GetBackendId() string {
 	if x != nil {
-		return x.BucketId
+		return x.BackendId
+	}
+	return ""
+}
+
+func (x *CreateBucketRequest) GetBucketName() string {
+	if x != nil {
+		return x.BucketName
 	}
 	return ""
 }
@@ -81,31 +202,30 @@ func (x *CreateBucketRequest) GetDisplayName() string {
 	return ""
 }
 
-func (x *CreateBucketRequest) GetStorageBackend() string {
+func (x *CreateBucketRequest) GetRegion() string {
 	if x != nil {
-		return x.StorageBackend
+		return x.Region
 	}
 	return ""
 }
 
-func (x *CreateBucketRequest) GetPolicy() *BucketPolicy {
+func (x *CreateBucketRequest) GetLabels() map[string]string {
 	if x != nil {
-		return x.Policy
+		return x.Labels
 	}
 	return nil
 }
 
 type GetBucketRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "buckets/{bucket}".
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetBucketRequest) Reset() {
 	*x = GetBucketRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[1]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -117,7 +237,7 @@ func (x *GetBucketRequest) String() string {
 func (*GetBucketRequest) ProtoMessage() {}
 
 func (x *GetBucketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[1]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -130,7 +250,7 @@ func (x *GetBucketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBucketRequest.ProtoReflect.Descriptor instead.
 func (*GetBucketRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{1}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetBucketRequest) GetName() string {
@@ -146,14 +266,14 @@ type UpdateBucketRequest struct {
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	DisplayName     string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	Policy          *BucketPolicy          `protobuf:"bytes,5,opt,name=policy,proto3" json:"policy,omitempty"`
+	Labels          map[string]string      `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateBucketRequest) Reset() {
 	*x = UpdateBucketRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[2]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +285,7 @@ func (x *UpdateBucketRequest) String() string {
 func (*UpdateBucketRequest) ProtoMessage() {}
 
 func (x *UpdateBucketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[2]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +298,7 @@ func (x *UpdateBucketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBucketRequest.ProtoReflect.Descriptor instead.
 func (*UpdateBucketRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{2}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *UpdateBucketRequest) GetName() string {
@@ -209,9 +329,9 @@ func (x *UpdateBucketRequest) GetDisplayName() string {
 	return ""
 }
 
-func (x *UpdateBucketRequest) GetPolicy() *BucketPolicy {
+func (x *UpdateBucketRequest) GetLabels() map[string]string {
 	if x != nil {
-		return x.Policy
+		return x.Labels
 	}
 	return nil
 }
@@ -220,16 +340,16 @@ type DeleteBucketRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	// If true, deletes even when the bucket contains objects (starts an
-	// asynchronous purge Operation). Default is to reject non-empty buckets.
-	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	// If true, also issues an S3 DeleteBucket. Refuses when any ObjectKey
+	// still references this bucket.
+	DeleteRemote  bool `protobuf:"varint,3,opt,name=delete_remote,json=deleteRemote,proto3" json:"delete_remote,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteBucketRequest) Reset() {
 	*x = DeleteBucketRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[3]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -241,7 +361,7 @@ func (x *DeleteBucketRequest) String() string {
 func (*DeleteBucketRequest) ProtoMessage() {}
 
 func (x *DeleteBucketRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[3]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -254,7 +374,7 @@ func (x *DeleteBucketRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBucketRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBucketRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{3}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeleteBucketRequest) GetName() string {
@@ -271,24 +391,22 @@ func (x *DeleteBucketRequest) GetResourceVersion() string {
 	return ""
 }
 
-func (x *DeleteBucketRequest) GetForce() bool {
+func (x *DeleteBucketRequest) GetDeleteRemote() bool {
 	if x != nil {
-		return x.Force
+		return x.DeleteRemote
 	}
 	return false
 }
 
 type DeleteBucketResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Present if force=true and deletion is asynchronous.
-	OperationName string `protobuf:"bytes,1,opt,name=operation_name,json=operationName,proto3" json:"operation_name,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteBucketResponse) Reset() {
 	*x = DeleteBucketResponse{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[4]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -300,7 +418,7 @@ func (x *DeleteBucketResponse) String() string {
 func (*DeleteBucketResponse) ProtoMessage() {}
 
 func (x *DeleteBucketResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[4]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -313,22 +431,15 @@ func (x *DeleteBucketResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBucketResponse.ProtoReflect.Descriptor instead.
 func (*DeleteBucketResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *DeleteBucketResponse) GetOperationName() string {
-	if x != nil {
-		return x.OperationName
-	}
-	return ""
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{5}
 }
 
 type ListBucketsRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	// CEL filter over Bucket fields.
-	Filter        string    `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional: scope listing to a single backend.
+	BackendId     string    `protobuf:"bytes,1,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	PageSize      int32     `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string    `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	OrderBy       string    `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
 	SortOrder     SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -337,7 +448,7 @@ type ListBucketsRequest struct {
 
 func (x *ListBucketsRequest) Reset() {
 	*x = ListBucketsRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[5]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +460,7 @@ func (x *ListBucketsRequest) String() string {
 func (*ListBucketsRequest) ProtoMessage() {}
 
 func (x *ListBucketsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[5]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +473,14 @@ func (x *ListBucketsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBucketsRequest.ProtoReflect.Descriptor instead.
 func (*ListBucketsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{5}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListBucketsRequest) GetBackendId() string {
+	if x != nil {
+		return x.BackendId
+	}
+	return ""
 }
 
 func (x *ListBucketsRequest) GetPageSize() int32 {
@@ -375,13 +493,6 @@ func (x *ListBucketsRequest) GetPageSize() int32 {
 func (x *ListBucketsRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
-	}
-	return ""
-}
-
-func (x *ListBucketsRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
 	}
 	return ""
 }
@@ -410,7 +521,7 @@ type ListBucketsResponse struct {
 
 func (x *ListBucketsResponse) Reset() {
 	*x = ListBucketsResponse{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[6]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +533,7 @@ func (x *ListBucketsResponse) String() string {
 func (*ListBucketsResponse) ProtoMessage() {}
 
 func (x *ListBucketsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[6]
+	mi := &file_paladin_v1_bucket_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +546,7 @@ func (x *ListBucketsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBucketsResponse.ProtoReflect.Descriptor instead.
 func (*ListBucketsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{6}
+	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListBucketsResponse) GetBuckets() []*Bucket {
@@ -452,164 +563,75 @@ func (x *ListBucketsResponse) GetNextPageToken() string {
 	return ""
 }
 
-type GetBucketStatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetBucketStatsRequest) Reset() {
-	*x = GetBucketStatsRequest{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetBucketStatsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetBucketStatsRequest) ProtoMessage() {}
-
-func (x *GetBucketStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetBucketStatsRequest.ProtoReflect.Descriptor instead.
-func (*GetBucketStatsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *GetBucketStatsRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-type BucketStats struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	ApproximateObjectCount int64                  `protobuf:"varint,1,opt,name=approximate_object_count,json=approximateObjectCount,proto3" json:"approximate_object_count,omitempty"`
-	ApproximateTotalBytes  int64                  `protobuf:"varint,2,opt,name=approximate_total_bytes,json=approximateTotalBytes,proto3" json:"approximate_total_bytes,omitempty"`
-	// Breakdown by state.
-	ObjectCountByState map[string]int64 `protobuf:"bytes,3,rep,name=object_count_by_state,json=objectCountByState,proto3" json:"object_count_by_state,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *BucketStats) Reset() {
-	*x = BucketStats{}
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BucketStats) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BucketStats) ProtoMessage() {}
-
-func (x *BucketStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_v1_bucket_service_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BucketStats.ProtoReflect.Descriptor instead.
-func (*BucketStats) Descriptor() ([]byte, []int) {
-	return file_paladin_v1_bucket_service_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *BucketStats) GetApproximateObjectCount() int64 {
-	if x != nil {
-		return x.ApproximateObjectCount
-	}
-	return 0
-}
-
-func (x *BucketStats) GetApproximateTotalBytes() int64 {
-	if x != nil {
-		return x.ApproximateTotalBytes
-	}
-	return 0
-}
-
-func (x *BucketStats) GetObjectCountByState() map[string]int64 {
-	if x != nil {
-		return x.ObjectCountByState
-	}
-	return nil
-}
-
 var File_paladin_v1_bucket_service_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_bucket_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1bocp/v1/bucket_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x12ocp/v1/types.proto\"\xdd\x01\n" +
-	"\x13CreateBucketRequest\x12L\n" +
-	"\tbucket_id\x18\x01 \x01(\tB/\xbaH,r*\x10\x03\x18?2$^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$R\bbucketId\x12!\n" +
-	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12'\n" +
-	"\x0fstorage_backend\x18\x03 \x01(\tR\x0estorageBackend\x12,\n" +
-	"\x06policy\x18\x04 \x01(\v2\x14.paladin.v1.BucketPolicyR\x06policy\"/\n" +
+	"\x1bocp/v1/bucket_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12ocp/v1/types.proto\"\xa7\x03\n" +
+	"\x06Bucket\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x02 \x01(\tR\tbackendId\x12\x1f\n" +
+	"\vbucket_name\x18\x03 \x01(\tR\n" +
+	"bucketName\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
+	"\x06region\x18\x05 \x01(\tR\x06region\x122\n" +
+	"\x06labels\x18\x06 \x03(\v2\x1a.paladin.v1.Bucket.LabelsEntryR\x06labels\x12)\n" +
+	"\x10resource_version\x18\a \x01(\tR\x0fresourceVersion\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x02\n" +
+	"\x13CreateBucketRequest\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x01 \x01(\tR\tbackendId\x12Q\n" +
+	"\vbucket_name\x18\x02 \x01(\tB0\xbaH-r+\x10\x03\x18?2%^[a-z0-9]([a-z0-9.-]{1,61}[a-z0-9])?$R\n" +
+	"bucketName\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x16\n" +
+	"\x06region\x18\x04 \x01(\tR\x06region\x12?\n" +
+	"\x06labels\x18\x05 \x03(\v2'.paladin.v1.CreateBucketRequest.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"/\n" +
 	"\x10GetBucketRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xfc\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xca\x02\n" +
 	"\x13UpdateBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
 	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12C\n" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"updateMask\x12!\n" +
-	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12,\n" +
-	"\x06policy\x18\x05 \x01(\v2\x14.paladin.v1.BucketPolicyR\x06policy\"s\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12?\n" +
+	"\x06labels\x18\x05 \x03(\v2'.paladin.v1.UpdateBucketRequest.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
 	"\x13DeleteBucketRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x14\n" +
-	"\x05force\x18\x03 \x01(\bR\x05force\"=\n" +
-	"\x14DeleteBucketResponse\x12%\n" +
-	"\x0eoperation_name\x18\x01 \x01(\tR\roperationName\"\xc1\x01\n" +
-	"\x12ListBucketsRequest\x12'\n" +
-	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12#\n" +
+	"\rdelete_remote\x18\x03 \x01(\bR\fdeleteRemote\"\x16\n" +
+	"\x14DeleteBucketResponse\"\xc8\x01\n" +
+	"\x12ListBucketsRequest\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x01 \x01(\tR\tbackendId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\x12\x19\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12\x19\n" +
 	"\border_by\x18\x04 \x01(\tR\aorderBy\x120\n" +
 	"\n" +
 	"sort_order\x18\x05 \x01(\x0e2\x11.paladin.v1.SortOrderR\tsortOrder\"g\n" +
 	"\x13ListBucketsResponse\x12(\n" +
 	"\abuckets\x18\x01 \x03(\v2\x0e.paladin.v1.BucketR\abuckets\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"4\n" +
-	"\x15GetBucketStatsRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xa6\x02\n" +
-	"\vBucketStats\x128\n" +
-	"\x18approximate_object_count\x18\x01 \x01(\x03R\x16approximateObjectCount\x126\n" +
-	"\x17approximate_total_bytes\x18\x02 \x01(\x03R\x15approximateTotalBytes\x12^\n" +
-	"\x15object_count_by_state\x18\x03 \x03(\v2+.paladin.v1.BucketStats.ObjectCountByStateEntryR\x12objectCountByState\x1aE\n" +
-	"\x17ObjectCountByStateEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x012\x99\x03\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xd3\x02\n" +
 	"\rBucketService\x12;\n" +
 	"\fCreateBucket\x12\x1b.paladin.v1.CreateBucketRequest\x1a\x0e.paladin.v1.Bucket\x125\n" +
 	"\tGetBucket\x12\x18.paladin.v1.GetBucketRequest\x1a\x0e.paladin.v1.Bucket\x12;\n" +
 	"\fUpdateBucket\x12\x1b.paladin.v1.UpdateBucketRequest\x1a\x0e.paladin.v1.Bucket\x12I\n" +
 	"\fDeleteBucket\x12\x1b.paladin.v1.DeleteBucketRequest\x1a\x1c.paladin.v1.DeleteBucketResponse\x12F\n" +
-	"\vListBuckets\x12\x1a.paladin.v1.ListBucketsRequest\x1a\x1b.paladin.v1.ListBucketsResponse\x12D\n" +
-	"\x0eGetBucketStats\x12\x1d.paladin.v1.GetBucketStatsRequest\x1a\x13.paladin.v1.BucketStatsBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1b\x06proto3"
+	"\vListBuckets\x12\x1a.paladin.v1.ListBucketsRequest\x1a\x1b.paladin.v1.ListBucketsResponseBGZEgithub.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1b\x06proto3"
 
 var (
 	file_paladin_v1_bucket_service_proto_rawDescOnce sync.Once
@@ -623,47 +645,47 @@ func file_paladin_v1_bucket_service_proto_rawDescGZIP() []byte {
 	return file_paladin_v1_bucket_service_proto_rawDescData
 }
 
-var file_paladin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_paladin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_paladin_v1_bucket_service_proto_goTypes = []any{
-	(*CreateBucketRequest)(nil),   // 0: paladin.v1.CreateBucketRequest
-	(*GetBucketRequest)(nil),      // 1: paladin.v1.GetBucketRequest
-	(*UpdateBucketRequest)(nil),   // 2: paladin.v1.UpdateBucketRequest
-	(*DeleteBucketRequest)(nil),   // 3: paladin.v1.DeleteBucketRequest
-	(*DeleteBucketResponse)(nil),  // 4: paladin.v1.DeleteBucketResponse
-	(*ListBucketsRequest)(nil),    // 5: paladin.v1.ListBucketsRequest
-	(*ListBucketsResponse)(nil),   // 6: paladin.v1.ListBucketsResponse
-	(*GetBucketStatsRequest)(nil), // 7: paladin.v1.GetBucketStatsRequest
-	(*BucketStats)(nil),           // 8: paladin.v1.BucketStats
-	nil,                           // 9: paladin.v1.BucketStats.ObjectCountByStateEntry
-	(*BucketPolicy)(nil),          // 10: paladin.v1.BucketPolicy
-	(*fieldmaskpb.FieldMask)(nil), // 11: google.protobuf.FieldMask
-	(SortOrder)(0),                // 12: paladin.v1.SortOrder
-	(*Bucket)(nil),                // 13: paladin.v1.Bucket
+	(*Bucket)(nil),                // 0: paladin.v1.Bucket
+	(*CreateBucketRequest)(nil),   // 1: paladin.v1.CreateBucketRequest
+	(*GetBucketRequest)(nil),      // 2: paladin.v1.GetBucketRequest
+	(*UpdateBucketRequest)(nil),   // 3: paladin.v1.UpdateBucketRequest
+	(*DeleteBucketRequest)(nil),   // 4: paladin.v1.DeleteBucketRequest
+	(*DeleteBucketResponse)(nil),  // 5: paladin.v1.DeleteBucketResponse
+	(*ListBucketsRequest)(nil),    // 6: paladin.v1.ListBucketsRequest
+	(*ListBucketsResponse)(nil),   // 7: paladin.v1.ListBucketsResponse
+	nil,                           // 8: paladin.v1.Bucket.LabelsEntry
+	nil,                           // 9: paladin.v1.CreateBucketRequest.LabelsEntry
+	nil,                           // 10: paladin.v1.UpdateBucketRequest.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil), // 12: google.protobuf.FieldMask
+	(SortOrder)(0),                // 13: paladin.v1.SortOrder
 }
 var file_paladin_v1_bucket_service_proto_depIdxs = []int32{
-	10, // 0: paladin.v1.CreateBucketRequest.policy:type_name -> paladin.v1.BucketPolicy
-	11, // 1: paladin.v1.UpdateBucketRequest.update_mask:type_name -> google.protobuf.FieldMask
-	10, // 2: paladin.v1.UpdateBucketRequest.policy:type_name -> paladin.v1.BucketPolicy
-	12, // 3: paladin.v1.ListBucketsRequest.sort_order:type_name -> paladin.v1.SortOrder
-	13, // 4: paladin.v1.ListBucketsResponse.buckets:type_name -> paladin.v1.Bucket
-	9,  // 5: paladin.v1.BucketStats.object_count_by_state:type_name -> paladin.v1.BucketStats.ObjectCountByStateEntry
-	0,  // 6: paladin.v1.BucketService.CreateBucket:input_type -> paladin.v1.CreateBucketRequest
-	1,  // 7: paladin.v1.BucketService.GetBucket:input_type -> paladin.v1.GetBucketRequest
-	2,  // 8: paladin.v1.BucketService.UpdateBucket:input_type -> paladin.v1.UpdateBucketRequest
-	3,  // 9: paladin.v1.BucketService.DeleteBucket:input_type -> paladin.v1.DeleteBucketRequest
-	5,  // 10: paladin.v1.BucketService.ListBuckets:input_type -> paladin.v1.ListBucketsRequest
-	7,  // 11: paladin.v1.BucketService.GetBucketStats:input_type -> paladin.v1.GetBucketStatsRequest
-	13, // 12: paladin.v1.BucketService.CreateBucket:output_type -> paladin.v1.Bucket
-	13, // 13: paladin.v1.BucketService.GetBucket:output_type -> paladin.v1.Bucket
-	13, // 14: paladin.v1.BucketService.UpdateBucket:output_type -> paladin.v1.Bucket
-	4,  // 15: paladin.v1.BucketService.DeleteBucket:output_type -> paladin.v1.DeleteBucketResponse
-	6,  // 16: paladin.v1.BucketService.ListBuckets:output_type -> paladin.v1.ListBucketsResponse
-	8,  // 17: paladin.v1.BucketService.GetBucketStats:output_type -> paladin.v1.BucketStats
-	12, // [12:18] is the sub-list for method output_type
-	6,  // [6:12] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	8,  // 0: paladin.v1.Bucket.labels:type_name -> paladin.v1.Bucket.LabelsEntry
+	11, // 1: paladin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	11, // 2: paladin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: paladin.v1.CreateBucketRequest.labels:type_name -> paladin.v1.CreateBucketRequest.LabelsEntry
+	12, // 4: paladin.v1.UpdateBucketRequest.update_mask:type_name -> google.protobuf.FieldMask
+	10, // 5: paladin.v1.UpdateBucketRequest.labels:type_name -> paladin.v1.UpdateBucketRequest.LabelsEntry
+	13, // 6: paladin.v1.ListBucketsRequest.sort_order:type_name -> paladin.v1.SortOrder
+	0,  // 7: paladin.v1.ListBucketsResponse.buckets:type_name -> paladin.v1.Bucket
+	1,  // 8: paladin.v1.BucketService.CreateBucket:input_type -> paladin.v1.CreateBucketRequest
+	2,  // 9: paladin.v1.BucketService.GetBucket:input_type -> paladin.v1.GetBucketRequest
+	3,  // 10: paladin.v1.BucketService.UpdateBucket:input_type -> paladin.v1.UpdateBucketRequest
+	4,  // 11: paladin.v1.BucketService.DeleteBucket:input_type -> paladin.v1.DeleteBucketRequest
+	6,  // 12: paladin.v1.BucketService.ListBuckets:input_type -> paladin.v1.ListBucketsRequest
+	0,  // 13: paladin.v1.BucketService.CreateBucket:output_type -> paladin.v1.Bucket
+	0,  // 14: paladin.v1.BucketService.GetBucket:output_type -> paladin.v1.Bucket
+	0,  // 15: paladin.v1.BucketService.UpdateBucket:output_type -> paladin.v1.Bucket
+	5,  // 16: paladin.v1.BucketService.DeleteBucket:output_type -> paladin.v1.DeleteBucketResponse
+	7,  // 17: paladin.v1.BucketService.ListBuckets:output_type -> paladin.v1.ListBucketsResponse
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_paladin_v1_bucket_service_proto_init() }
@@ -678,7 +700,7 @@ func file_paladin_v1_bucket_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_v1_bucket_service_proto_rawDesc), len(file_paladin_v1_bucket_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

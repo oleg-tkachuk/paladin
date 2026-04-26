@@ -1,6 +1,6 @@
 // Package policy exposes policy-text helpers (validation) to the API layer.
-// Persistence still lives on TenantService / BucketService via their
-// inherited_cedar_policy and BucketPolicy.cedar_policy fields.
+// Persistence still lives on TenantService / ObjectKeyService via their
+// inherited_cedar_policy and ObjectKeyPolicy.cedar_policy fields.
 package policy
 
 import (

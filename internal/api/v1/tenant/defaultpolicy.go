@@ -42,7 +42,7 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("bucket:admin") ||
+    principal.roles.contains("objectKey:admin") ||
     principal.roles.contains("platform-admin")
 };
 

@@ -2,7 +2,7 @@
 
 -- name: CreateObject :exec
 INSERT INTO objects (
-    object_id, tenant_id, bucket_id, key, state,
+    object_id, tenant_id, object_key, key, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -17,10 +17,10 @@ FROM objects
 WHERE tenant_id = $1 AND object_id = $2;
 
 -- name: LookupObjectByKey :one
--- Used by resource-name resolution: buckets/{b}/objects-by-key/{key} → object_id.
+-- Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
 SELECT sqlc.embed(objects)
 FROM objects
-WHERE tenant_id = $1 AND bucket_id = $2 AND key = $3 AND state <> 'DELETED';
+WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED';
 
 -- name: PromoteObject :execrows
 -- Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
@@ -57,7 +57,7 @@ WHERE tenant_id = $1 AND object_id = $2
 
 -- name: RestoreObject :execrows
 -- Undeletes a soft-deleted object iff no live row exists with the same
--- (tenant, bucket, key). Caller is expected to verify uniqueness first;
+-- (tenant, object_key, key). Caller is expected to verify uniqueness first;
 -- a UNIQUE partial index still catches the race at commit time.
 UPDATE objects
 SET state         = 'AVAILABLE',
@@ -71,7 +71,7 @@ WHERE tenant_id = $1 AND object_id = $2
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1
-  AND bucket_id = $2
+  AND object_key = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
   AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
   AND (sqlc.narg('after_id')::uuid IS NULL OR object_id > sqlc.narg('after_id')::uuid)
@@ -81,7 +81,7 @@ LIMIT sqlc.arg('page_size');
 -- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND bucket_id = $2
+WHERE tenant_id = $1 AND object_key = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state);
 
 -- name: ScanPendingExpired :many

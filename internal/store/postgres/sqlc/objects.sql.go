@@ -14,12 +14,12 @@ import (
 const countObjects = `-- name: CountObjects :one
 SELECT COUNT(*) AS n
 FROM objects
-WHERE tenant_id = $1 AND bucket_id = $2
+WHERE tenant_id = $1 AND object_key = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
 `
 
-func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState) (int64, error) {
-	row := q.db.QueryRow(ctx, countObjects, tenantID, bucketID, state)
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects, tenantID, objectKey, state)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
@@ -28,7 +28,7 @@ func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, bucket
 const createObject = `-- name: CreateObject :exec
 
 INSERT INTO objects (
-    object_id, tenant_id, bucket_id, key, state,
+    object_id, tenant_id, object_key, key, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at
 ) VALUES (
@@ -39,11 +39,11 @@ INSERT INTO objects (
 `
 
 // Object queries.
-func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, bucketID string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, objectKey string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, createObject,
 		objectID,
 		tenantID,
-		bucketID,
+		objectKey,
 		key,
 		state,
 		contentType,
@@ -59,7 +59,7 @@ func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenant
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2
 `
@@ -74,7 +74,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 	err := row.Scan(
 		&i.Object.ObjectID,
 		&i.Object.TenantID,
-		&i.Object.BucketID,
+		&i.Object.ObjectKey,
 		&i.Object.Key,
 		&i.Object.State,
 		&i.Object.ContentType,
@@ -97,10 +97,10 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE tenant_id = $1
-  AND bucket_id = $2
+  AND object_key = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
   AND ($4::text IS NULL OR key LIKE $4::text || '%')
   AND ($5::uuid IS NULL OR object_id > $5::uuid)
@@ -114,10 +114,10 @@ type ListObjectsRow struct {
 
 // CEL filter is applied by the caller post-load. Keyset page uses object_id
 // (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, bucketID string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
-		bucketID,
+		objectKey,
 		state,
 		prefix,
 		afterID,
@@ -133,7 +133,7 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, bucketI
 		if err := rows.Scan(
 			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.BucketID,
+			&i.Object.ObjectKey,
 			&i.Object.Key,
 			&i.Object.State,
 			&i.Object.ContentType,
@@ -163,23 +163,23 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, bucketI
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
-WHERE tenant_id = $1 AND bucket_id = $2 AND key = $3 AND state <> 'DELETED'
+WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED'
 `
 
 type LookupObjectByKeyRow struct {
 	Object Object `json:"object"`
 }
 
-// Used by resource-name resolution: buckets/{b}/objects-by-key/{key} → object_id.
-func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, bucketID string, key string) (LookupObjectByKeyRow, error) {
-	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, bucketID, key)
+// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
+func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, objectKey, key)
 	var i LookupObjectByKeyRow
 	err := row.Scan(
 		&i.Object.ObjectID,
 		&i.Object.TenantID,
-		&i.Object.BucketID,
+		&i.Object.ObjectKey,
 		&i.Object.Key,
 		&i.Object.State,
 		&i.Object.ContentType,
@@ -259,7 +259,7 @@ WHERE tenant_id = $1 AND object_id = $2
 `
 
 // Undeletes a soft-deleted object iff no live row exists with the same
-// (tenant, bucket, key). Caller is expected to verify uniqueness first;
+// (tenant, object_key, key). Caller is expected to verify uniqueness first;
 // a UNIQUE partial index still catches the race at commit time.
 func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, restoreObject, tenantID, objectID)
@@ -270,7 +270,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objec
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.object_id, objects.tenant_id, objects.bucket_id, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
 FROM objects
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
@@ -295,7 +295,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 		if err := rows.Scan(
 			&i.Object.ObjectID,
 			&i.Object.TenantID,
-			&i.Object.BucketID,
+			&i.Object.ObjectKey,
 			&i.Object.Key,
 			&i.Object.State,
 			&i.Object.ContentType,

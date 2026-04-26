@@ -46,7 +46,7 @@ All RPCs are served via Connect RPC on a single HTTP/2 port (`:8080`). The trans
 | `MultipartHandler` | `internal/api/connect/multipart_handler.go` | Multipart upload (initiate, sign parts, complete, abort, list parts) |
 | `PresignHandler` | `internal/api/connect/presign_handler.go` | Presigned URL generation (upload, download) |
 | `BulkHandler` | `internal/api/connect/bulk_handler.go` | Batch operations (batch delete, batch copy) |
-| `BucketHandler` | `internal/api/connect/bucket_handler.go` | Bucket management (stub — see `docs/TODO.md`) |
+| `ObjectKeyHandler` | `internal/api/connect/bucket_handler.go` | ObjectKey management (stub — see `docs/TODO.md`) |
 | `SystemHandler` | `internal/api/connect/system_handler.go` | Health, readiness, version, config |
 
 ### Shared Components
@@ -67,7 +67,7 @@ Defined in `internal/middleware/connect_chain.go`:
 5. **Logger** — access log (method, code, tenant, latency)
 6. **EnforceTenant** — reject unauthenticated when auth enabled
 7. **Validation** — `buf/validate` proto annotation enforcement via `protovalidate`
-8. **RateLimit** — per-tenant token bucket
+8. **RateLimit** — per-tenant token object_key
 
 ## Runtime Entry Points
 

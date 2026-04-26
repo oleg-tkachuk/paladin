@@ -14,7 +14,7 @@ HTTP 201
 object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"
 [Asserts]
-jsonpath "$.object_key" exists
+jsonpath "$.object_tag" exists
 jsonpath "$.upload.method" == "PUT"
 # Verify TTL (default 15m = 900s)
 jsonpath "$.upload.url" contains "X-Amz-Expires=900"
@@ -80,7 +80,7 @@ HTTP 201
 meta_object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"
 [Asserts]
-jsonpath "$.object_key" exists
+jsonpath "$.object_tag" exists
 
 # Get Object (Standard) - Check Metadata Preserved
 GET {{host}}/v1/objects/{{meta_object_id}}

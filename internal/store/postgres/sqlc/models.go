@@ -101,23 +101,10 @@ func (ns NullOperationState) Value() (driver.Value, error) {
 }
 
 type Bucket struct {
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	BucketID        string             `json:"bucket_id"`
+	BackendID       string             `json:"backend_id"`
+	BucketName      string             `json:"bucket_name"`
 	DisplayName     *string            `json:"display_name"`
-	StorageBackend  string             `json:"storage_backend"`
-	CedarPolicy     string             `json:"cedar_policy"`
-	CedarPolicyHash []byte             `json:"cedar_policy_hash"`
-	LifecycleRules  []byte             `json:"lifecycle_rules"`
-	ResourceVersion int64              `json:"resource_version"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-type Category struct {
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	Slug            string             `json:"slug"`
-	DisplayName     *string            `json:"display_name"`
-	Description     string             `json:"description"`
+	Region          *string            `json:"region"`
 	Labels          []byte             `json:"labels"`
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -156,7 +143,7 @@ type MultipartUpload struct {
 type Object struct {
 	ObjectID          pgtype.UUID        `json:"object_id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
-	BucketID          string             `json:"bucket_id"`
+	ObjectKey         string             `json:"object_key"`
 	Key               string             `json:"key"`
 	State             ObjectState        `json:"state"`
 	ContentType       string             `json:"content_type"`
@@ -174,6 +161,31 @@ type Object struct {
 	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
 	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
 	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
+}
+
+type ObjectKey struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ObjectKey       string             `json:"object_key"`
+	DisplayName     *string            `json:"display_name"`
+	BackendID       string             `json:"backend_id"`
+	CedarPolicy     string             `json:"cedar_policy"`
+	CedarPolicyHash []byte             `json:"cedar_policy_hash"`
+	LifecycleRules  []byte             `json:"lifecycle_rules"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	BucketName      string             `json:"bucket_name"`
+}
+
+type ObjectTag struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Slug            string             `json:"slug"`
+	DisplayName     *string            `json:"display_name"`
+	Description     string             `json:"description"`
+	Labels          []byte             `json:"labels"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Operation struct {

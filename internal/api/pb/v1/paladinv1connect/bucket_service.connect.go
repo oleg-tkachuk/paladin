@@ -48,9 +48,6 @@ const (
 	// BucketServiceListBucketsProcedure is the fully-qualified name of the BucketService's ListBuckets
 	// RPC.
 	BucketServiceListBucketsProcedure = "/paladin.v1.BucketService/ListBuckets"
-	// BucketServiceGetBucketStatsProcedure is the fully-qualified name of the BucketService's
-	// GetBucketStats RPC.
-	BucketServiceGetBucketStatsProcedure = "/paladin.v1.BucketService/GetBucketStats"
 )
 
 // BucketServiceClient is a client for the paladin.v1.BucketService service.
@@ -60,8 +57,6 @@ type BucketServiceClient interface {
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
 	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
-	// GetBucketStats returns approximate usage stats (counts, bytes).
-	GetBucketStats(context.Context, *connect.Request[v1.GetBucketStatsRequest]) (*connect.Response[v1.BucketStats], error)
 }
 
 // NewBucketServiceClient constructs a client for the paladin.v1.BucketService service. By default, it
@@ -105,23 +100,16 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
 			connect.WithClientOptions(opts...),
 		),
-		getBucketStats: connect.NewClient[v1.GetBucketStatsRequest, v1.BucketStats](
-			httpClient,
-			baseURL+BucketServiceGetBucketStatsProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("GetBucketStats")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // bucketServiceClient implements BucketServiceClient.
 type bucketServiceClient struct {
-	createBucket   *connect.Client[v1.CreateBucketRequest, v1.Bucket]
-	getBucket      *connect.Client[v1.GetBucketRequest, v1.Bucket]
-	updateBucket   *connect.Client[v1.UpdateBucketRequest, v1.Bucket]
-	deleteBucket   *connect.Client[v1.DeleteBucketRequest, v1.DeleteBucketResponse]
-	listBuckets    *connect.Client[v1.ListBucketsRequest, v1.ListBucketsResponse]
-	getBucketStats *connect.Client[v1.GetBucketStatsRequest, v1.BucketStats]
+	createBucket *connect.Client[v1.CreateBucketRequest, v1.Bucket]
+	getBucket    *connect.Client[v1.GetBucketRequest, v1.Bucket]
+	updateBucket *connect.Client[v1.UpdateBucketRequest, v1.Bucket]
+	deleteBucket *connect.Client[v1.DeleteBucketRequest, v1.DeleteBucketResponse]
+	listBuckets  *connect.Client[v1.ListBucketsRequest, v1.ListBucketsResponse]
 }
 
 // CreateBucket calls paladin.v1.BucketService.CreateBucket.
@@ -149,11 +137,6 @@ func (c *bucketServiceClient) ListBuckets(ctx context.Context, req *connect.Requ
 	return c.listBuckets.CallUnary(ctx, req)
 }
 
-// GetBucketStats calls paladin.v1.BucketService.GetBucketStats.
-func (c *bucketServiceClient) GetBucketStats(ctx context.Context, req *connect.Request[v1.GetBucketStatsRequest]) (*connect.Response[v1.BucketStats], error) {
-	return c.getBucketStats.CallUnary(ctx, req)
-}
-
 // BucketServiceHandler is an implementation of the paladin.v1.BucketService service.
 type BucketServiceHandler interface {
 	CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error)
@@ -161,8 +144,6 @@ type BucketServiceHandler interface {
 	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
 	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
 	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
-	// GetBucketStats returns approximate usage stats (counts, bytes).
-	GetBucketStats(context.Context, *connect.Request[v1.GetBucketStatsRequest]) (*connect.Response[v1.BucketStats], error)
 }
 
 // NewBucketServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -202,12 +183,6 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
 		connect.WithHandlerOptions(opts...),
 	)
-	bucketServiceGetBucketStatsHandler := connect.NewUnaryHandler(
-		BucketServiceGetBucketStatsProcedure,
-		svc.GetBucketStats,
-		connect.WithSchema(bucketServiceMethods.ByName("GetBucketStats")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/paladin.v1.BucketService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BucketServiceCreateBucketProcedure:
@@ -220,8 +195,6 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 			bucketServiceDeleteBucketHandler.ServeHTTP(w, r)
 		case BucketServiceListBucketsProcedure:
 			bucketServiceListBucketsHandler.ServeHTTP(w, r)
-		case BucketServiceGetBucketStatsProcedure:
-			bucketServiceGetBucketStatsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -249,8 +222,4 @@ func (UnimplementedBucketServiceHandler) DeleteBucket(context.Context, *connect.
 
 func (UnimplementedBucketServiceHandler) ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BucketService.ListBuckets is not implemented"))
-}
-
-func (UnimplementedBucketServiceHandler) GetBucketStats(context.Context, *connect.Request[v1.GetBucketStatsRequest]) (*connect.Response[v1.BucketStats], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.v1.BucketService.GetBucketStats is not implemented"))
 }

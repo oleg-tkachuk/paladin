@@ -27,9 +27,10 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/category"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
@@ -60,9 +61,10 @@ var ProviderSet = wire.NewSet(
 	ProvidePolicyEngine,
 	ProvideStateMachine,
 
+	ProvideObjectKeyHandler,
 	ProvideBucketHandler,
 	ProvideTenantHandler,
-	ProvideCategoryHandler,
+	ProvideObjectTagHandler,
 	ProvideOperationHandler,
 	ProvideBatchHandler,
 	ProvideObjectHandler,
@@ -108,9 +110,10 @@ func ProvideStateMachine(pool *pgxpool.Pool) *statemachine.Transitioner {
 // its Postgres adapters (see cmd/server).
 type Repos struct {
 	Object    object.Repository
+	ObjectKey objectkey.Repository
 	Bucket    bucket.Repository
 	Tenant    tenant.Repository
-	Category  category.Repository
+	ObjectTag objecttag.Repository
 	Presign   presign.Repository
 	Multipart multipart.Repository
 	Operation operation.Repository
@@ -118,12 +121,13 @@ type Repos struct {
 
 // Storage bundles the storage-side adapters. Every handler package declares
 // its own narrow Storage interface; a single backend adapter typically
-// implements all four.
+// implements all five.
 type Storage struct {
-	Object    object.Storage
-	Multipart multipart.Storage
-	Presign   presign.Storage
-	Stream    object.StreamSink
+	Object      object.Storage
+	Multipart   multipart.Storage
+	Presign     presign.Storage
+	Stream      object.StreamSink
+	Provisioner bucket.Provisioner
 }
 
 func ProvideObjectHandler(
@@ -141,16 +145,20 @@ func ProvideObjectHandler(
 	})
 }
 
-func ProvideBucketHandler(repos Repos, pe *policy.Engine, cfg config.Config) *bucket.Handler {
-	return bucket.NewHandler(repos.Bucket, pe, cfg.Storage.DefaultBackend)
+func ProvideObjectKeyHandler(repos Repos, pe *policy.Engine, cfg config.Config) *objectkey.Handler {
+	return objectkey.NewHandler(repos.ObjectKey, pe, cfg.Storage.DefaultBackend)
+}
+
+func ProvideBucketHandler(repos Repos, storage Storage, cfg config.Config) *bucket.Handler {
+	return bucket.NewHandler(repos.Bucket, storage.Provisioner, cfg.Storage.DefaultBackend)
 }
 
 func ProvideTenantHandler(repos Repos) *tenant.Handler {
 	return tenant.NewHandler(repos.Tenant)
 }
 
-func ProvideCategoryHandler(repos Repos) *category.Handler {
-	return category.NewHandler(repos.Category)
+func ProvideObjectTagHandler(repos Repos) *objecttag.Handler {
+	return objecttag.NewHandler(repos.ObjectTag)
 }
 
 func ProvideOperationHandler(repos Repos) *operation.Handler {

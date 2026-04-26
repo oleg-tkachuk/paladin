@@ -115,7 +115,7 @@ tasks:
       JWT_SUB: "dev-user"
       # Comma-separated list. platform-admin is required by TenantService RPCs.
       JWT_ROLES: "platform-admin"
-      # Tenant UUID. Required by per-tenant RPCs (Bucket, Category, Object...).
+      # Tenant UUID. Required by per-tenant RPCs (ObjectKey, ObjectTag, Object...).
       # Leave empty for cross-tenant admin-only tokens.
       JWT_TENANT: "3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"
       JWT_TTL_SECONDS: "604800" # 7 days

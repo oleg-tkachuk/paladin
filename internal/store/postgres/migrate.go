@@ -34,6 +34,18 @@ func (l *gooseLogger) Printf(format string, v ...interface{}) {
 }
 
 func (d *DB) RunMigrations(ctx context.Context, fs embed.FS) error {
+	return d.runMigrationsTo(ctx, fs, 0)
+}
+
+// RunMigrationsTo runs goose up only as far as the supplied version. A
+// version of 0 means "all the way". Used to interleave application-level
+// data work (seeds, backfills) between schema phases — e.g. populate
+// object_keys.bucket_name before migration 005 enforces NOT NULL on it.
+func (d *DB) RunMigrationsTo(ctx context.Context, fs embed.FS, target int64) error {
+	return d.runMigrationsTo(ctx, fs, target)
+}
+
+func (d *DB) runMigrationsTo(_ context.Context, fs embed.FS, target int64) error {
 	// Create a new *sql.DB just for migrations using the pool's config
 	db := stdlib.OpenDB(*d.Pool.Config().ConnConfig)
 	defer func() {
@@ -50,13 +62,21 @@ func (d *DB) RunMigrations(ctx context.Context, fs embed.FS) error {
 	goose.SetLogger(gl)
 
 	goose.SetBaseFS(fs)
-	if err := goose.Up(db, "."); err != nil {
+
+	var err error
+	if target > 0 {
+		err = goose.UpTo(db, ".", target)
+	} else {
+		err = goose.Up(db, ".")
+	}
+	if err != nil {
 		return fmt.Errorf("goose up: %w", err)
 	}
 
 	d.log.Info("Migrations applied successfully",
 		zap.String("service", "paladin"),
 		zap.Int("count", gl.count),
+		zap.Int64("target", target),
 	)
 
 	return nil

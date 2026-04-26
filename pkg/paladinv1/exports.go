@@ -56,14 +56,15 @@ type (
 	Object                 = internal.Object
 	PresignedUrl           = internal.PresignedUrl
 	PresignedPostPolicy    = internal.PresignedPostPolicy
-	Bucket                 = internal.Bucket
-	BucketPolicy           = internal.BucketPolicy
-	BucketStats            = internal.BucketStats
+	ObjectKey              = internal.ObjectKey
+	ObjectKeyPolicy        = internal.ObjectKeyPolicy
+	ObjectKeyStats         = internal.ObjectKeyStats
 	LifecycleRule          = internal.LifecycleRule
 	LifecycleTransition    = internal.LifecycleTransition
 	LifecycleExpiration    = internal.LifecycleExpiration
 	Tenant                 = internal.Tenant
-	Category               = internal.Category
+	ObjectTag              = internal.ObjectTag
+	Bucket                 = internal.Bucket
 	CompletedPart          = internal.CompletedPart
 	PartInfo               = internal.PartInfo
 	Operation              = internal.Operation
@@ -124,29 +125,41 @@ type (
 	ListPartsResponse               = internal.ListPartsResponse
 )
 
-// ─── Category service ────────────────────────────────────────────────────────
+// ─── ObjectTag service ───────────────────────────────────────────────────────
 
 type (
-	CreateCategoryRequest  = internal.CreateCategoryRequest
-	GetCategoryRequest     = internal.GetCategoryRequest
-	UpdateCategoryRequest  = internal.UpdateCategoryRequest
-	DeleteCategoryRequest  = internal.DeleteCategoryRequest
-	DeleteCategoryResponse = internal.DeleteCategoryResponse
-	ListCategoriesRequest  = internal.ListCategoriesRequest
-	ListCategoriesResponse = internal.ListCategoriesResponse
+	CreateObjectTagRequest  = internal.CreateObjectTagRequest
+	GetObjectTagRequest     = internal.GetObjectTagRequest
+	UpdateObjectTagRequest  = internal.UpdateObjectTagRequest
+	DeleteObjectTagRequest  = internal.DeleteObjectTagRequest
+	DeleteObjectTagResponse = internal.DeleteObjectTagResponse
+	ListObjectTagsRequest   = internal.ListObjectTagsRequest
+	ListObjectTagsResponse  = internal.ListObjectTagsResponse
 )
 
 // ─── Bucket service ──────────────────────────────────────────────────────────
 
 type (
-	CreateBucketRequest   = internal.CreateBucketRequest
-	GetBucketRequest      = internal.GetBucketRequest
-	UpdateBucketRequest   = internal.UpdateBucketRequest
-	DeleteBucketRequest   = internal.DeleteBucketRequest
-	DeleteBucketResponse  = internal.DeleteBucketResponse
-	ListBucketsRequest    = internal.ListBucketsRequest
-	ListBucketsResponse   = internal.ListBucketsResponse
-	GetBucketStatsRequest = internal.GetBucketStatsRequest
+	CreateBucketRequest  = internal.CreateBucketRequest
+	GetBucketRequest     = internal.GetBucketRequest
+	UpdateBucketRequest  = internal.UpdateBucketRequest
+	DeleteBucketRequest  = internal.DeleteBucketRequest
+	DeleteBucketResponse = internal.DeleteBucketResponse
+	ListBucketsRequest   = internal.ListBucketsRequest
+	ListBucketsResponse  = internal.ListBucketsResponse
+)
+
+// ─── ObjectKey service ──────────────────────────────────────────────────────────
+
+type (
+	CreateObjectKeyRequest   = internal.CreateObjectKeyRequest
+	GetObjectKeyRequest      = internal.GetObjectKeyRequest
+	UpdateObjectKeyRequest   = internal.UpdateObjectKeyRequest
+	DeleteObjectKeyRequest   = internal.DeleteObjectKeyRequest
+	DeleteObjectKeyResponse  = internal.DeleteObjectKeyResponse
+	ListObjectKeysRequest    = internal.ListObjectKeysRequest
+	ListObjectKeysResponse   = internal.ListObjectKeysResponse
+	GetObjectKeyStatsRequest = internal.GetObjectKeyStatsRequest
 )
 
 // ─── Tenant service ──────────────────────────────────────────────────────────

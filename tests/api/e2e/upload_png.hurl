@@ -14,7 +14,7 @@ HTTP 201
 object_id: jsonpath "$.object_id"
 upload_url: jsonpath "$.upload.url"
 [Asserts]
-jsonpath "$.object_key" exists
+jsonpath "$.object_tag" exists
 jsonpath "$.upload.method" == "PUT"
 jsonpath "$.upload.url" exists
 

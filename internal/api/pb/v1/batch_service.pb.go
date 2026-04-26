@@ -84,7 +84,7 @@ func (x *ObjectSelector) GetFilter() string {
 type BatchDeleteObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Required for scoping the filter scan even when filter is empty.
-	Bucket        string          `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey     string          `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Selector      *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	Permanent     bool            `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -121,9 +121,9 @@ func (*BatchDeleteObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_batch_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *BatchDeleteObjectsRequest) GetBucket() string {
+func (x *BatchDeleteObjectsRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -148,7 +148,7 @@ type BatchCopyObjectsRequest struct {
 	Selector          *ObjectSelector        `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	DestinationBucket string                 `protobuf:"bytes,3,opt,name=destination_bucket,json=destinationBucket,proto3" json:"destination_bucket,omitempty"`
 	// Template for destination key. CEL expression evaluated against the
-	// source Object: `"archive/" + bucket + "/" + key`.
+	// source Object: `"archive/" + object_key + "/" + key`.
 	DestinationKeyTemplate string `protobuf:"bytes,4,opt,name=destination_key_template,json=destinationKeyTemplate,proto3" json:"destination_key_template,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -214,7 +214,7 @@ func (x *BatchCopyObjectsRequest) GetDestinationKeyTemplate() string {
 
 type BatchRestoreObjectsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey     string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Selector      *ObjectSelector        `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -250,9 +250,9 @@ func (*BatchRestoreObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_batch_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *BatchRestoreObjectsRequest) GetBucket() string {
+func (x *BatchRestoreObjectsRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -469,18 +469,20 @@ const file_paladin_v1_batch_service_proto_rawDesc = "" +
 	"\x1aocp/v1/batch_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x12ocp/v1/types.proto\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x96\x01\n" +
-	"\x19BatchDeleteObjectsRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12:\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x9d\x01\n" +
+	"\x19BatchDeleteObjectsRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12:\n" +
 	"\bselector\x18\x02 \x01(\v2\x16.paladin.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12\x1c\n" +
 	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\xfe\x01\n" +
 	"\x17BatchCopyObjectsRequest\x12,\n" +
 	"\rsource_bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceBucket\x12:\n" +
 	"\bselector\x18\x02 \x01(\v2\x16.paladin.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x126\n" +
 	"\x12destination_bucket\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11destinationBucket\x12A\n" +
-	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"y\n" +
-	"\x1aBatchRestoreObjectsRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12:\n" +
+	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"\x80\x01\n" +
+	"\x1aBatchRestoreObjectsRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12:\n" +
 	"\bselector\x18\x02 \x01(\v2\x16.paladin.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\"\xa3\x01\n" +
 	"\x16BatchOperationMetadata\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x1c\n" +

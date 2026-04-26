@@ -163,7 +163,7 @@ type PostgresTimeouts struct {
 }
 
 // Storage is the registry of physical object-storage backends. Each logical
-// bucket references one by name via `buckets.storage_backend`; if that column
+// objectKey references one by name via `object_keys.storage_backend`; if that column
 // is empty the service falls back to DefaultBackend.
 type Storage struct {
 	DefaultBackend string                    `yaml:"default_backend" json:"default_backend"`
@@ -187,7 +187,7 @@ type Policy struct {
 	LabelsMaxBytes        int           `yaml:"labels_max_bytes" json:"labels_max_bytes"`
 	LabelsMaxKeys         int           `yaml:"labels_max_keys" json:"labels_max_keys"`
 	ExternalRefMaxLen     int           `yaml:"external_ref_max_len" json:"external_ref_max_len"`
-	ObjectKeyMaxLen       int           `yaml:"object_key_max_len" json:"object_key_max_len"`
+	ObjectTagMaxLen       int           `yaml:"object_tag_max_len" json:"object_tag_max_len"`
 }
 
 // Auth configures JWT verification for incoming requests. JWKSURL takes
@@ -260,7 +260,11 @@ type Idempotency struct {
 // params, credentials, SSE policy, upload-part sizing, and the event pipeline
 // that drives CompletionMode (IMPLICIT when events.enabled, EXPLICIT otherwise).
 type StorageBackend struct {
-	Kind            string               `yaml:"kind" json:"kind"` // aws-s3 | s3-compatible | gcs
+	Kind string `yaml:"kind" json:"kind"` // aws-s3 | s3-compatible | gcs
+	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
+	// become a tenant-scoped prefix within this bucket; the full S3 key
+	// for any object is "<tenant_id>/<object_key>/<key>".
+	Bucket          string               `yaml:"bucket" json:"bucket"`
 	Region          string               `yaml:"region" json:"region"`
 	Endpoint        string               `yaml:"endpoint" json:"endpoint"`
 	PublicEndpoint  string               `yaml:"public_endpoint" json:"public_endpoint"`

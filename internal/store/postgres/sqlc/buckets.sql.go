@@ -7,39 +7,49 @@ package sqlc
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countObjectKeysReferencingBucket = `-- name: CountObjectKeysReferencingBucket :one
+SELECT count(*)::bigint AS count
+FROM object_keys
+WHERE backend_id = $1 AND bucket_name = $2
+`
+
+func (q *Queries) CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjectKeysReferencingBucket, backendID, bucketName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createBucket = `-- name: CreateBucket :exec
 
-INSERT INTO buckets (
-    tenant_id, bucket_id, display_name, storage_backend,
-    cedar_policy, lifecycle_rules
-) VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
+VALUES ($1, $2, $3, $4, $5)
 `
 
-// Bucket queries.
-func (q *Queries) CreateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, storageBackend string, cedarPolicy string, lifecycleRules []byte) error {
+// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
+// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
+// (backend_id, bucket_name) composite key.
+func (q *Queries) CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createBucket,
-		tenantID,
-		bucketID,
+		backendID,
+		bucketName,
 		displayName,
-		storageBackend,
-		cedarPolicy,
-		lifecycleRules,
+		region,
+		labels,
 	)
 	return err
 }
 
 const deleteBucket = `-- name: DeleteBucket :execrows
 DELETE FROM buckets
-WHERE tenant_id = $1 AND bucket_id = $2
+WHERE backend_id = $1 AND bucket_name = $2
   AND resource_version = $3
 `
 
-func (q *Queries) DeleteBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteBucket, tenantID, bucketID, expectedVersion)
+func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteBucket, backendID, bucketName, expectedVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -47,26 +57,24 @@ func (q *Queries) DeleteBucket(ctx context.Context, tenantID pgtype.UUID, bucket
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.tenant_id, buckets.bucket_id, buckets.display_name, buckets.storage_backend, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.lifecycle_rules, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at
 FROM buckets
-WHERE tenant_id = $1 AND bucket_id = $2
+WHERE backend_id = $1 AND bucket_name = $2
 `
 
 type GetBucketRow struct {
 	Bucket Bucket `json:"bucket"`
 }
 
-func (q *Queries) GetBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string) (GetBucketRow, error) {
-	row := q.db.QueryRow(ctx, getBucket, tenantID, bucketID)
+func (q *Queries) GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error) {
+	row := q.db.QueryRow(ctx, getBucket, backendID, bucketName)
 	var i GetBucketRow
 	err := row.Scan(
-		&i.Bucket.TenantID,
-		&i.Bucket.BucketID,
+		&i.Bucket.BackendID,
+		&i.Bucket.BucketName,
 		&i.Bucket.DisplayName,
-		&i.Bucket.StorageBackend,
-		&i.Bucket.CedarPolicy,
-		&i.Bucket.CedarPolicyHash,
-		&i.Bucket.LifecycleRules,
+		&i.Bucket.Region,
+		&i.Bucket.Labels,
 		&i.Bucket.ResourceVersion,
 		&i.Bucket.CreatedAt,
 		&i.Bucket.UpdatedAt,
@@ -74,55 +82,27 @@ func (q *Queries) GetBucket(ctx context.Context, tenantID pgtype.UUID, bucketID 
 	return i, err
 }
 
-const getEffectivePolicy = `-- name: GetEffectivePolicy :one
-SELECT t.inherited_cedar_policy AS tenant_policy,
-       t.inherited_policy_hash  AS tenant_hash,
-       b.cedar_policy           AS bucket_policy,
-       b.cedar_policy_hash      AS bucket_hash
-FROM tenants t
-LEFT JOIN buckets b
-  ON b.tenant_id = t.tenant_id
- AND b.bucket_id = $2::text
-WHERE t.tenant_id = $1
-`
-
-type GetEffectivePolicyRow struct {
-	TenantPolicy string  `json:"tenant_policy"`
-	TenantHash   []byte  `json:"tenant_hash"`
-	BucketPolicy *string `json:"bucket_policy"`
-	BucketHash   []byte  `json:"bucket_hash"`
-}
-
-// Returns tenant-inherited policy concatenated with the bucket-specific policy.
-// Order is: tenant policies first, then bucket — Cedar treats them as a single
-// policy set; ordering only affects diagnostic output.
-func (q *Queries) GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, bucketID *string) (GetEffectivePolicyRow, error) {
-	row := q.db.QueryRow(ctx, getEffectivePolicy, tenantID, bucketID)
-	var i GetEffectivePolicyRow
-	err := row.Scan(
-		&i.TenantPolicy,
-		&i.TenantHash,
-		&i.BucketPolicy,
-		&i.BucketHash,
-	)
-	return i, err
-}
-
 const listBuckets = `-- name: ListBuckets :many
-SELECT buckets.tenant_id, buckets.bucket_id, buckets.display_name, buckets.storage_backend, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.lifecycle_rules, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at
 FROM buckets
-WHERE tenant_id = $1
-  AND ($2::text IS NULL OR bucket_id > $2::text)
-ORDER BY bucket_id
-LIMIT $3
+WHERE ($1::text IS NULL OR backend_id = $1::text)
+  AND ($2::text IS NULL
+       OR (backend_id, bucket_name) > ($3::text, $2::text))
+ORDER BY backend_id, bucket_name
+LIMIT $4
 `
 
 type ListBucketsRow struct {
 	Bucket Bucket `json:"bucket"`
 }
 
-func (q *Queries) ListBuckets(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListBucketsRow, error) {
-	rows, err := q.db.Query(ctx, listBuckets, tenantID, afterID, pageSize)
+func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listBuckets,
+		backendID,
+		afterName,
+		afterBackendID,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -131,13 +111,11 @@ func (q *Queries) ListBuckets(ctx context.Context, tenantID pgtype.UUID, afterID
 	for rows.Next() {
 		var i ListBucketsRow
 		if err := rows.Scan(
-			&i.Bucket.TenantID,
-			&i.Bucket.BucketID,
+			&i.Bucket.BackendID,
+			&i.Bucket.BucketName,
 			&i.Bucket.DisplayName,
-			&i.Bucket.StorageBackend,
-			&i.Bucket.CedarPolicy,
-			&i.Bucket.CedarPolicyHash,
-			&i.Bucket.LifecycleRules,
+			&i.Bucket.Region,
+			&i.Bucket.Labels,
 			&i.Bucket.ResourceVersion,
 			&i.Bucket.CreatedAt,
 			&i.Bucket.UpdatedAt,
@@ -154,24 +132,18 @@ func (q *Queries) ListBuckets(ctx context.Context, tenantID pgtype.UUID, afterID
 
 const updateBucket = `-- name: UpdateBucket :execrows
 UPDATE buckets
-SET display_name    = COALESCE($3,    display_name),
-    cedar_policy    = COALESCE($4,          cedar_policy),
-    cedar_policy_hash = CASE WHEN $4 IS NULL
-                             THEN cedar_policy_hash
-                             ELSE $5 END,
-    lifecycle_rules = COALESCE($6, lifecycle_rules)
-WHERE tenant_id = $1 AND bucket_id = $2
-  AND resource_version = $7
+SET display_name = COALESCE($3, display_name),
+    labels       = COALESCE($4,       labels)
+WHERE backend_id = $1 AND bucket_name = $2
+  AND resource_version = $5
 `
 
-func (q *Queries) UpdateBucket(ctx context.Context, tenantID pgtype.UUID, bucketID string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error) {
+func (q *Queries) UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucket,
-		tenantID,
-		bucketID,
+		backendID,
+		bucketName,
 		displayName,
-		policy,
-		policyHash,
-		lifecycleRules,
+		labels,
 		expectedVersion,
 	)
 	if err != nil {

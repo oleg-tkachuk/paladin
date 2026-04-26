@@ -28,7 +28,7 @@ datastores:
   postgres:
     dsn: "host=localhost"
   s3:
-    bucket: "test"
+    objectKey: "test"
     region: "us-east-1"
     endpoint: "http://localhost"
     access_key: "a"

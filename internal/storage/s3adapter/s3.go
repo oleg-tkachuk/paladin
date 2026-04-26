@@ -2,7 +2,12 @@
 // (object.Storage, object.StreamSink, multipart.Storage, presign.Storage)
 // on top of an aws-sdk-go-v2 S3 client.
 //
-// One adapter instance fronts a single physical storage backend (primary).
+// One adapter instance fronts a single physical S3 bucket configured under
+// `storage.backends.<name>.bucket`. The PALADIN "ObjectKey" is a tenant-scoped
+// prefix inside that bucket; the full S3 key for any PALADIN object is:
+//
+//	<tenant_id>/<object_key>/<storage_key>
+//
 // CompletionMode is sourced from the bundled config: when that backend has
 // S3 event notifications enabled, handlers return Implicit; otherwise
 // Explicit.
@@ -24,6 +29,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
@@ -44,6 +50,11 @@ type Client struct {
 // New builds an S3 client from one storage-backend entry. `backend.Events.Enabled`
 // decides CompletionMode (IMPLICIT when events drive promotion, EXPLICIT otherwise).
 func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
+	// backend.Bucket is now a *fallback*, not a hard requirement: handlers
+	// resolve the per-ObjectKey bucket from `buckets` and pass it to each
+	// storage call. If both per-call and fallback are empty, the AWS SDK
+	// will reject the request — surfacing the misconfiguration instead of
+	// silently writing into the wrong bucket.
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(backend.Region),
 		awsconfig.WithCredentialsProvider(
@@ -79,14 +90,81 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 	}, nil
 }
 
+// composeKey builds the full S3 key from tenant_id + object_key + storage key.
+// Layout: "<tenant_id>/<object_key>/<key>". Both prefix segments are required;
+// callers must supply them. The leading slash is omitted (S3 keys never start
+// with one).
+func composeKey(tenantID uuid.UUID, objectKey, key string) string {
+	return tenantID.String() + "/" + objectKey + "/" + key
+}
+
+// resolveBucket picks the per-call bucket if supplied, otherwise falls back
+// to the adapter's configured default. Returns "" only when neither is set,
+// which the AWS SDK will reject as InvalidArgument — surfacing it loudly
+// rather than silently writing to the wrong bucket.
+func (c *Client) resolveBucket(perCall string) string {
+	if perCall != "" {
+		return perCall
+	}
+	return c.cfg.Bucket
+}
+
+// ─── bucket.Provisioner ────────────────────────────────────────────────────
+// CreateBucket / DeleteBucket map directly to AWS S3 CreateBucket /
+// DeleteBucket. The adapter is bound to one backend at construction time;
+// the backendID parameter is accepted for interface symmetry but verified
+// against the configured backend so cross-backend calls fail fast.
+
+// CreateBucket provisions a real S3 bucket. Idempotent — returns nil when
+// the bucket already exists and is owned by the caller (S3 returns
+// BucketAlreadyOwnedByYou).
+func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region string) error {
+	in := &s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	}
+	// Region constraint: required for non-us-east-1 regions on real AWS S3.
+	// S3-compatible backends typically ignore it.
+	loc := region
+	if loc == "" {
+		loc = c.cfg.Region
+	}
+	if loc != "" && loc != "us-east-1" {
+		in.CreateBucketConfiguration = &s3types.CreateBucketConfiguration{
+			LocationConstraint: s3types.BucketLocationConstraint(loc),
+		}
+	}
+	_, err := c.s3.CreateBucket(ctx, in)
+	if err == nil {
+		return nil
+	}
+	// Idempotency: ignore "already exists / already owned by you".
+	msg := err.Error()
+	if strings.Contains(msg, "BucketAlreadyOwnedByYou") || strings.Contains(msg, "BucketAlreadyExists") {
+		return nil
+	}
+	return fmt.Errorf("s3 create bucket %q: %w", bucketName, err)
+}
+
+// DeleteBucket removes a real S3 bucket. Caller is responsible for ensuring
+// the bucket is empty (S3 rejects non-empty deletes).
+func (c *Client) DeleteBucket(ctx context.Context, backendID, bucketName string) error {
+	_, err := c.s3.DeleteBucket(ctx, &s3.DeleteBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 delete bucket %q: %w", bucketName, err)
+	}
+	return nil
+}
+
 // ─── object.Storage ────────────────────────────────────────────────────────
 
 var _ object.Storage = (*Client)(nil)
 
 func (c *Client) PresignPut(ctx context.Context, args object.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.PutObjectInput{
-		Bucket:      aws.String(args.Bucket),
-		Key:         aws.String(args.Key),
+		Bucket:      aws.String(c.resolveBucket(args.Bucket)),
+		Key:         aws.String(composeKey(args.TenantID, args.ObjectKey, args.Key)),
 		ContentType: aws.String(args.ContentType),
 	}
 	c.applySSE(in)
@@ -101,8 +179,8 @@ func (c *Client) PresignPost(ctx context.Context, args object.PresignPostArgs) (
 	// aws-sdk-go-v2 doesn't ship PresignPost; return a v4-signed PUT URL with
 	// POST-style fields so callers that requested POST have a working fallback.
 	in := &s3.PutObjectInput{
-		Bucket:      aws.String(args.Bucket),
-		Key:         aws.String(args.Key),
+		Bucket:      aws.String(c.resolveBucket(args.Bucket)),
+		Key:         aws.String(composeKey(args.TenantID, args.ObjectKey, args.Key)),
 		ContentType: aws.String(args.ContentType),
 	}
 	c.applySSE(in)
@@ -123,8 +201,8 @@ func (c *Client) PresignPost(ctx context.Context, args object.PresignPostArgs) (
 
 func (c *Client) PresignGet(ctx context.Context, args object.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.GetObjectInput{
-		Bucket: aws.String(args.Bucket),
-		Key:    aws.String(args.Key),
+		Bucket: aws.String(c.resolveBucket(args.Bucket)),
+		Key:    aws.String(composeKey(args.TenantID, args.ObjectKey, args.Key)),
 	}
 	if args.ContentDisposition != "" {
 		in.ResponseContentDisposition = aws.String(args.ContentDisposition)
@@ -136,10 +214,10 @@ func (c *Client) PresignGet(ctx context.Context, args object.PresignGetArgs) (st
 	return req.URL, signedHeaders(req), time.Now().Add(args.TTL), nil
 }
 
-func (c *Client) Head(ctx context.Context, bucket, key string) (string, int64, string, string, error) {
+func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) (string, int64, string, string, error) {
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Bucket: aws.String(c.resolveBucket(bucket)),
+		Key:    aws.String(composeKey(tenantID, objectKey, key)),
 	})
 	if err != nil {
 		return "", 0, "", "", fmt.Errorf("head: %w", err)
@@ -164,10 +242,12 @@ func (c *Client) Head(ctx context.Context, bucket, key string) (string, int64, s
 }
 
 func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error {
+	srcBucket := c.resolveBucket(src.Bucket)
+	dstBucket := c.resolveBucket(dst.Bucket)
 	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
-		Bucket:     aws.String(dst.Bucket),
-		Key:        aws.String(dst.Key),
-		CopySource: aws.String(src.Bucket + "/" + src.Key),
+		Bucket:     aws.String(dstBucket),
+		Key:        aws.String(composeKey(dst.TenantID, dst.ObjectKey, dst.Key)),
+		CopySource: aws.String(srcBucket + "/" + composeKey(src.TenantID, src.ObjectKey, src.Key)),
 	})
 	if err != nil {
 		return fmt.Errorf("copy: %w", err)
@@ -175,10 +255,10 @@ func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error
 	return nil
 }
 
-func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
+func (c *Client) DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error {
 	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Bucket: aws.String(c.resolveBucket(bucket)),
+		Key:    aws.String(composeKey(tenantID, objectKey, key)),
 	})
 	if err != nil {
 		return fmt.Errorf("delete: %w", err)
@@ -186,9 +266,9 @@ func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
 	return nil
 }
 
-// CompletionMode ignores the bucket — the adapter fronts a single backend
+// CompletionMode ignores the objectKey — the adapter fronts a single backend
 // whose Implicit/Explicit mode was chosen at construction time.
-func (c *Client) CompletionMode(bucketID string) object.CompletionMode {
+func (c *Client) CompletionMode(objectKey string) object.CompletionMode {
 	return c.mode
 }
 
@@ -196,10 +276,10 @@ func (c *Client) CompletionMode(bucketID string) object.CompletionMode {
 
 var _ multipart.Storage = (*Client)(nil)
 
-func (c *Client) InitiateMultipart(ctx context.Context, bucket, key, contentType string) (string, error) {
+func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (string, error) {
 	in := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
+		Bucket:      aws.String(c.resolveBucket(bucket)),
+		Key:         aws.String(composeKey(tenantID, objectKey, key)),
 		ContentType: aws.String(contentType),
 	}
 	c.applyMultipartSSE(in)
@@ -210,7 +290,7 @@ func (c *Client) InitiateMultipart(ctx context.Context, bucket, key, contentType
 	return aws.ToString(out.UploadId), nil
 }
 
-func (c *Client) CompleteMultipart(ctx context.Context, storageUploadID, bucket, key string, parts []multipart.PartETag) (string, int64, error) {
+func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []multipart.PartETag) (string, int64, error) {
 	completed := make([]s3types.CompletedPart, 0, len(parts))
 	for _, p := range parts {
 		completed = append(completed, s3types.CompletedPart{
@@ -218,9 +298,11 @@ func (c *Client) CompleteMultipart(ctx context.Context, storageUploadID, bucket,
 			ETag:       aws.String(p.ETag),
 		})
 	}
+	resolvedBucket := c.resolveBucket(bucket)
+	fullKey := composeKey(tenantID, objectKey, key)
 	out, err := c.s3.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:          aws.String(bucket),
-		Key:             aws.String(key),
+		Bucket:          aws.String(resolvedBucket),
+		Key:             aws.String(fullKey),
 		UploadId:        aws.String(storageUploadID),
 		MultipartUpload: &s3types.CompletedMultipartUpload{Parts: completed},
 	})
@@ -230,8 +312,8 @@ func (c *Client) CompleteMultipart(ctx context.Context, storageUploadID, bucket,
 	etag := strings.Trim(aws.ToString(out.ETag), `"`)
 
 	head, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Bucket: aws.String(resolvedBucket),
+		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		return etag, 0, fmt.Errorf("head after complete: %w", err)
@@ -243,10 +325,10 @@ func (c *Client) CompleteMultipart(ctx context.Context, storageUploadID, bucket,
 	return etag, size, nil
 }
 
-func (c *Client) AbortMultipart(ctx context.Context, storageUploadID, bucket, key string) error {
+func (c *Client) AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error {
 	_, err := c.s3.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(bucket),
-		Key:      aws.String(key),
+		Bucket:   aws.String(c.resolveBucket(bucket)),
+		Key:      aws.String(composeKey(tenantID, objectKey, key)),
 		UploadId: aws.String(storageUploadID),
 	})
 	if err != nil {
@@ -269,23 +351,23 @@ func (c *Client) Presign() *PresignView { return &PresignView{c: c} }
 
 var _ presign.Storage = (*PresignView)(nil)
 
-func (p *PresignView) PresignGet(ctx context.Context, bucket, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
+func (p *PresignView) PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
 	return p.c.PresignGet(ctx, object.PresignGetArgs{
-		Bucket: bucket, Key: key, TTL: ttl, ContentDisposition: disposition,
+		TenantID: tenantID, Bucket: bucket, ObjectKey: objectKey, Key: key, TTL: ttl, ContentDisposition: disposition,
 	})
 }
 
-func (p *PresignView) PresignPut(ctx context.Context, bucket, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
+func (p *PresignView) PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
 	return p.c.PresignPut(ctx, object.PresignPutArgs{
-		Bucket: bucket, Key: key, ContentType: contentType,
+		TenantID: tenantID, Bucket: bucket, ObjectKey: objectKey, Key: key, ContentType: contentType,
 		ChecksumAlgo: checksumAlgo, SizeHint: sizeHint, TTL: ttl,
 	})
 }
 
-func (p *PresignView) PresignPart(ctx context.Context, storageUploadID, bucket, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (p *PresignView) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	in := &s3.UploadPartInput{
-		Bucket:     aws.String(bucket),
-		Key:        aws.String(key),
+		Bucket:     aws.String(p.c.resolveBucket(bucket)),
+		Key:        aws.String(composeKey(tenantID, objectKey, key)),
 		PartNumber: aws.Int32(partNumber),
 		UploadId:   aws.String(storageUploadID),
 	}
@@ -302,10 +384,12 @@ var _ object.StreamSink = (*Client)(nil)
 
 // Open returns a StreamWriter that uploads a single object via S3 multipart.
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.
-func (c *Client) Open(ctx context.Context, bucket, key, contentType string, sizeHint int64) (object.StreamWriter, error) {
+func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string, sizeHint int64) (object.StreamWriter, error) {
+	resolvedBucket := c.resolveBucket(bucket)
+	fullKey := composeKey(tenantID, objectKey, key)
 	in := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
+		Bucket:      aws.String(resolvedBucket),
+		Key:         aws.String(fullKey),
 		ContentType: aws.String(contentType),
 	}
 	c.applyMultipartSSE(in)
@@ -320,8 +404,8 @@ func (c *Client) Open(ctx context.Context, bucket, key, contentType string, size
 	return &streamWriter{
 		ctx:      ctx,
 		c:        c,
-		bucket:   bucket,
-		key:      key,
+		bucket:   resolvedBucket,
+		fullKey:  fullKey,
 		uploadID: aws.ToString(out.UploadId),
 		partSize: partSize,
 	}, nil
@@ -330,8 +414,8 @@ func (c *Client) Open(ctx context.Context, bucket, key, contentType string, size
 type streamWriter struct {
 	ctx      context.Context
 	c        *Client
-	bucket   string
-	key      string
+	bucket   string // resolved bucket captured at Open time
+	fullKey  string
 	uploadID string
 	partSize int64
 
@@ -364,7 +448,7 @@ func (w *streamWriter) flushPart(final bool) error {
 	w.partNum++
 	out, err := w.c.s3.UploadPart(w.ctx, &s3.UploadPartInput{
 		Bucket:     aws.String(w.bucket),
-		Key:        aws.String(w.key),
+		Key:        aws.String(w.fullKey),
 		UploadId:   aws.String(w.uploadID),
 		PartNumber: aws.Int32(w.partNum),
 		Body:       strings.NewReader(string(w.buf)), // copy once
@@ -395,7 +479,7 @@ func (w *streamWriter) Close() (string, int64, string, error) {
 	}
 	out, err := w.c.s3.CompleteMultipartUpload(w.ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(w.bucket),
-		Key:             aws.String(w.key),
+		Key:             aws.String(w.fullKey),
 		UploadId:        aws.String(w.uploadID),
 		MultipartUpload: &s3types.CompletedMultipartUpload{Parts: w.parts},
 	})
@@ -420,7 +504,7 @@ func (w *streamWriter) Abort() error {
 	w.aborted = true
 	_, err := w.c.s3.AbortMultipartUpload(w.ctx, &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(w.bucket),
-		Key:      aws.String(w.key),
+		Key:      aws.String(w.fullKey),
 		UploadId: aws.String(w.uploadID),
 	})
 	if err != nil {

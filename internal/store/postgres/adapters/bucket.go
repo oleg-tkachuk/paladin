@@ -2,72 +2,53 @@ package adapters
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// BucketRepo satisfies bucket.Repository. Stats require an aggregation that
-// isn't expressed in the sqlc query set; we issue it directly through the
-// pool.
+// BucketRepo satisfies bucket.Repository.
 type BucketRepo struct {
-	q    *sqlc.Queries
-	pool *pgxpool.Pool
+	q *sqlc.Queries
 }
 
-func NewBucketRepo(q *sqlc.Queries, pool *pgxpool.Pool) *BucketRepo {
-	return &BucketRepo{q: q, pool: pool}
-}
+func NewBucketRepo(q *sqlc.Queries) *BucketRepo { return &BucketRepo{q: q} }
 
 var _ bucket.Repository = (*BucketRepo)(nil)
 
-func (r *BucketRepo) Create(ctx context.Context, args bucket.CreateBucketArgs) (bucket.Bucket, error) {
-	// buckets.lifecycle_rules is JSONB NOT NULL with default '[]'. The SQL
-	// INSERT binds this column explicitly, so a nil []byte would surface as
-	// NULL and violate the constraint. Normalize to an empty JSON array.
-	rules := args.LifecycleRules
-	if len(rules) == 0 {
-		rules = []byte("[]")
+func (r *BucketRepo) Create(ctx context.Context, args bucket.CreateArgs) (bucket.Bucket, error) {
+	// labels is JSONB NOT NULL DEFAULT '{}'. Bind explicitly to avoid SQL NULL.
+	labels := args.Labels
+	if len(labels) == 0 {
+		labels = []byte("{}")
 	}
 	if err := r.q.CreateBucket(ctx,
-		pgUUID(args.TenantID),
-		args.BucketID,
+		args.BackendID,
+		args.BucketName,
 		strPtr(args.DisplayName),
-		args.StorageBackend,
-		args.CedarPolicy,
-		rules,
+		strPtr(args.Region),
+		labels,
 	); err != nil {
 		return bucket.Bucket{}, fmt.Errorf("create bucket: %w", err)
 	}
-	return r.Get(ctx, args.TenantID, args.BucketID)
+	return r.Get(ctx, args.BackendID, args.BucketName)
 }
 
-func (r *BucketRepo) Get(ctx context.Context, tenantID uuid.UUID, bucketID string) (bucket.Bucket, error) {
-	row, err := r.q.GetBucket(ctx, pgUUID(tenantID), bucketID)
+func (r *BucketRepo) Get(ctx context.Context, backendID, bucketName string) (bucket.Bucket, error) {
+	row, err := r.q.GetBucket(ctx, backendID, bucketName)
 	if err != nil {
 		return bucket.Bucket{}, err
 	}
-	return bucketFromSQLC(row.Bucket), nil
+	return BucketFromSQLC(row.Bucket), nil
 }
 
-func (r *BucketRepo) Update(ctx context.Context, args bucket.UpdateBucketArgs) (bucket.Bucket, error) {
-	var policyHash []byte
-	if args.CedarPolicy != nil {
-		sum := sha256.Sum256([]byte(*args.CedarPolicy))
-		policyHash = sum[:]
-	}
+func (r *BucketRepo) Update(ctx context.Context, args bucket.UpdateArgs) (bucket.Bucket, error) {
 	rows, err := r.q.UpdateBucket(ctx,
-		pgUUID(args.TenantID),
-		args.BucketID,
+		args.BackendID,
+		args.BucketName,
 		args.DisplayName,
-		args.CedarPolicy,
-		policyHash,
-		args.LifecycleRules,
+		args.Labels,
 		args.ExpectedVersion,
 	)
 	if err != nil {
@@ -76,11 +57,11 @@ func (r *BucketRepo) Update(ctx context.Context, args bucket.UpdateBucketArgs) (
 	if rows == 0 {
 		return bucket.Bucket{}, bucket.ErrVersionMismatch
 	}
-	return r.Get(ctx, args.TenantID, args.BucketID)
+	return r.Get(ctx, args.BackendID, args.BucketName)
 }
 
-func (r *BucketRepo) Delete(ctx context.Context, tenantID uuid.UUID, bucketID string, expectedVersion int64) error {
-	rows, err := r.q.DeleteBucket(ctx, pgUUID(tenantID), bucketID, expectedVersion)
+func (r *BucketRepo) Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := r.q.DeleteBucket(ctx, backendID, bucketName, expectedVersion)
 	if err != nil {
 		return fmt.Errorf("delete bucket: %w", err)
 	}
@@ -90,64 +71,54 @@ func (r *BucketRepo) Delete(ctx context.Context, tenantID uuid.UUID, bucketID st
 	return nil
 }
 
-func (r *BucketRepo) List(ctx context.Context, args bucket.ListBucketsArgs) ([]bucket.Bucket, string, error) {
+func (r *BucketRepo) List(ctx context.Context, args bucket.ListArgs) ([]bucket.Bucket, string, error) {
 	pageSize := args.PageSize
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	var after *string
+	var afterBackend, afterName *string
 	if args.PageToken != "" {
-		tok := args.PageToken
-		after = &tok
+		// page_token format: "<backend_id>/<bucket_name>"
+		// Simple implementation: split on first '/'.
+		for i := 0; i < len(args.PageToken); i++ {
+			if args.PageToken[i] == '/' {
+				ab, an := args.PageToken[:i], args.PageToken[i+1:]
+				afterBackend, afterName = &ab, &an
+				break
+			}
+		}
 	}
-	rows, err := r.q.ListBuckets(ctx, pgUUID(args.TenantID), after, pageSize)
+	rows, err := r.q.ListBuckets(ctx, args.BackendID, afterName, afterBackend, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list buckets: %w", err)
 	}
 	out := make([]bucket.Bucket, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, bucketFromSQLC(row.Bucket))
+		out = append(out, BucketFromSQLC(row.Bucket))
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {
-		next = out[len(out)-1].BucketID
+		last := out[len(out)-1]
+		next = last.BackendID + "/" + last.BucketName
 	}
 	return out, next, nil
 }
 
-// Stats runs a single grouped aggregation. Returning (AVAILABLE, PENDING,
-// DELETED) counts keeps the row count O(1) regardless of bucket size.
-func (r *BucketRepo) Stats(ctx context.Context, tenantID uuid.UUID, bucketID string) (bucket.BucketStats, error) {
-	const q = `
-		SELECT
-			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN 1 ELSE 0 END), 0) AS available,
-			COALESCE(SUM(CASE WHEN state = 'PENDING'   THEN 1 ELSE 0 END), 0) AS pending,
-			COALESCE(SUM(CASE WHEN state = 'DELETED'   THEN 1 ELSE 0 END), 0) AS deleted,
-			COALESCE(SUM(CASE WHEN state = 'AVAILABLE' THEN size_bytes ELSE 0 END), 0) AS size_bytes
-		FROM objects
-		WHERE tenant_id = $1 AND bucket_id = $2
-	`
-	var s bucket.BucketStats
-	err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), bucketID).Scan(
-		&s.ObjectCountAvailable,
-		&s.ObjectCountPending,
-		&s.ObjectCountDeleted,
-		&s.SizeBytesAvailable,
-	)
+func (r *BucketRepo) CountObjectKeys(ctx context.Context, backendID, bucketName string) (int64, error) {
+	n, err := r.q.CountObjectKeysReferencingBucket(ctx, backendID, bucketName)
 	if err != nil {
-		return bucket.BucketStats{}, fmt.Errorf("bucket stats: %w", err)
+		return 0, err
 	}
-	return s, nil
+	return n, nil
 }
 
-func bucketFromSQLC(b sqlc.Bucket) bucket.Bucket {
+func BucketFromSQLC(b sqlc.Bucket) bucket.Bucket {
 	return bucket.Bucket{
-		TenantID:        uuidFrom(b.TenantID),
-		BucketID:        b.BucketID,
+		BackendID:       b.BackendID,
+		BucketName:      b.BucketName,
 		DisplayName:     derefStr(b.DisplayName),
-		StorageBackend:  b.StorageBackend,
-		CedarPolicy:     b.CedarPolicy,
-		LifecycleRules:  b.LifecycleRules,
+		Region:          derefStr(b.Region),
+		Labels:          b.Labels,
 		ResourceVersion: b.ResourceVersion,
 		CreatedAt:       timeFrom(b.CreatedAt),
 		UpdatedAt:       timeFrom(b.UpdatedAt),

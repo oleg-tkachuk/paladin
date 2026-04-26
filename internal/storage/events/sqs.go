@@ -30,7 +30,7 @@ type SQSClient interface {
 	DeleteMessage(ctx context.Context, in *sqs.DeleteMessageInput, opts ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 }
 
-// Resolver maps (bucket, key) pairs to PALADIN object_ids. Event payloads carry
+// Resolver maps (objectKey, key) pairs to PALADIN object_ids. Event payloads carry
 // physical S3 coordinates, not PALADIN logical identity.
 type Resolver interface {
 	ResolveObjectID(ctx context.Context, physicalBucket, key string) (uuid.UUID, error)
@@ -111,7 +111,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg sqstypes.Message) {
 	for _, ev := range events {
 		if err := c.processEvent(ctx, ev); err != nil {
 			c.log.Warn("process event", zap.Error(err),
-				zap.String("bucket", ev.Bucket), zap.String("key", ev.Key))
+				zap.String("objectKey", ev.ObjectKey), zap.String("key", ev.Key))
 			allSuccess = false
 		}
 	}
@@ -127,7 +127,7 @@ func (c *Consumer) processEvent(ctx context.Context, ev s3Event) error {
 	if !strings.HasPrefix(ev.EventName, "ObjectCreated:") {
 		return nil
 	}
-	objectID, err := c.resolver.ResolveObjectID(ctx, ev.Bucket, ev.Key)
+	objectID, err := c.resolver.ResolveObjectID(ctx, ev.ObjectKey, ev.Key)
 	if err != nil {
 		return fmt.Errorf("resolve object: %w", err)
 	}
@@ -150,7 +150,7 @@ func (c *Consumer) delete(ctx context.Context, handle *string) error {
 // notification JSON envelope.
 type s3Event struct {
 	EventName string
-	Bucket    string
+	ObjectKey string
 	Key       string
 	ETag      string
 	Size      int64
@@ -164,9 +164,9 @@ func parseS3Event(body string) ([]s3Event, error) {
 		Records []struct {
 			EventName string `json:"eventName"`
 			S3        struct {
-				Bucket struct {
+				ObjectKey struct {
 					Name string `json:"name"`
-				} `json:"bucket"`
+				} `json:"objectKey"`
 				Object struct {
 					Key       string `json:"key"`
 					Size      int64  `json:"size"`
@@ -181,7 +181,7 @@ func parseS3Event(body string) ([]s3Event, error) {
 		for _, r := range direct.Records {
 			out = append(out, s3Event{
 				EventName: r.EventName,
-				Bucket:    r.S3.Bucket.Name,
+				ObjectKey: r.S3.ObjectKey.Name,
 				Key:       r.S3.Object.Key,
 				ETag:      strings.Trim(r.S3.Object.ETag, `"`),
 				Size:      r.S3.Object.Size,

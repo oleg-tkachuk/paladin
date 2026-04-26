@@ -6,43 +6,58 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv
 
 import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
 import "paladin/v1/types.proto";
 
-// BucketService manages tenant-scoped logical buckets.
+// BucketService manages physical S3 buckets inside configured storage
+// backends. The PALADIN hierarchy is:
 //
-// Buckets are NOT provisioned as physical S3 buckets — they're Postgres rows
-// that map to prefixes inside the tenant's allocation in a shared storage
-// backend. Creation is fast (no IAM, no S3 create-bucket) and cheap.
+//   storage_backend (config) → bucket (real S3 bucket) → object_key
+//   (tenant prefix) → object
+//
+// Creating a bucket here issues an actual S3 CreateBucket call against the
+// backend's endpoint and records the resulting bucket so ObjectKey resources
+// can FK to it.
 service BucketService {
   rpc CreateBucket(CreateBucketRequest) returns (Bucket);
   rpc GetBucket(GetBucketRequest) returns (Bucket);
   rpc UpdateBucket(UpdateBucketRequest) returns (Bucket);
   rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
   rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
+}
 
-  // GetBucketStats returns approximate usage stats (counts, bytes).
-  rpc GetBucketStats(GetBucketStatsRequest) returns (BucketStats);
+message Bucket {
+  // Resource name: "backends/{backend_id}/buckets/{bucket_name}".
+  string name = 1;
+  // ID of the configured storage backend (storage.backends.<id>).
+  string backend_id = 2;
+  // Physical S3 bucket name (validates against S3 naming rules).
+  string bucket_name = 3;
+  string display_name = 4;
+  string region = 5;
+  map<string, string> labels = 6;
+  string resource_version = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
 }
 
 message CreateBucketRequest {
-  // Tenant-unique logical name.
-  string bucket_id = 1 [(buf.validate.field).string = {
+  // Storage backend to provision the bucket inside. Must reference a
+  // configured entry under `storage.backends`. Empty → server picks the
+  // default backend.
+  string backend_id = 1;
+  string bucket_name = 2 [(buf.validate.field).string = {
     min_len: 3,
     max_len: 63,
-    pattern: "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$"
+    pattern: "^[a-z0-9]([a-z0-9.-]{1,61}[a-z0-9])?$"
   }];
-
-  string display_name = 2;
-
-  // Storage backend (references server config). If empty, server picks the
-  // tenant's default backend.
-  string storage_backend = 3;
-
-  BucketPolicy policy = 4;
+  string display_name = 3;
+  // Optional region override; falls back to the backend's configured region.
+  string region = 4;
+  map<string, string> labels = 5;
 }
 
 message GetBucketRequest {
-  // Resource name: "buckets/{bucket}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
@@ -51,27 +66,24 @@ message UpdateBucketRequest {
   string resource_version = 2 [(buf.validate.field).string.min_len = 1];
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   string display_name = 4;
-  BucketPolicy policy = 5;
+  map<string, string> labels = 5;
 }
 
 message DeleteBucketRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   string resource_version = 2;
-  // If true, deletes even when the bucket contains objects (starts an
-  // asynchronous purge Operation). Default is to reject non-empty buckets.
-  bool force = 3;
+  // If true, also issues an S3 DeleteBucket. Refuses when any ObjectKey
+  // still references this bucket.
+  bool delete_remote = 3;
 }
 
-message DeleteBucketResponse {
-  // Present if force=true and deletion is asynchronous.
-  string operation_name = 1;
-}
+message DeleteBucketResponse {}
 
 message ListBucketsRequest {
-  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
-  string page_token = 2;
-  // CEL filter over Bucket fields.
-  string filter = 3;
+  // Optional: scope listing to a single backend.
+  string backend_id = 1;
+  int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+  string page_token = 3;
   string order_by = 4;
   SortOrder sort_order = 5;
 }
@@ -79,15 +91,4 @@ message ListBucketsRequest {
 message ListBucketsResponse {
   repeated Bucket buckets = 1;
   string next_page_token = 2;
-}
-
-message GetBucketStatsRequest {
-  string name = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-message BucketStats {
-  int64 approximate_object_count = 1;
-  int64 approximate_total_bytes = 2;
-  // Breakdown by state.
-  map<string, int64> object_count_by_state = 3;
 }

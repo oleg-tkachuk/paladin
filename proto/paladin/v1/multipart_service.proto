@@ -21,7 +21,7 @@ service MultipartUploadService {
 }
 
 message InitiateMultipartUploadRequest {
-  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2;
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
   // Required for multipart — used to compute part size.
@@ -42,7 +42,7 @@ message InitiateMultipartUploadResponse {
 }
 
 message PresignPartRequest {
-  // Resource name: "buckets/{bucket}/objects/{object_id}".
+  // Resource name: "object_keys/{object_key}/objects/{object_id}".
   string object_name = 1 [(buf.validate.field).string.min_len = 1];
   string upload_id = 2 [(buf.validate.field).string.min_len = 1];
   int32 part_number = 3 [(buf.validate.field).int32 = {gte: 1, lte: 10000}];

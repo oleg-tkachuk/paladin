@@ -19,7 +19,7 @@ type Principal struct {
 	// Subject is the stable identifier inside the tenant (user ID, service
 	// account, etc.). Carried verbatim from the JWT `sub` claim.
 	Subject string
-	// Roles are RBAC strings used by Cedar policies (e.g. "bucket:admin").
+	// Roles are RBAC strings used by Cedar policies (e.g. "objectKey:admin").
 	Roles []string
 	// Labels are free-form claim attributes exposed to Cedar as principal
 	// attributes.

@@ -145,7 +145,7 @@ func (ChecksumAlgorithm) EnumDescriptor() ([]byte, []int) {
 // CompletionMode communicates to the client how the object will be
 // transitioned from PENDING to AVAILABLE.
 //
-// Derived server-side from bucket.storage_backend.events configuration.
+// Derived server-side from object_key.storage_backend.events configuration.
 type CompletionMode int32
 
 const (
@@ -250,22 +250,29 @@ func (SortOrder) EnumDescriptor() ([]byte, []int) {
 
 // Object is the canonical representation of a stored object.
 //
-// Resource name: buckets/{bucket}/objects/{object_id}
-//   - {bucket} is a tenant-scoped logical namespace, not a physical S3 bucket.
+// Resource name: object_keys/{object_key}/objects/{object_id}
+//   - {object_key} is a tenant-scoped logical namespace, not a physical S3 object_key.
 //   - {object_id} is a stable UUIDv7 assigned on upload initiation.
 //
 // Tenancy: implied by auth context (JWT claim `tenant`). Never accept
 // tenant_id in request bodies for object-scoped RPCs.
 type Object struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Fully-qualified resource name: "buckets/{bucket}/objects/{object_id}".
+	// Fully-qualified resource name: "object_keys/{object_key}/objects/{object_id}".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Stable object identifier (UUIDv7). Sortable by creation time.
 	ObjectId string `protobuf:"bytes,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	// Logical bucket (namespace) name.
-	Bucket string `protobuf:"bytes,3,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// Storage key (path) within the bucket.
+	// Logical object_key (namespace) name.
+	ObjectKey string `protobuf:"bytes,3,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	// Storage key (path) within the object_key.
 	Key string `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	// Storage backend ID (FK to storage_backends.id). Surfaced on responses
+	// when the server JOINs object_keys; may be empty on bulk list endpoints
+	// that prioritise pagination cost over reflection completeness.
+	BackendId string `protobuf:"bytes,21,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	// Physical S3 bucket name (FK to buckets.bucket_name). Same caveat as
+	// backend_id — populated when the server JOINs object_keys.
+	BucketName string `protobuf:"bytes,22,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
 	// Lifecycle state.
 	State ObjectState `protobuf:"varint,5,opt,name=state,proto3,enum=paladin.v1.ObjectState" json:"state,omitempty"`
 	// Declared content type. Enforced via Cedar policy at presign time.
@@ -348,9 +355,9 @@ func (x *Object) GetObjectId() string {
 	return ""
 }
 
-func (x *Object) GetBucket() string {
+func (x *Object) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -358,6 +365,20 @@ func (x *Object) GetBucket() string {
 func (x *Object) GetKey() string {
 	if x != nil {
 		return x.Key
+	}
+	return ""
+}
+
+func (x *Object) GetBackendId() string {
+	if x != nil {
+		return x.BackendId
+	}
+	return ""
+}
+
+func (x *Object) GetBucketName() string {
+	if x != nil {
+		return x.BucketName
 	}
 	return ""
 }
@@ -562,7 +583,7 @@ type PresignedPostPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Form fields to include in the multipart/form-data upload.
 	Fields map[string]string `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Action URL (bucket endpoint) to POST to.
+	// Action URL (object_key endpoint) to POST to.
 	Action        string `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -612,46 +633,50 @@ func (x *PresignedPostPolicy) GetAction() string {
 	return ""
 }
 
-// Bucket is a tenant-scoped logical namespace.
+// ObjectKey is a tenant-scoped logical namespace.
 //
 // Buckets map to prefixes inside a physical storage backend; they are
-// NOT provisioned as real S3 buckets. Creating a bucket is a Postgres
+// NOT provisioned as real S3 object_keys. Creating a object_key is a Postgres
 // INSERT, not an IAM/S3 operation.
-type Bucket struct {
+type ObjectKey struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Fully-qualified resource name: "buckets/{bucket}".
+	// Fully-qualified resource name: "object_keys/{object_key}".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Human-friendly display label.
 	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// Logical name; tenant-unique; matches the S3 key-prefix component.
 	// Constraints: [a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?
-	BucketId string `protobuf:"bytes,3,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
-	// Storage backend identifier (from server-side config).
-	StorageBackend string `protobuf:"bytes,4,opt,name=storage_backend,json=storageBackend,proto3" json:"storage_backend,omitempty"`
-	// Effective completion mode (derived from storage_backend.events config).
+	ObjectKey string `protobuf:"bytes,3,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	// Storage backend identifier (from server-side config); FK to
+	// storage_backends.id.
+	BackendId string `protobuf:"bytes,4,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	// Effective completion mode (derived from backend.events config).
 	CompletionMode  CompletionMode         `protobuf:"varint,5,opt,name=completion_mode,json=completionMode,proto3,enum=paladin.v1.CompletionMode" json:"completion_mode,omitempty"`
-	Policy          *BucketPolicy          `protobuf:"bytes,6,opt,name=policy,proto3" json:"policy,omitempty"`
+	Policy          *ObjectKeyPolicy       `protobuf:"bytes,6,opt,name=policy,proto3" json:"policy,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,7,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Physical S3 bucket holding objects for this ObjectKey. References
+	// a row in the `buckets` table created via BucketService.CreateBucket.
+	BucketName    string `protobuf:"bytes,10,opt,name=bucket_name,json=bucketName,proto3" json:"bucket_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Bucket) Reset() {
-	*x = Bucket{}
+func (x *ObjectKey) Reset() {
+	*x = ObjectKey{}
 	mi := &file_paladin_v1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Bucket) String() string {
+func (x *ObjectKey) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Bucket) ProtoMessage() {}
+func (*ObjectKey) ProtoMessage() {}
 
-func (x *Bucket) ProtoReflect() protoreflect.Message {
+func (x *ObjectKey) ProtoReflect() protoreflect.Message {
 	mi := &file_paladin_v1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -663,80 +688,87 @@ func (x *Bucket) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Bucket.ProtoReflect.Descriptor instead.
-func (*Bucket) Descriptor() ([]byte, []int) {
+// Deprecated: Use ObjectKey.ProtoReflect.Descriptor instead.
+func (*ObjectKey) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Bucket) GetName() string {
+func (x *ObjectKey) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Bucket) GetDisplayName() string {
+func (x *ObjectKey) GetDisplayName() string {
 	if x != nil {
 		return x.DisplayName
 	}
 	return ""
 }
 
-func (x *Bucket) GetBucketId() string {
+func (x *ObjectKey) GetObjectKey() string {
 	if x != nil {
-		return x.BucketId
+		return x.ObjectKey
 	}
 	return ""
 }
 
-func (x *Bucket) GetStorageBackend() string {
+func (x *ObjectKey) GetBackendId() string {
 	if x != nil {
-		return x.StorageBackend
+		return x.BackendId
 	}
 	return ""
 }
 
-func (x *Bucket) GetCompletionMode() CompletionMode {
+func (x *ObjectKey) GetCompletionMode() CompletionMode {
 	if x != nil {
 		return x.CompletionMode
 	}
 	return CompletionMode_COMPLETION_MODE_UNSPECIFIED
 }
 
-func (x *Bucket) GetPolicy() *BucketPolicy {
+func (x *ObjectKey) GetPolicy() *ObjectKeyPolicy {
 	if x != nil {
 		return x.Policy
 	}
 	return nil
 }
 
-func (x *Bucket) GetResourceVersion() string {
+func (x *ObjectKey) GetResourceVersion() string {
 	if x != nil {
 		return x.ResourceVersion
 	}
 	return ""
 }
 
-func (x *Bucket) GetCreatedAt() *timestamppb.Timestamp {
+func (x *ObjectKey) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *Bucket) GetUpdatedAt() *timestamppb.Timestamp {
+func (x *ObjectKey) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
 	return nil
 }
 
-// BucketPolicy carries bucket-level authorization and lifecycle rules.
+func (x *ObjectKey) GetBucketName() string {
+	if x != nil {
+		return x.BucketName
+	}
+	return ""
+}
+
+// ObjectKeyPolicy carries object_key-level authorization and lifecycle rules.
 //
 // Path authorization is expressed as Cedar policies (text blob), compiled
 // and cached at load time. Lifecycle rules map to native S3 lifecycle
 // configuration on the underlying backend.
-type BucketPolicy struct {
+type ObjectKeyPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Cedar policy text. Compiled server-side; validated on write.
 	CedarPolicy string `protobuf:"bytes,1,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
@@ -746,20 +778,20 @@ type BucketPolicy struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *BucketPolicy) Reset() {
-	*x = BucketPolicy{}
+func (x *ObjectKeyPolicy) Reset() {
+	*x = ObjectKeyPolicy{}
 	mi := &file_paladin_v1_types_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BucketPolicy) String() string {
+func (x *ObjectKeyPolicy) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BucketPolicy) ProtoMessage() {}
+func (*ObjectKeyPolicy) ProtoMessage() {}
 
-func (x *BucketPolicy) ProtoReflect() protoreflect.Message {
+func (x *ObjectKeyPolicy) ProtoReflect() protoreflect.Message {
 	mi := &file_paladin_v1_types_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -771,19 +803,19 @@ func (x *BucketPolicy) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BucketPolicy.ProtoReflect.Descriptor instead.
-func (*BucketPolicy) Descriptor() ([]byte, []int) {
+// Deprecated: Use ObjectKeyPolicy.ProtoReflect.Descriptor instead.
+func (*ObjectKeyPolicy) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *BucketPolicy) GetCedarPolicy() string {
+func (x *ObjectKeyPolicy) GetCedarPolicy() string {
 	if x != nil {
 		return x.CedarPolicy
 	}
 	return ""
 }
 
-func (x *BucketPolicy) GetLifecycleRules() []*LifecycleRule {
+func (x *ObjectKeyPolicy) GetLifecycleRules() []*LifecycleRule {
 	if x != nil {
 		return x.LifecycleRules
 	}
@@ -1001,7 +1033,7 @@ type Tenant struct {
 	TenantId    string            `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	DisplayName string            `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Labels      map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Cedar policy text inherited by all buckets in this tenant.
+	// Cedar policy text inherited by all object_keys in this tenant.
 	InheritedCedarPolicy string                 `protobuf:"bytes,5,opt,name=inherited_cedar_policy,json=inheritedCedarPolicy,proto3" json:"inherited_cedar_policy,omitempty"`
 	ResourceVersion      string                 `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -1100,7 +1132,7 @@ type CompletedPart struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	PartNumber int32                  `protobuf:"varint,1,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
 	Etag       string                 `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
-	// Optional part-level checksum, when the bucket uses composite checksums.
+	// Optional part-level checksum, when the object_key uses composite checksums.
 	Checksum      string `protobuf:"bytes,3,opt,name=checksum,proto3" json:"checksum,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1349,12 +1381,17 @@ var File_paladin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12ocp/v1/types.proto\x12\x06ocp.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x19google/protobuf/any.proto\"\xd4\a\n" +
+	"\x12ocp/v1/types.proto\x12\x06ocp.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x19google/protobuf/any.proto\"\x9b\b\n" +
 	"\x06Object\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x16\n" +
-	"\x06bucket\x18\x03 \x01(\tR\x06bucket\x12\x10\n" +
-	"\x03key\x18\x04 \x01(\tR\x03key\x12)\n" +
+	"\tobject_id\x18\x02 \x01(\tR\bobjectId\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x03 \x01(\tR\tobjectKey\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\tR\x03key\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x15 \x01(\tR\tbackendId\x12\x1f\n" +
+	"\vbucket_name\x18\x16 \x01(\tR\n" +
+	"bucketName\x12)\n" +
 	"\x05state\x18\x05 \x01(\x0e2\x13.paladin.v1.ObjectStateR\x05state\x12!\n" +
 	"\fcontent_type\x18\x06 \x01(\tR\vcontentType\x12\x1d\n" +
 	"\n" +
@@ -1397,20 +1434,25 @@ const file_paladin_v1_types_proto_rawDesc = "" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x03\n" +
-	"\x06Bucket\x12\x12\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x03\n" +
+	"\tObjectKey\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
-	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1b\n" +
-	"\tbucket_id\x18\x03 \x01(\tR\bbucketId\x12'\n" +
-	"\x0fstorage_backend\x18\x04 \x01(\tR\x0estorageBackend\x12?\n" +
-	"\x0fcompletion_mode\x18\x05 \x01(\x0e2\x16.paladin.v1.CompletionModeR\x0ecompletionMode\x12,\n" +
-	"\x06policy\x18\x06 \x01(\v2\x14.paladin.v1.BucketPolicyR\x06policy\x12)\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x03 \x01(\tR\tobjectKey\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x04 \x01(\tR\tbackendId\x12?\n" +
+	"\x0fcompletion_mode\x18\x05 \x01(\x0e2\x16.paladin.v1.CompletionModeR\x0ecompletionMode\x12/\n" +
+	"\x06policy\x18\x06 \x01(\v2\x17.paladin.v1.ObjectKeyPolicyR\x06policy\x12)\n" +
 	"\x10resource_version\x18\a \x01(\tR\x0fresourceVersion\x129\n" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"q\n" +
-	"\fBucketPolicy\x12!\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
+	"\vbucket_name\x18\n" +
+	" \x01(\tR\n" +
+	"bucketName\"t\n" +
+	"\x0fObjectKeyPolicy\x12!\n" +
 	"\fcedar_policy\x18\x01 \x01(\tR\vcedarPolicy\x12>\n" +
 	"\x0flifecycle_rules\x18\x02 \x03(\v2\x15.paladin.v1.LifecycleRuleR\x0elifecycleRules\"\xd7\x01\n" +
 	"\rLifecycleRule\x12\x0e\n" +
@@ -1509,8 +1551,8 @@ var file_paladin_v1_types_proto_goTypes = []any{
 	(*Object)(nil),                // 4: paladin.v1.Object
 	(*PresignedUrl)(nil),          // 5: paladin.v1.PresignedUrl
 	(*PresignedPostPolicy)(nil),   // 6: paladin.v1.PresignedPostPolicy
-	(*Bucket)(nil),                // 7: paladin.v1.Bucket
-	(*BucketPolicy)(nil),          // 8: paladin.v1.BucketPolicy
+	(*ObjectKey)(nil),             // 7: paladin.v1.ObjectKey
+	(*ObjectKeyPolicy)(nil),       // 8: paladin.v1.ObjectKeyPolicy
 	(*LifecycleRule)(nil),         // 9: paladin.v1.LifecycleRule
 	(*LifecycleTransition)(nil),   // 10: paladin.v1.LifecycleTransition
 	(*LifecycleExpiration)(nil),   // 11: paladin.v1.LifecycleExpiration
@@ -1541,11 +1583,11 @@ var file_paladin_v1_types_proto_depIdxs = []int32{
 	6,  // 10: paladin.v1.PresignedUrl.post_policy:type_name -> paladin.v1.PresignedPostPolicy
 	21, // 11: paladin.v1.PresignedUrl.expires_at:type_name -> google.protobuf.Timestamp
 	19, // 12: paladin.v1.PresignedPostPolicy.fields:type_name -> paladin.v1.PresignedPostPolicy.FieldsEntry
-	2,  // 13: paladin.v1.Bucket.completion_mode:type_name -> paladin.v1.CompletionMode
-	8,  // 14: paladin.v1.Bucket.policy:type_name -> paladin.v1.BucketPolicy
-	21, // 15: paladin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	21, // 16: paladin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 17: paladin.v1.BucketPolicy.lifecycle_rules:type_name -> paladin.v1.LifecycleRule
+	2,  // 13: paladin.v1.ObjectKey.completion_mode:type_name -> paladin.v1.CompletionMode
+	8,  // 14: paladin.v1.ObjectKey.policy:type_name -> paladin.v1.ObjectKeyPolicy
+	21, // 15: paladin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
+	21, // 16: paladin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 17: paladin.v1.ObjectKeyPolicy.lifecycle_rules:type_name -> paladin.v1.LifecycleRule
 	10, // 18: paladin.v1.LifecycleRule.transition:type_name -> paladin.v1.LifecycleTransition
 	11, // 19: paladin.v1.LifecycleRule.expiration:type_name -> paladin.v1.LifecycleExpiration
 	22, // 20: paladin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration

@@ -26,7 +26,7 @@ const (
 
 type InitiateMultipartUploadRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
-	Bucket      string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey   string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Key         string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	ContentType string                 `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	// Required for multipart — used to compute part size.
@@ -69,9 +69,9 @@ func (*InitiateMultipartUploadRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_multipart_service_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *InitiateMultipartUploadRequest) GetBucket() string {
+func (x *InitiateMultipartUploadRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -196,7 +196,7 @@ func (x *InitiateMultipartUploadResponse) GetTotalParts() int32 {
 
 type PresignPartRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "buckets/{bucket}/objects/{object_id}".
+	// Resource name: "object_keys/{object_key}/objects/{object_id}".
 	ObjectName    string               `protobuf:"bytes,1,opt,name=object_name,json=objectName,proto3" json:"object_name,omitempty"`
 	UploadId      string               `protobuf:"bytes,2,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
 	PartNumber    int32                `protobuf:"varint,3,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
@@ -579,9 +579,10 @@ var File_paladin_v1_multipart_service_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_multipart_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1eocp/v1/multipart_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x12ocp/v1/types.proto\"\xae\x04\n" +
-	"\x1eInitiateMultipartUploadRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x10\n" +
+	"\x1eocp/v1/multipart_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x12ocp/v1/types.proto\"\xb5\x04\n" +
+	"\x1eInitiateMultipartUploadRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
 	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12&\n" +
 	"\n" +

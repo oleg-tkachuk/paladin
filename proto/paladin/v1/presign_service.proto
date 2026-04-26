@@ -24,7 +24,7 @@ service PresignService {
 }
 
 message RegenerateUploadUrlRequest {
-  // Resource name: "buckets/{bucket}/objects/{object_id}".
+  // Resource name: "object_keys/{object_key}/objects/{object_id}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
   google.protobuf.Duration ttl = 2;
 }

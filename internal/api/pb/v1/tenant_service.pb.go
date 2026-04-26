@@ -29,7 +29,7 @@ type CreateTenantRequest struct {
 	TenantId    string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Labels      map[string]string      `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Inherited Cedar policy applied to all buckets under this tenant.
+	// Inherited Cedar policy applied to all object_keys under this tenant.
 	InheritedCedarPolicy string `protobuf:"bytes,4,opt,name=inherited_cedar_policy,json=inheritedCedarPolicy,proto3" json:"inherited_cedar_policy,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache

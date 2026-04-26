@@ -1,5 +1,5 @@
 // Package cel compiles and evaluates AIP-160-style CEL filter expressions
-// used by ListObjects, ListBuckets, ListTenants, ListOperations.
+// used by ListObjects, ListObjectKeys, ListTenants, ListOperations.
 //
 // Separation from Cedar (policy): CEL answers "does this row match?" for
 // database queries; Cedar answers "may the caller perform this action?"
@@ -47,11 +47,11 @@ var ObjectSchema = &Schema{
 	},
 }
 
-// BucketSchema is exposed to filters against Bucket rows.
+// BucketSchema is exposed to filters against ObjectKey rows.
 var BucketSchema = &Schema{
-	Name: "Bucket",
+	Name: "ObjectKey",
 	vars: map[string]*cel.Type{
-		"bucket_id":       cel.StringType,
+		"objectKey":       cel.StringType,
 		"storage_backend": cel.StringType,
 		"display_name":    cel.StringType,
 		"created_at":      cel.TimestampType,

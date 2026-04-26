@@ -44,7 +44,7 @@ erDiagram
     OBJECTS {
         uuid id PK
         text tenant_id FK
-        text object_key
+        text object_tag
         text status
         bigint size_bytes
         timestamptz created_at
@@ -70,7 +70,7 @@ graph LR
     end
     subgraph "Managed Services"
         DB[("RDS / Postgres")]
-        S3["S3 Bucket / SeaweedFS"]
+        S3["S3 ObjectKey / SeaweedFS"]
     end
 
     C -- "HTTPS" --> LB

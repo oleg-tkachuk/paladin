@@ -1,7 +1,7 @@
-// Package category implements CategoryService business logic. Categories
+// Package objecttag implements ObjectTagService business logic. Object tags
 // are tenant-scoped taxonomy entries; objects are not FK-linked to them
 // (see migration 002).
-package category
+package objecttag
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
-type Category struct {
+type ObjectTag struct {
 	TenantID        uuid.UUID
 	Slug            string
 	DisplayName     string
@@ -44,11 +44,11 @@ type UpdateArgs struct {
 }
 
 type Repository interface {
-	Create(ctx context.Context, args CreateArgs) (Category, error)
-	Get(ctx context.Context, tenantID uuid.UUID, slug string) (Category, error)
-	Update(ctx context.Context, args UpdateArgs) (Category, error)
+	Create(ctx context.Context, args CreateArgs) (ObjectTag, error)
+	Get(ctx context.Context, tenantID uuid.UUID, slug string) (ObjectTag, error)
+	Update(ctx context.Context, args UpdateArgs) (ObjectTag, error)
 	Delete(ctx context.Context, tenantID uuid.UUID, slug string, expectedVersion int64) error
-	List(ctx context.Context, tenantID uuid.UUID, pageSize int32, afterSlug string) ([]Category, string, error)
+	List(ctx context.Context, tenantID uuid.UUID, pageSize int32, afterSlug string) ([]ObjectTag, string, error)
 }
 
 type Handler struct {
@@ -57,48 +57,48 @@ type Handler struct {
 
 func NewHandler(repo Repository) *Handler { return &Handler{repo: repo} }
 
-func (h *Handler) CreateCategory(ctx context.Context, args CreateArgs) (*Category, error) {
+func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	args.TenantID = t
-	c, err := h.repo.Create(ctx, args)
+	ot, err := h.repo.Create(ctx, args)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create category: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create object tag: %w", err))
 	}
-	return &c, nil
+	return &ot, nil
 }
 
-func (h *Handler) GetCategory(ctx context.Context, slug string) (*Category, error) {
+func (h *Handler) GetObjectTag(ctx context.Context, slug string) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	c, err := h.repo.Get(ctx, t, slug)
+	ot, err := h.repo.Get(ctx, t, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return &c, nil
+	return &ot, nil
 }
 
-func (h *Handler) UpdateCategory(ctx context.Context, args UpdateArgs) (*Category, error) {
+func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	args.TenantID = t
-	c, err := h.repo.Update(ctx, args)
+	ot, err := h.repo.Update(ctx, args)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return &c, nil
+	return &ot, nil
 }
 
-func (h *Handler) DeleteCategory(ctx context.Context, slug string, expectedVersion int64) error {
+func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVersion int64) error {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
@@ -112,7 +112,7 @@ func (h *Handler) DeleteCategory(ctx context.Context, slug string, expectedVersi
 	return nil
 }
 
-func (h *Handler) ListCategories(ctx context.Context, pageSize int32, pageToken string) ([]Category, string, error) {
+func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken string) ([]ObjectTag, string, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)

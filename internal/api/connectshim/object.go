@@ -24,7 +24,7 @@ func NewObjectServer(h *object.Handler) *ObjectServer { return &ObjectServer{H: 
 func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb.UploadObjectRequest]) (*connect.Response[pb.UploadObjectResponse], error) {
 	m := req.Msg
 	out, err := s.H.UploadObject(ctx, object.UploadObjectInput{
-		Bucket:        m.GetBucket(),
+		ObjectKey:     m.GetObjectKey(),
 		Key:           m.GetKey(),
 		ContentType:   m.GetContentType(),
 		SizeHint:      m.GetSizeHintBytes(),
@@ -73,7 +73,7 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.ListObjectsRequest]) (*connect.Response[pb.ListObjectsResponse], error) {
 	m := req.Msg
 	objs, next, err := s.H.ListObjects(ctx, object.ListObjectsInput{
-		Bucket:    m.GetBucket(),
+		ObjectKey: m.GetObjectKey(),
 		PageSize:  m.GetPageSize(),
 		PageToken: m.GetPageToken(),
 		Filter:    m.GetFilter(),
@@ -92,8 +92,8 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 
 func (s *ObjectServer) CountObjects(ctx context.Context, req *connect.Request[pb.CountObjectsRequest]) (*connect.Response[pb.CountObjectsResponse], error) {
 	out, err := s.H.CountObjects(ctx, object.CountObjectsInput{
-		Bucket: req.Msg.GetBucket(),
-		Filter: req.Msg.GetFilter(),
+		ObjectKey: req.Msg.GetObjectKey(),
+		Filter:    req.Msg.GetFilter(),
 	})
 	if err != nil {
 		return nil, err

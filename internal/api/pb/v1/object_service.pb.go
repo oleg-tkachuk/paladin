@@ -76,8 +76,8 @@ func (PresignTransport) EnumDescriptor() ([]byte, []int) {
 
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Target bucket.
-	Bucket string `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	// Target object_key.
+	ObjectKey string `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	// Desired storage key. If empty, server generates `<object_id>` under the
 	// tenant's default prefix.
 	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
@@ -132,9 +132,9 @@ func (*UploadObjectRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_object_service_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *UploadObjectRequest) GetBucket() string {
+func (x *UploadObjectRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -342,7 +342,7 @@ func (*UploadSmallRequest_Chunk) isUploadSmallRequest_Msg() {}
 
 type UploadSmallInit struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Bucket            string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey         string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Key               string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	ContentType       string                 `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	ChecksumAlgorithm ChecksumAlgorithm      `protobuf:"varint,4,opt,name=checksum_algorithm,json=checksumAlgorithm,proto3,enum=paladin.v1.ChecksumAlgorithm" json:"checksum_algorithm,omitempty"`
@@ -383,9 +383,9 @@ func (*UploadSmallInit) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_object_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *UploadSmallInit) GetBucket() string {
+func (x *UploadSmallInit) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -478,7 +478,7 @@ func (x *UploadSmallResponse) GetObject() *Object {
 
 type DownloadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "buckets/{bucket}/objects/{object_id}".
+	// Resource name: "object_keys/{object_key}/objects/{object_id}".
 	Name string               `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Ttl  *durationpb.Duration `protobuf:"bytes,2,opt,name=ttl,proto3" json:"ttl,omitempty"`
 	// Override for Content-Disposition on the download response.
@@ -636,7 +636,7 @@ func (x *GetObjectRequest) GetName() string {
 
 type LookupObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey     string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -672,9 +672,9 @@ func (*LookupObjectRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_object_service_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *LookupObjectRequest) GetBucket() string {
+func (x *LookupObjectRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -1114,9 +1114,9 @@ func (x *TagsOverride) GetTags() map[string]string {
 }
 
 type ListObjectsRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Bucket   string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	PageSize int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ObjectKey string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	PageSize  int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Opaque cursor. Encodes sort state + last-seen keyset.
 	PageToken string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	// CEL expression evaluated against the Object schema.
@@ -1160,9 +1160,9 @@ func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_object_service_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *ListObjectsRequest) GetBucket() string {
+func (x *ListObjectsRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -1256,7 +1256,7 @@ func (x *ListObjectsResponse) GetNextPageToken() string {
 
 type CountObjectsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	ObjectKey     string                 `protobuf:"bytes,1,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1292,9 +1292,9 @@ func (*CountObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_v1_object_service_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *CountObjectsRequest) GetBucket() string {
+func (x *CountObjectsRequest) GetObjectKey() string {
 	if x != nil {
-		return x.Bucket
+		return x.ObjectKey
 	}
 	return ""
 }
@@ -1363,9 +1363,10 @@ var File_paladin_v1_object_service_proto protoreflect.FileDescriptor
 
 const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1bocp/v1/object_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x12ocp/v1/types.proto\"\xc5\x04\n" +
-	"\x13UploadObjectRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x10\n" +
+	"\x1bocp/v1/object_service.proto\x12\x06ocp.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x12ocp/v1/types.proto\"\xcc\x04\n" +
+	"\x13UploadObjectRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
 	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12&\n" +
 	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12T\n" +
@@ -1389,9 +1390,10 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\x12UploadSmallRequest\x12-\n" +
 	"\x04init\x18\x01 \x01(\v2\x17.paladin.v1.UploadSmallInitH\x00R\x04init\x12\x16\n" +
 	"\x05chunk\x18\x02 \x01(\fH\x00R\x05chunkB\x05\n" +
-	"\x03msg\"\xcd\x03\n" +
-	"\x0fUploadSmallInit\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x10\n" +
+	"\x03msg\"\xd4\x03\n" +
+	"\x0fUploadSmallInit\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
 	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12H\n" +
 	"\x12checksum_algorithm\x18\x04 \x01(\x0e2\x19.paladin.v1.ChecksumAlgorithmR\x11checksumAlgorithm\x12A\n" +
@@ -1414,9 +1416,10 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\x06object\x18\x01 \x01(\v2\x0e.paladin.v1.ObjectR\x06object\x127\n" +
 	"\fdownload_url\x18\x02 \x01(\v2\x14.paladin.v1.PresignedUrlR\vdownloadUrl\"/\n" +
 	"\x10GetObjectRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"Q\n" +
-	"\x13LookupObjectRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x19\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"X\n" +
+	"\x13LookupObjectRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12\x19\n" +
 	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"\xe9\x03\n" +
 	"\x13UpdateObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
@@ -1461,9 +1464,10 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2\x1e.paladin.v1.TagsOverride.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe2\x01\n" +
-	"\x12ListObjectsRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12'\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\x01\n" +
+	"\x12ListObjectsRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12'\n" +
 	"\tpage_size\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1474,9 +1478,10 @@ const file_paladin_v1_object_service_proto_rawDesc = "" +
 	"sort_order\x18\x06 \x01(\x0e2\x11.paladin.v1.SortOrderR\tsortOrder\"g\n" +
 	"\x13ListObjectsResponse\x12(\n" +
 	"\aobjects\x18\x01 \x03(\v2\x0e.paladin.v1.ObjectR\aobjects\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"N\n" +
-	"\x13CountObjectsRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x16\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"U\n" +
+	"\x13CountObjectsRequest\x12&\n" +
+	"\n" +
+	"object_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tobjectKey\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\"Y\n" +
 	"\x14CountObjectsResponse\x12+\n" +
 	"\x11approximate_count\x18\x01 \x01(\x03R\x10approximateCount\x12\x14\n" +

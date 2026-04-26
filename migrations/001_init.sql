@@ -3,7 +3,7 @@
 
 -- Paladin schema.
 --
--- Clean-slate init: no categories, no dual-addressing. object_id is UUIDv7
+-- Clean-slate init: no object keys, no dual-addressing. object_id is UUIDv7
 -- (sortable), resource_version is a monotonic BIGINT bumped by a trigger.
 
 -- ─── Tenants ───────────────────────────────────────────────────────────────
@@ -33,9 +33,9 @@ CREATE TABLE storage_backends (
 );
 
 -- ─── Buckets (logical namespaces) ──────────────────────────────────────────
-CREATE TABLE buckets (
+CREATE TABLE object_keys (
     tenant_id          UUID NOT NULL REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
-    bucket_id          TEXT NOT NULL,
+    object_key          TEXT NOT NULL,
     display_name       TEXT,
     storage_backend    TEXT NOT NULL REFERENCES storage_backends(id),
     cedar_policy       TEXT NOT NULL DEFAULT '',
@@ -45,11 +45,11 @@ CREATE TABLE buckets (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    PRIMARY KEY (tenant_id, bucket_id),
-    CONSTRAINT bucket_id_format CHECK (bucket_id ~ '^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$')
+    PRIMARY KEY (tenant_id, object_key),
+    CONSTRAINT object_key_format CHECK (object_key ~ '^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$')
 );
 
-CREATE INDEX idx_buckets_storage_backend ON buckets(storage_backend);
+CREATE INDEX idx_object_keys_storage_backend ON object_keys(storage_backend);
 
 -- ─── Objects ───────────────────────────────────────────────────────────────
 CREATE TYPE object_state AS ENUM (
@@ -62,7 +62,7 @@ CREATE TYPE object_state AS ENUM (
 CREATE TABLE objects (
     object_id          UUID PRIMARY KEY,              -- UUIDv7, sortable
     tenant_id          UUID NOT NULL,
-    bucket_id          TEXT NOT NULL,
+    object_key          TEXT NOT NULL,
     key                TEXT NOT NULL,
     state              object_state NOT NULL,
 
@@ -85,21 +85,21 @@ CREATE TABLE objects (
     terminated_at      TIMESTAMPTZ,
     presign_expires_at TIMESTAMPTZ,
 
-    FOREIGN KEY (tenant_id, bucket_id) REFERENCES buckets(tenant_id, bucket_id) ON DELETE RESTRICT
+    FOREIGN KEY (tenant_id, object_key) REFERENCES object_keys(tenant_id, object_key) ON DELETE RESTRICT
 );
 
--- Uniqueness: a given (bucket, key) may have at most one non-deleted row.
+-- Uniqueness: a given (object_key, key) may have at most one non-deleted row.
 -- Historical (DELETED) rows are preserved for audit/restore.
 CREATE UNIQUE INDEX ux_objects_live_key
-    ON objects(tenant_id, bucket_id, key)
+    ON objects(tenant_id, object_key, key)
     WHERE state <> 'DELETED';
 
 CREATE INDEX idx_objects_state_pending_expiry
     ON objects(presign_expires_at)
     WHERE state = 'PENDING';
 
-CREATE INDEX idx_objects_bucket_committed
-    ON objects(tenant_id, bucket_id, committed_at DESC NULLS LAST);
+CREATE INDEX idx_objects_object_key_committed
+    ON objects(tenant_id, object_key, committed_at DESC NULLS LAST);
 
 CREATE INDEX idx_objects_tags_gin ON objects USING GIN (tags jsonb_path_ops);
 CREATE INDEX idx_objects_metadata_gin ON objects USING GIN (metadata jsonb_path_ops);
@@ -186,8 +186,8 @@ CREATE TRIGGER trg_tenants_bump_rv
     BEFORE UPDATE ON tenants
     FOR EACH ROW EXECUTE FUNCTION bump_resource_version();
 
-CREATE TRIGGER trg_buckets_bump_rv
-    BEFORE UPDATE ON buckets
+CREATE TRIGGER trg_object_keys_bump_rv
+    BEFORE UPDATE ON object_keys
     FOR EACH ROW EXECUTE FUNCTION bump_resource_version();
 
 CREATE TRIGGER trg_objects_bump_rv
@@ -198,7 +198,7 @@ CREATE TRIGGER trg_objects_bump_rv
 -- +goose Down
 -- +goose StatementBegin
 DROP TRIGGER IF EXISTS trg_objects_bump_rv ON objects;
-DROP TRIGGER IF EXISTS trg_buckets_bump_rv ON buckets;
+DROP TRIGGER IF EXISTS trg_object_keys_bump_rv ON object_keys;
 DROP TRIGGER IF EXISTS trg_tenants_bump_rv ON tenants;
 DROP FUNCTION IF EXISTS bump_resource_version();
 
@@ -209,7 +209,7 @@ DROP TABLE IF EXISTS multipart_parts;
 DROP TABLE IF EXISTS multipart_uploads;
 DROP TABLE IF EXISTS objects;
 DROP TYPE IF EXISTS object_state;
-DROP TABLE IF EXISTS buckets;
+DROP TABLE IF EXISTS object_keys;
 DROP TABLE IF EXISTS storage_backends;
 DROP TABLE IF EXISTS tenants;
 -- +goose StatementEnd

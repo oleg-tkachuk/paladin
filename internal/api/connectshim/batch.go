@@ -20,7 +20,7 @@ type BatchServer struct {
 func NewBatchServer(h *batch.Handler) *BatchServer { return &BatchServer{H: h} }
 
 // resolveObjectIDs expands the explicit names list. CEL filter expansion is
-// deferred to the worker (handler enforces the bucket-level auth check here).
+// deferred to the worker (handler enforces the objectKey-level auth check here).
 func resolveObjectIDs(sel *pb.ObjectSelector) ([]uuid.UUID, error) {
 	out := make([]uuid.UUID, 0, len(sel.GetNames()))
 	for _, n := range sel.GetNames() {
@@ -46,7 +46,7 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	opID, err := s.H.BatchDelete(ctx, batch.BatchDeleteArgs{
-		BucketID:  req.Msg.GetBucket(),
+		ObjectKey: req.Msg.GetObjectKey(),
 		ObjectIDs: ids,
 	})
 	if err != nil {

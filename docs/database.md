@@ -28,7 +28,7 @@ Child table for `multipart_uploads` to track individual uploaded parts and their
 
 ### 4. `tenants`
 
-Stores tenant-specific configuration and metadata (e.g., specific S3 buckets or quotas).
+Stores tenant-specific configuration and metadata (e.g., specific S3 object_keys or quotas).
 
 ### 5. `audit_logs`
 
@@ -55,4 +55,4 @@ The Reaper worker runs periodically to:
 
 Managed using [Goose](https://github.com/pressly/goose). Migrations are located in [../migrations/](../migrations/).
 
-- **Latest Version**: See current directory listing for migration count (021_relax_category_constraints.sql as of last check).
+- **Latest Version**: See current directory listing for migration count (021_relax_object_tag_constraints.sql as of last check).

@@ -78,22 +78,22 @@ type ObjectServiceClient interface {
 	// CompletionMode.
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
 	// UploadSmall streams bytes directly through the control plane to storage.
-	// Only valid when total payload < bucket.small_upload_limit_bytes
+	// Only valid when total payload < object_key.small_upload_limit_bytes
 	// (default 1 MiB). Useful for synchronous write-then-read-immediate use-cases.
 	UploadSmall(context.Context) *connect.ClientStreamForClient[v1.UploadSmallRequest, v1.UploadSmallResponse]
 	// DownloadObject returns object metadata plus a presigned GET URL.
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
 	// GetObject retrieves object metadata only (no presign).
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
-	// LookupObject resolves a (bucket, key) pair to an Object by name.
+	// LookupObject resolves a (object_key, key) pair to an Object by name.
 	// Separate RPC to keep all other operations single-addressing.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
 	// UpdateObject partially updates metadata/tags. Supports optimistic
 	// concurrency control via resource_version (If-Match).
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
-	// CompleteObject is a no-op when bucket uses IMPLICIT completion and the
+	// CompleteObject is a no-op when object_key uses IMPLICIT completion and the
 	// storage event has already arrived. Otherwise, promotes PENDING to AVAILABLE
-	// (after HEAD verification). Required for buckets with EXPLICIT completion.
+	// (after HEAD verification). Required for object_keys with EXPLICIT completion.
 	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
 	// DeleteObject soft-deletes by default; permanent=true hard-deletes after
 	// verifying ACL via Cedar.
@@ -279,22 +279,22 @@ type ObjectServiceHandler interface {
 	// CompletionMode.
 	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
 	// UploadSmall streams bytes directly through the control plane to storage.
-	// Only valid when total payload < bucket.small_upload_limit_bytes
+	// Only valid when total payload < object_key.small_upload_limit_bytes
 	// (default 1 MiB). Useful for synchronous write-then-read-immediate use-cases.
 	UploadSmall(context.Context, *connect.ClientStream[v1.UploadSmallRequest]) (*connect.Response[v1.UploadSmallResponse], error)
 	// DownloadObject returns object metadata plus a presigned GET URL.
 	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
 	// GetObject retrieves object metadata only (no presign).
 	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
-	// LookupObject resolves a (bucket, key) pair to an Object by name.
+	// LookupObject resolves a (object_key, key) pair to an Object by name.
 	// Separate RPC to keep all other operations single-addressing.
 	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
 	// UpdateObject partially updates metadata/tags. Supports optimistic
 	// concurrency control via resource_version (If-Match).
 	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
-	// CompleteObject is a no-op when bucket uses IMPLICIT completion and the
+	// CompleteObject is a no-op when object_key uses IMPLICIT completion and the
 	// storage event has already arrived. Otherwise, promotes PENDING to AVAILABLE
-	// (after HEAD verification). Required for buckets with EXPLICIT completion.
+	// (after HEAD verification). Required for object_keys with EXPLICIT completion.
 	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
 	// DeleteObject soft-deletes by default; permanent=true hard-deletes after
 	// verifying ACL via Cedar.

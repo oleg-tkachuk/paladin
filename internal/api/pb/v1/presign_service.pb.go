@@ -26,7 +26,7 @@ const (
 
 type RegenerateUploadUrlRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "buckets/{bucket}/objects/{object_id}".
+	// Resource name: "object_keys/{object_key}/objects/{object_id}".
 	Name          string               `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Ttl           *durationpb.Duration `protobuf:"bytes,2,opt,name=ttl,proto3" json:"ttl,omitempty"`
 	unknownFields protoimpl.UnknownFields

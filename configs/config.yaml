@@ -118,7 +118,7 @@ policy:
   labels_max_bytes: 4096
   labels_max_keys: 10
   external_ref_max_len: 256
-  object_key_max_len: 1024
+  object_tag_max_len: 1024
 
 # ─── Auth ───────────────────────────────────────────────────────────────────
 # JWT verification for Connect RPCs. Exactly one of jwks_url / hmac_secret
@@ -186,8 +186,8 @@ housekeeping:
   delete_orphaned_parts: false
 
 # ─── Storage Backends ───────────────────────────────────────────────────────
-# Registry of physical object-storage backends. Each logical bucket picks one
-# by name via `buckets.storage_backend`; when that column is empty the service
+# Registry of physical object-storage backends. Each logical object_key picks one
+# by name via `object_keys.storage_backend`; when that column is empty the service
 # falls back to `storage.default_backend`. `events.enabled=true` flips
 # CompletionMode to IMPLICIT (promotion via S3 event stream).
 storage:
@@ -195,6 +195,9 @@ storage:
   backends:
     primary:
       kind: s3-compatible # aws-s3 | s3-compatible | gcs
+      # Physical S3 bucket. PALADIN "ObjectKey" entries are tenant-scoped prefixes
+      # inside this bucket; full S3 key = "<tenant_id>/<object_key>/<key>".
+      bucket: paladin-primary
       region: us-east-1
       endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
       public_endpoint: "https://s3.paladin.local"
