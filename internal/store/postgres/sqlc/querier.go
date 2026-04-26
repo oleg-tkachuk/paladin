@@ -17,6 +17,10 @@ type Querier interface {
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
 	// (backend_id, bucket_name) composite key.
+	// Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+	// handler can return the existing row instead of erroring. The S3-side
+	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
+	// so the API surface stays consistently retry-safe.
 	CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error
 	// Multipart upload queries.
 	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
@@ -34,6 +38,7 @@ type Querier interface {
 	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	DeleteMultipartUpload(ctx context.Context, uploadID string) error
 	DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error)
+	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error)
@@ -77,9 +82,14 @@ type Querier interface {
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update).
 	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update).
 	UpdateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
 	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update). Non-zero
+	// enforces optimistic concurrency: a stale resource_version aborts the
+	// update with 0 rows affected and the handler returns CodeAborted.
 	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
 	UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)

@@ -32,9 +32,11 @@ func (q *Queries) CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slu
 const deleteObjectTag = `-- name: DeleteObjectTag :execrows
 DELETE FROM object_tags
 WHERE tenant_id = $1 AND slug = $2
-  AND resource_version = $3
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
 `
 
+// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 func (q *Queries) DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteObjectTag, tenantID, slug, expectedVersion)
 	if err != nil {
@@ -117,9 +119,13 @@ SET display_name = COALESCE($3, display_name),
     description  = COALESCE($4,  description),
     labels       = COALESCE($5,       labels)
 WHERE tenant_id = $1 AND slug = $2
-  AND resource_version = $6
+  AND ($6::bigint = 0
+       OR resource_version = $6::bigint)
 `
 
+// expected_version=0 disables the OCC guard (force update). Non-zero
+// enforces optimistic concurrency: a stale resource_version aborts the
+// update with 0 rows affected and the handler returns CodeAborted.
 func (q *Queries) UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateObjectTag,
 		tenantID,

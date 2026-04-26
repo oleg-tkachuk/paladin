@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
+	buf.build/go/protovalidate v1.2.0
 	connectrpc.com/connect v1.19.2
 	cuelang.org/go v0.16.1
 	github.com/aws/aws-sdk-go-v2 v1.41.6

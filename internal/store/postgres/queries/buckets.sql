@@ -3,8 +3,13 @@
 -- (backend_id, bucket_name) composite key.
 
 -- name: CreateBucket :exec
+-- Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+-- handler can return the existing row instead of erroring. The S3-side
+-- CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
+-- so the API surface stays consistently retry-safe.
 INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
-VALUES ($1, $2, $3, $4, $5);
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (backend_id, bucket_name) DO NOTHING;
 
 -- name: GetBucket :one
 SELECT sqlc.embed(buckets)
@@ -12,16 +17,19 @@ FROM buckets
 WHERE backend_id = $1 AND bucket_name = $2;
 
 -- name: UpdateBucket :execrows
+-- expected_version=0 disables the OCC guard (force update).
 UPDATE buckets
 SET display_name = COALESCE(sqlc.narg('display_name'), display_name),
     labels       = COALESCE(sqlc.narg('labels'),       labels)
 WHERE backend_id = $1 AND bucket_name = $2
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: DeleteBucket :execrows
 DELETE FROM buckets
 WHERE backend_id = $1 AND bucket_name = $2
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: ListBuckets :many
 SELECT sqlc.embed(buckets)

@@ -3,9 +3,11 @@ package cedar
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -50,6 +52,13 @@ func (s *PostgresStore) Fetch(ctx context.Context, tenantID uuid.UUID, objectKey
     `
 	var tPol, bPol string
 	if err := s.pool.QueryRow(ctx, q, tenantID, objectKey).Scan(&tPol, &bPol); err != nil {
+		// Unknown tenant → no policy. Cedar's deny-by-default semantics
+		// will then map the call to PermissionDenied at the engine layer
+		// instead of leaking a SQL error as a 500 to the client.
+		if errors.Is(err, pgx.ErrNoRows) {
+			sum := sha256.Sum256(nil)
+			return "", sum[:], nil
+		}
 		return "", nil, fmt.Errorf("policy fetch: %w", err)
 	}
 	text := tPol

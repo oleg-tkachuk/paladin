@@ -26,11 +26,16 @@ const createBucket = `-- name: CreateBucket :exec
 
 INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (backend_id, bucket_name) DO NOTHING
 `
 
 // Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 // Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
 // (backend_id, bucket_name) composite key.
+// Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+// handler can return the existing row instead of erroring. The S3-side
+// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
+// so the API surface stays consistently retry-safe.
 func (q *Queries) CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error {
 	_, err := q.db.Exec(ctx, createBucket,
 		backendID,
@@ -45,7 +50,8 @@ func (q *Queries) CreateBucket(ctx context.Context, backendID string, bucketName
 const deleteBucket = `-- name: DeleteBucket :execrows
 DELETE FROM buckets
 WHERE backend_id = $1 AND bucket_name = $2
-  AND resource_version = $3
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
 `
 
 func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error) {
@@ -135,9 +141,11 @@ UPDATE buckets
 SET display_name = COALESCE($3, display_name),
     labels       = COALESCE($4,       labels)
 WHERE backend_id = $1 AND bucket_name = $2
-  AND resource_version = $5
+  AND ($5::bigint = 0
+       OR resource_version = $5::bigint)
 `
 
+// expected_version=0 disables the OCC guard (force update).
 func (q *Queries) UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateBucket,
 		backendID,

@@ -36,7 +36,8 @@ func (q *Queries) CreateObjectKey(ctx context.Context, tenantID pgtype.UUID, obj
 const deleteObjectKey = `-- name: DeleteObjectKey :execrows
 DELETE FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2
-  AND resource_version = $3
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
 `
 
 func (q *Queries) DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error) {
@@ -164,9 +165,11 @@ SET display_name    = COALESCE($3,    display_name),
                              ELSE $5 END,
     lifecycle_rules = COALESCE($6, lifecycle_rules)
 WHERE tenant_id = $1 AND object_key = $2
-  AND resource_version = $7
+  AND ($7::bigint = 0
+       OR resource_version = $7::bigint)
 `
 
+// expected_version=0 disables the OCC guard (force update).
 func (q *Queries) UpdateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateObjectKey,
 		tenantID,

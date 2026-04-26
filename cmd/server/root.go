@@ -27,6 +27,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
@@ -229,7 +230,18 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	if err != nil {
 		return nil, fmt.Errorf("auth verifier: %w", err)
 	}
-	opts := connect.WithInterceptors(auth.Interceptor(verifier))
+	validateInterceptor, err := middleware.ProtoValidate()
+	if err != nil {
+		return nil, fmt.Errorf("init protovalidate: %w", err)
+	}
+	// Order matters: validate runs *after* auth so that an unauthenticated
+	// caller can't probe field-shape rules without a token. Connect runs
+	// the *first* listed interceptor outermost, so this ordering means
+	// auth is checked first, then validation.
+	opts := connect.WithInterceptors(
+		auth.Interceptor(verifier),
+		connect.UnaryInterceptorFunc(validateInterceptor),
+	)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {

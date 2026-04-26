@@ -12,6 +12,7 @@ FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2;
 
 -- name: UpdateObjectKey :execrows
+-- expected_version=0 disables the OCC guard (force update).
 UPDATE object_keys
 SET display_name    = COALESCE(sqlc.narg('display_name'),    display_name),
     cedar_policy    = COALESCE(sqlc.narg('policy'),          cedar_policy),
@@ -20,7 +21,8 @@ SET display_name    = COALESCE(sqlc.narg('display_name'),    display_name),
                              ELSE sqlc.narg('policy_hash') END,
     lifecycle_rules = COALESCE(sqlc.narg('lifecycle_rules'), lifecycle_rules)
 WHERE tenant_id = $1 AND object_key = $2
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: ListObjectKeys :many
 SELECT sqlc.embed(object_keys)
@@ -33,7 +35,8 @@ LIMIT sqlc.arg('page_size');
 -- name: DeleteObjectKey :execrows
 DELETE FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: GetEffectivePolicy :one
 -- Returns tenant-inherited policy concatenated with the object_key-specific policy.
