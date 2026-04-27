@@ -49,12 +49,27 @@ type Client struct {
 
 // New builds an S3 client from one storage-backend entry. `backend.Events.Enabled`
 // decides CompletionMode (IMPLICIT when events drive promotion, EXPLICIT otherwise).
+//
+// Two distinct S3 clients are constructed:
+//
+//   - `s3` — bound to `backend.Endpoint` (the *internal* address). Used for
+//     server-side calls the PALADIN backend issues itself: HeadObject,
+//     CreateBucket, CreateMultipartUpload, CompleteMultipartUpload,
+//     CopyObject, DeleteObject, etc. These run from inside the cluster and
+//     should hit the in-cluster service hostname.
+//
+//   - `presign` — bound to `backend.PublicEndpoint` (browser-reachable
+//     address) when configured, otherwise falls back to `backend.Endpoint`.
+//     Used exclusively to sign URLs that travel back to the browser via
+//     the API response. The signed URL embeds the host it was signed
+//     against, so it MUST match what the browser will actually dial.
+//
+// Without this split a deployment that exposes the storage backend on a
+// separate public ingress (e.g. internal=`http://seaweedfs-filer.storage.svc:8333`,
+// public=`https://s3.example.com`) would hand the browser presigned URLs
+// pointing at the in-cluster DNS name — which a browser cannot resolve
+// and which would also fail SigV4 verification at the public endpoint.
 func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
-	// backend.Bucket is now a *fallback*, not a hard requirement: handlers
-	// resolve the per-ObjectKey bucket from `buckets` and pass it to each
-	// storage call. If both per-call and fallback are empty, the AWS SDK
-	// will reject the request — surfacing the misconfiguration instead of
-	// silently writing into the wrong bucket.
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(backend.Region),
 		awsconfig.WithCredentialsProvider(
@@ -65,15 +80,28 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 		return nil, fmt.Errorf("aws config: %w", err)
 	}
 
-	opts := []func(*s3.Options){
-		func(o *s3.Options) {
-			o.UsePathStyle = backend.ForcePathStyle
-			if backend.Endpoint != "" {
-				o.BaseEndpoint = aws.String(backend.Endpoint)
-			}
-		},
+	// Internal S3 client — direct API calls from inside the cluster.
+	s3c := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = backend.ForcePathStyle
+		if backend.Endpoint != "" {
+			o.BaseEndpoint = aws.String(backend.Endpoint)
+		}
+	})
+
+	// Presign-only S3 client — points at the public endpoint so that
+	// every generated URL embeds a host the browser can actually reach.
+	// Falls back to the internal endpoint when no public_endpoint is
+	// configured (single-host dev setups).
+	presignEndpoint := backend.PublicEndpoint
+	if presignEndpoint == "" {
+		presignEndpoint = backend.Endpoint
 	}
-	s3c := s3.NewFromConfig(awsCfg, opts...)
+	s3PresignBase := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = backend.ForcePathStyle
+		if presignEndpoint != "" {
+			o.BaseEndpoint = aws.String(presignEndpoint)
+		}
+	})
 
 	mode := object.CompletionModeExplicit
 	if backend.Events.Enabled {
@@ -82,7 +110,7 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 
 	return &Client{
 		s3:      s3c,
-		presign: s3.NewPresignClient(s3c),
+		presign: s3.NewPresignClient(s3PresignBase),
 		cfg:     backend,
 		mode:    mode,
 		sseType: backend.SSE.Type,
