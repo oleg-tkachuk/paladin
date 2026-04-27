@@ -13,7 +13,7 @@ func TestTenantRateLimiter_GetLimiter(t *testing.T) {
 
 	l1 := rl.GetLimiter("tenant1")
 	assert.NotNil(t, l1)
-	assert.Equal(t, rate.Limit(10), l1.Limit())
+	assert.InDelta(t, float64(rate.Limit(10)), float64(l1.Limit()), 0.0001)
 	assert.Equal(t, 20, l1.Burst())
 
 	l2 := rl.GetLimiter("tenant1")
@@ -32,7 +32,7 @@ func TestTenantRateLimiter_Eviction(t *testing.T) {
 	rl.GetLimiter("tenant2")
 	time.Sleep(10 * time.Millisecond)
 
-	assert.Equal(t, 2, len(rl.visitors))
+	assert.Len(t, rl.visitors, 2)
 
 	// This should evict tenant1 (oldest access)
 	rl.GetLimiter("tenant3")
@@ -53,13 +53,13 @@ func TestTenantRateLimiter_Cleanup(t *testing.T) {
 	rl := NewTenantRateLimiter(rate.Limit(10), 20, 100, 50*time.Millisecond, 10*time.Millisecond)
 
 	rl.GetLimiter("tenant1")
-	assert.Equal(t, 1, len(rl.visitors))
+	assert.Len(t, rl.visitors, 1)
 
 	// Wait for cleanup
 	time.Sleep(150 * time.Millisecond)
 
 	rl.mu.RLock()
-	assert.Equal(t, 0, len(rl.visitors), "limiter should be cleaned up after TTL")
+	assert.Empty(t, rl.visitors, "limiter should be cleaned up after TTL")
 	rl.mu.RUnlock()
 }
 

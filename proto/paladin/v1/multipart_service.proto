@@ -2,217 +2,78 @@ syntax = "proto3";
 
 package paladin.v1;
 
-option go_package = "github.com/oleg-tkachuk/paladin/internal/api/grpc;grpcapi";
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1";
 
 import "buf/validate/validate.proto";
-import "google/api/annotations.proto";
 import "google/protobuf/duration.proto";
 import "paladin/v1/types.proto";
 
 // MultipartUploadService manages multipart uploads for large objects.
 //
-// Multipart uploads split large objects into independently uploadable parts,
-// each transferred directly to the storage backend via presigned URLs.
-// This enables parallel uploads, resumable transfers, and efficient handling
-// of objects that exceed single-request size limits.
+// Multipart flow is inherently explicit — the client orchestrates parts —
+// so there is no IMPLICIT mode. CompleteMultipartUpload is always required.
 service MultipartUploadService {
-  // InitiateMultipartUpload starts a new multipart upload session.
-  // Returns an upload_id that must be used for all subsequent part operations.
-  rpc InitiateMultipartUpload(InitiateMultipartUploadRequest) returns (InitiateMultipartUploadResponse) {
-    option (google.api.http) = {
-      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/uploads"
-      body: "*"
-    };
-  }
-
-  // GeneratePartUploadUrl creates a presigned URL for uploading a single part.
-  // The client uploads the part content directly to the storage backend
-  // using the returned URL and must record the returned ETag for completion.
-  rpc GeneratePartUploadUrl(GeneratePartUploadUrlRequest) returns (GeneratePartUploadUrlResponse) {
-    option (google.api.http) = {
-      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/uploads/{upload_id}/parts/{part_number}:sign"
-      body: "*"
-    };
-  }
-
-  // CompleteMultipartUpload finalizes a multipart upload by assembling all
-  // uploaded parts into a single object. Requires the ordered list of
-  // part numbers and their corresponding ETags.
-  rpc CompleteMultipartUpload(CompleteMultipartUploadRequest) returns (CompleteMultipartUploadResponse) {
-    option (google.api.http) = {
-      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/uploads/{upload_id}:complete"
-      body: "*"
-    };
-  }
-
-  // AbortMultipartUpload cancels an in-progress multipart upload and
-  // instructs the storage backend to clean up any uploaded parts.
-  rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse) {
-    option (google.api.http) = {
-      post: "/v1/tenants/{tenant_id}/buckets/{bucket}/uploads/{upload_id}:abort"
-      body: "*"
-    };
-  }
-
-  // ListParts returns a paginated list of parts that have been uploaded
-  // for an in-progress multipart upload.
-  rpc ListParts(ListPartsRequest) returns (ListPartsResponse) {
-    option (google.api.http) = {
-      get: "/v1/tenants/{tenant_id}/buckets/{bucket}/uploads/{upload_id}/parts"
-    };
-  }
+  rpc InitiateMultipartUpload(InitiateMultipartUploadRequest) returns (InitiateMultipartUploadResponse);
+  rpc PresignPart(PresignPartRequest) returns (PresignPartResponse);
+  rpc CompleteMultipartUpload(CompleteMultipartUploadRequest) returns (Object);
+  rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse);
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
 }
 
-// ─── Initiate ────────────────────────────────────────────────────────────────
-
-// InitiateMultipartUploadRequest starts a new multipart upload session.
 message InitiateMultipartUploadRequest {
-  // Tenant identifier for logical isolation (opaque UUID, used as S3 key prefix).
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-
-  // Target bucket name.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
-
-  // Desired storage key (path) for the assembled object.
-  // If omitted, the server generates a unique key.
-  string key = 3;
-
-  // MIME type of the final assembled object.
-  string content_type = 4 [(buf.validate.field).string.min_len = 1];
-
-  // Total size of the object in bytes (sum of all parts).
-  int64 size_bytes = 5 [(buf.validate.field).int64.gt = 0];
-
-  // User-defined metadata key-value pairs for the final object.
+  string object_key = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2;
+  string content_type = 3 [(buf.validate.field).string.min_len = 1];
+  // Required for multipart — used to compute part size.
+  int64 size_bytes = 4 [(buf.validate.field).int64.gt = 0];
+  ChecksumAlgorithm checksum_algorithm = 5
+      [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
   map<string, string> metadata = 6;
-
-  // User-defined tags for the final object.
   map<string, string> tags = 7;
-
-  // Checksum algorithm for part-level integrity verification.
-  ChecksumAlgorithm checksum_algorithm = 8;
-
-  // Client-provided idempotency key to prevent duplicate upload initiations.
-  string idempotency_key = 9;
+  string external_ref = 8;
 }
 
-// InitiateMultipartUploadResponse contains the upload session details.
 message InitiateMultipartUploadResponse {
-  // The created object resource in UPLOADING status.
   Object object = 1;
-
-  // Unique identifier for this multipart upload session.
-  // Must be provided in all subsequent part and completion requests.
+  // Multipart session identifier. Opaque to the client.
   string upload_id = 2;
-
-  // Recommended size for each part in bytes.
-  // The final part may be smaller. The server calculates this based on
-  // the total size and storage backend constraints.
   int64 recommended_part_size = 3;
-
-  // Total number of parts expected based on the recommended part size.
   int32 total_parts = 4;
 }
 
-// ─── Sign part ───────────────────────────────────────────────────────────────
-
-// GeneratePartUploadUrlRequest generates a presigned URL for uploading one part.
-message GeneratePartUploadUrlRequest {
-  // Tenant identifier for logical isolation.
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-
-  // Bucket containing the multipart upload.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
-
-  // Multipart upload session identifier.
-  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
-
-  // Sequential part number (starting from 1).
-  int32 part_number = 4 [(buf.validate.field).int32.gte = 1];
-
-  // Optional custom TTL for the presigned URL.
-  // If omitted, the server uses its default expiration.
-  google.protobuf.Duration ttl = 5;
+message PresignPartRequest {
+  // Resource name: "object_keys/{object_key}/objects/{object_id}".
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  int32 part_number = 3 [(buf.validate.field).int32 = {gte: 1, lte: 10000}];
+  google.protobuf.Duration ttl = 4;
 }
 
-// GeneratePartUploadUrlResponse contains the presigned URL for part upload.
-message GeneratePartUploadUrlResponse {
-  // Presigned URL for uploading the part content.
+message PresignPartResponse {
   PresignedUrl upload_url = 1;
 }
 
-// ─── Complete ────────────────────────────────────────────────────────────────
-
-// CompleteMultipartUploadRequest finalizes a multipart upload.
 message CompleteMultipartUploadRequest {
-  // Tenant identifier for logical isolation.
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-
-  // Bucket containing the multipart upload.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
-
-  // Multipart upload session identifier.
-  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
-
-  // Ordered list of completed parts with their ETags.
-  // Must include all parts that were successfully uploaded.
-  repeated CompletedPart parts = 4 [(buf.validate.field).repeated.min_items = 1];
-
-  // Client-provided idempotency key.
-  string idempotency_key = 5;
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  repeated CompletedPart parts = 3 [(buf.validate.field).repeated.min_items = 1];
 }
 
-// CompleteMultipartUploadResponse contains the assembled object.
-message CompleteMultipartUploadResponse {
-  // The assembled object resource with status transitioned to AVAILABLE.
-  Object object = 1;
-}
-
-// ─── Abort ───────────────────────────────────────────────────────────────────
-
-// AbortMultipartUploadRequest cancels a multipart upload session.
 message AbortMultipartUploadRequest {
-  // Tenant identifier for logical isolation.
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-
-  // Bucket containing the multipart upload.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
-
-  // Multipart upload session identifier to cancel.
-  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
-
-  // Client-provided idempotency key.
-  string idempotency_key = 4;
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-// AbortMultipartUploadResponse confirms the upload was aborted.
 message AbortMultipartUploadResponse {}
 
-// ─── List parts ──────────────────────────────────────────────────────────────
-
-// ListPartsRequest retrieves uploaded parts for a multipart upload session.
 message ListPartsRequest {
-  // Tenant identifier for logical isolation.
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-
-  // Bucket containing the multipart upload.
-  string bucket = 2 [(buf.validate.field).string.min_len = 1];
-
-  // Multipart upload session identifier.
-  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
-
-  // Maximum number of parts to return per page.
-  int32 page_size = 4;
-
-  // Opaque token for fetching the next page.
-  string page_token = 5;
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  int32 page_size = 3;
+  string page_token = 4;
 }
 
-// ListPartsResponse contains a page of uploaded parts.
 message ListPartsResponse {
-  // Parts that have been uploaded for this multipart upload.
   repeated PartInfo parts = 1;
-
-  // Token to retrieve the next page. Empty if this is the last page.
   string next_page_token = 2;
 }

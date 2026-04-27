@@ -4,17 +4,20 @@
 
 The Paladin (PALADIN) is a high-performance service for managing object metadata and lifecycle across S3-compatible storage systems. It provides multi-tenant isolation, structured audit logs, and a standardized API for object interactions.
 
-## Documentation Index
+## Documentation
 
-- [Architecture](docs/architecture.md) - High-level design and inventory.
-- [Configuration](docs/configuration.md) - Environment variables and YAML settings.
-- [API](docs/api.md) - REST and gRPC/Connect endpoints.
-- [Database](docs/database.md) - Postgres schema and migrations.
-- [Logging](docs/logging.md) - Structured logging and event taxonomy.
-- [Telemetry](docs/telemetry.md) - Metrics and tracing.
-- [Async & Jobs](docs/async.md) - Reaper worker and background tasks.
-- [Security](docs/security.md) - Auth, isolation, and secret management.
-- [Diagrams](docs/diagrams.md) - Visualizing flows and architecture.
+For detailed implementation details, see:
+
+- [Architecture](docs/architecture.md) — High-level overview, topology, and source index.
+- [API](docs/API.md) — Connect RPC service definitions, filtering, and validation.
+- [Configuration](docs/configuration.md) — YAML/Env/Secret configuration settings.
+- [Database](docs/database.md) — Schema, tables, and data lifecycle (soft vs hard delete).
+- [Logging](docs/logging.md) — Structured logging and event taxonomy.
+- [Telemetry](docs/telemetry.md) — Metrics (RED) and tracing (OTEL).
+- [Security](docs/security.md) — Tenant isolation, RBAC, and secret management.
+- [Operations](docs/operations.md) — Deployment, health checks, and Taskfile usage.
+- [Async & Jobs](docs/async.md) — Background workers (Reaper).
+- [Diagrams](docs/diagrams.md) — Mermaid diagrams of context and architecture.
 
 ## Getting Started
 
@@ -34,12 +37,12 @@ The Paladin (PALADIN) is a high-performance service for managing object metadata
 ## Infrastructure
 
 - **K8s Resources**: Deployments, Services, ConfigMaps, Secrets, Ingress.
-- **Helm Values**: See [deploy/helm/values.yaml](file:///workspace/deploy/helm/values.yaml).
+- **Helm Values**: See [deploy/helm/values.yaml](deploy/helm/values.yaml).
 - **CI/CD**: GitHub Actions for building images and running tests.
 
 ## Source Index
 
-- [cmd/server/main.go](file:///workspace/cmd/server/main.go) - Entry point.
-- [internal/api/](file:///workspace/internal/api/) - Layered API implementations.
-- [internal/service/](file:///workspace/internal/service/) - Domain services.
-- [internal/store/](file:///workspace/internal/store/) - Postgres repositories.
+- [cmd/server/main.go](cmd/server/main.go) - Entry point.
+- [internal/api/](internal/api/) - Layered API implementations.
+- [internal/service/](internal/service/) - Domain services.
+- [internal/store/](internal/store/) - Postgres repositories.

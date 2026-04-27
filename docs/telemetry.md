@@ -19,7 +19,7 @@ Accessible via the `/metrics` endpoint if enabled.
 
 ## 2. Tracing
 
-Tracing is automatically propagated across HTTP/gRPC boundaries using the `traceparent` header.
+Tracing is automatically propagated across HTTP/Connect boundaries using the `traceparent` header.
 
 ### Configuration
 

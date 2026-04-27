@@ -6,73 +6,101 @@ package sqlc
 
 import (
 	"context"
-	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	BulkDeleteObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
-	BulkMarkObjectSoftDeleted(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
-	BulkRestoreObject(ctx context.Context, tenantID string, column2 []pgtype.UUID) (int64, error)
-	CategoryExists(ctx context.Context, tenantID string, slug string) (bool, error)
-	CategoryObjectCount(ctx context.Context, tenantID string, category string) (int64, error)
-	// Audit log queries
-	CreateAuditLog(ctx context.Context, iD pgtype.UUID, tenantID string, requestID *string, idempotencyKey *string, actorSubject *string, actorType string, clientIp *netip.Addr, userAgent *string, method string, path string, queryParams []byte, requestHeaders []byte, requestBodySha256 *string, requestSizeBytes *int64, httpStatus *int32, responseCode *string, responseStatus *string, responseTimeMs *int32, createdAt pgtype.Timestamptz) error
-	// Category queries
-	CreateCategory(ctx context.Context, iD pgtype.UUID, tenantID string, slug string, name string, description *string) error
-	// Multipart queries
-	CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID string, objectID pgtype.UUID, uploadID string, bucket string, objectKey string, contentType string, partSizeBytes int64, status string, expiresAt pgtype.Timestamptz) error
-	// Objects queries
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID string, objectKey string, bucket string, contentType string, sizeBytes int64, checksumSha256 *string, status string, expiresAt pgtype.Timestamptz, labels []byte, externalRef *string, category string, subpath *string, tags []byte) error
-	DeleteCategory(ctx context.Context, tenantID string, slug string) (int64, error)
-	DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error
-	DeleteObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
-	DeleteTenant(ctx context.Context, tenantID string) (int64, error)
-	GetAuditLog(ctx context.Context, tenantID string, iD pgtype.UUID) (GetAuditLogRow, error)
-	GetCategory(ctx context.Context, tenantID string, slug string) (GetCategoryRow, error)
-	GetCategoryStats(ctx context.Context, tenantID string, category string) (GetCategoryStatsRow, error)
-	// Idempotency queries
-	GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (GetIdempotencyKeyRow, error)
-	GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (GetMultipartByUploadIDRow, error)
-	GetObject(ctx context.Context, tenantID string, iD pgtype.UUID) (GetObjectRow, error)
-	GetObjectByExternalRef(ctx context.Context, tenantID string, externalRef *string) (GetObjectByExternalRefRow, error)
-	GetObjectByKey(ctx context.Context, tenantID string, bucket string, objectKey string) (GetObjectByKeyRow, error)
-	GetObjectStats(ctx context.Context, tenantID string) (GetObjectStatsRow, error)
-	GetTenant(ctx context.Context, tenantID string) (GetTenantRow, error)
-	ListAuditLogs(ctx context.Context, tenantID string, limit int32, from pgtype.Timestamptz, to pgtype.Timestamptz, path *string, pathPrefix *string, method *string, httpStatus *int32, requestID *string, idempotencyKey *string, cursor pgtype.Timestamptz) ([]ListAuditLogsRow, error)
-	ListCategories(ctx context.Context, tenantID string, cursor pgtype.Timestamptz, search string, sortBy string, sortOrder string, limitVal int32) ([]ListCategoriesRow, error)
-	ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error)
-	ListExpiredPendingObjects(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ListExpiredPendingObjectsRow, error)
-	ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error)
-	ListObjects(ctx context.Context, tenantID string, status *string, externalRef *string, createdAfter pgtype.Timestamptz, createdBefore pgtype.Timestamptz, cursor pgtype.Timestamptz, category *string, recursive bool, keyPrefix *string, sortBy string, sortOrder string, limitVal int32) ([]ListObjectsRow, error)
-	ListTenants(ctx context.Context, limit int32, cursor pgtype.Timestamptz) ([]ListTenantsRow, error)
-	ListTenantsPaginated(ctx context.Context, cursor pgtype.Timestamptz, labelSelector []byte, tagSelector []string, search string, sortBy string, sortOrder string, limitVal int32) ([]ListTenantsPaginatedRow, error)
-	MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error
-	MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error
-	MarkObjectComplete(ctx context.Context, tenantID string, iD pgtype.UUID, storedEtag *string, storedSizeBytes *int64) (int64, error)
-	MarkObjectHardDeleted(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
-	MarkObjectSoftDeleted(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
-	PatchObjectExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, externalRef *string) (PatchObjectExternalRefRow, error)
-	PatchObjectLabels(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte) (PatchObjectLabelsRow, error)
-	PatchObjectLabelsAndExternalRef(ctx context.Context, tenantID string, iD pgtype.UUID, labels []byte, externalRef *string) (PatchObjectLabelsAndExternalRefRow, error)
-	PruneAuditLogs(ctx context.Context, createdAt pgtype.Timestamptz, limit int32) (int64, error)
-	RestoreObject(ctx context.Context, tenantID string, iD pgtype.UUID) (int64, error)
-	TenantHasActiveObjects(ctx context.Context, tenantID string) (bool, error)
-	UpdateCategory(ctx context.Context, tenantID string, slug string, name string, description *string) error
-	UpdateMultipartStatus(ctx context.Context, tenantID string, uploadID string) (int64, error)
-	UpdateObjectStatus(ctx context.Context, tenantID string, iD pgtype.UUID, status string) (int64, error)
-	UpdateObjectStatusToActive(ctx context.Context, iD pgtype.UUID, tenantID string) (int64, error)
-	// Labels patch: merge existing labels with the patch, stripping null values.
-	// This means:
-	//   - Provided keys overwrite existing keys.
-	//   - Provided keys with JSON null values are removed.
-	//   - Keys absent from the patch are preserved.
-	UpdateTenantMetadata(ctx context.Context, tenantID string, labels []byte, tags []string, displayName *string) (UpdateTenantMetadataRow, error)
-	UpsertIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string, requestPath string, requestHash string, responseCode int32, responseBody []byte, expiresAt pgtype.Timestamptz) error
-	UpsertMultipartPart(ctx context.Context, multipartID pgtype.UUID, partNumber int32, etag *string, sizeBytes *int64) error
-	// Tenant queries
-	UpsertTenant(ctx context.Context, iD pgtype.UUID, tenantID string, displayName *string, labels []byte, tags []string) (UpsertTenantRow, error)
+	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
+	// True when a non-DELETED row already exists at (tenant, object_key, key).
+	// Used by RestoreObject to refuse restoring into a slot that's been reused.
+	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
+	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
+	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
+	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
+	// Created lazily via BucketService.CreateBucket; ObjectKey rows FK to the
+	// (backend_id, bucket_name) composite key.
+	// Idempotent: a duplicate (backend_id, bucket_name) is a no-op so that the
+	// handler can return the existing row instead of erroring. The S3-side
+	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
+	// so the API surface stays consistently retry-safe.
+	CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error
+	// Multipart upload queries.
+	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
+	// Object queries.
+	CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, objectKey string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	// ObjectKey queries.
+	CreateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, backendID string, bucketName string, cedarPolicy string, lifecycleRules []byte) error
+	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
+	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
+	// Long-running operation queries.
+	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
+	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
+	// Tenant queries.
+	CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error
+	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	DeleteMultipartUpload(ctx context.Context, uploadID string) error
+	DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error)
+	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
+	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
+	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
+	GetBucket(ctx context.Context, backendID string, bucketName string) (GetBucketRow, error)
+	// Returns tenant-inherited policy concatenated with the object_key-specific policy.
+	// Order is: tenant policies first, then object_key — Cedar treats them as a single
+	// policy set; ordering only affects diagnostic output.
+	GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, objectKey *string) (GetEffectivePolicyRow, error)
+	// Idempotency-key queries. Scoped per (tenant, rpc method, key).
+	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (IdempotencyKey, error)
+	GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error)
+	GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error)
+	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (GetObjectKeyRow, error)
+	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
+	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
+	GetStorageBackend(ctx context.Context, id string) (StorageBackend, error)
+	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
+	// Removes the row outright. Caller is responsible for first deleting the
+	// object from the storage backend (S3 DeleteObject). Allowed from any
+	// state. expected_version=0 skips the OCC guard.
+	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
+	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
+	ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListObjectKeysRow, error)
+	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
+	// CEL filter is applied by the caller post-load. Keyset page uses object_id
+	// (UUIDv7) which is monotonic-by-time.
+	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
+	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
+	// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error)
+	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
+	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
+	// out-of-order S3 events + reconciler + RPC calls from regressing state.
+	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
+	// strictly greater than the stored sequencer (or either is NULL).
+	PromoteObject(ctx context.Context, objectID pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error)
+	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
+	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
+	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
+	// Undeletes a soft-deleted object iff no live row exists with the same
+	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
+	// a UNIQUE partial index still catches the race at commit time.
+	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
+	// Reconciler picks up PENDING rows whose presign has expired.
+	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
+	// expected_version=0 disables the OCC guard (force).
+	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update).
+	UpdateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update).
+	UpdateObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
+	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
+	// expected_version=0 disables the OCC guard (force update). Non-zero
+	// enforces optimistic concurrency: a stale resource_version aborts the
+	// update with 0 rows affected and the handler returns CodeAborted.
+	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
+	UpdateOperationState(ctx context.Context, operationID pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
+	UpdateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

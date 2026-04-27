@@ -11,68 +11,100 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteIdempotencyKey = `-- name: DeleteIdempotencyKey :exec
-DELETE FROM idempotency_keys 
-WHERE tenant_id = $1 AND idempotency_key = $2
+const createStorageBackend = `-- name: CreateStorageBackend :exec
+INSERT INTO storage_backends (id, kind, endpoint, region, events_enabled, events_target)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (id) DO UPDATE
+SET kind = EXCLUDED.kind,
+    endpoint = EXCLUDED.endpoint,
+    region = EXCLUDED.region,
+    events_enabled = EXCLUDED.events_enabled,
+    events_target = EXCLUDED.events_target
 `
 
-func (q *Queries) DeleteIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) error {
-	_, err := q.db.Exec(ctx, deleteIdempotencyKey, tenantID, idempotencyKey)
+func (q *Queries) CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error {
+	_, err := q.db.Exec(ctx, createStorageBackend,
+		iD,
+		kind,
+		endpoint,
+		region,
+		eventsEnabled,
+		eventsTarget,
+	)
 	return err
 }
 
 const getIdempotencyKey = `-- name: GetIdempotencyKey :one
 
-SELECT idempotency_keys.tenant_id, idempotency_keys.idempotency_key, idempotency_keys.request_path, idempotency_keys.request_hash, idempotency_keys.response_code, idempotency_keys.response_body, idempotency_keys.created_at, idempotency_keys.expires_at
+SELECT tenant_id, method, key, response, response_sha, created_at, expires_at
 FROM idempotency_keys
-WHERE tenant_id = $1 AND idempotency_key = $2
+WHERE tenant_id = $1 AND method = $2 AND key = $3
+  AND expires_at > now()
 `
 
-type GetIdempotencyKeyRow struct {
-	IdempotencyKey IdempotencyKey `json:"idempotency_key"`
-}
-
-// Idempotency queries
-func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string) (GetIdempotencyKeyRow, error) {
-	row := q.db.QueryRow(ctx, getIdempotencyKey, tenantID, idempotencyKey)
-	var i GetIdempotencyKeyRow
+// Idempotency-key queries. Scoped per (tenant, rpc method, key).
+func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyKey, tenantID, method, key)
+	var i IdempotencyKey
 	err := row.Scan(
-		&i.IdempotencyKey.TenantID,
-		&i.IdempotencyKey.IdempotencyKey,
-		&i.IdempotencyKey.RequestPath,
-		&i.IdempotencyKey.RequestHash,
-		&i.IdempotencyKey.ResponseCode,
-		&i.IdempotencyKey.ResponseBody,
-		&i.IdempotencyKey.CreatedAt,
-		&i.IdempotencyKey.ExpiresAt,
+		&i.TenantID,
+		&i.Method,
+		&i.Key,
+		&i.Response,
+		&i.ResponseSha,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
 
-const upsertIdempotencyKey = `-- name: UpsertIdempotencyKey :exec
-INSERT INTO idempotency_keys (
-    tenant_id, idempotency_key, request_path, request_hash, 
-    response_code, response_body, expires_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-)
-ON CONFLICT (tenant_id, idempotency_key) 
-DO UPDATE SET 
-    request_path = EXCLUDED.request_path,
-    request_hash = EXCLUDED.request_hash,
-    response_code = EXCLUDED.response_code,
-    response_body = EXCLUDED.response_body,
-    expires_at = EXCLUDED.expires_at
+const getStorageBackend = `-- name: GetStorageBackend :one
+SELECT id, kind, endpoint, region, events_enabled, events_target, created_at
+FROM storage_backends
+WHERE id = $1
 `
 
-func (q *Queries) UpsertIdempotencyKey(ctx context.Context, tenantID string, idempotencyKey string, requestPath string, requestHash string, responseCode int32, responseBody []byte, expiresAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, upsertIdempotencyKey,
+func (q *Queries) GetStorageBackend(ctx context.Context, id string) (StorageBackend, error) {
+	row := q.db.QueryRow(ctx, getStorageBackend, id)
+	var i StorageBackend
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Endpoint,
+		&i.Region,
+		&i.EventsEnabled,
+		&i.EventsTarget,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const purgeExpiredIdempotencyKeys = `-- name: PurgeExpiredIdempotencyKeys :execrows
+DELETE FROM idempotency_keys
+WHERE expires_at < now()
+`
+
+func (q *Queries) PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredIdempotencyKeys)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const putIdempotencyKey = `-- name: PutIdempotencyKey :exec
+INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tenant_id, method, key) DO NOTHING
+`
+
+func (q *Queries) PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, putIdempotencyKey,
 		tenantID,
-		idempotencyKey,
-		requestPath,
-		requestHash,
-		responseCode,
-		responseBody,
+		method,
+		key,
+		response,
+		responseSha,
 		expiresAt,
 	)
 	return err

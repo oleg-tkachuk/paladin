@@ -10,7 +10,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -36,10 +38,18 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 	}
 
 	// Trace Exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(cfg.Endpoint),
-		otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
-	)
+	var traceExporter sdktrace.SpanExporter
+	if cfg.Protocol == "http" {
+		traceExporter, err = otlptracehttp.New(ctx,
+			otlptracehttp.WithEndpoint(cfg.Endpoint),
+			otlptracehttp.WithInsecure(),
+		)
+	} else {
+		traceExporter, err = otlptracegrpc.New(ctx,
+			otlptracegrpc.WithEndpoint(cfg.Endpoint),
+			otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +63,18 @@ func InitOTel(ctx context.Context, cfg config.OTel) (ShutdownFunc, error) {
 	otel.SetTracerProvider(tp)
 
 	// Metric Exporter
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
-		otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
-	)
+	var metricExporter metric.Exporter
+	if cfg.Protocol == "http" {
+		metricExporter, err = otlpmetrichttp.New(ctx,
+			otlpmetrichttp.WithEndpoint(cfg.Endpoint),
+			otlpmetrichttp.WithInsecure(),
+		)
+	} else {
+		metricExporter, err = otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
+			otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

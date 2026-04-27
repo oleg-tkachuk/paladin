@@ -2,20 +2,20 @@ package app
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"sync/atomic"
 
-	"github.com/oleg-tkachuk/paladin/internal/config"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
-	"github.com/oleg-tkachuk/paladin/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
+// App is the top-level runtime container. It owns every long-lived resource
+// (HTTP server, DB pool, background workers, telemetry shutdown) and is the
+// single point of orderly startup/shutdown.
 type App struct {
 	Version   string
 	Commit    string
@@ -25,17 +25,13 @@ type App struct {
 	Logger *zap.Logger
 
 	httpSrv *http.Server
-	grpcSrv *grpc.Server
 
 	db           *postgres.DB
 	otelShutdown observability.ShutdownFunc
 	Started      *atomic.Bool
 
-	reaper       *worker.Reaper
-	reaperCtx    context.Context
-	reaperCancel context.CancelFunc
-
-	auditWriter *middleware.AuditBatchWriter
+	reconciler       *worker.ReconcilerV2
+	reconcilerCancel context.CancelFunc
 }
 
 func NewContainer(
@@ -43,41 +39,27 @@ func NewContainer(
 	cfg config.Config,
 	l *zap.Logger,
 	httpSrv *http.Server,
-	grpcSrv *grpc.Server,
 	db *postgres.DB,
 	otelShutdown observability.ShutdownFunc,
-	reaper *worker.Reaper,
+	reconciler *worker.ReconcilerV2,
 	started *atomic.Bool,
-	auditWriter *middleware.AuditBatchWriter,
 ) *App {
-	rCtx, rCancel := context.WithCancel(context.Background())
-
 	return &App{
-		Version: version, Commit: commit, BuildTime: buildTime,
-		Cfg: cfg, Logger: l,
-		httpSrv: httpSrv, grpcSrv: grpcSrv,
-		db: db, otelShutdown: otelShutdown,
-		reaper: reaper, reaperCtx: rCtx, reaperCancel: rCancel,
-		Started:     started,
-		auditWriter: auditWriter,
+		Version:      version,
+		Commit:       commit,
+		BuildTime:    buildTime,
+		Cfg:          cfg,
+		Logger:       l,
+		httpSrv:      httpSrv,
+		db:           db,
+		otelShutdown: otelShutdown,
+		reconciler:   reconciler,
+		Started:      started,
 	}
 }
 
 func (a *App) Run() error {
-	a.Logger.Info("Starting gRPC server", zap.String("addr", a.Cfg.Server.GRPC.Addr))
-
-	errCh := make(chan error, 2)
-
-	go func() {
-		lc := net.ListenConfig{}
-		ln, err := lc.Listen(context.Background(), "tcp", a.Cfg.Server.GRPC.Addr)
-		if err != nil {
-			errCh <- err
-
-			return
-		}
-		errCh <- a.grpcSrv.Serve(ln)
-	}()
+	errCh := make(chan error, 1)
 
 	go func() {
 		if a.Cfg.Server.HTTP.TLS.Enabled {
@@ -86,19 +68,20 @@ func (a *App) Run() error {
 				zap.String("cert_path", a.Cfg.Server.HTTP.TLS.CertPath),
 			)
 			if err := a.httpSrv.ListenAndServeTLS(a.Cfg.Server.HTTP.TLS.CertPath, a.Cfg.Server.HTTP.TLS.KeyPath); err != nil && err != http.ErrServerClosed {
-				a.Logger.Fatal("HTTPS server listen failed", zap.Error(err))
+				errCh <- err
 			}
 		} else {
 			a.Logger.Info("Starting HTTP server", zap.String("addr", a.httpSrv.Addr))
 			if err := a.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				a.Logger.Fatal("HTTP server listen failed", zap.Error(err))
+				errCh <- err
 			}
 		}
 	}()
 
-	// Start Reaper
-	if a.reaper != nil {
-		go a.reaper.Start(a.reaperCtx)
+	if a.reconciler != nil {
+		rctx, cancel := context.WithCancel(context.Background())
+		a.reconcilerCancel = cancel
+		go func() { _ = a.reconciler.Run(rctx) }()
 	}
 
 	a.Started.Store(true)
@@ -112,8 +95,8 @@ func (a *App) Shutdown() {
 
 	a.Logger.Info("Shutting down...")
 
-	if a.grpcSrv != nil {
-		a.grpcSrv.GracefulStop()
+	if a.reconcilerCancel != nil {
+		a.reconcilerCancel()
 	}
 
 	if a.httpSrv != nil {
@@ -126,14 +109,6 @@ func (a *App) Shutdown() {
 
 	if a.otelShutdown != nil {
 		_ = a.otelShutdown(ctx)
-	}
-
-	if a.reaperCancel != nil {
-		a.reaperCancel()
-	}
-
-	if a.auditWriter != nil {
-		a.auditWriter.Close()
 	}
 
 	_ = a.Logger.Sync()

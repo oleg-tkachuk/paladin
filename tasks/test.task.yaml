@@ -1,0 +1,86 @@
+version: "3"
+
+tasks:
+  unit:
+    desc: "Run unit tests"
+    cmds:
+      - cmd: |-
+          eval "$(minikube docker-env)" && time go test ./...
+
+  lint:
+    desc: "Run linters"
+    cmds:
+      - cmd: |-
+          time golangci-lint run ./...
+
+  coverage:
+    desc: "Run unit tests with coverage"
+    cmds:
+      - cmd: |-
+          eval "$(minikube docker-env)" && \
+          mkdir -p coverage && \
+          time go test -coverprofile=coverage/cover.out ./... && \
+          go tool cover -html=coverage/cover.out -o coverage/cover.html
+      - cmd: |-
+          printf "INFO: Coverage report saved to coverage/cover.html\n"
+
+  e2e:
+    desc: "Run E2E integration tests (Hurl)"
+    vars:
+      HOST: '{{.HOST | default "http://localhost:8080"}}'
+    cmds:
+      - cmd: |-
+          time hurl --variable host={{.HOST}} --test tests/api/e2e/*.hurl
+
+  functional:
+    desc: "Run API functional tests"
+    dir: tests/api/functional
+    cmds:
+      - cmd: |-
+          ./run-functional.sh
+
+  mutations:
+    desc: "Run API mutation tests"
+    dir: tests/api/mutations
+    cmds:
+      - cmd: |-
+          ./run-mutations.sh
+
+  security:
+    desc: "Run all security tests"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-all-security.sh
+
+  security:sast:
+    desc: "Run Security SAST tests (gosec)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-gosec.sh
+
+  security:dast:
+    desc: "Run Security DAST tests (nuclei, zap)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-nuclei.sh
+      - cmd: |-
+          ./run-zap.sh
+
+  security:sca:
+    desc: "Run Security SCA tests (trivy)"
+    dir: tests/api/security
+    cmds:
+      - cmd: |-
+          ./run-trivy.sh
+
+  all:
+    desc: "Run all verification tasks (lint, unit, functional, e2e, security)"
+    cmds:
+      - task: lint
+      - task: unit
+      - task: functional
+      - task: e2e
+      - task: security

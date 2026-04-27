@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package paladin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/v1;paladinv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "paladin/v1/types.proto";
+
+// ObjectTagService manages tenant-scoped taxonomy entries. Objects are NOT
+// linked to object tags via FK in this revision — clients should reference
+// object tags from object labels (or another cross-cutting mechanism).
+// Deleting an object tag therefore has no object-side effects.
+service ObjectTagService {
+  rpc CreateObjectTag(CreateObjectTagRequest) returns (ObjectTag);
+  rpc GetObjectTag(GetObjectTagRequest) returns (ObjectTag);
+  rpc UpdateObjectTag(UpdateObjectTagRequest) returns (ObjectTag);
+  rpc DeleteObjectTag(DeleteObjectTagRequest) returns (DeleteObjectTagResponse);
+  rpc ListObjectTags(ListObjectTagsRequest) returns (ListObjectTagsResponse);
+}
+
+message ObjectTag {
+  // Resource name: "object_tags/{slug}".
+  string name = 1;
+  // Tenant-unique slug.
+  string slug = 2;
+  string display_name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+  string resource_version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message CreateObjectTagRequest {
+  string slug = 1 [(buf.validate.field).string = {
+    min_len: 3,
+    max_len: 63,
+    pattern: "^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$"
+  }];
+  string display_name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+}
+
+message GetObjectTagRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateObjectTagRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  string display_name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+}
+
+message DeleteObjectTagRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+}
+
+message DeleteObjectTagResponse {}
+
+message ListObjectTagsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+  string page_token = 2;
+  string order_by = 3;
+  SortOrder sort_order = 4;
+}
+
+message ListObjectTagsResponse {
+  repeated ObjectTag object_tags = 1;
+  string next_page_token = 2;
+}

@@ -15,13 +15,12 @@ PALADIN uses [Koanf](https://github.com/knadh/koanf) to load and merge configura
 ### 1. App & Server
 
 - `app.env`: Execution environment (development, production).
-- `server.http.addr`: Address for the HTTP/REST server (default: `:8080`).
-- `server.grpc.addr`: Address for the gRPC/Connect server (default: `:8081`).
+- `server.http.addr`: Address for the application server (HTTP/JSON/Connect via Connect) (default: `:8080`).
 
 ### 2. Datastores
 
 - **Postgres**: Connection DSN and pool settings. Supports `password_secret` for K8s integration.
-- **S3**: Configuration for S3-compatible storage (endpoint, bucket, region, access/secret keys). Supports `secret` suffixes for K8s.
+- **S3**: Configuration for S3-compatible storage (endpoint, object_key, region, access/secret keys). Supports `secret` suffixes for K8s.
 
 ### 3. Policy
 
@@ -37,4 +36,4 @@ PALADIN uses [Koanf](https://github.com/knadh/koanf) to load and merge configura
 
 ## Schema Reference
 
-The full configuration schema is defined in [internal/config/schema.cue](file:///workspace/internal/config/schema.cue).
+The full configuration schema is defined in [../internal/config/schema.cue](../internal/config/schema.cue).

@@ -7,13 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/oleg-tkachuk/paladin/internal/domain"
 	"github.com/oleg-tkachuk/paladin/internal/utils"
 
 	_ "embed"
 
 	"cuelang.org/go/cue/cuecontext"
-	"github.com/jackc/pgx/v5"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -77,17 +75,23 @@ func Load(path string, log *zap.Logger) (Config, error) {
 
 	// Resolve secrets if running in a Kubernetes environment
 	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
-		resolver := NewK8sSecretResolver()
+		resolver := NewK8sSecretResolver(log)
 		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
 			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
 		}
 	}
 
-	// Parse sizes
-	if n, err := utils.ParseSizeString(cfg.Datastores.S3.PartSizeRaw); err == nil {
-		cfg.Datastores.S3.PartSizeBytes = n
-	} else {
-		return Config{}, fmt.Errorf("failed to parse s3.part_size (%s): %w", cfg.Datastores.S3.PartSizeRaw, err)
+	// Parse sizes — per-backend part_size lands in PartSizeBytes on each entry.
+	for name, b := range cfg.Storage.Backends {
+		if b.PartSizeRaw == "" {
+			continue
+		}
+		n, err := utils.ParseSizeString(b.PartSizeRaw)
+		if err != nil {
+			return Config{}, fmt.Errorf("storage.backends.%s.part_size (%s): %w", name, b.PartSizeRaw, err)
+		}
+		b.PartSizeBytes = n
+		cfg.Storage.Backends[name] = b
 	}
 
 	if n, err := utils.ParseSizeString(cfg.Policy.MaxObjectSizeRaw); err == nil {
@@ -134,99 +138,22 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("postgres: cannot specify both password and password_secret")
 	}
 
-	if c.Datastores.S3.AccessKey != "" && c.Datastores.S3.AccessKeySecret != nil {
-		return fmt.Errorf("s3: cannot specify both access_key and access_key_secret")
+	if c.Storage.DefaultBackend != "" {
+		if _, ok := c.Storage.Backends[c.Storage.DefaultBackend]; !ok {
+			return fmt.Errorf("storage: default_backend %q not present in storage.backends", c.Storage.DefaultBackend)
+		}
 	}
-
-	if c.Datastores.S3.SecretKey != "" && c.Datastores.S3.SecretKeySecret != nil {
-		return fmt.Errorf("s3: cannot specify both secret_key and secret_key_secret")
-	}
-
-	return nil
-}
-
-func (c *Config) Sanitize() domain.SystemConfig {
-	var pgHost, pgPort, pgUser, pgDB, pgSSLMode string
-	pgConfig, err := pgx.ParseConfig(c.Datastores.Postgres.DSN)
-	if err == nil {
-		pgHost = pgConfig.Host
-		pgPort = fmt.Sprintf("%d", pgConfig.Port)
-		pgUser = pgConfig.User
-		pgDB = pgConfig.Database
-		if val, ok := pgConfig.RuntimeParams["sslmode"]; ok {
-			pgSSLMode = val
-		} else if pgConfig.TLSConfig == nil {
-			pgSSLMode = "disable"
-		} else {
-			pgSSLMode = "enable"
+	for name, b := range c.Storage.Backends {
+		if b.AccessKey != "" && b.AccessKeySecret != nil {
+			return fmt.Errorf("storage.backends.%s: cannot specify both access_key and access_key_secret", name)
+		}
+		if b.SecretKey != "" && b.SecretKeySecret != nil {
+			return fmt.Errorf("storage.backends.%s: cannot specify both secret_key and secret_key_secret", name)
+		}
+		if b.SSE.Type == "aws:kms" && b.SSE.KeyID == "" {
+			return fmt.Errorf("storage.backends.%s: sse.key_id required when sse.type=aws:kms", name)
 		}
 	}
 
-	sc := domain.SystemConfig{}
-	sc.App.Name = c.App.Name
-	sc.App.Env = c.App.Env
-
-	sc.Server.Name = c.Server.Name
-	sc.Server.Mode = c.Server.Mode
-	sc.Server.HTTP.Addr = c.Server.HTTP.Addr
-	sc.Server.HTTP.CORSAllowedOrigins = c.Server.HTTP.CORSAllowedOrigins
-	sc.Server.HTTP.ReadTimeout = c.Server.HTTP.ReadTimeout.String()
-	sc.Server.HTTP.WriteTimeout = c.Server.HTTP.WriteTimeout.String()
-	sc.Server.HTTP.RequestIDHeader = c.Server.HTTP.RequestIDHeader
-
-	sc.Datastores.Postgres.Host = pgHost
-	sc.Datastores.Postgres.Port = pgPort
-	sc.Datastores.Postgres.User = pgUser
-	sc.Datastores.Postgres.Dbname = pgDB
-	sc.Datastores.Postgres.SslMode = pgSSLMode
-
-	sc.Datastores.S3.Bucket = c.Datastores.S3.Bucket
-	sc.Datastores.S3.Endpoint = c.Datastores.S3.Endpoint
-	sc.Datastores.S3.PublicEndpoint = c.Datastores.S3.PublicEndpoint
-	sc.Datastores.S3.ForcePathStyle = c.Datastores.S3.ForcePathStyle
-	sc.Datastores.S3.PresignTTL = c.Datastores.S3.PresignTTL.String()
-	sc.Datastores.S3.PartSize = c.Datastores.S3.PartSizeRaw
-	sc.Datastores.S3.SSEType = c.Datastores.S3.SSEType
-
-	sc.Policy.MaxObjectSize = c.Policy.MaxObjectSizeRaw
-	sc.Policy.MaxMultipartSize = c.Policy.MaxMultipartSizeRaw
-	sc.Policy.MinPartSize = c.Policy.MinPartSizeRaw
-	sc.Policy.MaxPartSize = c.Policy.MaxPartSizeRaw
-	sc.Policy.PresignPutTTL = c.Policy.PresignPutTTL.String()
-	sc.Policy.PresignGetTTL = c.Policy.PresignGetTTL.String()
-	sc.Policy.AllowedContentTypes = c.Policy.AllowedContentTypes
-
-	sc.Auth.Enabled = c.Auth.Enabled
-
-	sc.Security.TrustTenantIDFromRequest = c.Security.TrustTenantIDFromRequest
-	sc.Security.RejectTenantMismatch = c.Security.RejectTenantMismatch
-	sc.Security.EnableRLS = c.Security.EnableRLS
-
-	sc.Housekeeping.EnableReaper = c.Housekeeping.EnableReaper
-	sc.Housekeeping.PendingTTL = c.Housekeeping.PendingTTL.String()
-	sc.Housekeeping.MultipartTTL = c.Housekeeping.MultipartTTL.String()
-	sc.Housekeeping.GCInterval = c.Housekeeping.GCInterval.String()
-
-	sc.RateLimit.RequestsPerSecond = float32(c.RateLimit.RequestsPerSecond)
-	sc.RateLimit.Burst = c.RateLimit.Burst
-	sc.RateLimit.MaxTenants = c.RateLimit.MaxTenants
-
-	sc.Cache.Enabled = c.Cache.Enabled
-	sc.Cache.MaxSize = c.Cache.MaxSize
-	sc.Cache.TTL = c.Cache.TTL.String()
-
-	sc.Timeouts.FastOperation = c.Timeouts.FastOperation.String()
-	sc.Timeouts.DefaultOperation = c.Timeouts.DefaultOperation.String()
-	sc.Timeouts.S3Operation = c.Timeouts.S3Operation.String()
-	sc.Timeouts.LongOperation = c.Timeouts.LongOperation.String()
-
-	sc.Idempotency.Enabled = c.Idempotency.Enabled
-	sc.Idempotency.TTL = c.Idempotency.TTL.String()
-
-	sc.OTel.Enabled = c.OTel.Enabled
-	sc.OTel.Endpoint = c.OTel.Endpoint
-	sc.OTel.Protocol = c.OTel.Protocol
-	sc.OTel.Insecure = c.OTel.Insecure
-
-	return sc
+	return nil
 }

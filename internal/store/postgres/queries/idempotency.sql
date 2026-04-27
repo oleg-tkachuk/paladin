@@ -1,25 +1,31 @@
--- Idempotency queries
+-- Idempotency-key queries. Scoped per (tenant, rpc method, key).
 
 -- name: GetIdempotencyKey :one
-SELECT sqlc.embed(idempotency_keys)
+SELECT tenant_id, method, key, response, response_sha, created_at, expires_at
 FROM idempotency_keys
-WHERE tenant_id = $1 AND idempotency_key = $2;
+WHERE tenant_id = $1 AND method = $2 AND key = $3
+  AND expires_at > now();
 
--- name: UpsertIdempotencyKey :exec
-INSERT INTO idempotency_keys (
-    tenant_id, idempotency_key, request_path, request_hash, 
-    response_code, response_body, expires_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
-)
-ON CONFLICT (tenant_id, idempotency_key) 
-DO UPDATE SET 
-    request_path = EXCLUDED.request_path,
-    request_hash = EXCLUDED.request_hash,
-    response_code = EXCLUDED.response_code,
-    response_body = EXCLUDED.response_body,
-    expires_at = EXCLUDED.expires_at;
+-- name: PutIdempotencyKey :exec
+INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tenant_id, method, key) DO NOTHING;
 
--- name: DeleteIdempotencyKey :exec
-DELETE FROM idempotency_keys 
-WHERE tenant_id = $1 AND idempotency_key = $2;
+-- name: PurgeExpiredIdempotencyKeys :execrows
+DELETE FROM idempotency_keys
+WHERE expires_at < now();
+
+-- name: CreateStorageBackend :exec
+INSERT INTO storage_backends (id, kind, endpoint, region, events_enabled, events_target)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (id) DO UPDATE
+SET kind = EXCLUDED.kind,
+    endpoint = EXCLUDED.endpoint,
+    region = EXCLUDED.region,
+    events_enabled = EXCLUDED.events_enabled,
+    events_target = EXCLUDED.events_target;
+
+-- name: GetStorageBackend :one
+SELECT id, kind, endpoint, region, events_enabled, events_target, created_at
+FROM storage_backends
+WHERE id = $1;

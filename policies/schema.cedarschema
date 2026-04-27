@@ -1,0 +1,75 @@
+// Cedar schema for PALADIN authorization model.
+//
+// Evaluated at presign time (write path) and at DownloadObject/GetObject
+// time (read path). Deny-by-default: an object operation is permitted only
+// if ≥1 permit rule matches AND no forbid rule matches.
+//
+// Entities:
+//   - Tenant:    one per PALADIN tenant
+//   - Bucket:    one per logical bucket; parent=Tenant
+//   - PathPrefix: (synthetic) hierarchical entity representing a path prefix;
+//                 used for prefix-based permit rules via entity hierarchy
+//   - Object:    transient; built per-request, never persisted as an entity
+//
+// Context (per-request):
+//   - size_bytes      — declared size from the caller (may be 0 if unknown)
+//   - content_type    — declared MIME
+//   - now             — evaluation timestamp (for time-bound rules)
+//   - ip              — caller IP (for geofencing)
+
+entity Tenant = {
+  display_name: String,
+  tier: String,
+};
+
+entity Bucket in [Tenant] = {
+  bucket_id: String,
+  storage_backend: String,
+};
+
+entity Object in [Bucket] = {
+  key: String,
+  state: String,
+  size_bytes: Long,
+  content_type: String,
+  tags: Set<String>,
+};
+
+entity User in [Tenant] = {
+  roles: Set<String>,
+};
+
+action "PutObject", "PresignPut" appliesTo {
+  principal: [User],
+  resource: [Object],
+  context: {
+    size_bytes: Long,
+    content_type: String,
+    now: Long,
+    ip: String,
+  }
+};
+
+action "GetObject", "PresignGet", "HeadObject" appliesTo {
+  principal: [User],
+  resource: [Object],
+  context: {
+    now: Long,
+    ip: String,
+  }
+};
+
+action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
+  principal: [User],
+  resource: [Object],
+  context: {
+    now: Long,
+    ip: String,
+  }
+};
+
+action "AdminBucket" appliesTo {
+  principal: [User],
+  resource: [Bucket],
+  context: { now: Long }
+};

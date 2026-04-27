@@ -11,133 +11,83 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createMultipart = `-- name: CreateMultipart :exec
+const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
-    id, tenant_id, object_id, upload_id, bucket, object_key, 
-    content_type, part_size_bytes, status, expires_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-)
+    upload_id, object_id, storage_upload_id, part_size_bytes, total_parts
+) VALUES ($1, $2, $3, $4, $5)
 `
 
-// Multipart queries
-func (q *Queries) CreateMultipart(ctx context.Context, iD pgtype.UUID, tenantID string, objectID pgtype.UUID, uploadID string, bucket string, objectKey string, contentType string, partSizeBytes int64, status string, expiresAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, createMultipart,
-		iD,
-		tenantID,
-		objectID,
+// Multipart upload queries.
+func (q *Queries) CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error {
+	_, err := q.db.Exec(ctx, createMultipartUpload,
 		uploadID,
-		bucket,
-		objectKey,
-		contentType,
+		objectID,
+		storageUploadID,
 		partSizeBytes,
-		status,
-		expiresAt,
+		totalParts,
 	)
 	return err
 }
 
-const getMultipartByUploadID = `-- name: GetMultipartByUploadID :one
-SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.upload_id, multipart_uploads.bucket, multipart_uploads.object_key, multipart_uploads.content_type, multipart_uploads.part_size_bytes, multipart_uploads.status, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.expires_at
-FROM multipart_uploads
-WHERE tenant_id = $1 AND upload_id = $2
+const deleteMultipartUpload = `-- name: DeleteMultipartUpload :exec
+DELETE FROM multipart_uploads
+WHERE upload_id = $1
 `
 
-type GetMultipartByUploadIDRow struct {
+func (q *Queries) DeleteMultipartUpload(ctx context.Context, uploadID string) error {
+	_, err := q.db.Exec(ctx, deleteMultipartUpload, uploadID)
+	return err
+}
+
+const getMultipartUpload = `-- name: GetMultipartUpload :one
+SELECT multipart_uploads.upload_id, multipart_uploads.object_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.created_at, multipart_uploads.updated_at
+FROM multipart_uploads
+WHERE upload_id = $1
+`
+
+type GetMultipartUploadRow struct {
 	MultipartUpload MultipartUpload `json:"multipart_upload"`
 }
 
-func (q *Queries) GetMultipartByUploadID(ctx context.Context, tenantID string, uploadID string) (GetMultipartByUploadIDRow, error) {
-	row := q.db.QueryRow(ctx, getMultipartByUploadID, tenantID, uploadID)
-	var i GetMultipartByUploadIDRow
+func (q *Queries) GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error) {
+	row := q.db.QueryRow(ctx, getMultipartUpload, uploadID)
+	var i GetMultipartUploadRow
 	err := row.Scan(
-		&i.MultipartUpload.ID,
-		&i.MultipartUpload.TenantID,
-		&i.MultipartUpload.ObjectID,
 		&i.MultipartUpload.UploadID,
-		&i.MultipartUpload.Bucket,
-		&i.MultipartUpload.ObjectKey,
-		&i.MultipartUpload.ContentType,
+		&i.MultipartUpload.ObjectID,
+		&i.MultipartUpload.StorageUploadID,
 		&i.MultipartUpload.PartSizeBytes,
-		&i.MultipartUpload.Status,
+		&i.MultipartUpload.TotalParts,
 		&i.MultipartUpload.CreatedAt,
 		&i.MultipartUpload.UpdatedAt,
-		&i.MultipartUpload.ExpiresAt,
 	)
 	return i, err
 }
 
-const listExpiredMultiparts = `-- name: ListExpiredMultiparts :many
-SELECT multipart_uploads.id, multipart_uploads.tenant_id, multipart_uploads.object_id, multipart_uploads.upload_id, multipart_uploads.bucket, multipart_uploads.object_key, multipart_uploads.content_type, multipart_uploads.part_size_bytes, multipart_uploads.status, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.expires_at
-FROM multipart_uploads
-WHERE status = 'initiated' AND expires_at < NOW()
-LIMIT $1
-`
-
-type ListExpiredMultipartsRow struct {
-	MultipartUpload MultipartUpload `json:"multipart_upload"`
-}
-
-func (q *Queries) ListExpiredMultiparts(ctx context.Context, limit int32) ([]ListExpiredMultipartsRow, error) {
-	rows, err := q.db.Query(ctx, listExpiredMultiparts, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListExpiredMultipartsRow
-	for rows.Next() {
-		var i ListExpiredMultipartsRow
-		if err := rows.Scan(
-			&i.MultipartUpload.ID,
-			&i.MultipartUpload.TenantID,
-			&i.MultipartUpload.ObjectID,
-			&i.MultipartUpload.UploadID,
-			&i.MultipartUpload.Bucket,
-			&i.MultipartUpload.ObjectKey,
-			&i.MultipartUpload.ContentType,
-			&i.MultipartUpload.PartSizeBytes,
-			&i.MultipartUpload.Status,
-			&i.MultipartUpload.CreatedAt,
-			&i.MultipartUpload.UpdatedAt,
-			&i.MultipartUpload.ExpiresAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMultipartParts = `-- name: ListMultipartParts :many
-SELECT multipart_parts.multipart_id, multipart_parts.part_number, multipart_parts.etag, multipart_parts.size_bytes, multipart_parts.created_at
+SELECT upload_id, part_number, size_bytes, etag, checksum, uploaded_at
 FROM multipart_parts
-WHERE multipart_id = $1
-ORDER BY part_number ASC
+WHERE upload_id = $1
+ORDER BY part_number
 `
 
-type ListMultipartPartsRow struct {
-	MultipartPart MultipartPart `json:"multipart_part"`
-}
-
-func (q *Queries) ListMultipartParts(ctx context.Context, multipartID pgtype.UUID) ([]ListMultipartPartsRow, error) {
-	rows, err := q.db.Query(ctx, listMultipartParts, multipartID)
+func (q *Queries) ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error) {
+	rows, err := q.db.Query(ctx, listMultipartParts, uploadID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMultipartPartsRow
+	var items []MultipartPart
 	for rows.Next() {
-		var i ListMultipartPartsRow
+		var i MultipartPart
 		if err := rows.Scan(
-			&i.MultipartPart.MultipartID,
-			&i.MultipartPart.PartNumber,
-			&i.MultipartPart.Etag,
-			&i.MultipartPart.SizeBytes,
-			&i.MultipartPart.CreatedAt,
+			&i.UploadID,
+			&i.PartNumber,
+			&i.SizeBytes,
+			&i.Etag,
+			&i.Checksum,
+			&i.UploadedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -149,71 +99,23 @@ func (q *Queries) ListMultipartParts(ctx context.Context, multipartID pgtype.UUI
 	return items, nil
 }
 
-const markMultipartAborted = `-- name: MarkMultipartAborted :exec
-UPDATE multipart_uploads 
-SET status = 'aborted', updated_at = now()
-WHERE tenant_id = $1 AND upload_id = $2
+const recordMultipartPart = `-- name: RecordMultipartPart :exec
+INSERT INTO multipart_parts (upload_id, part_number, size_bytes, etag, checksum)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (upload_id, part_number) DO UPDATE
+SET size_bytes = EXCLUDED.size_bytes,
+    etag       = EXCLUDED.etag,
+    checksum   = EXCLUDED.checksum,
+    uploaded_at = now()
 `
 
-func (q *Queries) MarkMultipartAborted(ctx context.Context, tenantID string, uploadID string) error {
-	_, err := q.db.Exec(ctx, markMultipartAborted, tenantID, uploadID)
-	return err
-}
-
-const markMultipartCompleted = `-- name: MarkMultipartCompleted :exec
-UPDATE multipart_uploads 
-SET status = 'completed', updated_at = now()
-WHERE tenant_id = $1 AND upload_id = $2
-`
-
-func (q *Queries) MarkMultipartCompleted(ctx context.Context, tenantID string, uploadID string) error {
-	_, err := q.db.Exec(ctx, markMultipartCompleted, tenantID, uploadID)
-	return err
-}
-
-const updateMultipartStatus = `-- name: UpdateMultipartStatus :execrows
-UPDATE multipart_uploads 
-SET status = 'completed', updated_at = now()
-WHERE tenant_id = $1 AND upload_id = $2 AND status = 'initiated'
-`
-
-func (q *Queries) UpdateMultipartStatus(ctx context.Context, tenantID string, uploadID string) (int64, error) {
-	result, err := q.db.Exec(ctx, updateMultipartStatus, tenantID, uploadID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const updateObjectStatusToActive = `-- name: UpdateObjectStatusToActive :execrows
-UPDATE objects 
-SET status = 'active', updated_at = now()
-WHERE id = $1 AND tenant_id = $2
-`
-
-func (q *Queries) UpdateObjectStatusToActive(ctx context.Context, iD pgtype.UUID, tenantID string) (int64, error) {
-	result, err := q.db.Exec(ctx, updateObjectStatusToActive, iD, tenantID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const upsertMultipartPart = `-- name: UpsertMultipartPart :exec
-INSERT INTO multipart_parts (multipart_id, part_number, etag, size_bytes)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (multipart_id, part_number)
-DO UPDATE SET 
-    etag = EXCLUDED.etag, 
-    size_bytes = EXCLUDED.size_bytes
-`
-
-func (q *Queries) UpsertMultipartPart(ctx context.Context, multipartID pgtype.UUID, partNumber int32, etag *string, sizeBytes *int64) error {
-	_, err := q.db.Exec(ctx, upsertMultipartPart,
-		multipartID,
+func (q *Queries) RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error {
+	_, err := q.db.Exec(ctx, recordMultipartPart,
+		uploadID,
 		partNumber,
-		etag,
 		sizeBytes,
+		etag,
+		checksum,
 	)
 	return err
 }

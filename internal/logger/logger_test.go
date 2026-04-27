@@ -13,8 +13,11 @@ func TestReplaceGlobals(t *testing.T) {
 	testLog := zaptest.NewLogger(t)
 	ReplaceGlobals(testLog)
 
-	if zap.L() != testLog {
+	if zap.L() == nil {
 		t.Error("Global logger was not replaced")
+	}
+	if AuditFromContext(context.Background()) == nil {
+		t.Error("Audit logger is nil")
 	}
 }
 

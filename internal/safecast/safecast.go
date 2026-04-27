@@ -10,6 +10,7 @@ func Int32(v int) int32 {
 	if v < math.MinInt32 {
 		return math.MinInt32
 	}
+
 	return int32(v)
 }
 
@@ -22,6 +23,7 @@ func Int32WithFallback(v int, fallback int32) int32 {
 	if v < math.MinInt32 {
 		return int32(math.MinInt32)
 	}
+
 	return int32(v)
 }
 
@@ -30,6 +32,7 @@ func Int64(v uint64) int64 {
 	if v > uint64(math.MaxInt64) {
 		return math.MaxInt64
 	}
+
 	return int64(v)
 }
 
@@ -41,6 +44,7 @@ func Uint32(v int) uint32 {
 	if uint64(v) > math.MaxUint32 {
 		return math.MaxUint32
 	}
+
 	return uint32(v)
 }
 
@@ -57,6 +61,7 @@ func IntFrom64(v int64) int {
 	if v < int64(math.MinInt) {
 		return math.MinInt
 	}
+
 	return int(v)
 }
 
@@ -68,6 +73,7 @@ func Int32From64(v int64) int32 {
 	if v < math.MinInt32 {
 		return math.MinInt32
 	}
+
 	return int32(v)
 }
 
@@ -76,6 +82,7 @@ func Uint32From64(v uint64) uint32 {
 	if v > math.MaxUint32 {
 		return math.MaxUint32
 	}
+
 	return uint32(v)
 }
 
@@ -84,5 +91,6 @@ func UintFrom64(v uint64) uint {
 	if v > uint64(math.MaxUint) {
 		return math.MaxUint
 	}
+
 	return uint(v)
 }

@@ -14,7 +14,7 @@ The primary table for object metadata.
 - **Indices**:
   - `idx_objects_tenant_created_at`: For performant listing and filtering by tenant.
   - `uq_objects_tenant_key`: Enforces unique object keys within a single tenant.
-- **Statuses**: `pending`, `active`, `deleted`.
+- **Statuses**: `pending`, `uploading`, `uploaded`, `complete`, `aborted`, `deleted`, `error`, `soft_deleted`, `hard_deleted`.
 
 ### 2. `multipart_uploads`
 
@@ -28,7 +28,7 @@ Child table for `multipart_uploads` to track individual uploaded parts and their
 
 ### 4. `tenants`
 
-Stores tenant-specific configuration and metadata (e.g., specific S3 buckets or quotas).
+Stores tenant-specific configuration and metadata (e.g., specific S3 object_keys or quotas).
 
 ### 5. `audit_logs`
 
@@ -53,6 +53,6 @@ The Reaper worker runs periodically to:
 
 ## Migrations
 
-Managed using [Goose](https://github.com/pressly/goose). Migrations are located in [migrations/](file:///workspace/migrations/).
+Managed using [Goose](https://github.com/pressly/goose). Migrations are located in [../migrations/](../migrations/).
 
-- **Latest Version**: See current directory listing for migration count (019_domain_constraints.sql as of last check).
+- **Latest Version**: See current directory listing for migration count (021_relax_object_tag_constraints.sql as of last check).

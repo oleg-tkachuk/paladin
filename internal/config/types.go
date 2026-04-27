@@ -21,6 +21,10 @@ type Config struct {
 	Timeouts     Timeouts     `yaml:"timeouts" json:"timeouts"`
 	Idempotency  Idempotency  `yaml:"idempotency" json:"idempotency"`
 	OTel         OTel         `yaml:"otel" json:"otel"`
+	Storage      Storage      `yaml:"storage" json:"storage"`
+	Presign      Presign      `yaml:"presign" json:"presign"`
+	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
+	Cedar        Cedar        `yaml:"cedar" json:"cedar"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -104,7 +108,6 @@ type Server struct {
 	Mode            string        `yaml:"mode" json:"mode"`
 	Name            string        `yaml:"name" json:"name"`
 	HTTP            HTTPServer    `yaml:"http" json:"http"`
-	GRPC            GRPCServer    `yaml:"grpc" json:"grpc"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
@@ -133,16 +136,8 @@ type TLS struct {
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
 }
 
-type GRPCServer struct {
-	Addr              string `yaml:"addr" json:"addr"`
-	ReflectionEnabled bool   `yaml:"reflection_enabled" json:"reflection_enabled"`
-	MaxRecvMsgSize    int    `yaml:"max_recv_msg_size" json:"max_recv_msg_size"`
-	MaxSendMsgSize    int    `yaml:"max_send_msg_size" json:"max_send_msg_size"`
-}
-
 type Datastores struct {
 	Postgres Postgres `yaml:"postgres" json:"postgres"`
-	S3       S3       `yaml:"s3" json:"s3"`
 }
 
 type Postgres struct {
@@ -167,21 +162,12 @@ type PostgresTimeouts struct {
 	Statement time.Duration `yaml:"statement" json:"statement"`
 }
 
-type S3 struct {
-	Bucket          string        `yaml:"bucket" json:"bucket"`
-	Region          string        `yaml:"region" json:"region"`
-	Endpoint        string        `yaml:"endpoint" json:"endpoint"`
-	PublicEndpoint  string        `yaml:"public_endpoint" json:"public_endpoint"`
-	ForcePathStyle  bool          `yaml:"force_path_style" json:"force_path_style"`
-	AccessKey       string        `yaml:"access_key" json:"access_key"`
-	AccessKeySecret *SecretRef    `yaml:"access_key_secret" json:"access_key_secret"`
-	SecretKey       string        `yaml:"secret_key" json:"secret_key"`
-	SecretKeySecret *SecretRef    `yaml:"secret_key_secret" json:"secret_key_secret"`
-	PresignTTL      time.Duration `yaml:"presign_ttl" json:"presign_ttl"`
-	PartSizeRaw     string        `yaml:"part_size" json:"part_size"`
-	PartSizeBytes   int64         `yaml:"-"`
-	SSEType         string        `yaml:"sse_type" json:"sse_type"`     // e.g. "AES256" or "aws:kms"
-	SSEKeyID        string        `yaml:"sse_key_id" json:"sse_key_id"` // Optional KMS Key ID
+// Storage is the registry of physical object-storage backends. Each logical
+// objectKey references one by name via `object_keys.storage_backend`; if that column
+// is empty the service falls back to DefaultBackend.
+type Storage struct {
+	DefaultBackend string                    `yaml:"default_backend" json:"default_backend"`
+	Backends       map[string]StorageBackend `yaml:"backends" json:"backends"`
 }
 
 type Policy struct {
@@ -201,12 +187,17 @@ type Policy struct {
 	LabelsMaxBytes        int           `yaml:"labels_max_bytes" json:"labels_max_bytes"`
 	LabelsMaxKeys         int           `yaml:"labels_max_keys" json:"labels_max_keys"`
 	ExternalRefMaxLen     int           `yaml:"external_ref_max_len" json:"external_ref_max_len"`
-	ObjectKeyMaxLen       int           `yaml:"object_key_max_len" json:"object_key_max_len"`
+	ObjectTagMaxLen       int           `yaml:"object_tag_max_len" json:"object_tag_max_len"`
 }
 
+// Auth configures JWT verification for incoming requests. JWKSURL takes
+// precedence over HMACSecret when both are set.
 type Auth struct {
-	Enabled  bool   `yaml:"enabled" json:"enabled"`
-	AdminKey string `yaml:"admin_key" json:"admin_key"`
+	Issuer     string        `yaml:"issuer" json:"issuer"`
+	Audience   string        `yaml:"audience" json:"audience"`
+	JWKSURL    string        `yaml:"jwks_url" json:"jwks_url"`
+	HMACSecret string        `yaml:"hmac_secret" json:"hmac_secret"`
+	Leeway     time.Duration `yaml:"leeway" json:"leeway"`
 }
 
 type Security struct {
@@ -263,4 +254,57 @@ type Timeouts struct {
 type Idempotency struct {
 	Enabled bool          `yaml:"enabled" json:"enabled"`
 	TTL     time.Duration `yaml:"ttl" json:"ttl"`
+}
+
+// StorageBackend describes one physical object-storage backend: connection
+// params, credentials, SSE policy, upload-part sizing, and the event pipeline
+// that drives CompletionMode (IMPLICIT when events.enabled, EXPLICIT otherwise).
+type StorageBackend struct {
+	Kind string `yaml:"kind" json:"kind"` // aws-s3 | s3-compatible | gcs
+	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
+	// become a tenant-scoped prefix within this bucket; the full S3 key
+	// for any object is "<tenant_id>/<object_key>/<key>".
+	Bucket          string               `yaml:"bucket" json:"bucket"`
+	Region          string               `yaml:"region" json:"region"`
+	Endpoint        string               `yaml:"endpoint" json:"endpoint"`
+	PublicEndpoint  string               `yaml:"public_endpoint" json:"public_endpoint"`
+	ForcePathStyle  bool                 `yaml:"force_path_style" json:"force_path_style"`
+	AccessKey       string               `yaml:"access_key" json:"access_key"`
+	AccessKeySecret *SecretRef           `yaml:"access_key_secret" json:"access_key_secret"`
+	SecretKey       string               `yaml:"secret_key" json:"secret_key"`
+	SecretKeySecret *SecretRef           `yaml:"secret_key_secret" json:"secret_key_secret"`
+	PresignTTL      time.Duration        `yaml:"presign_ttl" json:"presign_ttl"`
+	PartSizeRaw     string               `yaml:"part_size" json:"part_size"`
+	PartSizeBytes   int64                `yaml:"-" json:"-"`
+	SSE             StorageBackendSSE    `yaml:"sse" json:"sse"`
+	Events          StorageBackendEvents `yaml:"events" json:"events"`
+}
+
+type StorageBackendSSE struct {
+	Type  string `yaml:"type" json:"type"`     // "" | AES256 | aws:kms
+	KeyID string `yaml:"key_id" json:"key_id"` // required when type=aws:kms
+}
+
+type StorageBackendEvents struct {
+	Enabled      bool          `yaml:"enabled" json:"enabled"`
+	Target       string        `yaml:"target" json:"target"` // sqs | redis | none
+	QueueURL     string        `yaml:"queue_url" json:"queue_url"`
+	PollInterval time.Duration `yaml:"poll_interval" json:"poll_interval"`
+}
+
+type Presign struct {
+	DefaultTTL     time.Duration `yaml:"default_ttl" json:"default_ttl"`
+	MaxTTL         time.Duration `yaml:"max_ttl" json:"max_ttl"`
+	DefaultMaxSize int64         `yaml:"default_max_size" json:"default_max_size"`
+}
+
+type Reconciler struct {
+	PollInterval    time.Duration `yaml:"poll_interval" json:"poll_interval"`
+	PendingGraceTTL time.Duration `yaml:"pending_grace_ttl" json:"pending_grace_ttl"`
+	// BatchSize caps how many stuck-PENDING rows are reconciled per tick.
+	BatchSize int `yaml:"batch_size" json:"batch_size"`
+}
+
+type Cedar struct {
+	PolicyCacheTTL time.Duration `yaml:"policy_cache_ttl" json:"policy_cache_ttl"`
 }

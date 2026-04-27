@@ -5,108 +5,220 @@
 package sqlc
 
 import (
-	"net/netip"
+	"database/sql/driver"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AuditLog struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          string             `json:"tenant_id"`
-	RequestID         *string            `json:"request_id"`
-	IdempotencyKey    *string            `json:"idempotency_key"`
-	ActorSubject      *string            `json:"actor_subject"`
-	ActorType         string             `json:"actor_type"`
-	ClientIp          *netip.Addr        `json:"client_ip"`
-	UserAgent         *string            `json:"user_agent"`
-	Method            string             `json:"method"`
-	Path              string             `json:"path"`
-	QueryParams       []byte             `json:"query_params"`
-	RequestHeaders    []byte             `json:"request_headers"`
-	RequestBodySha256 *string            `json:"request_body_sha256"`
-	RequestSizeBytes  *int64             `json:"request_size_bytes"`
-	HttpStatus        *int32             `json:"http_status"`
-	ResponseCode      *string            `json:"response_code"`
-	ResponseStatus    *string            `json:"response_status"`
-	ResponseTimeMs    *int32             `json:"response_time_ms"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+type ObjectState string
+
+const (
+	ObjectStatePENDING   ObjectState = "PENDING"
+	ObjectStateAVAILABLE ObjectState = "AVAILABLE"
+	ObjectStateFAILED    ObjectState = "FAILED"
+	ObjectStateDELETED   ObjectState = "DELETED"
+)
+
+func (e *ObjectState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ObjectState(s)
+	case string:
+		*e = ObjectState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ObjectState: %T", src)
+	}
+	return nil
+}
+
+type NullObjectState struct {
+	ObjectState ObjectState `json:"object_state"`
+	Valid       bool        `json:"valid"` // Valid is true if ObjectState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullObjectState) Scan(value interface{}) error {
+	if value == nil {
+		ns.ObjectState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ObjectState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullObjectState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ObjectState), nil
+}
+
+type OperationState string
+
+const (
+	OperationStatePENDING   OperationState = "PENDING"
+	OperationStateRUNNING   OperationState = "RUNNING"
+	OperationStateSUCCEEDED OperationState = "SUCCEEDED"
+	OperationStateFAILED    OperationState = "FAILED"
+	OperationStateCANCELLED OperationState = "CANCELLED"
+)
+
+func (e *OperationState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OperationState(s)
+	case string:
+		*e = OperationState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OperationState: %T", src)
+	}
+	return nil
+}
+
+type NullOperationState struct {
+	OperationState OperationState `json:"operation_state"`
+	Valid          bool           `json:"valid"` // Valid is true if OperationState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOperationState) Scan(value interface{}) error {
+	if value == nil {
+		ns.OperationState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OperationState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOperationState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OperationState), nil
+}
+
+type Bucket struct {
+	BackendID       string             `json:"backend_id"`
+	BucketName      string             `json:"bucket_name"`
+	DisplayName     *string            `json:"display_name"`
+	Region          *string            `json:"region"`
+	Labels          []byte             `json:"labels"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type IdempotencyKey struct {
-	TenantID       string             `json:"tenant_id"`
-	IdempotencyKey string             `json:"idempotency_key"`
-	RequestPath    string             `json:"request_path"`
-	RequestHash    string             `json:"request_hash"`
-	ResponseCode   int32              `json:"response_code"`
-	ResponseBody   []byte             `json:"response_body"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Method      string             `json:"method"`
+	Key         string             `json:"key"`
+	Response    []byte             `json:"response"`
+	ResponseSha []byte             `json:"response_sha"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
 type MultipartPart struct {
-	MultipartID pgtype.UUID        `json:"multipart_id"`
-	PartNumber  int32              `json:"part_number"`
-	Etag        *string            `json:"etag"`
-	SizeBytes   *int64             `json:"size_bytes"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UploadID   string             `json:"upload_id"`
+	PartNumber int32              `json:"part_number"`
+	SizeBytes  int64              `json:"size_bytes"`
+	Etag       string             `json:"etag"`
+	Checksum   *string            `json:"checksum"`
+	UploadedAt pgtype.Timestamptz `json:"uploaded_at"`
 }
 
 type MultipartUpload struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      string             `json:"tenant_id"`
-	ObjectID      pgtype.UUID        `json:"object_id"`
-	UploadID      string             `json:"upload_id"`
-	Bucket        string             `json:"bucket"`
-	ObjectKey     string             `json:"object_key"`
-	ContentType   string             `json:"content_type"`
-	PartSizeBytes int64              `json:"part_size_bytes"`
-	Status        string             `json:"status"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	UploadID        string             `json:"upload_id"`
+	ObjectID        pgtype.UUID        `json:"object_id"`
+	StorageUploadID string             `json:"storage_upload_id"`
+	PartSizeBytes   int64              `json:"part_size_bytes"`
+	TotalParts      int32              `json:"total_parts"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Object struct {
-	ID              pgtype.UUID        `json:"id"`
-	TenantID        string             `json:"tenant_id"`
-	ObjectKey       string             `json:"object_key"`
-	Bucket          string             `json:"bucket"`
-	ContentType     string             `json:"content_type"`
-	SizeBytes       int64              `json:"size_bytes"`
-	ChecksumSha256  *string            `json:"checksum_sha256"`
-	Status          string             `json:"status"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	Labels          []byte             `json:"labels"`
-	ExternalRef     *string            `json:"external_ref"`
-	StoredEtag      *string            `json:"stored_etag"`
-	StoredSizeBytes *int64             `json:"stored_size_bytes"`
-	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
-	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
-	Category        string             `json:"category"`
-	Subpath         *string            `json:"subpath"`
-	Tags            []byte             `json:"tags"`
+	ObjectID          pgtype.UUID        `json:"object_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ObjectKey         string             `json:"object_key"`
+	Key               string             `json:"key"`
+	State             ObjectState        `json:"state"`
+	ContentType       string             `json:"content_type"`
+	SizeBytes         *int64             `json:"size_bytes"`
+	Etag              *string            `json:"etag"`
+	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
+	Checksum          *string            `json:"checksum"`
+	Sequencer         *string            `json:"sequencer"`
+	Metadata          []byte             `json:"metadata"`
+	Tags              []byte             `json:"tags"`
+	ExternalRef       *string            `json:"external_ref"`
+	ResourceVersion   int64              `json:"resource_version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
+	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
+	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
 }
 
-type ObjectCategory struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	Slug        string             `json:"slug"`
-	Name        string             `json:"name"`
-	Description *string            `json:"description"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+type ObjectKey struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	ObjectKey       string             `json:"object_key"`
+	DisplayName     *string            `json:"display_name"`
+	BackendID       string             `json:"backend_id"`
+	CedarPolicy     string             `json:"cedar_policy"`
+	CedarPolicyHash []byte             `json:"cedar_policy_hash"`
+	LifecycleRules  []byte             `json:"lifecycle_rules"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	BucketName      string             `json:"bucket_name"`
+}
+
+type ObjectTag struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Slug            string             `json:"slug"`
+	DisplayName     *string            `json:"display_name"`
+	Description     string             `json:"description"`
+	Labels          []byte             `json:"labels"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Operation struct {
+	OperationID  pgtype.UUID        `json:"operation_id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	Type         string             `json:"type"`
+	State        OperationState     `json:"state"`
+	Metadata     []byte             `json:"metadata"`
+	Response     []byte             `json:"response"`
+	ErrorCode    *string            `json:"error_code"`
+	ErrorMessage *string            `json:"error_message"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DoneAt       pgtype.Timestamptz `json:"done_at"`
+}
+
+type StorageBackend struct {
+	ID            string             `json:"id"`
+	Kind          string             `json:"kind"`
+	Endpoint      *string            `json:"endpoint"`
+	Region        *string            `json:"region"`
+	EventsEnabled bool               `json:"events_enabled"`
+	EventsTarget  *string            `json:"events_target"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type Tenant struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    string             `json:"tenant_id"`
-	DisplayName *string            `json:"display_name"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	// Arbitrary key-value metadata. Keys are strings, values are strings.
-	Labels []byte `json:"labels"`
-	// Unordered set of string tags for categorical filtering.
-	Tags []string `json:"tags"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	DisplayName          *string            `json:"display_name"`
+	Labels               []byte             `json:"labels"`
+	InheritedCedarPolicy string             `json:"inherited_cedar_policy"`
+	InheritedPolicyHash  []byte             `json:"inherited_policy_hash"`
+	ResourceVersion      int64              `json:"resource_version"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }

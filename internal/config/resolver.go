@@ -11,7 +11,12 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"go.uber.org/zap"
 )
+
+// Redacted is the placeholder used in Obfuscated() for sensitive fields.
+const Redacted = "***"
 
 const (
 	defaultK8sAPIBaseURL = "https://kubernetes.default.svc"
@@ -29,6 +34,7 @@ type Resolver interface {
 // K8sSecretResolver resolves Kubernetes secrets by reading the projected token
 // and calling the Kubernetes API.
 type K8sSecretResolver struct {
+	log        *zap.Logger
 	client     *http.Client
 	apiBaseURL string
 	tokenPath  string
@@ -37,7 +43,7 @@ type K8sSecretResolver struct {
 
 // NewK8sSecretResolver creates a new K8s Secret resolver.
 // It configures TLS using the projected cluster CA.
-func NewK8sSecretResolver() *K8sSecretResolver {
+func NewK8sSecretResolver(log *zap.Logger) *K8sSecretResolver {
 	caCertPool := x509.NewCertPool()
 	caCert, err := os.ReadFile(k8sCACertPath)
 	if err == nil {
@@ -56,6 +62,7 @@ func NewK8sSecretResolver() *K8sSecretResolver {
 		apiBaseURL: defaultK8sAPIBaseURL,
 		tokenPath:  k8sTokenPath,
 		nsPath:     k8sNamespacePath,
+		log:        log,
 	}
 }
 
@@ -71,24 +78,25 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.PasswordSecret = nil
 	}
 
-	// S3 Access Key
-	if cfg.Datastores.S3.AccessKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Datastores.S3.AccessKeySecret)
-		if err != nil {
-			return fmt.Errorf("s3.access_key_secret: %w", err)
+	// Per-backend credential secrets.
+	for name, b := range cfg.Storage.Backends {
+		if b.AccessKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.AccessKeySecret)
+			if err != nil {
+				return fmt.Errorf("storage.backends.%s.access_key_secret: %w", name, err)
+			}
+			b.AccessKey = key
+			b.AccessKeySecret = nil
 		}
-		cfg.Datastores.S3.AccessKey = key
-		cfg.Datastores.S3.AccessKeySecret = nil
-	}
-
-	// S3 Secret Key
-	if cfg.Datastores.S3.SecretKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Datastores.S3.SecretKeySecret)
-		if err != nil {
-			return fmt.Errorf("s3.secret_key_secret: %w", err)
+		if b.SecretKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.SecretKeySecret)
+			if err != nil {
+				return fmt.Errorf("storage.backends.%s.secret_key_secret: %w", name, err)
+			}
+			b.SecretKey = key
+			b.SecretKeySecret = nil
 		}
-		cfg.Datastores.S3.SecretKey = key
-		cfg.Datastores.S3.SecretKeySecret = nil
+		cfg.Storage.Backends[name] = b
 	}
 
 	return nil
@@ -131,7 +139,11 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch secret: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			r.log.Error("close response body failed", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusForbidden {
@@ -174,21 +186,32 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 }
 
 // Obfuscated returns a deep copy of the configuration structure with all resolved secret
-// values replaced by "[REDACTED]". Useful for logging or debugging.
+// values replaced by Redacted. Useful for logging or debugging.
 func (c *Config) Obfuscated() Config {
 	cc := *c
 
 	// Redact Postgres
 	if cc.Datastores.Postgres.Password != "" {
-		cc.Datastores.Postgres.Password = "[REDACTED]"
+		cc.Datastores.Postgres.Password = Redacted
 	}
 
-	// Redact S3
-	if cc.Datastores.S3.AccessKey != "" {
-		cc.Datastores.S3.AccessKey = "[REDACTED]"
+	// Redact per-backend creds. Copy the map so we don't mutate the source.
+	if len(cc.Storage.Backends) > 0 {
+		redacted := make(map[string]StorageBackend, len(cc.Storage.Backends))
+		for name, b := range cc.Storage.Backends {
+			if b.AccessKey != "" {
+				b.AccessKey = Redacted
+			}
+			if b.SecretKey != "" {
+				b.SecretKey = Redacted
+			}
+			redacted[name] = b
+		}
+		cc.Storage.Backends = redacted
 	}
-	if cc.Datastores.S3.SecretKey != "" {
-		cc.Datastores.S3.SecretKey = "[REDACTED]"
+
+	if cc.Auth.HMACSecret != "" {
+		cc.Auth.HMACSecret = Redacted
 	}
 
 	return cc

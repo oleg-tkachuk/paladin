@@ -10,14 +10,6 @@ const (
 	TenantIDKey  ctxKey = "tenantID"
 )
 
-// Sentinel tenant identifiers used internally. These are never real tenant IDs.
-const (
-	// DefaultTenant is used when auth is disabled (local dev / test).
-	DefaultTenant = "1eae4beb-cf17-4ddd-908d-299de9614d59"
-	// SystemAdminTenant identifies requests authenticated via the admin key.
-	SystemAdminTenant = "f02ddb45-84bb-494f-b29e-326c62a37b72"
-)
-
 func RequestIDFromContext(ctx context.Context, fallback string) string {
 	if v := ctx.Value(RequestIDKey); v != nil {
 		if s, ok := v.(string); ok && s != "" {

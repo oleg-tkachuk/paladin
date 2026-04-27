@@ -1,12 +1,42 @@
 version: "3"
 
+silent: true
+
 vars:
   PROJECT_NAME: paladin
   COMPOSE_FILE: ./deploy/docker-compose.yaml
   DEPLOY_INFO_ENV_FILE: ./deploy/info.env
+  DOCKERFILE: ./deploy/Dockerfile
+  CHART_DIR: ./deploy/chart
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
   K8S_DEPLOYMENT_NAME: paladin
+
+  # OCI Registry
+  OCI_REGISTRY: "registry.local"
+  CHART_REPO: "oci://registry.local/charts"
+
+includes:
+  core:
+    taskfile: tasks/_core.task.yaml
+    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+    dir: .
+  docker:
+    taskfile: tasks/docker.task.yaml
+    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+    dir: .
+  test:
+    taskfile: tasks/test.task.yaml
+    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+    dir: .
+  gen:
+    taskfile: tasks/gen.task.yaml
+    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+    dir: .
+  k8s:
+    taskfile: tasks/k8s.task.yaml
+    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+    dir: .
 
 tasks:
   default:
@@ -14,219 +44,110 @@ tasks:
     cmds:
       - task -a
 
-  ds:prune:
-    desc: "Docker system prune"
-    silent: true
-    deps:
-      - dd:start
-    cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Docker system...\n"
-      - cmd: |-
-          docker system prune --volumes --force
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Minikube Docker system...\n"
-      - cmd: |-
-          minikube ssh "docker system prune -a --volumes --force" || true
-
-  dd:start:
-    desc: "Start Docker Desktop"
-    silent: true
-    cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Starting Docker Desktop...\n"
-      - cmd: |-
-          docker desktop start
-
-  # -------------------------
-  # Build pipeline (subtasks)
-  # -------------------------
-
   build:
-    desc: "Build the image"
+    desc: "Build and push image + Helm chart to OCI registry"
     cmds:
       - task: build:version:bump
       - task: build:env:write
-      - task: build:compose
-      - task: restart
+      - task: docker:build
+
+  build-local:
+    desc: "Build directly in Minikube Docker daemon (Zero-push flow)"
+    cmds:
+      - task: build:version:bump
+      - task: build:env:write
+      - task: docker:build-local
 
   build:version:bump:
     desc: "Auto-increment VERSION (patch)"
+    internal: true
     silent: true
     cmds:
       - cmd: |-
           set -euo pipefail
-
-          if [ ! -f {{.DEPLOY_INFO_ENV_FILE}} ]; then touch {{.DEPLOY_INFO_ENV_FILE}}; fi
-
+          if [ ! -f {{.DEPLOY_INFO_ENV_FILE}} ]; then mkdir -p $(dirname {{.DEPLOY_INFO_ENV_FILE}}) && touch {{.DEPLOY_INFO_ENV_FILE}}; fi
           check_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2 || echo "0.1.0")
           if [ -z "$check_version" ]; then check_version="0.1.0"; fi
-
           next_version="$(printf "%s" "$check_version" | awk -F. -v OFS=. '{$NF += 1 ; print}')"
-
           if grep -q "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}}; then
             sed -i '' "s/APP_VERSION=.*/APP_VERSION=$next_version/" {{.DEPLOY_INFO_ENV_FILE}}
           else
             echo "APP_VERSION=$next_version" >> {{.DEPLOY_INFO_ENV_FILE}}
           fi
-
           printf "INFO: %s: Bumped version from %s to %s\n" "{{.K8S_DEPLOYMENT_NAME}}" "$check_version" "$next_version"
 
   build:env:write:
     desc: "Write build metadata to env file"
+    internal: true
     silent: true
     cmds:
       - cmd: |-
           set -euo pipefail
           printf "INFO: %s: Writing build metadata to env file...\n" "{{.K8S_DEPLOYMENT_NAME}}"
-
-          # Read the version that was just bumped (or exists)
           next_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2)
-
           {
             printf "GIT_COMMIT_HASH=%s\n" "$(git rev-parse --short HEAD)"
             printf "BUILD_TIME=%s\n" "$(TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z)"
             printf "APP_VERSION=%s\n" "$next_version"
           } > {{.DEPLOY_INFO_ENV_FILE}}
 
-  build:compose:
-    desc: "Run docker compose build in minikube docker-env"
-    silent: true
+  up:
+    desc: "Start the local stack"
     cmds:
-      - cmd: |-
-          set -euo pipefail
+      - task: docker:up
 
-          printf "INFO: %s: Building Docker images...\n" "{{.K8S_DEPLOYMENT_NAME}}"
-
-          eval "$(minikube docker-env)"
-
-          time docker compose \
-            --progress={{.PROGRESS | default "auto"}} \
-            -f {{.COMPOSE_FILE}} \
-            -p {{.PROJECT_NAME}} \
-            --env-file {{.DEPLOY_INFO_ENV_FILE}} \
-            build
-
-  # -------------------------
-  # Verification & Quality
-  # -------------------------
-
-  test:unit:
-    desc: "Run unit tests"
-    cmds:
-      - cmd: |-
-          eval "$(minikube docker-env)" && time go test ./...
-
-  test:lint:
-    desc: "Run linters"
-    cmds:
-      - cmd: |-
-          time golangci-lint run ./...
-
-  test:coverage:
-    desc: "Run unit tests with coverage"
-    cmds:
-      - cmd: |-
-          eval "$(minikube docker-env)" && \
-          mkdir -p coverage && \
-          time go test -coverprofile=coverage/cover.out ./... && \
-          go tool cover -html=coverage/cover.out -o coverage/cover.html
-      - cmd: |-
-          printf "INFO: Coverage report saved to coverage/cover.html\n"
-
-  test:e2e:
-    desc: "Run E2E integration tests (Hurl)"
-    vars:
-      HOST: '{{.HOST | default "http://localhost:8080"}}'
-    cmds:
-      - cmd: |-
-          time hurl --variable host={{.HOST}} --test tests/api/e2e/*.hurl
-
-  test:functional:
-    desc: "Run API functional tests"
-    dir: tests/api/functional
-    cmds:
-      - cmd: |-
-          ./run-functional.sh
-
-  test:mutations:
-    desc: "Run API mutation tests"
-    dir: tests/api/mutations
-    cmds:
-      - cmd: |-
-          ./run-mutations.sh
-
-  test:security:sast:
-    desc: "Run Security SAST tests (gosec)"
-    dir: tests/api/security
-    cmds:
-      - cmd: |-
-          ./run-gosec.sh
-
-  test:security:dast:
-    desc: "Run Security DAST tests (nuclei, zap)"
-    dir: tests/api/security
-    cmds:
-      - cmd: |-
-          ./run-nuclei.sh
-      - cmd: |-
-          ./run-zap.sh
-
-  test:security:sca:
-    desc: "Run Security SCA tests (trivy)"
-    dir: tests/api/security
-    cmds:
-      - cmd: |-
-          ./run-trivy.sh
-
-  test:security:
-    desc: "Run all security tests"
-    dir: tests/api/security
-    cmds:
-      - cmd: |-
-          ./run-all-security.sh
-
-  test:all:
-    desc: "Run all verification tasks (lint, unit, functional, e2e, security)"
-    cmds:
-      - task: test:lint
-      - task: test:unit
-      - task: test:functional
-      - task: test:e2e
-      - task: test:security
-
-  # Alias for backward compatibility or convenience
   test:
-    desc: "Alias for test:unit"
+    desc: "Run unit tests"
     cmds:
       - task: test:unit
 
   generate:
-    desc: "Generate all code (Proto, Mocks)"
-    silent: true
+    desc: "Generate all code (Proto, Mocks, SQLC)"
+    cmds:
+      - task: gen:all
+
+  auth:mint-token:
+    desc: "Mint HS256 JWT for local dev (override JWT_SECRET/JWT_ISS/JWT_AUD/JWT_SUB/JWT_ROLES/JWT_TENANT/JWT_TTL_SECONDS)"
+    vars:
+      JWT_SECRET: "dev-secret-change-me-32-bytes-min"
+      JWT_ISS: "paladin-dev"
+      JWT_AUD: "paladin-api"
+      JWT_SUB: "dev-user"
+      # Comma-separated list. platform-admin is required by TenantService RPCs.
+      JWT_ROLES: "platform-admin"
+      # Tenant UUID. Required by per-tenant RPCs (ObjectKey, ObjectTag, Object...).
+      # Leave empty for cross-tenant admin-only tokens.
+      JWT_TENANT: "3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"
+      JWT_TTL_SECONDS: "604800" # 7 days
     cmds:
       - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, proto)...\n"
-      - cmd: |-
-          time go run github.com/vektra/mockery/v3 --config .mockery.yaml
-      - cmd: |-
-          time buf generate
-      - cmd: |-
-          time go generate ./...
+          set -euo pipefail
+          NOW=$(date +%s)
+          EXP=$((NOW + {{.JWT_TTL_SECONDS}}))
+          ROLES_JSON=$(printf '%s' "{{.JWT_ROLES}}" | awk -F, '{
+            printf "["
+            for (i = 1; i <= NF; i++) {
+              if (i > 1) printf ","
+              printf "\"%s\"", $i
+            }
+            printf "]"
+          }')
+          TENANT_JSON=""
+          if [ -n "{{.JWT_TENANT}}" ]; then
+            TENANT_JSON=$(printf ',"tenant":"%s"' "{{.JWT_TENANT}}")
+          fi
+          b64() { openssl base64 -e -A | tr '+/' '-_' | tr -d '='; }
+          HEADER=$(printf '%s' '{"alg":"HS256","typ":"JWT"}' | b64)
+          PAYLOAD=$(printf '{"iss":"%s","aud":"%s","sub":"%s","iat":%d,"nbf":%d,"exp":%d,"roles":%s%s}' \
+            "{{.JWT_ISS}}" "{{.JWT_AUD}}" "{{.JWT_SUB}}" "$NOW" "$NOW" "$EXP" "$ROLES_JSON" "$TENANT_JSON" | b64)
+          SIG=$(printf '%s' "${HEADER}.${PAYLOAD}" | openssl dgst -binary -sha256 -hmac "{{.JWT_SECRET}}" | b64)
+          printf '%s.%s.%s\n' "$HEADER" "$PAYLOAD" "$SIG"
 
+  # -------------------------
+  # Legacy Aliases / Utility
+  # -------------------------
 
   restart:
-    desc: "Restart the deployment"
-    silent: true
+    desc: "Alias for k8s:restart"
     cmds:
-      - |
-        if ! kubectl get namespace {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
-          printf "INFO: %s: Skipping restart (namespace %s not found)\n" "{{.K8S_DEPLOYMENT_NAME}}" "{{.K8S_NAMESPACE}}"
-          exit 0
-        fi
-        if kubectl get deployment/{{.K8S_DEPLOYMENT_NAME}} -n {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
-          printf "INFO: %s: Restarting deployment...\n" "{{.K8S_DEPLOYMENT_NAME}}"
-          kubectl -n {{.K8S_NAMESPACE}} rollout restart deployment {{.K8S_DEPLOYMENT_NAME}}
-        else
-          printf "INFO: %s: Skipping restart (deployment not found in %s)\n" "{{.K8S_DEPLOYMENT_NAME}}" "{{.K8S_NAMESPACE}}"
-        fi
+      - task: k8s:restart

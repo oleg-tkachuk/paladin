@@ -85,7 +85,7 @@ var (
 	// ObjectsTotal tracks total number of objects by status
 	ObjectsTotal = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "paladin_objects_total",
+			Name: "paladin_objects",
 			Help: "Total number of objects by status",
 		},
 		[]string{"status"},
@@ -94,7 +94,7 @@ var (
 	// MultipartUploadsTotal tracks total number of multipart uploads by status
 	MultipartUploadsTotal = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "paladin_multipart_uploads_total",
+			Name: "paladin_multipart_uploads",
 			Help: "Total number of multipart uploads by status",
 		},
 		[]string{"status"},
@@ -117,10 +117,10 @@ func RecordDatabaseQuery(query, status string, durationSeconds float64) {
 }
 
 // UpdateConnectionPoolMetrics updates database connection pool metrics
-func UpdateConnectionPoolMetrics(acquired, idle, max, total int32) {
+func UpdateConnectionPoolMetrics(acquired, idle, maxConns, total int32) {
 	DatabaseConnectionPool.WithLabelValues("acquired").Set(float64(acquired))
 	DatabaseConnectionPool.WithLabelValues("idle").Set(float64(idle))
-	DatabaseConnectionPool.WithLabelValues("max").Set(float64(max))
+	DatabaseConnectionPool.WithLabelValues("max").Set(float64(maxConns))
 	DatabaseConnectionPool.WithLabelValues("total").Set(float64(total))
 }
 
@@ -130,9 +130,9 @@ func RecordCacheOperation(operation, result string) {
 }
 
 // UpdateRateLimiterMetrics updates rate limiter metrics
-func UpdateRateLimiterMetrics(active, max int) {
+func UpdateRateLimiterMetrics(active, maxLimit int) {
 	RateLimiterState.WithLabelValues("active").Set(float64(active))
-	RateLimiterState.WithLabelValues("max").Set(float64(max))
+	RateLimiterState.WithLabelValues("max").Set(float64(maxLimit))
 }
 
 // RecordHTTPRequest records an HTTP request

@@ -8,7 +8,7 @@ The Paladin (PALADIN) is a central service in the acme ecosystem responsible for
 
 - **Language**: Go
 - **Frameworks**:
-  - [Connect RPC](https://connectrpc.com/): gRPC-compatible RPC framework (replaces Gin).
+  - [Connect RPC](https://connectrpc.com/): Connect-compatible RPC framework (replaces Gin).
   - [Protobuf + buf/validate](https://buf.build/bufbuild/protovalidate): Contract-first API with declarative validation.
   - [SQLC](https://sqlc.dev/): Type-safe SQL generator.
   - [Google Wire](https://github.com/google/wire): Dependency injection.
@@ -42,23 +42,23 @@ All RPCs are served via Connect RPC on a single HTTP/2 port (`:8080`). The trans
 
 | Handler | File | Service |
 |---------|------|---------|
-| `ObjectHandler` | `internal/api/grpc/object_handler.go` | Object lifecycle (upload, download, copy, move, delete, list) |
-| `MultipartHandler` | `internal/api/grpc/multipart_handler.go` | Multipart upload (initiate, sign parts, complete, abort, list parts) |
-| `PresignHandler` | `internal/api/grpc/presign_handler.go` | Presigned URL generation (upload, download) |
-| `BulkHandler` | `internal/api/grpc/bulk_handler.go` | Batch operations (batch delete, batch copy) |
-| `BucketHandler` | `internal/api/grpc/bucket_handler.go` | Bucket management (stub — see `docs/TODO.md`) |
-| `SystemHandler` | `internal/api/grpc/system_handler.go` | Health, readiness, version, config |
+| `ObjectHandler` | `internal/api/connect/object_handler.go` | Object lifecycle (upload, download, copy, move, delete, list) |
+| `MultipartHandler` | `internal/api/connect/multipart_handler.go` | Multipart upload (initiate, sign parts, complete, abort, list parts) |
+| `PresignHandler` | `internal/api/connect/presign_handler.go` | Presigned URL generation (upload, download) |
+| `BulkHandler` | `internal/api/connect/bulk_handler.go` | Batch operations (batch delete, batch copy) |
+| `ObjectKeyHandler` | `internal/api/connect/bucket_handler.go` | ObjectKey management (stub — see `docs/TODO.md`) |
+| `SystemHandler` | `internal/api/connect/system_handler.go` | Health, readiness, version, config |
 
 ### Shared Components
 
 | File | Purpose |
 |------|---------|
-| `internal/api/grpc/errors.go` | Domain-error → gRPC-code mapping |
-| `internal/api/grpc/mappers.go` | Domain ↔ proto type converters |
+| `internal/api/connect/errors.go` | Domain-error → Connect-code mapping |
+| `internal/api/connect/mappers.go` | Domain ↔ proto type converters |
 
 ### Interceptor Chain (Connect)
 
-Defined in `internal/middleware/grpc_chain.go`:
+Defined in `internal/middleware/connect_chain.go`:
 
 1. **Recovery** — panic catch → `CodeInternal`
 2. **RequestID** — extract/generate `x-request-id`
@@ -67,7 +67,7 @@ Defined in `internal/middleware/grpc_chain.go`:
 5. **Logger** — access log (method, code, tenant, latency)
 6. **EnforceTenant** — reject unauthenticated when auth enabled
 7. **Validation** — `buf/validate` proto annotation enforcement via `protovalidate`
-8. **RateLimit** — per-tenant token bucket
+8. **RateLimit** — per-tenant token object_key
 
 ## Runtime Entry Points
 
@@ -83,7 +83,7 @@ Defined in `internal/middleware/grpc_chain.go`:
 
 ## Source Index
 
-- `internal/api/grpc/` — Per-service RPC handlers, mappers, errors.
+- `internal/api/connect/` — Per-service RPC handlers, mappers, errors.
 - `internal/api/http/` — HTTP server, CORS, operational routes.
 - `internal/service/` — Business logic and orchestrators.
 - `internal/store/` — Database repositories (Postgres + cache).

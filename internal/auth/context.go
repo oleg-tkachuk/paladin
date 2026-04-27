@@ -1,0 +1,73 @@
+// Package auth carries authenticated identity through the request context.
+//
+// Tenant identity is propagated as an opaque value via context — never via
+// request fields. Handlers read the tenant via TenantFromContext.
+package auth
+
+import (
+	"context"
+	"errors"
+
+	"github.com/google/uuid"
+)
+
+// Principal is the authenticated caller.
+type Principal struct {
+	// TenantID is the tenant the caller is scoped to. Empty only for
+	// super-admin principals invoking cross-tenant RPCs.
+	TenantID uuid.UUID
+	// Subject is the stable identifier inside the tenant (user ID, service
+	// account, etc.). Carried verbatim from the JWT `sub` claim.
+	Subject string
+	// Roles are RBAC strings used by Cedar policies (e.g. "objectKey:admin").
+	Roles []string
+	// Labels are free-form claim attributes exposed to Cedar as principal
+	// attributes.
+	Labels map[string]string
+}
+
+// HasRole reports whether the principal carries the given role string.
+func (p *Principal) HasRole(role string) bool {
+	for _, r := range p.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+type principalKey struct{}
+
+// WithPrincipal returns a child context carrying p.
+func WithPrincipal(ctx context.Context, p *Principal) context.Context {
+	return context.WithValue(ctx, principalKey{}, p)
+}
+
+// PrincipalFromContext returns the authenticated principal or an error when
+// unset. Handlers should return connect.CodeUnauthenticated on error.
+func PrincipalFromContext(ctx context.Context) (*Principal, error) {
+	p, ok := ctx.Value(principalKey{}).(*Principal)
+	if !ok || p == nil {
+		return nil, ErrNoPrincipal
+	}
+	return p, nil
+}
+
+// TenantFromContext is a shortcut for handlers that only need the tenant ID.
+// Returns ErrNoPrincipal when unauthenticated and ErrNoTenant when the
+// principal is a cross-tenant admin without a tenant binding.
+func TenantFromContext(ctx context.Context) (uuid.UUID, error) {
+	p, err := PrincipalFromContext(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if p.TenantID == uuid.Nil {
+		return uuid.Nil, ErrNoTenant
+	}
+	return p.TenantID, nil
+}
+
+var (
+	ErrNoPrincipal = errors.New("auth: no authenticated principal")
+	ErrNoTenant    = errors.New("auth: principal is not bound to a tenant")
+)

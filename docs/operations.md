@@ -73,7 +73,7 @@ Multi-stage build:
 docker build -f deploy/Dockerfile -t paladin:dev .
 ```
 
-Default runtime config path inside the image: `/app/configs/paladin.yaml`
+Default runtime config path inside the image: `/app/configs/config.yaml`
 
 ## Taskfile Commands
 
@@ -98,9 +98,9 @@ Common tasks include:
 In Kubernetes, the service is deployed with:
 
 - A `Deployment` running the compiled binary
-- A `ConfigMap` mounting the YAML config to `/app/configs/paladin.yaml`
+- A `ConfigMap` mounting the YAML config to `/app/configs/config.yaml`
 - `Secret` objects referenced in the config for DB password and S3 credentials
-- Two `Services`: one for HTTP (`:8080`), one for gRPC (`:9090`)
+- Two `Services`: one for HTTP (`:8080`), one for Connect (`:9090`)
 - Liveness probe: `GET /health/livez`
 - Readiness probe: `GET /health/readyz`
 - Startup probe: `GET /health/startupz`
@@ -119,20 +119,20 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `internal/config/config.go` | Config loader (YAML → struct) |
 | `internal/config/resolver.go` | Kubernetes secret resolver |
 | `internal/config/schema.cue` | CUE schema for config validation |
-| `internal/api/grpc/server.go` | gRPC server implementation |
-| `internal/api/grpc/tenant_types.go` | gRPC tenant RPC message mappers |
-| `internal/api/grpc/validation.go` | gRPC request validation logic |
+| `internal/api/connect/server.go` | Connect server implementation |
+| `internal/api/connect/tenant_types.go` | Connect tenant RPC message mappers |
+| `internal/api/connect/validation.go` | Connect request validation logic |
 | `internal/api/http/router.go` | Gin HTTP router setup |
 | `internal/api/http/adapter.go` | OpenAPI → domain service adapter (all HTTP handler implementations) |
 | `internal/middleware/http_stack.go` | HTTP middleware chain setup |
-| `internal/middleware/grpc_chain.go` | gRPC interceptor chain setup |
+| `internal/middleware/connect_chain.go` | Connect interceptor chain setup |
 | `internal/middleware/auth.go` | HTTP tenant enforcement middleware |
-| `internal/middleware/ratelimit.go` | Per-tenant token bucket rate limiter |
+| `internal/middleware/ratelimit.go` | Per-tenant token object_key rate limiter |
 | `internal/middleware/audit_log.go` | HTTP audit logging middleware |
 | `internal/middleware/security_headers.go` | Security response headers |
 | `internal/middleware/request_size_limit.go` | Request body size enforcement |
 | `internal/service/object_service.go` | Core object lifecycle service |
-| `internal/service/category_service.go` | Category management service |
+| `internal/service/object_tag_service.go` | ObjectTag management service |
 | `internal/service/health.go` | Health & dependency check service |
 | `internal/service/system_service.go` | Admin config endpoint service |
 | `internal/service/policy.go` | Upload policy enforcement |
@@ -145,8 +145,8 @@ For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
 | `migrations/003_harden_objects.sql` | RLS policies, triggers, CHECK constraints |
 | `migrations/004_v1_1_0_refactor.sql` | Status expansion, idempotency_keys table |
 | `migrations/007_audit_logs.sql` | audit_logs table |
-| `migrations/010_category_support.sql` | object_categories table, category/subpath columns |
-| `proto/paladin.proto` | gRPC service and message definitions |
-| `configs/paladin.yaml` | Default config (local environment) |
+| `migrations/010_object_tag_support.sql` | object_object_tags table, object_tag/subpath columns |
+| `proto/paladin.proto` | Connect service and message definitions |
+| `configs/config.yaml` | Default config (local environment) |
 | `deploy/Dockerfile` | Multi-stage Docker build |
 | `deploy/docker-compose.yaml` | Local development stack |

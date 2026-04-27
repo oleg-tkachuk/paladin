@@ -1,22 +1,20 @@
-GET {{host}}/health/livez
-Host: api.paladin.local
-X-Tenant-ID: default
-HTTP 200
-[Asserts]
-jsonpath "$.status" == "alive"
+# Liveness / readiness / startup probes.
+#
+# These three endpoints are HTTP/1.1 plain-text — they're consumed by the
+# k8s probes, not by Connect clients.  All three return body "ok" with
+# 200 when healthy.
 
-GET {{host}}/health/startupz
-Host: api.paladin.local
-X-Tenant-ID: default
+GET {{host}}/livez
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "started"
+body == "ok"
 
-GET {{host}}/health/readyz
-Host: api.paladin.local
-X-Tenant-ID: default
+GET {{host}}/startupz
 HTTP 200
 [Asserts]
-jsonpath "$.status" == "ready"
-jsonpath "$.dependencies.postgresql" exists
-jsonpath "$.dependencies.seaweedfs" exists
+body == "ok"
+
+GET {{host}}/readyz
+HTTP 200
+[Asserts]
+body == "ok"
