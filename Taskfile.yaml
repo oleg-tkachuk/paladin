@@ -118,7 +118,7 @@ tasks:
       # Tenant UUID. Required by per-tenant RPCs (ObjectKey, ObjectTag, Object...).
       # Leave empty for cross-tenant admin-only tokens.
       JWT_TENANT: "3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"
-      JWT_TTL_SECONDS: "604800" # 7 days
+      JWT_TTL_SECONDS: "6048000" # 70 days
     cmds:
       - cmd: |-
           set -euo pipefail
