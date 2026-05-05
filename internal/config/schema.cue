@@ -196,6 +196,27 @@ cedar: {
   policy_cache_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
 }
 
+// mcp gates the LLM-facing Model Context Protocol bridges. Each transport
+// can be turned off independently. URLs default to the in-cluster service
+// addresses but can be overridden per-deployment.
+mcp: {
+  upstreams: {
+    admin_url: string | *"http://localhost:8090"
+    data_url:  string | *"http://localhost:8080"
+    iam_url:   string | *"http://localhost:8085"
+  }
+  stdio: {
+    enabled:     bool | *true
+    allow_write: bool | *false
+  }
+  http: {
+    enabled:         bool | *true
+    addr:            string | *":8095"
+    allow_write:     bool | *false
+    session_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"
+  }
+}
+
 
 #SecretRef: string | {
   name: string

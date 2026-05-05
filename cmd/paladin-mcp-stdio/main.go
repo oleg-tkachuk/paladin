@@ -5,13 +5,17 @@
 // SDK (github.com/modelcontextprotocol/go-sdk). All logging goes to stderr to
 // avoid polluting the protocol stream.
 //
-// Configuration:
+// Configuration: pass `PALADIN_CONFIG=/path/to/config.yaml` to read the `mcp:`
+// section, or rely on env vars alone.
 //
-//	PALADIN_ADMIN_URL    — admin plane base (default http://localhost:8090)
-//	PALADIN_DATA_URL     — data plane base  (default http://localhost:8080)
-//	PALADIN_IAM_URL      — iam plane base   (default http://localhost:8085)
-//	PALADIN_MCP_TOKEN    — bearer token (admin-aud or service-account)
-//	PALADIN_MCP_ALLOW_WRITE=1 — opt in to mutating tools (off by default)
+//	PALADIN_CONFIG                — optional path to the PALADIN YAML config
+//	PALADIN_ADMIN_URL             — admin plane base (default http://localhost:8090)
+//	PALADIN_DATA_URL              — data plane base  (default http://localhost:8080)
+//	PALADIN_IAM_URL               — iam plane base   (default http://localhost:8085)
+//	PALADIN_MCP_TOKEN             — bearer token (admin-aud or service-account)
+//	PALADIN_MCP_STDIO_ENABLED     — set false to refuse to start
+//	PALADIN_MCP_STDIO_ALLOW_WRITE — opt in to mutating tools (off by default)
+//	PALADIN_MCP_ALLOW_WRITE       — legacy global override; honoured for back-compat
 package main
 
 import (
@@ -25,6 +29,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
 )
 
@@ -34,21 +39,28 @@ var (
 )
 
 func main() {
+	cfg, err := config.LoadMCP(os.Getenv("PALADIN_CONFIG"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "paladin-mcp-stdio: config: %v\n", err)
+		os.Exit(2)
+	}
+	if !cfg.Stdio.Enabled {
+		fmt.Fprintln(os.Stderr, "paladin-mcp-stdio: disabled via config (mcp.stdio.enabled=false); exiting cleanly")
+		return
+	}
+
 	clients := mcp.NewClients(
 		&http.Client{Timeout: 30 * time.Second},
-		envOr("PALADIN_ADMIN_URL", "http://localhost:8090"),
-		envOr("PALADIN_DATA_URL", "http://localhost:8080"),
-		envOr("PALADIN_IAM_URL", "http://localhost:8085"),
+		cfg.Upstreams.AdminURL, cfg.Upstreams.DataURL, cfg.Upstreams.IAMURL,
 		os.Getenv("PALADIN_MCP_TOKEN"),
 	)
 
-	allowWrite := os.Getenv("PALADIN_MCP_ALLOW_WRITE") == "1"
-	if !allowWrite {
-		fmt.Fprintln(os.Stderr, "paladin-mcp-stdio: read-only mode (set PALADIN_MCP_ALLOW_WRITE=1 to enable mutating tools)")
+	if !cfg.Stdio.AllowWrite {
+		fmt.Fprintln(os.Stderr, "paladin-mcp-stdio: read-only mode (set mcp.stdio.allow_write=true to enable mutating tools)")
 	}
-	fmt.Fprintf(os.Stderr, "paladin-mcp-stdio %s (commit %s) starting; allow_write=%v\n", version, commit, allowWrite)
+	fmt.Fprintf(os.Stderr, "paladin-mcp-stdio %s (commit %s) starting; allow_write=%v\n", version, commit, cfg.Stdio.AllowWrite)
 
-	server := mcp.NewServer("paladin-mcp", version, clients, allowWrite)
+	server := mcp.NewServer("paladin-mcp", version, clients, cfg.Stdio.AllowWrite)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -57,11 +69,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "paladin-mcp-stdio: Run failed: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

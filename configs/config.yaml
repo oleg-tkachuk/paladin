@@ -274,3 +274,26 @@ reconciler:
 # Short TTL so a missed LISTEN/NOTIFY self-corrects.
 cedar:
   policy_cache_ttl: 30s
+
+# ─── MCP (Model Context Protocol) ───────────────────────────────────────────
+# LLM-facing bridges into PALADIN. Each transport can be turned off independently;
+# `allow_write` flips the catalog from read-only inspection tools to also
+# include mutating tools (create_user, set_quota, set_lifecycle_rules, …).
+#
+# Env-var overrides (always win over YAML for the local-binary use case):
+#   PALADIN_MCP_STDIO_ENABLED, PALADIN_MCP_STDIO_ALLOW_WRITE
+#   PALADIN_MCP_HTTP_ENABLED,  PALADIN_MCP_HTTP_ALLOW_WRITE,  PALADIN_MCP_HTTP_ADDR
+#   PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL
+mcp:
+  upstreams:
+    admin_url: "http://localhost:8090"
+    data_url: "http://localhost:8080"
+    iam_url: "http://localhost:8085"
+  stdio:
+    enabled: true # set false to ship a build with no local LLM bridge
+    allow_write: false # read-only by default
+  http:
+    enabled: true # set false in production if no remote LLM platforms connect
+    addr: ":8095"
+    allow_write: false
+    session_timeout: 10m # idle sessions auto-close after this

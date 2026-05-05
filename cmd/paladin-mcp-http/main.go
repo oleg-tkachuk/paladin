@@ -11,11 +11,14 @@
 // per-request Clients bundle) per session, so two MCP clients hitting the
 // bridge concurrently never share auth state.
 //
-// Environment matches paladin-mcp-stdio:
+// Configuration: pass `PALADIN_CONFIG=/path/to/config.yaml` to read the `mcp:`
+// section, or rely on env vars alone.
 //
-//	PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL
-//	PALADIN_MCP_HTTP_ADDR (default :8095)
-//	PALADIN_MCP_ALLOW_WRITE=1 — enable mutating tools
+//	PALADIN_CONFIG, PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL
+//	PALADIN_MCP_HTTP_ENABLED          — set false to refuse to start
+//	PALADIN_MCP_HTTP_ADDR             — listen address (default :8095)
+//	PALADIN_MCP_HTTP_ALLOW_WRITE      — enable mutating tools
+//	PALADIN_MCP_HTTP_SESSION_TIMEOUT  — Go duration (default 10m)
 package main
 
 import (
@@ -30,6 +33,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
 )
 
@@ -39,11 +43,15 @@ var (
 )
 
 func main() {
-	addr := envOr("PALADIN_MCP_HTTP_ADDR", ":8095")
-	adminURL := envOr("PALADIN_ADMIN_URL", "http://localhost:8090")
-	dataURL := envOr("PALADIN_DATA_URL", "http://localhost:8080")
-	iamURL := envOr("PALADIN_IAM_URL", "http://localhost:8085")
-	allowWrite := os.Getenv("PALADIN_MCP_ALLOW_WRITE") == "1"
+	cfg, err := config.LoadMCP(os.Getenv("PALADIN_CONFIG"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "paladin-mcp-http: config: %v\n", err)
+		os.Exit(2)
+	}
+	if !cfg.HTTP.Enabled {
+		fmt.Fprintln(os.Stderr, "paladin-mcp-http: disabled via config (mcp.http.enabled=false); exiting cleanly")
+		return
+	}
 
 	httpc := &http.Client{Timeout: 30 * time.Second}
 
@@ -55,12 +63,10 @@ func main() {
 			// roundtrip burning quota.
 			return nil
 		}
-		clients := mcp.NewClients(httpc, adminURL, dataURL, iamURL, token)
-		return mcp.NewServer("paladin-mcp", version, clients, allowWrite)
+		clients := mcp.NewClients(httpc, cfg.Upstreams.AdminURL, cfg.Upstreams.DataURL, cfg.Upstreams.IAMURL, token)
+		return mcp.NewServer("paladin-mcp", version, clients, cfg.HTTP.AllowWrite)
 	}, &mcpsdk.StreamableHTTPOptions{
-		// SessionTimeout closes idle sessions after 10 min so we don't pin
-		// memory for browsers that vanish mid-conversation.
-		SessionTimeout: 10 * time.Minute,
+		SessionTimeout: cfg.HTTP.SessionTimeout,
 	})
 
 	mux := http.NewServeMux()
@@ -71,7 +77,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:              addr,
+		Addr:              cfg.HTTP.Addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -86,17 +92,10 @@ func main() {
 	}()
 
 	fmt.Fprintf(os.Stderr, "paladin-mcp-http %s (commit %s) listening on %s; allow_write=%v\n",
-		version, commit, addr, allowWrite)
+		version, commit, cfg.HTTP.Addr, cfg.HTTP.AllowWrite)
 
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintf(os.Stderr, "paladin-mcp-http: ListenAndServe failed: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

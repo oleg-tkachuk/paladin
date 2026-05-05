@@ -25,6 +25,7 @@ type Config struct {
 	Presign      Presign      `yaml:"presign" json:"presign"`
 	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
 	Cedar        Cedar        `yaml:"cedar" json:"cedar"`
+	MCP          MCP          `yaml:"mcp" json:"mcp"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -373,4 +374,43 @@ type Reconciler struct {
 
 type Cedar struct {
 	PolicyCacheTTL time.Duration `yaml:"policy_cache_ttl" json:"policy_cache_ttl"`
+}
+
+// MCP gates the Model Context Protocol bridges (the LLM-facing entry points).
+// Each transport flavour (stdio for local IDE plugins, streamable HTTP for
+// remote LLM platforms) is opt-out via `enabled: false` so an operator can
+// e.g. ship a stdio-only build to laptops while disabling the HTTP server
+// entirely in production.
+type MCP struct {
+	Upstreams MCPUpstreams `yaml:"upstreams" json:"upstreams"`
+	Stdio     MCPStdio     `yaml:"stdio" json:"stdio"`
+	HTTP      MCPHTTP      `yaml:"http" json:"http"`
+}
+
+// MCPUpstreams holds the PALADIN plane URLs the MCP bridge dispatches to. They
+// are not secrets; the per-request bearer token is what gates access.
+type MCPUpstreams struct {
+	AdminURL string `yaml:"admin_url" json:"admin_url"`
+	DataURL  string `yaml:"data_url" json:"data_url"`
+	IAMURL   string `yaml:"iam_url" json:"iam_url"`
+}
+
+// MCPStdio configures the local stdio bridge (Claude Desktop / Cursor /
+// IDE plugins). When AllowWrite=false the binary registers only read-only
+// tools — the safe default for ad-hoc LLM exploration on a developer
+// workstation.
+type MCPStdio struct {
+	Enabled    bool `yaml:"enabled" json:"enabled"`
+	AllowWrite bool `yaml:"allow_write" json:"allow_write"`
+}
+
+// MCPHTTP configures the streamable-HTTP bridge (remote LLM platforms).
+// AllowWrite carries higher blast radius here than for the stdio binary;
+// keep it false unless the deployment is behind mTLS and short-lived
+// service-account tokens.
+type MCPHTTP struct {
+	Enabled        bool          `yaml:"enabled" json:"enabled"`
+	Addr           string        `yaml:"addr" json:"addr"`
+	AllowWrite     bool          `yaml:"allow_write" json:"allow_write"`
+	SessionTimeout time.Duration `yaml:"session_timeout" json:"session_timeout"`
 }
