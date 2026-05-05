@@ -10,15 +10,60 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
+
+// auditBeforeKey carries a pre-mutation snapshot stashed by a handler so the
+// audit interceptor can record before/after JSON without re-reading the row.
+type auditBeforeKey struct{}
+
+// StashBefore attaches a pre-mutation snapshot to ctx. Handlers that mutate
+// existing rows (Update*, Set*, Bind*, Patch*) should call this before
+// applying the change so the audit middleware can record diffs.
+//
+// The value is JSON-marshaled at write time — pass a struct, map, or
+// proto.Message; nil values are skipped silently.
+func StashBefore(ctx context.Context, snapshot any) context.Context {
+	if snapshot == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, auditBeforeKey{}, snapshot)
+}
+
+func beforeFromContext(ctx context.Context) []byte {
+	v := ctx.Value(auditBeforeKey{})
+	if v == nil {
+		return nil
+	}
+	return marshalAuditPayload(v)
+}
+
+func marshalAuditPayload(v any) []byte {
+	if v == nil {
+		return nil
+	}
+	if m, ok := v.(proto.Message); ok {
+		b, err := protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: false}.Marshal(m)
+		if err == nil {
+			return b
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
+}
 
 // AuditWriter inserts audit log entries. Implementations are typically the
 // Postgres adapter via admindomain.AuditRepository.
@@ -107,6 +152,8 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
+	entry.BeforeJSON = beforeFromContext(ctx)
+	entry.AfterJSON = marshalAuditPayload(req.Any())
 	return a.w.Insert(ctx, entry)
 }
 

@@ -662,6 +662,30 @@ func registerWriteTools(s *Server, c *Clients) {
 			return JSONResult(resp.Msg)
 		},
 	})
+
+	s.Tools.Register(Tool{
+		Name:        "paladin_audit_export",
+		Description: "Export a point-in-time JSON snapshot of audit-log entries (for SOC-2 / ISO-27001 evidence). Returns an Operation with the materialised dump in `response`. Capped at 10k rows — `truncated=true` signals the caller should narrow `filter`.",
+		InputSchema: schemaObject(map[string]any{
+			"filter":      schemaString("CEL filter over AuditLogEntry (reserved for slice 19)"),
+			"destination": schemaString("Advisory tag — recorded in result envelope; not yet acted upon"),
+		}),
+		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
+			var p struct {
+				Filter      string `json:"filter"`
+				Destination string `json:"destination"`
+			}
+			_ = json.Unmarshal(args, &p)
+			resp, err := c.Audit.ExportAuditLog(ctx, connect.NewRequest(&adminv1.ExportAuditLogRequest{
+				Filter:      p.Filter,
+				Destination: p.Destination,
+			}))
+			if err != nil {
+				return nil, err
+			}
+			return JSONResult(resp.Msg)
+		},
+	})
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────────

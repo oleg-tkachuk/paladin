@@ -2,11 +2,15 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/audith"
@@ -53,10 +57,29 @@ func (s *AuditServer) GetAuditLogEntry(ctx context.Context, req *connect.Request
 }
 
 func (s *AuditServer) ExportAuditLog(ctx context.Context, req *connect.Request[pb.ExportAuditLogRequest]) (*connect.Response[pb.Operation], error) {
-	if err := s.H.ExportAuditLog(ctx, req.Msg.GetFilter(), req.Msg.GetDestination()); err != nil {
+	res, err := s.H.ExportAuditLog(ctx, req.Msg.GetFilter(), req.Msg.GetDestination())
+	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.Operation{}), nil
+	payload, err := json.Marshal(res)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("export: marshal result: %w", err))
+	}
+	now := timestamppb.New(res.GeneratedAt)
+	op := &pb.Operation{
+		Name: "operations/audit-export-" + uuid.NewString(),
+		Type: "paladin.admin.v1.AuditLogService/ExportAuditLog",
+		Done: true,
+		Result: &pb.Operation_Response{
+			Response: &anypb.Any{
+				TypeUrl: "type.googleapis.com/paladin.admin.v1.ExportAuditLogResult",
+				Value:   payload,
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	return connect.NewResponse(op), nil
 }
 
 var _ paladinadminv1connect.AuditLogServiceHandler = (*AuditServer)(nil)

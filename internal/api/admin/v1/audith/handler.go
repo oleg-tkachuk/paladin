@@ -5,7 +5,10 @@ package audith
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -13,6 +16,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 )
+
+// exportRowCap bounds how many entries one ExportAuditLog call materialises.
+// Above this limit the Operation is returned with `truncated=true` so the
+// caller knows to narrow their filter or paginate manually. Tuned so a
+// well-formed export fits in well under the 10 MiB Connect body cap.
+const exportRowCap = 10_000
 
 type Handler struct {
 	repo admindomain.AuditRepository
@@ -54,9 +63,121 @@ func (h *Handler) GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindom
 	return &e, nil
 }
 
-// ExportAuditLog is a stub — real implementation lives in slice 4 (worker +
-// PresignedUrl issuance). Returns Unimplemented for now so the proto contract
-// stays honest.
-func (h *Handler) ExportAuditLog(ctx context.Context, _ string, _ string) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("ExportAuditLog: TODO slice 4"))
+// ExportAuditLogResult is the materialised payload returned by ExportAuditLog.
+// Embedded as JSON in Operation.response so the caller can consume it
+// without a follow-up GetOperation roundtrip.
+type ExportAuditLogResult struct {
+	GeneratedAt time.Time             `json:"generated_at"`
+	Filter      string                `json:"filter,omitempty"`
+	Destination string                `json:"destination,omitempty"`
+	RowCount    int                   `json:"row_count"`
+	Truncated   bool                  `json:"truncated"`
+	Entries     []ExportAuditLogEntry `json:"entries"`
+}
+
+// ExportAuditLogEntry is the export-shape of one AuditEntry. We project
+// before/after JSON as raw messages so a downstream JQ pipeline doesn't
+// have to re-decode escaped strings.
+type ExportAuditLogEntry struct {
+	EntryID       uuid.UUID       `json:"entry_id"`
+	At            time.Time       `json:"at"`
+	ActorSubject  string          `json:"actor_subject"`
+	ActorTenantID uuid.UUID       `json:"actor_tenant_id,omitempty"`
+	ActorAudience string          `json:"actor_audience"`
+	Action        string          `json:"action"`
+	ResourceName  string          `json:"resource_name"`
+	RequestID     string          `json:"request_id,omitempty"`
+	SourceIP      string          `json:"source_ip,omitempty"`
+	Before        json.RawMessage `json:"before,omitempty"`
+	After         json.RawMessage `json:"after,omitempty"`
+	ErrorMessage  string          `json:"error_message,omitempty"`
+}
+
+// ExportAuditLog materialises a synchronous JSON dump of audit entries
+// matching the filter. Used by SOC-2 / ISO-27001 audit prep workflows that
+// need a bounded, point-in-time snapshot. Streams are not used: a single
+// roundtrip with up to `exportRowCap` rows keeps the protocol simple.
+//
+// `destination` is currently advisory — recorded in the result envelope
+// for traceability but not acted upon. A future slice may persist the
+// dump to an PALADIN bucket and return a presigned URL instead.
+func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string) (*ExportAuditLogResult, error) {
+	caller, _, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := admindomain.ListAuditArgs{PageSize: 1000}
+	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
+		args.ActorTenantID = caller
+	}
+	_ = filter // CEL/tag filtering deferred — see slice 19
+
+	out := &ExportAuditLogResult{
+		GeneratedAt: time.Now().UTC(),
+		Filter:      filter,
+		Destination: destination,
+		Entries:     make([]ExportAuditLogEntry, 0, 200),
+	}
+	for {
+		page, next, err := h.repo.List(ctx, args)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal,
+				fmt.Errorf("export: list page: %w", err))
+		}
+		for i := range page {
+			out.Entries = append(out.Entries, projectExportEntry(page[i]))
+			if len(out.Entries) >= exportRowCap {
+				out.Truncated = true
+				out.RowCount = len(out.Entries)
+				return out, nil
+			}
+		}
+		if next == "" {
+			break
+		}
+		// Decode cursor into ListAuditArgs. The List adapter returns a
+		// "{rfc3339nano}/{uuid}" cursor; reuse the same parser used by the
+		// connectshim. Inline-decoded here to avoid an import cycle.
+		args.AfterAt, args.AfterID = decodeCursor(next)
+	}
+	out.RowCount = len(out.Entries)
+	return out, nil
+}
+
+func projectExportEntry(e admindomain.AuditEntry) ExportAuditLogEntry {
+	return ExportAuditLogEntry{
+		EntryID:       e.EntryID,
+		At:            e.At.UTC(),
+		ActorSubject:  e.ActorSubject,
+		ActorTenantID: e.ActorTenantID,
+		ActorAudience: e.ActorAudience,
+		Action:        e.Action,
+		ResourceName:  e.ResourceName,
+		RequestID:     e.RequestID,
+		SourceIP:      e.SourceIP,
+		Before:        json.RawMessage(e.BeforeJSON),
+		After:         json.RawMessage(e.AfterJSON),
+		ErrorMessage:  e.ErrorMessage,
+	}
+}
+
+// decodeCursor mirrors adapters.decodeAuditCursor for the export loop.
+// Liberal on parse failure — returns zero time + Nil UUID so the next
+// List call starts from the top (idempotent re-export rather than an
+// abrupt fail).
+func decodeCursor(tok string) (time.Time, uuid.UUID) {
+	for i := len(tok) - 1; i >= 0; i-- {
+		if tok[i] == '/' {
+			at, err := time.Parse(time.RFC3339Nano, tok[:i])
+			if err != nil {
+				return time.Time{}, uuid.Nil
+			}
+			id, err := uuid.Parse(tok[i+1:])
+			if err != nil {
+				return time.Time{}, uuid.Nil
+			}
+			return at, id
+		}
+	}
+	return time.Time{}, uuid.Nil
 }
