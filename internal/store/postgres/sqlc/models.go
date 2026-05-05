@@ -308,6 +308,13 @@ type RefreshToken struct {
 	Revoked   bool               `json:"revoked"`
 }
 
+type ReplicationState struct {
+	BackendID  string             `json:"backend_id"`
+	BucketName string             `json:"bucket_name"`
+	Watermark  pgtype.Timestamptz `json:"watermark"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type StorageBackend struct {
 	ID                   string             `json:"id"`
 	Kind                 string             `json:"kind"`

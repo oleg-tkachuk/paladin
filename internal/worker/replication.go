@@ -50,23 +50,38 @@ type ReplicationSource interface {
 	ListObjectKeyBindings(ctx context.Context, backendID, bucketName string) ([]ObjectKeyBinding, error)
 }
 
+// WatermarkStore persists the per-bucket replication high-water mark
+// across restarts. Implementations live in postgres adapters; the worker
+// only sees Get/Advance and degrades gracefully when the store is unset
+// (in-memory mode, suitable for dev / tests).
+type WatermarkStore interface {
+	Get(ctx context.Context, backendID, bucketName string) (time.Time, error)
+	Advance(ctx context.Context, backendID, bucketName string, t time.Time) error
+}
+
 // ReplicationWorker fans out cross-backend copies. nil-safe constructor —
 // passing a nil StorageReplicator yields a worker that walks objects and
 // logs intent without actually copying (handy for dry-run validation).
+//
+// WatermarkStore is optional. When set, the worker reads the per-bucket
+// high-water mark from the store on each tick and writes back after
+// successful copies; in-memory cache fronts both calls so the hot path
+// stays one DB roundtrip per bucket per tick. When unset, watermarks
+// live only in process memory (lost on restart — fine for dev).
 type ReplicationWorker struct {
 	Buckets    ReplicationSource
 	Objects    LifecycleObjectIter
 	Replicator StorageReplicator
+	Watermarks WatermarkStore
 	Interval   time.Duration
 	Logger     *zap.Logger
 	Now        func() time.Time
 
-	// LookbackWindow caps how far back the worker scans on first run; the
-	// in-memory watermark is good for the lifetime of the process. Slice 15
-	// will replace this with a DB-backed watermark.
+	// LookbackWindow caps how far back the worker scans on first run when
+	// no watermark is found in the store.
 	LookbackWindow time.Duration
 
-	watermarks map[string]time.Time // backend/bucket → last-seen committed_at
+	watermarks map[string]time.Time // in-memory cache of last-seen committed_at
 }
 
 func (r *ReplicationWorker) Run(ctx context.Context) error {
@@ -125,7 +140,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 			zap.Error(err))
 		return
 	}
-	cutoff := r.cutoff(b.BackendID + "/" + b.BucketName)
+	cutoff := r.cutoff(ctx, b.BackendID, b.BucketName)
 	for _, bind := range bindings {
 		if err := ctx.Err(); err != nil {
 			return
@@ -164,7 +179,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 					zap.Error(err))
 				return nil
 			}
-			r.advance(b.BackendID+"/"+b.BucketName, committed)
+			r.advance(ctx, b.BackendID, b.BucketName, committed)
 			return nil
 		})
 		if err != nil {
@@ -173,18 +188,42 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 	}
 }
 
-func (r *ReplicationWorker) cutoff(key string) time.Time {
+// cutoff resolves the start-of-window for a bucket. Layering:
+//  1. in-memory cache (hot path, no DB hit)
+//  2. WatermarkStore (cold start / new bucket)
+//  3. now − LookbackWindow (no prior state)
+func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName string) time.Time {
+	key := backendID + "/" + bucketName
 	if t, ok := r.watermarks[key]; ok {
 		return t
+	}
+	if r.Watermarks != nil {
+		if t, err := r.Watermarks.Get(ctx, backendID, bucketName); err == nil && !t.IsZero() {
+			r.watermarks[key] = t
+			return t
+		}
 	}
 	return r.Now().Add(-r.LookbackWindow)
 }
 
-func (r *ReplicationWorker) advance(key string, t time.Time) {
+// advance moves the watermark forward — first in memory, then to the
+// store. Monotonic: never moves backward. Persistence errors are
+// non-fatal (the next tick re-tries), so a transient DB blip can't stall
+// replication progress.
+func (r *ReplicationWorker) advance(ctx context.Context, backendID, bucketName string, t time.Time) {
+	key := backendID + "/" + bucketName
 	if cur, ok := r.watermarks[key]; ok && !t.After(cur) {
 		return
 	}
 	r.watermarks[key] = t
+	if r.Watermarks != nil {
+		if err := r.Watermarks.Advance(ctx, backendID, bucketName, t); err != nil {
+			r.log().Warn("replication: watermark advance failed",
+				zap.String("backend", backendID),
+				zap.String("bucket", bucketName),
+				zap.Error(err))
+		}
+	}
 }
 
 func (r *ReplicationWorker) log() *zap.Logger {

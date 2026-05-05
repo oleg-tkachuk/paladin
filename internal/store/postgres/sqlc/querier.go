@@ -83,6 +83,7 @@ type Querier interface {
 	GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (ObjectVersion, error)
 	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetRefreshToken(ctx context.Context, jti pgtype.UUID) (RefreshToken, error)
+	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
@@ -200,6 +201,10 @@ type Querier interface {
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, userID pgtype.UUID, passwordHash []byte) error
 	UpsertBucketQuota(ctx context.Context, quotaID pgtype.UUID, backendID *string, bucketName *string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	// Monotonic upsert: never moves the watermark backwards. Concurrent
+	// replicas may try to advance with stale values; the GREATEST() guard
+	// preserves the highest seen committed_at.
+	UpsertReplicationWatermark(ctx context.Context, backendID string, bucketName string, watermark pgtype.Timestamptz) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
 	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string) error

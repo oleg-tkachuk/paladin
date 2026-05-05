@@ -423,6 +423,7 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		Buckets:        adapters.NewLifecycleSource(db.Queries),
 		Objects:        adapters.NewLifecycleObjectIter(db.Queries),
 		Replicator:     nil, // dry-run
+		Watermarks:     adapters.NewReplicationWatermarkRepo(db.Queries),
 		Interval:       5 * time.Minute,
 		LookbackWindow: 1 * time.Hour,
 		Logger:         l.Named("replication"),
