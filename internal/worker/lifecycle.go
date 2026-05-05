@@ -16,12 +16,15 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	celpkg "github.com/google/cel-go/cel"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
@@ -59,12 +62,19 @@ type ObjectKeyBinding struct {
 
 // LifecycleWorker is the worker fan entry. SoftDeleter is the state-machine
 // seam (just SoftDelete; the worker never touches HardDelete).
+//
+// CELEvaluator is optional. When set, rules with a non-empty `match`
+// expression are evaluated against each Object before applying the
+// expiration cutoff — letting policy authors write things like
+// `tags["archive"] == "true" && size_bytes > 1048576`. When unset, rules
+// with `match` are skipped (fail-closed).
 type LifecycleWorker struct {
-	Buckets     BucketLifecycleSource
-	Objects     LifecycleObjectIter
-	SoftDeleter SoftDeleter
-	Interval    time.Duration
-	Logger      *zap.Logger
+	Buckets      BucketLifecycleSource
+	Objects      LifecycleObjectIter
+	SoftDeleter  SoftDeleter
+	CELEvaluator *cel.Evaluator
+	Interval     time.Duration
+	Logger       *zap.Logger
 
 	// Now is injectable for tests; defaults to time.Now.
 	Now func() time.Time
@@ -110,7 +120,7 @@ func (w *LifecycleWorker) tick(ctx context.Context) {
 }
 
 func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucket) {
-	expirers := buildExpirers(b.LifecycleRules, w.Now())
+	expirers := buildExpirers(b.LifecycleRules, w.Now(), w.CELEvaluator, w.log())
 	if len(expirers) == 0 {
 		return // no expiration rules → nothing to evaluate this tick
 	}
@@ -131,18 +141,27 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 				return nil
 			}
 			for _, e := range expirers {
-				if e.matches(row) {
-					if err := w.SoftDeleter.SoftDelete(ctx, row.ObjectID, 0); err != nil {
-						w.log().Warn("lifecycle: soft delete failed",
-							zap.String("object_id", row.ObjectID.String()),
-							zap.Error(err))
-						return nil
-					}
-					w.log().Info("lifecycle: expired object",
+				ok, err := e.matches(row)
+				if err != nil {
+					w.log().Warn("lifecycle: match eval failed",
 						zap.String("rule", e.id),
-						zap.String("object_id", row.ObjectID.String()))
+						zap.String("object_id", row.ObjectID.String()),
+						zap.Error(err))
+					continue
+				}
+				if !ok {
+					continue
+				}
+				if err := w.SoftDeleter.SoftDelete(ctx, row.ObjectID, 0); err != nil {
+					w.log().Warn("lifecycle: soft delete failed",
+						zap.String("object_id", row.ObjectID.String()),
+						zap.Error(err))
 					return nil
 				}
+				w.log().Info("lifecycle: expired object",
+					zap.String("rule", e.id),
+					zap.String("object_id", row.ObjectID.String()))
+				return nil
 			}
 			return nil
 		})
@@ -162,37 +181,101 @@ func (w *LifecycleWorker) log() *zap.Logger {
 	return zap.NewNop()
 }
 
-// expirer is a compiled lifecycle rule projection. v2 implements only
-// "expire after age" — no CEL match yet, just the time window. CEL will
-// land alongside the dispatcher CEL upgrade (slice 12+).
+// expirer is a compiled lifecycle rule projection. CEL `match` programs are
+// pre-compiled here so the per-row hot path stays a single Eval call.
 type expirer struct {
 	id      string
 	enabled bool
 	cutoff  time.Time
+	// match, when non-nil, gates expiration on a CEL evaluation against
+	// the Object schema. nil → always-match (gate is purely the cutoff).
+	match celpkg.Program
 }
 
-func (e expirer) matches(row LifecycleObjectRow) bool {
+// matches reports whether the row should be expired by this rule. Two
+// gates run in series: (1) age-based cutoff, (2) optional CEL match.
+func (e expirer) matches(row LifecycleObjectRow) (bool, error) {
 	if !e.enabled {
-		return false
+		return false, nil
 	}
 	created := row.CreatedAt
 	if row.CommittedAt != nil {
 		created = *row.CommittedAt
 	}
-	return created.Before(e.cutoff)
+	if !created.Before(e.cutoff) {
+		return false, nil
+	}
+	if e.match == nil {
+		return true, nil
+	}
+	return cel.Match(e.match, lifecycleRowToCELVars(row))
 }
 
-func buildExpirers(rules []admindomain.LifecycleRule, now time.Time) []expirer {
+// buildExpirers compiles each rule's CEL `match` expression upfront. A
+// rule with a malformed match is dropped (logged + skipped) rather than
+// blocking the whole tick. Rules without a match always evaluate the
+// time window only — preserving the slice-11 behaviour.
+func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.Evaluator, logger *zap.Logger) []expirer {
 	out := make([]expirer, 0, len(rules))
 	for _, r := range rules {
 		if r.Expiration == nil || r.Expiration.After <= 0 {
 			continue
 		}
+		var prog celpkg.Program
+		if r.Match != "" {
+			if eval == nil {
+				logger.Warn("lifecycle: rule has match but no CEL evaluator wired",
+					zap.String("rule", r.ID))
+				continue
+			}
+			compiled, err := eval.Compile(cel.ObjectSchema, r.Match)
+			if err != nil {
+				logger.Warn("lifecycle: rule match compile failed",
+					zap.String("rule", r.ID),
+					zap.Error(err))
+				continue
+			}
+			prog = compiled
+		}
 		out = append(out, expirer{
 			id:      r.ID,
 			enabled: r.Enabled,
 			cutoff:  now.Add(-r.Expiration.After),
+			match:   prog,
 		})
 	}
 	return out
 }
+
+// lifecycleRowToCELVars projects a LifecycleObjectRow into the variable
+// map shape expected by cel.ObjectSchema. Mirrors the projection used by
+// the data-plane ListObjects filter so policies behave identically.
+func lifecycleRowToCELVars(row LifecycleObjectRow) map[string]any {
+	vars := map[string]any{
+		"state":        row.State,
+		"size_bytes":   row.SizeBytes,
+		"content_type": row.ContentType,
+		"tags":         coalesceMap(row.Tags),
+		"metadata":     coalesceMap(row.Metadata),
+	}
+	if !row.CreatedAt.IsZero() {
+		vars["created_at"] = row.CreatedAt
+	}
+	if row.CommittedAt != nil && !row.CommittedAt.IsZero() {
+		vars["committed_at"] = *row.CommittedAt
+	}
+	return vars
+}
+
+// coalesceMap returns m unchanged when non-nil; an empty map otherwise.
+// CEL's `tags["foo"]` semantics differ between nil-map and empty-map —
+// always present an empty map to keep policies portable.
+func coalesceMap(m map[string]string) map[string]string {
+	if m != nil {
+		return m
+	}
+	return map[string]string{}
+}
+
+// silence unused `fmt` when no diagnostics surface in dev
+var _ = fmt.Sprintf

@@ -111,13 +111,25 @@ type VersionedObject struct {
 	Tags         map[string]string
 }
 
+// QuotaUpdater is the post-promote accounting hook — same shape as the
+// one on object.Handler. Multipart and single-PUT promotions share usage
+// counters per tenant.
+type QuotaUpdater interface {
+	OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error
+}
+
 type Handler struct {
 	repo     Repository
 	storage  Storage
 	policy   *cedar.Engine
 	sm       *statemachine.Transitioner
 	versions VersionRecorder // optional
+	quota    QuotaUpdater    // optional
 }
+
+// SetQuotaUpdater attaches the optional usage hook called on
+// CompleteMultipartUpload after a successful promotion. nil = no-op.
+func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
 func NewHandler(repo Repository, storage Storage, policy *cedar.Engine, sm *statemachine.Transitioner) *Handler {
 	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm}
@@ -202,6 +214,12 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 			ETag:        etag,
 			ContentType: "", // multipart doesn't carry CT through Storage; lookup later
 		})
+	}
+	// Quota accounting — symmetric with single-PUT path on object.Handler.
+	// Suppressed errors: drift gets corrected by the nightly accounting job;
+	// a transient failure must not undo a successful state transition.
+	if changed && h.quota != nil {
+		_ = h.quota.OnObjectPromoted(ctx, sess.TenantID, size)
 	}
 	if err := h.repo.DeleteSession(ctx, args.UploadID); err != nil {
 		// Session delete failure is non-fatal — the object is AVAILABLE.

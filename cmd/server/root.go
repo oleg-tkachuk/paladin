@@ -205,9 +205,11 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, sm)
 	policyH := wire.ProvidePolicyHandler(polEngine, polStore)
 	versionH := wire.ProvideVersionHandler(repos)
+	quotaUpdater := adapters.NewQuotaRepoV2(db.Queries)
 	objH.SetVersionHandler(versionH)
-	objH.SetQuotaUpdater(adapters.NewQuotaRepoV2(db.Queries))
+	objH.SetQuotaUpdater(quotaUpdater)
 	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
+	mpH.SetQuotaUpdater(quotaUpdater)
 
 	iss, err := wire.ProvideIssuer(cfg)
 	if err != nil {
@@ -405,11 +407,12 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		},
 	}
 	out = append(out, &worker.LifecycleWorker{
-		Buckets:     adapters.NewLifecycleSource(db.Queries),
-		Objects:     adapters.NewLifecycleObjectIter(db.Queries),
-		SoftDeleter: statemachine.New(db.Pool.(*pgxpool.Pool)),
-		Interval:    30 * time.Minute,
-		Logger:      l.Named("lifecycle"),
+		Buckets:      adapters.NewLifecycleSource(db.Queries),
+		Objects:      adapters.NewLifecycleObjectIter(db.Queries),
+		SoftDeleter:  statemachine.New(db.Pool.(*pgxpool.Pool)),
+		CELEvaluator: cel.NewEvaluator(),
+		Interval:     30 * time.Minute,
+		Logger:       l.Named("lifecycle"),
 	})
 
 	// Replication worker — dry-run until the StorageReplicator implementation
