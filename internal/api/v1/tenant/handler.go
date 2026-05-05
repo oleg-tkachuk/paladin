@@ -60,23 +60,20 @@ type Repository interface {
 
 type Handler struct {
 	repo   Repository
-	policy *cedar.Engine // optional; nil → role-only gating (legacy)
+	policy cedar.Authorizer
 }
 
-// NewHandler builds a tenant handler. policyEngine may be nil — older
-// deployments still rely on requirePlatformAdmin alone; the v2 wiring
-// passes the live engine so Cedar `ManageTenant`/`ReadTenant` rules
-// evaluate against the Tenant entity.
-func NewHandler(repo Repository, policyEngine *cedar.Engine) *Handler {
+// NewHandler builds a tenant handler. policyEngine is required — production
+// wiring passes the live Cedar engine; tests inject a fake Authorizer.
+func NewHandler(repo Repository, policyEngine cedar.Authorizer) *Handler {
+	if policyEngine == nil {
+		panic("tenant: policy authorizer is required")
+	}
 	return &Handler{repo: repo, policy: policyEngine}
 }
 
-// authorize evaluates Cedar against the Tenant resource. Falls back to
-// no-op when the engine is unwired so role-only deployments still work.
+// authorize evaluates Cedar against the Tenant resource.
 func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
-	if h.policy == nil {
-		return nil
-	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

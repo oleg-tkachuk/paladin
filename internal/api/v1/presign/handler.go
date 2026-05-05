@@ -42,11 +42,11 @@ type Repository interface {
 type Handler struct {
 	repo    Repository
 	storage Storage
-	policy  *cedar.Engine
+	policy  cedar.Authorizer
 	cfg     Config
 }
 
-func NewHandler(repo Repository, storage Storage, policy *cedar.Engine, cfg Config) *Handler {
+func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg Config) *Handler {
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 

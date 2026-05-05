@@ -79,11 +79,11 @@ type Repository interface {
 
 type Handler struct {
 	repo           Repository
-	policy         *cedar.Engine
+	policy         cedar.Authorizer
 	defaultBackend string
 }
 
-func NewHandler(repo Repository, policy *cedar.Engine, defaultBackend string) *Handler {
+func NewHandler(repo Repository, policy cedar.Authorizer, defaultBackend string) *Handler {
 	return &Handler{repo: repo, policy: policy, defaultBackend: defaultBackend}
 }
 

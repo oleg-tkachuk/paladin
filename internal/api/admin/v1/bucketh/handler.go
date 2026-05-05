@@ -33,20 +33,20 @@ type Provisioner interface {
 type Handler struct {
 	repo        admindomain.BucketRepository
 	provisioner Provisioner
-	policy      *cedar.Engine // optional; nil → role-only gating (legacy)
+	policy      cedar.Authorizer
 }
 
-func NewHandler(r admindomain.BucketRepository, p Provisioner, policyEngine *cedar.Engine) *Handler {
+func NewHandler(r admindomain.BucketRepository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
+	if policyEngine == nil {
+		panic("bucketh: policy authorizer is required")
+	}
 	return &Handler{repo: r, provisioner: p, policy: policyEngine}
 }
 
 // authorize evaluates Cedar against the Bucket resource. The Bucket entity
 // is anchored under StorageBackend, so the engine sees both the backend
-// and the bucket attributes. Returns nil when Cedar is unwired.
+// and the bucket attributes.
 func (h *Handler) authorize(ctx context.Context, action, backendID, bucketName string, ownerTenantID uuid.UUID) error {
-	if h.policy == nil {
-		return nil
-	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

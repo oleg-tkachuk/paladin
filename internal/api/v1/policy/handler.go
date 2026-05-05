@@ -6,7 +6,6 @@ package policy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,16 +16,18 @@ import (
 )
 
 // Handler offers Cedar inspection helpers — validation, dry-run authz, and
-// effective-policy assembly. The engine + store are required for the latter
-// two; ValidatePolicy is purely textual.
+// effective-policy assembly. ValidatePolicy is purely textual; the rest
+// require a live Cedar engine + Store.
 type Handler struct {
-	engine *cedar.Engine
+	engine cedar.Authorizer
 	store  cedar.Store
 }
 
-// NewHandler constructs a handler. engine and store may be nil — those code
-// paths return Unimplemented at the connectshim layer.
-func NewHandler(engine *cedar.Engine, store cedar.Store) *Handler {
+// NewHandler constructs a handler. engine and store are required.
+func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {
+	if engine == nil || store == nil {
+		panic("policy: engine and store are required")
+	}
 	return &Handler{engine: engine, store: store}
 }
 
@@ -59,9 +60,6 @@ type SimulateAuthzOutput struct {
 // SimulateAuthz answers "would this principal be allowed?" without performing
 // the action. Used by admin UI access pre-flight and the MCP bridge.
 func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*SimulateAuthzOutput, error) {
-	if h.engine == nil {
-		return nil, errors.New("policy: engine not wired")
-	}
 	tenantID, objectKey, err := parseSimulateResource(in.ResourceName, in.PrincipalTenantID)
 	if err != nil {
 		return nil, err
@@ -123,9 +121,6 @@ type PolicyLayer struct {
 // GetEffectivePolicy returns the merged Cedar text the engine would compile
 // for the given resource, plus its layer breakdown for inspection.
 func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, fallbackTenant uuid.UUID) (*EffectivePolicyOutput, error) {
-	if h.store == nil {
-		return nil, errors.New("policy: store not wired")
-	}
 	tenantID, objectKey, err := parseSimulateResource(resourceName, fallbackTenant)
 	if err != nil {
 		return nil, err

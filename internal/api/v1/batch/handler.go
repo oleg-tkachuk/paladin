@@ -49,10 +49,10 @@ type Submitter interface {
 
 type Handler struct {
 	submitter Submitter
-	policy    *cedar.Engine
+	policy    cedar.Authorizer
 }
 
-func NewHandler(submitter Submitter, policy *cedar.Engine) *Handler {
+func NewHandler(submitter Submitter, policy cedar.Authorizer) *Handler {
 	return &Handler{submitter: submitter, policy: policy}
 }
 

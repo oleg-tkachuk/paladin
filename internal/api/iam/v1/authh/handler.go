@@ -34,7 +34,7 @@ type Handler struct {
 	refresh        authstore.RefreshTokenRepository
 	issuer         *issuer.Issuer
 	refreshDecoder RefreshTokenDecoder
-	policy         *cedar.Engine
+	policy         cedar.Authorizer
 	now            func() time.Time
 }
 
@@ -43,7 +43,7 @@ func NewHandler(
 	refresh authstore.RefreshTokenRepository,
 	iss *issuer.Issuer,
 	dec RefreshTokenDecoder,
-	policy *cedar.Engine,
+	policy cedar.Authorizer,
 ) *Handler {
 	return &Handler{
 		users:          users,

@@ -2,14 +2,23 @@ package backendh
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
+
+// allowAuthorizer is a test stub that uniformly approves every action. The
+// role-guard tests below rely on requirePlatformAdmin firing before Cedar,
+// so a no-op authorizer keeps the role assertions surgical.
+type allowAuthorizer struct{}
+
+func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	return cedar.DecisionAllow, nil
+}
 
 type fakeBackendRepo struct{}
 
@@ -34,7 +43,7 @@ func ctxWithRoles(roles ...string) context.Context {
 }
 
 func TestCreateBackendRequiresPlatformAdmin(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, nil)
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
 	_, err := h.CreateBackend(ctxWithRoles("tenant.admin"), admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
 	})
@@ -47,7 +56,7 @@ func TestCreateBackendRequiresPlatformAdmin(t *testing.T) {
 }
 
 func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, nil) // nil engine → role-only path
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}) // nil engine → role-only path
 	out, err := h.CreateBackend(ctxWithRoles("platform.admin"), admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
 	})
@@ -61,7 +70,7 @@ func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
 
 func TestGetBackendRedactsSecretForNonPlatformAdmin(t *testing.T) {
 	repo := redactingRepo{}
-	h := NewHandler(repo, nil)
+	h := NewHandler(repo, allowAuthorizer{})
 	out, err := h.GetBackend(ctxWithRoles("tenant.admin"), "primary")
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +82,7 @@ func TestGetBackendRedactsSecretForNonPlatformAdmin(t *testing.T) {
 
 func TestGetBackendUnredactedForPlatformAdmin(t *testing.T) {
 	repo := redactingRepo{}
-	h := NewHandler(repo, nil)
+	h := NewHandler(repo, allowAuthorizer{})
 	out, err := h.GetBackend(ctxWithRoles("platform.admin"), "primary")
 	if err != nil {
 		t.Fatal(err)
@@ -95,16 +104,8 @@ func (redactingRepo) Get(context.Context, string) (admindomain.StorageBackend, e
 	}, nil
 }
 
-func TestAuthorizeNoOpWhenEngineNil(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, nil)
-	if err := h.authorize(ctxWithRoles("anyone"), "ManageBackend", "primary"); err != nil {
-		t.Errorf("nil engine should pass through, got %v", err)
-	}
-}
-
-// Note on Cedar gating: the engine path requires a *cedar.Engine which is
-// a concrete type (not an interface). End-to-end authz behavior is covered
-// by the Cedar unit tests; here we only verify the legacy nil-engine path
-// stays a no-op and the role guards reject correctly.
-
-var _ = errors.New // keep import used as test surface grows
+// Note on Cedar gating: end-to-end authz behaviour is covered by the Cedar
+// unit tests. Here we inject a permissive Authorizer so the assertions stay
+// focused on the role-guard layer (requirePlatformAdmin) — Cedar passes
+// uniformly, so any rejection surfaces an RBAC bug rather than a policy
+// rule.

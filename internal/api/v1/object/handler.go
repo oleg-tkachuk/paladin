@@ -210,7 +210,7 @@ type CountObjectsArgs struct {
 type Handler struct {
 	repo    Repository
 	storage Storage
-	policy  *cedar.Engine
+	policy  cedar.Authorizer
 	filter  *cel.Evaluator
 	sm      *statemachine.Transitioner
 	presign PresignConfig
@@ -246,7 +246,7 @@ type PresignConfig struct {
 func NewHandler(
 	repo Repository,
 	storage Storage,
-	policy *cedar.Engine,
+	policy cedar.Authorizer,
 	filter *cel.Evaluator,
 	sm *statemachine.Transitioner,
 	cfg PresignConfig,

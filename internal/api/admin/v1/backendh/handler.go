@@ -32,20 +32,19 @@ const (
 
 type Handler struct {
 	repo   admindomain.BackendRepository
-	policy *cedar.Engine // optional; nil → role-only gating (legacy)
+	policy cedar.Authorizer
 }
 
-func NewHandler(r admindomain.BackendRepository, policyEngine *cedar.Engine) *Handler {
+func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer) *Handler {
+	if policyEngine == nil {
+		panic("backendh: policy authorizer is required")
+	}
 	return &Handler{repo: r, policy: policyEngine}
 }
 
 // authorize runs Cedar against the StorageBackend resource (`r.BackendID` is
-// the natural key — backends are tenant-agnostic infra). Returns nil when
-// the engine is unwired so legacy role-only deployments still work.
+// the natural key — backends are tenant-agnostic infra).
 func (h *Handler) authorize(ctx context.Context, action, backendID string) error {
-	if h.policy == nil {
-		return nil
-	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

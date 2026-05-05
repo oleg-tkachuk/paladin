@@ -121,7 +121,7 @@ type QuotaUpdater interface {
 type Handler struct {
 	repo     Repository
 	storage  Storage
-	policy   *cedar.Engine
+	policy   cedar.Authorizer
 	sm       *statemachine.Transitioner
 	versions VersionRecorder // optional
 	quota    QuotaUpdater    // optional
@@ -131,7 +131,7 @@ type Handler struct {
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-func NewHandler(repo Repository, storage Storage, policy *cedar.Engine, sm *statemachine.Transitioner) *Handler {
+func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner) *Handler {
 	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm}
 }
 

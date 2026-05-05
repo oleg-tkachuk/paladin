@@ -173,6 +173,12 @@ func (e *Engine) Start(ctx context.Context) error {
 
 // IsAuthorized evaluates the applicable policies for (principal, action, resource).
 //
+// Authorizer is the narrow interface handlers depend on. *Engine is the
+// production implementation; tests inject a permissive or recording fake.
+type Authorizer interface {
+	IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error)
+}
+
 // Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
 // Errors indicate engine faults (policy fetch/compile), not denials.
 func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
