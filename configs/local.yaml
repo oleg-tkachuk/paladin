@@ -124,6 +124,7 @@ storage:
       force_path_style: true
       access_key: dummy
       secret_key: dummy
+      auth: { mode: static_keys }
       presign_ttl: 15m
       part_size: "8MB"
       sse: { type: "", key_id: "" }

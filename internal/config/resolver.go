@@ -96,6 +96,20 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 			b.SecretKey = key
 			b.SecretKeySecret = nil
 		}
+		if b.Auth.SessionTokenSecret != nil {
+			tok, err := r.resolveSecret(ctx, b.Auth.SessionTokenSecret)
+			if err != nil {
+				return fmt.Errorf("storage.backends.%s.auth.session_token_secret: %w", name, err)
+			}
+			b.Auth.SessionToken = tok
+			b.Auth.SessionTokenSecret = nil
+		}
+		// Legacy compat: if no auth.mode is set but we have static keys,
+		// pin the mode to static_keys so downstream code only branches on
+		// the canonical Auth.Mode field.
+		if b.Auth.Mode == "" && (b.AccessKey != "" || b.SecretKey != "") {
+			b.Auth.Mode = AuthModeStaticKeys
+		}
 		cfg.Storage.Backends[name] = b
 	}
 
@@ -204,6 +218,9 @@ func (c *Config) Obfuscated() Config {
 			}
 			if b.SecretKey != "" {
 				b.SecretKey = Redacted
+			}
+			if b.Auth.SessionToken != "" {
+				b.Auth.SessionToken = Redacted
 			}
 			redacted[name] = b
 		}

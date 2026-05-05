@@ -153,7 +153,49 @@ func (c *Config) Validate() error {
 		if b.SSE.Type == "aws:kms" && b.SSE.KeyID == "" {
 			return fmt.Errorf("storage.backends.%s: sse.key_id required when sse.type=aws:kms", name)
 		}
+		if err := validateBackendAuth(name, b); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+// validateBackendAuth enforces per-mode invariants on StorageBackendAuth.
+// When mode is empty we accept the legacy top-level access_key/secret_key
+// pair; the resolver later promotes that to mode=static_keys.
+func validateBackendAuth(name string, b StorageBackend) error {
+	a := b.Auth
+	switch a.Mode {
+	case "":
+		// Legacy: top-level keys imply static. If neither is set we let it
+		// fall through — some local-dev backends (no-auth MinIO) still work.
+		return nil
+	case AuthModeStaticKeys:
+		hasAK := b.AccessKey != "" || b.AccessKeySecret != nil
+		hasSK := b.SecretKey != "" || b.SecretKeySecret != nil
+		if !hasAK || !hasSK {
+			return fmt.Errorf("storage.backends.%s.auth.mode=static_keys: access_key and secret_key are required", name)
+		}
+		if a.RoleARN != "" {
+			return fmt.Errorf("storage.backends.%s.auth: role_arn is not valid with mode=static_keys", name)
+		}
+	case AuthModeDefaultChain:
+		if b.AccessKey != "" || b.SecretKey != "" || b.AccessKeySecret != nil || b.SecretKeySecret != nil {
+			return fmt.Errorf("storage.backends.%s.auth.mode=default_chain: must not specify static keys (use env vars or instance role)", name)
+		}
+		if a.RoleARN != "" {
+			return fmt.Errorf("storage.backends.%s.auth: role_arn is not valid with mode=default_chain (use mode=assume_role)", name)
+		}
+	case AuthModeAssumeRole, AuthModeWebIdentity:
+		if a.RoleARN == "" {
+			return fmt.Errorf("storage.backends.%s.auth.mode=%s: role_arn is required", name, a.Mode)
+		}
+		if a.DurationSeconds < 0 {
+			return fmt.Errorf("storage.backends.%s.auth.duration_seconds: must be ≥ 0", name)
+		}
+	default:
+		return fmt.Errorf("storage.backends.%s.auth.mode=%q: unknown (want static_keys|default_chain|assume_role|web_identity)", name, a.Mode)
+	}
 	return nil
 }

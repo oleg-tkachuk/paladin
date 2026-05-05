@@ -209,8 +209,42 @@ storage:
       endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
       public_endpoint: "https://s3.paladin.local"
       force_path_style: true
+      # ── Authentication ────────────────────────────────────────────────
+      # `auth.mode` selects how PALADIN signs requests to this backend.
+      #
+      #   static_keys   — IAM user access key + secret. Long-lived; the
+      #                   only mode that works against non-AWS endpoints
+      #                   like SeaweedFS / MinIO. Required: access_key,
+      #                   secret_key (or *_secret refs). Optional:
+      #                   auth.session_token / session_token_secret for
+      #                   externally-rotated short-lived creds.
+      #   default_chain — Defer to the AWS SDK default credential chain
+      #                   (env vars, ECS task role, EC2 IMDSv2 instance
+      #                   role, AWS_PROFILE). The right pick for EC2 /
+      #                   ECS / Fargate where AWS injects creds.
+      #   assume_role   — Bootstrap creds via the default chain, then
+      #                   STS AssumeRole into auth.role_arn. Optional:
+      #                   session_name, external_id, duration_seconds.
+      #   web_identity  — STS AssumeRoleWithWebIdentity. Canonical EKS
+      #                   IRSA path: token file is read from
+      #                   auth.web_identity_token_file or, if empty,
+      #                   AWS_WEB_IDENTITY_TOKEN_FILE (which the EKS
+      #                   pod-identity webhook injects automatically).
+      #
+      # When `auth.mode` is unset and access_key/secret_key are present,
+      # the resolver auto-promotes the entry to mode=static_keys for
+      # backward compatibility.
       access_key: dummy_access_key # override via access_key_secret in non-local
       secret_key: dummy_secret_key # override via secret_key_secret in non-local
+      auth:
+        mode: static_keys # static_keys | default_chain | assume_role | web_identity
+        # session_token: ""           # static_keys: optional STS session token
+        # session_token_secret: { name: paladin-aws, key: session_token }
+        # role_arn: ""                # required for assume_role / web_identity
+        # session_name: paladin-control-plane
+        # external_id: ""             # assume_role only — confused-deputy guard
+        # duration_seconds: 3600
+        # web_identity_token_file: "" # web_identity: defaults to $AWS_WEB_IDENTITY_TOKEN_FILE
       presign_ttl: 15m
       part_size: "8MB"
       sse:

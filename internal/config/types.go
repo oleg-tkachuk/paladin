@@ -276,21 +276,75 @@ type StorageBackend struct {
 	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
 	// become a tenant-scoped prefix within this bucket; the full S3 key
 	// for any object is "<tenant_id>/<object_key>/<key>".
-	Bucket          string               `yaml:"bucket" json:"bucket"`
-	Region          string               `yaml:"region" json:"region"`
-	Endpoint        string               `yaml:"endpoint" json:"endpoint"`
-	PublicEndpoint  string               `yaml:"public_endpoint" json:"public_endpoint"`
-	ForcePathStyle  bool                 `yaml:"force_path_style" json:"force_path_style"`
+	Bucket         string `yaml:"bucket" json:"bucket"`
+	Region         string `yaml:"region" json:"region"`
+	Endpoint       string `yaml:"endpoint" json:"endpoint"`
+	PublicEndpoint string `yaml:"public_endpoint" json:"public_endpoint"`
+	ForcePathStyle bool   `yaml:"force_path_style" json:"force_path_style"`
+	// Top-level AccessKey/SecretKey are kept for backward compatibility with
+	// pre-AuthMode deployments. New configs should use the `auth` block.
+	// When `auth.mode` is unset and these are populated, the resolver
+	// auto-promotes them to mode=static_keys.
 	AccessKey       string               `yaml:"access_key" json:"access_key"`
 	AccessKeySecret *SecretRef           `yaml:"access_key_secret" json:"access_key_secret"`
 	SecretKey       string               `yaml:"secret_key" json:"secret_key"`
 	SecretKeySecret *SecretRef           `yaml:"secret_key_secret" json:"secret_key_secret"`
+	Auth            StorageBackendAuth   `yaml:"auth" json:"auth"`
 	PresignTTL      time.Duration        `yaml:"presign_ttl" json:"presign_ttl"`
 	PartSizeRaw     string               `yaml:"part_size" json:"part_size"`
 	PartSizeBytes   int64                `yaml:"-" json:"-"`
 	SSE             StorageBackendSSE    `yaml:"sse" json:"sse"`
 	Events          StorageBackendEvents `yaml:"events" json:"events"`
 }
+
+// StorageBackendAuth selects how the PALADIN control plane authenticates to a
+// physical S3 backend. Only one mode is active per backend.
+//
+// Modes:
+//   - "static_keys"   — long-lived IAM user access key + secret. Required
+//     fields: AccessKey, SecretKey (or *Secret variants). Optional
+//     SessionToken for short-lived creds minted out-of-band (e.g. by an
+//     external broker).
+//   - "default_chain" — defer to the AWS SDK default credential chain.
+//     Picks up env vars (AWS_ACCESS_KEY_ID, ...), ECS task role
+//     (AWS_CONTAINER_CREDENTIALS_*), EC2 IMDSv2 instance role, and the
+//     AWS_PROFILE / shared-credentials file. The right choice for
+//     EC2 / ECS / Fargate / on-prem with env-injected creds.
+//   - "assume_role"   — assume an IAM role via STS. Bootstrap credentials
+//     come from the default chain (so this layers on top of an EC2 role
+//     or env-keys). Required: RoleARN. Optional: SessionName,
+//     ExternalID, DurationSeconds.
+//   - "web_identity"  — assume a role via STS AssumeRoleWithWebIdentity,
+//     which is the canonical EKS IRSA path. Required: RoleARN. The token
+//     file is read from WebIdentityTokenFile (or the
+//     AWS_WEB_IDENTITY_TOKEN_FILE env var the EKS pod identity webhook
+//     injects). The right choice for pods running in EKS with IRSA
+//     annotations.
+type StorageBackendAuth struct {
+	Mode string `yaml:"mode" json:"mode"`
+
+	// SessionToken is optional for static_keys (e.g. short-lived
+	// credentials handed in by an external rotator).
+	SessionToken       string     `yaml:"session_token" json:"session_token"`
+	SessionTokenSecret *SecretRef `yaml:"session_token_secret" json:"session_token_secret"`
+
+	// Role-assumption fields (assume_role + web_identity).
+	RoleARN         string `yaml:"role_arn" json:"role_arn"`
+	SessionName     string `yaml:"session_name" json:"session_name"`
+	ExternalID      string `yaml:"external_id" json:"external_id"`
+	DurationSeconds int    `yaml:"duration_seconds" json:"duration_seconds"`
+
+	// Web-identity-only: path to the OIDC token file. Defaults to
+	// AWS_WEB_IDENTITY_TOKEN_FILE env when empty (EKS IRSA convention).
+	WebIdentityTokenFile string `yaml:"web_identity_token_file" json:"web_identity_token_file"`
+}
+
+const (
+	AuthModeStaticKeys   = "static_keys"
+	AuthModeDefaultChain = "default_chain"
+	AuthModeAssumeRole   = "assume_role"
+	AuthModeWebIdentity  = "web_identity"
+)
 
 type StorageBackendSSE struct {
 	Type  string `yaml:"type" json:"type"`     // "" | AES256 | aws:kms

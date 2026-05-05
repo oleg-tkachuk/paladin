@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,8 +28,10 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
@@ -70,14 +73,9 @@ type Client struct {
 // pointing at the in-cluster DNS name — which a browser cannot resolve
 // and which would also fail SigV4 verification at the public endpoint.
 func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithRegion(backend.Region),
-		awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(backend.AccessKey, backend.SecretKey, ""),
-		),
-	)
+	awsCfg, err := buildAWSConfig(ctx, backend)
 	if err != nil {
-		return nil, fmt.Errorf("aws config: %w", err)
+		return nil, err
 	}
 
 	// Internal S3 client — direct API calls from inside the cluster.
@@ -116,6 +114,103 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 		sseType: backend.SSE.Type,
 		sseKey:  backend.SSE.KeyID,
 	}, nil
+}
+
+// buildAWSConfig assembles an aws.Config whose credential provider matches
+// backend.Auth.Mode. The four supported modes mirror the AWS guidance for
+// authenticating to S3:
+//
+//   - static_keys   → IAM user access key + secret (long-lived).
+//   - default_chain → SDK default chain (env, ECS task role, EC2 IMDS, etc.).
+//   - assume_role   → STS AssumeRole on top of the default chain.
+//   - web_identity  → STS AssumeRoleWithWebIdentity (EKS IRSA).
+//
+// An empty mode falls back to default_chain so a no-op `auth: {}` block is
+// still useful (e.g. when AWS_ACCESS_KEY_ID is provided via env).
+func buildAWSConfig(ctx context.Context, backend config.StorageBackend) (aws.Config, error) {
+	region := backend.Region
+	mode := backend.Auth.Mode
+	if mode == "" {
+		mode = config.AuthModeDefaultChain
+	}
+
+	switch mode {
+	case config.AuthModeStaticKeys:
+		cfg, err := awsconfig.LoadDefaultConfig(ctx,
+			awsconfig.WithRegion(region),
+			awsconfig.WithCredentialsProvider(
+				credentials.NewStaticCredentialsProvider(
+					backend.AccessKey, backend.SecretKey, backend.Auth.SessionToken,
+				),
+			),
+		)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("aws config (static_keys): %w", err)
+		}
+		return cfg, nil
+
+	case config.AuthModeDefaultChain:
+		cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("aws config (default_chain): %w", err)
+		}
+		return cfg, nil
+
+	case config.AuthModeAssumeRole:
+		base, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("aws config (assume_role bootstrap): %w", err)
+		}
+		stsClient := sts.NewFromConfig(base)
+		provider := stscreds.NewAssumeRoleProvider(stsClient, backend.Auth.RoleARN, func(o *stscreds.AssumeRoleOptions) {
+			if n := backend.Auth.SessionName; n != "" {
+				o.RoleSessionName = n
+			} else {
+				o.RoleSessionName = "paladin-control-plane"
+			}
+			if x := backend.Auth.ExternalID; x != "" {
+				o.ExternalID = aws.String(x)
+			}
+			if d := backend.Auth.DurationSeconds; d > 0 {
+				o.Duration = time.Duration(d) * time.Second
+			}
+		})
+		base.Credentials = aws.NewCredentialsCache(provider)
+		return base, nil
+
+	case config.AuthModeWebIdentity:
+		base, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("aws config (web_identity bootstrap): %w", err)
+		}
+		tokenFile := backend.Auth.WebIdentityTokenFile
+		if tokenFile == "" {
+			// EKS IRSA convention: pod identity webhook injects this env.
+			tokenFile = os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+		}
+		if tokenFile == "" {
+			return aws.Config{}, fmt.Errorf("aws config (web_identity): web_identity_token_file or AWS_WEB_IDENTITY_TOKEN_FILE must be set")
+		}
+		stsClient := sts.NewFromConfig(base)
+		provider := stscreds.NewWebIdentityRoleProvider(stsClient, backend.Auth.RoleARN,
+			stscreds.IdentityTokenFile(tokenFile),
+			func(o *stscreds.WebIdentityRoleOptions) {
+				if n := backend.Auth.SessionName; n != "" {
+					o.RoleSessionName = n
+				} else {
+					o.RoleSessionName = "paladin-control-plane"
+				}
+				if d := backend.Auth.DurationSeconds; d > 0 {
+					o.Duration = time.Duration(d) * time.Second
+				}
+			},
+		)
+		base.Credentials = aws.NewCredentialsCache(provider)
+		return base, nil
+
+	default:
+		return aws.Config{}, fmt.Errorf("unknown auth.mode %q", mode)
+	}
 }
 
 // composeKey builds the full S3 key from tenant_id + object_key + storage key.
