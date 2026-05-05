@@ -91,6 +91,17 @@ func (r *ObjectKeyRepo) Delete(ctx context.Context, tenantID uuid.UUID, objectKe
 	return nil
 }
 
+func (r *ObjectKeyRepo) Rebind(ctx context.Context, tenantID uuid.UUID, objectKey, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := r.q.BindObjectKeyToBucket(ctx, pgUUID(tenantID), objectKey, backendID, bucketName, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("rebind objectKey: %w", err)
+	}
+	if rows == 0 {
+		return objectkey.ErrVersionMismatch
+	}
+	return nil
+}
+
 func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysArgs) ([]objectkey.ObjectKey, string, error) {
 	pageSize := args.PageSize
 	if pageSize <= 0 {

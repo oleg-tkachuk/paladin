@@ -1,0 +1,157 @@
+// Package admindomain holds the handler-facing v2 domain types for admin
+// services. These types are independent of proto and sqlc — handlers consume
+// them, adapters produce them, connectshim wraps them for the wire.
+package admindomain
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// ─── Storage backend ────────────────────────────────────────────────────────
+
+type StorageBackend struct {
+	BackendID            string
+	DisplayName          string
+	Kind                 string // "aws-s3" | "s3-compatible" | "gcs"
+	Endpoint             string
+	PublicEndpoint       string
+	Region               string
+	ForcePathStyle       bool
+	CredentialsSecretRef string
+	SSE                  ServerSideEncryption
+	Events               EventSourceConfig
+	CedarPolicy          string
+	ResourceVersion      int64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type ServerSideEncryption struct {
+	Type  string // "" | "AES256" | "KMS"
+	KeyID string
+}
+
+type EventSourceConfig struct {
+	Enabled      bool
+	Target       string // "" | "sqs" | "redis"
+	QueueURL     string
+	PollInterval time.Duration
+}
+
+// ─── Bucket ─────────────────────────────────────────────────────────────────
+
+type Bucket struct {
+	BackendID       string
+	BucketName      string
+	DisplayName     string
+	Region          string
+	Labels          map[string]string
+	OwnerTenantID   uuid.UUID // uuid.Nil = shared
+	CedarPolicy     string
+	Constraints     BucketConstraints
+	LifecycleRules  []LifecycleRule
+	ObjectLock      ObjectLockConfig
+	Versioning      BucketVersioning
+	Replication     BucketReplication
+	ResourceVersion int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type BucketConstraints struct {
+	MaxObjectSizeBytes        int64
+	MinPartSizeBytes          int64
+	MaxPartSizeBytes          int64
+	MaxParts                  int32
+	AllowedContentTypes       []string
+	MaxPresignPutTTL          time.Duration
+	MaxPresignGetTTL          time.Duration
+	RequiredChecksumAlgorithm string // "" | "CRC32C" | "SHA256" | "MD5"
+}
+
+type LifecycleRule struct {
+	ID         string
+	Enabled    bool
+	Match      string // CEL
+	Transition *LifecycleTransition
+	Expiration *LifecycleExpiration
+}
+
+type LifecycleTransition struct {
+	After        time.Duration
+	StorageClass string
+}
+
+type LifecycleExpiration struct {
+	After time.Duration
+}
+
+type ObjectLockConfig struct {
+	Enabled          bool
+	DefaultMode      string // "GOVERNANCE" | "COMPLIANCE"
+	DefaultRetention time.Duration
+}
+
+type BucketVersioning struct {
+	Enabled            bool
+	KeepDeletesForever bool
+}
+
+type BucketReplication struct {
+	Enabled           bool
+	DestinationBucket string // resource name
+	Filter            string // CEL
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+
+type AuditEntry struct {
+	EntryID       uuid.UUID
+	At            time.Time
+	ActorSubject  string
+	ActorTenantID uuid.UUID
+	ActorAudience string
+	Action        string
+	ResourceName  string
+	RequestID     string
+	SourceIP      string
+	BeforeJSON    []byte
+	AfterJSON     []byte
+	ErrorMessage  string
+}
+
+// ─── Quota ──────────────────────────────────────────────────────────────────
+
+type Quota struct {
+	QuotaID           uuid.UUID
+	TenantID          uuid.UUID // uuid.Nil → bucket-scoped
+	BackendID         string    // empty → tenant-scoped
+	BucketName        string
+	MaxTotalBytes     int64
+	MaxObjectCount    int64
+	MaxBytesPerDay    int64
+	MaxObjectsPerDay  int64
+	UsageTotalBytes   int64
+	UsageObjectCount  int64
+	UsageBytesToday   int64
+	UsageObjectsToday int64
+	LastResetAt       *time.Time
+	ResourceVersion   int64
+	UpdatedAt         time.Time
+}
+
+// ─── Event subscription ─────────────────────────────────────────────────────
+
+type EventSubscription struct {
+	SubscriptionID  uuid.UUID
+	TenantID        uuid.UUID
+	CELFilter       string
+	SinkKind        string // "http" | "kafka" | "sqs"
+	SinkConfig      []byte // JSONB; shape varies by kind
+	Disabled        bool
+	ResourceVersion int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}

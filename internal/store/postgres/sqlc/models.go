@@ -100,12 +100,68 @@ func (ns NullOperationState) Value() (driver.Value, error) {
 	return string(ns.OperationState), nil
 }
 
+type ApiKey struct {
+	ApiKeyID           pgtype.UUID        `json:"api_key_id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	DisplayPrefix      string             `json:"display_prefix"`
+	Description        string             `json:"description"`
+	SecretHash         []byte             `json:"secret_hash"`
+	SecretHashOld      []byte             `json:"secret_hash_old"`
+	SecretHashOldUntil pgtype.Timestamptz `json:"secret_hash_old_until"`
+	Roles              []byte             `json:"roles"`
+	Scopes             []byte             `json:"scopes"`
+	Revoked            bool               `json:"revoked"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt         pgtype.Timestamptz `json:"last_used_at"`
+}
+
+type AuditLog struct {
+	EntryID       pgtype.UUID        `json:"entry_id"`
+	At            pgtype.Timestamptz `json:"at"`
+	ActorSubject  string             `json:"actor_subject"`
+	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
+	ActorAudience string             `json:"actor_audience"`
+	Action        string             `json:"action"`
+	ResourceName  string             `json:"resource_name"`
+	RequestID     *string            `json:"request_id"`
+	SourceIp      *string            `json:"source_ip"`
+	BeforeJson    []byte             `json:"before_json"`
+	AfterJson     []byte             `json:"after_json"`
+	ErrorMessage  *string            `json:"error_message"`
+}
+
 type Bucket struct {
-	BackendID       string             `json:"backend_id"`
-	BucketName      string             `json:"bucket_name"`
-	DisplayName     *string            `json:"display_name"`
-	Region          *string            `json:"region"`
-	Labels          []byte             `json:"labels"`
+	BackendID                         string             `json:"backend_id"`
+	BucketName                        string             `json:"bucket_name"`
+	DisplayName                       *string            `json:"display_name"`
+	Region                            *string            `json:"region"`
+	Labels                            []byte             `json:"labels"`
+	ResourceVersion                   int64              `json:"resource_version"`
+	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
+	CedarPolicy                       string             `json:"cedar_policy"`
+	CedarPolicyHash                   []byte             `json:"cedar_policy_hash"`
+	Constraints                       []byte             `json:"constraints"`
+	LifecycleRules                    []byte             `json:"lifecycle_rules"`
+	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
+	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
+	VersioningEnabled                 bool               `json:"versioning_enabled"`
+	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
+	ReplicationEnabled                bool               `json:"replication_enabled"`
+	ReplicationDestination            string             `json:"replication_destination"`
+	ReplicationFilter                 string             `json:"replication_filter"`
+}
+
+type EventSubscription struct {
+	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CelFilter       string             `json:"cel_filter"`
+	SinkKind        string             `json:"sink_kind"`
+	SinkConfig      []byte             `json:"sink_config"`
+	Disabled        bool               `json:"disabled"`
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
@@ -161,6 +217,10 @@ type Object struct {
 	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
 	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
 	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
+	CurrentVersionID  pgtype.UUID        `json:"current_version_id"`
+	LockMode          string             `json:"lock_mode"`
+	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold         bool               `json:"legal_hold"`
 }
 
 type ObjectKey struct {
@@ -175,6 +235,7 @@ type ObjectKey struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	BucketName      string             `json:"bucket_name"`
+	Constraints     []byte             `json:"constraints"`
 }
 
 type ObjectTag struct {
@@ -186,6 +247,24 @@ type ObjectTag struct {
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ObjectVersion struct {
+	VersionID         pgtype.UUID        `json:"version_id"`
+	ObjectID          pgtype.UUID        `json:"object_id"`
+	IsDeleteMarker    bool               `json:"is_delete_marker"`
+	S3Key             string             `json:"s3_key"`
+	SizeBytes         *int64             `json:"size_bytes"`
+	Etag              *string            `json:"etag"`
+	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
+	Checksum          *string            `json:"checksum"`
+	ContentType       *string            `json:"content_type"`
+	Metadata          []byte             `json:"metadata"`
+	Tags              []byte             `json:"tags"`
+	LockMode          string             `json:"lock_mode"`
+	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold         bool               `json:"legal_hold"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type Operation struct {
@@ -202,14 +281,53 @@ type Operation struct {
 	DoneAt       pgtype.Timestamptz `json:"done_at"`
 }
 
+type Quota struct {
+	QuotaID           pgtype.UUID        `json:"quota_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	BackendID         *string            `json:"backend_id"`
+	BucketName        *string            `json:"bucket_name"`
+	MaxTotalBytes     int64              `json:"max_total_bytes"`
+	MaxObjectCount    int64              `json:"max_object_count"`
+	MaxBytesPerDay    int64              `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  int64              `json:"max_objects_per_day"`
+	UsageTotalBytes   int64              `json:"usage_total_bytes"`
+	UsageObjectCount  int64              `json:"usage_object_count"`
+	UsageBytesToday   int64              `json:"usage_bytes_today"`
+	UsageObjectsToday int64              `json:"usage_objects_today"`
+	LastResetAt       pgtype.Timestamptz `json:"last_reset_at"`
+	ResourceVersion   int64              `json:"resource_version"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RefreshToken struct {
+	Jti       pgtype.UUID        `json:"jti"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Revoked   bool               `json:"revoked"`
+}
+
 type StorageBackend struct {
-	ID            string             `json:"id"`
-	Kind          string             `json:"kind"`
-	Endpoint      *string            `json:"endpoint"`
-	Region        *string            `json:"region"`
-	EventsEnabled bool               `json:"events_enabled"`
-	EventsTarget  *string            `json:"events_target"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                   string             `json:"id"`
+	Kind                 string             `json:"kind"`
+	Endpoint             *string            `json:"endpoint"`
+	Region               *string            `json:"region"`
+	EventsEnabled        bool               `json:"events_enabled"`
+	EventsTarget         *string            `json:"events_target"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	DisplayName          *string            `json:"display_name"`
+	PublicEndpoint       *string            `json:"public_endpoint"`
+	ForcePathStyle       bool               `json:"force_path_style"`
+	CredentialsSecretRef *string            `json:"credentials_secret_ref"`
+	SseType              string             `json:"sse_type"`
+	SseKeyID             string             `json:"sse_key_id"`
+	EventsQueueUrl       string             `json:"events_queue_url"`
+	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
+	CedarPolicy          string             `json:"cedar_policy"`
+	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
+	ResourceVersion      int64              `json:"resource_version"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {
@@ -221,4 +339,19 @@ type Tenant struct {
 	ResourceVersion      int64              `json:"resource_version"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type User struct {
+	UserID          pgtype.UUID        `json:"user_id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Subject         string             `json:"subject"`
+	DisplayName     *string            `json:"display_name"`
+	PasswordHash    []byte             `json:"password_hash"`
+	Roles           []byte             `json:"roles"`
+	Scopes          []byte             `json:"scopes"`
+	Disabled        bool               `json:"disabled"`
+	ResourceVersion int64              `json:"resource_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	LastLoginAt     pgtype.Timestamptz `json:"last_login_at"`
 }

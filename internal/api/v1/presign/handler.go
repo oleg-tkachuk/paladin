@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -50,11 +51,11 @@ func NewHandler(repo Repository, storage Storage, policy *cedar.Engine, cfg Conf
 }
 
 func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	objectKey, objectID, err := parseObjectName(objectName)
+	objectKey, objectID, err := apiutil.ParseObjectName(objectName)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -77,17 +78,24 @@ func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Du
 }
 
 func (h *Handler) PresignPut(ctx context.Context, objectName, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	objectKey, objectID, err := parseObjectName(objectName)
+	objectKey, objectID, err := apiutil.ParseObjectName(objectName)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	objectKey, key, _, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
+	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	// Only PENDING objects may receive a fresh upload URL. AVAILABLE objects
+	// would silently overwrite committed data; FAILED/DELETED rows are
+	// terminal and presigning a PUT against them is meaningless.
+	if state != "PENDING" {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("object state %s does not allow PUT", state))
 	}
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
@@ -100,7 +108,7 @@ func (h *Handler) PresignPut(ctx context.Context, objectName, contentType, check
 }
 
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -142,46 +150,4 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
-}
-
-func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
-	t, err := auth.TenantFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	return t, p, nil
-}
-
-// parseObjectName parses "object_keys/{objectKey}/objects/{object_id}".
-func parseObjectName(name string) (string, uuid.UUID, error) {
-	const prefix = "object_keys/"
-	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
-		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
-	}
-	rest := name[len(prefix):]
-	sep := -1
-	for i, c := range rest {
-		if c == '/' {
-			sep = i
-			break
-		}
-	}
-	if sep <= 0 {
-		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
-	}
-	objectKey := rest[:sep]
-	remainder := rest[sep+1:]
-	const objects = "objects/"
-	if len(remainder) <= len(objects) || remainder[:len(objects)] != objects {
-		return "", uuid.Nil, fmt.Errorf("invalid object name %q", name)
-	}
-	id, err := uuid.Parse(remainder[len(objects):])
-	if err != nil {
-		return "", uuid.Nil, fmt.Errorf("invalid object_id: %w", err)
-	}
-	return objectKey, id, nil
 }

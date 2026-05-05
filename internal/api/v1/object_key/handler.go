@@ -9,11 +9,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -70,6 +72,9 @@ type Repository interface {
 	Delete(ctx context.Context, tenantID uuid.UUID, objectKey string, expectedVersion int64) error
 	List(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error)
 	Stats(ctx context.Context, tenantID uuid.UUID, objectKey string) (ObjectKeyStats, error)
+	// Rebind atomically swaps the (backend_id, bucket_name) target. DB
+	// trigger enforces tenancy on single-tenant buckets.
+	Rebind(ctx context.Context, tenantID uuid.UUID, objectKey, backendID, bucketName string, expectedVersion int64) error
 }
 
 type Handler struct {
@@ -83,7 +88,7 @@ func NewHandler(repo Repository, policy *cedar.Engine, defaultBackend string) *H
 }
 
 func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
-	tenantID, principal, err := authzContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +110,7 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 }
 
 func (h *Handler) GetObjectKey(ctx context.Context, objectKey string) (*ObjectKey, error) {
-	tenantID, principal, err := authzContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +125,7 @@ func (h *Handler) GetObjectKey(ctx context.Context, objectKey string) (*ObjectKe
 }
 
 func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs) (*ObjectKey, error) {
-	tenantID, principal, err := authzContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +141,7 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 }
 
 func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expectedVersion int64) error {
-	tenantID, principal, err := authzContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -150,7 +155,7 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 }
 
 func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error) {
-	tenantID, _, err := authzContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -161,7 +166,7 @@ func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) (
 }
 
 func (h *Handler) GetObjectKeyStats(ctx context.Context, objectKey string) (*ObjectKeyStats, error) {
-	tenantID, principal, err := authzContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,16 +180,41 @@ func (h *Handler) GetObjectKeyStats(ctx context.Context, objectKey string) (*Obj
 	return &s, nil
 }
 
-func authzContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
-	tenantID, err := auth.TenantFromContext(ctx)
+// BindObjectKeyToBucket rebinds the namespace to a different bucket. Cedar
+// authorization uses ActionBindObjectKeyToBucket on the namespace.
+func (h *Handler) BindObjectKeyToBucket(ctx context.Context, objectKey, bucket string, expectedVersion int64) (*ObjectKey, error) {
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
-	p, err := auth.PrincipalFromContext(ctx)
+	if err := h.authorize(ctx, p, tenantID, objectKey, cedar.ActionAdminObjectKey); err != nil {
+		return nil, err
+	}
+	backendID, bucketName, err := splitBucketResourceName(bucket)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return tenantID, p, nil
+	if err := h.repo.Rebind(ctx, tenantID, objectKey, backendID, bucketName, expectedVersion); err != nil {
+		if errors.Is(err, ErrVersionMismatch) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("rebind: %w", err))
+	}
+	updated, err := h.repo.Get(ctx, tenantID, objectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &updated, nil
+}
+
+// splitBucketResourceName parses "storageBackends/{backend}/buckets/{bucket}".
+func splitBucketResourceName(name string) (backend, bucket string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "storageBackends" || parts[2] != "buckets" {
+		return "", "", fmt.Errorf("invalid bucket name %q", name)
+	}
+	return parts[1], parts[3], nil
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {

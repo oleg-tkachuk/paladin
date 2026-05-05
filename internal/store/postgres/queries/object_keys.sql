@@ -32,6 +32,17 @@ WHERE tenant_id = $1
 ORDER BY object_key
 LIMIT sqlc.arg('page_size');
 
+-- name: BindObjectKeyToBucket :execrows
+-- Atomically rebinds an object_key to a different (backend_id, bucket_name).
+-- The DB trigger enforce_object_key_bucket_tenancy validates the tenancy
+-- constraint (single-tenant buckets reject mismatched tenants).
+UPDATE object_keys
+SET backend_id  = $3,
+    bucket_name = $4
+WHERE tenant_id = $1 AND object_key = $2
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
 -- name: DeleteObjectKey :execrows
 DELETE FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2

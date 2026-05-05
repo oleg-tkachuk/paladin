@@ -19,12 +19,33 @@ type Principal struct {
 	// Subject is the stable identifier inside the tenant (user ID, service
 	// account, etc.). Carried verbatim from the JWT `sub` claim.
 	Subject string
-	// Roles are RBAC strings used by Cedar policies (e.g. "objectKey:admin").
+	// Roles are RBAC strings used by Cedar policies (e.g. "tenant.admin",
+	// "platform.admin", "mcp.operator").
 	Roles []string
+	// Scopes narrow the principal to a subset of resources. Cedar evaluates
+	// resource membership against these in addition to roles. Empty means
+	// "no per-resource restriction" (Cedar default policies still apply).
+	Scopes []Scope
+	// Audience is the JWT `aud` claim — used by handlers to assert that a
+	// caller hitting the admin plane wasn't issued a data-plane token.
+	Audience string
+	// PrincipalKind distinguishes a User-bound JWT from an ApiKey-derived
+	// token. Cedar policies may key on this for blast-radius limits.
+	Kind PrincipalKind
 	// Labels are free-form claim attributes exposed to Cedar as principal
 	// attributes.
 	Labels map[string]string
 }
+
+// PrincipalKind enumerates the originating credential type.
+type PrincipalKind uint8
+
+const (
+	PrincipalKindUnspecified PrincipalKind = iota
+	PrincipalKindUser
+	PrincipalKindApiKey
+	PrincipalKindServiceAccount // platform-issued, e.g. MCP server
+)
 
 // HasRole reports whether the principal carries the given role string.
 func (p *Principal) HasRole(role string) bool {

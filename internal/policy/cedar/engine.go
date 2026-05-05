@@ -41,11 +41,13 @@ const (
 
 // Entity type names — must match the Cedar schema exactly.
 const (
-	entityTypeTenant = "Tenant"
-	entityTypeBucket = "ObjectKey"
-	entityTypeObject = "Object"
-	entityTypeUser   = "User"
-	entityTypeAction = "Action"
+	entityTypeTenant         = "Tenant"
+	entityTypeObjectKey      = "ObjectKey"
+	entityTypeBucket         = "Bucket"         // physical S3 bucket
+	entityTypeStorageBackend = "StorageBackend" // physical backend
+	entityTypeObject         = "Object"
+	entityTypeUser           = "User"
+	entityTypeAction         = "Action"
 )
 
 // Principal represents the authenticated caller, matching Cedar entity `User`.
@@ -55,16 +57,34 @@ type Principal struct {
 	Roles    []string
 }
 
-// Resource is the object or objectKey under authorization.
+// Resource is the entity under authorization. Different fields are
+// populated depending on the action target:
+//
+//   - Object:        TenantID + ObjectKey + Key + ObjectID + bucket fields
+//   - ObjectKey:     TenantID + ObjectKey  (+ bucket fields if known)
+//   - Bucket:        BackendID + BucketName + (optional OwnerTenantID)
+//   - StorageBackend: BackendID
+//   - Tenant:        TenantID
+//
+// The engine uses the populated fields to emit only the relevant Cedar
+// entities. Unknown fields stay zero-valued.
 type Resource struct {
-	TenantID    uuid.UUID
+	// Tenant scope.
+	TenantID uuid.UUID
+
+	// ObjectKey + Object.
 	ObjectKey   string
-	Key         string // empty for objectKey-level actions
+	Key         string
 	ObjectID    uuid.UUID
 	State       string
 	SizeBytes   int64
 	ContentType string
 	Tags        map[string]string
+
+	// Physical bucket + backend (admin plane).
+	BackendID     string
+	BucketName    string
+	OwnerTenantID uuid.UUID // empty = shared bucket
 }
 
 // RequestContext carries per-request attributes matched against Cedar context.
@@ -214,20 +234,43 @@ func tenantUID(tenantID uuid.UUID) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(tenantID.String()))
 }
 
-func bucketUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
+func objectKeyUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
 	// Namespace by tenant to keep objectKey IDs unique across tenants.
-	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(tenantID.String()+"/"+objectKey))
+	return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(tenantID.String()+"/"+objectKey))
 }
 
+func physicalBucketUID(backendID, bucketName string) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(backendID+"/"+bucketName))
+}
+
+func storageBackendUID(backendID string) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeStorageBackend, cedartypes.String(backendID))
+}
+
+// resourceUID picks the most-specific entity type populated on the resource:
+//   - Object        when Key/ObjectID set
+//   - ObjectKey     when ObjectKey set (without Object)
+//   - Bucket        when BackendID+BucketName set (without ObjectKey)
+//   - StorageBackend when only BackendID set
+//   - Tenant         when only TenantID set (admin tenant ops)
 func resourceUID(r *Resource) cedartypes.EntityUID {
-	if r.Key == "" && r.ObjectID == uuid.Nil {
-		return bucketUID(r.TenantID, r.ObjectKey)
+	if r.Key != "" || r.ObjectID != uuid.Nil {
+		id := r.ObjectID.String()
+		if r.ObjectID == uuid.Nil {
+			id = r.ObjectKey + "/" + r.Key
+		}
+		return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
 	}
-	id := r.ObjectID.String()
-	if r.ObjectID == uuid.Nil {
-		id = r.ObjectKey + "/" + r.Key
+	if r.ObjectKey != "" {
+		return objectKeyUID(r.TenantID, r.ObjectKey)
 	}
-	return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
+	if r.BackendID != "" && r.BucketName != "" {
+		return physicalBucketUID(r.BackendID, r.BucketName)
+	}
+	if r.BackendID != "" {
+		return storageBackendUID(r.BackendID)
+	}
+	return tenantUID(r.TenantID)
 }
 
 func actionUID(name string) cedartypes.EntityUID {
@@ -237,60 +280,122 @@ func actionUID(name string) cedartypes.EntityUID {
 // buildEntities assembles the transient entity graph passed to Authorize.
 // PALADIN treats all attribute data as request-scoped — nothing is stored as
 // long-lived entities in cedar-go.
+//
+// Entities are emitted only when the corresponding resource fields are
+// populated, so admin-plane requests against a StorageBackend don't bring
+// along an unrelated Tenant entity that the policy never references.
 func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
-	tUID := tenantUID(r.TenantID)
-	bUID := bucketUID(r.TenantID, r.ObjectKey)
 	uUID := userUID(p)
-
-	tenantEntity := cedartypes.Entity{
-		UID: tUID,
-		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-			"display_name": cedartypes.String(""),
-			"tier":         cedartypes.String(""),
-		}),
-	}
-
-	bucketEntity := cedartypes.Entity{
-		UID:     bUID,
-		Parents: cedartypes.NewEntityUIDSet(tUID),
-		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-			"objectKey":       cedartypes.String(r.ObjectKey),
-			"storage_backend": cedartypes.String(""),
-		}),
-	}
-
 	rolesSet := make([]cedartypes.Value, 0, len(p.Roles))
 	for _, role := range p.Roles {
 		rolesSet = append(rolesSet, cedartypes.String(role))
 	}
-	userEntity := cedartypes.Entity{
+
+	m := cedartypes.EntityMap{}
+
+	// Tenant — emitted whenever a tenant is in scope (either the principal's
+	// or the resource's). Most data-plane calls hit this branch.
+	var tUID cedartypes.EntityUID
+	if r.TenantID != uuid.Nil {
+		tUID = tenantUID(r.TenantID)
+		m[tUID] = cedartypes.Entity{
+			UID: tUID,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"tenant_id":    cedartypes.String(r.TenantID.String()),
+				"display_name": cedartypes.String(""),
+				"labels":       cedartypes.NewSet(),
+			}),
+		}
+	}
+
+	// User — anchors the principal under their tenant when known.
+	userParents := cedartypes.EntityUIDSet{}
+	if r.TenantID != uuid.Nil {
+		userParents = cedartypes.NewEntityUIDSet(tUID)
+	}
+	m[uUID] = cedartypes.Entity{
 		UID:     uUID,
-		Parents: cedartypes.NewEntityUIDSet(tUID),
+		Parents: userParents,
 		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-			"roles": cedartypes.NewSet(rolesSet...),
+			"subject":   cedartypes.String(p.Subject),
+			"tenant_id": cedartypes.String(p.TenantID.String()),
+			"roles":     cedartypes.NewSet(rolesSet...),
 		}),
 	}
 
-	m := cedartypes.EntityMap{
-		tUID: tenantEntity,
-		bUID: bucketEntity,
-		uUID: userEntity,
+	// StorageBackend — admin-plane only.
+	var sbUID cedartypes.EntityUID
+	if r.BackendID != "" {
+		sbUID = storageBackendUID(r.BackendID)
+		m[sbUID] = cedartypes.Entity{
+			UID: sbUID,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"backend_id": cedartypes.String(r.BackendID),
+			}),
+		}
 	}
 
-	if !(r.Key == "" && r.ObjectID == uuid.Nil) {
+	// Bucket (physical) — child of StorageBackend.
+	var bUID cedartypes.EntityUID
+	if r.BackendID != "" && r.BucketName != "" {
+		bUID = physicalBucketUID(r.BackendID, r.BucketName)
+		bucketParents := cedartypes.NewEntityUIDSet(sbUID)
+		bucketEntity := cedartypes.Entity{
+			UID:     bUID,
+			Parents: bucketParents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"bucket_name":     cedartypes.String(r.BucketName),
+				"backend_id":      cedartypes.String(r.BackendID),
+				"owner_tenant_id": cedartypes.String(r.OwnerTenantID.String()),
+				"labels":          cedartypes.NewSet(),
+			}),
+		}
+		m[bUID] = bucketEntity
+	}
+
+	// ObjectKey — child of Tenant (and Bucket when bucket is in scope).
+	var okUID cedartypes.EntityUID
+	if r.ObjectKey != "" && r.TenantID != uuid.Nil {
+		okUID = objectKeyUID(r.TenantID, r.ObjectKey)
+		parents := cedartypes.NewEntityUIDSet(tUID)
+		if r.BackendID != "" && r.BucketName != "" {
+			parents = cedartypes.NewEntityUIDSet(tUID, bUID)
+		}
+		m[okUID] = cedartypes.Entity{
+			UID:     okUID,
+			Parents: parents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"object_key":  cedartypes.String(r.ObjectKey),
+				"tenant_id":   cedartypes.String(r.TenantID.String()),
+				"bucket_name": cedartypes.String(r.BucketName),
+				"backend_id":  cedartypes.String(r.BackendID),
+			}),
+		}
+	}
+
+	// Object — child of ObjectKey.
+	if r.Key != "" || r.ObjectID != uuid.Nil {
 		oUID := resourceUID(r)
 		tagsSet := make([]cedartypes.Value, 0, len(r.Tags))
 		for k := range r.Tags {
 			tagsSet = append(tagsSet, cedartypes.String(k))
 		}
+		var parents cedartypes.EntityUIDSet
+		if okUID != (cedartypes.EntityUID{}) {
+			parents = cedartypes.NewEntityUIDSet(okUID)
+		}
 		m[oUID] = cedartypes.Entity{
 			UID:     oUID,
-			Parents: cedartypes.NewEntityUIDSet(bUID),
+			Parents: parents,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
 				"key":          cedartypes.String(r.Key),
 				"state":        cedartypes.String(r.State),
 				"size_bytes":   cedartypes.Long(r.SizeBytes),
 				"content_type": cedartypes.String(r.ContentType),
+				"tenant_id":    cedartypes.String(r.TenantID.String()),
+				"object_key":   cedartypes.String(r.ObjectKey),
+				"bucket_name":  cedartypes.String(r.BucketName),
+				"backend_id":   cedartypes.String(r.BackendID),
 				"tags":         cedartypes.NewSet(tagsSet...),
 			}),
 		}

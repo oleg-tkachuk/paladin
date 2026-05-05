@@ -1,0 +1,237 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "paladin/common/v1/pagination.proto";
+import "paladin/common/v1/resource.proto";
+import "paladin/data/v1/types.proto";
+
+// ObjectService is the canonical data-plane API. PALADIN never proxies bytes —
+// every upload/download happens directly between the client and the storage
+// backend via presigned URLs returned by these RPCs.
+service ObjectService {
+  rpc UploadObject(UploadObjectRequest) returns (UploadObjectResponse);
+
+  rpc DownloadObject(DownloadObjectRequest) returns (DownloadObjectResponse);
+
+  rpc GetObject(GetObjectRequest) returns (Object);
+
+  // LookupObject resolves an Object by (object_key, key) instead of object_id.
+  rpc LookupObject(LookupObjectRequest) returns (Object);
+
+  rpc UpdateObject(UpdateObjectRequest) returns (Object);
+
+  // CompleteObject is no-op for IMPLICIT completion mode and the event has
+  // already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
+  rpc CompleteObject(CompleteObjectRequest) returns (Object);
+
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+
+  rpc RestoreObject(RestoreObjectRequest) returns (Object);
+
+  rpc CopyObject(CopyObjectRequest) returns (Object);
+
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+
+  rpc CountObjects(CountObjectsRequest) returns (CountObjectsResponse);
+
+  // ─── Versioning (opt-in per bucket) ──────────────────────────────────────
+  // ListObjectVersions returns the immutable history of an object. Empty
+  // when the parent bucket has versioning disabled.
+  rpc ListObjectVersions(ListObjectVersionsRequest) returns (ListObjectVersionsResponse);
+
+  // GetObjectVersion fetches metadata for a specific version.
+  rpc GetObjectVersion(GetObjectVersionRequest) returns (ObjectVersion);
+
+  // RestoreObjectVersion makes the named version `current` again. The
+  // current version becomes a non-current entry preserving lock state.
+  rpc RestoreObjectVersion(RestoreObjectVersionRequest) returns (Object);
+}
+
+// ─── Versioning ─────────────────────────────────────────────────────────────
+
+message ObjectVersion {
+  // Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  string name = 1;
+  string version_id = 2;
+  string object_id = 3;
+  bool is_delete_marker = 4;
+  string s3_key = 5;
+  int64 size_bytes = 6;
+  string etag = 7;
+  ChecksumDigest checksum = 8;
+  string content_type = 9;
+  map<string, string> metadata = 10;
+  map<string, string> tags = 11;
+  ObjectLockState lock = 12;
+  google.protobuf.Timestamp created_at = 13;
+  bool is_current = 14;
+}
+
+message ListObjectVersionsRequest {
+  // Object resource name (parent of the versions collection).
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  paladin.common.v1.PageRequest page = 2;
+}
+
+message ListObjectVersionsResponse {
+  repeated ObjectVersion versions = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message GetObjectVersionRequest {
+  // Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RestoreObjectVersionRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+}
+
+// ─── Upload ─────────────────────────────────────────────────────────────────
+
+message UploadObjectRequest {
+  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2; // empty → server uses object_id as key
+  string content_type = 3 [(buf.validate.field).string.min_len = 1];
+  int64 size_hint_bytes = 4;
+  paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5
+      [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  map<string, string> metadata = 6;
+  map<string, string> tags = 7;
+  string external_ref = 8;
+  PresignTransport transport = 9;
+  // Idempotency key — if a request with the same key is replayed, the
+  // server returns the cached response instead of creating a duplicate.
+  string idempotency_key = 10;
+}
+
+enum PresignTransport {
+  PRESIGN_TRANSPORT_UNSPECIFIED = 0;
+  PRESIGN_TRANSPORT_PUT = 1;
+  PRESIGN_TRANSPORT_POST = 2;
+}
+
+message UploadObjectResponse {
+  Object object = 1;
+  paladin.common.v1.PresignedUrl upload_url = 2;
+  paladin.common.v1.CompletionMode completion_mode = 3;
+}
+
+// ─── Download ───────────────────────────────────────────────────────────────
+
+message DownloadObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Duration ttl = 2;
+  string content_disposition = 3;
+}
+
+message DownloadObjectResponse {
+  Object object = 1;
+  paladin.common.v1.PresignedUrl download_url = 2;
+}
+
+// ─── Get / Lookup ───────────────────────────────────────────────────────────
+
+message GetObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message LookupObjectRequest {
+  // Parent ObjectKey — required to disambiguate `key` lookups.
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// ─── Update ─────────────────────────────────────────────────────────────────
+
+message UpdateObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  map<string, string> metadata = 4;
+  map<string, string> tags = 5;
+  string content_type = 6;
+  string external_ref = 7;
+}
+
+// ─── Complete ───────────────────────────────────────────────────────────────
+
+message CompleteObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string etag = 2;
+  string checksum_value = 3;
+}
+
+// ─── Delete / Restore ───────────────────────────────────────────────────────
+
+message DeleteObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  bool permanent = 3;
+  // Only honored on bucket-locked objects when caller has GOVERNANCE bypass
+  // (role `lock.governance.bypass` or `platform.admin`). The server sets
+  // a `SET LOCAL paladin.governance_bypass = true` GUC inside the deletion
+  // transaction; the DB trigger on object_versions checks for it before
+  // refusing to drop locked rows.
+  bool bypass_governance_retention = 4;
+}
+
+message DeleteObjectResponse {
+  Object object = 1;
+}
+
+message RestoreObjectRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // OCC guard. Empty disables the check (legacy callers); v2 SDKs are
+  // expected to read it from a prior GetObject and pass it back unchanged.
+  string resource_version = 2;
+}
+
+// ─── Copy ───────────────────────────────────────────────────────────────────
+
+message CopyObjectRequest {
+  string source_name = 1 [(buf.validate.field).string.min_len = 1];
+  // Destination ObjectKey resource name.
+  string destination_object_key = 2 [(buf.validate.field).string.min_len = 1];
+  string destination_key = 3 [(buf.validate.field).string.min_len = 1];
+  optional MetadataOverride metadata_override = 4;
+  optional TagsOverride tags_override = 5;
+}
+
+message MetadataOverride { map<string, string> metadata = 1; }
+message TagsOverride     { map<string, string> tags = 1; }
+
+// ─── List / Count ───────────────────────────────────────────────────────────
+
+message ListObjectsRequest {
+  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  paladin.common.v1.PageRequest page = 2;
+  string filter = 3;
+  string order_by = 4;
+  paladin.common.v1.SortOrder sort_order = 5;
+}
+
+message ListObjectsResponse {
+  repeated Object objects = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message CountObjectsRequest {
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  string filter = 2;
+}
+
+message CountObjectsResponse {
+  int64 approximate_count = 1;
+  bool exact = 2;
+}

@@ -18,6 +18,7 @@
 package wire
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -25,6 +26,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/audith"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/backendh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/eventsubh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/quotah"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/apikeyh"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/bucket"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
@@ -32,8 +42,12 @@ import (
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
 	objecttag "github.com/oleg-tkachuk/paladin/internal/api/v1/object_tag"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
+	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -117,6 +131,17 @@ type Repos struct {
 	Presign   presign.Repository
 	Multipart multipart.Repository
 	Operation operation.Repository
+
+	// v2 admin/iam stores.
+	BackendV2     admindomain.BackendRepository
+	BucketV2      admindomain.BucketRepository
+	Audit         admindomain.AuditRepository
+	Quota         admindomain.QuotaRepository
+	EventSub      admindomain.EventSubscriptionRepository
+	IAMUser       authstore.UserRepository
+	IAMApiKey     authstore.ApiKeyRepository
+	IAMRefresh    authstore.RefreshTokenRepository
+	ObjectVersion object.VersionRepository
 }
 
 // Storage bundles the storage-side adapters. Every handler package declares
@@ -179,4 +204,93 @@ func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg 
 
 func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner) *multipart.Handler {
 	return multipart.NewHandler(repos.Multipart, storage.Multipart, pe, sm)
+}
+
+// ─── v2 IAM/admin handlers ──────────────────────────────────────────────────
+
+// ProvideIssuer builds the JWT issuer used by Login / RefreshToken /
+// MintScopedToken. Fails at startup if no signing key is configured.
+func ProvideIssuer(cfg config.Config) (*issuer.Issuer, error) {
+	if cfg.Auth.SigningKey == "" {
+		return nil, errors.New("wire: auth.signing_key (or signing_key_secret) required")
+	}
+	return issuer.New(issuer.Config{
+		Issuer:            cfg.Auth.Issuer,
+		SigningKey:        []byte(cfg.Auth.SigningKey),
+		AccessTokenTTL:    cfg.Auth.AccessTokenTTL,
+		RefreshTokenTTL:   cfg.Auth.RefreshTokenTTL,
+		ScopedTokenMaxTTL: cfg.Auth.ScopedTokenMaxTTL,
+	})
+}
+
+// ProvideRefreshDecoder produces the verifier used to validate refresh
+// tokens presented to AuthService.RefreshToken. Audience is hard-pinned to
+// AudienceIAM regardless of which mux delivered the token.
+func ProvideRefreshDecoder(cfg config.Config) *auth.RefreshDecoder {
+	return &auth.RefreshDecoder{
+		Verifier: &auth.JWTVerifier{
+			Key:              []byte(cfg.Auth.SigningKey),
+			ExpectedIssuer:   cfg.Auth.Issuer,
+			ExpectedAudience: auth.AudienceIAM,
+			Leeway:           cfg.Auth.Leeway,
+		},
+	}
+}
+
+func ProvideAuthHandler(repos Repos, iss *issuer.Issuer, dec *auth.RefreshDecoder, pe *policy.Engine) *authh.Handler {
+	return authh.NewHandler(repos.IAMUser, repos.IAMRefresh, iss, dec, pe)
+}
+
+func ProvideUserHandler(repos Repos) *userh.Handler { return userh.NewHandler(repos.IAMUser) }
+
+func ProvideApiKeyHandler(repos Repos, iss *issuer.Issuer) *apikeyh.Handler {
+	return apikeyh.NewHandler(repos.IAMApiKey, iss)
+}
+
+func ProvideBackendV2Handler(repos Repos, pe *policy.Engine) *backendh.Handler {
+	return backendh.NewHandler(repos.BackendV2, pe)
+}
+
+func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {
+	// admindomain.Provisioner satisfied by the same s3 adapter that backs
+	// storage.Provisioner. We need a small interface adapter — bucketh.Provisioner
+	// has the same shape, so just type-cast/wrap.
+	return bucketh.NewHandler(repos.BucketV2, &bucketProvisionerAdapter{storage.Provisioner}, pe)
+}
+
+func ProvideQuotaHandler(repos Repos) *quotah.Handler { return quotah.NewHandler(repos.Quota) }
+func ProvideAuditHandler(repos Repos) *audith.Handler { return audith.NewHandler(repos.Audit) }
+func ProvideEventSubHandler(repos Repos) *eventsubh.Handler {
+	return eventsubh.NewHandler(repos.EventSub)
+}
+
+func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Handler {
+	return policyh.NewHandler(engine, store)
+}
+
+func ProvideVersionHandler(repos Repos) *object.VersionHandler {
+	if repos.ObjectVersion == nil {
+		return nil
+	}
+	return object.NewVersionHandler(repos.Object, repos.ObjectVersion)
+}
+
+// bucketProvisionerAdapter bridges the v1 bucket.Provisioner interface to
+// the bucketh.Provisioner interface; identical shape, distinct types.
+type bucketProvisionerAdapter struct {
+	v1 bucket.Provisioner
+}
+
+func (a *bucketProvisionerAdapter) CreateBucket(ctx context.Context, backendID, bucketName, region string) error {
+	if a.v1 == nil {
+		return nil
+	}
+	return a.v1.CreateBucket(ctx, backendID, bucketName, region)
+}
+
+func (a *bucketProvisionerAdapter) DeleteBucket(ctx context.Context, backendID, bucketName string) error {
+	if a.v1 == nil {
+		return nil
+	}
+	return a.v1.DeleteBucket(ctx, backendID, bucketName)
 }

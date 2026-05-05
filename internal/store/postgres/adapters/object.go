@@ -220,6 +220,55 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 	return bucket, nil
 }
 
+// LookupBucketMeta returns the bucket binding plus versioning + lock flags
+// in one trip. Hot-path call on every promote / delete; the JOIN hits
+// idx_object_keys_bucket and the buckets PK.
+func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.BucketMeta, error) {
+	const q = `
+		SELECT b.backend_id, b.bucket_name,
+		       COALESCE(bk.versioning_enabled, false),
+		       COALESCE(bk.object_lock_enabled, false)
+		FROM object_keys b
+		LEFT JOIN buckets bk
+		  ON bk.backend_id = b.backend_id AND bk.bucket_name = b.bucket_name
+		WHERE b.tenant_id = $1 AND b.object_key = $2
+	`
+	var meta object.BucketMeta
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
+		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
+	); err != nil {
+		if isNoRows(err) {
+			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
+		}
+		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
+	}
+	return meta, nil
+}
+
+// HardDeleteWithBypass mirrors HardDelete but wraps the call in a
+// transaction with `SET LOCAL paladin.governance_bypass = true`. The
+// enforce_object_version_lock trigger on object_versions reads this GUC.
+//
+// Compliance-mode rows still raise — by design.
+func (r *ObjectRepo) HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SET LOCAL paladin.governance_bypass = 'true'"); err != nil {
+		return fmt.Errorf("set bypass GUC: %w", err)
+	}
+	rows, err := r.q.WithTx(tx).HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
+	if err != nil {
+		return fmt.Errorf("hard delete (bypass): %w", err)
+	}
+	if rows == 0 {
+		return object.ErrVersionMismatch
+	}
+	return tx.Commit(ctx)
+}
+
 // BucketCompletionMode reads the storage backend tied to the objectKey and
 // returns Implicit when events are enabled on that backend, otherwise
 // Explicit. Unknown objectKey → Unspecified + error.
@@ -287,6 +336,7 @@ func objectFromSQLC(o sqlc.Object) object.Object {
 		ContentType:      o.ContentType,
 		SizeBytes:        size,
 		ETag:             derefStr(o.Etag),
+		ChecksumAlgo:     checksumAlgoName(o.ChecksumAlgorithm),
 		Checksum:         derefStr(o.Checksum),
 		Sequencer:        derefStr(o.Sequencer),
 		Metadata:         decodeMap(o.Metadata),

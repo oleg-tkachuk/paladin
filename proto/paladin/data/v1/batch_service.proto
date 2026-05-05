@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+
+// BatchService — async bulk operations. All RPCs return an Operation; clients
+// poll OperationService.GetOperation for status.
+service BatchService {
+  rpc BatchDeleteObjects(BatchDeleteObjectsRequest) returns (Operation);
+  rpc BatchCopyObjects(BatchCopyObjectsRequest) returns (Operation);
+  rpc BatchRestoreObjects(BatchRestoreObjectsRequest) returns (Operation);
+  rpc BatchUpdateTags(BatchUpdateTagsRequest) returns (Operation);
+}
+
+// Operation mirrors the admin-plane definition; copied here so the data
+// plane is self-contained for client codegen.
+message Operation {
+  string name = 1;
+  string type = 2;
+  google.protobuf.Any metadata = 3;
+  bool done = 4;
+  oneof result {
+    google.rpc.Status error = 5;
+    google.protobuf.Any response = 6;
+  }
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message ObjectSelector {
+  // Explicit object resource names. Capped at 100 for synchronous validation;
+  // larger sets must use `filter`.
+  repeated string names = 1 [(buf.validate.field).repeated.max_items = 100];
+  // CEL filter evaluated lazily inside the worker.
+  string filter = 2;
+}
+
+message BatchDeleteObjectsRequest {
+  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  ObjectSelector selector = 2 [(buf.validate.field).required = true];
+  bool permanent = 3;
+}
+
+message BatchCopyObjectsRequest {
+  // Source parent ObjectKey.
+  string source_parent = 1 [(buf.validate.field).string.min_len = 1];
+  ObjectSelector selector = 2 [(buf.validate.field).required = true];
+  // Destination ObjectKey resource name.
+  string destination_object_key = 3 [(buf.validate.field).string.min_len = 1];
+  // CEL expression evaluated against each source Object to compute dest key.
+  string destination_key_template = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message BatchRestoreObjectsRequest {
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  ObjectSelector selector = 2 [(buf.validate.field).required = true];
+}
+
+message BatchUpdateTagsRequest {
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  ObjectSelector selector = 2 [(buf.validate.field).required = true];
+  map<string, string> tags = 3;
+  // When true, replace the existing tag set; else merge.
+  bool replace = 4;
+}

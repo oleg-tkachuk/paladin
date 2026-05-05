@@ -105,9 +105,14 @@ type LoggerFields struct {
 }
 
 type Server struct {
-	Mode            string        `yaml:"mode" json:"mode"`
-	Name            string        `yaml:"name" json:"name"`
-	HTTP            HTTPServer    `yaml:"http" json:"http"`
+	Mode string `yaml:"mode" json:"mode"`
+	Name string `yaml:"name" json:"name"`
+	// DataHTTP, AdminHTTP, IAMHTTP — v2 three-plane listener configuration.
+	// All three must be set; each plane gets its own audience and interceptor
+	// stack.
+	DataHTTP        HTTPServer    `yaml:"data_http" json:"data_http"`
+	AdminHTTP       HTTPServer    `yaml:"admin_http" json:"admin_http"`
+	IAMHTTP         HTTPServer    `yaml:"iam_http" json:"iam_http"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
@@ -190,14 +195,21 @@ type Policy struct {
 	ObjectTagMaxLen       int           `yaml:"object_tag_max_len" json:"object_tag_max_len"`
 }
 
-// Auth configures JWT verification for incoming requests. JWKSURL takes
-// precedence over HMACSecret when both are set.
+// Auth configures JWT verification + minting. v2 issues tokens itself via
+// AuthService.Login / RefreshToken; the same SigningKey is used for both
+// signing (issuer) and verification (interceptor on each plane).
+//
+// JWKSURL is reserved for federated-IdP scenarios (slice 6+); v1 uses HMAC
+// only and rejects unset SigningKey at startup.
 type Auth struct {
-	Issuer     string        `yaml:"issuer" json:"issuer"`
-	Audience   string        `yaml:"audience" json:"audience"`
-	JWKSURL    string        `yaml:"jwks_url" json:"jwks_url"`
-	HMACSecret string        `yaml:"hmac_secret" json:"hmac_secret"`
-	Leeway     time.Duration `yaml:"leeway" json:"leeway"`
+	Issuer            string        `yaml:"issuer" json:"issuer"`
+	JWKSURL           string        `yaml:"jwks_url" json:"jwks_url"`
+	SigningKey        string        `yaml:"signing_key" json:"signing_key"`
+	SigningKeySecret  *SecretRef    `yaml:"signing_key_secret" json:"signing_key_secret"`
+	Leeway            time.Duration `yaml:"leeway" json:"leeway"`
+	AccessTokenTTL    time.Duration `yaml:"access_token_ttl" json:"access_token_ttl"`
+	RefreshTokenTTL   time.Duration `yaml:"refresh_token_ttl" json:"refresh_token_ttl"`
+	ScopedTokenMaxTTL time.Duration `yaml:"scoped_token_max_ttl" json:"scoped_token_max_ttl"`
 }
 
 type Security struct {

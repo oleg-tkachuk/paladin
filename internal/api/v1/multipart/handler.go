@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
@@ -86,22 +87,51 @@ type Repository interface {
 	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
 }
 
+// VersionRecorder is the optional hook that records a versions-row when the
+// parent bucket has versioning_enabled. Implemented by *object.VersionHandler
+// (declared as an interface here to avoid a cycle).
+type VersionRecorder interface {
+	OnPromote(ctx context.Context, obj VersionedObject) error
+}
+
+// VersionedObject is the minimal projection the recorder needs at promote
+// time. Mirrors object.Object so the wiring layer can pass the same value
+// through both packages without a separate conversion step.
+type VersionedObject struct {
+	ObjectID     uuid.UUID
+	TenantID     uuid.UUID
+	ObjectKey    string
+	Key          string
+	ContentType  string
+	SizeBytes    int64
+	ETag         string
+	ChecksumAlgo string
+	Checksum     string
+	Metadata     map[string]string
+	Tags         map[string]string
+}
+
 type Handler struct {
-	repo    Repository
-	storage Storage
-	policy  *cedar.Engine
-	sm      *statemachine.Transitioner
+	repo     Repository
+	storage  Storage
+	policy   *cedar.Engine
+	sm       *statemachine.Transitioner
+	versions VersionRecorder // optional
 }
 
 func NewHandler(repo Repository, storage Storage, policy *cedar.Engine, sm *statemachine.Transitioner) *Handler {
 	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm}
 }
 
+// SetVersionRecorder attaches the optional recorder used after a successful
+// CompleteMultipartUpload promote. Wired by main.
+func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
+
 // InitiateMultipartUpload creates the PENDING object row and opens a storage
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
 func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +166,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 }
 
 func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) error {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -158,9 +188,20 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
-	_, err = h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
+	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
+	}
+	if changed && h.versions != nil {
+		_ = h.versions.OnPromote(ctx, VersionedObject{
+			ObjectID:    sess.ObjectID,
+			TenantID:    sess.TenantID,
+			ObjectKey:   sess.ObjectKey,
+			Key:         sess.Key,
+			SizeBytes:   size,
+			ETag:        etag,
+			ContentType: "", // multipart doesn't carry CT through Storage; lookup later
+		})
 	}
 	if err := h.repo.DeleteSession(ctx, args.UploadID); err != nil {
 		// Session delete failure is non-fatal — the object is AVAILABLE.
@@ -171,7 +212,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 }
 
 func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) error {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -204,7 +245,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 // object's (objectKey, key); the storage URL targets the bucket bound to that
 // ObjectKey.
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -238,7 +279,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 // ListParts returns the parts already recorded for an upload session. Used
 // during resumption to figure out which part numbers still need uploading.
 func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -273,16 +314,4 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
-}
-
-func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
-	t, err := auth.TenantFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	return t, p, nil
 }

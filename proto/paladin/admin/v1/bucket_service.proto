@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// BucketService manages physical S3 buckets. Bucket admins create buckets
+// and bind them to backends; tenant admins consume them via ObjectKey.
+service BucketService {
+  rpc CreateBucket(CreateBucketRequest) returns (Bucket);
+  rpc GetBucket(GetBucketRequest) returns (Bucket);
+  rpc UpdateBucket(UpdateBucketRequest) returns (Bucket);
+  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
+
+  // SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
+  rpc SetBucketPolicy(SetBucketPolicyRequest) returns (Bucket);
+
+  // SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
+  // single-purpose RPCs to keep audit log entries focused.
+  rpc SetLifecycleRules(SetLifecycleRulesRequest) returns (Bucket);
+  rpc SetObjectLock(SetObjectLockRequest) returns (Bucket);
+  rpc SetVersioning(SetVersioningRequest) returns (Bucket);
+  rpc SetReplication(SetReplicationRequest) returns (Bucket);
+
+  // ListAccessibleBuckets is callable by tenant admins. Returns only buckets
+  // the caller's principal/scopes are allowed to bind ObjectKeys to.
+  rpc ListAccessibleBuckets(ListAccessibleBucketsRequest) returns (ListBucketsResponse);
+}
+
+message CreateBucketRequest {
+  // Parent: "storageBackends/{backend_id}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  string bucket_name = 2 [(buf.validate.field).string = {min_len: 3, max_len: 63}];
+  Bucket bucket = 3 [(buf.validate.field).required = true];
+  // When true, PALADIN also calls the backend to physically create the bucket.
+  // When false, the bucket is assumed to exist out-of-band.
+  bool provision_on_backend = 4;
+}
+
+message GetBucketRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateBucketRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  Bucket bucket = 4;
+}
+
+message DeleteBucketRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // When true, also removes the physical bucket (and is a destructive op).
+  bool delete_on_backend = 3;
+}
+
+message DeleteBucketResponse {}
+
+message ListBucketsRequest {
+  // Parent: "storageBackends/{backend_id}" or empty for cross-backend.
+  string parent = 1;
+  paladin.common.v1.PageRequest page = 2;
+  string filter = 3; // CEL over Bucket
+}
+
+message ListBucketsResponse {
+  repeated Bucket buckets = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message SetBucketPolicyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  string cedar_policy = 3;
+}
+
+message SetLifecycleRulesRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  repeated LifecycleRule rules = 3;
+}
+
+message SetObjectLockRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  ObjectLockConfig config = 3 [(buf.validate.field).required = true];
+}
+
+message SetVersioningRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  BucketVersioning versioning = 3 [(buf.validate.field).required = true];
+}
+
+message SetReplicationRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  BucketReplication replication = 3 [(buf.validate.field).required = true];
+}
+
+message ListAccessibleBucketsRequest {
+  // Tenant: "tenants/{tenant_id}". Required.
+  string tenant = 1 [(buf.validate.field).string.min_len = 1];
+  paladin.common.v1.PageRequest page = 2;
+}

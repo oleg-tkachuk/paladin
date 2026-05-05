@@ -16,6 +16,17 @@ SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2;
 
+-- name: LookupObjectByID :one
+-- Reads an object by id alone. Used by background workers (reconciler,
+-- replicator) that don't carry a tenant context. Joins object_keys to
+-- materialize the bucket binding so the caller can call S3 in one trip.
+SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.state,
+       b.backend_id, b.bucket_name
+FROM objects o
+JOIN object_keys b
+  ON b.tenant_id = o.tenant_id AND b.object_key = o.object_key
+WHERE o.object_id = $1;
+
 -- name: LookupObjectByKey :one
 -- Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
 SELECT sqlc.embed(objects)

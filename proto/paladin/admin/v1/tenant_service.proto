@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// TenantService manages tenants. Platform-admin only.
+service TenantService {
+  rpc CreateTenant(CreateTenantRequest) returns (Tenant);
+  rpc GetTenant(GetTenantRequest) returns (Tenant);
+  rpc UpdateTenant(UpdateTenantRequest) returns (Tenant);
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+
+  rpc SetInheritedPolicy(SetInheritedPolicyRequest) returns (Tenant);
+}
+
+message CreateTenantRequest {
+  string tenant_id = 1; // optional; UUIDv7 generated when empty
+  Tenant tenant = 2 [(buf.validate.field).required = true];
+}
+
+message GetTenantRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateTenantRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  Tenant tenant = 4;
+}
+
+message DeleteTenantRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // Refuse delete when object_keys/users/api_keys still reference the tenant.
+  bool force = 3;
+}
+
+message DeleteTenantResponse {}
+
+message ListTenantsRequest {
+  paladin.common.v1.PageRequest page = 1;
+  string filter = 2;
+}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message SetInheritedPolicyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  string cedar_policy = 3;
+}

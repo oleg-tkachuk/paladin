@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package paladin.iam.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "paladin/common/v1/pagination.proto";
+import "paladin/common/v1/scope.proto";
+import "paladin/iam/v1/types.proto";
+
+// ApiKeyService manages long-lived service-account credentials. Used by the
+// MCP server, CI runners, and any backend that cannot do interactive login.
+service ApiKeyService {
+  // CreateApiKey returns the secret value once, in CreateApiKeyResponse.secret.
+  // Subsequent reads return only metadata.
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
+  rpc GetApiKey(GetApiKeyRequest) returns (ApiKey);
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+
+  // RotateApiKey issues a new secret while keeping metadata + scopes intact.
+  // The previous secret stops working after `grace_period`.
+  rpc RotateApiKey(RotateApiKeyRequest) returns (RotateApiKeyResponse);
+
+  // MintScopedToken issues a short-lived JWT bound to this api_key but with
+  // a NARROWER scope set than the api_key itself. Used by the MCP server to
+  // hand out per-task tokens to ephemeral subprocesses.
+  rpc MintScopedToken(MintScopedTokenRequest) returns (MintScopedTokenResponse);
+}
+
+message CreateApiKeyRequest {
+  // Parent: "tenants/{tenant_id}". Empty for platform service accounts.
+  string parent = 1;
+  string description = 2 [(buf.validate.field).string.min_len = 1];
+  repeated string roles = 3;
+  repeated paladin.common.v1.Scope scopes = 4;
+  google.protobuf.Duration ttl = 5; // 0 = no expiry
+}
+
+message CreateApiKeyResponse {
+  ApiKey api_key = 1;
+  // The full secret value. Stored only as a hash; not retrievable later.
+  string secret = 2;
+}
+
+message GetApiKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListApiKeysRequest {
+  string parent = 1;
+  paladin.common.v1.PageRequest page = 2;
+  bool include_revoked = 3;
+}
+
+message ListApiKeysResponse {
+  repeated ApiKey api_keys = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message RevokeApiKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RevokeApiKeyResponse {}
+
+message RotateApiKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Duration grace_period = 2;
+}
+
+message RotateApiKeyResponse {
+  ApiKey api_key = 1;
+  string new_secret = 2;
+}
+
+message MintScopedTokenRequest {
+  // Parent api_key whose privileges bound the new token. Caller must hold
+  // the api_key's secret AND the new scopes must be ⊆ api_key.scopes.
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  repeated paladin.common.v1.Scope scopes = 2 [(buf.validate.field).repeated.min_items = 1];
+  google.protobuf.Duration ttl = 3 [(buf.validate.field).required = true];
+  // Audience the minted token should target ("paladin-data" or "paladin-admin").
+  string audience = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message MintScopedTokenResponse {
+  string access_token = 1;
+  int32 expires_in_seconds = 2;
+}

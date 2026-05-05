@@ -43,6 +43,8 @@ type jwtClaims struct {
 	Nbf    int64             `json:"nbf"`
 	Tenant string            `json:"tenant"`
 	Roles  []string          `json:"roles"`
+	Scopes []string          `json:"scopes"`
+	Kind   string            `json:"kind"`
 	Labels map[string]string `json:"labels"`
 }
 
@@ -102,10 +104,17 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		return nil, errors.New("jwt: audience mismatch")
 	}
 
+	scopes, err := ParseScopes(c.Scopes)
+	if err != nil {
+		return nil, fmt.Errorf("jwt: scopes claim: %w", err)
+	}
 	p := &Principal{
-		Subject: c.Sub,
-		Roles:   c.Roles,
-		Labels:  c.Labels,
+		Subject:  c.Sub,
+		Roles:    c.Roles,
+		Scopes:   scopes,
+		Audience: v.ExpectedAudience,
+		Kind:     parseKind(c.Kind),
+		Labels:   c.Labels,
 	}
 	if c.Tenant != "" {
 		id, err := uuid.Parse(c.Tenant)
@@ -115,6 +124,18 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		p.TenantID = id
 	}
 	return p, nil
+}
+
+func parseKind(s string) PrincipalKind {
+	switch s {
+	case "user":
+		return PrincipalKindUser
+	case "api_key":
+		return PrincipalKindApiKey
+	case "service_account":
+		return PrincipalKindServiceAccount
+	}
+	return PrincipalKindUnspecified
 }
 
 func b64Decode(s string) ([]byte, error) {

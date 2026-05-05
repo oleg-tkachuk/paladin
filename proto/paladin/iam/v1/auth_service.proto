@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package paladin.iam.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
+
+import "buf/validate/validate.proto";
+import "paladin/iam/v1/types.proto";
+
+// AuthService handles login + token lifecycle. Public-facing endpoints
+// (Login, RefreshToken) accept unauthenticated callers; everything else
+// requires a valid access token.
+service AuthService {
+  // Login exchanges username+password (or upstream IdP code) for a TokenPair.
+  // Rate-limited per (subject, source IP).
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // RefreshToken exchanges a still-valid refresh token for a fresh access+
+  // refresh pair. The old refresh token is invalidated (rotation).
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // Revoke invalidates a token (access or refresh). Idempotent.
+  rpc Revoke(RevokeRequest) returns (RevokeResponse);
+
+  // WhoAmI returns the caller's current Principal — used by SPAs to render
+  // identity / role-gated UI without re-decoding the JWT client-side.
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+
+  // ChangePassword updates the caller's password. Local-IdP only.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+}
+
+message LoginRequest {
+  // For local IdP: subject is username/email. For federated IdP this RPC
+  // accepts an upstream authorization code instead (see auth_method).
+  string subject = 1 [(buf.validate.field).string.min_len = 1];
+  string password = 2;
+  // Optional upstream IdP code (OIDC authorization-code flow).
+  string upstream_code = 3;
+  // Audience the caller wants the access token for. Server-side ACL still
+  // applies — caller cannot escalate beyond their roles.
+  string requested_audience = 4; // default: "paladin-data"
+}
+
+message LoginResponse {
+  TokenPair tokens = 1;
+  User user = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RefreshTokenResponse {
+  TokenPair tokens = 1;
+}
+
+message RevokeRequest {
+  // Either an access or refresh token; server identifies which.
+  string token = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RevokeResponse {}
+
+message WhoAmIRequest {}
+
+message WhoAmIResponse {
+  User user = 1;
+  // Audience extracted from the presented token; useful for SPAs that
+  // reuse one client to talk to multiple planes.
+  string audience = 2;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1 [(buf.validate.field).string.min_len = 1];
+  string new_password = 2 [(buf.validate.field).string.min_len = 12];
+}
+
+message ChangePasswordResponse {}

@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -27,11 +28,11 @@ type BatchDeleteArgs struct {
 }
 
 type BatchCopyArgs struct {
-	TenantID  uuid.UUID
-	SrcBucket string
-	DstBucket string
-	ObjectIDs []uuid.UUID
-	KeyPrefix string // optional destination prefix
+	TenantID     uuid.UUID
+	SrcObjectKey string
+	DstObjectKey string
+	ObjectIDs    []uuid.UUID
+	KeyPrefix    string // optional destination prefix
 }
 
 type BatchUpdateTagsArgs struct {
@@ -58,7 +59,7 @@ func NewHandler(submitter Submitter, policy *cedar.Engine) *Handler {
 // BatchDelete validates and enqueues an async delete across up to 10k objects.
 // Returns the operation_id to poll via GetOperation.
 func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.UUID, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -81,7 +82,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 }
 
 func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -95,10 +96,10 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
 	// Require copy on source and put on destination — objectKey-level check.
-	if err := h.authorize(ctx, p, tenantID, args.SrcBucket, cedar.ActionCopyObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.SrcObjectKey, cedar.ActionCopyObject); err != nil {
 		return uuid.Nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.DstBucket, cedar.ActionPutObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.DstObjectKey, cedar.ActionPutObject); err != nil {
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
@@ -106,7 +107,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 }
 
 func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs) (uuid.UUID, error) {
-	tenantID, p, err := callerContext(ctx)
+	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -136,18 +137,6 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
-}
-
-func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
-	t, err := auth.TenantFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	return t, p, nil
 }
 
 // maxBatchSize caps the number of objects per BatchXxx call.

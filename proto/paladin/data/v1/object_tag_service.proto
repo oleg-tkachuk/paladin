@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+
+// ObjectTagService isolates the tag-only path so callers can be granted
+// "TagObject" without "UpdateObject" — common pattern for downstream
+// classification systems.
+service ObjectTagService {
+  rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse);
+  rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse);
+  rpc DeleteObjectTags(DeleteObjectTagsRequest) returns (DeleteObjectTagsResponse);
+}
+
+message GetObjectTagsRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetObjectTagsResponse {
+  map<string, string> tags = 1;
+}
+
+message PutObjectTagsRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // Replaces the entire tag set.
+  map<string, string> tags = 3;
+}
+
+message PutObjectTagsResponse {
+  map<string, string> tags = 1;
+}
+
+message DeleteObjectTagsRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // If empty, all tags are removed; otherwise only the listed keys.
+  repeated string keys = 3;
+}
+
+message DeleteObjectTagsResponse {
+  map<string, string> tags = 1;
+}

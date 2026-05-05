@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bindObjectKeyToBucket = `-- name: BindObjectKeyToBucket :execrows
+UPDATE object_keys
+SET backend_id  = $3,
+    bucket_name = $4
+WHERE tenant_id = $1 AND object_key = $2
+  AND ($5::bigint = 0
+       OR resource_version = $5::bigint)
+`
+
+// Atomically rebinds an object_key to a different (backend_id, bucket_name).
+// The DB trigger enforce_object_key_bucket_tenancy validates the tenancy
+// constraint (single-tenant buckets reject mismatched tenants).
+func (q *Queries) BindObjectKeyToBucket(ctx context.Context, tenantID pgtype.UUID, objectKey string, backendID string, bucketName string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, bindObjectKeyToBucket,
+		tenantID,
+		objectKey,
+		backendID,
+		bucketName,
+		expectedVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createObjectKey = `-- name: CreateObjectKey :exec
 
 INSERT INTO object_keys (
@@ -83,7 +109,7 @@ func (q *Queries) GetEffectivePolicy(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectKey = `-- name: GetObjectKey :one
-SELECT object_keys.tenant_id, object_keys.object_key, object_keys.display_name, object_keys.backend_id, object_keys.cedar_policy, object_keys.cedar_policy_hash, object_keys.lifecycle_rules, object_keys.resource_version, object_keys.created_at, object_keys.updated_at, object_keys.bucket_name
+SELECT object_keys.tenant_id, object_keys.object_key, object_keys.display_name, object_keys.backend_id, object_keys.cedar_policy, object_keys.cedar_policy_hash, object_keys.lifecycle_rules, object_keys.resource_version, object_keys.created_at, object_keys.updated_at, object_keys.bucket_name, object_keys.constraints
 FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2
 `
@@ -107,12 +133,13 @@ func (q *Queries) GetObjectKey(ctx context.Context, tenantID pgtype.UUID, object
 		&i.ObjectKey.CreatedAt,
 		&i.ObjectKey.UpdatedAt,
 		&i.ObjectKey.BucketName,
+		&i.ObjectKey.Constraints,
 	)
 	return i, err
 }
 
 const listObjectKeys = `-- name: ListObjectKeys :many
-SELECT object_keys.tenant_id, object_keys.object_key, object_keys.display_name, object_keys.backend_id, object_keys.cedar_policy, object_keys.cedar_policy_hash, object_keys.lifecycle_rules, object_keys.resource_version, object_keys.created_at, object_keys.updated_at, object_keys.bucket_name
+SELECT object_keys.tenant_id, object_keys.object_key, object_keys.display_name, object_keys.backend_id, object_keys.cedar_policy, object_keys.cedar_policy_hash, object_keys.lifecycle_rules, object_keys.resource_version, object_keys.created_at, object_keys.updated_at, object_keys.bucket_name, object_keys.constraints
 FROM object_keys
 WHERE tenant_id = $1
   AND ($2::text IS NULL OR object_key > $2::text)
@@ -145,6 +172,7 @@ func (q *Queries) ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afte
 			&i.ObjectKey.CreatedAt,
 			&i.ObjectKey.UpdatedAt,
 			&i.ObjectKey.BucketName,
+			&i.ObjectKey.Constraints,
 		); err != nil {
 			return nil, err
 		}

@@ -1,34 +1,62 @@
-// Cedar schema for PALADIN authorization model.
+// Cedar schema for PALADIN authorization model — v2.
 //
-// Evaluated at presign time (write path) and at DownloadObject/GetObject
-// time (read path). Deny-by-default: an object operation is permitted only
-// if ≥1 permit rule matches AND no forbid rule matches.
+// Five entity types form a strict containment hierarchy:
 //
-// Entities:
-//   - Tenant:    one per PALADIN tenant
-//   - Bucket:    one per logical bucket; parent=Tenant
-//   - PathPrefix: (synthetic) hierarchical entity representing a path prefix;
-//                 used for prefix-based permit rules via entity hierarchy
-//   - Object:    transient; built per-request, never persisted as an entity
+//   StorageBackend
+//   └── Bucket
+//        └── ObjectKey            ← parent is BOTH Bucket and Tenant (multi-parent)
+//             └── Object
+//   Tenant
+//   └── ObjectKey
+//   Tenant
+//   └── User
+//   Tenant
+//   └── ApiKey
 //
-// Context (per-request):
-//   - size_bytes      — declared size from the caller (may be 0 if unknown)
-//   - content_type    — declared MIME
-//   - now             — evaluation timestamp (for time-bound rules)
-//   - ip              — caller IP (for geofencing)
+// Actions are grouped by plane:
+//   * Admin actions (control plane) target StorageBackend / Bucket / Tenant /
+//     ObjectKey resources.
+//   * Data actions (data plane) target ObjectKey (List*) or Object resources.
+//   * IAM actions (iam plane) target Tenant / User / ApiKey resources.
+//
+// Scope enforcement is implemented as a forbid-rule template that rejects
+// any request whose `resource` does not match a Scope on the principal.
+
+// ─── Entities ───────────────────────────────────────────────────────────────
+
+entity StorageBackend = {
+  backend_id: String,
+  kind: String,
+  region: String,
+};
+
+entity Bucket in [StorageBackend] = {
+  bucket_name: String,
+  backend_id: String,
+  owner_tenant_id: String,
+  region: String,
+  labels: Set<String>,
+};
 
 entity Tenant = {
+  tenant_id: String,
   display_name: String,
-  tier: String,
+  labels: Set<String>,
 };
 
-entity Bucket in [Tenant] = {
-  bucket_id: String,
-  storage_backend: String,
+entity ObjectKey in [Bucket, Tenant] = {
+  object_key: String,
+  tenant_id: String,
+  bucket_name: String,
+  backend_id: String,
 };
 
-entity Object in [Bucket] = {
-  key: String,
+entity Object in [ObjectKey] = {
+  object_id: String,
+  object_key: String,
+  bucket_name: String,
+  backend_id: String,
+  tenant_id: String,
   state: String,
   size_bytes: Long,
   content_type: String,
@@ -36,40 +64,118 @@ entity Object in [Bucket] = {
 };
 
 entity User in [Tenant] = {
+  subject: String,
+  tenant_id: String,
   roles: Set<String>,
+  // Scope strings of the form "type:value" e.g. "bucket:paladin-archive".
+  scopes: Set<String>,
+  audience: String,    // audience of the presented JWT
+  disabled: Bool,
 };
 
+entity ApiKey in [Tenant] = {
+  api_key_id: String,
+  tenant_id: String,
+  roles: Set<String>,
+  scopes: Set<String>,
+  revoked: Bool,
+};
+
+// ─── Action groups ──────────────────────────────────────────────────────────
+
+// Admin (control plane) — backends.
+action "ManageBackend" appliesTo {
+  principal: [User, ApiKey],
+  resource: [StorageBackend],
+  context: { now: Long, ip: String, audience: String }
+};
+
+action "ReadBackend" appliesTo {
+  principal: [User, ApiKey],
+  resource: [StorageBackend],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// Admin — buckets.
+action "ManageBucket", "BindBucketToBackend" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Bucket],
+  context: { now: Long, ip: String, audience: String }
+};
+
+action "ReadBucket" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Bucket],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// Admin — tenants.
+action "ManageTenant" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Tenant],
+  context: { now: Long, ip: String, audience: String }
+};
+
+action "ReadTenant" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Tenant],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// Admin — object keys.
+action "ManageObjectKey", "BindObjectKeyToBucket" appliesTo {
+  principal: [User, ApiKey],
+  resource: [ObjectKey],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// Admin — policy CRUD on any layer.
+action "ManagePolicy" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Tenant, Bucket, ObjectKey],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// Data plane — object operations.
 action "PutObject", "PresignPut" appliesTo {
-  principal: [User],
+  principal: [User, ApiKey],
   resource: [Object],
   context: {
     size_bytes: Long,
     content_type: String,
     now: Long,
     ip: String,
+    audience: String,
   }
 };
 
 action "GetObject", "PresignGet", "HeadObject" appliesTo {
-  principal: [User],
+  principal: [User, ApiKey],
   resource: [Object],
-  context: {
-    now: Long,
-    ip: String,
-  }
+  context: { now: Long, ip: String, audience: String }
 };
 
-action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject" appliesTo {
-  principal: [User],
+action "DeleteObject", "RestoreObject", "UpdateObject", "CopyObject", "TagObject" appliesTo {
+  principal: [User, ApiKey],
   resource: [Object],
-  context: {
-    now: Long,
-    ip: String,
-  }
+  context: { now: Long, ip: String, audience: String }
 };
 
-action "AdminBucket" appliesTo {
-  principal: [User],
-  resource: [Bucket],
-  context: { now: Long }
+action "ListObjects", "InitiateMultipart" appliesTo {
+  principal: [User, ApiKey],
+  resource: [ObjectKey],
+  context: { now: Long, ip: String, audience: String }
+};
+
+action "CompleteMultipart" appliesTo {
+  principal: [User, ApiKey],
+  resource: [Object],
+  context: { now: Long, ip: String, audience: String }
+};
+
+// IAM — user / api key management.
+action "ManageUser", "ManageApiKey", "MintScopedToken" appliesTo {
+  principal: [User, ApiKey],
+  resource: [User, ApiKey, Tenant],
+  context: { now: Long, ip: String, audience: String }
 };

@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"go.uber.org/zap"
@@ -10,12 +13,25 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
-// App is the top-level runtime container. It owns every long-lived resource
-// (HTTP server, DB pool, background workers, telemetry shutdown) and is the
-// single point of orderly startup/shutdown.
+// HTTPListener bundles one *http.Server with its plane label, used for
+// startup/shutdown logging.
+type HTTPListener struct {
+	Plane  string // "data" | "admin" | "iam"
+	Server *http.Server
+	TLS    config.TLS
+}
+
+// BackgroundJob is any long-running goroutine bound to the app lifetime.
+// Run blocks until ctx is cancelled. Workers (reconciler, dispatcher,
+// purgers) all satisfy this shape.
+type BackgroundJob interface {
+	Run(ctx context.Context) error
+}
+
+// App is the top-level runtime container. v2 owns three HTTP listeners
+// (data, admin, iam) plus a fan of background workers.
 type App struct {
 	Version   string
 	Commit    string
@@ -24,24 +40,24 @@ type App struct {
 	Cfg    config.Config
 	Logger *zap.Logger
 
-	httpSrv *http.Server
+	listeners []HTTPListener
+	jobs      []BackgroundJob
 
 	db           *postgres.DB
 	otelShutdown observability.ShutdownFunc
 	Started      *atomic.Bool
 
-	reconciler       *worker.ReconcilerV2
-	reconcilerCancel context.CancelFunc
+	jobsCancel context.CancelFunc
 }
 
 func NewContainer(
 	version, commit, buildTime string,
 	cfg config.Config,
 	l *zap.Logger,
-	httpSrv *http.Server,
+	listeners []HTTPListener,
 	db *postgres.DB,
 	otelShutdown observability.ShutdownFunc,
-	reconciler *worker.ReconcilerV2,
+	jobs []BackgroundJob,
 	started *atomic.Bool,
 ) *App {
 	return &App{
@@ -50,57 +66,81 @@ func NewContainer(
 		BuildTime:    buildTime,
 		Cfg:          cfg,
 		Logger:       l,
-		httpSrv:      httpSrv,
+		listeners:    listeners,
+		jobs:         jobs,
 		db:           db,
 		otelShutdown: otelShutdown,
-		reconciler:   reconciler,
 		Started:      started,
 	}
 }
 
+// Run starts every HTTP listener and blocks until the first one returns a
+// non-clean shutdown error. Subsequent listeners are stopped via Shutdown.
 func (a *App) Run() error {
-	errCh := make(chan error, 1)
+	errCh := make(chan error, len(a.listeners))
+	var wg sync.WaitGroup
 
-	go func() {
-		if a.Cfg.Server.HTTP.TLS.Enabled {
-			a.Logger.Info("Starting HTTPS server with TLS",
-				zap.String("addr", a.httpSrv.Addr),
-				zap.String("cert_path", a.Cfg.Server.HTTP.TLS.CertPath),
+	for i := range a.listeners {
+		l := a.listeners[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.Logger.Info("HTTP plane listening",
+				zap.String("plane", l.Plane),
+				zap.String("addr", l.Server.Addr),
+				zap.Bool("tls", l.TLS.Enabled),
 			)
-			if err := a.httpSrv.ListenAndServeTLS(a.Cfg.Server.HTTP.TLS.CertPath, a.Cfg.Server.HTTP.TLS.KeyPath); err != nil && err != http.ErrServerClosed {
-				errCh <- err
+			var err error
+			if l.TLS.Enabled {
+				err = l.Server.ListenAndServeTLS(l.TLS.CertPath, l.TLS.KeyPath)
+			} else {
+				err = l.Server.ListenAndServe()
 			}
-		} else {
-			a.Logger.Info("Starting HTTP server", zap.String("addr", a.httpSrv.Addr))
-			if err := a.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				errCh <- err
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errCh <- fmt.Errorf("plane %s: %w", l.Plane, err)
 			}
-		}
-	}()
+		}()
+	}
 
-	if a.reconciler != nil {
-		rctx, cancel := context.WithCancel(context.Background())
-		a.reconcilerCancel = cancel
-		go func() { _ = a.reconciler.Run(rctx) }()
+	if len(a.jobs) > 0 {
+		jctx, cancel := context.WithCancel(context.Background())
+		a.jobsCancel = cancel
+		for i := range a.jobs {
+			job := a.jobs[i]
+			go func() {
+				if err := job.Run(jctx); err != nil && !errors.Is(err, context.Canceled) {
+					a.Logger.Warn("background job exited with error",
+						zap.String("type", fmt.Sprintf("%T", job)),
+						zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	a.Started.Store(true)
 
-	return <-errCh
+	// Block on the first listener error; clean shutdown comes via Shutdown.
+	select {
+	case err := <-errCh:
+		return err
+	}
 }
 
+// Shutdown stops every HTTP listener and the reconciler. Idempotent.
 func (a *App) Shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Server.ShutdownTimeout)
 	defer cancel()
 
 	a.Logger.Info("Shutting down...")
 
-	if a.reconcilerCancel != nil {
-		a.reconcilerCancel()
+	if a.jobsCancel != nil {
+		a.jobsCancel()
 	}
 
-	if a.httpSrv != nil {
-		_ = a.httpSrv.Shutdown(ctx)
+	for _, l := range a.listeners {
+		if l.Server != nil {
+			_ = l.Server.Shutdown(ctx)
+		}
 	}
 
 	if a.db != nil {

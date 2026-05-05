@@ -78,7 +78,7 @@ func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenant
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2
 `
@@ -111,6 +111,10 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.Object.CurrentVersionID,
+		&i.Object.LockMode,
+		&i.Object.LockRetainUntil,
+		&i.Object.LegalHold,
 	)
 	return i, err
 }
@@ -134,7 +138,7 @@ func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, ob
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1
   AND object_key = $2
@@ -188,6 +192,10 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectK
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.Object.CurrentVersionID,
+			&i.Object.LockMode,
+			&i.Object.LockRetainUntil,
+			&i.Object.LegalHold,
 		); err != nil {
 			return nil, err
 		}
@@ -199,8 +207,45 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectK
 	return items, nil
 }
 
+const lookupObjectByID = `-- name: LookupObjectByID :one
+SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.state,
+       b.backend_id, b.bucket_name
+FROM objects o
+JOIN object_keys b
+  ON b.tenant_id = o.tenant_id AND b.object_key = o.object_key
+WHERE o.object_id = $1
+`
+
+type LookupObjectByIDRow struct {
+	ObjectID   pgtype.UUID `json:"object_id"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	ObjectKey  string      `json:"object_key"`
+	Key        string      `json:"key"`
+	State      ObjectState `json:"state"`
+	BackendID  string      `json:"backend_id"`
+	BucketName string      `json:"bucket_name"`
+}
+
+// Reads an object by id alone. Used by background workers (reconciler,
+// replicator) that don't carry a tenant context. Joins object_keys to
+// materialize the bucket binding so the caller can call S3 in one trip.
+func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error) {
+	row := q.db.QueryRow(ctx, lookupObjectByID, objectID)
+	var i LookupObjectByIDRow
+	err := row.Scan(
+		&i.ObjectID,
+		&i.TenantID,
+		&i.ObjectKey,
+		&i.Key,
+		&i.State,
+		&i.BackendID,
+		&i.BucketName,
+	)
+	return i, err
+}
+
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED'
 `
@@ -234,6 +279,10 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, o
 		&i.Object.CommittedAt,
 		&i.Object.TerminatedAt,
 		&i.Object.PresignExpiresAt,
+		&i.Object.CurrentVersionID,
+		&i.Object.LockMode,
+		&i.Object.LockRetainUntil,
+		&i.Object.LegalHold,
 	)
 	return i, err
 }
@@ -307,7 +356,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objec
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
@@ -350,6 +399,10 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.CommittedAt,
 			&i.Object.TerminatedAt,
 			&i.Object.PresignExpiresAt,
+			&i.Object.CurrentVersionID,
+			&i.Object.LockMode,
+			&i.Object.LockRetainUntil,
+			&i.Object.LegalHold,
 		); err != nil {
 			return nil, err
 		}

@@ -16,11 +16,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -39,6 +42,15 @@ type Storage interface {
 	DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error
 	// CompletionMode is derived from the objectKey's storage backend config.
 	CompletionMode(objectKey string) CompletionMode
+}
+
+// BucketMeta is the minimal projection of bucket metadata the object
+// handler needs at promote / delete time. Returned by LookupBucketMeta.
+type BucketMeta struct {
+	BackendID         string
+	BucketName        string
+	VersioningEnabled bool
+	ObjectLockEnabled bool
 }
 
 type CompletionMode uint8
@@ -106,10 +118,19 @@ type Repository interface {
 	// string means the row exists but no bucket has been bound — the
 	// storage adapter falls back to its configured default in that case.
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
+	// LookupBucketMeta returns the bucket binding plus the metadata needed for
+	// versioning / lock decisions on the hot path. Implementations should
+	// satisfy this with a single query — handlers call it on every promote.
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (BucketMeta, error)
 	// HardDelete removes the row outright; caller is responsible for
 	// having already deleted the storage-side object. expectedVersion=0
 	// skips OCC. Returns ErrVersionMismatch if no rows affected.
 	HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
+	// HardDeleteWithBypass performs the same delete as HardDelete but inside
+	// a transaction that sets `SET LOCAL paladin.governance_bypass = true`, which
+	// the object_versions trigger reads to permit removal of GOVERNANCE-locked
+	// rows. COMPLIANCE-locked rows are still rejected by the trigger.
+	HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
 	// LiveCollision reports whether a non-DELETED row already occupies
 	// (tenant, object_key, key); used to refuse RestoreObject when the
 	// slot has been reused by a fresh upload.
@@ -127,6 +148,7 @@ type Object struct {
 	ContentType      string
 	SizeBytes        int64
 	ETag             string
+	ChecksumAlgo     string // CRC32C / SHA256 / MD5 — propagated from CreateObjectArgs
 	Checksum         string
 	Sequencer        string
 	Metadata         map[string]string
@@ -192,7 +214,14 @@ type Handler struct {
 	filter  *cel.Evaluator
 	sm      *statemachine.Transitioner
 	presign PresignConfig
+	// versions is the optional version recorder. When set + the parent
+	// bucket has versioning enabled, the handler emits version history rows
+	// on promote / soft-delete. Nil disables versioning side-effects entirely.
+	versions *VersionHandler
 }
+
+// SetVersionHandler attaches the optional version recorder. Wired by main.
+func (h *Handler) SetVersionHandler(v *VersionHandler) { h.versions = v }
 
 type PresignConfig struct {
 	DefaultTTL     time.Duration
@@ -388,7 +417,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	objectKey, objectID, err := parseResourceName(in.Name)
+	objectKey, objectID, err := apiutil.ParseObjectName(in.Name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -426,10 +455,14 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	_ = changed // idempotent — either way, return fresh object
 	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// Record a version row only on the actual transition — retried completes
+	// land here as `changed=false` and must NOT double-write history.
+	if changed {
+		_ = h.versions.OnPromote(ctx, fresh)
 	}
 	return &fresh, nil
 }
@@ -516,11 +549,11 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 
 // GetObject returns metadata for an object addressed by its resource name.
 func (h *Handler) GetObject(ctx context.Context, name string) (*Object, error) {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := parseResourceName(name)
+	objectKey, objectID, err := apiutil.ParseObjectName(name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -534,7 +567,7 @@ func (h *Handler) GetObject(ctx context.Context, name string) (*Object, error) {
 // LookupObject resolves an object by (object_key, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
 func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Object, error) {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -562,11 +595,11 @@ type DownloadObjectOutput struct {
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
 // object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
 func (h *Handler) DownloadObject(ctx context.Context, name string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
-	tenantID, principal, err := callerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := parseResourceName(name)
+	objectKey, objectID, err := apiutil.ParseObjectName(name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -624,11 +657,11 @@ type UpdateObjectInput struct {
 }
 
 func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
-	tenantID, _, err := callerContext(ctx)
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	_, objectID, err := parseResourceName(in.Name)
+	_, objectID, err := apiutil.ParseObjectName(in.Name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -654,13 +687,15 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 // ─── DeleteObject (soft + hard) ─────────────────────────────────────────────
 
 // DeleteObject performs a soft-delete by default; permanent=true removes
-// the object from S3 first, then drops the row.
-func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string, permanent bool) error {
-	tenantID, principal, err := callerContext(ctx)
+// the object from S3 first, then drops the row. bypassGovernance opt-in
+// honored only for callers holding `lock.governance.bypass` or
+// `platform.admin` — protects compliance-mode locks regardless.
+func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string, permanent, bypassGovernance bool) error {
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
-	objectKey, objectID, err := parseResourceName(name)
+	objectKey, objectID, err := apiutil.ParseObjectName(name)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -674,7 +709,11 @@ func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string
 	}, cedar.ActionDeleteObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return err
 	}
-	rv, _ := parseInt64(resourceVersion)
+	rv, err := parseInt64(resourceVersion)
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("invalid resource_version: %w", err))
+	}
 	if !permanent {
 		if err := h.sm.SoftDelete(ctx, objectID, rv); err != nil {
 			if errors.Is(err, statemachine.ErrConflict) {
@@ -682,6 +721,9 @@ func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string
 			}
 			return connect.NewError(connect.CodeInternal, err)
 		}
+		// Best-effort delete-marker write; failure here does not undo the
+		// state transition (the object is still soft-deleted).
+		_ = h.versions.OnSoftDelete(ctx, obj)
 		return nil
 	}
 	// Permanent: remove from storage backend first, then drop the row.
@@ -692,7 +734,15 @@ func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string
 	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage delete: %w", err))
 	}
-	if err := h.repo.HardDelete(ctx, tenantID, objectID, rv); err != nil {
+	deleteFn := h.repo.HardDelete
+	if bypassGovernance {
+		if !principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin") {
+			return connect.NewError(connect.CodePermissionDenied,
+				errors.New("bypass_governance_retention requires role lock.governance.bypass or platform.admin"))
+		}
+		deleteFn = h.repo.HardDeleteWithBypass
+	}
+	if err := deleteFn(ctx, tenantID, objectID, rv); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
@@ -703,12 +753,16 @@ func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string
 
 // ─── RestoreObject ──────────────────────────────────────────────────────────
 
-func (h *Handler) RestoreObject(ctx context.Context, name string) (*Object, error) {
-	tenantID, _, err := callerContext(ctx)
+// RestoreObject brings a soft-deleted object back. resourceVersion enforces
+// OCC against the row read here — empty disables the check (legacy
+// behavior). Versioning-aware: when bucket has versioning_enabled, also
+// drops the most recent delete-marker before flipping state.
+func (h *Handler) RestoreObject(ctx context.Context, name, resourceVersion string) (*Object, error) {
+	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := parseResourceName(name)
+	objectKey, objectID, err := apiutil.ParseObjectName(name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -720,6 +774,21 @@ func (h *Handler) RestoreObject(ctx context.Context, name string) (*Object, erro
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("cannot restore from state %s", obj.State))
 	}
+	// OCC: when caller provided a resource_version, it must match the row
+	// we just loaded. TOCTOU-safe enough for restore — concurrent updates
+	// on a DELETED row are vanishingly rare (the only mutation paths are
+	// sm.Restore itself and HardDelete; both serialize via state guards).
+	if resourceVersion != "" {
+		expected, err := parseInt64(resourceVersion)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("invalid resource_version: %w", err))
+		}
+		if expected != obj.ResourceVersion {
+			return nil, connect.NewError(connect.CodeAborted,
+				fmt.Errorf("resource_version mismatch: expected %d, current %d", expected, obj.ResourceVersion))
+		}
+	}
 	collision, err := h.repo.LiveCollision(ctx, tenantID, objectKey, obj.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -727,6 +796,13 @@ func (h *Handler) RestoreObject(ctx context.Context, name string) (*Object, erro
 	if collision {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("a live object already occupies %s/%s", objectKey, obj.Key))
+	}
+	// Versioning-aware restore: if the parent bucket has versioning_enabled
+	// AND the most recent version is a delete-marker, drop that pointer back
+	// to the previous non-marker version. This makes RestoreObject a single
+	// "make visible again" affordance whether or not versioning is on.
+	if err := h.versions.UnsetDeleteMarkerCurrent(ctx, obj); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("restore version pointer: %w", err))
 	}
 	if err := h.sm.Restore(ctx, objectID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -752,11 +828,11 @@ type CopyObjectInput struct {
 }
 
 func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
-	tenantID, principal, err := callerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	srcObjectKey, srcObjectID, err := parseResourceName(in.SourceName)
+	srcObjectKey, srcObjectID, err := apiutil.ParseObjectName(in.SourceName)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -814,32 +890,31 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	}, Location{
 		TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
 	}); err != nil {
+		// Compensate: the destination row was created PENDING. Without this
+		// transition the row would linger forever, since the reconciler only
+		// promotes via HEAD against an object that the failed copy never wrote.
+		if mfErr := h.sm.MarkFailed(ctx, dst.ObjectID, "storage copy failed"); mfErr != nil {
+			return nil, connect.NewError(connect.CodeInternal,
+				fmt.Errorf("storage copy: %w (compensation also failed: %v)", err, mfErr))
+		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
 	}
-	if _, err := h.sm.PromoteToAvailable(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
-		src.Checksum, "", statemachine.SourceRPC); err != nil {
+	changed, err := h.sm.PromoteToAvailable(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
+		src.Checksum, "", statemachine.SourceRPC)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestObjectKey, dst.ObjectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	if changed {
+		_ = h.versions.OnPromote(ctx, fresh)
+	}
 	return &fresh, nil
 }
 
 // ─── shared internals ──────────────────────────────────────────────────────
-
-func callerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
-	tenantID, err := auth.TenantFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	return tenantID, p, nil
-}
 
 func (h *Handler) authorize(
 	ctx context.Context,
@@ -869,9 +944,7 @@ func parseInt64(s string) (int64, error) {
 	if s == "" {
 		return 0, nil
 	}
-	var n int64
-	_, err := fmt.Sscanf(s, "%d", &n)
-	return n, err
+	return strconv.ParseInt(s, 10, 64)
 }
 
 func coalesceMap(primary, fallback map[string]string) map[string]string {
@@ -883,36 +956,6 @@ func coalesceMap(primary, fallback map[string]string) map[string]string {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// parseResourceName parses "object_keys/{objectKey}/objects/{object_id}".
-func parseResourceName(name string) (objectKey string, objectID uuid.UUID, err error) {
-	const prefix = "object_keys/"
-	if len(name) < len(prefix) || name[:len(prefix)] != prefix {
-		return "", uuid.Nil, fmt.Errorf("invalid resource name %q", name)
-	}
-	rest := name[len(prefix):]
-	sep := -1
-	for i := 0; i < len(rest); i++ {
-		if rest[i] == '/' {
-			sep = i
-			break
-		}
-	}
-	if sep < 0 {
-		return "", uuid.Nil, fmt.Errorf("invalid resource name %q", name)
-	}
-	objectKey = rest[:sep]
-	remainder := rest[sep+1:]
-	const objects = "objects/"
-	if len(remainder) < len(objects) || remainder[:len(objects)] != objects {
-		return "", uuid.Nil, fmt.Errorf("invalid resource name %q", name)
-	}
-	id, err := uuid.Parse(remainder[len(objects):])
-	if err != nil {
-		return "", uuid.Nil, fmt.Errorf("invalid object_id in %q: %w", name, err)
-	}
-	return objectKey, id, nil
-}
-
 func resolveMaxSize(defaultMax, hint int64) int64 {
 	if hint > 0 && hint < defaultMax {
 		return hint
@@ -920,9 +963,22 @@ func resolveMaxSize(defaultMax, hint int64) int64 {
 	return defaultMax
 }
 
+// pgUniqueViolation is the SQLSTATE code Postgres returns for a unique-index
+// conflict. Defined here to avoid pulling in jackc/pgerrcode just for one
+// constant.
+const pgUniqueViolation = "23505"
+
 func mapCreateErr(err error) error {
-	// Real wiring inspects pgx error codes for 23505 (unique violation).
-	// Intentionally stubbed — filled in during the handler sweep.
+	if err == nil {
+		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgUniqueViolation:
+			return connect.NewError(connect.CodeAlreadyExists, err)
+		}
+	}
 	return connect.NewError(connect.CodeInternal, err)
 }
 

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1";
+
+import "buf/validate/validate.proto";
+
+// Scope narrows what resources a Principal may touch. Encoded into JWT
+// `scopes` claim as wire-string `<type>:<value>` (e.g. "bucket:paladin-archive").
+//
+// Scope semantics — a request resource is allowed when at least one Scope
+// in the principal's set matches the resource AND no Cedar `forbid` rule
+// fires. Wildcard `*` (and only `*`) is special-cased per type.
+message Scope {
+  ScopeType type = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  // Either a literal value or `*` for "all of this type". For OBJECT_KEY a
+  // glob form `bucket/objectKey/*` is accepted; matching is server-side.
+  string value = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+enum ScopeType {
+  SCOPE_TYPE_UNSPECIFIED = 0;
+  SCOPE_TYPE_TENANT = 1;
+  SCOPE_TYPE_BACKEND = 2;
+  SCOPE_TYPE_BUCKET = 3;
+  SCOPE_TYPE_OBJECT_KEY = 4;
+}

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1";
+
+import "buf/validate/validate.proto";
+
+// PageRequest is the AIP-158 pagination input shared across List RPCs.
+message PageRequest {
+  // Server caps page_size at a per-RPC max; 0 means use the server default.
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  // Opaque cursor returned in the previous PageResponse.next_page_token.
+  string page_token = 2;
+}
+
+message PageResponse {
+  string next_page_token = 1;
+  // Total matching items, set only when the RPC documents it as available
+  // (typically expensive to compute; most List RPCs leave it 0).
+  int64 total_size = 2;
+}
+
+// SortOrder is reused across services that expose order_by.
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}

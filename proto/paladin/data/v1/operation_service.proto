@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+import "paladin/common/v1/pagination.proto";
+import "paladin/data/v1/batch_service.proto";
+
+// OperationService is the data-plane mirror — caller sees only operations
+// they initiated (filtered by initiator_subject from JWT).
+service OperationService {
+  rpc GetOperation(GetOperationRequest) returns (Operation);
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+  rpc CancelOperation(CancelOperationRequest) returns (Operation);
+}
+
+message GetOperationRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListOperationsRequest {
+  paladin.common.v1.PageRequest page = 1;
+  string filter = 2;
+}
+
+message ListOperationsResponse {
+  repeated Operation operations = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message CancelOperationRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}

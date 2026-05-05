@@ -64,9 +64,19 @@ FROM storage_backends
 WHERE id = $1
 `
 
-func (q *Queries) GetStorageBackend(ctx context.Context, id string) (StorageBackend, error) {
+type GetStorageBackendRow struct {
+	ID            string             `json:"id"`
+	Kind          string             `json:"kind"`
+	Endpoint      *string            `json:"endpoint"`
+	Region        *string            `json:"region"`
+	EventsEnabled bool               `json:"events_enabled"`
+	EventsTarget  *string            `json:"events_target"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error) {
 	row := q.db.QueryRow(ctx, getStorageBackend, id)
-	var i StorageBackend
+	var i GetStorageBackendRow
 	err := row.Scan(
 		&i.ID,
 		&i.Kind,

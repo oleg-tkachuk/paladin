@@ -63,7 +63,7 @@ func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter
 FROM buckets
 WHERE backend_id = $1 AND bucket_name = $2
 `
@@ -84,12 +84,25 @@ func (q *Queries) GetBucket(ctx context.Context, backendID string, bucketName st
 		&i.Bucket.ResourceVersion,
 		&i.Bucket.CreatedAt,
 		&i.Bucket.UpdatedAt,
+		&i.Bucket.OwnerTenantID,
+		&i.Bucket.CedarPolicy,
+		&i.Bucket.CedarPolicyHash,
+		&i.Bucket.Constraints,
+		&i.Bucket.LifecycleRules,
+		&i.Bucket.ObjectLockEnabled,
+		&i.Bucket.ObjectLockDefaultMode,
+		&i.Bucket.ObjectLockDefaultRetentionSeconds,
+		&i.Bucket.VersioningEnabled,
+		&i.Bucket.VersioningKeepDeletesForever,
+		&i.Bucket.ReplicationEnabled,
+		&i.Bucket.ReplicationDestination,
+		&i.Bucket.ReplicationFilter,
 	)
 	return i, err
 }
 
 const listBuckets = `-- name: ListBuckets :many
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
   AND ($2::text IS NULL
@@ -125,6 +138,19 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 			&i.Bucket.ResourceVersion,
 			&i.Bucket.CreatedAt,
 			&i.Bucket.UpdatedAt,
+			&i.Bucket.OwnerTenantID,
+			&i.Bucket.CedarPolicy,
+			&i.Bucket.CedarPolicyHash,
+			&i.Bucket.Constraints,
+			&i.Bucket.LifecycleRules,
+			&i.Bucket.ObjectLockEnabled,
+			&i.Bucket.ObjectLockDefaultMode,
+			&i.Bucket.ObjectLockDefaultRetentionSeconds,
+			&i.Bucket.VersioningEnabled,
+			&i.Bucket.VersioningKeepDeletesForever,
+			&i.Bucket.ReplicationEnabled,
+			&i.Bucket.ReplicationDestination,
+			&i.Bucket.ReplicationFilter,
 		); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// ObjectKeyService manages tenant-scoped logical namespaces and their
+// binding to physical buckets. Tenant admins manage their own object_keys;
+// platform admins can manage cross-tenant.
+service ObjectKeyService {
+  rpc CreateObjectKey(CreateObjectKeyRequest) returns (ObjectKey);
+  rpc GetObjectKey(GetObjectKeyRequest) returns (ObjectKey);
+  rpc UpdateObjectKey(UpdateObjectKeyRequest) returns (ObjectKey);
+  rpc DeleteObjectKey(DeleteObjectKeyRequest) returns (DeleteObjectKeyResponse);
+  rpc ListObjectKeys(ListObjectKeysRequest) returns (ListObjectKeysResponse);
+
+  rpc SetObjectKeyPolicy(SetObjectKeyPolicyRequest) returns (ObjectKey);
+
+  // BindObjectKeyToBucket / RebindObjectKey is intentionally distinct from
+  // UpdateObjectKey — re-binding has data-locality implications worth a
+  // separate audit entry.
+  rpc BindObjectKeyToBucket(BindObjectKeyToBucketRequest) returns (ObjectKey);
+}
+
+message CreateObjectKeyRequest {
+  // Parent: "tenants/{tenant_id}".
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+  string object_key = 2 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
+  ObjectKey object_key_resource = 3 [(buf.validate.field).required = true];
+}
+
+message GetObjectKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateObjectKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  ObjectKey object_key_resource = 4;
+}
+
+message DeleteObjectKeyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  bool force = 3; // refuse when non-DELETED objects exist unless force=true
+}
+
+message DeleteObjectKeyResponse {}
+
+message ListObjectKeysRequest {
+  string parent = 1; // "tenants/{tenant_id}" or empty for cross-tenant
+  paladin.common.v1.PageRequest page = 2;
+  string filter = 3;
+}
+
+message ListObjectKeysResponse {
+  repeated ObjectKey object_keys = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message SetObjectKeyPolicyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  string cedar_policy = 3;
+}
+
+message BindObjectKeyToBucketRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // Target bucket resource name.
+  string bucket = 3 [(buf.validate.field).string.min_len = 1];
+}

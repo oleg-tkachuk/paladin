@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -19,11 +20,21 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/connectshim"
-	"github.com/oleg-tkachuk/paladin/internal/api/pb/v1/paladinv1connect"
-	policyh "github.com/oleg-tkachuk/paladin/internal/api/v1/policy"
-	systemh "github.com/oleg-tkachuk/paladin/internal/api/v1/system"
+	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
+	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
+	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/app"
+
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
+	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
@@ -33,8 +44,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
-	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 	"github.com/oleg-tkachuk/paladin/migrations"
 )
 
@@ -45,11 +56,11 @@ const (
 
 var (
 	configPath string
-	//nolint:unused // retained for ldflags injection
+	//nolint:unused
 	version = "dev"
-	//nolint:unused // retained for ldflags injection
+	//nolint:unused
 	commit = "none"
-	//nolint:unused // retained for ldflags injection
+	//nolint:unused
 	buildTime = "unknown"
 )
 
@@ -87,81 +98,51 @@ var rootCmd = &cobra.Command{
 			l.Fatal("Database ping failed", zap.Error(err))
 		}
 
-		// Two-phase migration: schema first, then seed + backfill, then the
-		// constraints that depend on backfilled data. Migration 005 enforces
-		// NOT NULL on object_keys.bucket_name and would fail on legacy DBs
-		// without the backfill in between.
-		if err := db.RunMigrationsTo(ctx, migrations.FS, 4); err != nil && !errors.Is(err, context.Canceled) {
-			l.Fatal("Phase-1 migrations failed", zap.Error(err))
-		}
-
-		if err := seedStorageBackends(ctx, db.Queries, cfg.Storage); err != nil {
-			l.Fatal("Failed to seed storage backends", zap.Error(err))
-		}
-
-		if err := seedDefaultBuckets(ctx, db.Pool, cfg.Storage); err != nil {
-			l.Fatal("Failed to seed default buckets", zap.Error(err))
-		}
-
-		if n, err := backfillObjectKeyBuckets(ctx, db.Pool, cfg.Storage); err != nil {
-			l.Fatal("Failed to backfill object_keys.bucket_name", zap.Error(err))
-		} else if n > 0 {
-			l.Info("Backfilled bucket_name for legacy object_keys",
-				zap.Int64("rows", n),
-			)
-		}
-
+		// All migrations now run in one phase — v2 schema is self-contained.
 		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
-			l.Fatal("Phase-2 migrations failed", zap.Error(err))
+			l.Fatal("Migrations failed", zap.Error(err))
 		}
 
-		srv, err := buildServer(ctx, cfg, db, l)
+		listeners, err := buildListeners(ctx, cfg, db, l)
 		if err != nil {
 			l.Fatal("Failed to assemble server", zap.Error(err))
 		}
 
-		l.Info("Paladin starting",
-			zap.String("addr", cfg.Server.HTTP.Addr),
+		started := &atomic.Bool{}
+		jobs := buildBackgroundJobs(cfg, db, l)
+		container := app.NewContainer(version, commit, buildTime, cfg, l, listeners, db, nil, jobs, started)
+
+		l.Info("Paladin starting (v2: data + admin + iam planes)",
 			zap.String("version", version),
 			zap.String("commit", commit),
 			zap.String("build_time", buildTime),
 		)
 
-		serveErr := make(chan error, 1)
-		go func() {
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				serveErr <- err
-			}
-			close(serveErr)
-		}()
+		runErr := make(chan error, 1)
+		go func() { runErr <- container.Run() }()
 
 		select {
 		case <-ctx.Done():
 			l.Info("Shutdown signal received")
-		case err := <-serveErr:
+		case err := <-runErr:
 			l.Error("HTTP server failed", zap.Error(err))
 		}
 
-		grace := cfg.Server.ShutdownTimeout
-		if grace <= 0 {
-			grace = defaultShutdownGrace
-		}
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			l.Warn("Graceful shutdown failed", zap.Error(err))
-		}
-		_ = l.Sync()
+		container.Shutdown()
 	},
 }
 
-// buildServer assembles repositories, storage, policy engine, handlers, and
-// Connect shims into an h2c-capable HTTP server. It does not call Wire's
-// generated injector — the DI shape is small enough to compose directly.
-func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger) (*http.Server, error) {
+// buildListeners assembles repositories, storage, policy engine, handlers,
+// and three Connect mux'es (data / admin / iam) into independent HTTP
+// servers. Each plane gets its own audience verifier + interceptor stack.
+func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger) ([]app.HTTPListener, error) {
 	pool, ok := db.Pool.(*pgxpool.Pool)
 	if !ok {
 		return nil, errors.New("DB.Pool is not *pgxpool.Pool")
+	}
+
+	if cfg.Auth.SigningKey == "" {
+		return nil, errors.New("auth.signing_key (or signing_key_secret) is required")
 	}
 
 	defaultName := cfg.Storage.DefaultBackend
@@ -172,21 +153,30 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 	if !ok {
 		return nil, fmt.Errorf("storage.backends.%s not configured", defaultName)
 	}
-
 	s3c, err := s3adapter.New(ctx, backend)
 	if err != nil {
 		return nil, fmt.Errorf("s3 adapter: %w", err)
 	}
 
+	// ─── Repositories (legacy v1 + v2 IAM/admin) ─────────────────────────
 	repos := wire.Repos{
-		Object:    adapters.NewObjectRepo(db.Queries, pool),
-		ObjectKey: adapters.NewObjectKeyRepo(db.Queries, pool),
-		Bucket:    adapters.NewBucketRepo(db.Queries),
-		Tenant:    adapters.NewTenantRepo(db.Queries, pool),
-		ObjectTag: adapters.NewObjectTagRepo(db.Queries),
-		Presign:   adapters.NewPresignRepo(db.Queries, pool),
-		Multipart: adapters.NewMultipartRepo(db.Queries, pool),
-		Operation: adapters.NewOperationRepo(db.Queries),
+		Object:        adapters.NewObjectRepo(db.Queries, pool),
+		ObjectKey:     adapters.NewObjectKeyRepo(db.Queries, pool),
+		Bucket:        adapters.NewBucketRepo(db.Queries),
+		Tenant:        adapters.NewTenantRepo(db.Queries, pool),
+		ObjectTag:     adapters.NewObjectTagRepo(db.Queries),
+		Presign:       adapters.NewPresignRepo(db.Queries, pool),
+		Multipart:     adapters.NewMultipartRepo(db.Queries, pool),
+		Operation:     adapters.NewOperationRepo(db.Queries),
+		BackendV2:     adapters.NewBackendRepoV2(db.Queries),
+		BucketV2:      adapters.NewBucketRepoV2(db.Queries),
+		Audit:         adapters.NewAuditRepoV2(db.Queries),
+		Quota:         adapters.NewQuotaRepoV2(db.Queries),
+		EventSub:      adapters.NewEventSubscriptionRepoV2(db.Queries),
+		IAMUser:       adapters.NewUserRepo(db.Queries),
+		IAMApiKey:     adapters.NewApiKeyRepo(db.Queries),
+		IAMRefresh:    adapters.NewRefreshTokenRepo(db.Queries),
+		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
 	}
 	storage := wire.Storage{
 		Object:      s3c,
@@ -196,54 +186,135 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 		Provisioner: s3c,
 	}
 
+	// ─── Cedar engine + state machine + CEL ──────────────────────────────
 	polStore := policy.NewPostgresStore(pool)
 	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL)
 	if err := polEngine.Start(ctx); err != nil {
 		return nil, fmt.Errorf("policy engine start: %w", err)
 	}
-
 	sm := statemachine.New(pool)
 	celEval := cel.NewEvaluator()
 
+	// ─── Handlers ────────────────────────────────────────────────────────
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, celEval, sm, cfg)
 	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
-	bucketH := wire.ProvideBucketHandler(repos, storage, cfg)
 	tenantH := wire.ProvideTenantHandler(repos)
-	objectTagH := wire.ProvideObjectTagHandler(repos)
 	opH := wire.ProvideOperationHandler(repos)
 	batchH := wire.ProvideBatchHandler(opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, sm)
-	policyH := policyh.NewHandler()
+	policyH := wire.ProvidePolicyHandler(polEngine, polStore)
+	versionH := wire.ProvideVersionHandler(repos)
+	objH.SetVersionHandler(versionH)
+	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
 
-	var buildT time.Time
-	if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
-		buildT = t
-	}
-	systemH := systemh.NewHandler(systemh.Info{
-		Version:   version,
-		Commit:    commit,
-		BuildTime: buildT,
-	}, db, cfg, configPath)
-
-	verifier, err := buildVerifier(cfg.Auth)
+	iss, err := wire.ProvideIssuer(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("auth verifier: %w", err)
+		return nil, err
 	}
+	dec := wire.ProvideRefreshDecoder(cfg)
+	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
+	userH := wire.ProvideUserHandler(repos)
+	apikH := wire.ProvideApiKeyHandler(repos, iss)
+
+	backendH := wire.ProvideBackendV2Handler(repos, polEngine)
+	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
+	quotaH := wire.ProvideQuotaHandler(repos)
+	auditH := wire.ProvideAuditHandler(repos)
+	eventSubH := wire.ProvideEventSubHandler(repos)
+	dispatcher := &worker.Dispatcher{
+		Store:       eventSubStoreAdapter{r: repos.EventSub},
+		Logger:      l.Named("event-dispatcher"),
+		MaxAttempts: 3,
+	}
+	eventSubH.SetDispatcher(dispatcher)
+
+	// ─── Per-plane interceptor stacks ────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
 		return nil, fmt.Errorf("init protovalidate: %w", err)
 	}
-	// Order matters: validate runs *after* auth so that an unauthenticated
-	// caller can't probe field-shape rules without a token. Connect runs
-	// the *first* listed interceptor outermost, so this ordering means
-	// auth is checked first, then validation.
-	opts := connect.WithInterceptors(
-		auth.Interceptor(verifier),
+	verifierData, err := buildVerifier(ctx, cfg.Auth, auth.AudienceData, l)
+	if err != nil {
+		return nil, err
+	}
+	verifierAdmin, err := buildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l)
+	if err != nil {
+		return nil, err
+	}
+	verifierIAM, err := buildVerifier(ctx, cfg.Auth, auth.AudienceIAM, l)
+	if err != nil {
+		return nil, err
+	}
+
+	// Audit middleware — uses repos.Audit. Skipped on data plane (volume).
+	auditMW := middleware.Audit(repos.Audit, "", false) // audience set per-plane below
+
+	dataOpts := connect.WithInterceptors(
+		auth.Interceptor(verifierData),
+		auth.RequireAudience(auth.AudienceData),
+		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
+	adminOpts := connect.WithInterceptors(
+		auth.Interceptor(verifierAdmin),
+		auth.RequireAudience(auth.AudienceAdmin),
+		connect.UnaryInterceptorFunc(validateInterceptor),
+		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
+	)
+	// IAM mux has unauthenticated RPCs (Login, RefreshToken) and gated ones
+	// (WhoAmI, UserService.*, ApiKeyService.*). PermissiveInterceptor passes
+	// through when no Authorization header is present — gated RPCs reject at
+	// the role/audience layer because PrincipalFromContext returns no user.
+	iamOpts := connect.WithInterceptors(
+		auth.NewPermissiveInterceptor(verifierIAM,
+			"Login",
+			"RefreshToken",
+		),
+		middleware.NewLoginRateLimiter(),
+		connect.UnaryInterceptorFunc(validateInterceptor),
+	)
+	_ = auditMW // appended in adminOpts directly
 
-	mux := http.NewServeMux()
+	// ─── Mux assembly ────────────────────────────────────────────────────
+	dataMux := http.NewServeMux()
+	addProbes(dataMux, db)
+	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(connectdata.NewObjectServer(objH, versionH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewPresignServiceHandler(connectdata.NewPresignServer(presignH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewObjectTagServiceHandler(connectdata.NewObjectTagServer(objH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewBatchServiceHandler(connectdata.NewBatchServer(batchH), dataOpts))
+	dataMux.Handle(paladindatav1connect.NewOperationServiceHandler(connectdata.NewOperationServer(opH), dataOpts))
+
+	adminMux := http.NewServeMux()
+	addProbes(adminMux, db)
+	adminMux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
+	adminMux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
+
+	iamMux := http.NewServeMux()
+	addProbes(iamMux, db)
+	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
+	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
+	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
+
+	// ─── HTTP servers ────────────────────────────────────────────────────
+	return []app.HTTPListener{
+		{Plane: "data", Server: buildHTTPServer(cfg.Server.DataHTTP, dataMux, l), TLS: cfg.Server.DataHTTP.TLS},
+		{Plane: "admin", Server: buildHTTPServer(cfg.Server.AdminHTTP, adminMux, l), TLS: cfg.Server.AdminHTTP.TLS},
+		{Plane: "iam", Server: buildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},
+	}, nil
+}
+
+// addProbes attaches /livez, /readyz, /startupz to a mux. All three planes
+// expose the same probes so K8s liveness/readiness can target each.
+func addProbes(mux *http.ServeMux, db *postgres.DB) {
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -264,131 +335,45 @@ func buildServer(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.Handle(paladinv1connect.NewTenantServiceHandler(connectshim.NewTenantServer(tenantH), opts))
-	mux.Handle(paladinv1connect.NewObjectTagServiceHandler(connectshim.NewObjectTagServer(objectTagH), opts))
-	mux.Handle(paladinv1connect.NewObjectKeyServiceHandler(connectshim.NewObjectKeyServer(objectKeyH), opts))
-	mux.Handle(paladinv1connect.NewBucketServiceHandler(connectshim.NewBucketServer(bucketH), opts))
-	mux.Handle(paladinv1connect.NewObjectServiceHandler(connectshim.NewObjectServer(objH), opts))
-	mux.Handle(paladinv1connect.NewPresignServiceHandler(connectshim.NewPresignServer(presignH), opts))
-	mux.Handle(paladinv1connect.NewMultipartUploadServiceHandler(connectshim.NewMultipartServer(mpH), opts))
-	mux.Handle(paladinv1connect.NewOperationServiceHandler(connectshim.NewOperationServer(opH), opts))
-	mux.Handle(paladinv1connect.NewBatchServiceHandler(connectshim.NewBatchServer(batchH), opts))
-	mux.Handle(paladinv1connect.NewPolicyServiceHandler(connectshim.NewPolicyServer(policyH), opts))
-	mux.Handle(paladinv1connect.NewSystemServiceHandler(connectshim.NewSystemServer(systemH), opts))
+}
 
+func buildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {
 	handler := h2c.NewHandler(mux, &http2.Server{})
-
 	return &http.Server{
-		Addr:              cfg.Server.HTTP.Addr,
+		Addr:              c.Addr,
 		Handler:           handler,
-		ReadHeaderTimeout: cfg.Server.HTTP.ReadHeaderTimeout,
-		ReadTimeout:       cfg.Server.HTTP.ReadTimeout,
-		WriteTimeout:      cfg.Server.HTTP.WriteTimeout,
-		IdleTimeout:       cfg.Server.HTTP.IdleTimeout,
-		MaxHeaderBytes:    cfg.Server.HTTP.MaxHeaderBytes,
+		ReadHeaderTimeout: c.ReadHeaderTimeout,
+		ReadTimeout:       c.ReadTimeout,
+		WriteTimeout:      c.WriteTimeout,
+		IdleTimeout:       c.IdleTimeout,
+		MaxHeaderBytes:    c.MaxHeaderBytes,
 		BaseContext: func(_ net.Listener) context.Context {
 			return logger.WithContext(context.Background(), l)
 		},
-	}, nil
-}
-
-// seedDefaultBuckets ensures every backend with a `bucket:` value in config
-// has a corresponding row in the `buckets` table. The S3 bucket itself is
-// expected to be pre-created out-of-band by the operator (or via the
-// BucketService API at runtime); this seed only records the mapping so
-// ObjectKey rows can FK to it. Idempotent via ON CONFLICT DO NOTHING.
-func seedDefaultBuckets(ctx context.Context, pool postgres.PgxPool, s config.Storage) error {
-	for name, b := range s.Backends {
-		if b.Bucket == "" {
-			continue
-		}
-		const q = `
-			INSERT INTO buckets (backend_id, bucket_name, display_name, region, labels)
-			VALUES ($1, $2, $3, $4, '{}'::jsonb)
-			ON CONFLICT (backend_id, bucket_name) DO NOTHING
-		`
-		var displayName, region *string
-		if d := "Default bucket for " + name; d != "" {
-			displayName = &d
-		}
-		if b.Region != "" {
-			r := b.Region
-			region = &r
-		}
-		if _, err := pool.Exec(ctx, q, name, b.Bucket, displayName, region); err != nil {
-			return fmt.Errorf("seed default bucket %q in backend %q: %w", b.Bucket, name, err)
-		}
 	}
-	return nil
 }
 
-// backfillObjectKeyBuckets fills in object_keys.bucket_name for any rows
-// where it is NULL, using the configured default bucket for the row's
-// backend_id. This bridges legacy installs (where ObjectKey predates the
-// bucket model) onto the new schema; once every row has a value, migration
-// 005 can flip the column to NOT NULL.
-func backfillObjectKeyBuckets(ctx context.Context, pool postgres.PgxPool, s config.Storage) (int64, error) {
-	var total int64
-	for name, b := range s.Backends {
-		if b.Bucket == "" {
-			continue
+// buildVerifier produces a TokenVerifier pinned to a specific audience.
+// JWKS-mode wins when `auth.jwks_url` is set (federated IdP); otherwise
+// HMAC-mode against `auth.signing_key`.
+func buildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.Logger) (auth.TokenVerifier, error) {
+	if a.JWKSURL != "" {
+		v := auth.NewJWKSVerifier(a.JWKSURL)
+		v.ExpectedIssuer = a.Issuer
+		v.ExpectedAudience = audience
+		v.Leeway = a.Leeway
+		if err := v.Start(ctx); err != nil {
+			return nil, fmt.Errorf("jwks(%s): %w", audience, err)
 		}
-		const q = `
-			UPDATE object_keys
-			SET bucket_name = $1
-			WHERE backend_id = $2 AND bucket_name IS NULL
-		`
-		tag, err := pool.Exec(ctx, q, b.Bucket, name)
-		if err != nil {
-			return total, fmt.Errorf("backfill backend %q: %w", name, err)
-		}
-		total += tag.RowsAffected()
+		l.Info("auth verifier: jwks", zap.String("audience", audience), zap.String("url", a.JWKSURL))
+		return v, nil
 	}
-	return total, nil
-}
-
-// seedStorageBackends upserts the storage_backends registry from config so
-// that `object_keys.backend_id` FK references resolve for object_keys created at
-// runtime. Idempotent — re-runs on every startup to pick up config edits.
-func seedStorageBackends(ctx context.Context, q *sqlc.Queries, s config.Storage) error {
-	for name, b := range s.Backends {
-		var endpoint, region, eventsTarget *string
-		if b.Endpoint != "" {
-			e := b.Endpoint
-			endpoint = &e
-		}
-		if b.Region != "" {
-			r := b.Region
-			region = &r
-		}
-		if b.Events.Target != "" {
-			t := b.Events.Target
-			eventsTarget = &t
-		}
-		if err := q.CreateStorageBackend(ctx, name, b.Kind, endpoint, region, b.Events.Enabled, eventsTarget); err != nil {
-			return fmt.Errorf("seed storage backend %q: %w", name, err)
-		}
-	}
-	return nil
-}
-
-// buildVerifier constructs a JWTVerifier from Auth config. JWKSURL takes
-// precedence when set; otherwise HMACSecret is used for HS256 verification.
-func buildVerifier(a config.Auth) (auth.TokenVerifier, error) {
-	v := &auth.JWTVerifier{
+	return &auth.JWTVerifier{
+		Key:              []byte(a.SigningKey),
 		ExpectedIssuer:   a.Issuer,
-		ExpectedAudience: a.Audience,
+		ExpectedAudience: audience,
 		Leeway:           a.Leeway,
-	}
-	switch {
-	case a.JWKSURL != "":
-		return nil, errors.New("auth.jwks_url not yet supported — set auth.hmac_secret")
-	case a.HMACSecret != "":
-		v.Key = []byte(a.HMACSecret)
-	default:
-		return nil, errors.New("auth: either jwks_url or hmac_secret must be set")
-	}
-	return v, nil
+	}, nil
 }
 
 func Execute() {
@@ -399,3 +384,112 @@ func Execute() {
 		os.Exit(1)
 	}
 }
+
+// buildBackgroundJobs assembles the worker fan: refresh-token purger,
+// api-key expirer, and audit log retention. Reconciler is intentionally not
+// started here yet — slice 11 will revive its wiring once the StorageProbe
+// adapter lands. Returns an empty slice in dev when the housekeeping config
+// is missing.
+func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []app.BackgroundJob {
+	out := []app.BackgroundJob{
+		&worker.RefreshTokenPurger{
+			Repo:     adapters.NewRefreshTokenRepo(db.Queries),
+			Interval: 1 * time.Hour,
+			Logger:   l.Named("refresh-purger"),
+		},
+		&worker.ApiKeyExpirer{
+			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(db.Queries)},
+			Interval: 1 * time.Hour,
+			Logger:   l.Named("api-key-expirer"),
+		},
+	}
+	out = append(out, &worker.LifecycleWorker{
+		Buckets:     adapters.NewLifecycleSource(db.Queries),
+		Objects:     adapters.NewLifecycleObjectIter(db.Queries),
+		SoftDeleter: statemachine.New(db.Pool.(*pgxpool.Pool)),
+		Interval:    30 * time.Minute,
+		Logger:      l.Named("lifecycle"),
+	})
+
+	if cfg.Reconciler.PollInterval > 0 {
+		s3c, err := s3adapter.New(context.Background(), cfg.Storage.Backends[cfg.Storage.DefaultBackend])
+		if err == nil {
+			out = append(out, worker.NewReconcilerV2(
+				statemachine.New(db.Pool.(*pgxpool.Pool)),
+				adapters.NewReconcilerProbe(db.Queries, s3c),
+				worker.ReconcilerV2Config{
+					PollInterval:    cfg.Reconciler.PollInterval,
+					PendingGraceTTL: cfg.Reconciler.PendingGraceTTL,
+					BatchSize:       cfg.Reconciler.BatchSize,
+				},
+				l.Named("reconciler"),
+			))
+		} else {
+			l.Warn("reconciler skipped: s3 adapter init failed", zap.Error(err))
+		}
+	}
+	if cfg.Housekeeping.AuditLogTTL > 0 {
+		out = append(out, &worker.AuditLogPurger{
+			Purger:   adapters.NewAuditRepoV2(db.Queries),
+			TTL:      cfg.Housekeeping.AuditLogTTL,
+			Interval: 24 * time.Hour,
+			Logger:   l.Named("audit-purger"),
+		})
+	}
+	return out
+}
+
+// apiKeyExpirerAdapter narrows *adapters.ApiKeyRepo down to the
+// worker.ApiKeyExpirerRepo two-method seam. Keeps the worker package free
+// of a heavyweight import.
+type apiKeyExpirerAdapter struct {
+	r *adapters.ApiKeyRepo
+}
+
+func (a *apiKeyExpirerAdapter) ListExpired(ctx context.Context, at time.Time, limit int32) ([]authstore.ApiKey, error) {
+	return a.r.ListExpired(ctx, at, limit)
+}
+
+func (a *apiKeyExpirerAdapter) Revoke(ctx context.Context, id uuid.UUID) error {
+	return a.r.Revoke(ctx, id)
+}
+
+// multipartVersionAdapter bridges multipart.VersionRecorder onto the object
+// VersionHandler. Mirrors the per-package indirection pattern (eventSub →
+// worker.SubscriptionStore) used elsewhere in this file.
+type multipartVersionAdapter struct {
+	v *object.VersionHandler
+}
+
+func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multipart.VersionedObject) error {
+	if a.v == nil {
+		return nil
+	}
+	return a.v.OnPromote(ctx, object.Object{
+		ObjectID:     vo.ObjectID,
+		TenantID:     vo.TenantID,
+		ObjectKey:    vo.ObjectKey,
+		Key:          vo.Key,
+		ContentType:  vo.ContentType,
+		SizeBytes:    vo.SizeBytes,
+		ETag:         vo.ETag,
+		ChecksumAlgo: vo.ChecksumAlgo,
+		Checksum:     vo.Checksum,
+		Metadata:     vo.Metadata,
+		Tags:         vo.Tags,
+	})
+}
+
+// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository under
+// the worker.SubscriptionStore interface (List-only).
+type eventSubStoreAdapter struct {
+	r admindomain.EventSubscriptionRepository
+}
+
+func (a eventSubStoreAdapter) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	return a.r.List(ctx, args)
+}
+
+// silence unused
+var _ = issuer.New
+var _ = defaultShutdownGrace

@@ -42,6 +42,7 @@ require (
 
 require (
 	github.com/aws/smithy-go v1.25.1 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 )
 
