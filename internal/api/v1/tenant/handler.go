@@ -59,11 +59,41 @@ type Repository interface {
 }
 
 type Handler struct {
-	repo Repository
+	repo   Repository
+	policy *cedar.Engine // optional; nil → role-only gating (legacy)
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+// NewHandler builds a tenant handler. policyEngine may be nil — older
+// deployments still rely on requirePlatformAdmin alone; the v2 wiring
+// passes the live engine so Cedar `ManageTenant`/`ReadTenant` rules
+// evaluate against the Tenant entity.
+func NewHandler(repo Repository, policyEngine *cedar.Engine) *Handler {
+	return &Handler{repo: repo, policy: policyEngine}
+}
+
+// authorize evaluates Cedar against the Tenant resource. Falls back to
+// no-op when the engine is unwired so role-only deployments still work.
+func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+	if h.policy == nil {
+		return nil
+	}
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{TenantID: tenantID},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
 }
 
 func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Tenant, error) {
@@ -72,6 +102,9 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	}
 	if args.TenantID == uuid.Nil {
 		args.TenantID = uuid.Must(uuid.NewV7())
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
+		return nil, err
 	}
 	// A tenant with no inherited policy would be deny-all at the Cedar layer
 	// (empty policy set → no permit rule matches). Seed a sensible default so
@@ -97,6 +130,9 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 			return nil, err
 		}
 	}
+	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
+		return nil, err
+	}
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
@@ -106,6 +142,9 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
 	}
 	t, err := h.repo.Update(ctx, args)
@@ -120,6 +159,9 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 
 func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
 	if err := requirePlatformAdmin(ctx); err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, tenantID, expectedVersion); err != nil {

@@ -27,16 +27,33 @@ const (
 
 // Action identifiers mirror the Cedar schema (policies/schema.cedarschema).
 const (
-	ActionPutObject      = "PutObject"
-	ActionPresignPut     = "PresignPut"
-	ActionGetObject      = "GetObject"
-	ActionPresignGet     = "PresignGet"
-	ActionHeadObject     = "HeadObject"
-	ActionDeleteObject   = "DeleteObject"
-	ActionRestoreObject  = "RestoreObject"
-	ActionUpdateObject   = "UpdateObject"
-	ActionCopyObject     = "CopyObject"
-	ActionAdminObjectKey = "AdminBucket"
+	// Object-scoped actions (data plane).
+	ActionPutObject     = "PutObject"
+	ActionPresignPut    = "PresignPut"
+	ActionGetObject     = "GetObject"
+	ActionPresignGet    = "PresignGet"
+	ActionHeadObject    = "HeadObject"
+	ActionDeleteObject  = "DeleteObject"
+	ActionRestoreObject = "RestoreObject"
+	ActionUpdateObject  = "UpdateObject"
+	ActionCopyObject    = "CopyObject"
+
+	// ObjectKey-scoped actions (admin plane).
+	ActionAdminObjectKey        = "AdminBucket" // legacy alias kept for back-compat
+	ActionManageObjectKey       = "ManageObjectKey"
+	ActionBindObjectKeyToBucket = "BindObjectKeyToBucket"
+
+	// Backend-scoped actions.
+	ActionManageBackend = "ManageBackend"
+	ActionReadBackend   = "ReadBackend"
+
+	// Bucket-scoped actions.
+	ActionManageBucket = "ManageBucket"
+	ActionReadBucket   = "ReadBucket"
+
+	// Tenant-scoped actions.
+	ActionManageTenant = "ManageTenant"
+	ActionReadTenant   = "ReadTenant"
 )
 
 // Entity type names — must match the Cedar schema exactly.

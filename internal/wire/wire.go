@@ -178,8 +178,8 @@ func ProvideBucketHandler(repos Repos, storage Storage, cfg config.Config) *buck
 	return bucket.NewHandler(repos.Bucket, storage.Provisioner, cfg.Storage.DefaultBackend)
 }
 
-func ProvideTenantHandler(repos Repos) *tenant.Handler {
-	return tenant.NewHandler(repos.Tenant)
+func ProvideTenantHandler(repos Repos, pe *policy.Engine) *tenant.Handler {
+	return tenant.NewHandler(repos.Tenant, pe)
 }
 
 func ProvideObjectTagHandler(repos Repos) *objecttag.Handler {

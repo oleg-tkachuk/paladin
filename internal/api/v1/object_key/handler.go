@@ -99,7 +99,7 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	if args.BackendID == "" {
 		args.BackendID = h.defaultBackend
 	}
-	if err := h.authorize(ctx, principal, tenantID, args.ObjectKey, cedar.ActionAdminObjectKey); err != nil {
+	if err := h.authorizeFull(ctx, principal, tenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Create(ctx, args)
@@ -114,7 +114,7 @@ func (h *Handler) GetObjectKey(ctx context.Context, objectKey string) (*ObjectKe
 	if err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionAdminObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Get(ctx, tenantID, objectKey)
@@ -130,7 +130,7 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 		return nil, err
 	}
 	args.TenantID = tenantID
-	if err := h.authorize(ctx, principal, tenantID, args.ObjectKey, cedar.ActionAdminObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, args.ObjectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Update(ctx, args)
@@ -145,7 +145,7 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	if err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionAdminObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, tenantID, objectKey, expectedVersion); err != nil {
@@ -170,7 +170,7 @@ func (h *Handler) GetObjectKeyStats(ctx context.Context, objectKey string) (*Obj
 	if err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionAdminObjectKey); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	s, err := h.repo.Stats(ctx, tenantID, objectKey)
@@ -187,12 +187,12 @@ func (h *Handler) BindObjectKeyToBucket(ctx context.Context, objectKey, bucket s
 	if err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, p, tenantID, objectKey, cedar.ActionAdminObjectKey); err != nil {
-		return nil, err
-	}
 	backendID, bucketName, err := splitBucketResourceName(bucket)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := h.authorizeFull(ctx, p, tenantID, objectKey, backendID, bucketName, cedar.ActionBindObjectKeyToBucket); err != nil {
+		return nil, err
 	}
 	if err := h.repo.Rebind(ctx, tenantID, objectKey, backendID, bucketName, expectedVersion); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
@@ -218,10 +218,28 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
+	return h.authorizeFull(ctx, p, tenantID, objectKey, "", "", action)
+}
+
+// authorizeFull is the bucket-aware variant that passes the bucket binding
+// to Cedar so the engine emits the full ObjectKey←Bucket←StorageBackend
+// hierarchy. Use whenever the caller has the binding in hand (Create,
+// BindObjectKeyToBucket, post-Get on Update).
+func (h *Handler) authorizeFull(
+	ctx context.Context,
+	p *auth.Principal,
+	tenantID uuid.UUID,
+	objectKey, backendID, bucketName, action string,
+) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
 		action,
-		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
+		&cedar.Resource{
+			TenantID:   tenantID,
+			ObjectKey:  objectKey,
+			BackendID:  backendID,
+			BucketName: bucketName,
+		},
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
