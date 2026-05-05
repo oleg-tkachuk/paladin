@@ -1,5 +1,21 @@
 -- Lifecycle worker queries.
 
+-- name: ListBucketsWithReplication :many
+-- Returns buckets that have replication.enabled = true. Used by the
+-- replication worker to drive its fan-out scan; same row shape as the
+-- lifecycle source so the decode helper is shared.
+SELECT backend_id, bucket_name, display_name, region, labels,
+       owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
+       lifecycle_rules,
+       object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
+       versioning_enabled, versioning_keep_deletes_forever,
+       replication_enabled, replication_destination, replication_filter,
+       resource_version, created_at, updated_at
+FROM buckets
+WHERE replication_enabled = TRUE
+  AND replication_destination <> ''
+ORDER BY backend_id, bucket_name;
+
 -- name: ListBucketsWithLifecycle :many
 -- Returns only buckets with a non-empty lifecycle_rules array. The worker
 -- ticks against this set; sweeping all buckets on every tick would be

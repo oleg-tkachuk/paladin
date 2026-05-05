@@ -55,6 +55,27 @@ func (s *LifecycleSource) ListObjectKeyBindings(ctx context.Context, backendID, 
 	return out, nil
 }
 
+// ListBucketsWithReplication satisfies worker.ReplicationSource. Same shape
+// as ListBucketsWithLifecycle — different filter predicate.
+func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]admindomain.Bucket, error) {
+	rows, err := s.q.ListBucketsWithReplication(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list buckets-with-replication: %w", err)
+	}
+	out := make([]admindomain.Bucket, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, decodeBucketRow(
+			row.BackendID, row.BucketName, row.DisplayName, row.Region, row.Labels,
+			row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
+			row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
+			row.VersioningEnabled, row.VersioningKeepDeletesForever,
+			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+			row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
+		))
+	}
+	return out, nil
+}
+
 // LifecycleObjectIter implements worker.LifecycleObjectIter via paginated
 // reads. Uses object_id-descending cursor so each page is a fresh, point-in-
 // time slice of newer-than-last objects (UUIDv7 monotonicity).

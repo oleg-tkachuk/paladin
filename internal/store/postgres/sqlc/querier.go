@@ -112,11 +112,15 @@ type Querier interface {
 	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	ListBucketsV2(ctx context.Context, backendID *string, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
-	// Lifecycle worker queries.
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.
 	ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWithLifecycleRow, error)
+	// Lifecycle worker queries.
+	// Returns buckets that have replication.enabled = true. Used by the
+	// replication worker to drive its fan-out scan; same row shape as the
+	// lifecycle source so the decode helper is shared.
+	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
 	// Returns api_keys whose `expires_at` has passed and that are still active.
 	// Used by the housekeeping worker to flip them to revoked.

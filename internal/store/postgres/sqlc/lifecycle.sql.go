@@ -72,7 +72,6 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 }
 
 const listBucketsWithLifecycle = `-- name: ListBucketsWithLifecycle :many
-
 SELECT backend_id, bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
@@ -109,7 +108,6 @@ type ListBucketsWithLifecycleRow struct {
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 }
 
-// Lifecycle worker queries.
 // Returns only buckets with a non-empty lifecycle_rules array. The worker
 // ticks against this set; sweeping all buckets on every tick would be
 // wasteful when most carry no rules.
@@ -122,6 +120,91 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 	var items []ListBucketsWithLifecycleRow
 	for rows.Next() {
 		var i ListBucketsWithLifecycleRow
+		if err := rows.Scan(
+			&i.BackendID,
+			&i.BucketName,
+			&i.DisplayName,
+			&i.Region,
+			&i.Labels,
+			&i.OwnerTenantID,
+			&i.CedarPolicy,
+			&i.CedarPolicyHash,
+			&i.Constraints,
+			&i.LifecycleRules,
+			&i.ObjectLockEnabled,
+			&i.ObjectLockDefaultMode,
+			&i.ObjectLockDefaultRetentionSeconds,
+			&i.VersioningEnabled,
+			&i.VersioningKeepDeletesForever,
+			&i.ReplicationEnabled,
+			&i.ReplicationDestination,
+			&i.ReplicationFilter,
+			&i.ResourceVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBucketsWithReplication = `-- name: ListBucketsWithReplication :many
+
+SELECT backend_id, bucket_name, display_name, region, labels,
+       owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
+       lifecycle_rules,
+       object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
+       versioning_enabled, versioning_keep_deletes_forever,
+       replication_enabled, replication_destination, replication_filter,
+       resource_version, created_at, updated_at
+FROM buckets
+WHERE replication_enabled = TRUE
+  AND replication_destination <> ''
+ORDER BY backend_id, bucket_name
+`
+
+type ListBucketsWithReplicationRow struct {
+	BackendID                         string             `json:"backend_id"`
+	BucketName                        string             `json:"bucket_name"`
+	DisplayName                       *string            `json:"display_name"`
+	Region                            *string            `json:"region"`
+	Labels                            []byte             `json:"labels"`
+	OwnerTenantID                     pgtype.UUID        `json:"owner_tenant_id"`
+	CedarPolicy                       string             `json:"cedar_policy"`
+	CedarPolicyHash                   []byte             `json:"cedar_policy_hash"`
+	Constraints                       []byte             `json:"constraints"`
+	LifecycleRules                    []byte             `json:"lifecycle_rules"`
+	ObjectLockEnabled                 bool               `json:"object_lock_enabled"`
+	ObjectLockDefaultMode             string             `json:"object_lock_default_mode"`
+	ObjectLockDefaultRetentionSeconds int64              `json:"object_lock_default_retention_seconds"`
+	VersioningEnabled                 bool               `json:"versioning_enabled"`
+	VersioningKeepDeletesForever      bool               `json:"versioning_keep_deletes_forever"`
+	ReplicationEnabled                bool               `json:"replication_enabled"`
+	ReplicationDestination            string             `json:"replication_destination"`
+	ReplicationFilter                 string             `json:"replication_filter"`
+	ResourceVersion                   int64              `json:"resource_version"`
+	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Lifecycle worker queries.
+// Returns buckets that have replication.enabled = true. Used by the
+// replication worker to drive its fan-out scan; same row shape as the
+// lifecycle source so the decode helper is shared.
+func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error) {
+	rows, err := q.db.Query(ctx, listBucketsWithReplication)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBucketsWithReplicationRow
+	for rows.Next() {
+		var i ListBucketsWithReplicationRow
 		if err := rows.Scan(
 			&i.BackendID,
 			&i.BucketName,

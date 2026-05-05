@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -223,26 +224,70 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 // LookupBucketMeta returns the bucket binding plus versioning + lock flags
 // in one trip. Hot-path call on every promote / delete; the JOIN hits
 // idx_object_keys_bucket and the buckets PK.
+//
+// Versioning + Object Lock can be OVERRIDDEN per object_key via the
+// `object_keys.constraints` JSONB field. Override semantics:
+//
+//   - `versioning_enabled` boolean — when set, takes precedence over the
+//     parent bucket flag. true → force-on (even on a non-versioned bucket
+//     — the object_versions rows just won't have S3 versionId metadata
+//     until the bucket is also versioned). false → force-off.
+//   - Missing key → fall through to bucket.versioning_enabled.
+//   - `object_lock_enabled` follows the same overlay logic.
+//
+// This lets a tenant turn versioning on for one namespace within a
+// shared bucket without touching the bucket's global config.
 func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.BucketMeta, error) {
 	const q = `
 		SELECT b.backend_id, b.bucket_name,
 		       COALESCE(bk.versioning_enabled, false),
-		       COALESCE(bk.object_lock_enabled, false)
+		       COALESCE(bk.object_lock_enabled, false),
+		       b.constraints
 		FROM object_keys b
 		LEFT JOIN buckets bk
 		  ON bk.backend_id = b.backend_id AND bk.bucket_name = b.bucket_name
 		WHERE b.tenant_id = $1 AND b.object_key = $2
 	`
-	var meta object.BucketMeta
+	var (
+		meta            object.BucketMeta
+		constraintsJSON []byte
+	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
+		&constraintsJSON,
 	); err != nil {
 		if isNoRows(err) {
 			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
 		}
 		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
+	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
+		meta.VersioningEnabled = v
+	}
+	if v, ok := readBoolOverride(constraintsJSON, "object_lock_enabled"); ok {
+		meta.ObjectLockEnabled = v
+	}
 	return meta, nil
+}
+
+// readBoolOverride extracts a top-level bool field from the constraints
+// JSONB blob. Returns (value, true) when the key exists with a bool value;
+// (false, false) when missing or wrong type. Liberal in input — malformed
+// JSON degrades open (no override applied).
+func readBoolOverride(raw []byte, key string) (bool, bool) {
+	if len(raw) == 0 {
+		return false, false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false, false
+	}
+	v, ok := m[key]
+	if !ok {
+		return false, false
+	}
+	b, ok := v.(bool)
+	return b, ok
 }
 
 // HardDeleteWithBypass mirrors HardDelete but wraps the call in a

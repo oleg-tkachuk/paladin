@@ -79,6 +79,21 @@ func (r *QuotaRepoV2) ResetDaily(ctx context.Context, quotaID uuid.UUID, at time
 	return r.q.ResetQuotaDaily(ctx, pgUUID(quotaID), pgTS(at))
 }
 
+// OnObjectPromoted increments the tenant-scope usage counters by one
+// object plus its byte size. No-op when the tenant has no quota row —
+// quotas are opt-in. Errors are returned to the caller; they're treated
+// as non-fatal at the handler level (touchQuota suppresses).
+func (r *QuotaRepoV2) OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error {
+	q, err := r.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, admindomain.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return r.IncrementUsage(ctx, q.QuotaID, sizeBytes, 1)
+}
+
 func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
 	return admindomain.Quota{
 		QuotaID:           uuidFrom(q.QuotaID),

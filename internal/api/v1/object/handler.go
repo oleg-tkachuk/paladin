@@ -218,10 +218,24 @@ type Handler struct {
 	// bucket has versioning enabled, the handler emits version history rows
 	// on promote / soft-delete. Nil disables versioning side-effects entirely.
 	versions *VersionHandler
+
+	// quota is the optional accounting hook called after a successful
+	// promote. Increments tenant-scope usage counters; the post-completion
+	// hard check that complements the presign-time soft check lives there.
+	quota QuotaUpdater
 }
 
 // SetVersionHandler attaches the optional version recorder. Wired by main.
 func (h *Handler) SetVersionHandler(v *VersionHandler) { h.versions = v }
+
+// QuotaUpdater is the post-promote accounting hook. Returns nil on missing
+// quota — quotas are opt-in. Implementations live in postgres adapters.
+type QuotaUpdater interface {
+	OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error
+}
+
+// SetQuotaUpdater attaches the optional usage hook. Wired by main.
+func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
 type PresignConfig struct {
 	DefaultTTL     time.Duration
@@ -463,6 +477,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// land here as `changed=false` and must NOT double-write history.
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
+		h.touchQuota(ctx, fresh)
 	}
 	return &fresh, nil
 }
@@ -910,11 +925,22 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	}
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
+		h.touchQuota(ctx, fresh)
 	}
 	return &fresh, nil
 }
 
 // ─── shared internals ──────────────────────────────────────────────────────
+
+// touchQuota increments usage counters after a successful promote. Failures
+// are logged-only — quota drift gets reconciled by the nightly accounting
+// job; a transient pgx error must NOT undo a successful state transition.
+func (h *Handler) touchQuota(ctx context.Context, obj Object) {
+	if h.quota == nil {
+		return
+	}
+	_ = h.quota.OnObjectPromoted(ctx, obj.TenantID, obj.SizeBytes)
+}
 
 func (h *Handler) authorize(
 	ctx context.Context,

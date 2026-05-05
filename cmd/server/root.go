@@ -206,6 +206,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	policyH := wire.ProvidePolicyHandler(polEngine, polStore)
 	versionH := wire.ProvideVersionHandler(repos)
 	objH.SetVersionHandler(versionH)
+	objH.SetQuotaUpdater(adapters.NewQuotaRepoV2(db.Queries))
 	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
 
 	iss, err := wire.ProvideIssuer(cfg)
@@ -409,6 +410,19 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		SoftDeleter: statemachine.New(db.Pool.(*pgxpool.Pool)),
 		Interval:    30 * time.Minute,
 		Logger:      l.Named("lifecycle"),
+	})
+
+	// Replication worker — dry-run until the StorageReplicator implementation
+	// lands. Walks objects in replicated buckets and logs intent without
+	// actually copying. Operators can flip to live mode by injecting a real
+	// replicator from internal/storage in slice 16.
+	out = append(out, &worker.ReplicationWorker{
+		Buckets:        adapters.NewLifecycleSource(db.Queries),
+		Objects:        adapters.NewLifecycleObjectIter(db.Queries),
+		Replicator:     nil, // dry-run
+		Interval:       5 * time.Minute,
+		LookbackWindow: 1 * time.Hour,
+		Logger:         l.Named("replication"),
 	})
 
 	if cfg.Reconciler.PollInterval > 0 {
