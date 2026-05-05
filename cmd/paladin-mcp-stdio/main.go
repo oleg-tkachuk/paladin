@@ -1,11 +1,11 @@
 // paladin-mcp-stdio is the stdio-transport Model Context Protocol bridge to PALADIN.
 //
-// Designed for Claude Desktop / Cursor / IDE plugins. The binary reads
-// newline-delimited JSON-RPC frames from stdin and writes responses to
-// stdout. All logging goes to stderr to avoid polluting the protocol stream.
+// Designed for Claude Desktop / Cursor / IDE plugins. The binary reads JSON-RPC
+// frames from stdin and writes responses to stdout via the official MCP Go
+// SDK (github.com/modelcontextprotocol/go-sdk). All logging goes to stderr to
+// avoid polluting the protocol stream.
 //
-// Configuration is environment-driven so the LLM client config can pin it
-// without a YAML round-trip:
+// Configuration:
 //
 //	PALADIN_ADMIN_URL    — admin plane base (default http://localhost:8090)
 //	PALADIN_DATA_URL     — data plane base  (default http://localhost:8080)
@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"time"
 
-	"go.uber.org/zap"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
 )
@@ -34,9 +34,6 @@ var (
 )
 
 func main() {
-	logger := zap.Must(zap.NewDevelopment(zap.IncreaseLevel(zap.InfoLevel)))
-	defer func() { _ = logger.Sync() }()
-
 	clients := mcp.NewClients(
 		&http.Client{Timeout: 30 * time.Second},
 		envOr("PALADIN_ADMIN_URL", "http://localhost:8090"),
@@ -49,21 +46,16 @@ func main() {
 	if !allowWrite {
 		fmt.Fprintln(os.Stderr, "paladin-mcp-stdio: read-only mode (set PALADIN_MCP_ALLOW_WRITE=1 to enable mutating tools)")
 	}
+	fmt.Fprintf(os.Stderr, "paladin-mcp-stdio %s (commit %s) starting; allow_write=%v\n", version, commit, allowWrite)
 
-	server := mcp.NewServer("paladin-mcp", version, logger)
-	mcp.RegisterDefaults(server, clients, allowWrite)
+	server := mcp.NewServer("paladin-mcp", version, clients, allowWrite)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger.Info("MCP stdio server starting",
-		zap.String("version", version),
-		zap.String("commit", commit),
-		zap.Bool("allow_write", allowWrite),
-	)
-
-	if err := server.ServeStdio(ctx, os.Stdin, os.Stdout); err != nil {
-		logger.Fatal("ServeStdio failed", zap.Error(err))
+	if err := server.Run(ctx, &mcpsdk.StdioTransport{}); err != nil {
+		fmt.Fprintf(os.Stderr, "paladin-mcp-stdio: Run failed: %v\n", err)
+		os.Exit(1)
 	}
 }
 
