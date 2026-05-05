@@ -144,11 +144,11 @@ func (c *Config) Validate() error {
 		}
 	}
 	for name, b := range c.Storage.Backends {
-		if b.AccessKey != "" && b.AccessKeySecret != nil {
-			return fmt.Errorf("storage.backends.%s: cannot specify both access_key and access_key_secret", name)
+		if b.Auth.AccessKey != "" && b.Auth.AccessKeySecret != nil {
+			return fmt.Errorf("storage.backends.%s.auth: cannot specify both access_key and access_key_secret", name)
 		}
-		if b.SecretKey != "" && b.SecretKeySecret != nil {
-			return fmt.Errorf("storage.backends.%s: cannot specify both secret_key and secret_key_secret", name)
+		if b.Auth.SecretKey != "" && b.Auth.SecretKeySecret != nil {
+			return fmt.Errorf("storage.backends.%s.auth: cannot specify both secret_key and secret_key_secret", name)
 		}
 		if b.SSE.Type == "aws:kms" && b.SSE.KeyID == "" {
 			return fmt.Errorf("storage.backends.%s: sse.key_id required when sse.type=aws:kms", name)
@@ -162,18 +162,15 @@ func (c *Config) Validate() error {
 }
 
 // validateBackendAuth enforces per-mode invariants on StorageBackendAuth.
-// When mode is empty we accept the legacy top-level access_key/secret_key
-// pair; the resolver later promotes that to mode=static_keys.
+// `auth.mode` is mandatory — explicit selection is required for every
+// backend so the operator can't accidentally hit the wrong AWS credential
+// chain at runtime.
 func validateBackendAuth(name string, b StorageBackend) error {
 	a := b.Auth
 	switch a.Mode {
-	case "":
-		// Legacy: top-level keys imply static. If neither is set we let it
-		// fall through — some local-dev backends (no-auth MinIO) still work.
-		return nil
 	case AuthModeStaticKeys:
-		hasAK := b.AccessKey != "" || b.AccessKeySecret != nil
-		hasSK := b.SecretKey != "" || b.SecretKeySecret != nil
+		hasAK := a.AccessKey != "" || a.AccessKeySecret != nil
+		hasSK := a.SecretKey != "" || a.SecretKeySecret != nil
 		if !hasAK || !hasSK {
 			return fmt.Errorf("storage.backends.%s.auth.mode=static_keys: access_key and secret_key are required", name)
 		}
@@ -181,7 +178,7 @@ func validateBackendAuth(name string, b StorageBackend) error {
 			return fmt.Errorf("storage.backends.%s.auth: role_arn is not valid with mode=static_keys", name)
 		}
 	case AuthModeDefaultChain:
-		if b.AccessKey != "" || b.SecretKey != "" || b.AccessKeySecret != nil || b.SecretKeySecret != nil {
+		if a.AccessKey != "" || a.SecretKey != "" || a.AccessKeySecret != nil || a.SecretKeySecret != nil {
 			return fmt.Errorf("storage.backends.%s.auth.mode=default_chain: must not specify static keys (use env vars or instance role)", name)
 		}
 		if a.RoleARN != "" {
@@ -194,6 +191,8 @@ func validateBackendAuth(name string, b StorageBackend) error {
 		if a.DurationSeconds < 0 {
 			return fmt.Errorf("storage.backends.%s.auth.duration_seconds: must be ≥ 0", name)
 		}
+	case "":
+		return fmt.Errorf("storage.backends.%s.auth.mode is required (one of static_keys|default_chain|assume_role|web_identity)", name)
 	default:
 		return fmt.Errorf("storage.backends.%s.auth.mode=%q: unknown (want static_keys|default_chain|assume_role|web_identity)", name, a.Mode)
 	}

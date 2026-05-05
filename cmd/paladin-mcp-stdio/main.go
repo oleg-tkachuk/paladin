@@ -15,7 +15,6 @@
 //	PALADIN_MCP_TOKEN             — bearer token (admin-aud or service-account)
 //	PALADIN_MCP_STDIO_ENABLED     — set false to refuse to start
 //	PALADIN_MCP_STDIO_ALLOW_WRITE — opt in to mutating tools (off by default)
-//	PALADIN_MCP_ALLOW_WRITE       — legacy global override; honoured for back-compat
 package main
 
 import (

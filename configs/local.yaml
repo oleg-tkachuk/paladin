@@ -122,9 +122,10 @@ storage:
       endpoint: "http://127.0.0.1:8333"
       public_endpoint: "http://127.0.0.1:8333"
       force_path_style: true
-      access_key: dummy
-      secret_key: dummy
-      auth: { mode: static_keys }
+      auth:
+        mode: static_keys
+        access_key: dummy
+        secret_key: dummy
       presign_ttl: 15m
       part_size: "8MB"
       sse: { type: "", key_id: "" }

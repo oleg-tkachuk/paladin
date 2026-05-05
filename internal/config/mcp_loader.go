@@ -43,8 +43,6 @@ func MCPDefaults() MCP {
 //	PALADIN_MCP_HTTP_ADDR                        — listen address, default :8095
 //	PALADIN_MCP_HTTP_ALLOW_WRITE                 — 1|true to enable mutations
 //	PALADIN_MCP_HTTP_SESSION_TIMEOUT             — Go duration, default 10m
-//	PALADIN_MCP_ALLOW_WRITE                      — legacy global override; sets
-//	                                           both stdio and http flags
 func LoadMCP(path string) (MCP, error) {
 	cfg := MCPDefaults()
 
@@ -95,17 +93,6 @@ func LoadMCP(path string) (MCP, error) {
 			return MCP{}, fmt.Errorf("PALADIN_MCP_HTTP_SESSION_TIMEOUT %q: %w", v, err)
 		}
 		cfg.HTTP.SessionTimeout = d
-	}
-	// Legacy single-knob: PALADIN_MCP_ALLOW_WRITE used to flip both transports.
-	// Honour it so existing Claude Desktop configs keep working, but per-
-	// transport vars take precedence.
-	if v, ok := envBool("PALADIN_MCP_ALLOW_WRITE"); ok {
-		if _, set := os.LookupEnv("PALADIN_MCP_STDIO_ALLOW_WRITE"); !set {
-			cfg.Stdio.AllowWrite = v
-		}
-		if _, set := os.LookupEnv("PALADIN_MCP_HTTP_ALLOW_WRITE"); !set {
-			cfg.HTTP.AllowWrite = v
-		}
 	}
 
 	return cfg, nil

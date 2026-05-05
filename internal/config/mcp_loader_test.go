@@ -92,32 +92,6 @@ mcp:
 	}
 }
 
-func TestLoadMCPLegacyAllowWriteEnv(t *testing.T) {
-	t.Setenv("PALADIN_MCP_ALLOW_WRITE", "true")
-	cfg, err := LoadMCP("")
-	if err != nil {
-		t.Fatalf("LoadMCP: %v", err)
-	}
-	if !cfg.Stdio.AllowWrite || !cfg.HTTP.AllowWrite {
-		t.Errorf("legacy PALADIN_MCP_ALLOW_WRITE should flip both transports, got %+v", cfg)
-	}
-}
-
-func TestLoadMCPPerTransportEnvBeatsLegacy(t *testing.T) {
-	t.Setenv("PALADIN_MCP_ALLOW_WRITE", "true")
-	t.Setenv("PALADIN_MCP_STDIO_ALLOW_WRITE", "false")
-	cfg, err := LoadMCP("")
-	if err != nil {
-		t.Fatalf("LoadMCP: %v", err)
-	}
-	if cfg.Stdio.AllowWrite {
-		t.Error("per-transport env must override legacy global")
-	}
-	if !cfg.HTTP.AllowWrite {
-		t.Error("legacy still applies to http when no per-transport override")
-	}
-}
-
 func TestLoadMCPMissingFileErrors(t *testing.T) {
 	if _, err := LoadMCP("/no/such/path/config.yaml"); err == nil {
 		t.Error("expected error for missing config path")

@@ -80,21 +80,21 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 
 	// Per-backend credential secrets.
 	for name, b := range cfg.Storage.Backends {
-		if b.AccessKeySecret != nil {
-			key, err := r.resolveSecret(ctx, b.AccessKeySecret)
+		if b.Auth.AccessKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.Auth.AccessKeySecret)
 			if err != nil {
-				return fmt.Errorf("storage.backends.%s.access_key_secret: %w", name, err)
+				return fmt.Errorf("storage.backends.%s.auth.access_key_secret: %w", name, err)
 			}
-			b.AccessKey = key
-			b.AccessKeySecret = nil
+			b.Auth.AccessKey = key
+			b.Auth.AccessKeySecret = nil
 		}
-		if b.SecretKeySecret != nil {
-			key, err := r.resolveSecret(ctx, b.SecretKeySecret)
+		if b.Auth.SecretKeySecret != nil {
+			key, err := r.resolveSecret(ctx, b.Auth.SecretKeySecret)
 			if err != nil {
-				return fmt.Errorf("storage.backends.%s.secret_key_secret: %w", name, err)
+				return fmt.Errorf("storage.backends.%s.auth.secret_key_secret: %w", name, err)
 			}
-			b.SecretKey = key
-			b.SecretKeySecret = nil
+			b.Auth.SecretKey = key
+			b.Auth.SecretKeySecret = nil
 		}
 		if b.Auth.SessionTokenSecret != nil {
 			tok, err := r.resolveSecret(ctx, b.Auth.SessionTokenSecret)
@@ -103,12 +103,6 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 			}
 			b.Auth.SessionToken = tok
 			b.Auth.SessionTokenSecret = nil
-		}
-		// Legacy compat: if no auth.mode is set but we have static keys,
-		// pin the mode to static_keys so downstream code only branches on
-		// the canonical Auth.Mode field.
-		if b.Auth.Mode == "" && (b.AccessKey != "" || b.SecretKey != "") {
-			b.Auth.Mode = AuthModeStaticKeys
 		}
 		cfg.Storage.Backends[name] = b
 	}
@@ -213,11 +207,11 @@ func (c *Config) Obfuscated() Config {
 	if len(cc.Storage.Backends) > 0 {
 		redacted := make(map[string]StorageBackend, len(cc.Storage.Backends))
 		for name, b := range cc.Storage.Backends {
-			if b.AccessKey != "" {
-				b.AccessKey = Redacted
+			if b.Auth.AccessKey != "" {
+				b.Auth.AccessKey = Redacted
 			}
-			if b.SecretKey != "" {
-				b.SecretKey = Redacted
+			if b.Auth.SecretKey != "" {
+				b.Auth.SecretKey = Redacted
 			}
 			if b.Auth.SessionToken != "" {
 				b.Auth.SessionToken = Redacted

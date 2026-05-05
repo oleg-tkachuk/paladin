@@ -161,10 +161,20 @@ storage: {
     endpoint:          string | *""
     public_endpoint:   string | *""
     force_path_style:  bool | *true
-    access_key:        string | *""
-    access_key_secret?: #SecretRef
-    secret_key:        string | *""
-    secret_key_secret?: #SecretRef
+    auth: {
+      mode: "static_keys" | "default_chain" | "assume_role" | "web_identity"
+      access_key:           string | *""
+      access_key_secret?:   #SecretRef
+      secret_key:           string | *""
+      secret_key_secret?:   #SecretRef
+      session_token:        string | *""
+      session_token_secret?: #SecretRef
+      role_arn:             string | *""
+      session_name:         string | *""
+      external_id:          string | *""
+      duration_seconds:     int | *0
+      web_identity_token_file: string | *""
+    }
     presign_ttl:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     part_size:         =~"^[0-9]+(B|KB|MB|GB)$" | *"8MB"
     sse: {

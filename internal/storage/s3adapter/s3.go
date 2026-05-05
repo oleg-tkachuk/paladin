@@ -124,23 +124,16 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 //   - default_chain → SDK default chain (env, ECS task role, EC2 IMDS, etc.).
 //   - assume_role   → STS AssumeRole on top of the default chain.
 //   - web_identity  → STS AssumeRoleWithWebIdentity (EKS IRSA).
-//
-// An empty mode falls back to default_chain so a no-op `auth: {}` block is
-// still useful (e.g. when AWS_ACCESS_KEY_ID is provided via env).
 func buildAWSConfig(ctx context.Context, backend config.StorageBackend) (aws.Config, error) {
 	region := backend.Region
-	mode := backend.Auth.Mode
-	if mode == "" {
-		mode = config.AuthModeDefaultChain
-	}
 
-	switch mode {
+	switch backend.Auth.Mode {
 	case config.AuthModeStaticKeys:
 		cfg, err := awsconfig.LoadDefaultConfig(ctx,
 			awsconfig.WithRegion(region),
 			awsconfig.WithCredentialsProvider(
 				credentials.NewStaticCredentialsProvider(
-					backend.AccessKey, backend.SecretKey, backend.Auth.SessionToken,
+					backend.Auth.AccessKey, backend.Auth.SecretKey, backend.Auth.SessionToken,
 				),
 			),
 		)
@@ -208,8 +201,10 @@ func buildAWSConfig(ctx context.Context, backend config.StorageBackend) (aws.Con
 		base.Credentials = aws.NewCredentialsCache(provider)
 		return base, nil
 
+	case "":
+		return aws.Config{}, fmt.Errorf("auth.mode is required")
 	default:
-		return aws.Config{}, fmt.Errorf("unknown auth.mode %q", mode)
+		return aws.Config{}, fmt.Errorf("unknown auth.mode %q", backend.Auth.Mode)
 	}
 }
 

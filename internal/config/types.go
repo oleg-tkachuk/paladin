@@ -277,25 +277,17 @@ type StorageBackend struct {
 	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
 	// become a tenant-scoped prefix within this bucket; the full S3 key
 	// for any object is "<tenant_id>/<object_key>/<key>".
-	Bucket         string `yaml:"bucket" json:"bucket"`
-	Region         string `yaml:"region" json:"region"`
-	Endpoint       string `yaml:"endpoint" json:"endpoint"`
-	PublicEndpoint string `yaml:"public_endpoint" json:"public_endpoint"`
-	ForcePathStyle bool   `yaml:"force_path_style" json:"force_path_style"`
-	// Top-level AccessKey/SecretKey are kept for backward compatibility with
-	// pre-AuthMode deployments. New configs should use the `auth` block.
-	// When `auth.mode` is unset and these are populated, the resolver
-	// auto-promotes them to mode=static_keys.
-	AccessKey       string               `yaml:"access_key" json:"access_key"`
-	AccessKeySecret *SecretRef           `yaml:"access_key_secret" json:"access_key_secret"`
-	SecretKey       string               `yaml:"secret_key" json:"secret_key"`
-	SecretKeySecret *SecretRef           `yaml:"secret_key_secret" json:"secret_key_secret"`
-	Auth            StorageBackendAuth   `yaml:"auth" json:"auth"`
-	PresignTTL      time.Duration        `yaml:"presign_ttl" json:"presign_ttl"`
-	PartSizeRaw     string               `yaml:"part_size" json:"part_size"`
-	PartSizeBytes   int64                `yaml:"-" json:"-"`
-	SSE             StorageBackendSSE    `yaml:"sse" json:"sse"`
-	Events          StorageBackendEvents `yaml:"events" json:"events"`
+	Bucket         string               `yaml:"bucket" json:"bucket"`
+	Region         string               `yaml:"region" json:"region"`
+	Endpoint       string               `yaml:"endpoint" json:"endpoint"`
+	PublicEndpoint string               `yaml:"public_endpoint" json:"public_endpoint"`
+	ForcePathStyle bool                 `yaml:"force_path_style" json:"force_path_style"`
+	Auth           StorageBackendAuth   `yaml:"auth" json:"auth"`
+	PresignTTL     time.Duration        `yaml:"presign_ttl" json:"presign_ttl"`
+	PartSizeRaw    string               `yaml:"part_size" json:"part_size"`
+	PartSizeBytes  int64                `yaml:"-" json:"-"`
+	SSE            StorageBackendSSE    `yaml:"sse" json:"sse"`
+	Events         StorageBackendEvents `yaml:"events" json:"events"`
 }
 
 // StorageBackendAuth selects how the PALADIN control plane authenticates to a
@@ -323,6 +315,12 @@ type StorageBackend struct {
 //     annotations.
 type StorageBackendAuth struct {
 	Mode string `yaml:"mode" json:"mode"`
+
+	// Static-keys credentials (mode=static_keys).
+	AccessKey       string     `yaml:"access_key" json:"access_key"`
+	AccessKeySecret *SecretRef `yaml:"access_key_secret" json:"access_key_secret"`
+	SecretKey       string     `yaml:"secret_key" json:"secret_key"`
+	SecretKeySecret *SecretRef `yaml:"secret_key_secret" json:"secret_key_secret"`
 
 	// SessionToken is optional for static_keys (e.g. short-lived
 	// credentials handed in by an external rotator).

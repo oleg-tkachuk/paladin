@@ -12,31 +12,27 @@ func TestValidateBackendAuthModes(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "legacy keys, no mode",
-			b: StorageBackend{
-				AccessKey: "AKIA", SecretKey: "secret",
-			},
+			name:    "missing mode rejected",
+			b:       StorageBackend{},
+			wantErr: "auth.mode is required",
 		},
 		{
 			name: "static_keys: missing secret_key rejected",
 			b: StorageBackend{
-				AccessKey: "AKIA",
-				Auth:      StorageBackendAuth{Mode: AuthModeStaticKeys},
+				Auth: StorageBackendAuth{Mode: AuthModeStaticKeys, AccessKey: "AKIA"},
 			},
 			wantErr: "static_keys",
 		},
 		{
 			name: "static_keys: full pair OK",
 			b: StorageBackend{
-				AccessKey: "AKIA", SecretKey: "secret",
-				Auth: StorageBackendAuth{Mode: AuthModeStaticKeys},
+				Auth: StorageBackendAuth{Mode: AuthModeStaticKeys, AccessKey: "AKIA", SecretKey: "secret"},
 			},
 		},
 		{
 			name: "default_chain: any static key rejected",
 			b: StorageBackend{
-				AccessKey: "AKIA",
-				Auth:      StorageBackendAuth{Mode: AuthModeDefaultChain},
+				Auth: StorageBackendAuth{Mode: AuthModeDefaultChain, AccessKey: "AKIA"},
 			},
 			wantErr: "default_chain",
 		},
@@ -75,8 +71,7 @@ func TestValidateBackendAuthModes(t *testing.T) {
 		{
 			name: "static_keys with role_arn rejected",
 			b: StorageBackend{
-				AccessKey: "AKIA", SecretKey: "secret",
-				Auth: StorageBackendAuth{Mode: AuthModeStaticKeys, RoleARN: "arn:aws:iam::1:role/x"},
+				Auth: StorageBackendAuth{Mode: AuthModeStaticKeys, AccessKey: "AKIA", SecretKey: "secret", RoleARN: "arn:aws:iam::1:role/x"},
 			},
 			wantErr: "role_arn",
 		},
