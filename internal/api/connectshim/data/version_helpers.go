@@ -1,25 +1,12 @@
 package data
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 )
-
-// parentObjectLegacyName converts the AIP-122 parent
-// "tenants/{t}/objectKeys/{ok}/objects/{id}" into the legacy form the
-// VersionHandler expects ("object_keys/{ok}/objects/{id}"). Returns the
-// raw input on parse failure — the handler will surface the error.
-func parentObjectLegacyName(ctx context.Context, parent string) string {
-	objectKey, objectID, _, err := objectNameParts(ctx, parent)
-	if err != nil || objectID == "" {
-		return parent
-	}
-	return fmt.Sprintf("object_keys/%s/objects/%s", objectKey, objectID)
-}
 
 // stripVersionSuffix removes "/versions/{ver}" tail. Returns the parent name.
 func stripVersionSuffix(name string) (string, error) {

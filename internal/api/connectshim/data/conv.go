@@ -6,13 +6,9 @@
 //
 //	tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}
 //
-// Existing v1 handlers expect the legacy form
-//
-//	object_keys/{object_key}/objects/{object_id}
-//
-// because they pull tenant from JWT context, not the URL. The shim parses
-// the new form, asserts the URL tenant matches the JWT tenant, and forwards
-// the legacy form down to the handler.
+// The shim parses each name, asserts the URL tenant matches the JWT tenant,
+// and forwards the (object_key, object_id) pair to the handler — handlers
+// pull the tenant from JWT context, so it is never re-passed.
 package data
 
 import (
@@ -76,22 +72,22 @@ func pageResponseProto(next string) *commonpb.PageResponse {
 // objectNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}".
 // It also asserts the parsed tenant matches the JWT-bound tenant (when the
 // caller has one). Cross-tenant access on the data plane is rejected.
-func objectNameParts(ctx context.Context, name string) (objectKey, objectID, legacyName string, err error) {
+func objectNameParts(ctx context.Context, name string) (objectKey, objectID string, err error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "objectKeys" || parts[4] != "objects" {
-		return "", "", "", fmt.Errorf("invalid object name %q", name)
+		return "", "", fmt.Errorf("invalid object name %q", name)
 	}
 	tIDStr, ok, oIDStr := parts[1], parts[3], parts[5]
 	if _, err := uuid.Parse(tIDStr); err != nil {
-		return "", "", "", fmt.Errorf("invalid tenant_id in name: %w", err)
+		return "", "", fmt.Errorf("invalid tenant_id in name: %w", err)
 	}
 	if _, err := uuid.Parse(oIDStr); err != nil {
-		return "", "", "", fmt.Errorf("invalid object_id in name: %w", err)
+		return "", "", fmt.Errorf("invalid object_id in name: %w", err)
 	}
 	if err := assertJWTTenant(ctx, tIDStr); err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
-	return ok, oIDStr, fmt.Sprintf("object_keys/%s/objects/%s", ok, oIDStr), nil
+	return ok, oIDStr, nil
 }
 
 // objectKeyNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}".

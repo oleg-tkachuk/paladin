@@ -19,13 +19,13 @@ func NewPresignServer(h *presign.Handler) *PresignServer { return &PresignServer
 
 func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Request[pb.RegenerateUploadUrlRequest]) (*connect.Response[pb.RegenerateUploadUrlResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	// Regenerate uses PUT path; ContentType / ChecksumAlgo / SizeHint are
 	// looked up server-side from the existing object row by the handler.
-	url, headers, expires, err := s.H.PresignPut(ctx, legacyName, "", "", m.GetTtl().AsDuration(), 0)
+	url, headers, expires, err := s.H.PresignPut(ctx, objectKey, objectID, "", "", m.GetTtl().AsDuration(), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -36,11 +36,11 @@ func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Re
 
 func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Request[pb.PresignDownloadRequest]) (*connect.Response[pb.PresignDownloadResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	url, headers, expires, err := s.H.PresignGet(ctx, legacyName, m.GetTtl().AsDuration(), m.GetContentDisposition())
+	url, headers, expires, err := s.H.PresignGet(ctx, objectKey, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
 	if err != nil {
 		return nil, err
 	}

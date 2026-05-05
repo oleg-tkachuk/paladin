@@ -53,11 +53,11 @@ func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb
 
 func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[pb.DownloadObjectRequest]) (*connect.Response[pb.DownloadObjectResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.DownloadObject(ctx, legacyName, m.GetTtl().AsDuration(), m.GetContentDisposition())
+	out, err := s.H.DownloadObject(ctx, objectKey, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
 	if err != nil {
 		return nil, err
 	}
@@ -70,11 +70,11 @@ func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[
 }
 
 func (s *ObjectServer) GetObject(ctx context.Context, req *connect.Request[pb.GetObjectRequest]) (*connect.Response[pb.Object], error) {
-	_, _, legacyName, err := objectNameParts(ctx, req.Msg.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetObject(ctx, legacyName)
+	out, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (s *ObjectServer) LookupObject(ctx context.Context, req *connect.Request[pb
 
 func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb.UpdateObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -104,7 +104,8 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
-		Name:            legacyName,
+		ObjectKey:       objectKey,
+		ObjectID:        objectID,
 		ResourceVersion: rv,
 		UpdatedFields:   m.GetUpdateMask().GetPaths(),
 		Metadata:        m.GetMetadata(),
@@ -120,14 +121,15 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 
 func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[pb.CompleteObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	out, err := s.H.CompleteObject(ctx, object.CompleteObjectInput{
-		Name:     legacyName,
-		ETag:     m.GetEtag(),
-		Checksum: m.GetChecksumValue(),
+		ObjectKey: objectKey,
+		ObjectID:  objectID,
+		ETag:      m.GetEtag(),
+		Checksum:  m.GetChecksumValue(),
 	})
 	if err != nil {
 		return nil, err
@@ -137,11 +139,11 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 
 func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb.DeleteObjectRequest]) (*connect.Response[pb.DeleteObjectResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := s.H.DeleteObject(ctx, legacyName, m.GetResourceVersion(), m.GetPermanent(), m.GetBypassGovernanceRetention()); err != nil {
+	if err := s.H.DeleteObject(ctx, objectKey, objectID, m.GetResourceVersion(), m.GetPermanent(), m.GetBypassGovernanceRetention()); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteObjectResponse{
@@ -150,11 +152,11 @@ func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *ObjectServer) RestoreObject(ctx context.Context, req *connect.Request[pb.RestoreObjectRequest]) (*connect.Response[pb.Object], error) {
-	_, _, legacyName, err := objectNameParts(ctx, req.Msg.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.RestoreObject(ctx, legacyName, req.Msg.GetResourceVersion())
+	out, err := s.H.RestoreObject(ctx, objectKey, objectID, req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +165,7 @@ func (s *ObjectServer) RestoreObject(ctx context.Context, req *connect.Request[p
 
 func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.CopyObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	_, _, srcLegacy, err := objectNameParts(ctx, m.GetSourceName())
+	srcObjectKey, srcObjectID, err := objectNameParts(ctx, m.GetSourceName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source: %w", err))
 	}
@@ -172,9 +174,10 @@ func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.C
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("destination: %w", err))
 	}
 	in := object.CopyObjectInput{
-		SourceName:    srcLegacy,
-		DestObjectKey: destObjectKey,
-		DestKey:       m.GetDestinationKey(),
+		SourceObjectKey: srcObjectKey,
+		SourceObjectID:  srcObjectID,
+		DestObjectKey:   destObjectKey,
+		DestKey:         m.GetDestinationKey(),
 	}
 	if mo := m.GetMetadataOverride(); mo != nil {
 		in.Metadata = mo.GetMetadata()
@@ -244,10 +247,15 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
 	m := req.Msg
+	objectKey, objectID, err := objectNameParts(ctx, m.GetParent())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	out, next, err := s.Versions.ListVersions(ctx, object.ListVersionsInput{
-		ParentName: parentObjectLegacyName(ctx, m.GetParent()),
-		PageSize:   m.GetPage().GetPageSize(),
-		PageToken:  m.GetPage().GetPageToken(),
+		ObjectKey: objectKey,
+		ObjectID:  objectID,
+		PageSize:  m.GetPage().GetPageSize(),
+		PageToken: m.GetPage().GetPageToken(),
 	})
 	if err != nil {
 		return nil, err

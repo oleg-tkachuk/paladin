@@ -108,7 +108,7 @@ var _ paladindatav1connect.BatchServiceHandler = (*BatchServer)(nil)
 func resolveObjectIDs(ctx context.Context, sel *pb.ObjectSelector) ([]uuid.UUID, error) {
 	out := make([]uuid.UUID, 0, len(sel.GetNames()))
 	for _, n := range sel.GetNames() {
-		_, idStr, _, err := objectNameParts(ctx, n)
+		_, idStr, err := objectNameParts(ctx, n)
 		if err != nil {
 			return nil, err
 		}

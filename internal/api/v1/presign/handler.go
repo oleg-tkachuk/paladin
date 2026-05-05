@@ -50,14 +50,17 @@ func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg C
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 
-func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(objectName)
+	if objectKey == "" || objectIDStr == "" {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	}
+	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
@@ -77,14 +80,17 @@ func (h *Handler) PresignGet(ctx context.Context, objectName string, ttl time.Du
 	return h.storage.PresignGet(ctx, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
 }
 
-func (h *Handler) PresignPut(ctx context.Context, objectName, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(objectName)
+	if objectKey == "" || objectIDStr == "" {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	}
+	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	objectKey, key, state, err := h.repo.LookupObjectByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {

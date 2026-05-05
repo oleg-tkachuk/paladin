@@ -29,9 +29,10 @@ func NewVersionHandler(objects Repository, versions VersionRepository) *VersionH
 // ─── List ───────────────────────────────────────────────────────────────────
 
 type ListVersionsInput struct {
-	ParentName string // tenants/{t}/objectKeys/{ok}/objects/{id}
-	PageSize   int32
-	PageToken  string
+	ObjectKey string
+	ObjectID  string
+	PageSize  int32
+	PageToken string
 }
 
 func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) ([]ObjectVersion, string, error) {
@@ -39,12 +40,15 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	if err != nil {
 		return nil, "", err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(in.ParentName)
+	if in.ObjectKey == "" || in.ObjectID == "" {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	}
+	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	// Confirm the parent object exists + the caller's tenant owns it.
-	if _, err := h.objects.FindByName(ctx, tenantID, objectKey, objectID.String()); err != nil {
+	if _, err := h.objects.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID); err != nil {
 		return nil, "", connect.NewError(connect.CodeNotFound, err)
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
@@ -262,20 +266,11 @@ type versionNameParts struct {
 	versionID uuid.UUID
 }
 
-// parseVersionName decodes
-// "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}" or the legacy
-// short form "object_keys/{ok}/objects/{id}/versions/{ver}". Both forms are
-// accepted for caller convenience; the handler operates on the trailing parts.
+// parseVersionName decodes the AIP-122 form
+// "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
 func parseVersionName(name string) (versionNameParts, error) {
-	// Try the AIP-122 form first.
 	const sep = "/versions/"
-	idx := -1
-	for i := 0; i+len(sep) <= len(name); i++ {
-		if name[i:i+len(sep)] == sep {
-			idx = i
-			break
-		}
-	}
+	idx := strings.LastIndex(name, sep)
 	if idx <= 0 {
 		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing /versions/{id})", name)
 	}
@@ -285,26 +280,13 @@ func parseVersionName(name string) (versionNameParts, error) {
 	if err != nil {
 		return versionNameParts{}, fmt.Errorf("invalid version_id: %w", err)
 	}
-	objectKey, objectID, err := parseObjectNameAny(parentName)
+	parts := strings.Split(parentName, "/")
+	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "objectKeys" || parts[4] != "objects" {
+		return versionNameParts{}, fmt.Errorf("invalid version name %q (parent must be tenants/{t}/objectKeys/{ok}/objects/{id})", name)
+	}
+	objectID, err := uuid.Parse(parts[5])
 	if err != nil {
-		return versionNameParts{}, err
+		return versionNameParts{}, fmt.Errorf("invalid object_id: %w", err)
 	}
-	return versionNameParts{objectKey: objectKey, objectID: objectID, versionID: verID}, nil
-}
-
-// parseObjectNameAny accepts either AIP-122 form
-// "tenants/{t}/objectKeys/{ok}/objects/{id}" or the legacy short form
-// "object_keys/{ok}/objects/{id}". Both feed the same handler logic.
-func parseObjectNameAny(name string) (string, uuid.UUID, error) {
-	if strings.HasPrefix(name, "tenants/") {
-		parts := strings.Split(name, "/")
-		if len(parts) == 6 && parts[2] == "objectKeys" && parts[4] == "objects" {
-			id, err := uuid.Parse(parts[5])
-			if err != nil {
-				return "", uuid.Nil, fmt.Errorf("invalid object_id: %w", err)
-			}
-			return parts[3], id, nil
-		}
-	}
-	return apiutil.ParseObjectName(name)
+	return versionNameParts{objectKey: parts[3], objectID: objectID, versionID: verID}, nil
 }

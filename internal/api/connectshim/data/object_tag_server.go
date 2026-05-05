@@ -21,11 +21,11 @@ type ObjectTagServer struct {
 func NewObjectTagServer(h *object.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }
 
 func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Request[pb.GetObjectTagsRequest]) (*connect.Response[pb.GetObjectTagsResponse], error) {
-	_, _, legacyName, err := objectNameParts(ctx, req.Msg.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetObject(ctx, legacyName)
+	out, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Reques
 
 func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Request[pb.PutObjectTagsRequest]) (*connect.Response[pb.PutObjectTagsResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -43,7 +43,8 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
-		Name:            legacyName,
+		ObjectKey:       objectKey,
+		ObjectID:        objectID,
 		ResourceVersion: rv,
 		UpdatedFields:   []string{"tags"},
 		Tags:            m.GetTags(),
@@ -56,7 +57,7 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 
 func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Request[pb.DeleteObjectTagsRequest]) (*connect.Response[pb.DeleteObjectTagsResponse], error) {
 	m := req.Msg
-	_, _, legacyName, err := objectNameParts(ctx, m.GetName())
+	objectKey, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -64,7 +65,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	current, err := s.H.GetObject(ctx, legacyName)
+	current, err := s.H.GetObject(ctx, objectKey, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,8 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 		}
 	}
 	out, err := s.H.UpdateObject(ctx, object.UpdateObjectInput{
-		Name:            legacyName,
+		ObjectKey:       objectKey,
+		ObjectID:        objectID,
 		ResourceVersion: rv,
 		UpdatedFields:   []string{"tags"},
 		Tags:            updated,

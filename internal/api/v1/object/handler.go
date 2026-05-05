@@ -417,9 +417,10 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 // ─── Exemplar RPC: CompleteObject ────────────────────────────────────────────
 
 type CompleteObjectInput struct {
-	Name     string // "object_keys/{objectKey}/objects/{object_id}"
-	ETag     string
-	Checksum string
+	ObjectKey string
+	ObjectID  string
+	ETag      string
+	Checksum  string
 }
 
 // CompleteObject is idempotent: if an event has already promoted the object,
@@ -431,12 +432,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	objectKey, objectID, err := apiutil.ParseObjectName(in.Name)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	if in.ObjectKey == "" || in.ObjectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
 	}
 
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	obj, err := h.repo.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -469,7 +469,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, in.ObjectKey, in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -562,17 +562,16 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 
 // ─── Read RPCs ──────────────────────────────────────────────────────────────
 
-// GetObject returns metadata for an object addressed by its resource name.
-func (h *Handler) GetObject(ctx context.Context, name string) (*Object, error) {
+// GetObject returns metadata for an object addressed by (objectKey, objectID).
+func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*Object, error) {
 	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(name)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	if objectKey == "" || objectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -609,16 +608,15 @@ type DownloadObjectOutput struct {
 
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
 // object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
-func (h *Handler) DownloadObject(ctx context.Context, name string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
+func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string, ttl time.Duration, disposition string) (*DownloadObjectOutput, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(name)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	if objectKey == "" || objectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -662,8 +660,9 @@ func (h *Handler) DownloadObject(ctx context.Context, name string, ttl time.Dura
 // is the FieldMask: only the named fields are written. Unknown field names
 // are silently ignored (matches AIP-134).
 type UpdateObjectInput struct {
-	Name            string // resource name
-	ResourceVersion int64  // 0 = skip OCC
+	ObjectKey       string
+	ObjectID        string
+	ResourceVersion int64 // 0 = skip OCC
 	UpdatedFields   []string
 	Metadata        map[string]string
 	Tags            map[string]string
@@ -676,9 +675,12 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, err
 	}
-	_, objectID, err := apiutil.ParseObjectName(in.Name)
+	if in.ObjectKey == "" || in.ObjectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
+	}
+	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	obj, err := h.repo.UpdateMetadata(ctx, UpdateMetadataArgs{
 		TenantID:        tenantID,
@@ -705,16 +707,19 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 // the object from S3 first, then drops the row. bypassGovernance opt-in
 // honored only for callers holding `lock.governance.bypass` or
 // `platform.admin` — protects compliance-mode locks regardless.
-func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string, permanent, bypassGovernance bool) error {
+func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(name)
-	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+	if objectKey == "" || objectIDStr == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	objectID, err := uuid.Parse(objectIDStr)
+	if err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
@@ -769,19 +774,22 @@ func (h *Handler) DeleteObject(ctx context.Context, name, resourceVersion string
 // ─── RestoreObject ──────────────────────────────────────────────────────────
 
 // RestoreObject brings a soft-deleted object back. resourceVersion enforces
-// OCC against the row read here — empty disables the check (legacy
-// behavior). Versioning-aware: when bucket has versioning_enabled, also
-// drops the most recent delete-marker before flipping state.
-func (h *Handler) RestoreObject(ctx context.Context, name, resourceVersion string) (*Object, error) {
+// OCC against the row read here — empty skips the check.
+// Versioning-aware: when bucket has versioning_enabled, also drops the most
+// recent delete-marker before flipping state.
+func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, resourceVersion string) (*Object, error) {
 	tenantID, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	objectKey, objectID, err := apiutil.ParseObjectName(name)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	if objectKey == "" || objectIDStr == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("object_key and object_id are required"))
 	}
-	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	objectID, err := uuid.Parse(objectIDStr)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -822,7 +830,7 @@ func (h *Handler) RestoreObject(ctx context.Context, name, resourceVersion strin
 	if err := h.sm.Restore(ctx, objectID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID.String())
+	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -832,14 +840,15 @@ func (h *Handler) RestoreObject(ctx context.Context, name, resourceVersion strin
 // ─── CopyObject ─────────────────────────────────────────────────────────────
 
 // CopyObjectInput identifies a server-side copy. Source is addressed by
-// resource name; destination by (object_key, key). When DestKey is empty
-// the source's storage key is reused.
+// (objectKey, objectID); destination by (object_key, key). When DestKey is
+// empty the source's storage key is reused.
 type CopyObjectInput struct {
-	SourceName    string
-	DestObjectKey string
-	DestKey       string
-	Metadata      map[string]string
-	Tags          map[string]string
+	SourceObjectKey string
+	SourceObjectID  string
+	DestObjectKey   string
+	DestKey         string
+	Metadata        map[string]string
+	Tags            map[string]string
 }
 
 func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
@@ -847,15 +856,15 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if err != nil {
 		return nil, err
 	}
-	srcObjectKey, srcObjectID, err := apiutil.ParseObjectName(in.SourceName)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	if in.SourceObjectKey == "" || in.SourceObjectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("source_object_key and source_object_id are required"))
 	}
 	if in.DestObjectKey == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("dest_object_key is required"))
 	}
-	src, err := h.repo.FindByName(ctx, tenantID, srcObjectKey, srcObjectID.String())
+	src, err := h.repo.FindByName(ctx, tenantID, in.SourceObjectKey, in.SourceObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -874,7 +883,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, err
 	}
 
-	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, srcObjectKey)
+	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -901,7 +910,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, mapCreateErr(err)
 	}
 	if err := h.storage.CopyObject(ctx, Location{
-		TenantID: tenantID, Bucket: srcBucket, ObjectKey: srcObjectKey, Key: src.Key,
+		TenantID: tenantID, Bucket: srcBucket, ObjectKey: in.SourceObjectKey, Key: src.Key,
 	}, Location{
 		TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
 	}); err != nil {
