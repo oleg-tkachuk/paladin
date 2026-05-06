@@ -137,6 +137,9 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin); err != nil {
 		return nil, "", err
 	}
+	if err := h.authorize(ctx, cedar.ActionReadBucket, args.BackendID, "", uuid.Nil); err != nil {
+		return nil, "", err
+	}
 	return h.repo.List(ctx, args)
 }
 
@@ -148,6 +151,9 @@ func (h *Handler) ListAccessibleBuckets(ctx context.Context, tenantID uuid.UUID,
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
 		return nil, "", connect.NewError(connect.CodePermissionDenied,
 			errors.New("cannot enumerate accessible buckets for another tenant"))
+	}
+	if err := h.authorize(ctx, cedar.ActionReadBucket, "", "", tenantID); err != nil {
+		return nil, "", err
 	}
 	return h.repo.ListAccessible(ctx, tenantID, pageSize, afterBackend, afterName)
 }

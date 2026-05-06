@@ -155,13 +155,16 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 }
 
 func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
 	args.TenantID = tenantID
-	// ListObjectKeys is permitted for any authenticated tenant member; per-objectKey
-	// visibility is not filtered through Cedar here to keep pagination cheap.
+	// One tenant-scoped Cedar check up front; per-row filtering would
+	// dominate pagination cost so we don't repeat it for every objectKey.
+	if err := h.authorize(ctx, principal, tenantID, "", cedar.ActionManageObjectKey); err != nil {
+		return nil, "", err
+	}
 	return h.repo.List(ctx, args)
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // State mirrors the operation_state SQL enum.
@@ -52,17 +53,47 @@ type Repository interface {
 }
 
 type Handler struct {
-	repo Repository
+	repo   Repository
+	policy cedar.Authorizer
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
+	if policy == nil {
+		panic("operation: policy authorizer is required")
+	}
+	return &Handler{repo: repo, policy: policy}
+}
+
+// authorize gates operation RPCs against Cedar with the operation's
+// tenant_id (an operation is owned by the tenant whose principal spawned
+// it; cross-tenant Get/Cancel is denied at the repo layer too).
+func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{TenantID: tenantID},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
 }
 
 func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
+		return nil, err
 	}
 	op, err := h.repo.Get(ctx, opID, tenantID)
 	if err != nil {
@@ -76,6 +107,9 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	if err := h.authorize(ctx, cedar.ActionCancelOperation, tenantID); err != nil {
+		return err
+	}
 	if err := h.repo.Cancel(ctx, opID, tenantID); err != nil {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("operation not cancellable: %w", err))
@@ -87,6 +121,9 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
+		return nil, "", err
 	}
 	var afterID uuid.UUID
 	if pageToken != "" {

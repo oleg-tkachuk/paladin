@@ -148,6 +148,18 @@ permit (
     principal.roles.contains("tenant-admin") ||
     principal.roles.contains("policy-author")
 };
+
+// Async operations — any tenant member sees / cancels operations they
+// (or someone in their tenant) spawned. Cross-tenant Read/Cancel for
+// platform-admin runs through the same permit, gated by tenant_id.
+permit (
+    principal,
+    action in [Action::"ReadOperation", Action::"CancelOperation"],
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    principal.tenant_id == resource.tenant_id
+};
 `
 
 // renderDefaultPolicy returns the default Cedar policy with the placeholder

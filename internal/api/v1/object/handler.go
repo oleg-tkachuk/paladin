@@ -440,6 +440,13 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	principal, _ := auth.PrincipalFromContext(ctx)
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes,
+	}, cedar.ActionPutObject, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
+	}
 
 	if obj.State == statemachine.StateAvailable {
 		// Already promoted (event-driven). No-op.
@@ -498,9 +505,16 @@ type ListObjectsInput struct {
 // skipped — listing is permitted for any authenticated tenant member to keep
 // pagination cheap (same contract as ListObjectKeys).
 func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
-	tenantID, err := auth.TenantFromContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, "", err
+	}
+	// One tenant+objectKey-scoped Cedar check up front; per-row Cedar would
+	// dominate pagination cost.
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: in.ObjectKey,
+	}, cedar.ActionGetObject, 0, ""); err != nil {
+		return nil, "", err
 	}
 	prog, err := h.filter.Compile(cel.ObjectSchema, in.Filter)
 	if err != nil {
@@ -538,9 +552,14 @@ type CountObjectsOutput struct {
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
 func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
-	tenantID, err := auth.TenantFromContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: in.ObjectKey,
+	}, cedar.ActionGetObject, 0, ""); err != nil {
+		return nil, err
 	}
 	prog, err := h.filter.Compile(cel.ObjectSchema, in.Filter)
 	if err != nil {
@@ -564,7 +583,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 
 // GetObject returns metadata for an object addressed by (objectKey, objectID).
 func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*Object, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -575,13 +594,19 @@ func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*O
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
+	}
 	return &obj, nil
 }
 
 // LookupObject resolves an object by (object_key, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
 func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Object, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -592,6 +617,12 @@ func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Obj
 	obj, err := h.repo.FindByPath(ctx, tenantID, objectKey, key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
 	}
 	return &obj, nil
 }
@@ -671,7 +702,7 @@ type UpdateObjectInput struct {
 }
 
 func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -681,6 +712,11 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: in.ObjectKey,
+	}, cedar.ActionUpdateObject, 0, ""); err != nil {
+		return nil, err
 	}
 	obj, err := h.repo.UpdateMetadata(ctx, UpdateMetadataArgs{
 		TenantID:        tenantID,
@@ -778,7 +814,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 // Versioning-aware: when bucket has versioning_enabled, also drops the most
 // recent delete-marker before flipping state.
 func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, resourceVersion string) (*Object, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -792,6 +828,12 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
+		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
+	}, cedar.ActionRestoreObject, obj.SizeBytes, obj.ContentType); err != nil {
+		return nil, err
 	}
 	if obj.State != statemachine.StateDeleted {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,

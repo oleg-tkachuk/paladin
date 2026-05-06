@@ -203,7 +203,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	objH := wire.ProvideObjectHandler(repos, storage, polEngine, celEval, sm, cfg)
 	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
 	tenantH := wire.ProvideTenantHandler(repos, polEngine)
-	opH := wire.ProvideOperationHandler(repos)
+	opH := wire.ProvideOperationHandler(repos, polEngine)
 	batchH := wire.ProvideBatchHandler(opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, sm)

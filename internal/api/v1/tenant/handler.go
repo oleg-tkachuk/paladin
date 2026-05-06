@@ -177,6 +177,9 @@ func (h *Handler) ListTenants(ctx context.Context, pageSize int32, pageToken str
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, "", err
 	}
+	if err := h.authorize(ctx, cedar.ActionReadTenant, uuid.Nil); err != nil {
+		return nil, "", err
+	}
 	var afterID uuid.UUID
 	if pageToken != "" {
 		id, err := uuid.Parse(pageToken)

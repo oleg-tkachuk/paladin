@@ -139,6 +139,10 @@ func (h *Handler) ListApiKeys(ctx context.Context, args authstore.ListApiKeysArg
 	if !isPlatformAdmin(ctx) {
 		args.TenantID = caller
 	}
+	if err := h.authorize(ctx, cedar.ActionReadApiKey,
+		authstore.ApiKey{TenantID: args.TenantID}); err != nil {
+		return nil, "", err
+	}
 	return h.apiKeys.List(ctx, args)
 }
 

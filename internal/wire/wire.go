@@ -186,8 +186,8 @@ func ProvideObjectTagHandler(repos Repos) *objecttag.Handler {
 	return objecttag.NewHandler(repos.ObjectTag)
 }
 
-func ProvideOperationHandler(repos Repos) *operation.Handler {
-	return operation.NewHandler(repos.Operation)
+func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operation.Handler {
+	return operation.NewHandler(repos.Operation, pe)
 }
 
 func ProvideBatchHandler(opH *operation.Handler, pe *policy.Engine) *batch.Handler {

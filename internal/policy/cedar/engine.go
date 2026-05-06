@@ -101,6 +101,12 @@ const (
 	ActionManageSubscription = "ManageSubscription"
 	ActionReadSubscription   = "ReadSubscription"
 	ActionTestSubscription   = "TestSubscription"
+
+	// Operation-scoped actions (long-running async ops: BatchDelete /
+	// BatchCopy / etc.). Resource is the Tenant entity carrying the
+	// op's tenant_id.
+	ActionReadOperation   = "ReadOperation"
+	ActionCancelOperation = "CancelOperation"
 )
 
 // Entity type names — must match the Cedar schema exactly.

@@ -178,7 +178,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 }
 
 func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) error {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -187,6 +187,9 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	sess, err := h.repo.GetSession(ctx, args.UploadID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPutObject, 0, ""); err != nil {
+		return err
 	}
 	bucket := sess.Bucket
 	if bucket == "" {
@@ -230,13 +233,16 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 }
 
 func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) error {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionDeleteObject, 0, ""); err != nil {
+		return err
 	}
 	bucket := sess.Bucket
 	if bucket == "" {
@@ -297,7 +303,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 // ListParts returns the parts already recorded for an upload session. Used
 // during resumption to figure out which part numbers still need uploading.
 func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -307,6 +313,9 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	}
 	if sess.TenantID != tenantID {
 		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionGetObject, 0, ""); err != nil {
+		return nil, "", err
 	}
 	if pageSize <= 0 || pageSize > 1000 {
 		pageSize = 100

@@ -118,6 +118,9 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID stri
 	if err := requireAnyRole(ctx, rolePlatformAdmin, roleBucketAdmin, roleTenantAdmin); err != nil {
 		return nil, "", err
 	}
+	if err := h.authorize(ctx, cedar.ActionReadBackend, ""); err != nil {
+		return nil, "", err
+	}
 	out, next, err := h.repo.List(ctx, pageSize, afterID)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err)
@@ -205,6 +208,9 @@ type TestBackendOutput struct {
 
 func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBackendOutput, error) {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, actionReadBackend, backendID); err != nil {
 		return nil, err
 	}
 	// Probe is wired by the storage adapter package in main.go; here we just

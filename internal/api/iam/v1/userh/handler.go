@@ -235,6 +235,9 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	} else if !hasPlatformAdmin(p) && scope != caller {
 		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant list denied"))
 	}
+	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: scope}); err != nil {
+		return nil, "", err
+	}
 	return h.users.List(ctx, authstore.ListUsersArgs{
 		TenantID:  scope,
 		PageSize:  in.PageSize,
