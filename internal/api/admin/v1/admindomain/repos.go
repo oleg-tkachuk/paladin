@@ -54,6 +54,20 @@ type BucketRepository interface {
 	// the row 'failed' and stops the worker from retrying; terminal=false
 	// (transient) keeps it 'pending' for the next tick.
 	MarkProvisionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
+
+	// ─── outbox / delete path ───────────────────────────────────────────
+	// MarkDeleting flips a row into the deletion outbox. The handler calls
+	// this; the actual physical delete (both S3 + DB row) is the worker's
+	// job. expectedVersion=0 disables the OCC check.
+	MarkDeleting(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+	// ListPendingDeletions is the deletion-side companion of ListPending
+	// Provisions: 'deleting' rows + 'deletion_failed' rows still within
+	// the retry budget.
+	ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]BucketProvisionRow, error)
+	// MarkDeletionFailed records a failed delete attempt. terminal=true
+	// freezes the row in 'deletion_failed'; terminal=false keeps it
+	// 'deleting' for retry.
+	MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
 }
 
 type ListBucketsArgs struct {

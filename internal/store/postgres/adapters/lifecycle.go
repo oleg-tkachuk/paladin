@@ -34,6 +34,7 @@ func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]admin
 			row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 			row.VersioningEnabled, row.VersioningKeepDeletesForever,
 			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+			row.ProvisionState,
 			row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 		))
 	}
@@ -70,6 +71,7 @@ func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]adm
 			row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 			row.VersioningEnabled, row.VersioningKeepDeletesForever,
 			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+			row.ProvisionState,
 			row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 		))
 	}

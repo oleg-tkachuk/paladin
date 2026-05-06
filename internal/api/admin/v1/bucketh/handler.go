@@ -289,15 +289,30 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := h.authorize(ctx, actionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
 		return err
 	}
-	if in.DeleteOnBackend {
-		if h.provisioner == nil {
-			return connect.NewError(connect.CodeUnavailable, errors.New("backend provisioning not wired"))
-		}
-		if err := h.provisioner.DeleteBucket(ctx, in.BackendID, in.BucketName); err != nil {
-			return connect.NewError(connect.CodeInternal, err)
-		}
+	// Outbox model for deletes (mirrors CreateBucket): the row stays in
+	// place flipped to 'deleting', and the bucket-reconciler worker
+	// drives the physical s3.DeleteBucket then the actual row removal.
+	// That avoids the same orphan window the create path used to have.
+	//
+	// When the operator opted out of backend deletion, we still mark
+	// 'deleting' rather than physical-delete inline — the worker has
+	// the same code path that handles the "no provisioner" case (it
+	// just deletes the row without calling S3) and concentrating the
+	// terminal logic there keeps the handler simple.
+	if in.DeleteOnBackend && h.provisioner == nil {
+		return connect.NewError(connect.CodeUnavailable, errors.New("backend provisioning not wired"))
 	}
-	if err := h.repo.Delete(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
+	if !in.DeleteOnBackend {
+		// Operator says S3 cleanup is their problem — physically delete
+		// the row right away. Faster and avoids parking dev/test rows
+		// in a 'deleting' loop the worker can never resolve (no S3 →
+		// always transient).
+		if err := h.repo.Delete(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
+			return mapVersion(err)
+		}
+		return nil
+	}
+	if err := h.repo.MarkDeleting(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
 		return mapVersion(err)
 	}
 	return nil

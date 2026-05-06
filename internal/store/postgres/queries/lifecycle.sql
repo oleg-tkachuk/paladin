@@ -4,31 +4,43 @@
 -- Returns buckets that have replication.enabled = true. Used by the
 -- replication worker to drive its fan-out scan; same row shape as the
 -- lifecycle source so the decode helper is shared.
+--
+-- provision_state filter: only 'ready' buckets are valid worker targets.
+-- 'pending' rows have no physical bucket yet, 'deleting' rows are on
+-- their way out, and 'failed' / 'deletion_failed' need operator triage —
+-- replicating into or out of any of those is at best wasted work and at
+-- worst ships objects into a bucket that's about to be torn down.
 SELECT backend_id, bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
+       provision_state,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE replication_enabled = TRUE
   AND replication_destination <> ''
+  AND provision_state = 'ready'
 ORDER BY backend_id, bucket_name;
 
 -- name: ListBucketsWithLifecycle :many
 -- Returns only buckets with a non-empty lifecycle_rules array. The worker
 -- ticks against this set; sweeping all buckets on every tick would be
 -- wasteful when most carry no rules.
+--
+-- See ListBucketsWithReplication for why we restrict to provision_state='ready'.
 SELECT backend_id, bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
+       provision_state,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0
+  AND provision_state = 'ready'
 ORDER BY backend_id, bucket_name;
 
 -- name: ListObjectKeyBindingsForBucket :many

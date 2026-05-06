@@ -541,8 +541,24 @@ type Bucket struct {
 	ResourceVersion string                 `protobuf:"bytes,14,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Outbox status of the underlying physical bucket. One of:
+	//
+	//	"ready"           — DB row + backend bucket are in sync.
+	//	"pending"         — handler accepted CreateBucket; backend
+	//	                    provisioning still in flight.
+	//	"failed"          — provisioning hit a non-retryable error;
+	//	                    provision_error carries the message.
+	//	"deleting"        — handler accepted DeleteBucket; backend
+	//	                    teardown still in flight.
+	//	"deletion_failed" — deletion hit a non-retryable error;
+	//	                    provision_error carries the message.
+	//
+	// Clients should treat anything other than "ready" as "do not bind /
+	// upload to this bucket yet"; the row stays visible so admin tooling
+	// can render progress or surface a stuck operation.
+	ProvisionState string `protobuf:"bytes,17,opt,name=provision_state,json=provisionState,proto3" json:"provision_state,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Bucket) Reset() {
@@ -685,6 +701,13 @@ func (x *Bucket) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Bucket) GetProvisionState() string {
+	if x != nil {
+		return x.ProvisionState
+	}
+	return ""
 }
 
 type BucketConstraints struct {
@@ -2117,7 +2140,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x121\n" +
 	"\x06target\x18\x02 \x01(\x0e2\x19.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
 	"\tqueue_url\x18\x03 \x01(\tR\bqueueUrl\x12>\n" +
-	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xc5\x06\n" +
+	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xee\x06\n" +
 	"\x06Bucket\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2142,7 +2165,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a9\n" +
+	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
+	"\x0fprovision_state\x18\x11 \x01(\tR\x0eprovisionState\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xeb\x03\n" +

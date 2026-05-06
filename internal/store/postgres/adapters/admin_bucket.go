@@ -98,6 +98,59 @@ func (r *BucketRepoV2) MarkProvisionFailed(ctx context.Context, backendID, bucke
 	return nil
 }
 
+// ─── outbox / delete path ──────────────────────────────────────────────────
+
+func (r *BucketRepoV2) MarkDeleting(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := r.q.MarkBucketDeleting(ctx, backendID, bucketName, expectedVersion)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		// Either the row doesn't exist or the resource_version check
+		// failed. Surface as ErrVersionMismatch to match the rest of the
+		// repo — handlers can still decode "not found" via the prior
+		// Get.
+		return admindomain.ErrVersionMismatch
+	}
+	return nil
+}
+
+func (r *BucketRepoV2) ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 10
+	}
+	rows, err := r.q.ListPendingBucketDeletions(ctx, maxAttempts, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]admindomain.BucketProvisionRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, admindomain.BucketProvisionRow{
+			BackendID:         row.BackendID,
+			BucketName:        row.BucketName,
+			Region:            derefStr(row.Region),
+			ProvisionState:    row.ProvisionState,
+			ProvisionAttempts: row.ProvisionAttempts,
+			LastProvisionAt:   timeFrom(row.LastProvisionAt),
+		})
+	}
+	return out, nil
+}
+
+func (r *BucketRepoV2) MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error {
+	rows, err := r.q.MarkBucketDeletionFailed(ctx, backendID, bucketName, terminal, errMsg)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
+}
+
 func (r *BucketRepoV2) Get(ctx context.Context, backendID, bucketName string) (admindomain.Bucket, error) {
 	row, err := r.q.GetBucketV2(ctx, backendID, bucketName)
 	if err != nil {
@@ -269,6 +322,7 @@ func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+		row.ProvisionState,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -280,6 +334,7 @@ func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+		row.ProvisionState,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -291,6 +346,7 @@ func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bu
 		row.ObjectLockEnabled, row.ObjectLockDefaultMode, row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+		row.ProvisionState,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -306,6 +362,7 @@ func decodeBucketRow(
 	lockEnabled bool, lockMode string, lockRetentionSeconds int64,
 	versioningEnabled, keepDeletesForever bool,
 	replicationEnabled bool, replicationDest, replicationFilter string,
+	provisionState string,
 	resourceVersion int64,
 	createdAt, updatedAt pgtype.Timestamptz,
 ) admindomain.Bucket {
@@ -337,6 +394,7 @@ func decodeBucketRow(
 			DestinationBucket: replicationDest,
 			Filter:            replicationFilter,
 		},
+		ProvisionState:  provisionState,
 		ResourceVersion: resourceVersion,
 		CreatedAt:       timeFrom(createdAt),
 		UpdatedAt:       timeFrom(updatedAt),

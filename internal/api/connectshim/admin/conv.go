@@ -208,6 +208,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		ResourceVersion: resourceVersion(b.ResourceVersion),
 		CreatedAt:       tsProto(b.CreatedAt),
 		UpdatedAt:       tsProto(b.UpdatedAt),
+		ProvisionState:  b.ProvisionState,
 	}
 }
 

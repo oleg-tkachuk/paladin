@@ -39,6 +39,7 @@ import (
 // cheaper than introducing a shared package.
 type BucketProvisioner interface {
 	CreateBucket(ctx context.Context, backendID, bucketName, region string) error
+	DeleteBucket(ctx context.Context, backendID, bucketName string) error
 }
 
 // BucketProvisionRepo is the subset of admindomain.BucketRepository the
@@ -47,6 +48,16 @@ type BucketProvisionRepo interface {
 	ListPendingProvisions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error)
 	MarkProvisionReady(ctx context.Context, backendID, bucketName string) error
 	MarkProvisionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
+
+	// Delete-side outbox.
+	ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error)
+	// Delete physically removes the row. Called from the worker AFTER
+	// the backend confirms the bucket is gone. expectedVersion=0 here:
+	// the OCC was already enforced when the handler flipped the row to
+	// 'deleting'; an intervening UPDATE is a bug we want to surface, not
+	// race against.
+	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+	MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
 }
 
 type BucketReconcilerConfig struct {
@@ -110,16 +121,32 @@ func (r *BucketReconciler) Run(ctx context.Context) error {
 }
 
 func (r *BucketReconciler) tick(ctx context.Context) {
+	// Create-side scan.
 	rows, err := r.repo.ListPendingProvisions(ctx, r.cfg.MaxAttempts, r.cfg.BatchSize)
 	if err != nil {
 		r.log.Warn("list pending bucket provisions failed", zap.Error(err))
+	} else {
+		for _, row := range rows {
+			if err := ctx.Err(); err != nil {
+				return
+			}
+			r.reconcileOne(ctx, row)
+		}
+	}
+
+	// Delete-side scan. Same batch budget — operationally a backlog of
+	// 'deleting' rows is no more urgent than a backlog of 'pending'
+	// ones; both block reconvergence equally.
+	delRows, err := r.repo.ListPendingDeletions(ctx, r.cfg.MaxAttempts, r.cfg.BatchSize)
+	if err != nil {
+		r.log.Warn("list pending bucket deletions failed", zap.Error(err))
 		return
 	}
-	for _, row := range rows {
+	for _, row := range delRows {
 		if err := ctx.Err(); err != nil {
 			return
 		}
-		r.reconcileOne(ctx, row)
+		r.reconcileDeleteOne(ctx, row)
 	}
 }
 
@@ -165,6 +192,78 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 	} else {
 		log.Warn("bucket provisioning failed (transient)", zap.Error(err))
 	}
+}
+
+// reconcileDeleteOne is the delete-path twin of reconcileOne. The flow
+// is: backend.DeleteBucket → physical row delete. Both halves are
+// idempotent: backend swallows NoSuchBucket, and Delete is a guarded
+// SQL statement that returns ErrVersionMismatch (treated as "already
+// gone") if the row vanished out from under us.
+func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindomain.BucketProvisionRow) {
+	log := r.log.With(
+		zap.String("backend_id", row.BackendID),
+		zap.String("bucket_name", row.BucketName),
+		zap.Int32("attempt", row.ProvisionAttempts+1),
+	)
+
+	if r.prov == nil {
+		// No backend wired — see reconcileOne's note. Mark transient so
+		// a future deploy can converge.
+		_ = r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName,
+			false, "no provisioner wired")
+		log.Debug("no provisioner wired, leaving row deleting")
+		return
+	}
+
+	if err := r.prov.DeleteBucket(ctx, row.BackendID, row.BucketName); err != nil {
+		terminal := isTerminalDeletionError(err)
+		if mErr := r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName, terminal, err.Error()); mErr != nil {
+			log.Warn("mark-deletion-failed write failed",
+				zap.Bool("terminal", terminal), zap.Error(mErr), zap.NamedError("backend_err", err))
+			return
+		}
+		if terminal {
+			log.Error("bucket deletion failed permanently", zap.Error(err))
+		} else {
+			log.Warn("bucket deletion failed (transient)", zap.Error(err))
+		}
+		return
+	}
+
+	// Backend confirms the bucket is gone — drop the row. expectedVersion
+	// is 0 because the OCC check was enforced at MarkDeleting time; the
+	// row hasn't been touched since (UpdateBucket et al. would refuse a
+	// 'deleting' row in a future hardening pass, but right now nothing
+	// guards it — keeping expectedVersion=0 means the worker doesn't
+	// fight an admin who forced through an UPDATE during the delete).
+	if err := r.repo.Delete(ctx, row.BackendID, row.BucketName, 0); err != nil {
+		log.Warn("backend deleted but row delete failed", zap.Error(err))
+		return
+	}
+	log.Info("bucket deleted")
+}
+
+// isTerminalDeletionError mirrors isTerminalProvisionError for the
+// delete side. BucketNotEmpty is the canonical non-retryable here —
+// the caller has to remove the contents first; retrying without that
+// will keep failing.
+func isTerminalDeletionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	msg := err.Error()
+	for _, marker := range []string{
+		"AccessDenied",
+		"BucketNotEmpty",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // isTerminalProvisionError classifies a backend error as retryable vs

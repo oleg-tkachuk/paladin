@@ -97,6 +97,20 @@ message Bucket {
   string resource_version = 14;
   google.protobuf.Timestamp created_at = 15;
   google.protobuf.Timestamp updated_at = 16;
+  // Outbox status of the underlying physical bucket. One of:
+  //   "ready"           — DB row + backend bucket are in sync.
+  //   "pending"         — handler accepted CreateBucket; backend
+  //                       provisioning still in flight.
+  //   "failed"          — provisioning hit a non-retryable error;
+  //                       provision_error carries the message.
+  //   "deleting"        — handler accepted DeleteBucket; backend
+  //                       teardown still in flight.
+  //   "deletion_failed" — deletion hit a non-retryable error;
+  //                       provision_error carries the message.
+  // Clients should treat anything other than "ready" as "do not bind /
+  // upload to this bucket yet"; the row stays visible so admin tooling
+  // can render progress or surface a stuck operation.
+  string provision_state = 17;
 }
 
 message BucketConstraints {

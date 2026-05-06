@@ -85,9 +85,11 @@ type BucketProvisionRow struct {
 // inside Go code so a typo doesn't silently keep the row in 'pending'
 // forever.
 const (
-	BucketProvisionStatePending = "pending"
-	BucketProvisionStateReady   = "ready"
-	BucketProvisionStateFailed  = "failed"
+	BucketProvisionStatePending        = "pending"
+	BucketProvisionStateReady          = "ready"
+	BucketProvisionStateFailed         = "failed"
+	BucketProvisionStateDeleting       = "deleting"
+	BucketProvisionStateDeletionFailed = "deletion_failed"
 )
 
 type BucketConstraints struct {

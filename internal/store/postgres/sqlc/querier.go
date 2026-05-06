@@ -48,6 +48,10 @@ type Querier interface {
 	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
 	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	// Physical row delete. Called by the bucket-reconciler worker AFTER
+	// s3.DeleteBucket confirms. The handler does NOT call this directly —
+	// it flips state to 'deleting' via MarkBucketDeleting and lets the
+	// worker drive the physical delete.
 	DeleteBucketV2(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	DeleteEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error)
 	DeleteMultipartUpload(ctx context.Context, uploadID string) error
@@ -121,11 +125,19 @@ type Querier interface {
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.
+	//
+	// See ListBucketsWithReplication for why we restrict to provision_state='ready'.
 	ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWithLifecycleRow, error)
 	// Lifecycle worker queries.
 	// Returns buckets that have replication.enabled = true. Used by the
 	// replication worker to drive its fan-out scan; same row shape as the
 	// lifecycle source so the decode helper is shared.
+	//
+	// provision_state filter: only 'ready' buckets are valid worker targets.
+	// 'pending' rows have no physical bucket yet, 'deleting' rows are on
+	// their way out, and 'failed' / 'deletion_failed' need operator triage —
+	// replicating into or out of any of those is at best wasted work and at
+	// worst ships objects into a bucket that's about to be torn down.
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
 	// Returns api_keys whose `expires_at` has passed and that are still active.
@@ -143,6 +155,9 @@ type Querier interface {
 	// (UUIDv7) which is monotonic-by-time.
 	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
+	// Worker query for the delete path. Picks 'deleting' rows plus
+	// 'deletion_failed' rows whose retry budget hasn't run out.
+	ListPendingBucketDeletions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketDeletionsRow, error)
 	// Worker query: drag the next batch of buckets that need a backend
 	// CreateBucket call. ORDER BY last_provision_at NULLS FIRST so brand-new
 	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
@@ -161,6 +176,15 @@ type Querier interface {
 	LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error)
+	// Soft-flip into the deletion outbox. Resets attempts so the new
+	// operation gets a fresh retry budget; clears any old error message.
+	// The actual DELETE happens later, from the worker, after backend
+	// confirmation.
+	MarkBucketDeleting(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	// Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
+	// parks the row in 'deletion_failed' (operator triage); terminal=false
+	// keeps the row 'deleting' so the next tick retries.
+	MarkBucketDeletionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
 	// terminal=true → the worker hit a non-retryable error (auth denied,
 	// region mismatch, …) and the row should stop receiving attempts.
 	// terminal=false → transient error; row stays 'pending' and gets
