@@ -1,17 +1,18 @@
 version: "3"
 
+# Code generation. Order matters: mockery first so it can run against
+# whatever interfaces the generator emits in subsequent steps; buf
+# before go generate so the protoc-generated files exist when go
+# generate's tools (e.g. goimports) walk the tree.
+
 tasks:
   all:
-    desc: "Generate all code (Proto, Mocks, SQLC)"
-    silent: true
+    desc: "Regenerate every kind of code we ship (mocks, proto, sqlc)"
+    deps: [":core:tools:basic"]
     cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Generating code (mocks, proto, sqlc)...\n"
-      - cmd: |-
-          time go run github.com/vektra/mockery/v3 --config .mockery.yaml
-      - cmd: |-
-          time buf generate
-      - cmd: |-
-          time go generate ./...
-      - cmd: |-
-          if [ -f sqlc.yaml ]; then time sqlc generate; fi
+      - task: ":core:banner"
+        vars: { MESSAGE: "regenerating code (mocks → proto → go generate → sqlc)" }
+      - go run github.com/vektra/mockery/v3 --config .mockery.yaml
+      - buf generate
+      - go generate ./...
+      - sqlc generate

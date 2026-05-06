@@ -1,80 +1,98 @@
 version: "3"
 
+# Image + Helm chart build/release flow. Two entry points — `build`
+# (push to OCI registry) and `build-local` (load straight into Minikube
+# without a push) — share one internal builder so the docker-build
+# invocation isn't duplicated.
+
 vars:
   TAG: latest
 
 tasks:
+  # ─── Public entry points ─────────────────────────────────────────────────
+
   build:
-    desc: "Build and push {{.PROJECT_NAME}} image + Helm chart to OCI registry"
-    deps: [":core:tools:check"]
-    vars:
+    desc: "Build, push image (TAG + :latest), package and push the Helm chart"
+    deps: [":core:tools:build"]
+    vars: &build-vars
       IMAGE: "{{.OCI_REGISTRY}}/{{.PROJECT_NAME}}"
-      # Auto-generated version from info.env
-      _TAG_AUTO: { sh: "grep 'APP_VERSION=' {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2" }
-      # Final tag to use (CLI/Global TAG -> fallback to info.env)
+      _TAG_AUTO: { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
       _TAG: '{{.TAG | default ._TAG_AUTO}}'
       _COMMIT: { sh: "git rev-parse --short HEAD" }
-      _TIME: { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
-      # Chart version must be SemVer. Helm fails on 'latest'.
+      _TIME:   { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+      # Helm rejects non-SemVer chart versions (e.g. literal "latest"),
+      # so chart packaging always uses the auto-bumped numeric version.
       _CHART_VER: '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
     cmds:
       - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] Building {{.PROJECT_NAME}} {{._TAG}} (chart: {{._CHART_VER}}) in Minikube..." }
-      - |
-        docker build \
-          --network=host \
-          --tag {{.IMAGE}}:{{._TAG}} \
-          --file {{.DOCKERFILE}} \
-          --build-arg APP_VERSION={{._TAG}} \
-          --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
-          --build-arg BUILD_TIME="{{._TIME}}" \
-          .
-        docker push {{.IMAGE}}:{{._TAG}}
-        docker push {{.IMAGE}}:latest
-      - |
-        helm package {{.CHART_DIR}} \
-          --version {{._CHART_VER}} \
-          --app-version {{._TAG}}
+        vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._TAG}} (chart {{._CHART_VER}})" }
+      - task: _docker:build
+        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._TAG}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
+      # Push the versioned tag, then mirror it as :latest so consumers
+      # pinning `:latest` get the just-built image. The previous form
+      # pushed `:latest` without first tagging — would silently re-push
+      # whatever stale `:latest` was sitting in the local cache, or 404
+      # outright on a fresh host.
+      - docker push {{.IMAGE}}:{{._TAG}}
+      - docker tag  {{.IMAGE}}:{{._TAG}} {{.IMAGE}}:latest
+      - docker push {{.IMAGE}}:latest
+      # Helm chart — package, push, clean up the tarball.
+      - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._TAG}}
       - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
       - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
       - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] Pushed {{.PROJECT_NAME}} image + chart {{._TAG}}" }
+        vars: { MESSAGE: "[OCI] pushed image + chart {{._TAG}}" }
 
   build-local:
-    desc: "Build {{.PROJECT_NAME}} image directly in Minikube (Zero-push flow)"
-    deps: [":core:tools:check"]
-    vars:
-      IMAGE: "{{.OCI_REGISTRY}}/{{.PROJECT_NAME}}"
-      _TAG_AUTO: { sh: "grep 'APP_VERSION=' {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2" }
-      _TAG: '{{.TAG | default ._TAG_AUTO}}'
-      _COMMIT: { sh: "git rev-parse --short HEAD" }
-      _TIME: { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+    desc: "Build the image directly into the Minikube Docker daemon (no push)"
+    deps: [":core:tools:build"]
+    vars: *build-vars
     cmds:
       - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] Building {{.PROJECT_NAME}} {{._TAG}} in Minikube..." }
-      - |
-        eval "$(minikube docker-env)"
-        docker build \
-          --network=host \
-          --tag {{.IMAGE}}:{{._TAG}} \
-          --file {{.DOCKERFILE}} \
-          --build-arg APP_VERSION={{._TAG}} \
-          --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
-          --build-arg BUILD_TIME="{{._TIME}}" \
-          .
+        vars: { MESSAGE: "[LOCAL] building {{.PROJECT_NAME}} {{._TAG}} into Minikube" }
+      # Wrap the shared builder in a subshell that targets Minikube's
+      # Docker daemon. `eval` mutates the shell's env only for the
+      # duration of this cmd block.
+      - cmd: |-
+          eval "$(minikube docker-env)"
+          docker build \
+            --network=host \
+            --tag {{.IMAGE}}:{{._TAG}} \
+            --file {{.DOCKERFILE}} \
+            --build-arg APP_VERSION={{._TAG}} \
+            --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
+            --build-arg BUILD_TIME="{{._TIME}}" \
+            .
       - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] Built {{.PROJECT_NAME}} {{._TAG}} in Minikube" }
+        vars: { MESSAGE: "[LOCAL] built {{._TAG}} into Minikube" }
+
+  # ─── Local stack (Docker Compose) ────────────────────────────────────────
 
   up:
-    desc: "Start the local stack via Docker Compose"
-    silent: true
+    desc: "Bring up the local stack (postgres + seaweedfs + service)"
     cmds:
       - task: ":core:banner"
-        vars: { MESSAGE: "Starting local stack..." }
+        vars: { MESSAGE: "starting local stack" }
       - cmd: |-
-          time docker compose \
+          docker compose \
             --progress={{.PROGRESS | default "auto"}} \
             -f {{.COMPOSE_FILE}} \
             -p {{.PROJECT_NAME}} \
             --env-file {{.DEPLOY_INFO_ENV_FILE}} \
             up -d --build
+
+  # ─── Internal helpers ────────────────────────────────────────────────────
+
+  _docker:build:
+    desc: "Internal: invoke `docker build` with the standard ldflags args"
+    internal: true
+    cmds:
+      - cmd: |-
+          docker build \
+            --network=host \
+            --tag {{.IMAGE}}:{{.TAG}} \
+            --file {{.DOCKERFILE}} \
+            --build-arg APP_VERSION={{.TAG}} \
+            --build-arg GIT_COMMIT_HASH={{.COMMIT}} \
+            --build-arg BUILD_TIME="{{.TIME}}" \
+            .

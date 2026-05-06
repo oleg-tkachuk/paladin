@@ -1,0 +1,24 @@
+version: "3"
+
+# Auth-adjacent dev helpers. The actual JWT minting lives in
+# scripts/auth-mint-jwt.sh — keeping bash out of YAML.
+
+tasks:
+  mint-token:
+    desc: "Mint an HS256 JWT for local dev (override JWT_* env vars; see scripts/auth-mint-jwt.sh)"
+    # Defaults match configs/local.yaml: signing_key, issuer, plane
+    # audience, plus a sample tenant UUID. Operators override at the
+    # command line: `JWT_TENANT=… task auth:mint-token`.
+    env:
+      JWT_SECRET: '{{.JWT_SECRET | default "dev-secret-change-me-32-bytes-min"}}'
+      JWT_ISS:    '{{.JWT_ISS    | default "paladin-dev"}}'
+      JWT_AUD:    '{{.JWT_AUD    | default "paladin-api"}}'
+      JWT_SUB:    '{{.JWT_SUB    | default "dev-user"}}'
+      # platform.admin in DOT form — hyphenated `platform-admin` silently
+      # fails every Cedar permit.
+      JWT_ROLES:        '{{.JWT_ROLES        | default "platform.admin"}}'
+      JWT_TENANT:       '{{.JWT_TENANT       | default "3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"}}'
+      JWT_TENANT_SLUG:  '{{.JWT_TENANT_SLUG  | default ""}}'
+      JWT_TTL_SECONDS:  '{{.JWT_TTL_SECONDS  | default "6048000"}}'
+    cmds:
+      - ./scripts/auth-mint-jwt.sh

@@ -1,42 +1,66 @@
 version: "3"
 
+# Shared helpers used by every other task file. Two flavours of
+# tools-check so callers can declare the actual subset they need
+# (codegen tasks don't need helm/minikube; build tasks do).
+
 tasks:
   banner:
+    desc: "Emit a one-line INFO banner. Other tasks call this via `task: ':core:banner'`"
     internal: true
     cmds:
-      - printf ">>> %s\n" "{{.MESSAGE}}"
+      - cmd: |-
+          printf 'INFO: %s: %s\n' '{{.PROJECT_NAME}}' '{{.MESSAGE}}'
 
-  tools:check:
-    desc: "Verify that all required CLI tools are installed"
+  # ─── Tool-availability checks ────────────────────────────────────────────
+  # `command -v` is portable; `>/dev/null` swallows the path. preconditions
+  # are evaluated before any cmd runs, so failures report clearly.
+
+  tools:basic:
+    desc: "Verify CLI tools needed for codegen + tests (go, git, docker)"
     internal: true
     preconditions:
-      - sh: command -v minikube >/dev/null
-        msg: "[ERROR] minikube is not installed"
+      - sh: command -v go     >/dev/null
+        msg: "[ERROR] go is not installed"
+      - sh: command -v git    >/dev/null
+        msg: "[ERROR] git is not installed"
       - sh: command -v docker >/dev/null
         msg: "[ERROR] docker is not installed"
-      - sh: command -v helm >/dev/null
-        msg: "[ERROR] helm is not installed"
 
-  ds:prune:
-    desc: "Docker system prune"
-    silent: true
-    deps:
-      - dd:start
-    cmds:
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Docker system...\n"
-      - cmd: |-
-          docker system prune --volumes --force
-      - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Pruning Minikube Docker system...\n"
-      - cmd: |-
-          minikube ssh "docker system prune -a --volumes --force" || true
+  tools:build:
+    desc: "Verify CLI tools needed for image+chart build (basic + helm + minikube)"
+    internal: true
+    deps: [tools:basic]
+    preconditions:
+      - sh: command -v helm     >/dev/null
+        msg: "[ERROR] helm is not installed"
+      - sh: command -v minikube >/dev/null
+        msg: "[ERROR] minikube is not installed (build-local needs it; remote build does not)"
+
+  # ─── Maintenance — macOS Docker Desktop only ─────────────────────────────
+  # `docker desktop` is a Docker Desktop CLI subcommand; Linux installs
+  # don't ship it. The guard prints a friendly skip rather than failing
+  # so CI doesn't trip when these helpers are inadvertently invoked.
 
   dd:start:
-    desc: "Start Docker Desktop"
-    silent: true
+    desc: "Start Docker Desktop (macOS Docker Desktop only — no-op on Linux)"
     cmds:
       - cmd: |-
-          printf "INFO: {{.K8S_DEPLOYMENT_NAME}}: Starting Docker Desktop...\n"
-      - cmd: |-
+          if ! docker desktop --help >/dev/null 2>&1; then
+            printf 'INFO: %s: dd:start skipped (Docker Desktop CLI unavailable)\n' '{{.PROJECT_NAME}}'
+            exit 0
+          fi
+          printf 'INFO: %s: starting Docker Desktop\n' '{{.PROJECT_NAME}}'
           docker desktop start
+
+  ds:prune:
+    desc: "Aggressively prune the local Docker system AND the Minikube daemon"
+    deps: [dd:start]
+    cmds:
+      - task: banner
+        vars: { MESSAGE: "pruning host Docker system" }
+      - docker system prune --volumes --force
+      - task: banner
+        vars: { MESSAGE: "pruning Minikube Docker system" }
+      # Minikube may be off — `|| true` keeps the prune chain idempotent.
+      - minikube ssh "docker system prune -a --volumes --force" || true
