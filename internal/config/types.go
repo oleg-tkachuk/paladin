@@ -8,20 +8,19 @@ import (
 )
 
 type Config struct {
-	App          App          `yaml:"app" json:"app"`
-	Logger       Logger       `yaml:"logger" json:"logger"`
-	Server       Server       `yaml:"server" json:"server"`
-	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
-	Limits       Limits       `yaml:"limits" json:"limits"`
-	Auth         Auth         `yaml:"auth" json:"auth"`
-	Security     Security     `yaml:"security" json:"security"`
-	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
-	Middleware   Middleware   `yaml:"middleware" json:"middleware"`
-	OTel         OTel         `yaml:"otel" json:"otel"`
-	Storage      Storage      `yaml:"storage" json:"storage"`
-	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
-	Cedar        Cedar        `yaml:"cedar" json:"cedar"`
-	MCP          MCP          `yaml:"mcp" json:"mcp"`
+	App        App        `yaml:"app" json:"app"`
+	Logger     Logger     `yaml:"logger" json:"logger"`
+	Server     Server     `yaml:"server" json:"server"`
+	Datastores Datastores `yaml:"datastores" json:"datastores"`
+	Limits     Limits     `yaml:"limits" json:"limits"`
+	Auth       Auth       `yaml:"auth" json:"auth"`
+	Security   Security   `yaml:"security" json:"security"`
+	Middleware Middleware `yaml:"middleware" json:"middleware"`
+	Workers    Workers    `yaml:"workers" json:"workers"`
+	OTel       OTel       `yaml:"otel" json:"otel"`
+	Storage    Storage    `yaml:"storage" json:"storage"`
+	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
+	MCP        MCP        `yaml:"mcp" json:"mcp"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -215,6 +214,14 @@ type Security struct {
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	EnableRLS                bool `yaml:"enable_rls" json:"enable_rls"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
+}
+
+// Workers groups every background-loop subsystem under a single section
+// so an operator looking for "what runs in the background?" finds them
+// in one place.
+type Workers struct {
+	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
+	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
 }
 
 type Housekeeping struct {

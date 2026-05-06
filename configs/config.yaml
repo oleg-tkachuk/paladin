@@ -168,14 +168,22 @@ middleware:
     enabled: true
     ttl: 24h
 
-# ─── Housekeeping (background reapers) ──────────────────────────────────────
-housekeeping:
-  enable_reaper: true
-  pending_ttl: 24h                      # PENDING objects older than this are GC'd
-  multipart_ttl: 72h                    # abandoned multipart sessions
-  audit_log_ttl: 8760h                  # 365 days
-  gc_interval: 1h
-  delete_orphaned_parts: false          # WARNING: enable in prod to reclaim S3 storage
+# ─── Background workers ────────────────────────────────────────────────────
+# Long-running goroutines that close gaps the request path can't handle:
+# reconciler reverifies stuck-PENDING objects against S3; housekeeping
+# reaps orphaned rows on a schedule.
+workers:
+  reconciler:                           # closes gaps when S3 events are unavailable / lost
+    poll_interval: 30s
+    pending_grace_ttl: 2h                # only PENDING rows older than this are reconciled
+    batch_size: 100
+  housekeeping:                         # background reapers
+    enable_reaper: true
+    pending_ttl: 24h                    # PENDING objects older than this are GC'd
+    multipart_ttl: 72h                  # abandoned multipart sessions
+    audit_log_ttl: 8760h                # 365 days
+    gc_interval: 1h
+    delete_orphaned_parts: false        # WARNING: enable in prod to reclaim S3 storage
 
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks
@@ -223,12 +231,6 @@ storage:
         target: "none"                  # sqs | redis | none
         queue_url: ""
         poll_interval: 20s
-
-# ─── Reconciler (closes gaps when S3 events are unavailable / lost) ─────────
-reconciler:
-  poll_interval: 30s
-  pending_grace_ttl: 2h                 # only PENDING rows older than this are reconciled
-  batch_size: 100
 
 # ─── Cedar policy engine ────────────────────────────────────────────────────
 cedar:

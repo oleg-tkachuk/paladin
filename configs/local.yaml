@@ -108,12 +108,17 @@ middleware:
     enabled: true
     ttl: 1h
 
-housekeeping:
-  enable_reaper: false
-  pending_ttl: "24h"
-  multipart_ttl: "72h"
-  gc_interval: "1h"
-  delete_orphaned_parts: false
+workers:
+  reconciler:
+    poll_interval: 30s
+    pending_grace_ttl: 2h
+    batch_size: 100
+  housekeeping:
+    enable_reaper: false
+    pending_ttl: "24h"
+    multipart_ttl: "72h"
+    gc_interval: "1h"
+    delete_orphaned_parts: false
 
 storage:
   default_backend: primary
@@ -133,11 +138,6 @@ storage:
       part_size: "8MB"
       sse: { type: "", key_id: "" }
       events: { enabled: false, target: "none", queue_url: "", poll_interval: 20s }
-
-reconciler:
-  poll_interval: 30s
-  pending_grace_ttl: 2h
-  batch_size: 100
 
 cedar:
   policy_cache_ttl: 30s

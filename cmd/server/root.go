@@ -429,16 +429,16 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		Logger:         l.Named("replication"),
 	})
 
-	if cfg.Reconciler.PollInterval > 0 {
+	if cfg.Workers.Reconciler.PollInterval > 0 {
 		s3c, err := s3adapter.New(context.Background(), cfg.Storage.Backends[cfg.Storage.DefaultBackend])
 		if err == nil {
 			out = append(out, worker.NewReconcilerV2(
 				statemachine.New(db.Pool.(*pgxpool.Pool)),
 				adapters.NewReconcilerProbe(db.Queries, s3c),
 				worker.ReconcilerV2Config{
-					PollInterval:    cfg.Reconciler.PollInterval,
-					PendingGraceTTL: cfg.Reconciler.PendingGraceTTL,
-					BatchSize:       cfg.Reconciler.BatchSize,
+					PollInterval:    cfg.Workers.Reconciler.PollInterval,
+					PendingGraceTTL: cfg.Workers.Reconciler.PendingGraceTTL,
+					BatchSize:       cfg.Workers.Reconciler.BatchSize,
 				},
 				l.Named("reconciler"),
 			))
@@ -446,10 +446,10 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 			l.Warn("reconciler skipped: s3 adapter init failed", zap.Error(err))
 		}
 	}
-	if cfg.Housekeeping.AuditLogTTL > 0 {
+	if cfg.Workers.Housekeeping.AuditLogTTL > 0 {
 		out = append(out, &worker.AuditLogPurger{
 			Purger:   adapters.NewAuditRepoV2(db.Queries),
-			TTL:      cfg.Housekeeping.AuditLogTTL,
+			TTL:      cfg.Workers.Housekeeping.AuditLogTTL,
 			Interval: 24 * time.Hour,
 			Logger:   l.Named("audit-purger"),
 		})
