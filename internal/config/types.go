@@ -15,6 +15,7 @@ type Config struct {
 	Limits     Limits     `yaml:"limits" json:"limits"`
 	Auth       Auth       `yaml:"auth" json:"auth"`
 	Security   Security   `yaml:"security" json:"security"`
+	Bootstrap  Bootstrap  `yaml:"bootstrap" json:"bootstrap"`
 	Middleware Middleware `yaml:"middleware" json:"middleware"`
 	Workers    Workers    `yaml:"workers" json:"workers"`
 	OTel       OTel       `yaml:"otel" json:"otel"`
@@ -222,6 +223,62 @@ type Security struct {
 	TrustTenantIDFromRequest bool `yaml:"trust_tenant_id_from_request" json:"trust_tenant_id_from_request"`
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
+}
+
+// Bootstrap groups one-shot startup steps that prepare the cluster for
+// first-time use. Each step is opt-in (default disabled) and idempotent —
+// the server can restart freely without re-creating the same state.
+type Bootstrap struct {
+	Admin BootstrapAdmin `yaml:"admin" json:"admin"`
+}
+
+// BootstrapAdmin provisions a platform-admin user from a Kubernetes Secret
+// on first startup, ArgoCD-style. The Secret is created by the Helm chart
+// (templates/secret-bootstrap-admin.yaml) — operators don't pre-create it
+// and never put the password in YAML. The dedicated tenant is created if
+// missing so the admin has a home; `platform.admin` role makes it
+// cross-tenant via Cedar.
+//
+// Flow:
+//
+//  1. enabled=false (default): no-op.
+//  2. enabled=true, user missing: create tenant if missing, hash the
+//     password, INSERT into iam.users, write an audit entry.
+//  3. enabled=true, user exists, force_reset=false: log + skip.
+//  4. enabled=true, user exists, force_reset=true: rotate password_hash,
+//     write an audit entry, log a WARN.
+//
+// `force_reset=true` is meant for one-off rotations via Helm upgrade. Flip
+// it back to false in the next deploy or the password keeps getting reset
+// on every restart (logged but otherwise harmless — bcrypt cost dominates).
+type BootstrapAdmin struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Subject is the login identifier (`subject` claim / Login.subject).
+	Subject string `yaml:"subject" json:"subject"`
+	// TenantSlug + TenantDisplayName describe the dedicated tenant the
+	// admin lives in. The tenant is created on first run if absent.
+	TenantSlug        string `yaml:"tenant_slug" json:"tenant_slug"`
+	TenantDisplayName string `yaml:"tenant_display_name" json:"tenant_display_name"`
+	// DisplayName is the user's display_name (cosmetic, distinct from the
+	// tenant name). Empty falls back to Subject.
+	DisplayName string `yaml:"display_name" json:"display_name"`
+	// Roles attached to the admin user. Default ["platform.admin"]. Cedar
+	// uses the dot form; do not use hyphens.
+	Roles []string `yaml:"roles" json:"roles"`
+	// Password is the bootstrap password. In a Kubernetes deployment it is
+	// resolved at boot from PasswordSecret; locally an operator may set it
+	// inline (debug mode only). Never logged.
+	Password string `yaml:"password" json:"password"`
+	// PasswordSecret references the Kubernetes Secret holding the password.
+	// Resolved at boot by K8sSecretResolver — same pattern as the postgres
+	// password_secret.
+	PasswordSecret *SecretRef `yaml:"password_secret" json:"password_secret"`
+	// MinPasswordLength rejects shorter passwords on startup. Default 16
+	// (server.mode=release) / 8 (debug, test).
+	MinPasswordLength int `yaml:"min_password_length" json:"min_password_length"`
+	// ForceReset rotates the existing user's password_hash on every boot
+	// while true. Flip back to false after the rotation has propagated.
+	ForceReset bool `yaml:"force_reset" json:"force_reset"`
 }
 
 // Workers groups every background-loop subsystem under a single section

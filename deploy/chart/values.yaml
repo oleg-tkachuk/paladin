@@ -132,6 +132,28 @@ config:
     reject_tenant_mismatch: true
     log_sensitive: false
 
+  # ArgoCD-style platform-admin bootstrap. When enabled, the chart creates
+  # the Secret itself (templates/secret-bootstrap-admin.yaml) and the
+  # server resolves the password through K8sSecretResolver — no env vars,
+  # no operator pre-creating the Secret. The `password_secret.name` /
+  # `.key` MUST match the chart-root `bootstrap.admin.passwordSecret` so
+  # the resolver sees the Secret the chart created.
+  bootstrap:
+    admin:
+      enabled: false
+      subject: "admin"
+      tenant_slug: "platform"
+      tenant_display_name: "Platform"
+      display_name: ""
+      roles: ["platform.admin"]
+      password_secret:
+        name: "paladin-bootstrap-admin"
+        key: "password"
+        # Empty namespace → resolver falls back to the pod's own namespace.
+        namespace: ""
+      min_password_length: 0
+      force_reset: false
+
   middleware:
     timeouts:
       fast_operation: 5s
@@ -227,6 +249,35 @@ image:
   repository: registry.local/paladin
   pullPolicy: Always
   tag: ""
+
+# Bootstrap (chart-level) — controls the Kubernetes Secret the chart
+# creates for the platform-admin password. The Go bootstrap step reads the
+# Secret via K8sSecretResolver, so there is no env var or secretKeyRef on
+# the deployment. The same `name` / `key` MUST appear in
+# `config.bootstrap.admin.password_secret` so the resolver finds the
+# Secret the chart provisioned.
+#
+# Password resolution at install time:
+#   1. Pre-existing Secret in the namespace → preserved (no rotation).
+#   2. `--set bootstrap.admin.password=<value>` (or --set-file) → that value.
+#   3. Otherwise → chart auto-generates a 24-char random password.
+#
+# After install, retrieve the auto-generated password with:
+#   kubectl get secret <name> -n <ns> -o jsonpath='{.data.password}' | base64 -d
+#
+# Keep `bootstrap.admin.enabled` and `config.bootstrap.admin.enabled` in
+# sync — the chart-level flag gates the Secret template, the config-level
+# flag gates the boot step.
+bootstrap:
+  admin:
+    enabled: false
+    # Inline password override. Empty + no existing Secret → chart auto-
+    # generates a random one. Pass via --set-file to keep it out of shell
+    # history. Never commit a real value to git.
+    password: ""
+    passwordSecret:
+      name: "paladin-bootstrap-admin"
+      key: "password"
 
 imagePullSecrets: []
 nameOverride: ""

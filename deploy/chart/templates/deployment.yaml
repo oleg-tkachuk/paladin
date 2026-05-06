@@ -68,6 +68,9 @@ spec:
               value: {{ .Values.metadata.commit | quote }}
             - name: BUILD_TIME
               value: {{ .Values.metadata.buildTime | quote }}
+          # The bootstrap-admin password is NOT mounted as an env var — the
+          # server resolves it via K8sSecretResolver, same way it reads the
+          # postgres password. See templates/secret-bootstrap-admin.yaml.
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

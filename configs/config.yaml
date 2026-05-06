@@ -153,6 +153,29 @@ security:
   reject_tenant_mismatch: true          # 403 when JWT tenant != header tenant
   log_sensitive: false                  # log secret values (debugging only)
 
+# ─── Bootstrap (one-shot startup steps; opt-in) ────────────────────────────
+# ArgoCD-style platform-admin provisioning. The password is resolved at
+# boot from a Kubernetes Secret (created by the Helm chart, not by the
+# operator) — same SecretRef pattern as datastores.postgres.password_secret.
+# See docs/security.md for the full runbook.
+bootstrap:
+  admin:
+    enabled: false                      # opt-in; flip to true in chart values
+    subject: "admin"                    # login identifier
+    tenant_slug: "platform"             # auto-created on first run if missing
+    tenant_display_name: "Platform"
+    display_name: ""                    # falls back to subject when empty
+    roles: ["platform.admin"]           # cross-tenant via Cedar role
+    # Inline password — debug-only. Production deploys leave this empty
+    # and rely on `password_secret` below.
+    password: ""
+    password_secret:
+      name: "paladin-bootstrap-admin"       # Secret managed by the chart
+      key: "password"
+      namespace: ""                     # empty → pod namespace
+    min_password_length: 0              # 0 → 16 in release, 8 in debug/test
+    force_reset: false                  # one-shot rotation; flip back to false after deploy
+
 # ─── Cross-cutting middleware (timeouts, RPS caps, caches, idempotency) ────
 middleware:
   timeouts:

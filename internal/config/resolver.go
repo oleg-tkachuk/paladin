@@ -89,6 +89,18 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.MigratePasswordSecret = nil
 	}
 
+	// Bootstrap admin password — only resolved when bootstrap.admin.enabled
+	// is true. Skip otherwise so a misconfigured Secret doesn't crash boot
+	// in clusters where bootstrap is intentionally off.
+	if cfg.Bootstrap.Admin.Enabled && cfg.Bootstrap.Admin.PasswordSecret != nil {
+		pwd, err := r.resolveSecret(ctx, cfg.Bootstrap.Admin.PasswordSecret)
+		if err != nil {
+			return fmt.Errorf("bootstrap.admin.password_secret: %w", err)
+		}
+		cfg.Bootstrap.Admin.Password = pwd
+		cfg.Bootstrap.Admin.PasswordSecret = nil
+	}
+
 	// Per-backend credential secrets.
 	for name, b := range cfg.Storage.Backends {
 		if b.Auth.AccessKeySecret != nil {

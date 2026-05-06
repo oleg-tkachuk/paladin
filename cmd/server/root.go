@@ -36,6 +36,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	bootstrappkg "github.com/oleg-tkachuk/paladin/internal/bootstrap"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/health"
@@ -111,6 +112,20 @@ var rootCmd = &cobra.Command{
 		// See docs/db-roles.md for the role split rationale.
 		if err := db.RunMigrationsWith(ctx, migrations.FS, cfg.Datastores.Postgres); err != nil && !errors.Is(err, context.Canceled) {
 			l.Fatal("failed to apply migrations", zap.Error(err))
+		}
+
+		// Bootstrap step — runs once per boot, after migrations, before any
+		// listener starts accepting traffic. Disabled by default; flip the
+		// `bootstrap.admin.enabled` flag in the chart values to provision
+		// the platform-admin user from a Kubernetes Secret.
+		if err := bootstrappkg.EnsureAdmin(ctx, cfg.Bootstrap.Admin, bootstrappkg.Deps{
+			Tenants: db.Queries,
+			Users:   adapters.NewUserRepo(db.Queries),
+			Audit:   adapters.NewAuditRepoV2(db.Queries),
+			Logger:  l.Named("bootstrap"),
+			Mode:    cfg.Server.Mode,
+		}); err != nil {
+			l.Fatal("bootstrap admin failed", zap.Error(err))
 		}
 
 		listeners, healthH, err := buildListeners(ctx, cfg, db, l)

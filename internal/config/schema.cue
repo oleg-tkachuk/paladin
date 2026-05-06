@@ -155,6 +155,35 @@ security: {
   log_sensitive:                bool | *false
 }
 
+// Bootstrap groups one-shot startup steps. Each step is opt-in (default
+// disabled) and idempotent — restarting the server does not duplicate
+// state. See internal/bootstrap/admin.go for the runtime implementation.
+bootstrap: {
+  // ArgoCD-style platform-admin bootstrap. Reads the password from an
+  // environment variable (mounted from a Kubernetes Secret via the chart),
+  // creates the dedicated tenant if missing, then either creates the user
+  // or — when force_reset=true — rotates its password_hash. Audit entries
+  // are written under "iam.bootstrap_admin.create" / ".reset".
+  admin: {
+    enabled:             bool   | *false
+    subject:             string | *"admin"
+    tenant_slug:         =~"^[a-z][a-z0-9-]{1,62}[a-z0-9]$" | *"platform"
+    tenant_display_name: string | *"Platform"
+    display_name:        string | *""
+    roles:               [...string] | *["platform.admin"]
+    // Either `password` (debug-only, inline) or `password_secret` (k8s
+    // Secret coordinates) populates the resolved password. The chart
+    // creates the Secret itself — operators don't pre-create it. In-cluster
+    // boot resolves password_secret → password and zeroes the ref before
+    // any consumer reads cfg.
+    password:            string | *""
+    password_secret?:    #SecretRef
+    // 0 = use the per-mode default (16 in release, 8 in debug/test).
+    min_password_length: int & >= 0 | *0
+    force_reset:         bool | *false
+  }
+}
+
 // Middleware bundles cross-cutting interceptor knobs (timeouts, rate
 // limiting, resource cache, idempotency).
 middleware: {
