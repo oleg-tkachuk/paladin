@@ -309,6 +309,13 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 		auth.NewPermissiveInterceptor(verifierIAM,
 			"Login",
 			"RefreshToken",
+			// ExchangeAudience derives a short-lived per-audience access
+			// token from a still-valid refresh token. Like RefreshToken
+			// it carries its own credential in the body — no
+			// Authorization header to verify pre-call. The handler
+			// itself validates the refresh token (signature + store
+			// presence + expiry + audience escalation) before minting.
+			"ExchangeAudience",
 		),
 		middleware.NewLoginRateLimiter(),
 		connect.UnaryInterceptorFunc(validateInterceptor),
