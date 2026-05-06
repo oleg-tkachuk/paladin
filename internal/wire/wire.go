@@ -164,9 +164,9 @@ func ProvideObjectHandler(
 	cfg config.Config,
 ) *object.Handler {
 	return object.NewHandler(repos.Object, storage.Object, pe, fe, sm, object.PresignConfig{
-		DefaultTTL:     cfg.Presign.DefaultTTL,
-		MaxTTL:         cfg.Presign.MaxTTL,
-		DefaultMaxSize: cfg.Presign.DefaultMaxSize,
+		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
+		MaxTTL:         cfg.Limits.Presign.MaxTTL,
+		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
 	})
 }
 
@@ -196,9 +196,9 @@ func ProvideBatchHandler(opH *operation.Handler, pe *policy.Engine) *batch.Handl
 
 func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presign.Handler {
 	return presign.NewHandler(repos.Presign, storage.Presign, pe, presign.Config{
-		DefaultTTL:     cfg.Presign.DefaultTTL,
-		MaxTTL:         cfg.Presign.MaxTTL,
-		DefaultMaxSize: cfg.Presign.DefaultMaxSize,
+		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
+		MaxTTL:         cfg.Limits.Presign.MaxTTL,
+		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
 	})
 }
 

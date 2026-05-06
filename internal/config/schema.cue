@@ -101,15 +101,12 @@ datastores: {
   }
 }
 
-policy: {
+limits: {
   max_object_size:    =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"100MB"
   max_multipart_size: =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"1TB"
   min_part_size:      =~"^[0-9]+(B|KB|MB|GB)$" | *"5MB"
   max_part_size:      =~"^[0-9]+(B|KB|MB|GB)$" | *"5GB"
   max_parts:          int | *10000
-  presign_put_ttl:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-  presign_get_ttl:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-  presign_part_ttl:   =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   // Empty → accept anything. Listing common types here gives the upload
   // path an early reject for typos / drive-bys.
   allowed_content_types: [...string] | *[]
@@ -117,6 +114,16 @@ policy: {
   labels_max_keys:       int | *10
   external_ref_max_len:  int | *256
   object_tag_max_len:    int | *1024
+  // Presign-URL ttls + body-size cap. Per-method ttls override default_ttl
+  // when non-zero; max_ttl bounds caller-supplied TTLs.
+  presign: {
+    put_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+    get_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+    part_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+    default_ttl:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+    max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
+    default_max_size: int & >= 1 | *5368709120 // 5 GiB
+  }
 }
 
 // Auth is the PALADIN IAM-plane JWT issuer + verifier. The same signing_key is
@@ -219,12 +226,6 @@ storage: {
       poll_interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10s"
     }
   }
-}
-
-presign: {
-  default_ttl:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-  max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
-  default_max_size: int & >= 1 | *5368709120 // 5 GiB
 }
 
 reconciler: {

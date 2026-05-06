@@ -94,28 +94,28 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		cfg.Storage.Backends[name] = b
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Policy.MaxObjectSizeRaw); err == nil {
-		cfg.Policy.MaxObjectSizeBytes = n
+	if n, err := utils.ParseSizeString(cfg.Limits.MaxObjectSizeRaw); err == nil {
+		cfg.Limits.MaxObjectSizeBytes = n
 	} else {
-		return Config{}, fmt.Errorf("failed to parse policy.max_object_size (%s): %w", cfg.Policy.MaxObjectSizeRaw, err)
+		return Config{}, fmt.Errorf("failed to parse limits.max_object_size (%s): %w", cfg.Limits.MaxObjectSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Policy.MaxMultipartSizeRaw); err == nil {
-		cfg.Policy.MaxMultipartSizeBytes = n
+	if n, err := utils.ParseSizeString(cfg.Limits.MaxMultipartSizeRaw); err == nil {
+		cfg.Limits.MaxMultipartSizeBytes = n
 	} else {
-		return Config{}, fmt.Errorf("failed to parse policy.max_multipart_size (%s): %w", cfg.Policy.MaxMultipartSizeRaw, err)
+		return Config{}, fmt.Errorf("failed to parse limits.max_multipart_size (%s): %w", cfg.Limits.MaxMultipartSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Policy.MinPartSizeRaw); err == nil {
-		cfg.Policy.MinPartSizeBytes = n
+	if n, err := utils.ParseSizeString(cfg.Limits.MinPartSizeRaw); err == nil {
+		cfg.Limits.MinPartSizeBytes = n
 	} else {
-		return Config{}, fmt.Errorf("failed to parse policy.min_part_size (%s): %w", cfg.Policy.MinPartSizeRaw, err)
+		return Config{}, fmt.Errorf("failed to parse limits.min_part_size (%s): %w", cfg.Limits.MinPartSizeRaw, err)
 	}
 
-	if n, err := utils.ParseSizeString(cfg.Policy.MaxPartSizeRaw); err == nil {
-		cfg.Policy.MaxPartSizeBytes = n
+	if n, err := utils.ParseSizeString(cfg.Limits.MaxPartSizeRaw); err == nil {
+		cfg.Limits.MaxPartSizeBytes = n
 	} else {
-		return Config{}, fmt.Errorf("failed to parse policy.max_part_size (%s): %w", cfg.Policy.MaxPartSizeRaw, err)
+		return Config{}, fmt.Errorf("failed to parse limits.max_part_size (%s): %w", cfg.Limits.MaxPartSizeRaw, err)
 	}
 
 	log.Info("Config loaded and validated", zap.Any("config", cfg.Obfuscated()))

@@ -12,7 +12,7 @@ type Config struct {
 	Logger       Logger       `yaml:"logger" json:"logger"`
 	Server       Server       `yaml:"server" json:"server"`
 	Datastores   Datastores   `yaml:"datastores" json:"datastores"`
-	Policy       Policy       `yaml:"policy" json:"policy"`
+	Limits       Limits       `yaml:"limits" json:"limits"`
 	Auth         Auth         `yaml:"auth" json:"auth"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
@@ -22,7 +22,6 @@ type Config struct {
 	Idempotency  Idempotency  `yaml:"idempotency" json:"idempotency"`
 	OTel         OTel         `yaml:"otel" json:"otel"`
 	Storage      Storage      `yaml:"storage" json:"storage"`
-	Presign      Presign      `yaml:"presign" json:"presign"`
 	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
 	Cedar        Cedar        `yaml:"cedar" json:"cedar"`
 	MCP          MCP          `yaml:"mcp" json:"mcp"`
@@ -175,24 +174,26 @@ type Storage struct {
 	Backends       map[string]StorageBackend `yaml:"backends" json:"backends"`
 }
 
-type Policy struct {
-	MaxObjectSizeRaw      string        `yaml:"max_object_size" json:"max_object_size"`
-	MaxObjectSizeBytes    int64         `yaml:"-" json:"-"`
-	MaxMultipartSizeRaw   string        `yaml:"max_multipart_size" json:"max_multipart_size"`
-	MaxMultipartSizeBytes int64         `yaml:"-" json:"-"`
-	MinPartSizeRaw        string        `yaml:"min_part_size" json:"min_part_size"`
-	MinPartSizeBytes      int64         `yaml:"-" json:"-"`
-	MaxPartSizeRaw        string        `yaml:"max_part_size" json:"max_part_size"`
-	MaxPartSizeBytes      int64         `yaml:"-" json:"-"`
-	MaxParts              int           `yaml:"max_parts" json:"max_parts"`
-	PresignPutTTL         time.Duration `yaml:"presign_put_ttl" json:"presign_put_ttl"`
-	PresignGetTTL         time.Duration `yaml:"presign_get_ttl" json:"presign_get_ttl"`
-	PresignPartTTL        time.Duration `yaml:"presign_part_ttl" json:"presign_part_ttl"`
-	AllowedContentTypes   []string      `yaml:"allowed_content_types" json:"allowed_content_types"`
-	LabelsMaxBytes        int           `yaml:"labels_max_bytes" json:"labels_max_bytes"`
-	LabelsMaxKeys         int           `yaml:"labels_max_keys" json:"labels_max_keys"`
-	ExternalRefMaxLen     int           `yaml:"external_ref_max_len" json:"external_ref_max_len"`
-	ObjectTagMaxLen       int           `yaml:"object_tag_max_len" json:"object_tag_max_len"`
+// Limits collects all request-shape constraints the data plane enforces:
+// object/part size, allowed MIME types, metadata-cardinality caps, and the
+// presign-URL ttls + size cap. Lives under one top-level section so an
+// operator has a single place to look for "what does the service refuse?".
+type Limits struct {
+	MaxObjectSizeRaw      string   `yaml:"max_object_size" json:"max_object_size"`
+	MaxObjectSizeBytes    int64    `yaml:"-" json:"-"`
+	MaxMultipartSizeRaw   string   `yaml:"max_multipart_size" json:"max_multipart_size"`
+	MaxMultipartSizeBytes int64    `yaml:"-" json:"-"`
+	MinPartSizeRaw        string   `yaml:"min_part_size" json:"min_part_size"`
+	MinPartSizeBytes      int64    `yaml:"-" json:"-"`
+	MaxPartSizeRaw        string   `yaml:"max_part_size" json:"max_part_size"`
+	MaxPartSizeBytes      int64    `yaml:"-" json:"-"`
+	MaxParts              int      `yaml:"max_parts" json:"max_parts"`
+	AllowedContentTypes   []string `yaml:"allowed_content_types" json:"allowed_content_types"`
+	LabelsMaxBytes        int      `yaml:"labels_max_bytes" json:"labels_max_bytes"`
+	LabelsMaxKeys         int      `yaml:"labels_max_keys" json:"labels_max_keys"`
+	ExternalRefMaxLen     int      `yaml:"external_ref_max_len" json:"external_ref_max_len"`
+	ObjectTagMaxLen       int      `yaml:"object_tag_max_len" json:"object_tag_max_len"`
+	Presign               Presign  `yaml:"presign" json:"presign"`
 }
 
 // Auth configures JWT verification + minting. v2 issues tokens itself via
@@ -356,7 +357,12 @@ type StorageBackendEvents struct {
 	PollInterval time.Duration `yaml:"poll_interval" json:"poll_interval"`
 }
 
+// Presign holds presign-URL knobs. Nested under Limits since the URL TTLs
+// and the body-size cap are both request-shape constraints.
 type Presign struct {
+	PutTTL         time.Duration `yaml:"put_ttl" json:"put_ttl"`
+	GetTTL         time.Duration `yaml:"get_ttl" json:"get_ttl"`
+	PartTTL        time.Duration `yaml:"part_ttl" json:"part_ttl"`
 	DefaultTTL     time.Duration `yaml:"default_ttl" json:"default_ttl"`
 	MaxTTL         time.Duration `yaml:"max_ttl" json:"max_ttl"`
 	DefaultMaxSize int64         `yaml:"default_max_size" json:"default_max_size"`

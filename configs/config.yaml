@@ -96,16 +96,13 @@ datastores:
       statement: 0s                     # 0s = disabled; set non-zero in prod
     healthcheck_period: 30s
 
-# ─── Request policy (size + TTL guards on data plane) ───────────────────────
-policy:
+# ─── Request limits (single source of truth for refusals) ───────────────────
+limits:
   max_object_size: "100MB"              # rejected at presign time
   max_multipart_size: "1TB"             # CompleteMultipart cap
   min_part_size: "5MB"                  # AWS S3 minimum (last part exempt)
   max_part_size: "5GB"
   max_parts: 10000
-  presign_put_ttl: 15m
-  presign_get_ttl: 15m
-  presign_part_ttl: 15m
   allowed_content_types:                # empty list = accept any
     - "image/jpeg"
     - "image/png"
@@ -120,6 +117,13 @@ policy:
   labels_max_keys: 10
   external_ref_max_len: 256
   object_tag_max_len: 1024
+  presign:
+    put_ttl: 15m                        # per-method ttl for PresignPut / UploadObject
+    get_ttl: 15m                        # PresignGet / DownloadObject
+    part_ttl: 15m                       # PresignPart (multipart)
+    default_ttl: 15m                    # fallback when caller passes no ttl
+    max_ttl: 168h                       # 7d — upper bound for caller-supplied ttls
+    default_max_size: 5368709120        # 5 GiB; POST policy content-length-range cap
 
 # ─── Auth (JWT issuance + verification) ─────────────────────────────────────
 # PALADIN IAM mints HS256 tokens via Login / RefreshToken and verifies them on
@@ -224,12 +228,6 @@ storage:
         target: "none"                  # sqs | redis | none
         queue_url: ""
         poll_interval: 20s
-
-# ─── Presign policy (data-plane URL TTLs + size cap) ────────────────────────
-presign:
-  default_ttl: 15m
-  max_ttl: 168h                         # 7d — Go duration has no "d" unit
-  default_max_size: 5368709120          # 5 GiB; POST policy content-length-range cap
 
 # ─── Reconciler (closes gaps when S3 events are unavailable / lost) ─────────
 reconciler:

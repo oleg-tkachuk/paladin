@@ -49,15 +49,12 @@ datastores:
     timeouts: { connect: 5s, statement: 0s }
     healthcheck_period: 30s
 
-policy:
+limits:
   max_object_size: "100MB"
   max_multipart_size: "1TB"
   min_part_size: "5MB"
   max_part_size: "5GB"
   max_parts: 10000
-  presign_put_ttl: 15m
-  presign_get_ttl: 15m
-  presign_part_ttl: 15m
   allowed_content_types:
     - "image/jpeg"
     - "image/png"
@@ -69,6 +66,13 @@ policy:
   labels_max_keys: 10
   external_ref_max_len: 256
   object_tag_max_len: 1024
+  presign:
+    put_ttl: 15m
+    get_ttl: 15m
+    part_ttl: 15m
+    default_ttl: 15m
+    max_ttl: 168h
+    default_max_size: 5368709120
 
 auth:
   issuer: "paladin-dev"
@@ -131,11 +135,6 @@ storage:
       part_size: "8MB"
       sse: { type: "", key_id: "" }
       events: { enabled: false, target: "none", queue_url: "", poll_interval: 20s }
-
-presign:
-  default_ttl: 15m
-  max_ttl: 168h
-  default_max_size: 5368709120
 
 reconciler:
   poll_interval: 30s
