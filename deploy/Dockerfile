@@ -32,8 +32,13 @@ ENV GOPATH=/go_workspace \
     PATH=/go_workspace/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     CGO_ENABLED=0
 
-# git is a hard dep for `go install` (resolves module proxy fallbacks).
-RUN apk add --no-cache git
+# `git` is a hard dep for `go install` (resolves module proxy fallbacks).
+# `mkdir -p` is required for GOTMPDIR + GOBIN — Go stat-checks GOTMPDIR
+# before use and refuses to start with `creating work dir: stat …: no
+# such file or directory`. GOMODCACHE + GOCACHE are mounted at use-site
+# via BuildKit cache mounts, so they don't need pre-creation.
+RUN apk add --no-cache git && \
+    mkdir -p /go_workspace/tmp /go_workspace/bin
 
 # -----------------------------------------------------------------------------
 # Tools stage — code-generation binaries built for BUILDPLATFORM. Pinned
