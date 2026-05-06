@@ -15,6 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 )
 
 // exportRowCap bounds how many entries one ExportAuditLog call materialises.
@@ -25,11 +26,19 @@ const exportRowCap = 10_000
 
 type Handler struct {
 	repo admindomain.AuditRepository
+	cel  *celpkg.Evaluator
 }
 
-func NewHandler(r admindomain.AuditRepository) *Handler { return &Handler{repo: r} }
+func NewHandler(r admindomain.AuditRepository) *Handler {
+	return &Handler{repo: r, cel: celpkg.NewEvaluator()}
+}
 
-func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
+// ListAuditLog returns one page of audit entries. `filter` is an optional
+// CEL expression evaluated against AuditLogSchema; rows that fail the
+// predicate are dropped before the page is returned. The repo cursor is
+// preserved as-is so the caller can paginate even when most rows in a
+// page get filtered out.
+func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditEntry, string, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -42,7 +51,44 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 		}
 		args.ActorTenantID = caller
 	}
-	return h.repo.List(ctx, args)
+	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
+	if err != nil {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", err
+	}
+	if filter == "" {
+		return page, next, nil
+	}
+	out := page[:0]
+	for i := range page {
+		match, err := celpkg.Match(prog, auditEntryRow(page[i]))
+		if err != nil {
+			return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("filter eval: %w", err))
+		}
+		if match {
+			out = append(out, page[i])
+		}
+	}
+	return out, next, nil
+}
+
+// auditEntryRow projects an AuditEntry into the map shape CEL expects.
+// Kept private because the field names must match AuditLogSchema verbatim.
+func auditEntryRow(e admindomain.AuditEntry) map[string]any {
+	return map[string]any{
+		"actor_subject":   e.ActorSubject,
+		"actor_tenant_id": e.ActorTenantID.String(),
+		"actor_audience":  e.ActorAudience,
+		"action":          e.Action,
+		"resource_name":   e.ResourceName,
+		"request_id":      e.RequestID,
+		"source_ip":       e.SourceIP,
+		"at":              e.At,
+		"is_error":        e.ErrorMessage != "",
+	}
 }
 
 func (h *Handler) GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindomain.AuditEntry, error) {
@@ -110,7 +156,10 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		args.ActorTenantID = caller
 	}
-	_ = filter // CEL/tag filtering deferred — see slice 19
+	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
 
 	out := &ExportAuditLogResult{
 		GeneratedAt: time.Now().UTC(),
@@ -125,6 +174,16 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 				fmt.Errorf("export: list page: %w", err))
 		}
 		for i := range page {
+			if filter != "" {
+				match, err := celpkg.Match(prog, auditEntryRow(page[i]))
+				if err != nil {
+					return nil, connect.NewError(connect.CodeInternal,
+						fmt.Errorf("export: filter eval: %w", err))
+				}
+				if !match {
+					continue
+				}
+			}
 			out.Entries = append(out.Entries, projectExportEntry(page[i]))
 			if len(out.Entries) >= exportRowCap {
 				out.Truncated = true

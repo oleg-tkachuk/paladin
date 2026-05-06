@@ -31,9 +31,7 @@ func (s *AuditServer) ListAuditLog(ctx context.Context, req *connect.Request[pb.
 	if tok := m.GetPage().GetPageToken(); tok != "" {
 		args.AfterAt, args.AfterID = decodeAuditCursor(tok)
 	}
-	// Filter is CEL; keep server-side post-filter for slice 2 — TODO compile CEL.
-	_ = m.GetFilter()
-	list, next, err := s.H.ListAuditLog(ctx, args)
+	list, next, err := s.H.ListAuditLog(ctx, args, m.GetFilter())
 	if err != nil {
 		return nil, err
 	}

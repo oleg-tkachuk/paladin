@@ -174,7 +174,7 @@ type simulateAuthzArgs struct {
 }
 type auditRecentArgs struct {
 	PageSize int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 200"`
-	Filter   string `json:"filter,omitempty" jsonschema:"optional CEL over AuditLogEntry"`
+	Filter   string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, at, is_error"`
 }
 
 // ─── Read-only tool registration ────────────────────────────────────────────
@@ -344,7 +344,7 @@ type setQuotaArgs struct {
 	MaxObjectsPerDay int64  `json:"max_objects_per_day,omitempty" jsonschema:"daily object-count budget"`
 }
 type auditExportArgs struct {
-	Filter      string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry (reserved)"`
+	Filter      string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, at, is_error"`
 	Destination string `json:"destination,omitempty" jsonschema:"Advisory tag — recorded in result envelope; not yet acted upon"`
 }
 

@@ -110,6 +110,57 @@ func TestExportAuditLogTruncatesAtCap(t *testing.T) {
 	}
 }
 
+func TestListAuditLogAppliesCELFilter(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	good := mkEntry(t0)
+	bad := mkEntry(t0.Add(time.Second))
+	bad.ErrorMessage = "boom"
+	repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{good, bad}}}
+	h := NewHandler(repo)
+
+	// is_error == true filters out the success row.
+	got, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t),
+		admindomain.ListAuditArgs{PageSize: 50}, "is_error == true")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || got[0].EntryID != bad.EntryID {
+		t.Errorf("got %d entries, want 1 (the failed one)", len(got))
+	}
+}
+
+func TestListAuditLogRejectsBadFilter(t *testing.T) {
+	repo := &fakeAuditRepo{}
+	h := NewHandler(repo)
+	_, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t),
+		admindomain.ListAuditArgs{PageSize: 50}, "no_such_field == 1")
+	if err == nil {
+		t.Fatal("expected error for unknown CEL identifier")
+	}
+}
+
+func TestExportAuditLogAppliesCELFilter(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	a := mkEntry(t0)
+	a.Action = "/paladin.admin.v1.BucketService/CreateBucket"
+	b := mkEntry(t0.Add(time.Second))
+	b.Action = "/paladin.admin.v1.BucketService/DeleteBucket"
+	repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{a, b}}}
+	h := NewHandler(repo)
+
+	res, err := h.ExportAuditLog(ctxWithPlatformAdmin(t),
+		`action.endsWith("DeleteBucket")`, "")
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if res.RowCount != 1 {
+		t.Errorf("row_count: got %d want 1", res.RowCount)
+	}
+	if len(res.Entries) != 1 || res.Entries[0].Action != b.Action {
+		t.Errorf("expected only DeleteBucket entry; got %+v", res.Entries)
+	}
+}
+
 func TestDecodeCursorRoundTrip(t *testing.T) {
 	at := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	id := uuid.New()

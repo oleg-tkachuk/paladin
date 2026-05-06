@@ -58,6 +58,25 @@ var BucketSchema = &Schema{
 	},
 }
 
+// AuditLogSchema is exposed to filters against AuditLogEntry rows
+// (ListAuditLog, ExportAuditLog). `is_error` is a derived bool — true
+// when the entry has a non-empty error_message — exposed because it's
+// the most common selector in compliance queries.
+var AuditLogSchema = &Schema{
+	Name: "AuditLogEntry",
+	vars: map[string]*cel.Type{
+		"actor_subject":   cel.StringType,
+		"actor_tenant_id": cel.StringType,
+		"actor_audience":  cel.StringType,
+		"action":          cel.StringType,
+		"resource_name":   cel.StringType,
+		"request_id":      cel.StringType,
+		"source_ip":       cel.StringType,
+		"at":              cel.TimestampType,
+		"is_error":        cel.BoolType,
+	},
+}
+
 // Evaluator compiles and caches CEL programs per schema+expression.
 type Evaluator struct {
 	cache sync.Map // key = schema.Name + "\x00" + expr; val = cel.Program
