@@ -51,7 +51,11 @@ config:
       request_id_header: "X-Request-Id"
       real_ip_header: "X-Forwarded-For"
       trusted_proxies: []
-      cors_allowed_origins: ["*"]
+      # No browsers ever talk to the backend directly — the UI hits its own
+      # Next.js BFF (/api/rpc/{plane}) which proxies in-cluster. Closed by
+      # default; opening to a specific origin would only be needed if a
+      # third-party browser-side client is introduced.
+      cors_allowed_origins: []
       tls: { enabled: false }
     admin_http:
       <<: *http_defaults

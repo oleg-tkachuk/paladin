@@ -59,7 +59,7 @@ server:
     request_id_header: "X-Request-Id"
     real_ip_header: "X-Forwarded-For"
     trusted_proxies: []                 # CIDRs trusted for X-Forwarded-For
-    cors_allowed_origins: ["*"]         # WARNING: wildcard is local-only
+    cors_allowed_origins: []            # Closed: UI proxies via its own BFF
     tls:
       enabled: false
       cert_path: ""
