@@ -118,6 +118,15 @@ ALTER TABLE tenants ALTER COLUMN labels   SET STATISTICS 500;
 -- behaviour change — same body. The pin ensures `now()`, `RAISE`, etc.
 -- always resolve to pg_catalog regardless of session search_path.
 
+-- StatementBegin/End wraps each CREATE FUNCTION because goose's
+-- auto-splitter splits on `;` and would otherwise treat the inner
+-- semicolons in the PL/pgSQL bodies as statement boundaries — symptom
+-- is `unterminated dollar-quoted string at or near "$$"` on a fresh
+-- DB run. Note: this migration was previously applied to clusters
+-- bootstrapped with the old `acme` DB, so goose never re-parsed
+-- it; the bug only surfaced once the new `paladin` DB triggered a clean
+-- replay from migration 001.
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION bump_resource_version() RETURNS trigger AS $$
 BEGIN
     IF NEW.resource_version IS NULL OR NEW.resource_version = OLD.resource_version THEN
@@ -129,7 +138,9 @@ END;
 $$ LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = pg_catalog, public;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION enforce_object_key_bucket_tenancy() RETURNS TRIGGER AS $$
 DECLARE
     bucket_owner UUID;
@@ -147,7 +158,9 @@ END;
 $$ LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = pg_catalog, public;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION enforce_object_version_lock() RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.legal_hold IS DISTINCT FROM NEW.legal_hold) THEN
@@ -171,6 +184,7 @@ END;
 $$ LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = pg_catalog, public;
+-- +goose StatementEnd
 
 -- ─── F. CHECK constraints — enum-shape TEXT columns ────────────────────────
 -- These columns carry domain-restricted strings but accept any TEXT today.
