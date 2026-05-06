@@ -162,7 +162,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 		return nil, fmt.Errorf("s3 adapter: %w", err)
 	}
 
-	// ─── Repositories (legacy v1 + v2 IAM/admin) ─────────────────────────
+	// ─── Repositories ────────────────────────────────────────────────────
 	repos := wire.Repos{
 		Object:        adapters.NewObjectRepo(db.Queries, pool),
 		ObjectKey:     adapters.NewObjectKeyRepo(db.Queries, pool),
