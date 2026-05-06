@@ -16,16 +16,48 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 type Handler struct {
 	apiKeys authstore.ApiKeyRepository
 	issuer  *issuer.Issuer
+	policy  cedar.Authorizer
 	now     func() time.Time
 }
 
-func NewHandler(keys authstore.ApiKeyRepository, iss *issuer.Issuer) *Handler {
-	return &Handler{apiKeys: keys, issuer: iss, now: time.Now}
+func NewHandler(keys authstore.ApiKeyRepository, iss *issuer.Issuer, policy cedar.Authorizer) *Handler {
+	if policy == nil {
+		panic("apikeyh: policy authorizer is required")
+	}
+	return &Handler{apiKeys: keys, issuer: iss, policy: policy, now: time.Now}
+}
+
+// authorize gates an api-key RPC against Cedar; the existing
+// isPlatformAdmin / tenant-isolation checks at call sites stay as
+// defense-in-depth.
+func (h *Handler) authorize(ctx context.Context, action string, target authstore.ApiKey) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{
+			TenantID:       target.TenantID,
+			TargetApiKeyID: target.ApiKeyID,
+		},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied,
+			errors.New("denied by policy"))
+	}
+	return nil
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────
@@ -44,6 +76,10 @@ type CreateApiKeyOutput struct {
 }
 
 func (h *Handler) CreateApiKey(ctx context.Context, in CreateApiKeyInput) (*CreateApiKeyOutput, error) {
+	if err := h.authorize(ctx, cedar.ActionManageApiKey,
+		authstore.ApiKey{TenantID: in.TenantID}); err != nil {
+		return nil, err
+	}
 	if in.Description == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("description required"))
 	}
@@ -89,6 +125,9 @@ func (h *Handler) GetApiKey(ctx context.Context, id uuid.UUID) (*authstore.ApiKe
 	if !isPlatformAdmin(ctx) && k.TenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("api_key not found"))
 	}
+	if err := h.authorize(ctx, cedar.ActionReadApiKey, k); err != nil {
+		return nil, err
+	}
 	return &k, nil
 }
 
@@ -104,7 +143,11 @@ func (h *Handler) ListApiKeys(ctx context.Context, args authstore.ListApiKeysArg
 }
 
 func (h *Handler) RevokeApiKey(ctx context.Context, id uuid.UUID) error {
-	if _, err := h.GetApiKey(ctx, id); err != nil {
+	current, err := h.GetApiKey(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageApiKey, *current); err != nil {
 		return err
 	}
 	return h.apiKeys.Revoke(ctx, id)
@@ -115,6 +158,9 @@ func (h *Handler) RevokeApiKey(ctx context.Context, id uuid.UUID) error {
 func (h *Handler) RotateApiKey(ctx context.Context, id uuid.UUID, grace time.Duration) (*authstore.ApiKey, string, error) {
 	current, err := h.GetApiKey(ctx, id)
 	if err != nil {
+		return nil, "", err
+	}
+	if err := h.authorize(ctx, cedar.ActionRotateApiKey, *current); err != nil {
 		return nil, "", err
 	}
 	newSecret, _, err := auth.GenerateApiKeySecret()
@@ -159,6 +205,9 @@ func (h *Handler) MintScopedToken(ctx context.Context, in MintScopedTokenInput) 
 	parent, err := h.apiKeys.GetByID(ctx, in.ApiKeyID)
 	if err != nil {
 		return "", time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, cedar.ActionMintScopedToken, parent); err != nil {
+		return "", time.Time{}, err
 	}
 	if parent.Revoked {
 		return "", time.Time{}, connect.NewError(connect.CodePermissionDenied, errors.New("parent api_key revoked"))

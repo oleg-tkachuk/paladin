@@ -16,13 +16,49 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 type Handler struct {
-	users authstore.UserRepository
+	users  authstore.UserRepository
+	policy cedar.Authorizer
 }
 
-func NewHandler(u authstore.UserRepository) *Handler { return &Handler{users: u} }
+func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
+	if policy == nil {
+		panic("userh: policy authorizer is required")
+	}
+	return &Handler{users: u, policy: policy}
+}
+
+// authorize gates a user-management RPC against Cedar. Pre-existing
+// hasPlatformAdmin/tenant-isolation checks stay as defense-in-depth at the
+// call sites; Cedar adds policy expressivity (tenant.admin permits, etc.)
+// on top.
+func (h *Handler) authorize(ctx context.Context, action string, target authstore.User) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{
+			TenantID:      target.TenantID,
+			TargetUserID:  target.UserID,
+			TargetSubject: target.Subject,
+		},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied,
+			errors.New("denied by policy"))
+	}
+	return nil
+}
 
 // ─── Create ─────────────────────────────────────────────────────────────────
 
@@ -40,11 +76,15 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	if err != nil {
 		return nil, err
 	}
-	// Tenant admins limited to their own tenant.
+	// Tenant admins limited to their own tenant — code-level guard.
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && in.TenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied,
 			errors.New("cannot create user in foreign tenant"))
+	}
+	if err := h.authorize(ctx, cedar.ActionManageUser,
+		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {
+		return nil, err
 	}
 	if in.Subject == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("subject required"))
@@ -91,6 +131,9 @@ func (h *Handler) GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, e
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
 	}
+	if err := h.authorize(ctx, cedar.ActionReadUser, u); err != nil {
+		return nil, err
+	}
 	return &u, nil
 }
 
@@ -117,6 +160,9 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && current.TenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant update denied"))
+	}
+	if err := h.authorize(ctx, cedar.ActionManageUser, current); err != nil {
+		return nil, err
 	}
 	for _, field := range in.UpdateMask {
 		switch field {
@@ -152,6 +198,9 @@ func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion 
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant delete denied"))
+	}
+	if err := h.authorize(ctx, cedar.ActionManageUser, u); err != nil {
+		return err
 	}
 	if err := h.users.Delete(ctx, id, expectedVersion); err != nil {
 		if errors.Is(err, authstore.ErrVersionMismatch) {
@@ -201,6 +250,9 @@ func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.S
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	if err := h.authorize(ctx, cedar.ActionGrantScopes, current); err != nil {
+		return nil, err
+	}
 	current.Scopes = mergeScopes(current.Scopes, scopes)
 	updated, err := h.users.Update(ctx, current, 0)
 	if err != nil {
@@ -214,6 +266,9 @@ func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	if err := h.authorize(ctx, cedar.ActionGrantScopes, current); err != nil {
+		return nil, err
+	}
 	current.Scopes = removeScopes(current.Scopes, scopes)
 	updated, err := h.users.Update(ctx, current, 0)
 	if err != nil {
@@ -225,6 +280,13 @@ func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.
 // ─── ResetPassword ──────────────────────────────────────────────────────────
 
 func (h *Handler) ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) (string, error) {
+	current, err := h.users.GetByID(ctx, id)
+	if err != nil {
+		return "", connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorize(ctx, cedar.ActionResetPassword, current); err != nil {
+		return "", err
+	}
 	if newPassword == "" {
 		newPassword = generatedPassword()
 	}

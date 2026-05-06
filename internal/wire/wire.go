@@ -241,10 +241,12 @@ func ProvideAuthHandler(repos Repos, iss *issuer.Issuer, dec *auth.RefreshDecode
 	return authh.NewHandler(repos.IAMUser, repos.IAMRefresh, iss, dec, pe)
 }
 
-func ProvideUserHandler(repos Repos) *userh.Handler { return userh.NewHandler(repos.IAMUser) }
+func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
+	return userh.NewHandler(repos.IAMUser, pe)
+}
 
-func ProvideApiKeyHandler(repos Repos, iss *issuer.Issuer) *apikeyh.Handler {
-	return apikeyh.NewHandler(repos.IAMApiKey, iss)
+func ProvideApiKeyHandler(repos Repos, iss *issuer.Issuer, pe *policy.Engine) *apikeyh.Handler {
+	return apikeyh.NewHandler(repos.IAMApiKey, iss, pe)
 }
 
 func ProvideBackendV2Handler(repos Repos, pe *policy.Engine) *backendh.Handler {

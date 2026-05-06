@@ -221,8 +221,8 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	}
 	dec := wire.ProvideRefreshDecoder(cfg)
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
-	userH := wire.ProvideUserHandler(repos)
-	apikH := wire.ProvideApiKeyHandler(repos, iss)
+	userH := wire.ProvideUserHandler(repos, polEngine)
+	apikH := wire.ProvideApiKeyHandler(repos, iss, polEngine)
 
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine)
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
