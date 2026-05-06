@@ -46,10 +46,11 @@ server: {
   mode: "debug" | "test" | *"release"
   // Three-plane HTTP listeners. v2 splits the API into paladin-data, paladin-admin
   // and paladin-iam audiences, each on its own port so the operator can expose
-  // them on different network profiles.
-  data_http:        #HTTPServer
-  admin_http:       #HTTPServer
-  iam_http:         #HTTPServer
+  // them on different network profiles. Each plane has a sensible default
+  // address so an operator running PALADIN locally can omit them entirely.
+  data_http:  #HTTPServer & {addr: string | *"0.0.0.0:8080"}
+  admin_http: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
+  iam_http:   #HTTPServer & {addr: string | *"0.0.0.0:8085"}
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
   log_probes:       bool | *false
 }

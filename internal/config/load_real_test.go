@@ -1,10 +1,53 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.uber.org/zap"
 )
+
+// TestLoadMinimalYAML asserts that a YAML supplying only the no-default
+// fields (postgres dsn, app.name, one storage backend, signing key) loads
+// cleanly — every other field falls back to CUE defaults. Catches the
+// "incomplete value: cannot convert string to JSON" failure mode.
+func TestLoadMinimalYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "min.yaml")
+	body := []byte(`
+app:
+  name: paladin
+  env: local
+datastores:
+  postgres:
+    dsn: "postgres://localhost/test"
+auth:
+  signing_key: "dev-secret-change-me-32-bytes-min"
+storage:
+  backends:
+    primary:
+      kind: s3-compatible
+      auth:
+        mode: static_keys
+        access_key: a
+        secret_key: b
+`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := Load(path, zap.NewNop())
+	if err != nil {
+		t.Fatalf("Load minimal yaml: %v", err)
+	}
+	// Defaults must have populated every three-plane addr.
+	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
+		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Server)
+	}
+	if cfg.Server.DataHTTP.Addr == cfg.Server.AdminHTTP.Addr {
+		t.Errorf("data and admin defaulted to the same addr: %q", cfg.Server.DataHTTP.Addr)
+	}
+}
 
 // TestLoadRealConfigYAML loads the canonical configs/config.yaml end-to-end
 // (CUE validation + Go struct decode + Validate). This catches drift
