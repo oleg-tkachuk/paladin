@@ -215,8 +215,40 @@ type Security struct {
 // so an operator looking for "what runs in the background?" finds them
 // in one place.
 type Workers struct {
-	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
-	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
+	Reconciler       Reconciler       `yaml:"reconciler" json:"reconciler"`
+	Housekeeping     Housekeeping     `yaml:"housekeeping" json:"housekeeping"`
+	RefreshTokenReap RefreshTokenReap `yaml:"refresh_token_reap" json:"refresh_token_reap"`
+	ApiKeyReap       ApiKeyReap       `yaml:"api_key_reap" json:"api_key_reap"`
+	Lifecycle        Lifecycle        `yaml:"lifecycle" json:"lifecycle"`
+	Replication      Replication      `yaml:"replication" json:"replication"`
+}
+
+// RefreshTokenReap drops expired refresh-token rows. Always on; tune
+// `interval` based on token issuance volume.
+type RefreshTokenReap struct {
+	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// ApiKeyReap flips revoked=true on api-keys past their expires_at.
+// Always on; tune `interval` based on api-key volume.
+type ApiKeyReap struct {
+	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// Lifecycle runs CEL-based expiration rules per bucket. Optional —
+// disable when no buckets carry lifecycle rules.
+type Lifecycle struct {
+	Enabled  bool          `yaml:"enabled" json:"enabled"`
+	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// Replication copies objects between backends per BucketReplication.
+// Optional and currently dry-run unless a real StorageReplicator is wired
+// in — `enabled: false` skips even the planning loop.
+type Replication struct {
+	Enabled        bool          `yaml:"enabled" json:"enabled"`
+	Interval       time.Duration `yaml:"interval" json:"interval"`
+	LookbackWindow time.Duration `yaml:"lookback_window" json:"lookback_window"`
 }
 
 type Housekeeping struct {

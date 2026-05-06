@@ -172,12 +172,23 @@ workers:
     interval: 30s                       # how often to run a reconcile pass
     min_object_age: 2h                  # only objects older than this are eligible
     batch_size: 100
-  housekeeping:                         # background reapers
+  housekeeping:                         # audit-log reaper
     interval: 1h                        # how often the reaper loop runs
     pending_ttl: 24h                    # PENDING objects older than this are GC'd
     multipart_ttl: 72h                  # abandoned multipart sessions
     audit_log_ttl: 8760h                # 365 days
     delete_orphaned_parts: false        # WARNING: enable in prod to reclaim S3 storage
+  refresh_token_reap:                   # drops expired refresh tokens
+    interval: 1h
+  api_key_reap:                         # auto-revokes api-keys past expires_at
+    interval: 1h
+  lifecycle:                            # CEL-based per-bucket expiration
+    enabled: true
+    interval: 30m
+  replication:                          # cross-backend copy (dry-run until wired)
+    enabled: false
+    interval: 5m
+    lookback_window: 1h
 
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks

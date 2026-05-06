@@ -64,4 +64,18 @@ func TestLoadRealConfigYAML(t *testing.T) {
 		t.Errorf("otel.resource.deployment.environment: got %q want %q",
 			cfg.OTel.Resource.DeploymentEnvironment, cfg.App.Env)
 	}
+	// Every worker subsystem must have a non-zero interval after CUE
+	// applies its defaults — silent-zero would hot-loop the goroutine.
+	if cfg.Workers.RefreshTokenReap.Interval == 0 {
+		t.Error("workers.refresh_token_reap.interval defaulted to zero")
+	}
+	if cfg.Workers.ApiKeyReap.Interval == 0 {
+		t.Error("workers.api_key_reap.interval defaulted to zero")
+	}
+	if cfg.Workers.Lifecycle.Interval == 0 {
+		t.Error("workers.lifecycle.interval defaulted to zero")
+	}
+	if cfg.Workers.Replication.Interval == 0 || cfg.Workers.Replication.LookbackWindow == 0 {
+		t.Error("workers.replication interval/lookback_window defaulted to zero")
+	}
 }

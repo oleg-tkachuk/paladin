@@ -397,37 +397,41 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 	out := []app.BackgroundJob{
 		&worker.RefreshTokenPurger{
 			Repo:     adapters.NewRefreshTokenRepo(db.Queries),
-			Interval: 1 * time.Hour,
+			Interval: cfg.Workers.RefreshTokenReap.Interval,
 			Logger:   l.Named("refresh-purger"),
 		},
 		&worker.ApiKeyExpirer{
 			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(db.Queries)},
-			Interval: 1 * time.Hour,
+			Interval: cfg.Workers.ApiKeyReap.Interval,
 			Logger:   l.Named("api-key-expirer"),
 		},
 	}
-	out = append(out, &worker.LifecycleWorker{
-		Buckets:      adapters.NewLifecycleSource(db.Queries),
-		Objects:      adapters.NewLifecycleObjectIter(db.Queries),
-		SoftDeleter:  statemachine.New(db.Pool.(*pgxpool.Pool)),
-		CELEvaluator: cel.NewEvaluator(),
-		Interval:     30 * time.Minute,
-		Logger:       l.Named("lifecycle"),
-	})
+	if cfg.Workers.Lifecycle.Enabled {
+		out = append(out, &worker.LifecycleWorker{
+			Buckets:      adapters.NewLifecycleSource(db.Queries),
+			Objects:      adapters.NewLifecycleObjectIter(db.Queries),
+			SoftDeleter:  statemachine.New(db.Pool.(*pgxpool.Pool)),
+			CELEvaluator: cel.NewEvaluator(),
+			Interval:     cfg.Workers.Lifecycle.Interval,
+			Logger:       l.Named("lifecycle"),
+		})
+	}
 
 	// Replication worker — dry-run until the StorageReplicator implementation
 	// lands. Walks objects in replicated buckets and logs intent without
 	// actually copying. Operators can flip to live mode by injecting a real
 	// replicator from internal/storage in slice 16.
-	out = append(out, &worker.ReplicationWorker{
-		Buckets:        adapters.NewLifecycleSource(db.Queries),
-		Objects:        adapters.NewLifecycleObjectIter(db.Queries),
-		Replicator:     nil, // dry-run
-		Watermarks:     adapters.NewReplicationWatermarkRepo(db.Queries),
-		Interval:       5 * time.Minute,
-		LookbackWindow: 1 * time.Hour,
-		Logger:         l.Named("replication"),
-	})
+	if cfg.Workers.Replication.Enabled {
+		out = append(out, &worker.ReplicationWorker{
+			Buckets:        adapters.NewLifecycleSource(db.Queries),
+			Objects:        adapters.NewLifecycleObjectIter(db.Queries),
+			Replicator:     nil, // dry-run
+			Watermarks:     adapters.NewReplicationWatermarkRepo(db.Queries),
+			Interval:       cfg.Workers.Replication.Interval,
+			LookbackWindow: cfg.Workers.Replication.LookbackWindow,
+			Logger:         l.Named("replication"),
+		})
+	}
 
 	if cfg.Workers.Reconciler.Interval > 0 {
 		s3c, err := s3adapter.New(context.Background(), cfg.Storage.Backends[cfg.Storage.DefaultBackend])
@@ -450,7 +454,7 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		out = append(out, &worker.AuditLogPurger{
 			Purger:   adapters.NewAuditRepoV2(db.Queries),
 			TTL:      cfg.Workers.Housekeeping.AuditLogTTL,
-			Interval: 24 * time.Hour,
+			Interval: cfg.Workers.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),
 		})
 	}

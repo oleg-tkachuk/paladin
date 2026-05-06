@@ -172,20 +172,42 @@ middleware: {
   }
 }
 
-// Workers groups every background-loop subsystem (reconciler closes
-// gaps when S3 events are missed; housekeeping reaps stale rows).
+// Workers groups every background-loop subsystem.
 workers: {
+  // Reconciler: closes gaps when S3 events are unavailable / lost.
   reconciler: {
     interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     min_object_age: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2h"
     batch_size:     int & >= 1 | *100
   }
+  // Housekeeping: deletes audit_log rows older than audit_log_ttl.
   housekeeping: {
     pending_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
     multipart_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
     audit_log_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h" // 365d
     interval:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     delete_orphaned_parts: bool | *false
+  }
+  // RefreshTokenReap: drops expired refresh tokens.
+  refresh_token_reap: {
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+  }
+  // ApiKeyReap: flips revoked=true on api-keys past their expires_at.
+  api_key_reap: {
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+  }
+  // Lifecycle: CEL-based per-bucket expiration. Disable when no buckets
+  // carry lifecycle rules to save the per-tick scan.
+  lifecycle: {
+    enabled:  bool | *true
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30m"
+  }
+  // Replication: per-bucket cross-backend copies. Currently dry-run
+  // unless a real StorageReplicator is wired in.
+  replication: {
+    enabled:         bool | *false
+    interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
+    lookback_window: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
   }
 }
 
