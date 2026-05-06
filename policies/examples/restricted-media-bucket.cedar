@@ -1,6 +1,10 @@
 // Example: media bucket that accepts only images and videos up to 50 MiB,
 // with a time-window restriction and a tag requirement.
+//
+// Apply by binding to a specific objectKey (or bucket) — replace
+// "placeholder" with the tenant UUID at load time.
 
+// Writes constrained by size, content type, and a required `category` tag.
 permit (
     principal in Tenant::"placeholder",
     action in [Action::"PutObject", Action::"PresignPut"],
@@ -8,14 +12,13 @@ permit (
 ) when {
     context.size_bytes <= 52428800 &&
     (context.content_type like "image/*" || context.content_type like "video/*") &&
-    // Require a `category` tag to classify uploads.
     resource.tags.contains("category")
 };
 
-// Read available anytime for members.
+// Read available anytime for tenant members.
 permit (
     principal in Tenant::"placeholder",
-    action in [Action::"GetObject", Action::"PresignGet"],
+    action in [Action::"GetObject", Action::"PresignGet", Action::"HeadObject"],
     resource
 );
 
