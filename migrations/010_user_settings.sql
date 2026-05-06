@@ -1,5 +1,4 @@
 -- +goose Up
--- +goose StatementBegin
 
 -- Per-user settings — what the web UI persists on behalf of an end user.
 --
@@ -65,6 +64,14 @@ CREATE TRIGGER trg_user_settings_bump_rv
 -- Tenant consistency: tenant_id must match users.tenant_id. Enforced via a
 -- trigger because PG doesn't support FOREIGN KEY referencing a derived
 -- tuple. Cross-tenant inserts would otherwise silently corrupt isolation.
+--
+-- StatementBegin/End wraps ONLY the CREATE FUNCTION body — goose's
+-- auto-splitter splits on `;` and chokes on the function's internal
+-- semicolons. Wrapping a wider block (e.g. multiple statements with
+-- different roles) confuses the wrapper itself; per the goose docs,
+-- StatementBegin/End is single-statement and only needed where the
+-- statement contains literal semicolons goose would otherwise misread.
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION enforce_user_settings_tenant() RETURNS trigger
     LANGUAGE plpgsql
     SECURITY INVOKER
@@ -84,20 +91,16 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+-- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS trg_user_settings_enforce_tenant ON user_settings;
 CREATE TRIGGER trg_user_settings_enforce_tenant
     BEFORE INSERT OR UPDATE OF tenant_id, user_id ON user_settings
     FOR EACH ROW EXECUTE FUNCTION enforce_user_settings_tenant();
 
--- +goose StatementEnd
-
 -- +goose Down
--- +goose StatementBegin
 
 DROP TRIGGER IF EXISTS trg_user_settings_enforce_tenant ON user_settings;
 DROP FUNCTION IF EXISTS enforce_user_settings_tenant();
 DROP TRIGGER IF EXISTS trg_user_settings_bump_rv ON user_settings;
 DROP TABLE IF EXISTS user_settings;
-
--- +goose StatementEnd

@@ -1,5 +1,4 @@
 -- +goose Up
--- +goose StatementBegin
 
 -- ─── Minimum-privilege runtime role ────────────────────────────────────────
 --
@@ -41,6 +40,12 @@
 
 -- Idempotent CREATE ROLE — bootstrap-friendly. The DBA may have
 -- pre-created the role with a password; we only ensure existence here.
+--
+-- StatementBegin/End wraps ONLY the DO block — goose splits the file
+-- on `;` and would otherwise treat the inner `IF/END IF;` semicolons
+-- as statement boundaries. The surrounding GRANT/REVOKE statements
+-- have no inner semicolons and parse fine via the auto-splitter.
+-- +goose StatementBegin
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_app') THEN
@@ -50,6 +55,7 @@ BEGIN
         CREATE ROLE paladin_app NOLOGIN;
     END IF;
 END $$;
+-- +goose StatementEnd
 
 -- Schema-level: USAGE only (lets the role resolve names; no CREATE so
 -- paladin_app cannot add tables/functions/types to public).
@@ -89,10 +95,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM paladin_app;
 
--- +goose StatementEnd
-
 -- +goose Down
--- +goose StatementBegin
 
 -- The Down path is intentionally narrow: revoke the grants, but leave the
 -- role itself. Dropping the role would fail if `paladin_app` owns objects or
@@ -111,5 +114,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public
     REVOKE USAGE, SELECT ON SEQUENCES FROM paladin_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE current_user IN SCHEMA public
     REVOKE EXECUTE ON FUNCTIONS FROM paladin_app;
-
--- +goose StatementEnd

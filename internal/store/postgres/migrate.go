@@ -15,19 +15,27 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
-// openMigrationDB returns the *sql.DB goose runs against. When migrateCfg
-// is non-nil and carries a DSN, a fresh ConnConfig is parsed from it —
-// production deploys point this at a DDL-capable role distinct from the
-// runtime user. When nil, the runtime pool's ConnConfig is reused (dev
-// path; the runtime user must have DDL rights).
+// openMigrationDB returns the *sql.DB goose runs against. When
+// migrateCfg.MigrateDSN is non-empty, a fresh ConnConfig is parsed from
+// that DSN — production deploys point it at a DDL-capable role distinct
+// from the runtime `dsn` (`paladin_migrate` vs `paladin_app`). When MigrateDSN
+// is empty, the runtime pool's ConnConfig is reused (dev path; the
+// runtime user must have DDL rights in that mode).
 //
 // Either way the connection is tagged with `application_name=paladin-migrate`
 // so DBA dashboards can tell the migration session apart from runtime
 // traffic in pg_stat_activity.
 func openMigrationDB(runtimeCfg *pgx.ConnConfig, migrateCfg *config.Postgres) (*sql.DB, error) {
 	cc := runtimeCfg
-	if migrateCfg != nil && migrateCfg.DSN != "" {
-		parsed, err := pgx.ParseConfig(migrateCfg.DSN)
+	if migrateCfg != nil && migrateCfg.MigrateDSN != "" {
+		// IMPORTANT: parse `MigrateDSN`, NOT `DSN`. Reading `DSN` here
+		// would point goose at the runtime user (paladin_app) — which has
+		// no DDL grants — and migrations would fail with permission
+		// denied even though the field naming and pg_stat_activity
+		// tag make it look like the migrate path is active. Past
+		// regression: see commit fixing
+		// "goose up: ERROR: permission denied for schema public".
+		parsed, err := pgx.ParseConfig(migrateCfg.MigrateDSN)
 		if err != nil {
 			return nil, fmt.Errorf("parse migrate_dsn: %w", err)
 		}
@@ -86,10 +94,10 @@ func (d *DB) RunMigrations(ctx context.Context, fs embed.FS) error {
 // typically a DDL-capable role distinct from the runtime user. The pool
 // stays untouched; only goose's transient *sql.DB is rebuilt.
 //
-// Empty migrateCfg.DSN falls back to RunMigrations (runtime-pool path) so
-// callers can pass `cfg.Datastores.Postgres` unconditionally.
+// Empty migrateCfg.MigrateDSN falls back to RunMigrations (runtime-pool
+// path) so callers can pass `cfg.Datastores.Postgres` unconditionally.
 func (d *DB) RunMigrationsWith(ctx context.Context, fs embed.FS, migrateCfg config.Postgres) error {
-	if migrateCfg.DSN == "" {
+	if migrateCfg.MigrateDSN == "" {
 		return d.RunMigrations(ctx, fs)
 	}
 	return d.runMigrationsTo(ctx, fs, 0, &migrateCfg)
