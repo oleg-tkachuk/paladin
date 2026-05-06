@@ -16,10 +16,7 @@ type Config struct {
 	Auth         Auth         `yaml:"auth" json:"auth"`
 	Security     Security     `yaml:"security" json:"security"`
 	Housekeeping Housekeeping `yaml:"housekeeping" json:"housekeeping"`
-	RateLimit    RateLimit    `yaml:"rate_limit" json:"rate_limit"`
-	Cache        Cache        `yaml:"cache" json:"cache"`
-	Timeouts     Timeouts     `yaml:"timeouts" json:"timeouts"`
-	Idempotency  Idempotency  `yaml:"idempotency" json:"idempotency"`
+	Middleware   Middleware   `yaml:"middleware" json:"middleware"`
 	OTel         OTel         `yaml:"otel" json:"otel"`
 	Storage      Storage      `yaml:"storage" json:"storage"`
 	Reconciler   Reconciler   `yaml:"reconciler" json:"reconciler"`
@@ -227,6 +224,17 @@ type Housekeeping struct {
 	AuditLogTTL         time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
 	GCInterval          time.Duration `yaml:"gc_interval" json:"gc_interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
+}
+
+// Middleware bundles the four cross-cutting interceptor knobs so an
+// operator has a single section to scan when tuning request-shape
+// behaviour: per-handler timeouts, sliding-window rate limits, the
+// resource-cache TTL, and idempotency-key retention.
+type Middleware struct {
+	Timeouts    Timeouts    `yaml:"timeouts" json:"timeouts"`
+	RateLimit   RateLimit   `yaml:"rate_limit" json:"rate_limit"`
+	Cache       Cache       `yaml:"cache" json:"cache"`
+	Idempotency Idempotency `yaml:"idempotency" json:"idempotency"`
 }
 
 type RateLimit struct {

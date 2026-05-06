@@ -146,32 +146,27 @@ security:
   enable_rls: false                     # WARNING: requires migration 003
   log_sensitive: false                  # log secret values (debugging only)
 
-# ─── Per-handler timeouts ───────────────────────────────────────────────────
-timeouts:
-  fast_operation: 5s                    # Get/GetMeta/Delete/PatchMeta/GetMultipart
-  default_operation: 30s                # CreateSingle, List
-  s3_operation: 60s                     # presign + multipart S3 calls
-  long_operation: 2m                    # CompleteMultipart
-
-# ─── Rate limiter (sliding window per-tenant) ───────────────────────────────
-rate_limit:
-  enabled: true
-  requests_per_second: 300
-  burst: 500
-  max_tenants: 10000                    # LRU eviction beyond this
-  cleanup_ttl: 10m
-  cleanup_interval: 5m
-
-# ─── Resource cache (Cedar policies, bucket meta, …) ────────────────────────
-cache:
-  enabled: true
-  max_size: 1000
-  ttl: 5m
-
-# ─── Idempotency (request-deduplication via Idempotency-Key header) ─────────
-idempotency:
-  enabled: true
-  ttl: 24h
+# ─── Cross-cutting middleware (timeouts, RPS caps, caches, idempotency) ────
+middleware:
+  timeouts:
+    fast_operation: 5s                  # Get/GetMeta/Delete/PatchMeta/GetMultipart
+    default_operation: 30s              # CreateSingle, List
+    s3_operation: 60s                   # presign + multipart S3 calls
+    long_operation: 2m                  # CompleteMultipart
+  rate_limit:                           # sliding window per-tenant
+    enabled: true
+    requests_per_second: 300
+    burst: 500
+    max_tenants: 10000                  # LRU eviction beyond this
+    cleanup_ttl: 10m
+    cleanup_interval: 5m
+  cache:                                # in-memory resource cache (Cedar, bucket meta)
+    enabled: true
+    max_size: 1000
+    ttl: 5m
+  idempotency:                          # de-dup via Idempotency-Key header
+    enabled: true
+    ttl: 24h
 
 # ─── Housekeeping (background reapers) ──────────────────────────────────────
 housekeeping:

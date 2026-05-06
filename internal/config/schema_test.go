@@ -72,8 +72,8 @@ storage:
 	if cfg.Server.ShutdownTimeout.String() != "20s" {
 		t.Errorf("Server.ShutdownTimeout: got %v want 20s", cfg.Server.ShutdownTimeout)
 	}
-	if !cfg.RateLimit.Enabled {
-		t.Error("RateLimit.Enabled: default should be true")
+	if !cfg.Middleware.RateLimit.Enabled {
+		t.Error("Middleware.RateLimit.Enabled: default should be true")
 	}
 	if cfg.Auth.AccessTokenTTL.String() != "15m0s" {
 		t.Errorf("Auth.AccessTokenTTL: got %v want 15m", cfg.Auth.AccessTokenTTL)

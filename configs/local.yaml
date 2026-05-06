@@ -88,27 +88,25 @@ security:
   enable_rls: false
   log_sensitive: false
 
-timeouts:
-  fast_operation: 5s
-  default_operation: 30s
-  s3_operation: 60s
-  long_operation: 2m
-
-rate_limit:
-  requests_per_second: 1000
-  burst: 2000
-  max_tenants: 1000
-  cleanup_ttl: 10m
-  cleanup_interval: 5m
-
-cache:
-  enabled: true
-  max_size: 1000
-  ttl: 5m
-
-idempotency:
-  enabled: true
-  ttl: 1h
+middleware:
+  timeouts:
+    fast_operation: 5s
+    default_operation: 30s
+    s3_operation: 60s
+    long_operation: 2m
+  rate_limit:
+    requests_per_second: 1000
+    burst: 2000
+    max_tenants: 1000
+    cleanup_ttl: 10m
+    cleanup_interval: 5m
+  cache:
+    enabled: true
+    max_size: 1000
+    ttl: 5m
+  idempotency:
+    enabled: true
+    ttl: 1h
 
 housekeeping:
   enable_reaper: false

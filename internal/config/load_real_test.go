@@ -31,8 +31,8 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if cfg.Datastores.Postgres.DSN == "" {
 		t.Error("Postgres.DSN is empty after load")
 	}
-	if !cfg.RateLimit.Enabled {
-		t.Error("RateLimit.Enabled: expected true from yaml")
+	if !cfg.Middleware.RateLimit.Enabled {
+		t.Error("Middleware.RateLimit.Enabled: expected true from yaml")
 	}
 	if cfg.MCP.HTTP.Addr == "" {
 		t.Error("MCP.HTTP.Addr is empty")
