@@ -1,6 +1,6 @@
 apiVersion: v2
 name: paladin
-description: acme Paladin service — Connect RPC service
+description: Paladin service — Connect RPC service
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

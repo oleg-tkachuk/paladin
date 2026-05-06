@@ -64,14 +64,14 @@ config:
     postgres:
       # Runtime DSN — must point at the minimum-privilege role
       # (`paladin_app`). See migrations/011_app_role.sql + docs/db-roles.md.
-      dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+      dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
       password_secret:
         name: paladin-postgresql-app-user
         key: password
         namespace: database
       # DDL-capable DSN used only by goose at startup. Distinct from the
       # runtime role so the runtime pool can be locked down.
-      migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+      migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
       migrate_password_secret:
         name: paladin-postgresql-migrate-user
         key: password

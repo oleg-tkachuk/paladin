@@ -32,10 +32,10 @@ CREATE ROLE paladin_migrate WITH LOGIN PASSWORD '<from-secret>' CREATEDB;
 CREATE ROLE paladin_app WITH NOLOGIN;
 
 -- Create the database, owned by the migrate role.
-CREATE DATABASE acme OWNER paladin_migrate;
+CREATE DATABASE paladin OWNER paladin_migrate;
 
 -- Grant connect rights to the runtime role.
-GRANT CONNECT ON DATABASE acme TO paladin_app;
+GRANT CONNECT ON DATABASE paladin TO paladin_app;
 
 -- Enable LOGIN + set password for the runtime role. Done in two steps so
 -- the operator always has an explicit password-set moment in their
@@ -100,14 +100,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON the_new_table TO paladin_app;
 datastores:
   postgres:
     # Runtime: paladin_app (DML-only)
-    dsn: "postgres://paladin_app@host:5432/acme?sslmode=verify-full"
+    dsn: "postgres://paladin_app@host:5432/paladin?sslmode=verify-full"
     password_secret:
       name: paladin-postgresql-app-user
       key: password
       namespace: database
 
     # Migrations: paladin_migrate (DDL-capable)
-    migrate_dsn: "postgres://paladin_migrate@host:5432/acme?sslmode=verify-full"
+    migrate_dsn: "postgres://paladin_migrate@host:5432/paladin?sslmode=verify-full"
     migrate_password_secret:
       name: paladin-postgresql-migrate-user
       key: password
@@ -145,14 +145,14 @@ production-like blast radius.
 After deploy, `psql` as the runtime role and confirm DDL is denied:
 
 ```sh
-psql "postgres://paladin_app:…@host/acme" -c "DROP TABLE tenants;"
+psql "postgres://paladin_app:…@host/paladin" -c "DROP TABLE tenants;"
 # ERROR:  must be owner of table tenants
 ```
 
 Inversely, list grants:
 
 ```sh
-psql "postgres://paladin_migrate:…@host/acme" -c "\dp tenants"
+psql "postgres://paladin_migrate:…@host/paladin" -c "\dp tenants"
 # Access privileges
 #       Schema |  Name   | Type  |       Access privileges       | …
 #       public | tenants | table | paladin_migrate=arwdDxt/paladin_migrate
@@ -171,7 +171,7 @@ apart in `pg_stat_activity`:
 ```sql
 SELECT application_name, count(*)
 FROM pg_stat_activity
-WHERE datname = 'acme'
+WHERE datname = 'paladin'
 GROUP BY 1;
 --  application_name | count
 -- ------------------+-------

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Paladin (PALADIN) is a central service in the acme ecosystem responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and robust multi-tenant isolation.
+The Paladin (PALADIN) is a multi-tenant service responsible for managing the lifecycle of binary objects (files, documents, images). It provides a unified API for object storage, abstraction over physical storage (S3/SeaweedFS), and tenant isolation enforced by Cedar policies.
 
 ## Inventory Map
 
@@ -25,9 +25,9 @@ The Paladin (PALADIN) is a central service in the acme ecosystem responsible for
 
 ### Downstream Consumers
 
-- **acme consumer API**: Consumes PALADIN for document management.
-- **Workflows Workers**: Use PALADIN for hard deletion and object lifecycle management.
-- **Frontend Applications**: Directly consume signed URLs for uploads and downloads.
+- **Tenant applications**: Consume PALADIN for document and asset management.
+- **Workflow workers**: Use PALADIN for hard deletion and object lifecycle management.
+- **Frontend applications**: Directly consume signed URLs for uploads and downloads.
 
 ### Data Flow
 

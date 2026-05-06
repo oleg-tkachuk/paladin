@@ -82,7 +82,7 @@ datastores:
     # Runtime DSN — must point at the minimum-privilege role (`paladin_app`).
     # See migrations/011_app_role.sql + docs/db-roles.md for what that role
     # is allowed to do (DML only, no DDL, no role management).
-    dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+    dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
     password: ""                        # prefer password_secret in non-local
     password_secret:
       name: paladin-postgresql-app-user
@@ -91,7 +91,7 @@ datastores:
     # Separate DDL-capable DSN for schema migrations. In production this
     # MUST differ from `dsn` so the runtime pool can be locked down.
     # Empty falls back to the runtime DSN — fine for dev only.
-    migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/acme?sslmode=disable"
+    migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
     migrate_password: ""
     migrate_password_secret:
       name: paladin-postgresql-migrate-user

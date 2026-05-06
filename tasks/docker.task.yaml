@@ -1,9 +1,9 @@
 version: "3"
 
-# Image + Helm chart build/release flow. Two entry points — `build`
-# (push to OCI registry) and `build-local` (load straight into Minikube
-# without a push) — share one internal builder so the docker-build
-# invocation isn't duplicated.
+# Image + Helm chart deploy flow. Two entry points — `deploy` (push to
+# OCI registry) and `deploy-local` (load straight into Minikube without
+# a push) — share one internal builder so the docker-build invocation
+# isn't duplicated.
 
 vars:
   TAG: latest
@@ -11,7 +11,7 @@ vars:
 tasks:
   # ─── Public entry points ─────────────────────────────────────────────────
 
-  build:
+  deploy:
     desc: "Build, push image (TAG + :latest), package and push the Helm chart"
     deps: [":core:tools:build"]
     vars: &build-vars
@@ -43,7 +43,7 @@ tasks:
       - task: ":core:banner"
         vars: { MESSAGE: "[OCI] pushed image + chart {{._TAG}}" }
 
-  build-local:
+  deploy-local:
     desc: "Build the image directly into the Minikube Docker daemon (no push)"
     deps: [":core:tools:build"]
     vars: *build-vars

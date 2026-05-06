@@ -37,18 +37,22 @@ tasks:
     cmds:
       - task --list-all
 
-  # ─── Build / release ─────────────────────────────────────────────────────
-  build:
+  # ─── Deploy / release ────────────────────────────────────────────────────
+  # `deploy` is the registry-push pipeline (build → tag → push image +
+  # chart). `deploy-local` is the same flow targeting the in-cluster
+  # Minikube Docker daemon — no push, no chart packaging — used by the
+  # local dev loop.
+  deploy:
     desc: "Build, tag, and push image + Helm chart to the OCI registry"
     cmds:
       - task: metadata:write
-      - task: docker:build
+      - task: docker:deploy
 
-  build-local:
+  deploy-local:
     desc: "Build the image directly into the Minikube Docker daemon (no push)"
     cmds:
       - task: metadata:write
-      - task: docker:build-local
+      - task: docker:deploy-local
 
   metadata:write:
     desc: "Bump APP_VERSION and write GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"

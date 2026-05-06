@@ -43,10 +43,13 @@ go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DS
 ### Build and Run
 
 ```bash
-# Build binary
-task build
+# Build + push image and Helm chart to the OCI registry
+task deploy
 
-# Run directly
+# Or build into the local Minikube Docker daemon (no push)
+task deploy-local
+
+# Run the binary directly
 ./server --config configs/local.yaml
 ```
 
@@ -85,7 +88,8 @@ task --list
 
 Common tasks include:
 
-- `task build` — build the binary
+- `task deploy` — build + push image and Helm chart
+- `task deploy-local` — build into the Minikube Docker daemon
 - `task test` — run unit tests
 - `task lint` — run golangci-lint
 - `task proto` — regenerate proto Go files
@@ -105,7 +109,7 @@ In Kubernetes, the service is deployed with:
 - Readiness probe: `GET /health/readyz`
 - Startup probe: `GET /health/startupz`
 
-For Helm chart details and Kubernetes manifests, refer to `acme-iac`.
+For Helm chart details, refer to [`deploy/chart/`](../deploy/chart/).
 
 ## Source Index
 

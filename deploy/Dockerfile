@@ -119,7 +119,7 @@ ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
 
 LABEL org.opencontainers.image.title="paladin" \
-      org.opencontainers.image.description="acme PALADIN API — Connect RPC service" \
+      org.opencontainers.image.description="Paladin — Connect RPC service" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
       org.opencontainers.image.created="${BUILD_TIME}" \

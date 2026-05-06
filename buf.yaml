@@ -1,7 +1,7 @@
 version: v2
 modules:
   - path: proto
-    name: buf.build/acme/paladin
+    name: buf.build/oleg-tkachuk/paladin
 deps:
   - buf.build/bufbuild/protovalidate
   - buf.build/googleapis/googleapis
