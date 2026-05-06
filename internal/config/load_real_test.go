@@ -6,7 +6,37 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
+	goyaml "gopkg.in/yaml.v3"
 )
+
+// TestHelmValuesConfigBlock pins the config: subtree of the chart values.yaml
+// against the live CUE schema. Helm bakes this subtree into the ConfigMap
+// the pod reads, so any drift between configs/config.yaml and the chart
+// breaks every cluster deploy.
+func TestHelmValuesConfigBlock(t *testing.T) {
+	body, err := os.ReadFile("../../deploy/chart/values.yaml")
+	if err != nil {
+		t.Fatalf("read values.yaml: %v", err)
+	}
+	var wrap struct {
+		Config map[string]any `yaml:"config"`
+	}
+	if err := goyaml.Unmarshal(body, &wrap); err != nil {
+		t.Fatalf("decode values.yaml: %v", err)
+	}
+	out, err := goyaml.Marshal(wrap.Config)
+	if err != nil {
+		t.Fatalf("re-marshal: %v", err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "values-config.yaml")
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := Load(path, zap.NewNop()); err != nil {
+		t.Fatalf("Load chart values.yaml -> .config: %v", err)
+	}
+}
 
 // TestLoadMinimalYAML asserts that a YAML supplying only the no-default
 // fields (postgres dsn, app.name, one storage backend, signing key) loads
