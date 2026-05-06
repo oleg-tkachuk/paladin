@@ -152,7 +152,7 @@ config:
         # Empty namespace → resolver falls back to the pod's own namespace.
         namespace: ""
       min_password_length: 0
-      force_reset: false
+      force_reset: true
 
   middleware:
     timeouts:
