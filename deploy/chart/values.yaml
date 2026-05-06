@@ -250,12 +250,19 @@ image:
   pullPolicy: Always
   tag: ""
 
-# Bootstrap (chart-level) — controls the Kubernetes Secret the chart
-# creates for the platform-admin password. The Go bootstrap step reads the
-# Secret via K8sSecretResolver, so there is no env var or secretKeyRef on
-# the deployment. The same `name` / `key` MUST appear in
-# `config.bootstrap.admin.password_secret` so the resolver finds the
-# Secret the chart provisioned.
+# Bootstrap (chart-level) — password / Secret-name override surface for
+# the platform-admin Secret the chart creates. The Go bootstrap step
+# reads the Secret via K8sSecretResolver, so there is no env var or
+# secretKeyRef on the deployment. The same `name` / `key` MUST appear
+# in `config.bootstrap.admin.password_secret` so the resolver finds
+# the Secret the chart provisioned.
+#
+# WHETHER the Secret is created is governed by the SAME flag the binary
+# checks: `config.bootstrap.admin.enabled`. Don't add a duplicate
+# `bootstrap.admin.enabled` here — the parallel knob silently drifted
+# in the past and produced "access denied reading secret
+# paladin-bootstrap-admin" because the resolver expected a Secret the
+# template never rendered. Single source of truth lives under `config`.
 #
 # Password resolution at install time:
 #   1. Pre-existing Secret in the namespace → preserved (no rotation).
@@ -264,13 +271,8 @@ image:
 #
 # After install, retrieve the auto-generated password with:
 #   kubectl get secret <name> -n <ns> -o jsonpath='{.data.password}' | base64 -d
-#
-# Keep `bootstrap.admin.enabled` and `config.bootstrap.admin.enabled` in
-# sync — the chart-level flag gates the Secret template, the config-level
-# flag gates the boot step.
 bootstrap:
   admin:
-    enabled: false
     # Inline password override. Empty + no existing Secret → chart auto-
     # generates a random one. Pass via --set-file to keep it out of shell
     # history. Never commit a real value to git.
@@ -447,3 +449,9 @@ rbac:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user
       - paladin-admin-key
+      # Bootstrap admin password — read once at startup when
+      # config.bootstrap.admin.enabled=true. Resolver looks in the
+      # pod's own namespace (config.bootstrap.admin.password_secret.namespace
+      # is empty → falls back to the SA namespace). Drop this entry
+      # when bootstrap is permanently disabled.
+      - paladin-bootstrap-admin
