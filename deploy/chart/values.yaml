@@ -257,14 +257,30 @@ image:
 # in `config.bootstrap.admin.password_secret` so the resolver finds
 # the Secret the chart provisioned.
 #
-# WHETHER the Secret is created is governed by the SAME flag the binary
-# checks: `config.bootstrap.admin.enabled`. Don't add a duplicate
-# `bootstrap.admin.enabled` here — the parallel knob silently drifted
-# in the past and produced "access denied reading secret
-# paladin-bootstrap-admin" because the resolver expected a Secret the
-# template never rendered. Single source of truth lives under `config`.
+# Two independent flags (intentionally — the topologies that need them
+# split are real):
 #
-# Password resolution at install time:
+#   config.bootstrap.admin.enabled  — does the SERVER run the boot step?
+#                                     (read by Go via cfg.Bootstrap.Admin.Enabled)
+#   bootstrap.admin.enabled         — does THIS chart render the Secret?
+#
+# Combinations:
+#
+#   • Chart-managed Secret + boot step on:
+#       config.bootstrap.admin.enabled: true
+#       bootstrap.admin.enabled:        true
+#     Single-chart install where you trust Helm's `lookup` semantics.
+#
+#   • Externally-managed Secret + boot step on (the GitOps shape):
+#       config.bootstrap.admin.enabled: true
+#       bootstrap.admin.enabled:        false
+#     ArgoCD ships the Secret via a sibling Application (SealedSecret /
+#     ExternalSecret / SOPS). Avoids the `lookup`-under-`helm template`
+#     drift where randAlphaNum churns the password on every sync.
+#
+#   • Off entirely — both false (default).
+#
+# Password resolution when bootstrap.admin.enabled=true:
 #   1. Pre-existing Secret in the namespace → preserved (no rotation).
 #   2. `--set bootstrap.admin.password=<value>` (or --set-file) → that value.
 #   3. Otherwise → chart auto-generates a 24-char random password.
@@ -273,6 +289,7 @@ image:
 #   kubectl get secret <name> -n <ns> -o jsonpath='{.data.password}' | base64 -d
 bootstrap:
   admin:
+    enabled: false
     # Inline password override. Empty + no existing Secret → chart auto-
     # generates a random one. Pass via --set-file to keep it out of shell
     # history. Never commit a real value to git.
