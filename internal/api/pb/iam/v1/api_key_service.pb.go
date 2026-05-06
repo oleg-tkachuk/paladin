@@ -27,7 +27,7 @@ const (
 
 type CreateApiKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent: "tenants/{tenant_id}". Empty for platform service accounts.
+	// Parent: "tenants/{tenant_id_or_slug}". Empty for platform service accounts.
 	Parent        string               `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Description   string               `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	Roles         []string             `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`

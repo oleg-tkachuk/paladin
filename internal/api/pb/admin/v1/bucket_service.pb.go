@@ -720,7 +720,7 @@ func (x *SetReplicationRequest) GetReplication() *BucketReplication {
 
 type ListAccessibleBucketsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant: "tenants/{tenant_id}". Required.
+	// Tenant: "tenants/{tenant_id_or_slug}". Required.
 	Tenant        string          `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -27,7 +27,7 @@ const (
 
 type CreateSubscriptionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{t}"
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}"
 	Subscription  *EventSubscription     `protobuf:"bytes,2,opt,name=subscription,proto3" json:"subscription,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

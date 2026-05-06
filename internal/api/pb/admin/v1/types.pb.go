@@ -1172,7 +1172,7 @@ func (x *BucketReplication) GetFilter() string {
 
 type Tenant struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id}".
+	// Resource name: "tenants/{tenant_id_or_slug}".
 	Name        string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	TenantId    string            `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	DisplayName string            `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
@@ -1274,7 +1274,7 @@ func (x *Tenant) GetUpdatedAt() *timestamppb.Timestamp {
 
 type ObjectKey struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id}/objectKeys/{object_key}".
+	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}".
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	TenantId    string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	ObjectKey   string `protobuf:"bytes,3,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
@@ -1404,7 +1404,7 @@ func (x *ObjectKey) GetUpdatedAt() *timestamppb.Timestamp {
 // Quota caps usage at tenant or bucket scope. Enforced at presign time.
 type Quota struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id}/quota" or
+	// Resource name: "tenants/{tenant_id_or_slug}/quota" or
 	// "storageBackends/{backend_id}/buckets/{bucket_name}/quota".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Hard caps. 0 → no cap.
@@ -1722,7 +1722,7 @@ func (x *AuditLogEntry) GetErrorMessage() string {
 // Replaces the need for clients to consume S3 events directly.
 type EventSubscription struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
-	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // "tenants/{t}/eventSubscriptions/{id}"
+	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // "tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"
 	TenantId string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// CEL filter against EventEnvelope; empty → all events for the tenant.
 	Filter          string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`

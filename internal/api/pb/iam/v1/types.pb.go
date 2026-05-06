@@ -28,7 +28,7 @@ const (
 // federated IdPs the row is created on first successful upstream login.
 type User struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id}/users/{user_id}".
+	// Resource name: "tenants/{tenant_id_or_slug}/users/{user_id}".
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	UserId      string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	TenantId    string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -166,7 +166,7 @@ func (x *User) GetLastLoginAt() *timestamppb.Timestamp {
 // cadence different. Secret value is returned ONCE on Create.
 type ApiKey struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{tenant_id}/apiKeys/{api_key_id}".
+	// Resource name: "tenants/{tenant_id_or_slug}/apiKeys/{api_key_id}".
 	Name     string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	ApiKeyId string `protobuf:"bytes,2,opt,name=api_key_id,json=apiKeyId,proto3" json:"api_key_id,omitempty"`
 	TenantId string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`

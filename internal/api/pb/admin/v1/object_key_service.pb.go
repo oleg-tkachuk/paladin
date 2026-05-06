@@ -27,7 +27,7 @@ const (
 
 type CreateObjectKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent: "tenants/{tenant_id}".
+	// Parent: "tenants/{tenant_id_or_slug}".
 	Parent            string     `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	ObjectKey         string     `protobuf:"bytes,2,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
 	ObjectKeyResource *ObjectKey `protobuf:"bytes,3,opt,name=object_key_resource,json=objectKeyResource,proto3" json:"object_key_resource,omitempty"`
@@ -296,7 +296,7 @@ func (*DeleteObjectKeyResponse) Descriptor() ([]byte, []int) {
 
 type ListObjectKeysRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id}" or empty for cross-tenant
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
 	Page          *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	Filter        string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
 	unknownFields protoimpl.UnknownFields

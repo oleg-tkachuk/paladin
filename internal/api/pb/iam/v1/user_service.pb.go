@@ -27,7 +27,7 @@ const (
 
 type CreateUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent: "tenants/{tenant_id}". Empty for platform-level users.
+	// Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
 	Parent          string      `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Subject         string      `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	DisplayName     string      `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
@@ -329,7 +329,7 @@ func (*DeleteUserResponse) Descriptor() ([]byte, []int) {
 
 type ListUsersRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Parent string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id}" or empty for cross-tenant (platform admin only)
+	Parent string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant (platform admin only)
 	Page   *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	// CEL filter against User schema.
 	Filter        string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`

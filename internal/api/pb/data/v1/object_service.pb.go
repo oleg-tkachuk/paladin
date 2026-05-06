@@ -78,7 +78,7 @@ func (PresignTransport) EnumDescriptor() ([]byte, []int) {
 
 type ObjectVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
 	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	VersionId      string                 `protobuf:"bytes,2,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
 	ObjectId       string                 `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
@@ -332,7 +332,7 @@ func (x *ListObjectVersionsResponse) GetPage() *v1.PageResponse {
 
 type GetObjectVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+	// Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -429,7 +429,7 @@ func (x *RestoreObjectVersionRequest) GetResourceVersion() string {
 
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
 	Parent            string               `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Key               string               `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
 	ContentType       string               `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
@@ -1305,7 +1305,7 @@ func (x *TagsOverride) GetTags() map[string]string {
 
 type ListObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
 	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	Filter        string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`

@@ -215,7 +215,7 @@ func (x *ObjectSelector) GetFilter() string {
 
 type BatchDeleteObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
 	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	Selector      *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	Permanent     bool            `protobuf:"varint,3,opt,name=permanent,proto3" json:"permanent,omitempty"`

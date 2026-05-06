@@ -346,6 +346,13 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
+	// SystemService surfaces build metadata + per-component health to
+	// authenticated UI clients. Reuses the same Ready checks as /readyz
+	// but itemises them so the dashboard can render a per-dependency table.
+	iamMux.Handle(paladiniamv1connect.NewSystemServiceHandler(
+		connectiam.NewSystemServer(version, commit, parseBuildTime(buildTime), healthH),
+		iamOpts,
+	))
 	// JSON shim for UserSettings — keeps the wire path identical to the
 	// future buf-generated connect handler so clients survive the swap.
 	connectiam.RegisterUserSettings(iamMux, userSettingsH)
@@ -357,6 +364,20 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 		{Plane: "iam", Server: buildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},
 	}
 	return listeners, healthH, nil
+}
+
+// parseBuildTime turns the link-time `buildTime` string into a time.Time.
+// The build pipeline emits RFC3339 (`date -Iseconds`); local `go run`
+// builds carry "unknown" — return zero in that case so SystemService
+// returns nil for build_time.
+func parseBuildTime(s string) time.Time {
+	if s == "" || s == "unknown" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 // newHealthHandler builds the shared probe handler. Same instance is
