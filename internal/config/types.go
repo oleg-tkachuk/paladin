@@ -223,7 +223,7 @@ type Housekeeping struct {
 	PendingTTL          time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
 	MultipartTTL        time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
 	AuditLogTTL         time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
-	GCInterval          time.Duration `yaml:"gc_interval" json:"gc_interval"`
+	Interval            time.Duration `yaml:"interval" json:"interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
 }
 
@@ -377,8 +377,12 @@ type Presign struct {
 }
 
 type Reconciler struct {
-	PollInterval    time.Duration `yaml:"poll_interval" json:"poll_interval"`
-	PendingGraceTTL time.Duration `yaml:"pending_grace_ttl" json:"pending_grace_ttl"`
+	// Interval between reconcile ticks.
+	Interval time.Duration `yaml:"interval" json:"interval"`
+	// MinObjectAge: an object must be at least this old to be eligible for
+	// reconciliation — protects against racing the upload path before the
+	// client has called Complete.
+	MinObjectAge time.Duration `yaml:"min_object_age" json:"min_object_age"`
 	// BatchSize caps how many stuck-PENDING rows are reconciled per tick.
 	BatchSize int `yaml:"batch_size" json:"batch_size"`
 }

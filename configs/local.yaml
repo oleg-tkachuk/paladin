@@ -105,13 +105,13 @@ middleware:
 
 workers:
   reconciler:
-    poll_interval: 30s
-    pending_grace_ttl: 2h
+    interval: 30s
+    min_object_age: 2h
     batch_size: 100
   housekeeping:
     pending_ttl: "24h"
     multipart_ttl: "72h"
-    gc_interval: "1h"
+    interval: "1h"
     delete_orphaned_parts: false
 
 storage:

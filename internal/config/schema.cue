@@ -176,15 +176,15 @@ middleware: {
 // gaps when S3 events are missed; housekeeping reaps stale rows).
 workers: {
   reconciler: {
-    poll_interval:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-    pending_grace_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2h"
-    batch_size:        int & >= 1 | *100
+    interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+    min_object_age: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2h"
+    batch_size:     int & >= 1 | *100
   }
   housekeeping: {
     pending_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
     multipart_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
     audit_log_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h" // 365d
-    gc_interval:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    interval:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     delete_orphaned_parts: bool | *false
   }
 }

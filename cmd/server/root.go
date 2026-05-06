@@ -429,15 +429,15 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 		Logger:         l.Named("replication"),
 	})
 
-	if cfg.Workers.Reconciler.PollInterval > 0 {
+	if cfg.Workers.Reconciler.Interval > 0 {
 		s3c, err := s3adapter.New(context.Background(), cfg.Storage.Backends[cfg.Storage.DefaultBackend])
 		if err == nil {
 			out = append(out, worker.NewReconcilerV2(
 				statemachine.New(db.Pool.(*pgxpool.Pool)),
 				adapters.NewReconcilerProbe(db.Queries, s3c),
 				worker.ReconcilerV2Config{
-					PollInterval:    cfg.Workers.Reconciler.PollInterval,
-					PendingGraceTTL: cfg.Workers.Reconciler.PendingGraceTTL,
+					PollInterval:    cfg.Workers.Reconciler.Interval,
+					PendingGraceTTL: cfg.Workers.Reconciler.MinObjectAge,
 					BatchSize:       cfg.Workers.Reconciler.BatchSize,
 				},
 				l.Named("reconciler"),
