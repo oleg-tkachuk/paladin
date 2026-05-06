@@ -353,9 +353,12 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 		connectiam.NewSystemServer(version, commit, parseBuildTime(buildTime), healthH),
 		iamOpts,
 	))
-	// JSON shim for UserSettings — keeps the wire path identical to the
-	// future buf-generated connect handler so clients survive the swap.
-	connectiam.RegisterUserSettings(iamMux, userSettingsH)
+	// UserSettings now uses the buf-generated Connect handler. Wire path is
+	// identical to the previous JSON shim — clients survived the swap.
+	iamMux.Handle(paladiniamv1connect.NewUserSettingsServiceHandler(
+		connectiam.NewUserSettingsServer(userSettingsH),
+		iamOpts,
+	))
 
 	// ─── HTTP servers ────────────────────────────────────────────────────
 	listeners := []app.HTTPListener{

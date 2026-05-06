@@ -1,40 +1,31 @@
-// Package iam — UserSettings JSON shim.
+// Package iam — UserSettings Connect-RPC server.
 //
-// This is a hand-written JSON-over-HTTP server that mounts under the same
-// `/paladin.iam.v1.UserSettingsService/{Method}` path namespace connect-rpc
-// would use. It exists because buf-codegen for the
-// `proto/paladin/iam/v1/user_settings_service.proto` definition has not been
-// run yet — see BACKLOG.md "UserSettings — proto + connect-rpc wiring".
-//
-// Once `buf generate` runs:
-//   1. Replace the file-level Register function with the proper
-//      `paladiniamv1connect.NewUserSettingsServiceHandler(server, opts)` shape.
-//   2. Move the JSON request/response structs to paladiniamv1 generated types.
-//   3. Adjust callers in cmd/server/root.go to use the new constructor.
-//
-// The wire path stays identical, so existing clients won't notice the swap.
-
+// Replaces the earlier hand-written JSON shim that mounted under the same
+// `/paladin.iam.v1.UserSettingsService/{Method}` path. The wire path is
+// unchanged — clients keep their existing URLs and request bodies, just
+// with proper Connect framing now.
 package iam
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
+	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
 )
 
-const userSettingsServicePrefix = "/paladin.iam.v1.UserSettingsService/"
-
-// UserSettingsServer is the JSON-over-HTTP handler. Implements the same
-// surface as the (yet-to-be-generated) connect-rpc server interface, so
-// the post-buf-generate swap is mechanical.
+// UserSettingsServer satisfies the generated Connect handler interface.
+// Authentication is enforced by the IAM mux's interceptor stack before
+// the request lands here; we read auth.Principal via the domain handler.
 type UserSettingsServer struct {
+	paladiniamv1connect.UnimplementedUserSettingsServiceHandler
 	H *usersettingsh.Handler
 }
 
@@ -42,219 +33,205 @@ func NewUserSettingsServer(h *usersettingsh.Handler) *UserSettingsServer {
 	return &UserSettingsServer{H: h}
 }
 
-// RegisterUserSettings mounts the five RPC methods on `mux` under the
-// canonical service path. Returns the prefix for caller-side logging.
-func RegisterUserSettings(mux *http.ServeMux, h *usersettingsh.Handler) string {
-	srv := NewUserSettingsServer(h)
-	mux.Handle(userSettingsServicePrefix, srv)
-	return userSettingsServicePrefix
-}
+var _ paladiniamv1connect.UserSettingsServiceHandler = (*UserSettingsServer)(nil)
 
-// ServeHTTP dispatches by trailing method name. Authentication is performed
-// by the IAM mux's chained interceptors before this handler runs — we read
-// auth.Principal from ctx the same way the generated connect handlers do.
-func (s *UserSettingsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSONErr(w, http.StatusMethodNotAllowed, "POST required")
-		return
+// ─── RPC methods ────────────────────────────────────────────────────────────
+
+func (s *UserSettingsServer) GetMine(
+	ctx context.Context,
+	_ *connect.Request[pb.GetMineRequest],
+) (*connect.Response[pb.UserSettings], error) {
+	out, err := s.H.GetMine(ctx)
+	if err != nil {
+		return nil, err
 	}
-	method := strings.TrimPrefix(r.URL.Path, userSettingsServicePrefix)
-	switch method {
-	case "GetMine":
-		s.getMine(w, r)
-	case "UpdateMine":
-		s.updateMine(w, r)
-	case "GetForUser":
-		s.getForUser(w, r)
-	case "ListByTenant":
-		s.listByTenant(w, r)
-	case "DeleteForUser":
-		s.deleteForUser(w, r)
-	default:
-		writeJSONErr(w, http.StatusNotFound, "unknown method")
+	msg, err := settingsToProto(out)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	return connect.NewResponse(msg), nil
 }
 
-// ─── DTOs ───────────────────────────────────────────────────────────────────
-
-// SettingsDTO is the wire shape — mirrors the proto `UserSettings` message
-// field-for-field. When the generated proto types land, this struct goes
-// away in favour of paladiniamv1.UserSettings.
-type SettingsDTO struct {
-	Name            string          `json:"name"`
-	UserID          string          `json:"user_id"`
-	TenantID        string          `json:"tenant_id"`
-	Timezone        string          `json:"timezone"`
-	Locale          string          `json:"locale"`
-	Theme           string          `json:"theme"`
-	Preferences     json.RawMessage `json:"preferences,omitempty"`
-	ResourceVersion string          `json:"resource_version"`
-}
-
-type updateMineReq struct {
-	UpdateMask  []string        `json:"update_mask,omitempty"`
-	Timezone    string          `json:"timezone,omitempty"`
-	Locale      string          `json:"locale,omitempty"`
-	Theme       string          `json:"theme,omitempty"`
-	Preferences json.RawMessage `json:"preferences,omitempty"`
-}
-
-type listResp struct {
-	Settings []SettingsDTO `json:"settings"`
-}
-
-// ─── handlers ───────────────────────────────────────────────────────────────
-
-func (s *UserSettingsServer) getMine(w http.ResponseWriter, r *http.Request) {
-	out, err := s.H.GetMine(r.Context())
-	writeOne(w, out, err)
-}
-
-func (s *UserSettingsServer) updateMine(w http.ResponseWriter, r *http.Request) {
-	var req updateMineReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, errEOF) {
-		writeJSONErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
-		return
+func (s *UserSettingsServer) UpdateMine(
+	ctx context.Context,
+	req *connect.Request[pb.UpdateMineRequest],
+) (*connect.Response[pb.UserSettings], error) {
+	prefs, err := structToBytes(req.Msg.GetPreferences())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	prefs := []byte(req.Preferences)
-	if len(prefs) == 0 {
-		prefs = nil
-	}
-	out, err := s.H.UpdateMine(r.Context(), usersettingsh.UpdateMineInput{
-		UpdateMask:  req.UpdateMask,
-		Timezone:    req.Timezone,
-		Locale:      req.Locale,
-		Theme:       req.Theme,
+	out, err := s.H.UpdateMine(ctx, usersettingsh.UpdateMineInput{
+		UpdateMask:  paths(req.Msg.GetUpdateMask()),
+		Timezone:    req.Msg.GetTimezone(),
+		Locale:      req.Msg.GetLocale(),
+		Theme:       req.Msg.GetTheme(),
 		Preferences: prefs,
 	})
-	writeOne(w, out, err)
+	if err != nil {
+		return nil, err
+	}
+	msg, err := settingsToProto(out)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(msg), nil
 }
 
-func (s *UserSettingsServer) getForUser(w http.ResponseWriter, r *http.Request) {
-	uid, err := parseUserName(extractField(r, "name"))
+func (s *UserSettingsServer) GetForUser(
+	ctx context.Context,
+	req *connect.Request[pb.GetForUserRequest],
+) (*connect.Response[pb.UserSettings], error) {
+	uid, err := parseUserResourceName(req.Msg.GetName())
 	if err != nil {
-		writeJSONErr(w, http.StatusBadRequest, err.Error())
-		return
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetForUser(r.Context(), uid)
-	writeOne(w, out, err)
+	out, err := s.H.GetForUser(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	msg, err := settingsToProto(out)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(msg), nil
 }
 
-func (s *UserSettingsServer) listByTenant(w http.ResponseWriter, r *http.Request) {
-	parent := extractField(r, "parent")
-	tid, err := parseTenantParent(r.Context(), parent)
+func (s *UserSettingsServer) ListByTenant(
+	ctx context.Context,
+	req *connect.Request[pb.ListByTenantRequest],
+) (*connect.Response[pb.ListByTenantResponse], error) {
+	tid, err := parseTenantParent(req.Msg.GetParent())
 	if err != nil {
-		writeJSONErr(w, http.StatusBadRequest, err.Error())
-		return
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	pageSize := int32(extractInt(r, "page_size"))
-	out, err := s.H.ListByTenant(r.Context(), tid, pageSize)
+	pageSize := int32(0)
+	if p := req.Msg.GetPage(); p != nil {
+		pageSize = p.GetPageSize()
+	}
+	out, err := s.H.ListByTenant(ctx, tid, pageSize)
 	if err != nil {
-		writeConnectErr(w, err)
-		return
+		return nil, err
 	}
-	dtos := make([]SettingsDTO, 0, len(out))
+	items := make([]*pb.UserSettings, 0, len(out))
 	for _, s := range out {
-		dtos = append(dtos, settingsToDTO(s))
+		msg, err := settingsToProto(&s)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		items = append(items, msg)
 	}
-	writeJSON(w, http.StatusOK, listResp{Settings: dtos})
+	return connect.NewResponse(&pb.ListByTenantResponse{
+		Settings: items,
+		// Domain handler doesn't paginate yet — reflect that with an empty
+		// next_page_token. When it learns to, swap in the real cursor.
+	}), nil
 }
 
-func (s *UserSettingsServer) deleteForUser(w http.ResponseWriter, r *http.Request) {
-	uid, err := parseUserName(extractField(r, "name"))
+func (s *UserSettingsServer) DeleteForUser(
+	ctx context.Context,
+	req *connect.Request[pb.DeleteForUserRequest],
+) (*connect.Response[pb.DeleteForUserResponse], error) {
+	uid, err := parseUserResourceName(req.Msg.GetName())
 	if err != nil {
-		writeJSONErr(w, http.StatusBadRequest, err.Error())
-		return
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := s.H.DeleteForUser(r.Context(), uid); err != nil {
-		writeConnectErr(w, err)
-		return
+	if err := s.H.DeleteForUser(ctx, uid); err != nil {
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, struct{}{})
+	return connect.NewResponse(&pb.DeleteForUserResponse{}), nil
 }
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── conversions ────────────────────────────────────────────────────────────
 
-var errEOF = errors.New("EOF") // Local alias; keeps import surface small.
-
-func writeOne(w http.ResponseWriter, s *usersettingsh.Settings, err error) {
+func settingsToProto(s *usersettingsh.Settings) (*pb.UserSettings, error) {
+	prefs, err := bytesToStruct(s.Preferences)
 	if err != nil {
-		writeConnectErr(w, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, settingsToDTO(*s))
-}
-
-func settingsToDTO(s usersettingsh.Settings) SettingsDTO {
-	return SettingsDTO{
+	return &pb.UserSettings{
 		Name:            "users/" + s.UserID.String() + "/settings",
-		UserID:          s.UserID.String(),
-		TenantID:        s.TenantID.String(),
+		UserId:          s.UserID.String(),
+		TenantId:        s.TenantID.String(),
 		Timezone:        s.Timezone,
 		Locale:          s.Locale,
 		Theme:           s.Theme,
-		Preferences:     json.RawMessage(s.Preferences),
+		Preferences:     prefs,
 		ResourceVersion: itoa64(s.ResourceVersion),
-	}
+		CreatedAt:       timestamppb.New(s.CreatedAt),
+		UpdatedAt:       timestamppb.New(s.UpdatedAt),
+	}, nil
 }
 
-// parseUserName accepts both "users/{uuid}" and "users/{uuid}/settings"
-// since the resource-name shape varies between Get and Delete in the proto.
-func parseUserName(name string) (uuid.UUID, error) {
-	if !strings.HasPrefix(name, "users/") {
+// bytesToStruct turns the domain layer's raw JSON preferences into a
+// google.protobuf.Struct. Empty / nil → nil (the field stays unset).
+func bytesToStruct(b []byte) (*structpb.Struct, error) {
+	if len(b) == 0 {
+		return nil, nil
+	}
+	out := &structpb.Struct{}
+	if err := out.UnmarshalJSON(b); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// structToBytes is the inverse — nil → nil so callers can distinguish
+// "no preferences set" from "preferences set to {}".
+func structToBytes(p *structpb.Struct) ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+	return p.MarshalJSON()
+}
+
+func paths(m *fieldmaskpb.FieldMask) []string {
+	if m == nil {
+		return nil
+	}
+	return m.GetPaths()
+}
+
+// parseUserResourceName accepts both "users/{uuid}" and
+// "users/{uuid}/settings" since the proto's Get and Delete use the
+// trailing /settings shape on different fields.
+func parseUserResourceName(name string) (uuid.UUID, error) {
+	const prefix = "users/"
+	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
 		return uuid.Nil, errors.New("name must start with users/")
 	}
-	body := strings.TrimPrefix(name, "users/")
-	body = strings.TrimSuffix(body, "/settings")
+	body := name[len(prefix):]
+	if i := indexOf(body, "/settings"); i >= 0 {
+		body = body[:i]
+	}
 	return uuid.Parse(body)
 }
 
-// parseTenantParent accepts the slug form via apiutil.ParseTenantNameRef but
-// the JSON shim avoids importing apiutil to keep package coupling shallow.
-// Slug → uuid resolution happens at the handler layer once the listing
-// endpoint actually receives the slug — for v1 the JSON shim hard-requires
-// a UUID. Slug-form parents are tracked in BACKLOG (Tenant slug rollout —
-// Phase 3).
-func parseTenantParent(_ context.Context, parent string) (uuid.UUID, error) {
-	body := strings.TrimPrefix(parent, "tenants/")
-	if body == "" {
+// parseTenantParent — UUID-only for now; slug rollout is tracked in
+// BACKLOG ("Tenant slug — Phase 3"). Same constraint as the prior shim.
+func parseTenantParent(parent string) (uuid.UUID, error) {
+	const prefix = "tenants/"
+	if len(parent) <= len(prefix) || parent[:len(prefix)] != prefix {
 		return uuid.Nil, errors.New("parent must be tenants/{tenant_id}")
 	}
-	id, err := uuid.Parse(body)
+	id, err := uuid.Parse(parent[len(prefix):])
 	if err != nil {
 		return uuid.Nil, errors.New("parent: tenant slug not yet supported on this RPC; use UUID")
 	}
 	return id, nil
 }
 
-// extractField pulls a string field from the JSON body. The body is consumed
-// once; callers that need multiple fields use a typed struct instead.
-func extractField(r *http.Request, key string) string {
-	var m map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		return ""
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
 	}
-	v, _ := m[key].(string)
-	return v
+	return -1
 }
 
-func extractInt(r *http.Request, key string) int64 {
-	// Bodies are consumed by extractField — this helper is only correct
-	// when called BEFORE extractField on a fresh body. Keeping it
-	// single-purpose: callers either decode the full struct or use this
-	// + extractField, never both. listByTenant uses a typed struct path
-	// internally; this exists for future single-int extractions.
-	var m map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		return 0
-	}
-	v, _ := m[key].(float64)
-	return int64(v)
-}
-
+// itoa64 — small dependency-free formatter matching the proto-emitted
+// resource_version shape (decimal string). Mirrors what the JSON shim used.
 func itoa64(i int64) string {
-	// Small dependency-free formatter — matches proto-emitted resource_version
-	// shape (decimal string).
 	if i == 0 {
 		return "0"
 	}
@@ -274,51 +251,4 @@ func itoa64(i int64) string {
 		buf[pos] = '-'
 	}
 	return string(buf[pos:])
-}
-
-func writeJSON(w http.ResponseWriter, code int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func writeJSONErr(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
-}
-
-// writeConnectErr maps a *connect.Error to an HTTP status code so handlers
-// that already return Connect-style errors render correctly even though we
-// aren't using the full connect-rpc framing.
-func writeConnectErr(w http.ResponseWriter, err error) {
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		writeJSONErr(w, connectCodeToHTTP(ce.Code()), ce.Message())
-		return
-	}
-	writeJSONErr(w, http.StatusInternalServerError, err.Error())
-}
-
-func connectCodeToHTTP(c connect.Code) int {
-	switch c {
-	case connect.CodeInvalidArgument, connect.CodeFailedPrecondition, connect.CodeOutOfRange:
-		return http.StatusBadRequest
-	case connect.CodeUnauthenticated:
-		return http.StatusUnauthorized
-	case connect.CodePermissionDenied:
-		return http.StatusForbidden
-	case connect.CodeNotFound:
-		return http.StatusNotFound
-	case connect.CodeAlreadyExists, connect.CodeAborted:
-		return http.StatusConflict
-	case connect.CodeResourceExhausted:
-		return http.StatusTooManyRequests
-	case connect.CodeUnimplemented:
-		return http.StatusNotImplemented
-	case connect.CodeUnavailable:
-		return http.StatusServiceUnavailable
-	case connect.CodeDeadlineExceeded:
-		return http.StatusGatewayTimeout
-	default:
-		return http.StatusInternalServerError
-	}
 }
