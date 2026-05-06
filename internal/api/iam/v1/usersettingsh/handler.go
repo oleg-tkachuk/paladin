@@ -239,12 +239,22 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 // subjectToUserID resolves the caller's JWT `sub` claim to the user_id
-// primary key needed by the user_settings FK. Avoids forcing every
-// UpdateMine caller to round-trip the IAM API first.
+// primary key needed by the user_settings FK. The IAM issuer mints
+// access tokens with `sub = UserID.String()` (see authh.MintAccess),
+// so p.Subject is already the UUID — parse it directly. We retain a
+// GetBySubject fallback for tokens minted by an older issuer that
+// stored the human-readable subject in `sub`; once that path is
+// confirmed dead the fallback can go.
 func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.UUID, error) {
 	if h.users == nil {
 		return uuid.Nil, connect.NewError(connect.CodeInternal,
 			errors.New("user repository not wired"))
+	}
+	if id, perr := uuid.Parse(p.Subject); perr == nil {
+		// Fast path — sub claim is the UUID.
+		if u, err := h.users.GetByID(ctx, id); err == nil {
+			return u.UserID, nil
+		}
 	}
 	u, err := h.users.GetBySubject(ctx, p.TenantID, p.Subject)
 	if err != nil {
