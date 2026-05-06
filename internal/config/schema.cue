@@ -96,7 +96,10 @@ datastores: {
       // 0s = disabled. Enforce a non-zero value on hot tenants to bound
       // worst-case query time.
       connect:   =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
-      statement: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"0s"
+      // Server-side statement_timeout. 0 disables (do not ship to prod).
+      // Default 30s bounds worst-case query time without breaking the
+      // worker loops that occasionally chew through ~1s page-scans.
+      statement: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     }
     healthcheck_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   }

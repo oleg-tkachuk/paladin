@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -47,6 +48,45 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	poolCfg.MaxConnIdleTime = cfg.Pool.MaxConnIdleTime
 	poolCfg.HealthCheckPeriod = cfg.HealthcheckPeriod
 	poolCfg.ConnConfig.ConnectTimeout = cfg.Timeouts.Connect
+
+	// Server-side runtime parameters applied on every new connection. These
+	// bound worst-case behaviour at the Postgres layer — independent of any
+	// app-level deadline that might be skipped on a leaked goroutine.
+	//
+	//   * statement_timeout: kills any query that runs longer than the
+	//     configured ceiling. 0 disables (don't ship to prod that way).
+	//   * idle_in_transaction_session_timeout: closes connections that
+	//     hold a transaction open without doing work — the classic source
+	//     of unkillable AccessExclusiveLock waits.
+	//   * lock_timeout: bounds how long any single statement waits for a
+	//     lock before failing fast. Combined with the above, prevents
+	//     a slow ALTER from queueing every reader.
+	if poolCfg.ConnConfig.RuntimeParams == nil {
+		poolCfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	if cfg.Timeouts.Statement > 0 {
+		poolCfg.ConnConfig.RuntimeParams["statement_timeout"] =
+			strconv.FormatInt(cfg.Timeouts.Statement.Milliseconds(), 10)
+	}
+	// Idle-in-transaction defaults to the statement timeout when set, else
+	// 60s — whichever is sooner. A live transaction with no work for a
+	// minute is almost always a bug.
+	idleInTx := int64(60_000)
+	if cfg.Timeouts.Statement > 0 && cfg.Timeouts.Statement.Milliseconds() < idleInTx {
+		idleInTx = cfg.Timeouts.Statement.Milliseconds()
+	}
+	poolCfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] =
+		strconv.FormatInt(idleInTx, 10)
+	// Lock acquisition cap — 5s by default. Enough for normal contention,
+	// short enough that a stuck DDL doesn't pile up readers.
+	if _, set := poolCfg.ConnConfig.RuntimeParams["lock_timeout"]; !set {
+		poolCfg.ConnConfig.RuntimeParams["lock_timeout"] = "5000"
+	}
+	// Application name surfaces in pg_stat_activity so DBAs can tell
+	// PALADIN traffic from migrations / ad-hoc queries.
+	if _, set := poolCfg.ConnConfig.RuntimeParams["application_name"]; !set {
+		poolCfg.ConnConfig.RuntimeParams["application_name"] = "paladin"
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

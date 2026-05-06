@@ -18,5 +18,11 @@ SET revoked = TRUE
 WHERE user_id = $1 AND revoked = FALSE;
 
 -- name: PurgeExpiredRefreshTokens :execrows
+-- Bounded batch (10k). Worker loops until result is 0.
 DELETE FROM refresh_tokens
-WHERE expires_at < $1;
+WHERE ctid IN (
+    SELECT ctid FROM refresh_tokens
+    WHERE expires_at < $1
+    ORDER BY expires_at
+    LIMIT 10000
+);

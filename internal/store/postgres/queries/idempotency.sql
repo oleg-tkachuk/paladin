@@ -12,8 +12,14 @@ VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (tenant_id, method, key) DO NOTHING;
 
 -- name: PurgeExpiredIdempotencyKeys :execrows
+-- Bounded batch (10k). Worker loops until result is 0.
 DELETE FROM idempotency_keys
-WHERE expires_at < now();
+WHERE ctid IN (
+    SELECT ctid FROM idempotency_keys
+    WHERE expires_at < now()
+    ORDER BY expires_at
+    LIMIT 10000
+);
 
 -- name: CreateStorageBackend :exec
 INSERT INTO storage_backends (id, kind, endpoint, region, events_enabled, events_target)

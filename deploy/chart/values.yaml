@@ -70,7 +70,7 @@ config:
         max_conn_idle_time: 5m
       timeouts:
         connect: 5s
-        statement: 0s
+        statement: 30s
       healthcheck_period: 30s
 
   limits:

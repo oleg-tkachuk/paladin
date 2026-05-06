@@ -13,10 +13,18 @@ FROM audit_log
 WHERE entry_id = $1;
 
 -- name: PurgeAuditOlderThan :execrows
--- Deletes audit_log rows older than the cutoff. Used by the AuditLogPurger
--- worker; disabled when housekeeping.audit_log_ttl == 0.
+-- Deletes audit_log rows older than the cutoff in batches of 10k. The
+-- worker calls this in a loop until it returns 0 — keeps each statement
+-- bounded so a long-overdue first-run doesn't lock the table for minutes
+-- and bloat WAL with one giant DELETE. ctid-batched form is the canonical
+-- Postgres pattern; idiom-equivalent to MySQL's `DELETE ... LIMIT`.
 DELETE FROM audit_log
-WHERE at < $1;
+WHERE ctid IN (
+    SELECT ctid FROM audit_log
+    WHERE at < $1
+    ORDER BY at
+    LIMIT 10000
+);
 
 -- name: ListAuditEntries :many
 -- Cursor: (at, entry_id) tuple. Filter args are intentionally simple — CEL

@@ -93,7 +93,7 @@ datastores:
       max_conn_idle_time: 5m
     timeouts:
       connect: 5s
-      statement: 0s                     # 0s = disabled; set non-zero in prod
+      statement: 30s                    # server-side statement_timeout; 0 = disabled (do not ship)
     healthcheck_period: 30s
 
 # ─── Request limits (single source of truth for refusals) ───────────────────
