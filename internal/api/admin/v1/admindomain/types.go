@@ -43,22 +43,52 @@ type EventSourceConfig struct {
 // ─── Bucket ─────────────────────────────────────────────────────────────────
 
 type Bucket struct {
-	BackendID       string
-	BucketName      string
-	DisplayName     string
-	Region          string
-	Labels          map[string]string
-	OwnerTenantID   uuid.UUID // uuid.Nil = shared
-	CedarPolicy     string
-	Constraints     BucketConstraints
-	LifecycleRules  []LifecycleRule
-	ObjectLock      ObjectLockConfig
-	Versioning      BucketVersioning
-	Replication     BucketReplication
+	BackendID      string
+	BucketName     string
+	DisplayName    string
+	Region         string
+	Labels         map[string]string
+	OwnerTenantID  uuid.UUID // uuid.Nil = shared
+	CedarPolicy    string
+	Constraints    BucketConstraints
+	LifecycleRules []LifecycleRule
+	ObjectLock     ObjectLockConfig
+	Versioning     BucketVersioning
+	Replication    BucketReplication
+	// ProvisionState is the outbox status of the underlying physical
+	// bucket: empty/"ready" means the row is committed AND the backend
+	// confirms the bucket exists; "pending" means the reconciler still
+	// owes the backend a CreateBucket call; "failed" means a non-retryable
+	// error stopped the reconciler. Currently used only on Create input —
+	// Get / List do not populate it.
+	ProvisionState  string
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
+
+// BucketProvisionRow is the worker's view of a bucket that owes the
+// backend a CreateBucket call. Fields are kept narrow on purpose so
+// the SELECT stays cheap and the worker doesn't need to know about
+// cedar / lifecycle / etc.
+type BucketProvisionRow struct {
+	BackendID         string
+	BucketName        string
+	Region            string
+	ProvisionState    string
+	ProvisionAttempts int32
+	LastProvisionAt   time.Time
+}
+
+// Provision-state constants — mirror the CHECK constraint in the
+// migration. Keep these as the single source of truth for state names
+// inside Go code so a typo doesn't silently keep the row in 'pending'
+// forever.
+const (
+	BucketProvisionStatePending = "pending"
+	BucketProvisionStateReady   = "ready"
+	BucketProvisionStateFailed  = "failed"
+)
 
 type BucketConstraints struct {
 	MaxObjectSizeBytes        int64

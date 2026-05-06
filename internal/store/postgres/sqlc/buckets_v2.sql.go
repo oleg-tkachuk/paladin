@@ -14,11 +14,12 @@ import (
 const createBucketV2 = `-- name: CreateBucketV2 :exec
 INSERT INTO buckets (
     backend_id, bucket_name, display_name, region, labels,
-    owner_tenant_id, cedar_policy, constraints
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    owner_tenant_id, cedar_policy, constraints,
+    provision_state
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
-func (q *Queries) CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte) error {
+func (q *Queries) CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
 	_, err := q.db.Exec(ctx, createBucketV2,
 		backendID,
 		bucketName,
@@ -28,6 +29,7 @@ func (q *Queries) CreateBucketV2(ctx context.Context, backendID string, bucketNa
 		ownerTenantID,
 		cedarPolicy,
 		constraints,
+		provisionState,
 	)
 	return err
 }
@@ -285,6 +287,99 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, afterBac
 		return nil, err
 	}
 	return items, nil
+}
+
+const listPendingBucketProvisions = `-- name: ListPendingBucketProvisions :many
+SELECT backend_id, bucket_name, region, provision_state,
+       provision_attempts, last_provision_at
+FROM buckets
+WHERE provision_state = 'pending'
+   OR (provision_state = 'failed' AND provision_attempts < $1::int)
+ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+LIMIT $2::int
+`
+
+type ListPendingBucketProvisionsRow struct {
+	BackendID         string             `json:"backend_id"`
+	BucketName        string             `json:"bucket_name"`
+	Region            *string            `json:"region"`
+	ProvisionState    string             `json:"provision_state"`
+	ProvisionAttempts int32              `json:"provision_attempts"`
+	LastProvisionAt   pgtype.Timestamptz `json:"last_provision_at"`
+}
+
+// Worker query: drag the next batch of buckets that need a backend
+// CreateBucket call. ORDER BY last_provision_at NULLS FIRST so brand-new
+// rows are picked up before failed-and-waiting-for-retry rows. Caller is
+// expected to apply its own backoff before recalling on failed rows.
+func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingBucketProvisions, maxAttempts, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingBucketProvisionsRow
+	for rows.Next() {
+		var i ListPendingBucketProvisionsRow
+		if err := rows.Scan(
+			&i.BackendID,
+			&i.BucketName,
+			&i.Region,
+			&i.ProvisionState,
+			&i.ProvisionAttempts,
+			&i.LastProvisionAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markBucketProvisionFailed = `-- name: MarkBucketProvisionFailed :execrows
+UPDATE buckets
+SET provision_state    = CASE WHEN $3::bool THEN 'failed' ELSE 'pending' END,
+    provision_error    = $4::text,
+    provision_attempts = provision_attempts + 1,
+    last_provision_at  = now()
+WHERE backend_id = $1 AND bucket_name = $2
+`
+
+// terminal=true → the worker hit a non-retryable error (auth denied,
+// region mismatch, …) and the row should stop receiving attempts.
+// terminal=false → transient error; row stays 'pending' and gets
+// retried on the next tick after the configured backoff.
+func (q *Queries) MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketProvisionFailed,
+		backendID,
+		bucketName,
+		terminal,
+		errMsg,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markBucketProvisionReady = `-- name: MarkBucketProvisionReady :execrows
+UPDATE buckets
+SET provision_state    = 'ready',
+    provision_error    = '',
+    provision_attempts = provision_attempts + 1,
+    last_provision_at  = now()
+WHERE backend_id = $1 AND bucket_name = $2
+`
+
+func (q *Queries) MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error) {
+	result, err := q.db.Exec(ctx, markBucketProvisionReady, backendID, bucketName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setBucketConstraints = `-- name: SetBucketConstraints :execrows

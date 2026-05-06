@@ -43,6 +43,17 @@ type BucketRepository interface {
 	SetReplication(ctx context.Context, backendID, bucketName string, r BucketReplication, expectedVersion int64) error
 	SetConstraints(ctx context.Context, backendID, bucketName string, c BucketConstraints, expectedVersion int64) error
 	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+
+	// ─── outbox / reconciler ────────────────────────────────────────────
+	// ListPendingProvisions returns up to `limit` rows that need the
+	// backend's CreateBucket call. Includes 'pending' rows and 'failed'
+	// rows that have not yet exhausted their retry budget (`maxAttempts`).
+	ListPendingProvisions(ctx context.Context, maxAttempts, limit int32) ([]BucketProvisionRow, error)
+	MarkProvisionReady(ctx context.Context, backendID, bucketName string) error
+	// MarkProvisionFailed records an attempt error. terminal=true marks
+	// the row 'failed' and stops the worker from retrying; terminal=false
+	// (transient) keeps it 'pending' for the next tick.
+	MarkProvisionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
 }
 
 type ListBucketsArgs struct {

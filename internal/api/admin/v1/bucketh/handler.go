@@ -89,14 +89,22 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
+	// Outbox model: the DB row is the source of truth. When the caller
+	// asked us to create the physical bucket too, we mark the row
+	// 'pending' and let the reconciler worker drive the backend
+	// CreateBucket — that way a DB-write failure can never leave an
+	// orphan in S3, and a backend-side failure is observable on the row
+	// instead of being lost to a 5xx that never made it to the client.
 	if in.ProvisionOnBackend {
 		if h.provisioner == nil {
 			return nil, connect.NewError(connect.CodeUnavailable,
 				errors.New("backend provisioning not wired"))
 		}
-		if err := h.provisioner.CreateBucket(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.Region); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
+		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
+	} else {
+		// Operator opted out of backend provisioning (e.g. binding a
+		// pre-existing bucket). Row is immediately authoritative.
+		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
 	}
 	if err := h.repo.Create(ctx, in.Bucket); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

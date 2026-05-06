@@ -31,7 +31,7 @@ type Querier interface {
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
 	CreateBucket(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte) error
-	CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte) error
+	CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
 	CreateEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind string, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
 	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
@@ -143,6 +143,11 @@ type Querier interface {
 	// (UUIDv7) which is monotonic-by-time.
 	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
+	// Worker query: drag the next batch of buckets that need a backend
+	// CreateBucket call. ORDER BY last_provision_at NULLS FIRST so brand-new
+	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
+	// expected to apply its own backoff before recalling on failed rows.
+	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
 	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
 	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
@@ -156,6 +161,12 @@ type Querier interface {
 	LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: object_keys/{b}/objects-by-key/{key} → object_id.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (LookupObjectByKeyRow, error)
+	// terminal=true → the worker hit a non-retryable error (auth denied,
+	// region mismatch, …) and the row should stop receiving attempts.
+	// terminal=false → transient error; row stays 'pending' and gets
+	// retried on the next tick after the configured backoff.
+	MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
+	MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error)
 	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.

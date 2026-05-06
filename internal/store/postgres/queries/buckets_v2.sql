@@ -14,8 +14,42 @@ WHERE backend_id = $1 AND bucket_name = $2;
 -- name: CreateBucketV2 :exec
 INSERT INTO buckets (
     backend_id, bucket_name, display_name, region, labels,
-    owner_tenant_id, cedar_policy, constraints
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    owner_tenant_id, cedar_policy, constraints,
+    provision_state
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+
+-- name: ListPendingBucketProvisions :many
+-- Worker query: drag the next batch of buckets that need a backend
+-- CreateBucket call. ORDER BY last_provision_at NULLS FIRST so brand-new
+-- rows are picked up before failed-and-waiting-for-retry rows. Caller is
+-- expected to apply its own backoff before recalling on failed rows.
+SELECT backend_id, bucket_name, region, provision_state,
+       provision_attempts, last_provision_at
+FROM buckets
+WHERE provision_state = 'pending'
+   OR (provision_state = 'failed' AND provision_attempts < sqlc.arg('max_attempts')::int)
+ORDER BY last_provision_at NULLS FIRST, backend_id, bucket_name
+LIMIT sqlc.arg('limit_count')::int;
+
+-- name: MarkBucketProvisionReady :execrows
+UPDATE buckets
+SET provision_state    = 'ready',
+    provision_error    = '',
+    provision_attempts = provision_attempts + 1,
+    last_provision_at  = now()
+WHERE backend_id = $1 AND bucket_name = $2;
+
+-- name: MarkBucketProvisionFailed :execrows
+-- terminal=true → the worker hit a non-retryable error (auth denied,
+-- region mismatch, …) and the row should stop receiving attempts.
+-- terminal=false → transient error; row stays 'pending' and gets
+-- retried on the next tick after the configured backoff.
+UPDATE buckets
+SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'failed' ELSE 'pending' END,
+    provision_error    = sqlc.arg('err_msg')::text,
+    provision_attempts = provision_attempts + 1,
+    last_provision_at  = now()
+WHERE backend_id = $1 AND bucket_name = $2;
 
 -- name: ListBucketsV2 :many
 SELECT backend_id, bucket_name, display_name, region, labels,

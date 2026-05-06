@@ -63,7 +63,7 @@ func (q *Queries) DeleteBucket(ctx context.Context, backendID string, bucketName
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at
 FROM buckets
 WHERE backend_id = $1 AND bucket_name = $2
 `
@@ -97,12 +97,16 @@ func (q *Queries) GetBucket(ctx context.Context, backendID string, bucketName st
 		&i.Bucket.ReplicationEnabled,
 		&i.Bucket.ReplicationDestination,
 		&i.Bucket.ReplicationFilter,
+		&i.Bucket.ProvisionState,
+		&i.Bucket.ProvisionError,
+		&i.Bucket.ProvisionAttempts,
+		&i.Bucket.LastProvisionAt,
 	)
 	return i, err
 }
 
 const listBuckets = `-- name: ListBuckets :many
-SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter
+SELECT buckets.backend_id, buckets.bucket_name, buckets.display_name, buckets.region, buckets.labels, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.owner_tenant_id, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.constraints, buckets.lifecycle_rules, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
   AND ($2::text IS NULL
@@ -151,6 +155,10 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 			&i.Bucket.ReplicationEnabled,
 			&i.Bucket.ReplicationDestination,
 			&i.Bucket.ReplicationFilter,
+			&i.Bucket.ProvisionState,
+			&i.Bucket.ProvisionError,
+			&i.Bucket.ProvisionAttempts,
+			&i.Bucket.LastProvisionAt,
 		); err != nil {
 			return nil, err
 		}

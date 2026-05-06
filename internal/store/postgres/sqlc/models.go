@@ -153,6 +153,10 @@ type Bucket struct {
 	ReplicationEnabled                bool               `json:"replication_enabled"`
 	ReplicationDestination            string             `json:"replication_destination"`
 	ReplicationFilter                 string             `json:"replication_filter"`
+	ProvisionState                    string             `json:"provision_state"`
+	ProvisionError                    string             `json:"provision_error"`
+	ProvisionAttempts                 int32              `json:"provision_attempts"`
+	LastProvisionAt                   pgtype.Timestamptz `json:"last_provision_at"`
 }
 
 type EventSubscription struct {

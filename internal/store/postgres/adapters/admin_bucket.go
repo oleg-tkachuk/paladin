@@ -29,6 +29,13 @@ func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 	if string(constraints) == "null" {
 		constraints = []byte("{}")
 	}
+	state := b.ProvisionState
+	if state == "" {
+		// Empty input means the caller didn't ask for backend provisioning,
+		// so the row is immediately authoritative. The reconciler ignores
+		// 'ready' rows.
+		state = admindomain.BucketProvisionStateReady
+	}
 	return r.q.CreateBucketV2(ctx,
 		b.BackendID,
 		b.BucketName,
@@ -38,7 +45,57 @@ func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 		pgUUIDOptional(b.OwnerTenantID),
 		b.CedarPolicy,
 		constraints,
+		state,
 	)
+}
+
+// ─── outbox / reconciler ────────────────────────────────────────────────────
+
+func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 10
+	}
+	rows, err := r.q.ListPendingBucketProvisions(ctx, maxAttempts, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]admindomain.BucketProvisionRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, admindomain.BucketProvisionRow{
+			BackendID:         row.BackendID,
+			BucketName:        row.BucketName,
+			Region:            derefStr(row.Region),
+			ProvisionState:    row.ProvisionState,
+			ProvisionAttempts: row.ProvisionAttempts,
+			LastProvisionAt:   timeFrom(row.LastProvisionAt),
+		})
+	}
+	return out, nil
+}
+
+func (r *BucketRepoV2) MarkProvisionReady(ctx context.Context, backendID, bucketName string) error {
+	rows, err := r.q.MarkBucketProvisionReady(ctx, backendID, bucketName)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *BucketRepoV2) MarkProvisionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error {
+	rows, err := r.q.MarkBucketProvisionFailed(ctx, backendID, bucketName, terminal, errMsg)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *BucketRepoV2) Get(ctx context.Context, backendID, bucketName string) (admindomain.Bucket, error) {

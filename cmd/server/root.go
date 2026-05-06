@@ -128,6 +128,18 @@ var rootCmd = &cobra.Command{
 			l.Fatal("bootstrap admin failed", zap.Error(err))
 		}
 
+		// Mirror yaml `storage.backends.*` into the `storage_backends`
+		// DB table so subsequent BucketService.CreateBucket calls have a
+		// valid FK target. Idempotent — restarts don't churn RVs when the
+		// yaml hasn't changed.
+		if err := bootstrappkg.EnsureBackends(ctx, cfg.Storage, bootstrappkg.BackendDeps{
+			Backends: adapters.NewBackendRepoV2(db.Queries),
+			Audit:    adapters.NewAuditRepoV2(db.Queries),
+			Logger:   l.Named("bootstrap"),
+		}); err != nil {
+			l.Fatal("bootstrap backends failed", zap.Error(err))
+		}
+
 		listeners, healthH, err := buildListeners(ctx, cfg, db, l)
 		if err != nil {
 			l.Fatal("failed to assemble server", zap.Error(err))
@@ -514,6 +526,18 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 					BatchSize:       cfg.Workers.Reconciler.BatchSize,
 				},
 				l.Named("reconciler"),
+			))
+			// Bucket-provision outbox worker — drives the second half of
+			// CreateBucket(provision_on_backend=true). Shares the same S3
+			// client instance and runs at the reconciler's cadence.
+			out = append(out, worker.NewBucketReconciler(
+				adapters.NewBucketRepoV2(db.Queries),
+				s3c,
+				worker.BucketReconcilerConfig{
+					Interval:  cfg.Workers.Reconciler.Interval,
+					BatchSize: int32(cfg.Workers.Reconciler.BatchSize),
+				},
+				l.Named("bucket-reconciler"),
 			))
 		} else {
 			l.Warn("skipping reconciler", zap.String("reason", "s3 adapter init failed"), zap.Error(err))
