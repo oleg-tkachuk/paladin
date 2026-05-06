@@ -163,7 +163,7 @@ type PostgresTimeouts struct {
 }
 
 // Storage is the registry of physical object-storage backends. Each logical
-// objectKey references one by name via `object_keys.storage_backend`; if that column
+// objectKey references one by name via `object_keys.backend_id`; if that column
 // is empty the service falls back to DefaultBackend.
 type Storage struct {
 	DefaultBackend string                    `yaml:"default_backend" json:"default_backend"`

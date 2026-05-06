@@ -59,7 +59,7 @@ DECLARE
 BEGIN
     SELECT owner_tenant_id INTO bucket_owner
     FROM buckets
-    WHERE backend_id = NEW.storage_backend AND bucket_name = NEW.bucket_name;
+    WHERE backend_id = NEW.backend_id AND bucket_name = NEW.bucket_name;
 
     IF bucket_owner IS NOT NULL AND bucket_owner <> NEW.tenant_id THEN
         RAISE EXCEPTION 'object_key tenant_id % cannot bind to bucket owned by tenant %',
@@ -71,7 +71,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_object_keys_enforce_bucket_tenancy ON object_keys;
 CREATE TRIGGER trg_object_keys_enforce_bucket_tenancy
-    BEFORE INSERT OR UPDATE OF bucket_name, storage_backend, tenant_id ON object_keys
+    BEFORE INSERT OR UPDATE OF bucket_name, backend_id, tenant_id ON object_keys
     FOR EACH ROW EXECUTE FUNCTION enforce_object_key_bucket_tenancy();
 
 -- ─── object_keys: per-key constraints overlay ────────────────────────────────
