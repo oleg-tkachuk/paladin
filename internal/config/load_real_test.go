@@ -26,12 +26,7 @@ auth:
   signing_key: "dev-secret-change-me-32-bytes-min"
 storage:
   backends:
-    primary:
-      kind: s3-compatible
-      auth:
-        mode: static_keys
-        access_key: a
-        secret_key: b
+    primary: {}
 `)
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
@@ -46,6 +41,16 @@ storage:
 	}
 	if cfg.Server.DataHTTP.Addr == cfg.Server.AdminHTTP.Addr {
 		t.Errorf("data and admin defaulted to the same addr: %q", cfg.Server.DataHTTP.Addr)
+	}
+	// Storage backend disjunctions must default — no static-keys credentials
+	// supplied, so default_chain is the only auth.mode that won't be rejected
+	// by Validate().
+	be := cfg.Storage.Backends["primary"]
+	if be.Kind == "" {
+		t.Error("storage.backends[primary].kind not defaulted")
+	}
+	if be.Auth.Mode == "" {
+		t.Error("storage.backends[primary].auth.mode not defaulted")
 	}
 }
 

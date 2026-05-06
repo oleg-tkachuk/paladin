@@ -218,14 +218,14 @@ workers: {
 storage: {
   default_backend: string | *"primary"
   backends: [string]: {
-    kind:             "aws-s3" | "s3-compatible" | "gcs"
+    kind:             "aws-s3" | "s3-compatible" | "gcs" | *"aws-s3"
     bucket:           string | *""
     region:           string | *""
     endpoint:         string | *""
     public_endpoint:  string | *""
     force_path_style: bool   | *true
     auth: {
-      mode:                    "static_keys" | "default_chain" | "assume_role" | "web_identity"
+      mode:                    "static_keys" | "default_chain" | "assume_role" | "web_identity" | *"default_chain"
       access_key:              string | *""
       access_key_secret?:      #SecretRef
       secret_key:              string | *""
