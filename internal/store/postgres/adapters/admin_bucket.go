@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -36,7 +37,7 @@ func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 		// 'ready' rows.
 		state = admindomain.BucketProvisionStateReady
 	}
-	return r.q.CreateBucketV2(ctx,
+	if err := r.q.CreateBucketV2(ctx,
 		b.BackendID,
 		b.BucketName,
 		strPtr(b.DisplayName),
@@ -46,7 +47,25 @@ func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 		b.CedarPolicy,
 		constraints,
 		state,
-	)
+	); err != nil {
+		// Surface FK + unique violations as typed domain errors so the
+		// handler can map them to user-friendly Connect codes instead of
+		// leaking raw "buckets_backend_id_fkey (SQLSTATE 23503)" strings.
+		var pg *pgconn.PgError
+		if errors.As(err, &pg) {
+			switch pg.Code {
+			case "23503":
+				// foreign_key_violation — only realistic source is the
+				// backend_id FK (storage_backends row missing).
+				return fmt.Errorf("%w: backend %q is not registered (run BackendService.CreateBackend or declare it in storage.backends)", admindomain.ErrConflict, b.BackendID)
+			case "23505":
+				// unique_violation — bucket already exists in this backend.
+				return fmt.Errorf("%w: bucket %q already exists in backend %q", admindomain.ErrConflict, b.BucketName, b.BackendID)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 // ─── outbox / reconciler ────────────────────────────────────────────────────

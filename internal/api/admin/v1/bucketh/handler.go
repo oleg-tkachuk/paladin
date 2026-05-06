@@ -107,6 +107,14 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
 	}
 	if err := h.repo.Create(ctx, in.Bucket); err != nil {
+		// Translate the typed ErrConflict the repo raises for FK /
+		// unique violations into FailedPrecondition so clients (UI,
+		// SDKs) see a readable message instead of "internal: SQLSTATE
+		// 23503". The repo's wrapped error already names the missing
+		// backend or duplicate bucket.
+		if errors.Is(err, admindomain.ErrConflict) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	got, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName)
