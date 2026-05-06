@@ -149,10 +149,14 @@ func (x *LoginResponse) GetUser() *User {
 }
 
 type RefreshTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RefreshToken  string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RefreshToken string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	// Audience the caller wants on the new access token. Empty defaults to
+	// `paladin-data` server-side; SPAs that pin a refresh chain to a particular
+	// plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
+	RequestedAudience string `protobuf:"bytes,2,opt,name=requested_audience,json=requestedAudience,proto3" json:"requested_audience,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RefreshTokenRequest) Reset() {
@@ -188,6 +192,13 @@ func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
 func (x *RefreshTokenRequest) GetRefreshToken() string {
 	if x != nil {
 		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *RefreshTokenRequest) GetRequestedAudience() string {
+	if x != nil {
+		return x.RequestedAudience
 	}
 	return ""
 }
@@ -625,9 +636,10 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x12requested_audience\x18\x04 \x01(\tR\x11requestedAudience\"d\n" +
 	"\rLoginResponse\x12-\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x15.paladin.iam.v1.TokenPairR\x06tokens\x12$\n" +
-	"\x04user\x18\x02 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\"C\n" +
+	"\x04user\x18\x02 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\"r\n" +
 	"\x13RefreshTokenRequest\x12,\n" +
-	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\"E\n" +
+	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\x12-\n" +
+	"\x12requested_audience\x18\x02 \x01(\tR\x11requestedAudience\"E\n" +
 	"\x14RefreshTokenResponse\x12-\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x15.paladin.iam.v1.TokenPairR\x06tokens\".\n" +
 	"\rRevokeRequest\x12\x1d\n" +

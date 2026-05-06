@@ -39,12 +39,17 @@ func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginReq
 	if err != nil {
 		return nil, err
 	}
+	// Relative TTLs from "now". The previous form used
+	// `AccessExpiresAt.Sub(out.User.CreatedAt)` which happens to look
+	// right for users created near login time but balloons for accounts
+	// minted hours / days earlier.
+	now := time.Now()
 	return connect.NewResponse(&pb.LoginResponse{
 		Tokens: &pb.TokenPair{
 			AccessToken:             out.AccessToken,
-			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(out.User.CreatedAt).Seconds()),
+			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
 			RefreshToken:            out.RefreshToken,
-			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(out.User.CreatedAt).Seconds()),
+			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
 			TokenType:               "Bearer",
 		},
 		User: userToProto(&out.User),
@@ -53,16 +58,20 @@ func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginReq
 
 func (s *AuthServer) RefreshToken(ctx context.Context, req *connect.Request[pb.RefreshTokenRequest]) (*connect.Response[pb.RefreshTokenResponse], error) {
 	out, err := s.H.RefreshToken(ctx, authh.RefreshInput{
-		RefreshToken: req.Msg.GetRefreshToken(),
+		RefreshToken:      req.Msg.GetRefreshToken(),
+		RequestedAudience: req.Msg.GetRequestedAudience(),
 	})
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	return connect.NewResponse(&pb.RefreshTokenResponse{
 		Tokens: &pb.TokenPair{
-			AccessToken:  out.AccessToken,
-			RefreshToken: out.RefreshToken,
-			TokenType:    "Bearer",
+			AccessToken:             out.AccessToken,
+			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
+			RefreshToken:            out.RefreshToken,
+			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
+			TokenType:               "Bearer",
 		},
 	}), nil
 }
