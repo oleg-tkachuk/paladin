@@ -21,8 +21,8 @@ WHERE user_id = $1 AND revoked = FALSE;
 -- Bounded batch (10k). Worker loops until result is 0.
 DELETE FROM refresh_tokens
 WHERE ctid IN (
-    SELECT ctid FROM refresh_tokens
-    WHERE expires_at < $1
-    ORDER BY expires_at
+    SELECT rt.ctid FROM refresh_tokens AS rt
+    WHERE rt.expires_at < $1
+    ORDER BY rt.expires_at
     LIMIT 10000
 );

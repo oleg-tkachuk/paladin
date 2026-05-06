@@ -16,7 +16,6 @@ type Querier interface {
 	// constraint (single-tenant buckets reject mismatched tenants).
 	BindObjectKeyToBucket(ctx context.Context, tenantID pgtype.UUID, objectKey string, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
-	PurgeTerminalOperations(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error)
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
@@ -58,6 +57,7 @@ type Querier interface {
 	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
 	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
+	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
 	// not supply a tenant hint. Returns 0/1/many — handler decides on ambiguity.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
@@ -92,10 +92,9 @@ type Querier interface {
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
-	GetUserSettings(ctx context.Context, userID pgtype.UUID) (UserSettings, error)
-	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSettings, error)
-	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, pageSize int32) ([]UserSettings, error)
-	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// User-settings queries. Lazy 1:1 with users — a missing row at read time
+	// means "user has never customized; serve defaults".
+	GetUserSettings(ctx context.Context, userID pgtype.UUID) (UserSetting, error)
 	// Removes the row outright. Caller is responsible for first deleting the
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.
@@ -146,6 +145,9 @@ type Querier interface {
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
 	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
+	// Admin-side: surface configured settings across a tenant for support and
+	// compliance flows ("which users opted into the dark theme?").
+	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error)
 	ListUsersAll(ctx context.Context, userID pgtype.UUID, limit int32) ([]User, error)
 	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, userID pgtype.UUID, limit int32) ([]User, error)
 	// Reads an object by id alone. Used by background workers (reconciler,
@@ -160,11 +162,24 @@ type Querier interface {
 	// If AVAILABLE already, this is a no-op ONLY when the incoming sequencer is
 	// strictly greater than the stored sequencer (or either is NULL).
 	PromoteObject(ctx context.Context, objectID pgtype.UUID, sizeBytes *int64, etag *string, checksum *string, sequencer *string) (int64, error)
-	// Deletes audit_log rows older than the cutoff. Used by the AuditLogPurger
-	// worker; disabled when housekeeping.audit_log_ttl == 0.
+	// Deletes audit_log rows older than the cutoff in batches of 10k. The
+	// worker calls this in a loop until it returns 0 — keeps each statement
+	// bounded so a long-overdue first-run doesn't lock the table for minutes
+	// and bloat WAL with one giant DELETE. ctid-batched form is the canonical
+	// Postgres pattern; idiom-equivalent to MySQL's `DELETE ... LIMIT`.
+	// The inner SELECT aliases the table (`AS al`) and qualifies its column
+	// references. Postgres parses the unaliased form fine — the column
+	// unambiguously belongs to the inner FROM scope — but sqlc's parser
+	// treats it as ambiguous and errors out at codegen.
 	PurgeAuditOlderThan(ctx context.Context, at pgtype.Timestamptz) (int64, error)
+	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
+	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredRefreshTokens(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error)
+	// Bounded batch (10k). Worker loops until result is 0. Uses
+	// idx_operations_terminal_done_at (added in migration 008) so the planner
+	// never scans the live PENDING/RUNNING tail.
+	PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error)
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
 	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
 	ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error
@@ -215,6 +230,9 @@ type Querier interface {
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
 	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string) error
 	UpsertTenantQuota(ctx context.Context, quotaID pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
+	// Insert-or-update with a single round trip. Returns the post-write row so
+	// the handler can echo the bumped resource_version back to the caller.
+	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

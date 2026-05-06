@@ -15,9 +15,9 @@ ON CONFLICT (tenant_id, method, key) DO NOTHING;
 -- Bounded batch (10k). Worker loops until result is 0.
 DELETE FROM idempotency_keys
 WHERE ctid IN (
-    SELECT ctid FROM idempotency_keys
-    WHERE expires_at < now()
-    ORDER BY expires_at
+    SELECT ik.ctid FROM idempotency_keys AS ik
+    WHERE ik.expires_at < now()
+    ORDER BY ik.expires_at
     LIMIT 10000
 );
 

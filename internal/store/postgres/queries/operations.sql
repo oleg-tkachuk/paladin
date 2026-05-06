@@ -36,11 +36,11 @@ LIMIT sqlc.arg('page_size');
 -- never scans the live PENDING/RUNNING tail.
 DELETE FROM operations
 WHERE ctid IN (
-    SELECT ctid FROM operations
-    WHERE state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
-      AND done_at IS NOT NULL
-      AND done_at < $1
-    ORDER BY done_at
+    SELECT op.ctid FROM operations AS op
+    WHERE op.state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+      AND op.done_at IS NOT NULL
+      AND op.done_at < $1
+    ORDER BY op.done_at
     LIMIT 10000
 );
 

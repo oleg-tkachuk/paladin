@@ -28,26 +28,6 @@ func (q *Queries) CancelOperation(ctx context.Context, operationID pgtype.UUID, 
 	return result.RowsAffected(), nil
 }
 
-const purgeTerminalOperations = `-- name: PurgeTerminalOperations :execrows
-DELETE FROM operations
-WHERE ctid IN (
-    SELECT ctid FROM operations
-    WHERE state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
-      AND done_at IS NOT NULL
-      AND done_at < $1
-    ORDER BY done_at
-    LIMIT 10000
-)
-`
-
-func (q *Queries) PurgeTerminalOperations(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeTerminalOperations, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const createOperation = `-- name: CreateOperation :exec
 
 INSERT INTO operations (operation_id, tenant_id, type, state, metadata)
@@ -144,6 +124,29 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 		return nil, err
 	}
 	return items, nil
+}
+
+const purgeTerminalOperations = `-- name: PurgeTerminalOperations :execrows
+DELETE FROM operations
+WHERE ctid IN (
+    SELECT op.ctid FROM operations AS op
+    WHERE op.state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+      AND op.done_at IS NOT NULL
+      AND op.done_at < $1
+    ORDER BY op.done_at
+    LIMIT 10000
+)
+`
+
+// Bounded batch (10k). Worker loops until result is 0. Uses
+// idx_operations_terminal_done_at (added in migration 008) so the planner
+// never scans the live PENDING/RUNNING tail.
+func (q *Queries) PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeTerminalOperations, doneAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateOperationState = `-- name: UpdateOperationState :execrows

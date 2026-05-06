@@ -49,9 +49,15 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userI
 
 const purgeExpiredRefreshTokens = `-- name: PurgeExpiredRefreshTokens :execrows
 DELETE FROM refresh_tokens
-WHERE expires_at < $1
+WHERE ctid IN (
+    SELECT rt.ctid FROM refresh_tokens AS rt
+    WHERE rt.expires_at < $1
+    ORDER BY rt.expires_at
+    LIMIT 10000
+)
 `
 
+// Bounded batch (10k). Worker loops until result is 0.
 func (q *Queries) PurgeExpiredRefreshTokens(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeExpiredRefreshTokens, expiresAt)
 	if err != nil {

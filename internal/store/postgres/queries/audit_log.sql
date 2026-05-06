@@ -18,11 +18,15 @@ WHERE entry_id = $1;
 -- bounded so a long-overdue first-run doesn't lock the table for minutes
 -- and bloat WAL with one giant DELETE. ctid-batched form is the canonical
 -- Postgres pattern; idiom-equivalent to MySQL's `DELETE ... LIMIT`.
+-- The inner SELECT aliases the table (`AS al`) and qualifies its column
+-- references. Postgres parses the unaliased form fine — the column
+-- unambiguously belongs to the inner FROM scope — but sqlc's parser
+-- treats it as ambiguous and errors out at codegen.
 DELETE FROM audit_log
 WHERE ctid IN (
-    SELECT ctid FROM audit_log
-    WHERE at < $1
-    ORDER BY at
+    SELECT al.ctid FROM audit_log AS al
+    WHERE al.at < $1
+    ORDER BY al.at
     LIMIT 10000
 );
 

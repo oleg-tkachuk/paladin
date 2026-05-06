@@ -91,9 +91,15 @@ func (q *Queries) GetStorageBackend(ctx context.Context, id string) (GetStorageB
 
 const purgeExpiredIdempotencyKeys = `-- name: PurgeExpiredIdempotencyKeys :execrows
 DELETE FROM idempotency_keys
-WHERE expires_at < now()
+WHERE ctid IN (
+    SELECT ik.ctid FROM idempotency_keys AS ik
+    WHERE ik.expires_at < now()
+    ORDER BY ik.expires_at
+    LIMIT 10000
+)
 `
 
+// Bounded batch (10k). Worker loops until result is 0.
 func (q *Queries) PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeExpiredIdempotencyKeys)
 	if err != nil {

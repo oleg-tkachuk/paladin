@@ -44,7 +44,7 @@ func (q *Queries) DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expect
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
 FROM tenants
 WHERE tenant_id = $1
 `
@@ -58,7 +58,6 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 	var i GetTenantRow
 	err := row.Scan(
 		&i.Tenant.TenantID,
-		&i.Tenant.Slug,
 		&i.Tenant.DisplayName,
 		&i.Tenant.Labels,
 		&i.Tenant.InheritedCedarPolicy,
@@ -66,12 +65,13 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 		&i.Tenant.ResourceVersion,
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
+		&i.Tenant.Slug,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
 FROM tenants
 WHERE slug = $1
 `
@@ -85,7 +85,6 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 	var i GetTenantBySlugRow
 	err := row.Scan(
 		&i.Tenant.TenantID,
-		&i.Tenant.Slug,
 		&i.Tenant.DisplayName,
 		&i.Tenant.Labels,
 		&i.Tenant.InheritedCedarPolicy,
@@ -93,12 +92,13 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 		&i.Tenant.ResourceVersion,
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
+		&i.Tenant.Slug,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
 FROM tenants
 WHERE ($1::uuid IS NULL OR tenant_id > $1::uuid)
 ORDER BY tenant_id
@@ -120,7 +120,6 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize
 		var i ListTenantsRow
 		if err := rows.Scan(
 			&i.Tenant.TenantID,
-			&i.Tenant.Slug,
 			&i.Tenant.DisplayName,
 			&i.Tenant.Labels,
 			&i.Tenant.InheritedCedarPolicy,
@@ -128,6 +127,7 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize
 			&i.Tenant.ResourceVersion,
 			&i.Tenant.CreatedAt,
 			&i.Tenant.UpdatedAt,
+			&i.Tenant.Slug,
 		); err != nil {
 			return nil, err
 		}

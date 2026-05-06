@@ -80,7 +80,7 @@ func (r *UserSettingsRepo) Delete(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-func settingsFromSQLC(s sqlc.UserSettings) usersettingsh.Settings {
+func settingsFromSQLC(s sqlc.UserSetting) usersettingsh.Settings {
 	return usersettingsh.Settings{
 		UserID:          uuidFrom(s.UserID),
 		TenantID:        uuidFrom(s.TenantID),

@@ -339,7 +339,6 @@ type StorageBackend struct {
 
 type Tenant struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	Slug                 string             `json:"slug"`
 	DisplayName          *string            `json:"display_name"`
 	Labels               []byte             `json:"labels"`
 	InheritedCedarPolicy string             `json:"inherited_cedar_policy"`
@@ -347,6 +346,7 @@ type Tenant struct {
 	ResourceVersion      int64              `json:"resource_version"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Slug                 string             `json:"slug"`
 }
 
 type User struct {
@@ -364,7 +364,7 @@ type User struct {
 	LastLoginAt     pgtype.Timestamptz `json:"last_login_at"`
 }
 
-type UserSettings struct {
+type UserSetting struct {
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	Timezone        string             `json:"timezone"`

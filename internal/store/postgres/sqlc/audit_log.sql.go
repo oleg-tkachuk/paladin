@@ -124,11 +124,23 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 
 const purgeAuditOlderThan = `-- name: PurgeAuditOlderThan :execrows
 DELETE FROM audit_log
-WHERE at < $1
+WHERE ctid IN (
+    SELECT al.ctid FROM audit_log AS al
+    WHERE al.at < $1
+    ORDER BY al.at
+    LIMIT 10000
+)
 `
 
-// Deletes audit_log rows older than the cutoff. Used by the AuditLogPurger
-// worker; disabled when housekeeping.audit_log_ttl == 0.
+// Deletes audit_log rows older than the cutoff in batches of 10k. The
+// worker calls this in a loop until it returns 0 — keeps each statement
+// bounded so a long-overdue first-run doesn't lock the table for minutes
+// and bloat WAL with one giant DELETE. ctid-batched form is the canonical
+// Postgres pattern; idiom-equivalent to MySQL's `DELETE ... LIMIT`.
+// The inner SELECT aliases the table (`AS al`) and qualifies its column
+// references. Postgres parses the unaliased form fine — the column
+// unambiguously belongs to the inner FROM scope — but sqlc's parser
+// treats it as ambiguous and errors out at codegen.
 func (q *Queries) PurgeAuditOlderThan(ctx context.Context, at pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeAuditOlderThan, at)
 	if err != nil {
