@@ -6,12 +6,15 @@ package policy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -31,12 +34,41 @@ func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {
 	return &Handler{engine: engine, store: store}
 }
 
-// ValidatePolicy parses the Cedar policy text. Returns (valid, parser-error-text).
-func (h *Handler) ValidatePolicy(_ context.Context, text string) (bool, string) {
-	if err := cedar.Validate(text); err != nil {
-		return false, err.Error()
+// authorizeInspect gates a policy-introspection RPC against Cedar. Resource
+// carries tenant + object_key when known; ValidatePolicy passes empty
+// Resource and relies on policies that match by principal role.
+func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, objectKey string) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	return true, ""
+	decision, err := h.engine.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		cedar.ActionInspectPolicy,
+		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
+}
+
+// ValidatePolicy parses the Cedar policy text. Returns (valid, parser-error-text)
+// for compile failures. A protocol error is returned only when the caller
+// is unauthorized — once past authz, parser issues come back through the
+// (bool, string) result.
+func (h *Handler) ValidatePolicy(ctx context.Context, text string) (bool, string, error) {
+	if err := h.authorizeInspect(ctx, uuid.Nil, ""); err != nil {
+		return false, "", err
+	}
+	if err := cedar.Validate(text); err != nil {
+		return false, err.Error(), nil
+	}
+	return true, "", nil
 }
 
 // ─── SimulateAuthz ──────────────────────────────────────────────────────────
@@ -62,6 +94,9 @@ type SimulateAuthzOutput struct {
 func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*SimulateAuthzOutput, error) {
 	tenantID, objectKey, err := parseSimulateResource(in.ResourceName, in.PrincipalTenantID)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeInspect(ctx, tenantID, objectKey); err != nil {
 		return nil, err
 	}
 	res := &cedar.Resource{
@@ -123,6 +158,9 @@ type PolicyLayer struct {
 func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, fallbackTenant uuid.UUID) (*EffectivePolicyOutput, error) {
 	tenantID, objectKey, err := parseSimulateResource(resourceName, fallbackTenant)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.authorizeInspect(ctx, tenantID, objectKey); err != nil {
 		return nil, err
 	}
 	merged, _, err := h.store.Fetch(ctx, tenantID, objectKey)

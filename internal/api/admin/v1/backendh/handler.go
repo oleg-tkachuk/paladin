@@ -157,7 +157,7 @@ func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef st
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionRotateBackendCredentials, backendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.RotateCredentials(ctx, backendID, secretRef); err != nil {

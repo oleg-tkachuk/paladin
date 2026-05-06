@@ -183,6 +183,9 @@ func (h *Handler) SetPolicy(ctx context.Context, backendID, bucketName, policy s
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
+	if err := h.authorize(ctx, cedar.ActionConfigureBucketPolicy, backendID, bucketName, uuid.Nil); err != nil {
+		return nil, err
+	}
 	if err := h.repo.SetPolicy(ctx, backendID, bucketName, policy, expectedVersion); err != nil {
 		return nil, mapVersion(err)
 	}
@@ -192,6 +195,9 @@ func (h *Handler) SetPolicy(ctx context.Context, backendID, bucketName, policy s
 
 func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName string, rules []admindomain.LifecycleRule, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionConfigureLifecycle, backendID, bucketName, uuid.Nil); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetLifecycle(ctx, backendID, bucketName, rules, expectedVersion); err != nil {
@@ -205,6 +211,9 @@ func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName strin
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
+	if err := h.authorize(ctx, cedar.ActionConfigureLock, backendID, bucketName, uuid.Nil); err != nil {
+		return nil, err
+	}
 	if err := h.repo.SetObjectLock(ctx, backendID, bucketName, lock, expectedVersion); err != nil {
 		return nil, mapVersion(err)
 	}
@@ -216,6 +225,9 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
+	if err := h.authorize(ctx, cedar.ActionConfigureVersioning, backendID, bucketName, uuid.Nil); err != nil {
+		return nil, err
+	}
 	if err := h.repo.SetVersioning(ctx, backendID, bucketName, v, expectedVersion); err != nil {
 		return nil, mapVersion(err)
 	}
@@ -225,6 +237,9 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 
 func (h *Handler) SetReplication(ctx context.Context, backendID, bucketName string, r admindomain.BucketReplication, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionConfigureReplication, backendID, bucketName, uuid.Nil); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetReplication(ctx, backendID, bucketName, r, expectedVersion); err != nil {

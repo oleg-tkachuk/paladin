@@ -98,6 +98,56 @@ permit (
     (principal.roles.contains("tenant-admin") &&
      principal.tenant_id == resource.tenant_id)
 };
+
+// Granular bucket sub-actions. ConfigureLock is callable by a dedicated
+// compliance role; the rest stay tied to bucket-admin / platform-admin so
+// existing operators keep their old reach until they elect to specialise.
+permit (
+    principal,
+    action in [
+        Action::"ConfigureBucketPolicy",
+        Action::"ConfigureLifecycle",
+        Action::"ConfigureVersioning",
+        Action::"ConfigureReplication"
+    ],
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    principal.roles.contains("bucket-admin")
+};
+permit (
+    principal,
+    action == Action::"ConfigureLock",
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    principal.roles.contains("bucket-admin") ||
+    principal.roles.contains("compliance-officer")
+};
+
+// Sensitive backend ops — credential rotation isolated from the broader
+// ManageBackend right so a "secrets-rotator" service-account can run
+// rotations without grant on backend CRUD.
+permit (
+    principal,
+    action == Action::"RotateBackendCredentials",
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    principal.roles.contains("secrets-rotator")
+};
+
+// Policy-engine introspection. Avoid open access — admin UIs use this
+// for access-preflight, but anonymous SimulateAuthz is an information leak.
+permit (
+    principal,
+    action == Action::"InspectPolicy",
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    principal.roles.contains("tenant-admin") ||
+    principal.roles.contains("policy-author")
+};
 `
 
 // renderDefaultPolicy returns the default Cedar policy with the placeholder

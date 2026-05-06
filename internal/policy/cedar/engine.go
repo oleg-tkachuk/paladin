@@ -51,6 +51,25 @@ const (
 	ActionManageBucket = "ManageBucket"
 	ActionReadBucket   = "ReadBucket"
 
+	// Granular bucket sub-actions. Splitting ManageBucket lets compliance
+	// roles get fine-grained authority — e.g. ConfigureLock without
+	// SetReplication (data-residency risk) — without granting full bucket
+	// ownership.
+	ActionConfigureBucketPolicy = "ConfigureBucketPolicy"
+	ActionConfigureLifecycle    = "ConfigureLifecycle"
+	ActionConfigureLock         = "ConfigureLock"
+	ActionConfigureVersioning   = "ConfigureVersioning"
+	ActionConfigureReplication  = "ConfigureReplication"
+
+	// Sensitive backend ops. Separate action so a "secrets.rotator" role
+	// can rotate credentials without inheriting full ManageBackend rights.
+	ActionRotateBackendCredentials = "RotateBackendCredentials"
+
+	// Policy engine introspection. Gates ValidatePolicy / SimulateAuthz /
+	// GetEffectivePolicy — these leak schema/policy text and shouldn't be
+	// open to any authenticated principal.
+	ActionInspectPolicy = "InspectPolicy"
+
 	// Tenant-scoped actions.
 	ActionManageTenant = "ManageTenant"
 	ActionReadTenant   = "ReadTenant"

@@ -20,7 +20,10 @@ type PolicyServer struct {
 func NewPolicyServer(h *policyh.Handler) *PolicyServer { return &PolicyServer{H: h} }
 
 func (s *PolicyServer) Validate(ctx context.Context, req *connect.Request[pb.ValidateRequest]) (*connect.Response[pb.ValidateResponse], error) {
-	ok, msg := s.H.ValidatePolicy(ctx, req.Msg.GetCedarPolicy())
+	ok, msg, err := s.H.ValidatePolicy(ctx, req.Msg.GetCedarPolicy())
+	if err != nil {
+		return nil, err
+	}
 	out := &pb.ValidateResponse{Ok: ok}
 	if !ok {
 		out.Diagnostics = []*pb.PolicyDiagnostic{{Severity: "error", Message: msg}}
