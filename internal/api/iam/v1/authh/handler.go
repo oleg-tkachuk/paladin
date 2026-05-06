@@ -206,6 +206,91 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	}, nil
 }
 
+// ─── ExchangeAudience ───────────────────────────────────────────────────────
+//
+// Derives a short-lived access token for a different audience from a
+// still-valid refresh token, WITHOUT rotating the refresh chain. This is
+// what a multi-plane SPA wants: one login, one refresh-token cookie, but
+// simultaneous access tokens for paladin-data, paladin-admin and paladin-iam.
+//
+// The contract differs from RefreshToken in two ways:
+//
+//   1. The presented refresh token is validated (signature, store
+//      presence, expiry) but is NOT revoked. Subsequent ExchangeAudience
+//      calls re-use it.
+//   2. No refresh token is returned — the caller already has one.
+//
+// Same audience-escalation policy as Login/RefreshToken: a user with only
+// `tenant.user` cannot exchange into paladin-admin.
+
+type ExchangeAudienceInput struct {
+	RefreshToken   string
+	TargetAudience string
+}
+
+type ExchangeAudienceOutput struct {
+	AccessToken     string
+	AccessExpiresAt time.Time
+}
+
+func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput) (*ExchangeAudienceOutput, error) {
+	if in.RefreshToken == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refresh_token required"))
+	}
+	if in.TargetAudience == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("target_audience required"))
+	}
+
+	jti, userID, tenantID, err := h.parseRefresh(in.RefreshToken)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	stored, err := h.refresh.Get(ctx, jti)
+	if err != nil {
+		if errors.Is(err, authstore.ErrTokenRevoked) || errors.Is(err, authstore.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if h.now().After(stored.ExpiresAt) {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
+	}
+
+	u, err := h.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("user no longer exists"))
+	}
+	if u.Disabled || u.TenantID != tenantID {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("user no longer eligible"))
+	}
+
+	if err := h.assertAudienceAllowed(u, in.TargetAudience); err != nil {
+		return nil, err
+	}
+
+	// Mint access only — refresh chain stays intact.
+	var slug string
+	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
+		slug, _ = h.tenantSlug(ctx, u.TenantID)
+	}
+	access, accessExp, err := h.issuer.MintAccess(issuer.AccessClaims{
+		Subject:    u.UserID.String(),
+		TenantID:   u.TenantID,
+		TenantSlug: slug,
+		Audience:   in.TargetAudience,
+		Roles:      u.Roles,
+		Scopes:     u.Scopes,
+		Kind:       auth.PrincipalKindUser,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("mint access: %w", err))
+	}
+	return &ExchangeAudienceOutput{
+		AccessToken:     access,
+		AccessExpiresAt: accessExp,
+	}, nil
+}
+
 // ─── Revoke ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) Revoke(ctx context.Context, token string) error {

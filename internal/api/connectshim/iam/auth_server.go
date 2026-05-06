@@ -2,6 +2,7 @@ package iam
 
 import (
 	"context"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -89,6 +90,23 @@ func (s *AuthServer) ChangePassword(ctx context.Context, req *connect.Request[pb
 		return nil, err
 	}
 	return connect.NewResponse(&pb.ChangePasswordResponse{}), nil
+}
+
+func (s *AuthServer) ExchangeAudience(ctx context.Context, req *connect.Request[pb.ExchangeAudienceRequest]) (*connect.Response[pb.ExchangeAudienceResponse], error) {
+	out, err := s.H.ExchangeAudience(ctx, authh.ExchangeAudienceInput{
+		RefreshToken:   req.Msg.GetRefreshToken(),
+		TargetAudience: req.Msg.GetTargetAudience(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	// access_expires_in_seconds: relative TTL, like Login/RefreshToken.
+	ttl := int32(time.Until(out.AccessExpiresAt).Seconds())
+	return connect.NewResponse(&pb.ExchangeAudienceResponse{
+		AccessToken:            out.AccessToken,
+		AccessExpiresInSeconds: ttl,
+		TokenType:              "Bearer",
+	}), nil
 }
 
 var _ paladiniamv1connect.AuthServiceHandler = (*AuthServer)(nil)

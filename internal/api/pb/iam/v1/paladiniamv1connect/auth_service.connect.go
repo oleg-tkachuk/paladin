@@ -46,6 +46,9 @@ const (
 	// AuthServiceChangePasswordProcedure is the fully-qualified name of the AuthService's
 	// ChangePassword RPC.
 	AuthServiceChangePasswordProcedure = "/paladin.iam.v1.AuthService/ChangePassword"
+	// AuthServiceExchangeAudienceProcedure is the fully-qualified name of the AuthService's
+	// ExchangeAudience RPC.
+	AuthServiceExchangeAudienceProcedure = "/paladin.iam.v1.AuthService/ExchangeAudience"
 )
 
 // AuthServiceClient is a client for the paladin.iam.v1.AuthService service.
@@ -63,6 +66,14 @@ type AuthServiceClient interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 	// ChangePassword updates the caller's password. Local-IdP only.
 	ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error)
+	// ExchangeAudience derives a short-lived access token for a different
+	// audience from a still-valid refresh token, WITHOUT rotating the
+	// refresh chain. Use it from a multi-plane SPA that needs simultaneous
+	// tokens for paladin-data, paladin-admin, paladin-iam off a single login session.
+	// The presented refresh token must still be in the store and unexpired;
+	// server-side audience escalation rules apply (admin requires an
+	// admin-tier role on the principal).
+	ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the paladin.iam.v1.AuthService service. By default, it
@@ -106,16 +117,23 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("ChangePassword")),
 			connect.WithClientOptions(opts...),
 		),
+		exchangeAudience: connect.NewClient[v1.ExchangeAudienceRequest, v1.ExchangeAudienceResponse](
+			httpClient,
+			baseURL+AuthServiceExchangeAudienceProcedure,
+			connect.WithSchema(authServiceMethods.ByName("ExchangeAudience")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login          *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	refreshToken   *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
-	revoke         *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
-	whoAmI         *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
-	changePassword *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
+	login            *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	refreshToken     *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
+	revoke           *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
+	whoAmI           *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
+	changePassword   *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
+	exchangeAudience *connect.Client[v1.ExchangeAudienceRequest, v1.ExchangeAudienceResponse]
 }
 
 // Login calls paladin.iam.v1.AuthService.Login.
@@ -143,6 +161,11 @@ func (c *authServiceClient) ChangePassword(ctx context.Context, req *connect.Req
 	return c.changePassword.CallUnary(ctx, req)
 }
 
+// ExchangeAudience calls paladin.iam.v1.AuthService.ExchangeAudience.
+func (c *authServiceClient) ExchangeAudience(ctx context.Context, req *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error) {
+	return c.exchangeAudience.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the paladin.iam.v1.AuthService service.
 type AuthServiceHandler interface {
 	// Login exchanges username+password (or upstream IdP code) for a TokenPair.
@@ -158,6 +181,14 @@ type AuthServiceHandler interface {
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 	// ChangePassword updates the caller's password. Local-IdP only.
 	ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error)
+	// ExchangeAudience derives a short-lived access token for a different
+	// audience from a still-valid refresh token, WITHOUT rotating the
+	// refresh chain. Use it from a multi-plane SPA that needs simultaneous
+	// tokens for paladin-data, paladin-admin, paladin-iam off a single login session.
+	// The presented refresh token must still be in the store and unexpired;
+	// server-side audience escalation rules apply (admin requires an
+	// admin-tier role on the principal).
+	ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -197,6 +228,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("ChangePassword")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceExchangeAudienceHandler := connect.NewUnaryHandler(
+		AuthServiceExchangeAudienceProcedure,
+		svc.ExchangeAudience,
+		connect.WithSchema(authServiceMethods.ByName("ExchangeAudience")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.iam.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -209,6 +246,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceWhoAmIHandler.ServeHTTP(w, r)
 		case AuthServiceChangePasswordProcedure:
 			authServiceChangePasswordHandler.ServeHTTP(w, r)
+		case AuthServiceExchangeAudienceProcedure:
+			authServiceExchangeAudienceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -236,4 +275,8 @@ func (UnimplementedAuthServiceHandler) WhoAmI(context.Context, *connect.Request[
 
 func (UnimplementedAuthServiceHandler) ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.AuthService.ChangePassword is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.AuthService.ExchangeAudience is not implemented"))
 }

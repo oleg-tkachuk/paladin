@@ -28,6 +28,15 @@ service AuthService {
 
   // ChangePassword updates the caller's password. Local-IdP only.
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // ExchangeAudience derives a short-lived access token for a different
+  // audience from a still-valid refresh token, WITHOUT rotating the
+  // refresh chain. Use it from a multi-plane SPA that needs simultaneous
+  // tokens for paladin-data, paladin-admin, paladin-iam off a single login session.
+  // The presented refresh token must still be in the store and unexpired;
+  // server-side audience escalation rules apply (admin requires an
+  // admin-tier role on the principal).
+  rpc ExchangeAudience(ExchangeAudienceRequest) returns (ExchangeAudienceResponse);
 }
 
 message LoginRequest {
@@ -77,3 +86,19 @@ message ChangePasswordRequest {
 }
 
 message ChangePasswordResponse {}
+
+message ExchangeAudienceRequest {
+  // Refresh token from the active session. Validated but NOT consumed.
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
+  // Target audience: "paladin-data" | "paladin-admin" | "paladin-iam".
+  string target_audience = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message ExchangeAudienceResponse {
+  // Short-lived access token bound to target_audience. No refresh token
+  // is issued — the caller's existing refresh chain is unchanged.
+  string access_token = 1;
+  int32 access_expires_in_seconds = 2;
+  // Always "Bearer" today; reserved for future scoped-token kinds.
+  string token_type = 3;
+}

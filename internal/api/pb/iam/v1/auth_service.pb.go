@@ -495,6 +495,123 @@ func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{9}
 }
 
+type ExchangeAudienceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Refresh token from the active session. Validated but NOT consumed.
+	RefreshToken string `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	// Target audience: "paladin-data" | "paladin-admin" | "paladin-iam".
+	TargetAudience string `protobuf:"bytes,2,opt,name=target_audience,json=targetAudience,proto3" json:"target_audience,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ExchangeAudienceRequest) Reset() {
+	*x = ExchangeAudienceRequest{}
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeAudienceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeAudienceRequest) ProtoMessage() {}
+
+func (x *ExchangeAudienceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeAudienceRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeAudienceRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ExchangeAudienceRequest) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *ExchangeAudienceRequest) GetTargetAudience() string {
+	if x != nil {
+		return x.TargetAudience
+	}
+	return ""
+}
+
+type ExchangeAudienceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Short-lived access token bound to target_audience. No refresh token
+	// is issued — the caller's existing refresh chain is unchanged.
+	AccessToken            string `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	AccessExpiresInSeconds int32  `protobuf:"varint,2,opt,name=access_expires_in_seconds,json=accessExpiresInSeconds,proto3" json:"access_expires_in_seconds,omitempty"`
+	// Always "Bearer" today; reserved for future scoped-token kinds.
+	TokenType     string `protobuf:"bytes,3,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeAudienceResponse) Reset() {
+	*x = ExchangeAudienceResponse{}
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeAudienceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeAudienceResponse) ProtoMessage() {}
+
+func (x *ExchangeAudienceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeAudienceResponse.ProtoReflect.Descriptor instead.
+func (*ExchangeAudienceResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ExchangeAudienceResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *ExchangeAudienceResponse) GetAccessExpiresInSeconds() int32 {
+	if x != nil {
+		return x.AccessExpiresInSeconds
+	}
+	return 0
+}
+
+func (x *ExchangeAudienceResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
 var File_paladin_iam_v1_auth_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
@@ -523,13 +640,22 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\x15ChangePasswordRequest\x12*\n" +
 	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
 	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\fR\vnewPassword\"\x18\n" +
-	"\x16ChangePasswordResponse2\xf9\x02\n" +
+	"\x16ChangePasswordResponse\"y\n" +
+	"\x17ExchangeAudienceRequest\x12,\n" +
+	"\rrefresh_token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\frefreshToken\x120\n" +
+	"\x0ftarget_audience\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetAudience\"\x97\x01\n" +
+	"\x18ExchangeAudienceResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x129\n" +
+	"\x19access_expires_in_seconds\x18\x02 \x01(\x05R\x16accessExpiresInSeconds\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x03 \x01(\tR\ttokenType2\xd8\x03\n" +
 	"\vAuthService\x12<\n" +
 	"\x05Login\x12\x18.paladin.iam.v1.LoginRequest\x1a\x19.paladin.iam.v1.LoginResponse\x12Q\n" +
 	"\fRefreshToken\x12\x1f.paladin.iam.v1.RefreshTokenRequest\x1a .paladin.iam.v1.RefreshTokenResponse\x12?\n" +
 	"\x06Revoke\x12\x19.paladin.iam.v1.RevokeRequest\x1a\x1a.paladin.iam.v1.RevokeResponse\x12?\n" +
 	"\x06WhoAmI\x12\x19.paladin.iam.v1.WhoAmIRequest\x1a\x1a.paladin.iam.v1.WhoAmIResponse\x12W\n" +
-	"\x0eChangePassword\x12!.paladin.iam.v1.ChangePasswordRequest\x1a\".paladin.iam.v1.ChangePasswordResponseBNZLgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
+	"\x0eChangePassword\x12!.paladin.iam.v1.ChangePasswordRequest\x1a\".paladin.iam.v1.ChangePasswordResponse\x12]\n" +
+	"\x10ExchangeAudience\x12#.paladin.iam.v1.ExchangeAudienceRequest\x1a$.paladin.iam.v1.ExchangeAudienceResponseBNZLgithub.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_auth_service_proto_rawDescOnce sync.Once
@@ -543,38 +669,42 @@ func file_paladin_iam_v1_auth_service_proto_rawDescGZIP() []byte {
 	return file_paladin_iam_v1_auth_service_proto_rawDescData
 }
 
-var file_paladin_iam_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_paladin_iam_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_paladin_iam_v1_auth_service_proto_goTypes = []any{
-	(*LoginRequest)(nil),           // 0: paladin.iam.v1.LoginRequest
-	(*LoginResponse)(nil),          // 1: paladin.iam.v1.LoginResponse
-	(*RefreshTokenRequest)(nil),    // 2: paladin.iam.v1.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),   // 3: paladin.iam.v1.RefreshTokenResponse
-	(*RevokeRequest)(nil),          // 4: paladin.iam.v1.RevokeRequest
-	(*RevokeResponse)(nil),         // 5: paladin.iam.v1.RevokeResponse
-	(*WhoAmIRequest)(nil),          // 6: paladin.iam.v1.WhoAmIRequest
-	(*WhoAmIResponse)(nil),         // 7: paladin.iam.v1.WhoAmIResponse
-	(*ChangePasswordRequest)(nil),  // 8: paladin.iam.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil), // 9: paladin.iam.v1.ChangePasswordResponse
-	(*TokenPair)(nil),              // 10: paladin.iam.v1.TokenPair
-	(*User)(nil),                   // 11: paladin.iam.v1.User
+	(*LoginRequest)(nil),             // 0: paladin.iam.v1.LoginRequest
+	(*LoginResponse)(nil),            // 1: paladin.iam.v1.LoginResponse
+	(*RefreshTokenRequest)(nil),      // 2: paladin.iam.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),     // 3: paladin.iam.v1.RefreshTokenResponse
+	(*RevokeRequest)(nil),            // 4: paladin.iam.v1.RevokeRequest
+	(*RevokeResponse)(nil),           // 5: paladin.iam.v1.RevokeResponse
+	(*WhoAmIRequest)(nil),            // 6: paladin.iam.v1.WhoAmIRequest
+	(*WhoAmIResponse)(nil),           // 7: paladin.iam.v1.WhoAmIResponse
+	(*ChangePasswordRequest)(nil),    // 8: paladin.iam.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),   // 9: paladin.iam.v1.ChangePasswordResponse
+	(*ExchangeAudienceRequest)(nil),  // 10: paladin.iam.v1.ExchangeAudienceRequest
+	(*ExchangeAudienceResponse)(nil), // 11: paladin.iam.v1.ExchangeAudienceResponse
+	(*TokenPair)(nil),                // 12: paladin.iam.v1.TokenPair
+	(*User)(nil),                     // 13: paladin.iam.v1.User
 }
 var file_paladin_iam_v1_auth_service_proto_depIdxs = []int32{
-	10, // 0: paladin.iam.v1.LoginResponse.tokens:type_name -> paladin.iam.v1.TokenPair
-	11, // 1: paladin.iam.v1.LoginResponse.user:type_name -> paladin.iam.v1.User
-	10, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
-	11, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
+	12, // 0: paladin.iam.v1.LoginResponse.tokens:type_name -> paladin.iam.v1.TokenPair
+	13, // 1: paladin.iam.v1.LoginResponse.user:type_name -> paladin.iam.v1.User
+	12, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
+	13, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
 	0,  // 4: paladin.iam.v1.AuthService.Login:input_type -> paladin.iam.v1.LoginRequest
 	2,  // 5: paladin.iam.v1.AuthService.RefreshToken:input_type -> paladin.iam.v1.RefreshTokenRequest
 	4,  // 6: paladin.iam.v1.AuthService.Revoke:input_type -> paladin.iam.v1.RevokeRequest
 	6,  // 7: paladin.iam.v1.AuthService.WhoAmI:input_type -> paladin.iam.v1.WhoAmIRequest
 	8,  // 8: paladin.iam.v1.AuthService.ChangePassword:input_type -> paladin.iam.v1.ChangePasswordRequest
-	1,  // 9: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
-	3,  // 10: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
-	5,  // 11: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
-	7,  // 12: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
-	9,  // 13: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
+	10, // 9: paladin.iam.v1.AuthService.ExchangeAudience:input_type -> paladin.iam.v1.ExchangeAudienceRequest
+	1,  // 10: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
+	3,  // 11: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
+	5,  // 12: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
+	7,  // 13: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
+	9,  // 14: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
+	11, // 15: paladin.iam.v1.AuthService.ExchangeAudience:output_type -> paladin.iam.v1.ExchangeAudienceResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -592,7 +722,7 @@ func file_paladin_iam_v1_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_auth_service_proto_rawDesc), len(file_paladin_iam_v1_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
