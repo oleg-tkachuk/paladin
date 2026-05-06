@@ -47,7 +47,7 @@ func (r *RefreshTokenPurger) Run(ctx context.Context) error {
 		case <-t.C:
 			n, err := r.Repo.PurgeExpired(ctx, time.Now().UTC())
 			if err != nil {
-				r.log().Warn("purge refresh tokens failed", zap.Error(err))
+				r.log().Warn("failed to purge refresh tokens", zap.Error(err))
 				continue
 			}
 			if n > 0 {
@@ -99,12 +99,12 @@ func (a *ApiKeyExpirer) Run(ctx context.Context) error {
 func (a *ApiKeyExpirer) tick(ctx context.Context) {
 	keys, err := a.Repo.ListExpired(ctx, time.Now().UTC(), 200)
 	if err != nil {
-		a.log().Warn("list expired api keys failed", zap.Error(err))
+		a.log().Warn("failed to list expired api keys", zap.Error(err))
 		return
 	}
 	for _, k := range keys {
 		if err := a.Repo.Revoke(ctx, k.ApiKeyID); err != nil {
-			a.log().Warn("revoke expired api key failed",
+			a.log().Warn("failed to revoke expired api key",
 				zap.String("api_key_id", k.ApiKeyID.String()),
 				zap.Error(err))
 			continue
@@ -153,7 +153,7 @@ func (p *AuditLogPurger) Run(ctx context.Context) error {
 			cutoff := time.Now().UTC().Add(-p.TTL)
 			n, err := p.Purger.PurgeOlderThan(ctx, cutoff)
 			if err != nil {
-				p.log().Warn("purge audit log failed", zap.Error(err))
+				p.log().Warn("failed to purge audit log", zap.Error(err))
 				continue
 			}
 			if n > 0 {

@@ -83,40 +83,40 @@ var rootCmd = &cobra.Command{
 
 		cfg, err := config.Load(configPath, bootstrap)
 		if err != nil {
-			bootstrap.Fatal("Failed to load config", zap.Error(err))
+			bootstrap.Fatal("failed to load config", zap.Error(err))
 		}
 
 		l, err := logger.New(cfg.Logger)
 		if err != nil {
-			bootstrap.Fatal("Failed to build logger", zap.Error(err))
+			bootstrap.Fatal("failed to build logger", zap.Error(err))
 		}
 		logger.ReplaceGlobals(l)
 
 		db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"))
 		if err != nil {
-			l.Fatal("Failed to connect to database", zap.Error(err))
+			l.Fatal("failed to connect to database", zap.Error(err))
 		}
 		defer db.Close()
 
 		if err := db.Ping(ctx); err != nil {
-			l.Fatal("Database ping failed", zap.Error(err))
+			l.Fatal("failed to ping database", zap.Error(err))
 		}
 
 		// All migrations now run in one phase — v2 schema is self-contained.
 		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
-			l.Fatal("Migrations failed", zap.Error(err))
+			l.Fatal("failed to apply migrations", zap.Error(err))
 		}
 
 		listeners, err := buildListeners(ctx, cfg, db, l)
 		if err != nil {
-			l.Fatal("Failed to assemble server", zap.Error(err))
+			l.Fatal("failed to assemble server", zap.Error(err))
 		}
 
 		started := &atomic.Bool{}
 		jobs := buildBackgroundJobs(cfg, db, l)
 		container := app.NewContainer(version, commit, buildTime, cfg, l, listeners, db, nil, jobs, started)
 
-		l.Info("Paladin starting (v2: data + admin + iam planes)",
+		l.Info("starting",
 			zap.String("version", version),
 			zap.String("commit", commit),
 			zap.String("build_time", buildTime),
@@ -127,9 +127,9 @@ var rootCmd = &cobra.Command{
 
 		select {
 		case <-ctx.Done():
-			l.Info("Shutdown signal received")
+			l.Info("shutdown signal received")
 		case err := <-runErr:
-			l.Error("HTTP server failed", zap.Error(err))
+			l.Error("http server failed", zap.Error(err))
 		}
 
 		container.Shutdown()
@@ -372,7 +372,7 @@ func buildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.L
 		if err := v.Start(ctx); err != nil {
 			return nil, fmt.Errorf("jwks(%s): %w", audience, err)
 		}
-		l.Info("auth verifier: jwks", zap.String("audience", audience), zap.String("url", a.JWKSURL))
+		l.Info("using jwks verifier", zap.String("audience", audience), zap.String("url", a.JWKSURL))
 		return v, nil
 	}
 	return &auth.JWTVerifier{
@@ -451,7 +451,7 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 				l.Named("reconciler"),
 			))
 		} else {
-			l.Warn("reconciler skipped: s3 adapter init failed", zap.Error(err))
+			l.Warn("skipping reconciler", zap.String("reason", "s3 adapter init failed"), zap.Error(err))
 		}
 	}
 	if cfg.Workers.Housekeeping.AuditLogTTL > 0 {

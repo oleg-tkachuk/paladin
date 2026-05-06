@@ -80,7 +80,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			WaitTimeSeconds:     int32(c.cfg.PollInterval.Seconds()),
 		})
 		if err != nil {
-			c.log.Warn("sqs receive failed", zap.Error(err))
+			c.log.Warn("failed to receive from sqs", zap.Error(err))
 			// Back off briefly to avoid hammering SQS on transient errors.
 			select {
 			case <-ctx.Done():
@@ -102,7 +102,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg sqstypes.Message) {
 	}
 	events, err := parseS3Event(*msg.Body)
 	if err != nil {
-		c.log.Error("parse s3 event", zap.Error(err), zap.Stringp("body_preview", previewPtr(msg.Body)))
+		c.log.Error("failed to parse s3 event", zap.Error(err), zap.Stringp("body_preview", previewPtr(msg.Body)))
 		// Malformed payloads are deleted — redelivery won't help.
 		_ = c.delete(ctx, msg.ReceiptHandle)
 		return
@@ -110,7 +110,7 @@ func (c *Consumer) handleMessage(ctx context.Context, msg sqstypes.Message) {
 	allSuccess := true
 	for _, ev := range events {
 		if err := c.processEvent(ctx, ev); err != nil {
-			c.log.Warn("process event", zap.Error(err),
+			c.log.Warn("failed to process event", zap.Error(err),
 				zap.String("objectKey", ev.ObjectKey), zap.String("key", ev.Key))
 			allSuccess = false
 		}

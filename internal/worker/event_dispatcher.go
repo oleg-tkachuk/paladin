@@ -85,7 +85,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (
 			continue
 		}
 		if err := d.deliver(ctx, sub, evt); err != nil {
-			d.log().Warn("event delivery failed",
+			d.log().Warn("failed to deliver event",
 				zap.String("subscription_id", sub.SubscriptionID.String()),
 				zap.String("event_type", evt.Type),
 				zap.Error(err),

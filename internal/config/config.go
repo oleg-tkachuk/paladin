@@ -118,7 +118,7 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("failed to parse limits.max_part_size (%s): %w", cfg.Limits.MaxPartSizeRaw, err)
 	}
 
-	log.Info("Config loaded and validated", zap.Any("config", cfg.Obfuscated()))
+	log.Info("config loaded", zap.Any("config", cfg.Obfuscated()))
 
 	return cfg, nil
 }

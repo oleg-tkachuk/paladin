@@ -149,7 +149,7 @@ func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			r.log.Error("close response body failed", zap.Error(err))
+			r.log.Error("failed to close response body", zap.Error(err))
 		}
 	}()
 

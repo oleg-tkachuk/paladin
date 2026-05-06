@@ -108,7 +108,7 @@ func (w *LifecycleWorker) Run(ctx context.Context) error {
 func (w *LifecycleWorker) tick(ctx context.Context) {
 	buckets, err := w.Buckets.ListBucketsWithLifecycle(ctx)
 	if err != nil {
-		w.log().Warn("lifecycle: list buckets failed", zap.Error(err))
+		w.log().Warn("failed to list buckets", zap.Error(err))
 		return
 	}
 	for _, b := range buckets {
@@ -126,7 +126,7 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 	}
 	bindings, err := w.Buckets.ListObjectKeyBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
-		w.log().Warn("lifecycle: list bindings failed",
+		w.log().Warn("failed to list object_key bindings",
 			zap.String("backend", b.BackendID),
 			zap.String("bucket", b.BucketName),
 			zap.Error(err))
@@ -143,7 +143,7 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 			for _, e := range expirers {
 				ok, err := e.matches(row)
 				if err != nil {
-					w.log().Warn("lifecycle: match eval failed",
+					w.log().Warn("failed to evaluate match",
 						zap.String("rule", e.id),
 						zap.String("object_id", row.ObjectID.String()),
 						zap.Error(err))
@@ -153,12 +153,12 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 					continue
 				}
 				if err := w.SoftDeleter.SoftDelete(ctx, row.ObjectID, 0); err != nil {
-					w.log().Warn("lifecycle: soft delete failed",
+					w.log().Warn("failed to soft-delete object",
 						zap.String("object_id", row.ObjectID.String()),
 						zap.Error(err))
 					return nil
 				}
-				w.log().Info("lifecycle: expired object",
+				w.log().Info("expired object",
 					zap.String("rule", e.id),
 					zap.String("object_id", row.ObjectID.String()))
 				return nil
@@ -166,7 +166,7 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 			return nil
 		})
 		if err != nil {
-			w.log().Warn("lifecycle: iterate objects failed",
+			w.log().Warn("failed to iterate objects",
 				zap.String("tenant", bind.TenantID.String()),
 				zap.String("object_key", bind.ObjectKey),
 				zap.Error(err))
@@ -224,13 +224,13 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 		var prog celpkg.Program
 		if r.Match != "" {
 			if eval == nil {
-				logger.Warn("lifecycle: rule has match but no CEL evaluator wired",
+				logger.Warn("rule has match but no CEL evaluator wired",
 					zap.String("rule", r.ID))
 				continue
 			}
 			compiled, err := eval.Compile(cel.ObjectSchema, r.Match)
 			if err != nil {
-				logger.Warn("lifecycle: rule match compile failed",
+				logger.Warn("failed to compile rule match",
 					zap.String("rule", r.ID),
 					zap.Error(err))
 				continue

@@ -112,7 +112,7 @@ func (r *ReplicationWorker) Run(ctx context.Context) error {
 func (r *ReplicationWorker) tick(ctx context.Context) {
 	buckets, err := r.Buckets.ListBucketsWithReplication(ctx)
 	if err != nil {
-		r.log().Warn("replication: list buckets failed", zap.Error(err))
+		r.log().Warn("failed to list buckets", zap.Error(err))
 		return
 	}
 	for _, b := range buckets {
@@ -129,12 +129,12 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 	}
 	dstBackend, dstBucket, err := splitBucketName(b.Replication.DestinationBucket)
 	if err != nil {
-		r.log().Warn("replication: invalid destination", zap.String("dst", b.Replication.DestinationBucket), zap.Error(err))
+		r.log().Warn("invalid destination", zap.String("dst", b.Replication.DestinationBucket), zap.Error(err))
 		return
 	}
 	bindings, err := r.Buckets.ListObjectKeyBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
-		r.log().Warn("replication: list bindings failed",
+		r.log().Warn("failed to list object_key bindings",
 			zap.String("backend", b.BackendID),
 			zap.String("bucket", b.BucketName),
 			zap.Error(err))
@@ -169,12 +169,12 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 				ObjectKey:  bind.ObjectKey,
 			}
 			if r.Replicator == nil {
-				r.log().Info("replication: dry-run match",
+				r.log().Info("dry-run match",
 					zap.String("object_id", row.ObjectID.String()))
 				return nil
 			}
 			if err := r.Replicator.Replicate(ctx, src, dst); err != nil {
-				r.log().Warn("replication: copy failed",
+				r.log().Warn("failed to copy object",
 					zap.String("object_id", row.ObjectID.String()),
 					zap.Error(err))
 				return nil
@@ -183,7 +183,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 			return nil
 		})
 		if err != nil {
-			r.log().Warn("replication: iterate failed", zap.Error(err))
+			r.log().Warn("failed to iterate objects", zap.Error(err))
 		}
 	}
 }
@@ -218,7 +218,7 @@ func (r *ReplicationWorker) advance(ctx context.Context, backendID, bucketName s
 	r.watermarks[key] = t
 	if r.Watermarks != nil {
 		if err := r.Watermarks.Advance(ctx, backendID, bucketName, t); err != nil {
-			r.log().Warn("replication: watermark advance failed",
+			r.log().Warn("failed to advance watermark",
 				zap.String("backend", backendID),
 				zap.String("bucket", bucketName),
 				zap.Error(err))

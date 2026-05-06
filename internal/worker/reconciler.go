@@ -79,7 +79,7 @@ func (r *ReconcilerV2) Run(ctx context.Context) error {
 func (r *ReconcilerV2) tick(ctx context.Context) {
 	ids, err := r.sm.ScanPendingExpired(ctx, r.cfg.PendingGraceTTL, r.cfg.BatchSize)
 	if err != nil {
-		r.log.Warn("reconciler scan failed", zap.Error(err))
+		r.log.Warn("failed to scan pending objects", zap.Error(err))
 		return
 	}
 	for _, id := range ids {
@@ -93,16 +93,16 @@ func (r *ReconcilerV2) tick(ctx context.Context) {
 func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) {
 	etag, size, checksum, seq, found, err := r.probe.HeadByObjectID(ctx, objectID)
 	if err != nil {
-		r.log.Warn("reconciler HEAD failed", zap.String("object_id", objectID.String()), zap.Error(err))
+		r.log.Warn("failed to HEAD object", zap.String("object_id", objectID.String()), zap.Error(err))
 		return
 	}
 	if found {
 		if _, err := r.sm.PromoteToAvailable(ctx, objectID, etag, size, checksum, seq, statemachine.SourceReconciler); err != nil {
-			r.log.Warn("reconciler promote failed", zap.String("object_id", objectID.String()), zap.Error(err))
+			r.log.Warn("failed to promote object", zap.String("object_id", objectID.String()), zap.Error(err))
 		}
 		return
 	}
 	if err := r.sm.MarkFailed(ctx, objectID, "presign-expired"); err != nil {
-		r.log.Warn("reconciler mark-failed", zap.String("object_id", objectID.String()), zap.Error(err))
+		r.log.Warn("failed to mark object as failed", zap.String("object_id", objectID.String()), zap.Error(err))
 	}
 }

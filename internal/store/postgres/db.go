@@ -53,7 +53,7 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 		return nil, fmt.Errorf("pgxpool init: %w", err)
 	}
 
-	log.Info("PostgreSQL pool initialized",
+	log.Info("pool initialized",
 		zap.String("endpoint", fmt.Sprintf("postgres://%s:****@%s:%d/%s",
 			poolCfg.ConnConfig.User, poolCfg.ConnConfig.Host, poolCfg.ConnConfig.Port, poolCfg.ConnConfig.Database)),
 		zap.Int32("max_conns", poolCfg.MaxConns),
@@ -121,7 +121,7 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil {
-			d.log.Error("rollback transaction failed", zap.Error(err))
+			d.log.Error("failed to rollback transaction", zap.Error(err))
 		}
 	}()
 

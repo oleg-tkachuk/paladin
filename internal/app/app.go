@@ -85,7 +85,7 @@ func (a *App) Run() error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a.Logger.Info("HTTP plane listening",
+			a.Logger.Info("plane listening",
 				zap.String("plane", l.Plane),
 				zap.String("addr", l.Server.Addr),
 				zap.Bool("tls", l.TLS.Enabled),
@@ -109,7 +109,7 @@ func (a *App) Run() error {
 			job := a.jobs[i]
 			go func() {
 				if err := job.Run(jctx); err != nil && !errors.Is(err, context.Canceled) {
-					a.Logger.Warn("background job exited with error",
+					a.Logger.Warn("background job exited",
 						zap.String("type", fmt.Sprintf("%T", job)),
 						zap.Error(err))
 				}
@@ -131,7 +131,7 @@ func (a *App) Shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Server.ShutdownTimeout)
 	defer cancel()
 
-	a.Logger.Info("Shutting down...")
+	a.Logger.Info("shutting down")
 
 	if a.jobsCancel != nil {
 		a.jobsCancel()

@@ -50,7 +50,7 @@ func (d *DB) runMigrationsTo(_ context.Context, fs embed.FS, target int64) error
 	db := stdlib.OpenDB(*d.Pool.Config().ConnConfig)
 	defer func() {
 		if err := db.Close(); err != nil {
-			d.log.Error("close db failed", zap.Error(err))
+			d.log.Error("failed to close db", zap.Error(err))
 		}
 	}()
 
@@ -73,7 +73,7 @@ func (d *DB) runMigrationsTo(_ context.Context, fs embed.FS, target int64) error
 		return fmt.Errorf("goose up: %w", err)
 	}
 
-	d.log.Info("Migrations applied successfully",
+	d.log.Info("migrations applied",
 		zap.String("service", "paladin"),
 		zap.Int("count", gl.count),
 		zap.Int64("target", target),
