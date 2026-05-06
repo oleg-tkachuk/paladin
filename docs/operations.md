@@ -24,10 +24,10 @@ Compose services:
 
 ### Local Config
 
-Use `configs/paladin.local.yaml` for local development:
+Use `configs/local.yaml` for local development:
 
 ```bash
-./server --config configs/paladin.local.yaml
+./server --config configs/local.yaml
 ```
 
 ### Run Migrations
@@ -47,7 +47,7 @@ go run github.com/pressly/goose/v3/cmd/goose@latest -dir migrations postgres "DS
 task build
 
 # Run directly
-./server --config configs/paladin.local.yaml
+./server --config configs/local.yaml
 ```
 
 ### Run Tests

@@ -1,6 +1,7 @@
 {{- if .Values.httpRoute.enabled -}}
 {{- $fullName := include "chart.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
+{{- /* Default backend port — data plane. Rules can override per-rule. */ -}}
+{{- $svcPort := .Values.service.ports.data -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

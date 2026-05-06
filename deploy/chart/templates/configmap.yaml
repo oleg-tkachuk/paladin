@@ -1,9 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: paladin-config
+  # `-config` suffix matches the deployment's volume reference. Templated
+  # via chart.fullname so multiple releases of this chart in one namespace
+  # don't collide on a hardcoded `paladin-config`.
+  name: {{ include "chart.fullname" . }}-config
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 data:
   config.yaml: |
-{{ toYaml .Values.config | nindent 4 }}
+    {{- toYaml .Values.config | nindent 4 }}

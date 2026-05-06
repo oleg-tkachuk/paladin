@@ -4,6 +4,11 @@ metadata:
   commit: "unknown"
   buildTime: "unknown"
 
+# Time the kubelet waits for a graceful shutdown before SIGKILL. Should
+# match `config.server.shutdown_timeout` plus a small buffer so in-flight
+# requests have time to drain before the pod is killed.
+terminationGracePeriodSeconds: 30
+
 config:
   app:
     name: paladin
@@ -232,12 +237,43 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
+# Pod-level security context. Defaults intentionally non-empty —
+# locked-down runtime is the right default; operators who need to relax
+# it for sidecar tooling override per-release.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532             # distroless 'nonroot' UID
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
+# Container-level. readOnlyRootFilesystem is safe because the binary
+# writes only to stdout/stderr; configs are mounted RO from the
+# ConfigMap; migrations are embedded into the binary.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
+  # Three-plane HTTP service. Order matters for the Service object — the
+  # first port stays at .spec.ports[0] so out-of-the-box `kubectl
+  # port-forward svc/<name>` lands on data:8080, which is what most
+  # operators expect.
+  ports:
+    data: 8080
+    iam: 8085
+    admin: 8090
+  # Backwards-compat shim. Charts that imported old values are likely
+  # using `.Values.service.port` for templating; we keep it pointed at
+  # the data plane so existing references keep working.
   port: 8080
 
 ingress:
@@ -267,24 +303,27 @@ httpRoute:
 
 resources: {}
 
+# Probes target the data-plane port; addProbes in cmd/server mounts
+# /livez, /readyz, /startupz on every plane's mux, so any of the three
+# would work — data is the natural default.
 livenessProbe:
   httpGet:
     path: /livez
-    port: http
+    port: data
   initialDelaySeconds: 15
   periodSeconds: 20
 
 readinessProbe:
   httpGet:
     path: /readyz
-    port: http
+    port: data
   initialDelaySeconds: 10
   periodSeconds: 10
 
 startupProbe:
   httpGet:
     path: /startupz
-    port: http
+    port: data
   initialDelaySeconds: 5
   periodSeconds: 5
   failureThreshold: 12
@@ -295,17 +334,16 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 
-volumes:
-  - name: config
-    configMap:
-      name: paladin-config
-  - name: migrations
-    emptyDir: {}
+# Default volumes. The configmap name is templated in deployment.yaml so
+# this list intentionally references the chart-fullname-suffixed
+# configmap; do not hardcode 'paladin-config' here.
+#
+# Migrations are NOT a volume — they're embedded into the binary via
+# go:embed. The previous emptyDir mount was dead weight and has been
+# removed.
+volumes: []
 
-volumeMounts:
-  - name: config
-    mountPath: /app/configs
-    readOnly: true
+volumeMounts: []
 
 nodeSelector: {}
 
@@ -313,11 +351,19 @@ tolerations: []
 
 affinity: {}
 
+# RBAC for the K8sSecretResolver. The resolver issues exactly one verb
+# (GET) per referenced secret — list/watch are NOT used. We narrow the
+# verbs to match.
+#
+# `secretNames` lists every secret referenced from `config.*.password_secret`
+# / `config.*.access_key_secret` / `config.*.secret_key_secret`. Operators
+# who add new secret references must extend this list, otherwise the
+# resolver will 403 at startup.
 rbac:
   secretReader:
     enabled: true
     clusterWide: true
     secretNames:
       - paladin-postgresql-app-user
-      - paladin-postgresql-superuser
+      - paladin-postgresql-migrate-user
       - paladin-admin-key

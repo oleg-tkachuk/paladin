@@ -7,9 +7,20 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: http
+    {{- /*
+      Three-plane HTTP. Iterating in a deterministic order (data → iam →
+      admin) keeps `kubectl describe svc` output stable across releases,
+      and pins .spec.ports[0] to the data plane so default port-forwards
+      land where operators expect.
+    */}}
+    {{- $ports := .Values.service.ports }}
+    {{- range $name := list "data" "iam" "admin" }}
+    {{- with index $ports $name }}
+    - name: {{ $name }}
+      port: {{ . }}
+      targetPort: {{ $name }}
       protocol: TCP
-      name: http
+    {{- end }}
+    {{- end }}
   selector:
     {{- include "chart.selectorLabels" . | nindent 4 }}

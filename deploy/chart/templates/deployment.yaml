@@ -13,10 +13,14 @@ spec:
       {{- include "chart.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        # Roll the pod when the configmap changes — checksum is the
+        # rendered ConfigMap contents, so any tweak to `config.*` triggers
+        # a fresh rollout instead of waiting for the next manual restart.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "chart.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
@@ -28,6 +32,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "chart.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -40,10 +45,22 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--config"
+            - "/app/configs/config.yaml"
           ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
+            {{- /*
+              Named ports match the Service. Order pinned so HPA / probes
+              by name resolve identically across releases.
+            */}}
+            {{- $ports := .Values.service.ports }}
+            {{- range $name := list "data" "iam" "admin" }}
+            {{- with index $ports $name }}
+            - name: {{ $name }}
+              containerPort: {{ . }}
               protocol: TCP
+            {{- end }}
+            {{- end }}
           env:
             - name: APP_VERSION
               value: {{ .Values.metadata.version | default .Chart.AppVersion | quote }}
@@ -67,14 +84,23 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
           volumeMounts:
+            # ConfigMap mounted RO at /app/configs — matches the binary's
+            # default config path. Always present; user-supplied volumes
+            # append below.
+            - name: config
+              mountPath: /app/configs
+              readOnly: true
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
+            {{- end }}
       volumes:
+        - name: config
+          configMap:
+            name: {{ include "chart.fullname" . }}-config
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

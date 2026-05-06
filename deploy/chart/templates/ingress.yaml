@@ -37,7 +37,10 @@ spec:
               service:
                 name: {{ include "chart.fullname" $ }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  # Per-host override wins; otherwise fall back to the
+                  # data-plane port. The legacy `service.port` value is
+                  # kept aligned with `ports.data` for back-compat.
+                  number: {{ default $.Values.service.ports.data .port }}
           {{- end }}
     {{- end }}
 {{- end }}

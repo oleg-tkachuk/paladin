@@ -1,3 +1,17 @@
+# Local-development stack. Stand up Postgres + SeaweedFS + PALADIN in one shot:
+#
+#   docker compose -f deploy/docker-compose.yaml up --build
+#
+# The PALADIN container is distroless (no curl/nc/sh), so this file does NOT
+# define an in-container healthcheck — kubelet-style probes can't run
+# without shell tools. Postgres' healthcheck still works because the
+# postgres image carries pg_isready.
+
+x-build-meta: &build-meta
+  APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
+  GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
+  BUILD_TIME: ${BUILD_TIME:-now}
+
 services:
   postgres:
     image: postgres:16
@@ -23,10 +37,10 @@ services:
     container_name: paladin-seaweedfs
     command: server -ip.bind=0.0.0.0 -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
     ports:
-      - "9333:9333"
-      - "8081:8080" # Volume/Master UI (Internal 8080 -> Host 8081)
-      - "8888:8888" # Filer
-      - "8333:8333" # S3
+      - "9333:9333"   # Master
+      - "8081:8080"   # Volume / Master UI (internal 8080 → host 8081)
+      - "8888:8888"   # Filer
+      - "8333:8333"   # S3
     volumes:
       - paladin_seaweed_data:/data
       - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
@@ -34,31 +48,31 @@ services:
   paladin:
     image: paladin
     container_name: paladin
+    init: true
+    restart: on-failure
     build:
       context: ..
       dockerfile: ./deploy/Dockerfile
       network: host
-      args:
-        APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
-        GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
-        BUILD_TIME: ${BUILD_TIME:-now}
-        HTTP_PORT: 8080
-    command: ["--config", "/app/configs/paladin.local.yaml"]
+      args: *build-meta
+    # `local.yaml` is the dev config; the host bind below mounts the repo's
+    # configs/ directory verbatim. The default config path is
+    # /app/configs/config.yaml — override here so dev-only overrides apply.
+    command: ["--config", "/app/configs/local.yaml"]
     depends_on:
       postgres:
         condition: service_healthy
       seaweedfs:
         condition: service_started
     ports:
-      - "8080:8080"
+      - "8080:8080"   # data plane
+      - "8085:8085"   # iam plane
+      - "8090:8090"   # admin plane
     volumes:
-      - ./../configs:/app/configs:ro
-      - ./../migrations:/app/migrations:ro
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/health/readyz"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
+      # Bind-mount the repo configs so iterative edits don't require a
+      # rebuild. Migrations are embedded into the binary; no migrations
+      # mount is needed.
+      - ../configs:/app/configs:ro
 
 volumes:
   paladin_pg_data:

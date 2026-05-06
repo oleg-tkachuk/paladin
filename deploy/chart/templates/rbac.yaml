@@ -1,59 +1,43 @@
-{{- if .Values.rbac -}}
-{{- if .Values.rbac.secretReader.enabled -}}
-{{- if .Values.rbac.secretReader.clusterWide -}}
+{{- /*
+  RBAC for the in-process K8sSecretResolver. The resolver issues exactly
+  one verb (GET) per referenced secret name — list/watch are NOT needed
+  and were narrowed in this refactor to comply with least-privilege.
+
+  ClusterRole vs Role: Postgres / S3 credentials commonly live in a
+  separate namespace from the PALADIN deployment (e.g. `database/` for the
+  PG operator's secrets). clusterWide=true binds at cluster scope so the
+  resolver can reach them; clusterWide=false keeps everything in the
+  release namespace.
+*/}}
+{{- if and .Values.rbac .Values.rbac.secretReader.enabled -}}
+{{- $name := printf "%s-secret-reader" (include "chart.fullname" .) -}}
+{{- $clusterWide := .Values.rbac.secretReader.clusterWide -}}
+{{- $kind := ternary "ClusterRole" "Role" $clusterWide -}}
+{{- $bindingKind := ternary "ClusterRoleBinding" "RoleBinding" $clusterWide -}}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: {{ $kind }}
 metadata:
-  name: {{ include "chart.fullname" . }}-secret-reader
+  name: {{ $name }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames: {{ .Values.rbac.secretReader.secretNames | toJson }}
-    verbs: ["get", "watch", "list"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: {{ $bindingKind }}
 metadata:
-  name: {{ include "chart.fullname" . }}-secret-reader
+  name: {{ $name }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "chart.fullname" . }}-secret-reader
+  kind: {{ $kind }}
+  name: {{ $name }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "chart.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
-{{- else -}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "chart.fullname" . }}-secret-reader
-  labels:
-    {{- include "chart.labels" . | nindent 4 }}
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: {{ .Values.rbac.secretReader.secretNames | toJson }}
-    verbs: ["get", "watch", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "chart.fullname" . }}-secret-reader
-  labels:
-    {{- include "chart.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "chart.fullname" . }}-secret-reader
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "chart.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
-{{- end -}}
-{{- end -}}
 {{- end -}}
