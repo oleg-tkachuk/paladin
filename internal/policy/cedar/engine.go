@@ -312,13 +312,38 @@ func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey 
 	return set, nil
 }
 
-// compile parses the policy text into a cedar.PolicySet. An empty policy
-// set is returned for empty input so that "no policy" == "deny all".
+// builtinPolicy is concatenated with every fetched tenant/objectKey
+// policy before compile. It carries the platform-admin escape hatch:
+// any principal whose `roles` set contains "platform.admin" gets ALLOW
+// on every action and resource. Without this, cross-tenant RPCs whose
+// resource has TenantID=uuid.Nil (e.g. TenantService.ListTenants) load
+// an empty policy from the store and Cedar's deny-by-default kicks in,
+// surfacing as `[permission_denied] denied by policy` even for the
+// bootstrap admin who's supposed to be able to do everything.
+//
+// Tenant-scoped policies in the store can still `forbid` specific
+// actions; Cedar's first-forbid wins so an explicit ban beats this.
+const builtinPolicy = `// Built-in: platform.admin gets unconditional ALLOW. Edit at your own
+// risk — removing this strands a fresh cluster's bootstrap admin.
+permit (
+  principal,
+  action,
+  resource
+)
+when {
+  principal has roles && principal.roles.contains("platform.admin")
+};
+`
+
+// compile parses the policy text into a cedar.PolicySet, prepending the
+// built-in platform-admin permit. Empty input still produces a non-empty
+// set because of the builtin, which is the whole point.
 func compile(text string) (*cedar.PolicySet, error) {
-	if text == "" {
-		return cedar.NewPolicySet(), nil
+	combined := builtinPolicy
+	if text != "" {
+		combined += "\n// --- tenant policy follows ---\n" + text
 	}
-	return cedar.NewPolicySetFromBytes("", []byte(text))
+	return cedar.NewPolicySetFromBytes("", []byte(combined))
 }
 
 // Validate parses the policy text and returns the parser error (or nil).
