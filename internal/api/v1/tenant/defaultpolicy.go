@@ -75,6 +75,29 @@ permit (
     (principal.roles.contains("tenant-admin") &&
      principal.tenant_id == resource.tenant_id)
 };
+
+// Tenant-scoped admin resources (Quota, AuditLog, EventSubscription).
+// Same shape as IAM: platform-admin sees all; tenant-admin sees own.
+// Compliance roles (audit-readers) are configured by extending the
+// permits below in tenant-managed policy.
+permit (
+    principal,
+    action in [
+        Action::"ManageQuota",
+        Action::"ReadQuota",
+        Action::"ResetQuotaUsage",
+        Action::"ReadAuditLog",
+        Action::"ExportAuditLog",
+        Action::"ManageSubscription",
+        Action::"ReadSubscription",
+        Action::"TestSubscription"
+    ],
+    resource
+) when {
+    principal.roles.contains("platform-admin") ||
+    (principal.roles.contains("tenant-admin") &&
+     principal.tenant_id == resource.tenant_id)
+};
 `
 
 // renderDefaultPolicy returns the default Cedar policy with the placeholder

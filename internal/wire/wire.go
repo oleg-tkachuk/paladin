@@ -260,10 +260,14 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bu
 	return bucketh.NewHandler(repos.BucketV2, &bucketProvisionerAdapter{storage.Provisioner}, pe)
 }
 
-func ProvideQuotaHandler(repos Repos) *quotah.Handler { return quotah.NewHandler(repos.Quota) }
-func ProvideAuditHandler(repos Repos) *audith.Handler { return audith.NewHandler(repos.Audit) }
-func ProvideEventSubHandler(repos Repos) *eventsubh.Handler {
-	return eventsubh.NewHandler(repos.EventSub)
+func ProvideQuotaHandler(repos Repos, pe *policy.Engine) *quotah.Handler {
+	return quotah.NewHandler(repos.Quota, pe)
+}
+func ProvideAuditHandler(repos Repos, pe *policy.Engine) *audith.Handler {
+	return audith.NewHandler(repos.Audit, pe)
+}
+func ProvideEventSubHandler(repos Repos, pe *policy.Engine) *eventsubh.Handler {
+	return eventsubh.NewHandler(repos.EventSub, pe)
 }
 
 func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Handler {

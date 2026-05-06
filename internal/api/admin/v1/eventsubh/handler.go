@@ -5,20 +5,51 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 type Handler struct {
 	repo       admindomain.EventSubscriptionRepository
 	dispatcher Dispatcher
+	policy     cedar.Authorizer
 }
 
-func NewHandler(r admindomain.EventSubscriptionRepository) *Handler { return &Handler{repo: r} }
+func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authorizer) *Handler {
+	if policy == nil {
+		panic("eventsubh: policy authorizer is required")
+	}
+	return &Handler{repo: r, policy: policy}
+}
+
+// authorize gates a subscription RPC against Cedar; existing role +
+// tenant-isolation guards stay as defense-in-depth.
+func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{TenantID: tenantID},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
+}
 
 func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (*admindomain.EventSubscription, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
@@ -30,6 +61,9 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant denied"))
+	}
+	if err := h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
+		return nil, err
 	}
 	if err := h.repo.Create(ctx, s); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -56,11 +90,18 @@ func (h *Handler) Get(ctx context.Context, id uuid.UUID) (*admindomain.EventSubs
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("subscription not found"))
 	}
+	if err := h.authorize(ctx, cedar.ActionReadSubscription, s.TenantID); err != nil {
+		return nil, err
+	}
 	return &s, nil
 }
 
 func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, expectedVersion int64, mask []string) (*admindomain.EventSubscription, error) {
-	if _, err := h.Get(ctx, s.SubscriptionID); err != nil {
+	current, err := h.Get(ctx, s.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
@@ -74,7 +115,11 @@ func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, e
 }
 
 func (h *Handler) Delete(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
-	if _, err := h.Get(ctx, id); err != nil {
+	current, err := h.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageSubscription, current.TenantID); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, id, expectedVersion); err != nil {
@@ -93,6 +138,9 @@ func (h *Handler) List(ctx context.Context, args admindomain.ListEventSubscripti
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		args.TenantID = caller
+	}
+	if err := h.authorize(ctx, cedar.ActionReadSubscription, args.TenantID); err != nil {
+		return nil, "", err
 	}
 	return h.repo.List(ctx, args)
 }
@@ -114,6 +162,9 @@ func (h *Handler) SetDispatcher(d Dispatcher) { h.dispatcher = d }
 func (h *Handler) TestSubscription(ctx context.Context, id uuid.UUID) error {
 	sub, err := h.Get(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionTestSubscription, sub.TenantID); err != nil {
 		return err
 	}
 	if h.dispatcher == nil {

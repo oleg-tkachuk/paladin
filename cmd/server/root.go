@@ -226,9 +226,9 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine)
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
-	quotaH := wire.ProvideQuotaHandler(repos)
-	auditH := wire.ProvideAuditHandler(repos)
-	eventSubH := wire.ProvideEventSubHandler(repos)
+	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
+	auditH := wire.ProvideAuditHandler(repos, polEngine)
+	eventSubH := wire.ProvideEventSubHandler(repos, polEngine)
 	dispatcher := &worker.Dispatcher{
 		Store:       eventSubStoreAdapter{r: repos.EventSub},
 		Logger:      l.Named("event-dispatcher"),

@@ -66,6 +66,22 @@ const (
 	ActionReadApiKey      = "ReadApiKey"
 	ActionRotateApiKey    = "RotateApiKey"
 	ActionMintScopedToken = "MintScopedToken"
+
+	// Quota-scoped actions. Resource is the Tenant or Bucket entity (no
+	// dedicated Quota entity — quota config attaches 1:1 to the parent).
+	ActionManageQuota     = "ManageQuota"
+	ActionReadQuota       = "ReadQuota"
+	ActionResetQuotaUsage = "ResetQuotaUsage"
+
+	// AuditLog-scoped actions. Resource is the Tenant entity (audit lines
+	// are tenant-scoped via actor_tenant_id).
+	ActionReadAuditLog   = "ReadAuditLog"
+	ActionExportAuditLog = "ExportAuditLog"
+
+	// EventSubscription-scoped actions. Resource is the Tenant entity.
+	ActionManageSubscription = "ManageSubscription"
+	ActionReadSubscription   = "ReadSubscription"
+	ActionTestSubscription   = "TestSubscription"
 )
 
 // Entity type names — must match the Cedar schema exactly.

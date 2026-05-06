@@ -9,7 +9,14 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
+
+type allowAuthorizer struct{}
+
+func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	return cedar.DecisionAllow, nil
+}
 
 type fakeAuditRepo struct {
 	pages [][]admindomain.AuditEntry // each call to List returns next page
@@ -65,7 +72,7 @@ func TestExportAuditLogPaginatesAndProjects(t *testing.T) {
 			{mkEntry(t0.Add(2 * time.Second))},
 		},
 	}
-	h := NewHandler(repo)
+	h := NewHandler(repo, allowAuthorizer{})
 	res, err := h.ExportAuditLog(ctxWithPlatformAdmin(t), "", "")
 	if err != nil {
 		t.Fatalf("export: %v", err)
@@ -97,7 +104,7 @@ func TestExportAuditLogTruncatesAtCap(t *testing.T) {
 		bulk[i] = mkEntry(t0.Add(time.Duration(i) * time.Millisecond))
 	}
 	repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{bulk}}
-	h := NewHandler(repo)
+	h := NewHandler(repo, allowAuthorizer{})
 	res, err := h.ExportAuditLog(ctxWithPlatformAdmin(t), "", "")
 	if err != nil {
 		t.Fatalf("export: %v", err)
@@ -116,7 +123,7 @@ func TestListAuditLogAppliesCELFilter(t *testing.T) {
 	bad := mkEntry(t0.Add(time.Second))
 	bad.ErrorMessage = "boom"
 	repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{good, bad}}}
-	h := NewHandler(repo)
+	h := NewHandler(repo, allowAuthorizer{})
 
 	// is_error == true filters out the success row.
 	got, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t),
@@ -131,7 +138,7 @@ func TestListAuditLogAppliesCELFilter(t *testing.T) {
 
 func TestListAuditLogRejectsBadFilter(t *testing.T) {
 	repo := &fakeAuditRepo{}
-	h := NewHandler(repo)
+	h := NewHandler(repo, allowAuthorizer{})
 	_, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t),
 		admindomain.ListAuditArgs{PageSize: 50}, "no_such_field == 1")
 	if err == nil {
@@ -146,7 +153,7 @@ func TestExportAuditLogAppliesCELFilter(t *testing.T) {
 	b := mkEntry(t0.Add(time.Second))
 	b.Action = "/paladin.admin.v1.BucketService/DeleteBucket"
 	repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{a, b}}}
-	h := NewHandler(repo)
+	h := NewHandler(repo, allowAuthorizer{})
 
 	res, err := h.ExportAuditLog(ctxWithPlatformAdmin(t),
 		`action.endsWith("DeleteBucket")`, "")

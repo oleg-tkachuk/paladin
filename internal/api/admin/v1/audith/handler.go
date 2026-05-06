@@ -15,7 +15,9 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // exportRowCap bounds how many entries one ExportAuditLog call materialises.
@@ -25,12 +27,39 @@ import (
 const exportRowCap = 10_000
 
 type Handler struct {
-	repo admindomain.AuditRepository
-	cel  *celpkg.Evaluator
+	repo   admindomain.AuditRepository
+	cel    *celpkg.Evaluator
+	policy cedar.Authorizer
 }
 
-func NewHandler(r admindomain.AuditRepository) *Handler {
-	return &Handler{repo: r, cel: celpkg.NewEvaluator()}
+func NewHandler(r admindomain.AuditRepository, policy cedar.Authorizer) *Handler {
+	if policy == nil {
+		panic("audith: policy authorizer is required")
+	}
+	return &Handler{repo: r, cel: celpkg.NewEvaluator(), policy: policy}
+}
+
+// authorize gates an audit-log RPC against Cedar. The Resource is a Tenant
+// (audit lines are tenant-scoped); compliance roles can be granted
+// cross-tenant read by writing a permit without the tenant_id match.
+func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	decision, err := h.policy.IsAuthorized(ctx,
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		action,
+		&cedar.Resource{TenantID: tenantID},
+		cedar.RequestContext{Now: time.Now()},
+	)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	}
+	return nil
 }
 
 // ListAuditLog returns one page of audit entries. `filter` is an optional
@@ -50,6 +79,9 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 				errors.New("cross-tenant audit denied"))
 		}
 		args.ActorTenantID = caller
+	}
+	if err := h.authorize(ctx, cedar.ActionReadAuditLog, args.ActorTenantID); err != nil {
+		return nil, "", err
 	}
 	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
 	if err != nil {
@@ -106,6 +138,9 @@ func (h *Handler) GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindom
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && e.ActorTenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("audit entry not found"))
 	}
+	if err := h.authorize(ctx, cedar.ActionReadAuditLog, e.ActorTenantID); err != nil {
+		return nil, err
+	}
 	return &e, nil
 }
 
@@ -155,6 +190,9 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	args := admindomain.ListAuditArgs{PageSize: 1000}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		args.ActorTenantID = caller
+	}
+	if err := h.authorize(ctx, cedar.ActionExportAuditLog, args.ActorTenantID); err != nil {
+		return nil, err
 	}
 	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
 	if err != nil {
