@@ -185,10 +185,6 @@ type Limits struct {
 	MaxPartSizeBytes      int64    `yaml:"-" json:"-"`
 	MaxParts              int      `yaml:"max_parts" json:"max_parts"`
 	AllowedContentTypes   []string `yaml:"allowed_content_types" json:"allowed_content_types"`
-	LabelsMaxBytes        int      `yaml:"labels_max_bytes" json:"labels_max_bytes"`
-	LabelsMaxKeys         int      `yaml:"labels_max_keys" json:"labels_max_keys"`
-	ExternalRefMaxLen     int      `yaml:"external_ref_max_len" json:"external_ref_max_len"`
-	ObjectTagMaxLen       int      `yaml:"object_tag_max_len" json:"object_tag_max_len"`
 	Presign               Presign  `yaml:"presign" json:"presign"`
 }
 
@@ -212,7 +208,6 @@ type Auth struct {
 type Security struct {
 	TrustTenantIDFromRequest bool `yaml:"trust_tenant_id_from_request" json:"trust_tenant_id_from_request"`
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
-	EnableRLS                bool `yaml:"enable_rls" json:"enable_rls"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
 }
 
@@ -225,7 +220,6 @@ type Workers struct {
 }
 
 type Housekeeping struct {
-	EnableReaper        bool          `yaml:"enable_reaper" json:"enable_reaper"`
 	PendingTTL          time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
 	MultipartTTL        time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
 	AuditLogTTL         time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
@@ -298,7 +292,6 @@ type StorageBackend struct {
 	PublicEndpoint string               `yaml:"public_endpoint" json:"public_endpoint"`
 	ForcePathStyle bool                 `yaml:"force_path_style" json:"force_path_style"`
 	Auth           StorageBackendAuth   `yaml:"auth" json:"auth"`
-	PresignTTL     time.Duration        `yaml:"presign_ttl" json:"presign_ttl"`
 	PartSizeRaw    string               `yaml:"part_size" json:"part_size"`
 	PartSizeBytes  int64                `yaml:"-" json:"-"`
 	SSE            StorageBackendSSE    `yaml:"sse" json:"sse"`

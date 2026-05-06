@@ -110,10 +110,6 @@ limits: {
   // Empty → accept anything. Listing common types here gives the upload
   // path an early reject for typos / drive-bys.
   allowed_content_types: [...string] | *[]
-  labels_max_bytes:      int | *4096
-  labels_max_keys:       int | *10
-  external_ref_max_len:  int | *256
-  object_tag_max_len:    int | *1024
   // Presign-URL ttls + body-size cap. Per-method ttls override default_ttl
   // when non-zero; max_ttl bounds caller-supplied TTLs.
   presign: {
@@ -145,10 +141,7 @@ auth: {
 security: {
   trust_tenant_id_from_request: bool | *true
   reject_tenant_mismatch:       bool | *true
-  // enable_rls requires the row-level-security migration to be applied.
-  // Flipping it without the migration is a silent foot-gun.
-  enable_rls:    bool | *false
-  log_sensitive: bool | *false
+  log_sensitive:                bool | *false
 }
 
 // Middleware bundles cross-cutting interceptor knobs (timeouts, rate
@@ -188,7 +181,6 @@ workers: {
     batch_size:        int & >= 1 | *100
   }
   housekeeping: {
-    enable_reaper:         bool | *true
     pending_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
     multipart_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
     audit_log_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h" // 365d
@@ -223,7 +215,6 @@ storage: {
       duration_seconds:        int    | *0
       web_identity_token_file: string | *""
     }
-    presign_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     part_size:   =~"^[0-9]+(B|KB|MB|GB)$"     | *"8MB"
     sse: {
       type:   "" | "AES256" | "aws:kms" | *""

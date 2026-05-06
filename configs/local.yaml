@@ -62,10 +62,6 @@ limits:
     - "application/pdf"
     - "application/json"
     - "application/octet-stream"
-  labels_max_bytes: 4096
-  labels_max_keys: 10
-  external_ref_max_len: 256
-  object_tag_max_len: 1024
   presign:
     put_ttl: 15m
     get_ttl: 15m
@@ -85,7 +81,6 @@ auth:
 security:
   trust_tenant_id_from_request: true
   reject_tenant_mismatch: false
-  enable_rls: false
   log_sensitive: false
 
 middleware:
@@ -114,7 +109,6 @@ workers:
     pending_grace_ttl: 2h
     batch_size: 100
   housekeeping:
-    enable_reaper: false
     pending_ttl: "24h"
     multipart_ttl: "72h"
     gc_interval: "1h"
@@ -134,7 +128,6 @@ storage:
         mode: static_keys
         access_key: dummy
         secret_key: dummy
-      presign_ttl: 15m
       part_size: "8MB"
       sse: { type: "", key_id: "" }
       events: { enabled: false, target: "none", queue_url: "", poll_interval: 20s }
