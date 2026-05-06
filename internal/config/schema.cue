@@ -82,6 +82,13 @@ datastores: {
     dsn:               string
     password:          string | *""
     password_secret?:  #SecretRef
+    // Optional separate DSN for schema migrations. Production deploys
+    // SHOULD set this to a DDL-capable role (`paladin_migrate`) distinct from
+    // the runtime role (`paladin_app`) used by `dsn`. Empty → migrations run
+    // as the runtime user (fine for dev, unsafe for prod).
+    migrate_dsn:               string | *""
+    migrate_password:          string | *""
+    migrate_password_secret?:  #SecretRef
     // Optional separate DSN for reaper / housekeeping connections so they
     // run with a lower-privilege role and don't compete with hot-path
     // queries on the main pool. Empty → reuse `dsn`.

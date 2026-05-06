@@ -44,7 +44,11 @@ server:
 
 datastores:
   postgres:
+    # Local dev runs migrations and runtime as the same `paladin` superuser —
+    # role split is enforced only when `migrate_dsn` is set. Production
+    # configs flip this on (see docs/db-roles.md).
     dsn: "postgres://paladin:paladin@127.0.0.1:5433/paladin?sslmode=disable"
+    migrate_dsn: ""                     # empty → reuse `dsn` (dev path)
     pool: { max_conns: 10, min_conns: 1, max_conn_lifetime: 30m, max_conn_idle_time: 5m }
     timeouts: { connect: 5s, statement: 30s }
     healthcheck_period: 30s

@@ -42,13 +42,16 @@ the same commit. Treat this file like a runtime invariant.
   authored.
 - **Definition of Done:**
   - Per-table `CREATE POLICY` for every `tenant_id`-bearing table.
-  - DB role split: app role with `BYPASSRLS` revoked, migration role
-    keeps it.
+  - `paladin_app` (already landed via migration 011) gains
+    `FORCE ROW LEVEL SECURITY` on each protected table; the role does
+    not have `BYPASSRLS`, so RLS will bite the moment policies are
+    installed.
   - Policy fixtures + integration tests that prove cross-tenant
     `SELECT`/`UPDATE` is denied with the app role.
   - `security.enable_rls` becomes load-bearing again (panic on
     `enable_rls=true` if policies aren't installed).
-- **Blockers:** none. Pure migration + role split.
+- **Blockers:** none. Pure migration work — role split prerequisite is
+  done.
 
 ### Federated IdP via JWKS
 
@@ -82,20 +85,6 @@ the same commit. Treat this file like a runtime invariant.
   - DEK rotation runbook.
 - **Blockers:** KMS choice (AWS KMS vs Vault Transit vs cloud-agnostic
   envelope-encryption library).
-
-### Minimum-privilege DB role for the app
-
-- **Status:** Deferred
-- **Reason:** Production deploys typically use a single `app_user` role
-  with broad `INSERT/UPDATE/DELETE` on every table. RLS work above
-  presumes a separate role; the role split is its own slice.
-- **Definition of Done:**
-  - `paladin_app` role with explicit table-level `GRANT`s, no
-    `BYPASSRLS`, no DDL.
-  - `paladin_migrate` role for goose runs, holds DDL.
-  - Helm chart's `password_secret` references `paladin_app`'s credential.
-- **Blockers:** RLS landing first (the role split is meaningless
-  without it).
 
 ---
 

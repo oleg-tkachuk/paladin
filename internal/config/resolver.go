@@ -77,6 +77,17 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.Password = pwd
 		cfg.Datastores.Postgres.PasswordSecret = nil
 	}
+	// Migration role secret is independent — production deploys keep the
+	// DDL credential in a separate, more tightly access-controlled secret
+	// than the runtime credential.
+	if cfg.Datastores.Postgres.MigratePasswordSecret != nil {
+		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.MigratePasswordSecret)
+		if err != nil {
+			return fmt.Errorf("postgres.migrate_password_secret: %w", err)
+		}
+		cfg.Datastores.Postgres.MigratePassword = pwd
+		cfg.Datastores.Postgres.MigratePasswordSecret = nil
+	}
 
 	// Per-backend credential secrets.
 	for name, b := range cfg.Storage.Backends {

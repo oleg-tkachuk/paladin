@@ -104,7 +104,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		// All migrations now run in one phase — v2 schema is self-contained.
-		if err := db.RunMigrations(ctx, migrations.FS); err != nil && !errors.Is(err, context.Canceled) {
+		// Production deploys set `datastores.postgres.migrate_dsn` to a
+		// DDL-capable role distinct from the runtime DSN; RunMigrationsWith
+		// falls back to the runtime pool when migrate_dsn is empty (dev path).
+		// See docs/db-roles.md for the role split rationale.
+		if err := db.RunMigrationsWith(ctx, migrations.FS, cfg.Datastores.Postgres); err != nil && !errors.Is(err, context.Canceled) {
 			l.Fatal("failed to apply migrations", zap.Error(err))
 		}
 

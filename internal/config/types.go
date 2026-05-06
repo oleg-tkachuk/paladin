@@ -141,9 +141,22 @@ type Datastores struct {
 }
 
 type Postgres struct {
-	DSN               string           `yaml:"dsn" json:"dsn"`
-	Password          string           `yaml:"password" json:"password"`
-	PasswordSecret    *SecretRef       `yaml:"password_secret" json:"password_secret"`
+	// DSN is the runtime connection string. The user portion of this DSN
+	// should resolve to a minimum-privilege role (`paladin_app` by convention,
+	// see migrations/011_app_role.sql). It must NOT carry DDL rights.
+	DSN            string     `yaml:"dsn" json:"dsn"`
+	Password       string     `yaml:"password" json:"password"`
+	PasswordSecret *SecretRef `yaml:"password_secret" json:"password_secret"`
+
+	// MigrateDSN is the connection used to apply schema migrations. When
+	// empty, migrations run as the runtime DSN's user — fine for dev, but
+	// production deploys MUST set this to a separate DDL-capable role
+	// (`paladin_migrate` by convention) so the runtime role can be locked
+	// down to DML only. See docs/db-roles.md.
+	MigrateDSN            string     `yaml:"migrate_dsn" json:"migrate_dsn"`
+	MigratePassword       string     `yaml:"migrate_password" json:"migrate_password"`
+	MigratePasswordSecret *SecretRef `yaml:"migrate_password_secret" json:"migrate_password_secret"`
+
 	ReaperDSN         string           `yaml:"reaper_dsn" json:"reaper_dsn"`
 	Pool              PostgresPool     `yaml:"pool" json:"pool"`
 	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
