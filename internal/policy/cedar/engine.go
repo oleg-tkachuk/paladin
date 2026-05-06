@@ -39,7 +39,6 @@ const (
 	ActionCopyObject    = "CopyObject"
 
 	// ObjectKey-scoped actions (admin plane).
-	ActionAdminObjectKey        = "AdminBucket" // legacy alias kept for back-compat
 	ActionManageObjectKey       = "ManageObjectKey"
 	ActionBindObjectKeyToBucket = "BindObjectKeyToBucket"
 

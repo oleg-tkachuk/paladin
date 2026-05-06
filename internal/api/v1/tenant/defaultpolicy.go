@@ -43,15 +43,7 @@ permit (
     resource
 ) when {
     principal.roles.contains("objectKey:admin") ||
-    principal.roles.contains("platform-admin")
-};
-
-permit (
-    principal in Tenant::"placeholder",
-    action == Action::"AdminBucket",
-    resource
-) when {
-    principal.roles.contains("platform-admin")
+    principal.roles.contains("platform.admin")
 };
 
 // IAM: platform admins manage everything. Tenant admins manage users and
@@ -71,8 +63,8 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    (principal.roles.contains("tenant-admin") &&
+    principal.roles.contains("platform.admin") ||
+    (principal.roles.contains("tenant.admin") &&
      principal.tenant_id == resource.tenant_id)
 };
 
@@ -94,8 +86,8 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    (principal.roles.contains("tenant-admin") &&
+    principal.roles.contains("platform.admin") ||
+    (principal.roles.contains("tenant.admin") &&
      principal.tenant_id == resource.tenant_id)
 };
 
@@ -112,29 +104,29 @@ permit (
     ],
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    principal.roles.contains("bucket-admin")
+    principal.roles.contains("platform.admin") ||
+    principal.roles.contains("bucket.admin")
 };
 permit (
     principal,
     action == Action::"ConfigureLock",
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    principal.roles.contains("bucket-admin") ||
-    principal.roles.contains("compliance-officer")
+    principal.roles.contains("platform.admin") ||
+    principal.roles.contains("bucket.admin") ||
+    principal.roles.contains("compliance.officer")
 };
 
 // Sensitive backend ops — credential rotation isolated from the broader
-// ManageBackend right so a "secrets-rotator" service-account can run
+// ManageBackend right so a "secrets.rotator" service-account can run
 // rotations without grant on backend CRUD.
 permit (
     principal,
     action == Action::"RotateBackendCredentials",
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    principal.roles.contains("secrets-rotator")
+    principal.roles.contains("platform.admin") ||
+    principal.roles.contains("secrets.rotator")
 };
 
 // Policy-engine introspection. Avoid open access — admin UIs use this
@@ -144,9 +136,9 @@ permit (
     action == Action::"InspectPolicy",
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
-    principal.roles.contains("tenant-admin") ||
-    principal.roles.contains("policy-author")
+    principal.roles.contains("platform.admin") ||
+    principal.roles.contains("tenant.admin") ||
+    principal.roles.contains("policy.author")
 };
 
 // Async operations — any tenant member sees / cancels operations they
@@ -157,7 +149,7 @@ permit (
     action in [Action::"ReadOperation", Action::"CancelOperation"],
     resource
 ) when {
-    principal.roles.contains("platform-admin") ||
+    principal.roles.contains("platform.admin") ||
     principal.tenant_id == resource.tenant_id
 };
 `

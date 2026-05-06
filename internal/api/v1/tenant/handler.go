@@ -15,14 +15,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
-// RolePlatformAdmin is the JWT role PALADIN treats as authorized to manage tenants.
-// Kept in code (not Cedar) because tenant-creation decisions precede tenant
-// entity existence — there's no Cedar principal hierarchy to evaluate yet.
-const RolePlatformAdmin = "platform-admin"
+// Use apiutil.RolePlatformAdmin as the canonical role string ("platform.admin").
+// A previous local copy here used the hyphen form which silently failed every
+// Cedar permit because the JWT issuer mints dot-form roles.
 
 type Tenant struct {
 	TenantID             uuid.UUID
@@ -197,11 +197,10 @@ func requirePlatformAdmin(ctx context.Context) error {
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
-	if !p.HasRole(RolePlatformAdmin) {
+	if !p.HasRole(apiutil.RolePlatformAdmin) {
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("platform-admin role required"))
+			errors.New("platform.admin role required"))
 	}
-	_ = cedar.ActionAdminObjectKey // reserved for tenant-level Cedar rollout
 	return nil
 }
 
