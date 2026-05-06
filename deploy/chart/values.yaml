@@ -303,15 +303,30 @@ httpRoute:
 
 resources: {}
 
-# Probes target the data-plane port; addProbes in cmd/server mounts
+# Probes target the data-plane port. The internal/health package mounts
 # /livez, /readyz, /startupz on every plane's mux, so any of the three
 # would work — data is the natural default.
+#
+# Probe semantics (see internal/health/health.go):
+#   /livez    — process alive, dependency-free; flips to 503 only after
+#               graceful-shutdown signalling.
+#   /readyz   — pod ready to serve; checks DB ping with a 2s budget.
+#   /startupz — bootstrap done; same checks as readyz, used until
+#               kubelet sees the first 200.
+#
+# `timeoutSeconds: 3` exceeds the in-handler 2s check budget so kubelet's
+# own deadline doesn't kill probes that are already correctly bounded
+# server-side. Without this, a 1s kubelet default would race the in-pod
+# check and kubelet would mark the pod NotReady before the handler even
+# returned its real status.
 livenessProbe:
   httpGet:
     path: /livez
     port: data
   initialDelaySeconds: 15
   periodSeconds: 20
+  timeoutSeconds: 1            # /livez never blocks, 1s is plenty
+  failureThreshold: 3
 
 readinessProbe:
   httpGet:
@@ -319,6 +334,11 @@ readinessProbe:
     port: data
   initialDelaySeconds: 10
   periodSeconds: 10
+  timeoutSeconds: 3            # exceeds the 2s in-handler check budget
+  # 3 consecutive failures (≈30s) before kube-proxy removes us — gives
+  # the dependency room to recover from blips without bouncing traffic.
+  failureThreshold: 3
+  successThreshold: 1
 
 startupProbe:
   httpGet:
@@ -326,7 +346,12 @@ startupProbe:
     port: data
   initialDelaySeconds: 5
   periodSeconds: 5
-  failureThreshold: 12
+  timeoutSeconds: 3
+  # 24 × 5s = 120s startup window — long enough for first-time goose
+  # migrations against a fresh cluster (which can run hundreds of DDL
+  # statements) plus connection-pool warm-up. Once startupz returns 200
+  # once, kubelet stops calling it and switches to live+ready probes.
+  failureThreshold: 24
 
 autoscaling:
   enabled: false

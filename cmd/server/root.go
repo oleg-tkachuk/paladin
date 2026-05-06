@@ -38,6 +38,7 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -112,14 +113,15 @@ var rootCmd = &cobra.Command{
 			l.Fatal("failed to apply migrations", zap.Error(err))
 		}
 
-		listeners, err := buildListeners(ctx, cfg, db, l)
+		listeners, healthH, err := buildListeners(ctx, cfg, db, l)
 		if err != nil {
 			l.Fatal("failed to assemble server", zap.Error(err))
 		}
 
 		started := &atomic.Bool{}
 		jobs := buildBackgroundJobs(cfg, db, l)
-		container := app.NewContainer(version, commit, buildTime, cfg, l, listeners, db, nil, jobs, started)
+		container := app.NewContainer(version, commit, buildTime, cfg, l, listeners, db, nil, jobs, started).
+			WithHealth(healthH)
 
 		l.Info("starting",
 			zap.String("version", version),
@@ -144,27 +146,32 @@ var rootCmd = &cobra.Command{
 // buildListeners assembles repositories, storage, policy engine, handlers,
 // and three Connect mux'es (data / admin / iam) into independent HTTP
 // servers. Each plane gets its own audience verifier + interceptor stack.
-func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger) ([]app.HTTPListener, error) {
+//
+// The returned *health.Handler is shared across all three planes so the
+// shutting-down state (set on SIGTERM) flips readyz to 503 everywhere at
+// once. The caller is responsible for stashing it on the App container
+// and calling MarkShuttingDown at the start of graceful shutdown.
+func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger) ([]app.HTTPListener, *health.Handler, error) {
 	pool, ok := db.Pool.(*pgxpool.Pool)
 	if !ok {
-		return nil, errors.New("DB.Pool is not *pgxpool.Pool")
+		return nil, nil, errors.New("DB.Pool is not *pgxpool.Pool")
 	}
 
 	if cfg.Auth.SigningKey == "" {
-		return nil, errors.New("auth.signing_key (or signing_key_secret) is required")
+		return nil, nil, errors.New("auth.signing_key (or signing_key_secret) is required")
 	}
 
 	defaultName := cfg.Storage.DefaultBackend
 	if defaultName == "" {
-		return nil, errors.New("storage.default_backend not set")
+		return nil, nil, errors.New("storage.default_backend not set")
 	}
 	backend, ok := cfg.Storage.Backends[defaultName]
 	if !ok {
-		return nil, fmt.Errorf("storage.backends.%s not configured", defaultName)
+		return nil, nil, fmt.Errorf("storage.backends.%s not configured", defaultName)
 	}
 	s3c, err := s3adapter.New(ctx, backend)
 	if err != nil {
-		return nil, fmt.Errorf("s3 adapter: %w", err)
+		return nil, nil, fmt.Errorf("s3 adapter: %w", err)
 	}
 
 	// ─── Repositories ────────────────────────────────────────────────────
@@ -199,7 +206,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	polStore := policy.NewPostgresStore(pool)
 	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL)
 	if err := polEngine.Start(ctx); err != nil {
-		return nil, fmt.Errorf("policy engine start: %w", err)
+		return nil, nil, fmt.Errorf("policy engine start: %w", err)
 	}
 	sm := statemachine.New(pool)
 	celEval := cel.NewEvaluator()
@@ -222,7 +229,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 
 	iss, err := wire.ProvideIssuer(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dec := wire.ProvideRefreshDecoder(cfg)
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
@@ -249,19 +256,19 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	// ─── Per-plane interceptor stacks ────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
-		return nil, fmt.Errorf("init protovalidate: %w", err)
+		return nil, nil, fmt.Errorf("init protovalidate: %w", err)
 	}
 	verifierData, err := buildVerifier(ctx, cfg.Auth, auth.AudienceData, l)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	verifierAdmin, err := buildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	verifierIAM, err := buildVerifier(ctx, cfg.Auth, auth.AudienceIAM, l)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Audit middleware — uses repos.Audit. Skipped on data plane (volume).
@@ -294,8 +301,12 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	_ = auditMW // appended in adminOpts directly
 
 	// ─── Mux assembly ────────────────────────────────────────────────────
+	// Single shared health handler — flipping shuttingDown once during
+	// graceful shutdown affects every plane's /readyz simultaneously.
+	healthH := newHealthHandler(db, cfg.Server, l)
+
 	dataMux := http.NewServeMux()
-	addProbes(dataMux, db)
+	healthH.Register(dataMux)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(connectdata.NewObjectServer(objH, versionH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewPresignServiceHandler(connectdata.NewPresignServer(presignH), dataOpts))
@@ -304,7 +315,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	dataMux.Handle(paladindatav1connect.NewOperationServiceHandler(connectdata.NewOperationServer(opH), dataOpts))
 
 	adminMux := http.NewServeMux()
-	addProbes(adminMux, db)
+	healthH.Register(adminMux)
 	adminMux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	adminMux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
 	adminMux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
@@ -316,7 +327,7 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	adminMux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
 
 	iamMux := http.NewServeMux()
-	addProbes(iamMux, db)
+	healthH.Register(iamMux)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
@@ -325,36 +336,31 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	connectiam.RegisterUserSettings(iamMux, userSettingsH)
 
 	// ─── HTTP servers ────────────────────────────────────────────────────
-	return []app.HTTPListener{
+	listeners := []app.HTTPListener{
 		{Plane: "data", Server: buildHTTPServer(cfg.Server.DataHTTP, dataMux, l), TLS: cfg.Server.DataHTTP.TLS},
 		{Plane: "admin", Server: buildHTTPServer(cfg.Server.AdminHTTP, adminMux, l), TLS: cfg.Server.AdminHTTP.TLS},
 		{Plane: "iam", Server: buildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},
-	}, nil
+	}
+	return listeners, healthH, nil
 }
 
-// addProbes attaches /livez, /readyz, /startupz to a mux. All three planes
-// expose the same probes so K8s liveness/readiness can target each.
-func addProbes(mux *http.ServeMux, db *postgres.DB) {
-	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		if err := db.Ping(r.Context()); err != nil {
-			http.Error(w, "db: "+err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	mux.HandleFunc("GET /startupz", func(w http.ResponseWriter, r *http.Request) {
-		if err := db.Ping(r.Context()); err != nil {
-			http.Error(w, "db: "+err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+// newHealthHandler builds the shared probe handler. Same instance is
+// registered on every plane mux so the shutting-down state stays unified.
+//
+// Ready and Startup share one DB ping check today (v1 has no other
+// dependencies the data-plane explicitly tracks). Adding S3 reachability
+// later is a single extra entry in the Ready slice — no handler changes.
+func newHealthHandler(db *postgres.DB, cfg config.Server, l *zap.Logger) *health.Handler {
+	dbPing := health.Check{
+		Name: "postgres",
+		Func: func(ctx context.Context) error { return db.Ping(ctx) },
+	}
+	return &health.Handler{
+		Logger:       l.Named("health"),
+		LogSuccesses: cfg.LogProbes,
+		Ready:        []health.Check{dbPing},
+		Startup:      []health.Check{dbPing},
+	}
 }
 
 func buildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {

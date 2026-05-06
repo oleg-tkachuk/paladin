@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 )
@@ -47,8 +49,22 @@ type App struct {
 	otelShutdown observability.ShutdownFunc
 	Started      *atomic.Bool
 
+	// health is the optional probe registrar. When set, Shutdown calls
+	// MarkShuttingDown FIRST and pauses long enough for kubelet to
+	// observe the 503 readyz before listeners go away — otherwise
+	// in-flight traffic gets reset mid-request because the Service
+	// still has us in its endpoint slice.
+	health *health.Handler
+
 	jobsCancel context.CancelFunc
 }
+
+// readyDrainPause is the wait between MarkShuttingDown and listener
+// shutdown. It needs to exceed the longest readiness probe period across
+// the planes (the Helm chart's default is 10s) so kubelet observes at
+// least one 503 readyz response before the kube-proxy endpoint slice
+// removes us. 12s gives one full probe cycle plus a small buffer.
+const readyDrainPause = 12 * time.Second
 
 func NewContainer(
 	version, commit, buildTime string,
@@ -126,12 +142,49 @@ func (a *App) Run() error {
 	}
 }
 
+// WithHealth installs the probe registrar so Shutdown can flip /readyz
+// to 503 BEFORE listeners go away. Builder-style so existing callers
+// that don't yet supply one keep compiling unchanged.
+func (a *App) WithHealth(h *health.Handler) *App {
+	a.health = h
+	return a
+}
+
 // Shutdown stops every HTTP listener and the reconciler. Idempotent.
+//
+// Order matters:
+//
+//  1. health.MarkShuttingDown — readyz starts returning 503; kubelet
+//     stops adding new endpoints to the Service.
+//  2. readyDrainPause       — let kubelet observe at least one 503
+//     before we tear down listeners. Without this, kube-proxy may
+//     still route a few requests to a half-closed pod and clients see
+//     `connection reset` mid-request.
+//  3. Cancel background jobs — workers stop accepting new ticks.
+//  4. http.Server.Shutdown — waits for in-flight requests to finish
+//     within ShutdownTimeout.
+//  5. Close DB pool + flush observability.
 func (a *App) Shutdown() {
-	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Server.ShutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Server.ShutdownTimeout+readyDrainPause)
 	defer cancel()
 
 	a.Logger.Info("shutting down")
+
+	// Phase 1: flip readyz BEFORE anything else so kubelet's probe loop
+	// sees the 503 promptly. Skipping when health is unwired keeps the
+	// shape testable from contexts that don't bring up real probes.
+	if a.health != nil {
+		a.health.MarkShuttingDown()
+		a.Logger.Info("readyz draining; waiting for kubelet to observe before stopping listeners",
+			zap.Duration("pause", readyDrainPause))
+		select {
+		case <-time.After(readyDrainPause):
+		case <-ctx.Done():
+			// Outer deadline fired (ShutdownTimeout exceeded). Skip the
+			// pause and proceed with shutdown so we don't get SIGKILL'd
+			// before any cleanup runs.
+		}
+	}
 
 	if a.jobsCancel != nil {
 		a.jobsCancel()
