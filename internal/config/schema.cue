@@ -44,7 +44,6 @@ otel: {
 
 server: {
   mode: "debug" | "test" | *"release"
-  name: string | *app.name
   // Three-plane HTTP listeners. v2 splits the API into paladin-data, paladin-admin
   // and paladin-iam audiences, each on its own port so the operator can expose
   // them on different network profiles.

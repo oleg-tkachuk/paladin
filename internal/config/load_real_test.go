@@ -46,4 +46,22 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
 		t.Error("three-plane HTTP addrs incomplete")
 	}
+	// service / env identity must propagate from app.* to logger.fields and
+	// otel.resource via CUE defaults — the YAML omits them.
+	if cfg.Logger.Fields.Service != cfg.App.Name {
+		t.Errorf("logger.fields.service: got %q want %q (default from app.name)",
+			cfg.Logger.Fields.Service, cfg.App.Name)
+	}
+	if cfg.Logger.Fields.Env != cfg.App.Env {
+		t.Errorf("logger.fields.env: got %q want %q (default from app.env)",
+			cfg.Logger.Fields.Env, cfg.App.Env)
+	}
+	if cfg.OTel.Resource.ServiceName != cfg.App.Name {
+		t.Errorf("otel.resource.service.name: got %q want %q",
+			cfg.OTel.Resource.ServiceName, cfg.App.Name)
+	}
+	if cfg.OTel.Resource.DeploymentEnvironment != cfg.App.Env {
+		t.Errorf("otel.resource.deployment.environment: got %q want %q",
+			cfg.OTel.Resource.DeploymentEnvironment, cfg.App.Env)
+	}
 }

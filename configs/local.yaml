@@ -13,22 +13,15 @@ logger:
   development: true
   disable_caller: true
   disable_stacktrace: true
-  fields:
-    service: paladin
-    env: local
 
 otel:
   enabled: false
   endpoint: ""
   protocol: http
   insecure: true
-  resource:
-    service.name: paladin
-    deployment.environment: local
 
 server:
   mode: debug
-  name: paladin
   data_http: &http_defaults
     addr: "127.0.0.1:8080"
     read_header_timeout: 5s

@@ -26,9 +26,9 @@ logger:
     enabled: false                      # production: enable to cap log volume
     initial: 100                        # log first N entries per second verbatim
     thereafter: 100                     # then 1 in N until the second rolls
-  fields:                               # default to app.name / app.env — only override when they must differ
-    service: paladin
-    env: local
+  # logger.fields.{service,env} default from app.name / app.env via CUE.
+  # Only declare here when the structured-log dimensions must diverge from
+  # the service identity (rarely true).
 
 # ─── OpenTelemetry ──────────────────────────────────────────────────────────
 otel:
@@ -36,9 +36,8 @@ otel:
   endpoint: "otel-collector:4317"       # otlp host:port (grpc) or url (http)
   protocol: http                        # grpc | http
   insecure: true                        # tls=off — dev only
-  resource:
-    service.name: paladin  # default app.name
-    deployment.environment: local       # default app.env
+  # otel.resource.{service.name,deployment.environment} default from
+  # app.name / app.env via CUE.
 
 # ─── HTTP servers (three-plane) ─────────────────────────────────────────────
 # Data, admin and iam each get their own listener with its own audience and
@@ -46,7 +45,6 @@ otel:
 # and overridden per plane below.
 server:
   mode: debug                           # debug | test | release
-  name: paladin            # default app.name
   shutdown_timeout: 20s
   log_probes: false                     # spam reduction for k8s livenessProbe
 

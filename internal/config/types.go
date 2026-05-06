@@ -107,7 +107,6 @@ type LoggerFields struct {
 
 type Server struct {
 	Mode string `yaml:"mode" json:"mode"`
-	Name string `yaml:"name" json:"name"`
 	// DataHTTP, AdminHTTP, IAMHTTP — v2 three-plane listener configuration.
 	// All three must be set; each plane gets its own audience and interceptor
 	// stack.
