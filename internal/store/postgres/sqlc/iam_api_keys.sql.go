@@ -101,16 +101,20 @@ SELECT api_key_id, tenant_id, display_prefix, description,
 FROM api_keys
 WHERE tenant_id = $1
   AND ($2::boolean OR revoked = FALSE)
-  AND api_key_id > $3
+  AND ($3::uuid IS NULL OR api_key_id > $3::uuid)
 ORDER BY api_key_id ASC
 LIMIT $4
 `
 
-func (q *Queries) ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, apiKeyID pgtype.UUID, limit int32) ([]ApiKey, error) {
+// $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
+// which the Go adapter passes for the first page. Without the IS NULL
+// guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
+// and the first call returns empty even when rows exist.
+func (q *Queries) ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, column3 pgtype.UUID, limit int32) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listApiKeysByTenant,
 		tenantID,
 		column2,
-		apiKeyID,
+		column3,
 		limit,
 	)
 	if err != nil {

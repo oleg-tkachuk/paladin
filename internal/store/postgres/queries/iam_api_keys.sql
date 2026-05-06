@@ -53,6 +53,10 @@ ORDER BY expires_at ASC
 LIMIT $2;
 
 -- name: ListApiKeysByTenant :many
+-- $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
+-- which the Go adapter passes for the first page. Without the IS NULL
+-- guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
+-- and the first call returns empty even when rows exist.
 SELECT api_key_id, tenant_id, display_prefix, description,
        secret_hash, secret_hash_old, secret_hash_old_until,
        roles, scopes, revoked,
@@ -60,6 +64,6 @@ SELECT api_key_id, tenant_id, display_prefix, description,
 FROM api_keys
 WHERE tenant_id = $1
   AND ($2::boolean OR revoked = FALSE)
-  AND api_key_id > $3
+  AND ($3::uuid IS NULL OR api_key_id > $3::uuid)
 ORDER BY api_key_id ASC
 LIMIT $4;

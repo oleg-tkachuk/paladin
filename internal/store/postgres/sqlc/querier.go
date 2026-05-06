@@ -116,7 +116,11 @@ type Querier interface {
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, objectKey string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
-	ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, apiKeyID pgtype.UUID, limit int32) ([]ApiKey, error)
+	// $3 is the keyset-pagination cursor; pgUUID(uuid.Nil) maps to NULL,
+	// which the Go adapter passes for the first page. Without the IS NULL
+	// guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
+	// and the first call returns empty even when rows exist.
+	ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, column3 pgtype.UUID, limit int32) ([]ApiKey, error)
 	// Cursor: (at, entry_id) tuple. Filter args are intentionally simple — CEL
 	// compiles to an in-memory pass after the SQL fetch.
 	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
