@@ -71,7 +71,11 @@ var rootCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		bootstrap := logger.NewBootstrapLogger()
+		bootstrap, err := logger.NewBootstrapLogger()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
+			os.Exit(1)
+		}
 
 		if abs, err := filepath.Abs(configPath); err == nil {
 			configPath = abs

@@ -22,9 +22,12 @@ func TestReplaceGlobals(t *testing.T) {
 }
 
 func TestNewBootstrapLogger(t *testing.T) {
-	l := NewBootstrapLogger()
+	l, err := NewBootstrapLogger()
+	if err != nil {
+		t.Fatalf("NewBootstrapLogger: %v", err)
+	}
 	if l == nil {
-		t.Fatal("Bootstrap logger is nil")
+		t.Fatal("bootstrap logger is nil")
 	}
 }
 
