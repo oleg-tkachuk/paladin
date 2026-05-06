@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -26,6 +27,7 @@ import (
 
 type Tenant struct {
 	TenantID             uuid.UUID
+	Slug                 string
 	DisplayName          string
 	Labels               []byte // JSONB
 	InheritedCedarPolicy string
@@ -36,7 +38,12 @@ type Tenant struct {
 }
 
 type CreateTenantArgs struct {
-	TenantID             uuid.UUID
+	TenantID uuid.UUID
+	// Slug is the human-readable tenant identifier exposed in Cedar policies
+	// and resource names. Required — auto-derived from TenantID when empty so
+	// existing UUID-only callers keep working through the rollout. Validated
+	// via apiutil.ValidateTenantSlug; uniqueness is enforced by the database.
+	Slug                 string
 	DisplayName          string
 	Labels               []byte
 	InheritedCedarPolicy string
@@ -79,7 +86,7 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{TenantID: tenantID},
 		cedar.RequestContext{Now: time.Now()},
@@ -100,14 +107,26 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.TenantID == uuid.Nil {
 		args.TenantID = uuid.Must(uuid.NewV7())
 	}
+	// Slug defaults: when the caller omits a slug, derive a stable backfill
+	// matching migrations/009_tenant_slug.sql so existing UUID-based clients
+	// keep working. New callers should pass an operator-chosen slug.
+	if args.Slug == "" {
+		args.Slug = "t-" + strings.ReplaceAll(args.TenantID.String(), "-", "")
+	}
+	if err := apiutil.ValidateTenantSlug(args.Slug); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("slug: %w", err))
+	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
 	}
 	// A tenant with no inherited policy would be deny-all at the Cedar layer
 	// (empty policy set → no permit rule matches). Seed a sensible default so
 	// newly-created tenants can immediately read/write their own objects.
+	// The default policy keys on the slug, so policies remain readable even
+	// when the platform regenerates them after a rename.
 	if args.InheritedCedarPolicy == "" {
-		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID)
+		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID, args.Slug)
 	}
 	t, err := h.repo.Create(ctx, args)
 	if err != nil {

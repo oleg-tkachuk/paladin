@@ -19,8 +19,11 @@ package wire
 
 import (
 	"context"
+
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -238,7 +241,8 @@ func ProvideRefreshDecoder(cfg config.Config) *auth.RefreshDecoder {
 }
 
 func ProvideAuthHandler(repos Repos, iss *issuer.Issuer, dec *auth.RefreshDecoder, pe *policy.Engine) *authh.Handler {
-	return authh.NewHandler(repos.IAMUser, repos.IAMRefresh, iss, dec, pe)
+	return authh.NewHandler(repos.IAMUser, repos.IAMRefresh, iss, dec, pe).
+		WithTenantSlugLookup(tenantSlugLookup(repos.Tenant))
 }
 
 func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
@@ -246,7 +250,26 @@ func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
 }
 
 func ProvideApiKeyHandler(repos Repos, iss *issuer.Issuer, pe *policy.Engine) *apikeyh.Handler {
-	return apikeyh.NewHandler(repos.IAMApiKey, iss, pe)
+	return apikeyh.NewHandler(repos.IAMApiKey, iss, pe).
+		WithTenantSlugLookup(tenantSlugLookup(repos.Tenant))
+}
+
+// tenantSlugLookup adapts the tenant.Repository to the Slug-resolver shape
+// authh / apikeyh expect. Lightweight cache: per-tenant slugs are
+// effectively immutable (rename is a deferred admin RPC — see BACKLOG),
+// so a single Get round-trip per token mint is the worst case for now.
+// If the mint volume warrants it, drop in a sync.Map cache here.
+func tenantSlugLookup(tr tenant.Repository) func(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	if tr == nil {
+		return nil
+	}
+	return func(ctx context.Context, tenantID uuid.UUID) (string, error) {
+		t, err := tr.Get(ctx, tenantID)
+		if err != nil {
+			return "", err
+		}
+		return t.Slug, nil
+	}
 }
 
 func ProvideBackendV2Handler(repos Repos, pe *policy.Engine) *backendh.Handler {

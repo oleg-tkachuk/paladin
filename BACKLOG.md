@@ -50,24 +50,6 @@ the same commit. Treat this file like a runtime invariant.
     `enable_rls=true` if policies aren't installed).
 - **Blockers:** none. Pure migration + role split.
 
-### `cedar.Principal.Scopes` wiring (`scope_enforcement.cedar` aspirational)
-
-- **Status:** Aspirational
-- **Reason:** [policies/examples/scope_enforcement.cedar](policies/examples/scope_enforcement.cedar)
-  references `principal.scopes`, but `cedar.Principal` does not carry
-  scopes today and `buildEntities` does not emit a `scopes` attribute.
-  Loading the policy against the live engine fails at evaluation time.
-- **Definition of Done:**
-  - `Scopes []string` added to `cedar.Principal`.
-  - `auth.Scope → []string` adapter at every handler call site that
-    constructs `cedar.Principal{...}` (~20 sites; mechanical edit).
-  - `buildEntities` emits `scopes` as a `Set<String>` on the
-    principal-`User` entity.
-  - schema.cedarschema declares `scopes` on the `User` entity.
-  - Smoke test: scope_enforcement.cedar evaluates without error
-    against a principal with non-empty scopes.
-- **Blockers:** none.
-
 ### Federated IdP via JWKS
 
 - **Status:** Deferred
@@ -188,22 +170,51 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** observability instrumentation + a representative
   workload.
 
-### Operations housekeeping reaper
-
-- **Status:** Deferred
-- **Reason:** Operations table accumulates rows in terminal states
-  (`SUCCEEDED` / `FAILED` / `CANCELLED`). [Migration 008](migrations/008_db_optimization.sql)
-  added `idx_operations_terminal_done_at` in anticipation, but no
-  reaper is wired.
-- **Definition of Done:**
-  - `OperationsReaper` worker analogous to `AuditLogPurger`.
-  - `workers.operations_reap` config section with TTL knob.
-  - Default TTL: 30 days.
-- **Blockers:** none.
-
 ---
 
 ## Features
+
+### UserSettings — buf-generated connect-rpc swap
+
+- **Status:** Deferred
+- **Reason:** The feature is fully reachable today via a hand-written
+  JSON shim at [internal/api/connectshim/iam/user_settings_server.go](internal/api/connectshim/iam/user_settings_server.go).
+  The proto definition lives at
+  [proto/paladin/iam/v1/user_settings_service.proto](proto/paladin/iam/v1/user_settings_service.proto)
+  but `buf generate` hasn't been run for it — the generated `*.pb.go`
+  + `*_connect.go` artifacts are missing. The shim mounts at the same
+  path namespace (`/paladin.iam.v1.UserSettingsService/{Method}`) so
+  swap-in is mechanical once codegen runs.
+- **Definition of Done:**
+  - `buf generate` produces `user_settings_service.pb.go` +
+    `user_settings_service.connect.go`.
+  - `connectiam.UserSettingsServer` rewritten to satisfy the generated
+    service interface (replace the JSON shim).
+  - `cmd/server/root.go` swaps `connectiam.RegisterUserSettings` for
+    the `paladiniamv1connect.NewUserSettingsServiceHandler` form.
+- **Blockers:** none — mechanical once codegen runs.
+
+### Tenant slug rollout — Phase 3 (resource-name slug acceptance)
+
+- **Status:** Deferred
+- **Reason:** Phase 1+2 landed: `tenants.slug` column, slug-aware
+  `cedar.Principal/Resource`, default-policy templating on slug, JWT
+  `tenant_slug` claim minted by both `authh` and `apikeyh` (via
+  `WithTenantSlugLookup` + `wire.tenantSlugLookup`), MCP/proto comment
+  hints rewritten to `tenants/{tenant_id_or_slug}`, and
+  `apiutil.ParseTenantNameRef` is available alongside the legacy parser.
+  What remains is the actual handler-side acceptance: most RPCs still
+  call `apiutil.ParseTenantName` (UUID-only) instead of `ParseTenantNameRef`
+  with slug-resolution.
+- **Definition of Done:**
+  - All `apiutil.ParseTenantName` callers migrated to
+    `ParseTenantNameRef` + slug-resolution via
+    `TenantRepo.GetTenantBySlug` (already wired in sqlc).
+  - Admin RPC `RenameTenantSlug` (with policy rewrite — replace old slug
+    in `tenants.inherited_cedar_policy` + per-objectKey policies) plus
+    audit-log emission.
+- **Blockers:** none — incremental work; tracked here so handlers don't
+  drift apart as they migrate.
 
 ### Replication: real `StorageReplicator` implementation
 
@@ -219,20 +230,6 @@ the same commit. Treat this file like a runtime invariant.
     errors.
   - Integration test using two MinIO instances.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
-
-### AWS Web Identity credential refresh
-
-- **Status:** Deferred
-- **Reason:** [s3adapter](internal/storage/s3adapter/s3.go) wires
-  `stscreds.NewWebIdentityRoleProvider` inside `aws.NewCredentialsCache`.
-  The cache refreshes credentials on AWS SDK timing, but the OIDC
-  token file itself is read once at adapter construction. Long-lived
-  pods that survive token rotation may end up with a stale token.
-- **Definition of Done:**
-  - Custom `IdentityTokenRetriever` that re-reads the file on every
-    refresh.
-  - Test with simulated token rotation.
-- **Blockers:** none.
 
 ### `ResetPassword` — email/SSO delivery
 
@@ -261,22 +258,6 @@ the same commit. Treat this file like a runtime invariant.
   - Per-batch progress recorded in `metadata` proto.
   - Cancel honors the state machine.
 - **Blockers:** none. Was originally tracked as "slice 4".
-
-### Lifecycle CEL: rule-without-CEL semantics
-
-- **Status:** Deferred
-- **Reason:** [internal/worker/lifecycle.go](internal/worker/lifecycle.go)
-  carries `BucketLifecycleRule.Match` as a CEL string. Rules with
-  empty `Match` apply unconditionally — fine — but an invalid CEL
-  string today logs a warning and **skips** the rule. A misconfig in
-  prod thus silently turns lifecycle off for that bucket.
-- **Definition of Done:**
-  - Rule validation at write time (`SetLifecycleRules` rejects bad
-    CEL).
-  - Invariant: a stored rule either has empty match OR compiles.
-  - Worker treats compile failure as `Fatal` (not skip), surfacing
-    the misconfig.
-- **Blockers:** none.
 
 ### Event dispatcher: Kafka / SQS sinks
 
@@ -349,26 +330,4 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Documentation
 
-### Cedar policy authoring guide
-
-- **Status:** Deferred
-- **Reason:** [policies/schema.cedarschema](policies/schema.cedarschema)
-  documents the entity/action surface; [policies/examples/](policies/examples/)
-  ships three sample policies. Operators writing real policies need
-  a guide that walks: roles → resources → actions → context attrs →
-  permit/forbid patterns.
-- **Definition of Done:**
-  - `docs/cedar-authoring.md` covering the six default roles, the 25
-    actions, the resource attribute reference, and 3-4 worked examples
-    that go beyond the examples directory.
-- **Blockers:** none.
-
-### Operator runbook for housekeeping tuning
-
-- **Status:** Deferred
-- **Reason:** `workers.housekeeping.audit_log_ttl` is a knob, but
-  there's no guidance on choosing it or relating it to disk budget.
-- **Definition of Done:**
-  - `docs/ops-housekeeping.md` with a sizing formula:
-    `audit_rows_per_day × bytes_per_row × ttl_days = disk_budget`.
-- **Blockers:** none.
+_(no documentation items currently deferred)_

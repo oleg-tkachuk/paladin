@@ -185,8 +185,13 @@ func buildAWSConfig(ctx context.Context, backend config.StorageBackend) (aws.Con
 			return aws.Config{}, fmt.Errorf("aws config (web_identity): web_identity_token_file or AWS_WEB_IDENTITY_TOKEN_FILE must be set")
 		}
 		stsClient := sts.NewFromConfig(base)
+		// Use the per-call file-reading retriever rather than
+		// stscreds.IdentityTokenFile so token rotation (EKS IRSA: ~48m
+		// rewrite cadence on a 1h projected TTL) is picked up without a
+		// pod restart. See web_identity_retriever.go for the rotation
+		// contract.
 		provider := stscreds.NewWebIdentityRoleProvider(stsClient, backend.Auth.RoleARN,
-			stscreds.IdentityTokenFile(tokenFile),
+			&rotatingTokenRetriever{path: tokenFile},
 			func(o *stscreds.WebIdentityRoleOptions) {
 				if n := backend.Auth.SessionName; n != "" {
 					o.RoleSessionName = n

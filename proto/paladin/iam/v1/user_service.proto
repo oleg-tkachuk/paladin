@@ -29,7 +29,7 @@ service UserService {
 }
 
 message CreateUserRequest {
-  // Parent: "tenants/{tenant_id}". Empty for platform-level users.
+  // Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
   string parent = 1;
   string subject = 2 [(buf.validate.field).string.min_len = 1];
   string display_name = 3;
@@ -60,7 +60,7 @@ message DeleteUserRequest {
 message DeleteUserResponse {}
 
 message ListUsersRequest {
-  string parent = 1; // "tenants/{tenant_id}" or empty for cross-tenant (platform admin only)
+  string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant (platform admin only)
   paladin.common.v1.PageRequest page = 2;
   // CEL filter against User schema.
   string filter = 3;

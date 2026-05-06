@@ -8,10 +8,14 @@ import (
 
 // defaultPolicyTemplate is applied to a freshly created tenant when the
 // caller does not supply inherited_cedar_policy. The literal "placeholder"
-// is substituted with the tenant's UUID at creation time.
+// is substituted with the tenant's slug at creation time (the slug is the
+// canonical Cedar Tenant UID — see internal/policy/cedar/engine.go:tenantUID).
 //
 // Mirrors policies/examples/default.cedar — update both together.
 const defaultPolicyTemplate = `// Default deny-by-default policy applied on tenant creation.
+// The Tenant UID below is the tenant's slug (e.g. "acme") — a human-readable
+// kebab-case handle. The tenant's UUID is also accessible via
+// principal.tenant_id for policies that prefer the UUID form.
 // Tenant members may read/write their own objects; admins may manage them.
 
 permit (
@@ -44,6 +48,20 @@ permit (
 ) when {
     principal.roles.contains("objectKey:admin") ||
     principal.roles.contains("platform.admin")
+};
+
+// User settings — every authenticated user reads/writes their own settings
+// without further check. Cross-user access (admin viewing a teammate's
+// timezone) is platform-admin or tenant-admin only.
+permit (
+    principal,
+    action in [Action::"ReadUserSettings", Action::"ManageUserSettings"],
+    resource
+) when {
+    principal == resource ||
+    principal.roles.contains("platform.admin") ||
+    (principal.roles.contains("tenant.admin") &&
+     principal.tenant_id == resource.tenant_id)
 };
 
 // IAM: platform admins manage everything. Tenant admins manage users and
@@ -155,7 +173,12 @@ permit (
 `
 
 // renderDefaultPolicy returns the default Cedar policy with the placeholder
-// Tenant UID substituted for the concrete tenant UUID.
-func renderDefaultPolicy(tenantID uuid.UUID) string {
-	return strings.ReplaceAll(defaultPolicyTemplate, "placeholder", tenantID.String())
+// Tenant UID substituted for the tenant's slug. Falls back to the UUID when
+// slug is empty (legacy callers still constructing tenants without a slug).
+func renderDefaultPolicy(tenantID uuid.UUID, slug string) string {
+	uid := slug
+	if uid == "" {
+		uid = tenantID.String()
+	}
+	return strings.ReplaceAll(defaultPolicyTemplate, "placeholder", uid)
 }

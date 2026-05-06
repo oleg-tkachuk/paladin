@@ -10,7 +10,7 @@ import "google/protobuf/timestamp.proto";
 // `bucket` and `backend_id` surface only when the caller has the
 // `view.physical_storage` role (set in JWT claims).
 message Object {
-  // Resource name: "tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}".
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}/objects/{object_id}".
   string name = 1;
   string object_id = 2;
   string tenant_id = 3;

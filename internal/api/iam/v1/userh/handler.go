@@ -41,7 +41,7 @@ func (h *Handler) authorize(ctx context.Context, action string, target authstore
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{
 			TenantID:      target.TenantID,

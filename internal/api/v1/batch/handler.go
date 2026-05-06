@@ -125,7 +125,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
 		cedar.RequestContext{Now: time.Now()},

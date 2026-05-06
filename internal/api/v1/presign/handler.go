@@ -144,7 +144,7 @@ func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, key, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey, Key: key},
 		cedar.RequestContext{Now: time.Now()},

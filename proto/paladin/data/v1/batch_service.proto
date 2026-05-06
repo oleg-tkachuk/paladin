@@ -42,7 +42,7 @@ message ObjectSelector {
 }
 
 message BatchDeleteObjectsRequest {
-  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
   bool permanent = 3;

@@ -189,6 +189,7 @@ workers: {
     pending_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
     multipart_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
     audit_log_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h" // 365d
+    operations_ttl:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"720h"  // 30d
     interval:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     delete_orphaned_parts: bool | *false
   }

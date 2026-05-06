@@ -79,6 +79,14 @@ const (
 	ActionResetPassword = "ResetPassword"
 	ActionGrantScopes   = "GrantScopes"
 
+	// User-settings actions. Resource is the User entity (the user whose
+	// settings are read/written). The principal-as-target case (a user
+	// editing their own settings) is the common path — handlers short-circuit
+	// to allow without a Cedar round-trip when subject matches. Cedar still
+	// gates the cross-user case (admin viewing a teammate's timezone).
+	ActionReadUserSettings   = "ReadUserSettings"
+	ActionManageUserSettings = "ManageUserSettings"
+
 	// IAM ApiKey-scoped actions.
 	ActionManageApiKey    = "ManageApiKey"
 	ActionReadApiKey      = "ReadApiKey"
@@ -121,10 +129,21 @@ const (
 )
 
 // Principal represents the authenticated caller, matching Cedar entity `User`.
+//
+// TenantSlug is optional. When set, it becomes the canonical Cedar `Tenant::"…"`
+// UID key (so policies read `Tenant::"acme"` rather than the UUID). The UUID
+// stays as a `tenant_id` attribute for policies that key on it. When unset,
+// the UID falls back to the UUID string for backwards compatibility.
 type Principal struct {
-	Subject  string
-	TenantID uuid.UUID
-	Roles    []string
+	Subject    string
+	TenantID   uuid.UUID
+	TenantSlug string
+	Roles      []string
+	// Scopes are the JWT-carried scope strings (already in wire form,
+	// e.g. "objects:read:tenant_id/object_key/key"). Exposed to Cedar as
+	// `principal.scopes` so policies can match scope prefixes for
+	// fine-grained delegation. Empty when the principal carries roles only.
+	Scopes []string
 }
 
 // Resource is the entity under authorization. Different fields are
@@ -140,7 +159,8 @@ type Principal struct {
 // entities. Unknown fields stay zero-valued.
 type Resource struct {
 	// Tenant scope.
-	TenantID uuid.UUID
+	TenantID   uuid.UUID
+	TenantSlug string // optional; preferred for Cedar Tenant UID when set
 
 	// ObjectKey + Object.
 	ObjectKey   string
@@ -312,7 +332,14 @@ func userUID(p *Principal) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeUser, cedartypes.String(p.Subject))
 }
 
-func tenantUID(tenantID uuid.UUID) cedartypes.EntityUID {
+// tenantUID encodes the Tenant entity UID. Slug wins when set so that Cedar
+// policies (and the resource_name format `tenants/{slug}`) read with
+// human-friendly identifiers; UUID is the fallback for legacy callers and
+// for tenants that have not yet been migrated to a slug.
+func tenantUID(tenantID uuid.UUID, slug string) cedartypes.EntityUID {
+	if slug != "" {
+		return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(slug))
+	}
 	return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(tenantID.String()))
 }
 
@@ -360,7 +387,7 @@ func resourceUID(r *Resource) cedartypes.EntityUID {
 	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
 		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
 	}
-	return tenantUID(r.TenantID)
+	return tenantUID(r.TenantID, r.TenantSlug)
 }
 
 // targetUserUID encodes a user-as-resource UID. The principal-User entity
@@ -398,18 +425,26 @@ func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 	for _, role := range p.Roles {
 		rolesSet = append(rolesSet, cedartypes.String(role))
 	}
+	scopesSet := make([]cedartypes.Value, 0, len(p.Scopes))
+	for _, sc := range p.Scopes {
+		scopesSet = append(scopesSet, cedartypes.String(sc))
+	}
 
 	m := cedartypes.EntityMap{}
 
 	// Tenant — emitted whenever a tenant is in scope (either the principal's
 	// or the resource's). Most data-plane calls hit this branch.
 	var tUID cedartypes.EntityUID
-	if r.TenantID != uuid.Nil {
-		tUID = tenantUID(r.TenantID)
+	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
+		// Prefer slug for the Tenant UID when known so policies key on the
+		// human-readable handle. Both tenant_id (uuid) and slug are exposed
+		// as attributes so policies can match either form.
+		tUID = tenantUID(r.TenantID, r.TenantSlug)
 		m[tUID] = cedartypes.Entity{
 			UID: tUID,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
 				"tenant_id":    cedartypes.String(r.TenantID.String()),
+				"slug":         cedartypes.String(r.TenantSlug),
 				"display_name": cedartypes.String(""),
 				"labels":       cedartypes.NewSet(),
 			}),
@@ -418,16 +453,18 @@ func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 
 	// User — anchors the principal under their tenant when known.
 	userParents := cedartypes.EntityUIDSet{}
-	if r.TenantID != uuid.Nil {
+	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
 		userParents = cedartypes.NewEntityUIDSet(tUID)
 	}
 	m[uUID] = cedartypes.Entity{
 		UID:     uUID,
 		Parents: userParents,
 		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
-			"subject":   cedartypes.String(p.Subject),
-			"tenant_id": cedartypes.String(p.TenantID.String()),
-			"roles":     cedartypes.NewSet(rolesSet...),
+			"subject":     cedartypes.String(p.Subject),
+			"tenant_id":   cedartypes.String(p.TenantID.String()),
+			"tenant_slug": cedartypes.String(p.TenantSlug),
+			"roles":       cedartypes.NewSet(rolesSet...),
+			"scopes":      cedartypes.NewSet(scopesSet...),
 		}),
 	}
 

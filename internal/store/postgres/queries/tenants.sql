@@ -1,13 +1,18 @@
 -- Tenant queries.
 
 -- name: CreateTenant :exec
-INSERT INTO tenants (tenant_id, display_name, labels, inherited_cedar_policy)
-VALUES ($1, $2, $3, $4);
+INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetTenant :one
 SELECT sqlc.embed(tenants)
 FROM tenants
 WHERE tenant_id = $1;
+
+-- name: GetTenantBySlug :one
+SELECT sqlc.embed(tenants)
+FROM tenants
+WHERE slug = $1;
 
 -- name: UpdateTenant :execrows
 UPDATE tenants

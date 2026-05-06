@@ -23,7 +23,7 @@ service EventSubscriptionService {
 }
 
 message CreateSubscriptionRequest {
-  string parent = 1 [(buf.validate.field).string.min_len = 1]; // "tenants/{t}"
+  string parent = 1 [(buf.validate.field).string.min_len = 1]; // "tenants/{tenant_id_or_slug}"
   EventSubscription subscription = 2 [(buf.validate.field).required = true];
 }
 

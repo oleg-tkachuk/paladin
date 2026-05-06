@@ -28,7 +28,7 @@ service ObjectKeyService {
 }
 
 message CreateObjectKeyRequest {
-  // Parent: "tenants/{tenant_id}".
+  // Parent: "tenants/{tenant_id_or_slug}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string object_key = 2 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
   ObjectKey object_key_resource = 3 [(buf.validate.field).required = true];
@@ -54,7 +54,7 @@ message DeleteObjectKeyRequest {
 message DeleteObjectKeyResponse {}
 
 message ListObjectKeysRequest {
-  string parent = 1; // "tenants/{tenant_id}" or empty for cross-tenant
+  string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;
 }

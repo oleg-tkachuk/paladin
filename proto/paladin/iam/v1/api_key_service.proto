@@ -31,7 +31,7 @@ service ApiKeyService {
 }
 
 message CreateApiKeyRequest {
-  // Parent: "tenants/{tenant_id}". Empty for platform service accounts.
+  // Parent: "tenants/{tenant_id_or_slug}". Empty for platform service accounts.
   string parent = 1;
   string description = 2 [(buf.validate.field).string.min_len = 1];
   repeated string roles = 3;

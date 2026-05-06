@@ -29,12 +29,18 @@ type RefreshTokenDecoder interface {
 
 // Handler exposes login + token lifecycle. PolicyEngine is consulted on
 // audience escalation (RefreshToken with requested_audience=paladin-admin).
+// TenantSlugLookup resolves a tenant UUID to its kebab-case slug. Optional
+// at construction — when nil, minted access tokens omit the `tenant_slug`
+// claim and Cedar policies fall back to UUID-keyed Tenant UIDs.
+type TenantSlugLookup func(ctx context.Context, tenantID uuid.UUID) (string, error)
+
 type Handler struct {
 	users          authstore.UserRepository
 	refresh        authstore.RefreshTokenRepository
 	issuer         *issuer.Issuer
 	refreshDecoder RefreshTokenDecoder
 	policy         cedar.Authorizer
+	tenantSlug     TenantSlugLookup
 	now            func() time.Time
 }
 
@@ -53,6 +59,14 @@ func NewHandler(
 		policy:         policy,
 		now:            time.Now,
 	}
+}
+
+// WithTenantSlugLookup installs the resolver used to populate the
+// `tenant_slug` access-token claim. Builder-style so existing wire-up
+// callers keep working without breakage.
+func (h *Handler) WithTenantSlugLookup(f TenantSlugLookup) *Handler {
+	h.tenantSlug = f
+	return h
 }
 
 // ─── Login ──────────────────────────────────────────────────────────────────
@@ -336,13 +350,23 @@ func isAdminRole(r string) bool {
 func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string) (
 	access string, refresh string, accessExp, refreshExp time.Time, err error,
 ) {
+	// Resolve tenant slug if a lookup is configured. Failure is non-fatal
+	// — the access token can still be minted with UUID-only tenant binding,
+	// and Cedar policies fall back to UUID-keyed Tenant UIDs. Logging the
+	// failure is the caller's responsibility (the minting RPC has access
+	// to a logger; this helper does not).
+	var slug string
+	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
+		slug, _ = h.tenantSlug(ctx, u.TenantID)
+	}
 	access, accessExp, err = h.issuer.MintAccess(issuer.AccessClaims{
-		Subject:  u.UserID.String(),
-		TenantID: u.TenantID,
-		Audience: audience,
-		Roles:    u.Roles,
-		Scopes:   u.Scopes,
-		Kind:     auth.PrincipalKindUser,
+		Subject:    u.UserID.String(),
+		TenantID:   u.TenantID,
+		TenantSlug: slug,
+		Audience:   audience,
+		Roles:      u.Roles,
+		Scopes:     u.Scopes,
+		Kind:       auth.PrincipalKindUser,
 	})
 	if err != nil {
 		return "", "", time.Time{}, time.Time{}, fmt.Errorf("mint access: %w", err)

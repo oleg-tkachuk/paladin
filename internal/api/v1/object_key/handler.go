@@ -235,7 +235,7 @@ func (h *Handler) authorizeFull(
 	objectKey, backendID, bucketName, action string,
 ) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: tenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{
 			TenantID:   tenantID,

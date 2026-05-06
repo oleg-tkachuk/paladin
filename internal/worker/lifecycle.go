@@ -211,10 +211,19 @@ func (e expirer) matches(row LifecycleObjectRow) (bool, error) {
 	return cel.Match(e.match, lifecycleRowToCELVars(row))
 }
 
-// buildExpirers compiles each rule's CEL `match` expression upfront. A
-// rule with a malformed match is dropped (logged + skipped) rather than
-// blocking the whole tick. Rules without a match always evaluate the
-// time window only — preserving the slice-11 behaviour.
+// buildExpirers compiles each rule's CEL `match` expression upfront.
+//
+// Compile failure is FATAL for that rule — the worker emits an Error log
+// and skips the rule for this tick. Previously the path silently dropped
+// the rule on a Warn, which meant a misconfig in production turned
+// lifecycle off for the bucket without anyone noticing. Write-time
+// validation in bucketh.SetLifecycleRules now rejects bad CEL synchronously,
+// so reaching this branch implies either (a) data written before the
+// validator landed, or (b) a schema migration introduced an incompatibility
+// — both warrant Error-level visibility.
+//
+// Rules without a match always evaluate the time window only — preserving
+// the slice-11 behaviour.
 func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.Evaluator, logger *zap.Logger) []expirer {
 	out := make([]expirer, 0, len(rules))
 	for _, r := range rules {
@@ -224,14 +233,15 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 		var prog celpkg.Program
 		if r.Match != "" {
 			if eval == nil {
-				logger.Warn("rule has match but no CEL evaluator wired",
+				logger.Error("rule has match but no CEL evaluator wired (configuration error)",
 					zap.String("rule", r.ID))
 				continue
 			}
 			compiled, err := eval.Compile(cel.ObjectSchema, r.Match)
 			if err != nil {
-				logger.Warn("failed to compile rule match",
+				logger.Error("malformed CEL match — rule will not run; fix at write time via SetLifecycleRules",
 					zap.String("rule", r.ID),
+					zap.String("match", r.Match),
 					zap.Error(err))
 				continue
 			}

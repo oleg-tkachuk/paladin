@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -50,7 +51,7 @@ func (h *Handler) authorize(ctx context.Context, action, backendID string) error
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{BackendID: backendID},
 		cedar.RequestContext{Now: time.Now()},

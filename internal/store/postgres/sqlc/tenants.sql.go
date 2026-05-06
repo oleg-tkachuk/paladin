@@ -13,14 +13,15 @@ import (
 
 const createTenant = `-- name: CreateTenant :exec
 
-INSERT INTO tenants (tenant_id, display_name, labels, inherited_cedar_policy)
-VALUES ($1, $2, $3, $4)
+INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 // Tenant queries.
-func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error {
+func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error {
 	_, err := q.db.Exec(ctx, createTenant,
 		tenantID,
+		slug,
 		displayName,
 		labels,
 		inheritedCedarPolicy,
@@ -43,7 +44,7 @@ func (q *Queries) DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expect
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
 FROM tenants
 WHERE tenant_id = $1
 `
@@ -57,6 +58,34 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 	var i GetTenantRow
 	err := row.Scan(
 		&i.Tenant.TenantID,
+		&i.Tenant.Slug,
+		&i.Tenant.DisplayName,
+		&i.Tenant.Labels,
+		&i.Tenant.InheritedCedarPolicy,
+		&i.Tenant.InheritedPolicyHash,
+		&i.Tenant.ResourceVersion,
+		&i.Tenant.CreatedAt,
+		&i.Tenant.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTenantBySlug = `-- name: GetTenantBySlug :one
+SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+FROM tenants
+WHERE slug = $1
+`
+
+type GetTenantBySlugRow struct {
+	Tenant Tenant `json:"tenant"`
+}
+
+func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getTenantBySlug, slug)
+	var i GetTenantBySlugRow
+	err := row.Scan(
+		&i.Tenant.TenantID,
+		&i.Tenant.Slug,
 		&i.Tenant.DisplayName,
 		&i.Tenant.Labels,
 		&i.Tenant.InheritedCedarPolicy,
@@ -69,7 +98,7 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
+SELECT tenants.tenant_id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at
 FROM tenants
 WHERE ($1::uuid IS NULL OR tenant_id > $1::uuid)
 ORDER BY tenant_id
@@ -91,6 +120,7 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize
 		var i ListTenantsRow
 		if err := rows.Scan(
 			&i.Tenant.TenantID,
+			&i.Tenant.Slug,
 			&i.Tenant.DisplayName,
 			&i.Tenant.Labels,
 			&i.Tenant.InheritedCedarPolicy,

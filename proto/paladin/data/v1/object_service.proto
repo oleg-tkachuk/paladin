@@ -57,7 +57,7 @@ service ObjectService {
 // ─── Versioning ─────────────────────────────────────────────────────────────
 
 message ObjectVersion {
-  // Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
   string name = 1;
   string version_id = 2;
   string object_id = 3;
@@ -86,7 +86,7 @@ message ListObjectVersionsResponse {
 }
 
 message GetObjectVersionRequest {
-  // Resource name: "tenants/{t}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
@@ -98,7 +98,7 @@ message RestoreObjectVersionRequest {
 // ─── Upload ─────────────────────────────────────────────────────────────────
 
 message UploadObjectRequest {
-  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2; // empty → server uses object_id as key
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
@@ -213,7 +213,7 @@ message TagsOverride     { map<string, string> tags = 1; }
 // ─── List / Count ───────────────────────────────────────────────────────────
 
 message ListObjectsRequest {
-  // Parent ObjectKey: "tenants/{t}/objectKeys/{ok}".
+  // Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;

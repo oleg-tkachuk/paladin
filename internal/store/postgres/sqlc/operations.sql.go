@@ -28,6 +28,26 @@ func (q *Queries) CancelOperation(ctx context.Context, operationID pgtype.UUID, 
 	return result.RowsAffected(), nil
 }
 
+const purgeTerminalOperations = `-- name: PurgeTerminalOperations :execrows
+DELETE FROM operations
+WHERE ctid IN (
+    SELECT ctid FROM operations
+    WHERE state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+      AND done_at IS NOT NULL
+      AND done_at < $1
+    ORDER BY done_at
+    LIMIT 10000
+)
+`
+
+func (q *Queries) PurgeTerminalOperations(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeTerminalOperations, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createOperation = `-- name: CreateOperation :exec
 
 INSERT INTO operations (operation_id, tenant_id, type, state, metadata)

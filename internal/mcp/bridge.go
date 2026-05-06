@@ -150,20 +150,20 @@ type queryObjectsArgs struct {
 	PageSize  int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
 }
 type getQuotaArgs struct {
-	Name string `json:"name" jsonschema:"Quota resource name (tenants/{t}/quota | storageBackends/{b}/buckets/{n}/quota)"`
+	Name string `json:"name" jsonschema:"Quota resource name (tenants/{tenant_id_or_slug}/quota | storageBackends/{b}/buckets/{n}/quota)"`
 }
 type validatePolicyArgs struct {
 	CedarPolicy string `json:"cedar_policy" jsonschema:"Cedar policy text"`
 }
 type listVersionsArgs struct {
-	ObjectName string `json:"object_name" jsonschema:"Object resource name (tenants/{t}/objectKeys/{ok}/objects/{id})"`
+	ObjectName string `json:"object_name" jsonschema:"Object resource name (tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id})"`
 	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
 type getVersionArgs struct {
 	VersionName string `json:"version_name" jsonschema:".../objects/{id}/versions/{ver}"`
 }
 type getEffectivePolicyArgs struct {
-	ResourceName string `json:"resource_name" jsonschema:"Any resource name; tenants/{t}/objectKeys/{ok} works for namespace-level"`
+	ResourceName string `json:"resource_name" jsonschema:"Any resource name; tenants/{tenant_id_or_slug}/objectKeys/{ok} works for namespace-level"`
 }
 type simulateAuthzArgs struct {
 	PrincipalSubject  string   `json:"principal_subject" jsonschema:"subject (user_id or service-account ref)"`
@@ -309,7 +309,7 @@ type createObjectKeyArgs struct {
 	CedarPolicy string `json:"cedar_policy,omitempty" jsonschema:"optional Cedar policy"`
 }
 type grantUserScopesArgs struct {
-	UserName string   `json:"user_name" jsonschema:"tenants/{t}/users/{u}"`
+	UserName string   `json:"user_name" jsonschema:"tenants/{tenant_id_or_slug}/users/{u}"`
 	Scopes   []string `json:"scopes,omitempty" jsonschema:"scope strings of form type:value (tenant:.., backend:.., bucket:.., object_key:..) or '*'"`
 }
 type restoreVersionArgs struct {
@@ -334,7 +334,7 @@ type setLifecycleRulesArgs struct {
 	Rules           []lifecycleRuleArg `json:"rules,omitempty" jsonschema:"rule list; pass empty to clear all rules"`
 }
 type revokeApiKeyArgs struct {
-	Name string `json:"name" jsonschema:"tenants/{t}/apiKeys/{id}"`
+	Name string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/apiKeys/{id}"`
 }
 type setQuotaArgs struct {
 	Name             string `json:"name" jsonschema:"Quota resource name"`

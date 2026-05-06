@@ -25,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
+	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
@@ -223,6 +224,11 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	apikH := wire.ProvideApiKeyHandler(repos, iss, polEngine)
+	userSettingsH := usersettingsh.NewHandler(
+		adapters.NewUserSettingsRepo(db.Queries),
+		repos.IAMUser,
+		polEngine,
+	)
 
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine)
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
@@ -310,6 +316,9 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
+	// JSON shim for UserSettings — keeps the wire path identical to the
+	// future buf-generated connect handler so clients survive the swap.
+	connectiam.RegisterUserSettings(iamMux, userSettingsH)
 
 	// ─── HTTP servers ────────────────────────────────────────────────────
 	return []app.HTTPListener{
@@ -460,6 +469,14 @@ func buildBackgroundJobs(cfg config.Config, db *postgres.DB, l *zap.Logger) []ap
 			TTL:      cfg.Workers.Housekeeping.AuditLogTTL,
 			Interval: cfg.Workers.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),
+		})
+	}
+	if cfg.Workers.Housekeeping.OperationsTTL > 0 {
+		out = append(out, &worker.OperationsReaper{
+			Repo:     adapters.NewOperationRepo(db.Queries),
+			TTL:      cfg.Workers.Housekeeping.OperationsTTL,
+			Interval: cfg.Workers.Housekeeping.Interval,
+			Logger:   l.Named("operations-reaper"),
 		})
 	}
 	return out

@@ -30,6 +30,20 @@ WHERE tenant_id = $1
 ORDER BY operation_id
 LIMIT sqlc.arg('page_size');
 
+-- name: PurgeTerminalOperations :execrows
+-- Bounded batch (10k). Worker loops until result is 0. Uses
+-- idx_operations_terminal_done_at (added in migration 008) so the planner
+-- never scans the live PENDING/RUNNING tail.
+DELETE FROM operations
+WHERE ctid IN (
+    SELECT ctid FROM operations
+    WHERE state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+      AND done_at IS NOT NULL
+      AND done_at < $1
+    ORDER BY done_at
+    LIMIT 10000
+);
+
 -- name: CancelOperation :execrows
 UPDATE operations
 SET state   = 'CANCELLED',

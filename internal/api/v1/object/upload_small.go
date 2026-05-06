@@ -31,6 +31,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
@@ -105,7 +106,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 	// Authorize with the declared size as a context attribute — Cedar policy
 	// can reject oversized uploads at the start rather than after N chunks.
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, Roles: principal.Roles},
+		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, TenantSlug: principal.TenantSlug, Roles: principal.Roles, Scopes: apiutil.ScopeStrings(principal.Scopes)},
 		cedar.ActionPutObject,
 		&cedar.Resource{
 			TenantID: tenantID, ObjectKey: init.ObjectKey, Key: init.Key,

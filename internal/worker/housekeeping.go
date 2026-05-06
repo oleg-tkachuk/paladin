@@ -121,6 +121,85 @@ func (a *ApiKeyExpirer) log() *zap.Logger {
 	return zap.NewNop()
 }
 
+// OperationsReaper drops terminal-state operations older than TTL.
+//
+// Terminal states are SUCCEEDED / FAILED / CANCELLED — the row's `done_at`
+// is set when the state machine transitions in. Active rows (PENDING /
+// RUNNING) are never touched: they don't have a `done_at` to compare and
+// the partial index `idx_operations_terminal_done_at` (migration 008)
+// excludes them anyway, so the reaper never reads them.
+//
+// Disabled when TTL == 0. Default TTL chosen at the call site
+// (cmd/server/root.go) — recommended 30 days so support has a window to
+// reconstruct what happened in the run-up to a failed batch.
+type OperationsReaper struct {
+	Repo     OperationsReaperRepo
+	TTL      time.Duration
+	Interval time.Duration
+	Logger   *zap.Logger
+}
+
+// OperationsReaperRepo is the narrow seam — one method on the operation
+// store. Postgres adapter satisfies it via the bounded ctid-batched query
+// in queries/operations.sql.
+type OperationsReaperRepo interface {
+	PurgeTerminalBefore(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+func (r *OperationsReaper) Run(ctx context.Context) error {
+	if r.TTL <= 0 {
+		// Disabled — return without ticking. Caller treats nil error as
+		// "worker exited cleanly" and proceeds.
+		return nil
+	}
+	if r.Interval <= 0 {
+		r.Interval = 6 * time.Hour
+	}
+	t := time.NewTicker(r.Interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			cutoff := time.Now().UTC().Add(-r.TTL)
+			r.drain(ctx, cutoff)
+		}
+	}
+}
+
+// drain calls the bounded purge in a loop until it returns 0 rows. Each
+// iteration is capped at 10k rows by the SQL — drain backs off on error so
+// a transient DB hiccup doesn't pin the goroutine in a tight retry loop.
+func (r *OperationsReaper) drain(ctx context.Context, cutoff time.Time) {
+	for iter := 0; ; iter++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		n, err := r.Repo.PurgeTerminalBefore(ctx, cutoff)
+		if err != nil {
+			r.log().Warn("failed to purge terminal operations",
+				zap.Int("iter", iter), zap.Error(err))
+			return
+		}
+		if n == 0 {
+			return
+		}
+		r.log().Info("purged terminal operations",
+			zap.Int64("rows", n),
+			zap.Time("older_than", cutoff))
+	}
+}
+
+func (r *OperationsReaper) log() *zap.Logger {
+	if r.Logger != nil {
+		return r.Logger
+	}
+	return zap.NewNop()
+}
+
 // AuditLogPurger drops audit_log rows older than TTL. Disabled when TTL == 0.
 type AuditLogPurger struct {
 	Purger   AuditPurgerRepo

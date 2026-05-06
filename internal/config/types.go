@@ -252,9 +252,12 @@ type Replication struct {
 }
 
 type Housekeeping struct {
-	PendingTTL          time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
-	MultipartTTL        time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
-	AuditLogTTL         time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
+	PendingTTL   time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
+	MultipartTTL time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
+	AuditLogTTL  time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
+	// OperationsTTL bounds how long a terminal-state operation row is
+	// retained. 0 disables the reaper. See [worker.OperationsReaper].
+	OperationsTTL       time.Duration `yaml:"operations_ttl" json:"operations_ttl"`
 	Interval            time.Duration `yaml:"interval" json:"interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
 }

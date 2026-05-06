@@ -117,6 +117,31 @@ func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
 	return prog, nil
 }
 
+// Validate compiles `expr` against `schema` and discards the resulting
+// program. Returns nil iff the expression parses, type-checks against the
+// schema vars, and yields a bool. Used by write paths that want to reject
+// malformed CEL synchronously rather than discovering the failure from a
+// background worker hours later (see worker.lifecycle compile-on-tick).
+//
+// An empty expression is valid — it's the "match everything" sentinel.
+func Validate(schema *Schema, expr string) error {
+	if expr == "" {
+		return nil
+	}
+	env, err := buildEnv(schema)
+	if err != nil {
+		return fmt.Errorf("cel: build env: %w", err)
+	}
+	ast, iss := env.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		return fmt.Errorf("cel: compile %q: %w", expr, iss.Err())
+	}
+	if ast.OutputType() != cel.BoolType {
+		return fmt.Errorf("cel: expression %q must return bool, got %s", expr, ast.OutputType())
+	}
+	return nil
+}
+
 // Match runs a compiled program against a row represented as a map.
 func Match(prog cel.Program, row map[string]any) (bool, error) {
 	out, _, err := prog.Eval(row)

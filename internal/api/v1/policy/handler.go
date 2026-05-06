@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
@@ -43,7 +44,7 @@ func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, obje
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.engine.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		cedar.ActionInspectPolicy,
 		&cedar.Resource{TenantID: tenantID, ObjectKey: objectKey},
 		cedar.RequestContext{Now: time.Now()},

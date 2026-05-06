@@ -3,8 +3,10 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -87,6 +89,14 @@ func (r *OperationRepo) List(ctx context.Context, tenantID uuid.UUID, state *ope
 		next = out[len(out)-1].OperationID.String()
 	}
 	return out, next, nil
+}
+
+// PurgeTerminalBefore deletes operations in a terminal state whose `done_at`
+// is older than `cutoff`. Bounded at 10k rows per call (sqlc query); the
+// reaper worker loops until 0 to drain a backlog without pinning locks.
+func (r *OperationRepo) PurgeTerminalBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	ts := pgtype.Timestamptz{Time: cutoff, Valid: true}
+	return r.q.PurgeTerminalOperations(ctx, ts)
 }
 
 func operationFromSQLC(o sqlc.Operation) operation.Operation {

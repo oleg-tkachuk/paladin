@@ -70,13 +70,14 @@ func New(cfg Config) (*Issuer, error) {
 
 // AccessClaims is the populated claim set for a freshly-minted access token.
 type AccessClaims struct {
-	Subject  string
-	TenantID uuid.UUID
-	Audience string
-	Roles    []string
-	Scopes   []auth.Scope
-	Kind     auth.PrincipalKind
-	Labels   map[string]string
+	Subject    string
+	TenantID   uuid.UUID
+	TenantSlug string
+	Audience   string
+	Roles      []string
+	Scopes     []auth.Scope
+	Kind       auth.PrincipalKind
+	Labels     map[string]string
 	// Optional explicit TTL override (must be ≤ scoped_token_max_ttl).
 	TTL time.Duration
 }
@@ -115,6 +116,9 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 	}
 	if c.TenantID != uuid.Nil {
 		claims["tenant"] = c.TenantID.String()
+	}
+	if c.TenantSlug != "" {
+		claims["tenant_slug"] = c.TenantSlug
 	}
 	if len(c.Labels) > 0 {
 		claims["labels"] = c.Labels

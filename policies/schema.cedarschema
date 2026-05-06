@@ -76,7 +76,12 @@ entity User in [Tenant] = {
   tenant_id: String,
   // Principal-only
   subject: String,
+  tenant_slug: String,
   roles: Set<String>,
+  // Wire-form scopes from the JWT (e.g.
+  // "objects:read:tenant_id/object_key/key"). Empty for role-only principals.
+  // Use `principal.scopes.contains("…")` to gate fine-grained delegations.
+  scopes: Set<String>,
   // Resource-only (zero-valued on principal)
   user_id: String,
 };

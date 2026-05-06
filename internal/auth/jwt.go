@@ -36,16 +36,17 @@ type JWTVerifier struct {
 }
 
 type jwtClaims struct {
-	Iss    string            `json:"iss"`
-	Sub    string            `json:"sub"`
-	Aud    json.RawMessage   `json:"aud"`
-	Exp    int64             `json:"exp"`
-	Nbf    int64             `json:"nbf"`
-	Tenant string            `json:"tenant"`
-	Roles  []string          `json:"roles"`
-	Scopes []string          `json:"scopes"`
-	Kind   string            `json:"kind"`
-	Labels map[string]string `json:"labels"`
+	Iss        string            `json:"iss"`
+	Sub        string            `json:"sub"`
+	Aud        json.RawMessage   `json:"aud"`
+	Exp        int64             `json:"exp"`
+	Nbf        int64             `json:"nbf"`
+	Tenant     string            `json:"tenant"`
+	TenantSlug string            `json:"tenant_slug"`
+	Roles      []string          `json:"roles"`
+	Scopes     []string          `json:"scopes"`
+	Kind       string            `json:"kind"`
+	Labels     map[string]string `json:"labels"`
 }
 
 // Verify validates the token and returns a Principal. The signature-algorithm
@@ -109,12 +110,13 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		return nil, fmt.Errorf("jwt: scopes claim: %w", err)
 	}
 	p := &Principal{
-		Subject:  c.Sub,
-		Roles:    c.Roles,
-		Scopes:   scopes,
-		Audience: v.ExpectedAudience,
-		Kind:     parseKind(c.Kind),
-		Labels:   c.Labels,
+		Subject:    c.Sub,
+		Roles:      c.Roles,
+		Scopes:     scopes,
+		Audience:   v.ExpectedAudience,
+		Kind:       parseKind(c.Kind),
+		Labels:     c.Labels,
+		TenantSlug: c.TenantSlug,
 	}
 	if c.Tenant != "" {
 		id, err := uuid.Parse(c.Tenant)

@@ -164,7 +164,7 @@ message BucketReplication {
 // ─── Tenant ─────────────────────────────────────────────────────────────────
 
 message Tenant {
-  // Resource name: "tenants/{tenant_id}".
+  // Resource name: "tenants/{tenant_id_or_slug}".
   string name = 1;
   string tenant_id = 2;
   string display_name = 3;
@@ -179,7 +179,7 @@ message Tenant {
 // ─── ObjectKey ──────────────────────────────────────────────────────────────
 
 message ObjectKey {
-  // Resource name: "tenants/{tenant_id}/objectKeys/{object_key}".
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}".
   string name = 1;
   string tenant_id = 2;
   string object_key = 3;
@@ -201,7 +201,7 @@ message ObjectKey {
 
 // Quota caps usage at tenant or bucket scope. Enforced at presign time.
 message Quota {
-  // Resource name: "tenants/{tenant_id}/quota" or
+  // Resource name: "tenants/{tenant_id_or_slug}/quota" or
   // "storageBackends/{backend_id}/buckets/{bucket_name}/quota".
   string name = 1;
   // Hard caps. 0 → no cap.
@@ -249,7 +249,7 @@ message AuditLogEntry {
 // EventSubscription describes a webhook / queue sink for PALADIN events.
 // Replaces the need for clients to consume S3 events directly.
 message EventSubscription {
-  string name = 1; // "tenants/{t}/eventSubscriptions/{id}"
+  string name = 1; // "tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"
   string tenant_id = 2;
   // CEL filter against EventEnvelope; empty → all events for the tenant.
   string filter = 3;

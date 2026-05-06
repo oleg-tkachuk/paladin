@@ -37,6 +37,7 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 	}
 	if err := r.q.CreateTenant(ctx,
 		pgUUID(args.TenantID),
+		args.Slug,
 		strPtr(args.DisplayName),
 		labels,
 		args.InheritedCedarPolicy,
@@ -123,6 +124,7 @@ func (r *TenantRepo) List(ctx context.Context, pageSize int32, afterID uuid.UUID
 func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 	return tenant.Tenant{
 		TenantID:             uuidFrom(t.TenantID),
+		Slug:                 t.Slug,
 		DisplayName:          derefStr(t.DisplayName),
 		Labels:               t.Labels,
 		InheritedCedarPolicy: t.InheritedCedarPolicy,

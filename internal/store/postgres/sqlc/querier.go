@@ -16,6 +16,7 @@ type Querier interface {
 	// constraint (single-tenant buckets reject mismatched tenants).
 	BindObjectKeyToBucket(ctx context.Context, tenantID pgtype.UUID, objectKey string, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
+	PurgeTerminalOperations(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error)
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
@@ -45,7 +46,7 @@ type Querier interface {
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// Tenant queries.
-	CreateTenant(ctx context.Context, tenantID pgtype.UUID, displayName *string, labels []byte, inheritedCedarPolicy string) error
+	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
 	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	DeleteBucketV2(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
@@ -87,9 +88,14 @@ type Querier interface {
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
+	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
+	GetUserSettings(ctx context.Context, userID pgtype.UUID) (UserSettings, error)
+	UpsertUserSettings(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, timezone string, locale string, theme string, preferences []byte) (UserSettings, error)
+	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, pageSize int32) ([]UserSettings, error)
+	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Removes the row outright. Caller is responsible for first deleting the
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.

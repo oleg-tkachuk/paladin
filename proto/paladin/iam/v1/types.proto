@@ -10,7 +10,7 @@ import "paladin/common/v1/scope.proto";
 // User is an authenticated identity inside a tenant. Local-IdP form; for
 // federated IdPs the row is created on first successful upstream login.
 message User {
-  // Resource name: "tenants/{tenant_id}/users/{user_id}".
+  // Resource name: "tenants/{tenant_id_or_slug}/users/{user_id}".
   string name = 1;
   string user_id = 2;
   string tenant_id = 3;
@@ -31,7 +31,7 @@ message User {
 // Separate from User because its scopes are typically narrower and rotation
 // cadence different. Secret value is returned ONCE on Create.
 message ApiKey {
-  // Resource name: "tenants/{tenant_id}/apiKeys/{api_key_id}".
+  // Resource name: "tenants/{tenant_id_or_slug}/apiKeys/{api_key_id}".
   string name = 1;
   string api_key_id = 2;
   string tenant_id = 3;

@@ -303,7 +303,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	// 1. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, Roles: principal.Roles},
+		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, TenantSlug: principal.TenantSlug, Roles: principal.Roles, Scopes: apiutil.ScopeStrings(principal.Scopes)},
 		cedar.ActionPresignPut,
 		&cedar.Resource{
 			TenantID:    tenantID,
@@ -1003,7 +1003,7 @@ func (h *Handler) authorize(
 	contentType string,
 ) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, Roles: principal.Roles},
+		&cedar.Principal{Subject: principal.Subject, TenantID: tenantID, TenantSlug: principal.TenantSlug, Roles: principal.Roles, Scopes: apiutil.ScopeStrings(principal.Scopes)},
 		action,
 		res,
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},

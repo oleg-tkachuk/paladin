@@ -47,6 +47,8 @@ var preAuthnAllowlist = map[string]struct{}{
 	"Revoke":         {}, // revokes by token (caller proves possession)
 	"WhoAmI":         {}, // self-introspection; tenant comes from context
 	"ChangePassword": {}, // operates on the caller's own password
+	"GetMine":        {}, // self-service: caller reads their own user_settings
+	"UpdateMine":     {}, // self-service: caller writes their own user_settings
 	"ValidatePolicy": {}, // gated, but intentionally syntactic-only
 }
 

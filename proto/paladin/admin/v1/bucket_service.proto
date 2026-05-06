@@ -106,7 +106,7 @@ message SetReplicationRequest {
 }
 
 message ListAccessibleBucketsRequest {
-  // Tenant: "tenants/{tenant_id}". Required.
+  // Tenant: "tenants/{tenant_id_or_slug}". Required.
   string tenant = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
 }

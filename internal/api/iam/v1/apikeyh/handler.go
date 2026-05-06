@@ -19,11 +19,17 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
+// TenantSlugLookup mirrors authh.TenantSlugLookup — both packages call
+// MintAccess and both want to populate the tenant_slug claim. Defined
+// here to avoid cross-package coupling for one type alias.
+type TenantSlugLookup func(ctx context.Context, tenantID uuid.UUID) (string, error)
+
 type Handler struct {
-	apiKeys authstore.ApiKeyRepository
-	issuer  *issuer.Issuer
-	policy  cedar.Authorizer
-	now     func() time.Time
+	apiKeys    authstore.ApiKeyRepository
+	issuer     *issuer.Issuer
+	policy     cedar.Authorizer
+	tenantSlug TenantSlugLookup
+	now        func() time.Time
 }
 
 func NewHandler(keys authstore.ApiKeyRepository, iss *issuer.Issuer, policy cedar.Authorizer) *Handler {
@@ -31,6 +37,14 @@ func NewHandler(keys authstore.ApiKeyRepository, iss *issuer.Issuer, policy ceda
 		panic("apikeyh: policy authorizer is required")
 	}
 	return &Handler{apiKeys: keys, issuer: iss, policy: policy, now: time.Now}
+}
+
+// WithTenantSlugLookup installs the resolver used for the access-token
+// `tenant_slug` claim. nil-safe — the field stays unset and minted tokens
+// omit the claim, matching pre-Phase-2 behaviour.
+func (h *Handler) WithTenantSlugLookup(f TenantSlugLookup) *Handler {
+	h.tenantSlug = f
+	return h
 }
 
 // authorize gates an api-key RPC against Cedar; the existing
@@ -42,7 +56,7 @@ func (h *Handler) authorize(ctx context.Context, action string, target authstore
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{
 			TenantID:       target.TenantID,
@@ -222,14 +236,19 @@ func (h *Handler) MintScopedToken(ctx context.Context, in MintScopedTokenInput) 
 			fmt.Errorf("requested scopes exceed parent api_key authority"))
 	}
 
+	var slug string
+	if h.tenantSlug != nil && parent.TenantID != uuid.Nil {
+		slug, _ = h.tenantSlug(ctx, parent.TenantID)
+	}
 	tok, exp, err := h.issuer.MintAccess(issuer.AccessClaims{
-		Subject:  parent.ApiKeyID.String(),
-		TenantID: parent.TenantID,
-		Audience: in.Audience,
-		Roles:    parent.Roles,
-		Scopes:   in.Scopes,
-		Kind:     auth.PrincipalKindApiKey,
-		TTL:      in.TTL,
+		Subject:    parent.ApiKeyID.String(),
+		TenantID:   parent.TenantID,
+		TenantSlug: slug,
+		Audience:   in.Audience,
+		Roles:      parent.Roles,
+		Scopes:     in.Scopes,
+		Kind:       auth.PrincipalKindApiKey,
+		TTL:        in.TTL,
 	})
 	if err != nil {
 		return "", time.Time{}, connect.NewError(connect.CodeInternal, err)

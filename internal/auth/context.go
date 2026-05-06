@@ -16,6 +16,10 @@ type Principal struct {
 	// TenantID is the tenant the caller is scoped to. Empty only for
 	// super-admin principals invoking cross-tenant RPCs.
 	TenantID uuid.UUID
+	// TenantSlug is the tenant's human-readable slug. Optional during the
+	// rollout — when set, becomes the canonical Cedar Tenant UID. Carried
+	// from the JWT `tenant_slug` claim minted by the issuer.
+	TenantSlug string
 	// Subject is the stable identifier inside the tenant (user ID, service
 	// account, etc.). Carried verbatim from the JWT `sub` claim.
 	Subject string

@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -52,7 +53,7 @@ func (h *Handler) authorize(ctx context.Context, action, backendID, bucketName s
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, Roles: p.Roles},
+		&cedar.Principal{Subject: p.Subject, TenantID: p.TenantID, TenantSlug: p.TenantSlug, Roles: p.Roles, Scopes: apiutil.ScopeStrings(p.Scopes)},
 		action,
 		&cedar.Resource{
 			BackendID:     backendID,
@@ -205,6 +206,15 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	}
 	if err := h.authorize(ctx, cedar.ActionConfigureLifecycle, backendID, bucketName, uuid.Nil); err != nil {
 		return nil, err
+	}
+	// Validate every rule's CEL match upfront so a typo is rejected at
+	// write time, not silently swallowed by the lifecycle worker hours
+	// later. Empty match = "always match" (worker contract).
+	for i, r := range rules {
+		if err := celpkg.Validate(celpkg.ObjectSchema, r.Match); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
+		}
 	}
 	if err := h.repo.SetLifecycle(ctx, backendID, bucketName, rules, expectedVersion); err != nil {
 		return nil, mapVersion(err)
