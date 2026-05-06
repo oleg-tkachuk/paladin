@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
@@ -359,6 +360,14 @@ func buildListeners(ctx context.Context, cfg config.Config, db *postgres.DB, l *
 	adminMux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	adminMux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
 	adminMux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
+	// SystemService.GetConfig — surfaces the running config (with
+	// secrets redacted) so the UI's /config page can render the live
+	// YAML instead of pointing the operator at kubectl. platform.admin
+	// only; the role check lives inside the shim.
+	adminMux.Handle(paladinadminv1connect.NewSystemServiceHandler(
+		admin.NewSystemServer(systemh.New(cfg, configPath)),
+		adminOpts,
+	))
 
 	iamMux := http.NewServeMux()
 	healthH.Register(iamMux)
