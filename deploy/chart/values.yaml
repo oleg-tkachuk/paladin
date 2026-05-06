@@ -140,7 +140,7 @@ config:
   # the resolver sees the Secret the chart created.
   bootstrap:
     admin:
-      enabled: false
+      enabled: true
       subject: "admin"
       tenant_slug: "platform"
       tenant_display_name: "Platform"
