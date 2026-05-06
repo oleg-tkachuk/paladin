@@ -31,6 +31,15 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("CUE schema invalid: %w", schemaVal.Err())
 	}
 
+	// Strict-key check on the YAML file BEFORE merging env / CUE defaults.
+	// Catches typos like `auth.singing_key:` that would otherwise be
+	// silently ignored — env vars layer on top, CUE injects defaults, and
+	// the final Config struct never sees the bad key. Fail fast with the
+	// full list of offending paths.
+	if err := validateNoUnknownKeys(path); err != nil {
+		return Config{}, err
+	}
+
 	// Initialize koanf
 	k := koanf.New(".")
 
