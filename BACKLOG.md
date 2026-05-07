@@ -68,26 +68,56 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Phase 5 — Drop own IAM, accept OIDC + capability tokens
+### Capability service: issuer / verifier / RPC wiring
+
+- **Status:** Aspirational
+- **Reason:** Phase 5a landed `internal/capability` (types, Ed25519
+  signer, delegation guard, store interface) and migration 016
+  (`capability_records`, `capability_revocations`). What's missing is
+  the runtime glue: issuer service, verifier with revocation cache,
+  Connect RPC surface, and the interceptor swap.
+- **Definition of Done:**
+  - `internal/capability/postgres` implements the Store interface
+    against migration 016 tables.
+  - `internal/capability/verifier` wraps Decode + VerifySignature +
+    revocation cache lookup + audience / time / generation gates,
+    returns a typed `*Capability` to interceptor code.
+  - Issuer holds an Ed25519 keypair (KMS-wrapped in production), mints
+    capabilities atomically (Insert + Sign in one transaction so a
+    crash mid-issue can't strand a row without a token).
+  - JWKS endpoint on the admin plane (`/jwks.json`) so verifiers in
+    other planes / pods fetch public keys without an extra RPC layer.
+  - Connect RPC surface — `proto/paladin/admin/v1/capability_service.proto`
+    with Issue / Delegate / Revoke / List / VerifySelf — generated and
+    handler-wired.
+  - Interceptor variant `auth.CapabilityInterceptor` accepts capability
+    tokens alongside the existing JWT verifier (additive; not yet a
+    swap).
+  - Housekeeping worker calls `Store.PurgeExpired` on cadence.
+- **Blockers:** none. Discrete work; unblocks Phase 5b.
+
+### Phase 5b — Drop own IAM, accept OIDC
 
 - **Status:** Blocked
-- **Reason:** The agentic-plane spec calls `internal/api/iam` (own
-  user / api_key / refresh-token store) an anti-feature for B2B
-  integration. Replacement: OIDC RP that accepts JWT/JWKS from the
-  customer's IdP, plus a capability service that mints short-lived
-  scoped tokens. The current code still mints HS256 JWTs locally and
-  the database has live `users`, `api_keys`, `refresh_tokens` tables.
+- **Reason:** Phase 5a wraps the agent-runtime authorisation primitive
+  (capabilities) but the data plane still authenticates via HS256 JWTs
+  minted by `internal/api/iam` against local `users` / `api_keys` /
+  `refresh_tokens` tables. The agentic-plane spec calls those tables
+  an anti-feature for B2B integration — every buyer already runs Okta
+  / Auth0 / Cognito / Keycloak.
 - **Definition of Done:**
   - `internal/auth` accepts JWKS-issued tokens from configured
     issuers; HS256 path retained only for `bootstrap.admin` first-run.
   - `users`, `api_keys`, `refresh_tokens` tables removed via migration
     after a deprecation cycle; existing tenants migrated by a runbook.
-  - `internal/capability` service with Ed25519-signed tokens, caveats,
-    delegation, revocation list, and JWKS endpoint for verifiers.
+  - IAM Connect plane (`internal/api/iam/v1`) deleted entirely; the
+    `serve api` subcommand drops its IAM listener; Helm chart drops
+    the iam port from the api role.
   - Cedar policy plane stays for tenant-admin authoring; capability
-    becomes the agent-runtime authorisation primitive.
+    becomes the agent-runtime authorisation primitive (Phase 5a).
 - **Blockers:** Customer IdP commitment (Auth0 / Cognito / Keycloak)
-  + a migration plan for existing PALADIN-IAM users.
+  + a migration plan for existing PALADIN-IAM users + a clear cutover
+  signal (no live tenants on the local IAM path).
 
 ### LLM provider wiring
 
