@@ -162,22 +162,29 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** Decision on which models to use per Role — needs
   configuration sign-off from the product side. Wiring is unblocked.
 
-### Vector index wiring
+### Vector index — first caller (RAG search + agent memory)
 
 - **Status:** Aspirational
-- **Reason:** `internal/vector` interface + pgvector adapter +
-  migration 014 landed in Phase 1 but no caller indexes or searches
-  yet. First users: agent memory (`remember` / `recall`) and chunk-
-  level RAG search.
+- **Reason:** Backend plumbing landed: pgvector adapter (Phase 1) plus
+  the real Qdrant REST client (Round 3). cfg.Vector picks one backend
+  at boot via `vector.backend: pgvector|qdrant`; VectorBundle on
+  SharedDeps holds the live Indexer. Helm chart exposes the Qdrant
+  config skeleton + cross-namespace SecretRef + an opt-in
+  `secretCopy` pre-install hook for operators who prefer a copy of
+  `qdrant-client-key` into the PALADIN namespace. What's not wired is an
+  actual caller; first users: agent memory (`remember` / `recall`),
+  chunk-level RAG search exposed via MCP, on-store embedding pipeline.
 - **Definition of Done:**
-  - Embedding pipeline writes to pgvector on object PUT (kind-gated
-    so we don't embed binary blobs).
-  - MCP search tool exposes `search` resource backed by
+  - Embedding pipeline writes to the Indexer on object PUT (kind-gated
+    so we don't embed binary blobs). Uses the LLM Registry's
+    RoleEmbeddings binding.
+  - MCP `search` tool exposes a search resource backed by
     `vector.Indexer.Search`.
   - Per-tenant stats surfaced on the admin SystemService.
-  - Soft-delete cascade calls `DeleteByObject` so vector store stays
-    consistent with object metadata.
-- **Blockers:** LLM provider wiring (above) — no embeddings without it.
+  - Soft-delete cascade calls `DeleteByObject` so the vector store
+    stays consistent with object metadata.
+- **Blockers:** "LLM provider — first caller" lands first (no
+  embeddings without an embedding-model binding).
 
 ---
 

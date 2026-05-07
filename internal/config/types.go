@@ -664,13 +664,32 @@ type VectorPgvector struct {
 	DefaultModel string `yaml:"default_model" json:"default_model"`
 }
 
-// VectorQdrant mirrors internal/vector/qdrant.Config.
+// VectorQdrant mirrors internal/vector/qdrant.Config. Default deploy
+// pattern: Qdrant lives in its own namespace (typically `qdrant`); PALADIN
+// reaches it over a cluster-internal Service URL. The api_key Secret
+// can either be copied into the PALADIN namespace (Helm pre-install hook)
+// or read cross-namespace via the secret-reader ClusterRole — both
+// flows are supported.
 type VectorQdrant struct {
-	Endpoint     string    `yaml:"endpoint" json:"endpoint"`
+	// URL of the Qdrant REST endpoint, e.g.
+	// http://qdrant.qdrant.svc.cluster.local:6333
+	URL string `yaml:"url" json:"url"`
+	// APIKey is the bearer key Qdrant expects on every request.
+	// In production resolve via APIKeySecret; APIKey-inline is for
+	// dev mode only.
 	APIKey       string    `yaml:"api_key" json:"api_key"`
 	APIKeySecret SecretRef `yaml:"api_key_secret" json:"api_key_secret"`
-	Collection   string    `yaml:"collection" json:"collection"`
-	Dimension    int       `yaml:"dimension" json:"dimension"`
+	// Collection is the Qdrant collection name. One collection per
+	// PALADIN deployment is the supported topology — multi-tenancy is
+	// enforced via the `tenant_id` payload filter on every query,
+	// not via separate collections.
+	Collection string `yaml:"collection" json:"collection"`
+	// Dimension MUST match the embedding model's output size.
+	// Mismatch shows up as a Qdrant 4xx at upsert time.
+	Dimension int `yaml:"dimension" json:"dimension"`
+	// Timeout caps each HTTP call. Default 10s — search is fast but
+	// large upserts / collection-stat calls can spike on cold cache.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
 }
 
 // Capability configures the agent-runtime authorisation primitive. See

@@ -61,6 +61,11 @@ type SharedDeps struct {
 	// llm.ErrProviderUnavailable; LLM is never load-bearing on the
 	// hot path.
 	LLM *LLMBundle
+
+	// Vector is the configured embeddings index (pgvector or qdrant).
+	// Nil when cfg.Vector.Enabled is false; semantic search and agent
+	// memory recall return empty results in that mode (non-fatal).
+	Vector *VectorBundle
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -157,6 +162,13 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, fmt.Errorf("app: llm bundle: %w", err)
 	}
 	deps.LLM = llmBundle
+
+	// Vector subsystem — additive; absence is fine.
+	vecBundle, err := BuildVectorBundle(cfg.Vector, deps)
+	if err != nil {
+		return nil, fmt.Errorf("app: vector bundle: %w", err)
+	}
+	deps.Vector = vecBundle
 
 	return deps, nil
 }

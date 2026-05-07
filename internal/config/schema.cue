@@ -355,11 +355,12 @@ vector: {
     default_model: string | *""
   }
   qdrant: {
-    endpoint:        string | *""
+    url:             string | *""
     api_key:         string | *""
     api_key_secret?: #SecretRef
     collection:      string | *"paladin"
     dimension:       int | *1536
+    timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10s"
   }
 }
 
