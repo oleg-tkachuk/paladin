@@ -25,6 +25,7 @@ type Config struct {
 	LLM        LLM        `yaml:"llm" json:"llm"`
 	Vector     Vector     `yaml:"vector" json:"vector"`
 	Capability Capability `yaml:"capability" json:"capability"`
+	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -295,6 +296,7 @@ type Workers struct {
 	Lifecycle        Lifecycle        `yaml:"lifecycle" json:"lifecycle"`
 	Replication      Replication      `yaml:"replication" json:"replication"`
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
+	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 }
 
 // CapabilityWorker drops capability_revocations rows for tokens whose
@@ -303,6 +305,15 @@ type Workers struct {
 // row can never match a verifying token by definition). Disable by
 // setting interval to 0.
 type CapabilityWorker struct {
+	Interval   time.Duration `yaml:"interval" json:"interval"`
+	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
+}
+
+// APITokenWorker drops api_tokens rows whose expires_at is past
+// expired_for. Bounded table over time; verifier correctness is
+// unchanged (an expired token can never satisfy the time gate).
+// Disable by setting interval to 0.
+type APITokenWorker struct {
 	Interval   time.Duration `yaml:"interval" json:"interval"`
 	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
 }
@@ -667,4 +678,37 @@ type Capability struct {
 	// answers. Default 2s; the SLO for revocation propagation. Set <0
 	// to disable caching (every check hits the DB).
 	RevocationCacheTTL time.Duration `yaml:"revocation_cache_ttl" json:"revocation_cache_ttl"`
+}
+
+// APIToken configures the hashed-bearer M2M token subsystem. Distinct
+// from Capability (agent-runtime, JWT, short-lived) and from Auth
+// (user authn via OIDC / HS256 bootstrap). See internal/auth/api_token
+// for the package and migrations/017_api_tokens.sql for the schema.
+//
+// API tokens are long-lived service-to-service credentials following
+// the hashed-bearer pattern (Hatchet / GitHub PATs / Stripe / GitLab
+// reference implementations). Disabled by default — enable per-deploy
+// once the admin RPC surface is rolled out and at least one issuance
+// path (CLI or admin UI) is in place.
+type APIToken struct {
+	// Enabled gates the subsystem. When false, the issuer + verifier
+	// are not built and the interceptor short-circuits — JWT / capability
+	// auth still works.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// MaxTTL caps the lifetime of any token Issue mints. 0 → 1 year
+	// default (in the issuer). Service tokens shouldn't live forever;
+	// if a customer needs a longer-lived secret they're using the
+	// wrong primitive (consider OIDC client_credentials).
+	MaxTTL time.Duration `yaml:"max_ttl" json:"max_ttl"`
+
+	// VerifierLeeway widens the expires_at gate to absorb clock skew.
+	// Default 30s.
+	VerifierLeeway time.Duration `yaml:"verifier_leeway" json:"verifier_leeway"`
+
+	// TouchLastUsed controls whether the verifier bumps last_used_at
+	// on successful verify. Production should keep this on for stale-
+	// token cleanup tooling; high-QPS deploys that can't tolerate the
+	// per-request UPDATE turn it off and rely on creation timestamps.
+	TouchLastUsed bool `yaml:"touch_last_used" json:"touch_last_used"`
 }

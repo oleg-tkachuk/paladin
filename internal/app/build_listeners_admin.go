@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
@@ -57,22 +58,28 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	if err != nil {
 		return nil, nil, err
 	}
-	// Capability interceptor — additive, runs after JWT verify so a
-	// missing token falls through to JWT auth and an invalid token
-	// fails loud. Most admin RPCs gate on roles (platform.admin), but
-	// future delegation paths (cap-issuer minting sub-caps from a parent
-	// the caller holds) read the capability via auth.CapabilityFromContext.
-	var capAdmin connect.Interceptor
+	// Capability + API-token interceptors — additive, run after JWT
+	// verify so a missing token falls through to JWT auth and an
+	// invalid token fails loud. Most admin RPCs gate on roles
+	// (platform.admin); the agent / service paths read the typed
+	// principal via auth.CapabilityFromContext / APITokenFromContext.
+	var capAdmin, apiTokAdmin connect.Interceptor
 	if deps.Capability != nil {
 		capAdmin = auth.CapabilityInterceptor(deps.Capability.Verifier, capability.AudiencePlaneAdmin)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "")
+	}
+	if deps.APIToken != nil {
+		apiTokAdmin = auth.APITokenInterceptor(deps.APIToken.Verifier, "admin")
+	} else {
+		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}
 
 	adminOpts := connect.WithInterceptors(
 		auth.Interceptor(verifierAdmin),
 		auth.RequireAudience(auth.AudienceAdmin),
 		capAdmin,
+		apiTokAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
 	)
@@ -109,6 +116,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// authentication; the handler does its own Cedar gate per RPC.
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, polEngine)
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
+	}
+
+	// APITokenService — Create / Revoke / List / GetSelf. Mounted only
+	// when the api_token subsystem is wired. GetSelf is gated only by
+	// the interceptor (caller must hold a valid token); the rest are
+	// platform-admin via Cedar.
+	if deps.APIToken != nil {
+		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, polEngine)
+		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
 	}
 
 	return mux, healthH, nil

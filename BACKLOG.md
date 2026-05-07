@@ -140,40 +140,56 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### Phase 5b.2 — api_tokens RPC surface, mux wiring, legacy migration
+### api_token CLI + legacy api_keys migration runbook
 
 - **Status:** Aspirational
-- **Reason:** Phase 5b.2 foundation landed: migration 017
-  (api_tokens table), `internal/auth/api_token` package (types,
-  argon2id format, Store interface, Issuer, Verifier),
-  `internal/auth/api_token/postgres` Store impl,
-  `auth.APITokenInterceptor` (additive). Tests cover the format
-  invariants, issuance round-trip, audience / TTL / revocation /
-  tampered-plaintext rejections.
-  What's left: the network surface (proto + handler), boot wiring,
-  legacy `api_keys` migration, housekeeping, CLI.
+- **Reason:** The api_token primitive is now wire-complete (boot
+  bundle, interceptor on data/admin/iam, APITokenService proto +
+  Connect handler, APITokenPurger worker, helm config). What's left
+  is operator UX:
+    - a CLI to mint tokens from a terminal without going through
+      the admin Connect API directly;
+    - a one-shot job + runbook that walks an upgrading customer
+      from the legacy `api_keys` table to `api_tokens` (re-hash via
+      argon2id, copy scopes / expires_at / revoked_at, drop the
+      old table after a cool-down).
 - **Definition of Done:**
-  - Boot wiring: `internal/app.BuildSharedDeps` builds an
-    `*api_token.Issuer` + `*api_token.Verifier` against the same
-    Postgres pool as the rest of PALADIN. Bundle stored on `SharedDeps`
-    so listener builders can hand the verifier to the interceptor.
-  - `AssembleAPIMuxes` / `AssembleAdminMux` append APITokenInterceptor
-    to data / admin / iam opts, audience-pinned per plane.
-  - Proto + Connect handler `APITokenService` under the admin plane:
-    Create (returns plaintext exactly once), Revoke, List, GetSelf
-    (introspect current token from request context).
-  - Helm `serve worker`: append a `worker.APITokenPurger` calling
-    `Store.PurgeExpired` on cadence (gated by `cfg.Workers.APIToken`).
-  - Legacy migration: drop `api_keys` table after re-hashing existing
-    rows into `api_tokens` (one-shot Job, runbook). The old
-    `internal/api/iam/v1/api_key_service` handler stays in place
-    until the runbook runs in production; afterwards delete it.
-  - CLI: `paladin api-token create --tenant=acme --name=ingest-svc
-    --scopes=api:write --audience=data --ttl=90d` calls Create
-    via the admin plane.
-  - Optional sliding-window rate limit per token (Postgres-backed,
-    default off) — separate worker, low priority.
-- **Blockers:** none. Discrete work.
+  - `paladin api-token create --tenant=… --name=… --scopes=… --audience=…
+    --ttl=…` subcommand on cmd/server. Shells out via Connect client
+    to the admin plane. Plaintext printed to stdout once with a
+    big "store now, won't show again" warning.
+  - `paladin api-token revoke <id>` and `paladin api-token list --tenant=…`
+    for symmetry.
+  - One-shot migration Job (separate from migrate hook): re-hashes
+    existing `api_keys` rows into `api_tokens` using their original
+    plaintext when stored as such, or invalidates and re-issues
+    when only sha256(token) is on the legacy row.
+  - After the runbook runs in production: drop the legacy
+    `internal/api/iam/v1/api_key_service` handler; remove the
+    `api_keys` table via migration 018; admin UI swaps to
+    APITokenService.
+- **Blockers:** Production migration plan signed off by the team
+  who runs the existing api_keys consumers. Without that, dropping
+  the legacy table breaks live integrations.
+
+### api_token: optional sliding-window rate limit
+
+- **Status:** Deferred
+- **Reason:** Hatchet / GitHub PATs include per-token rate limits
+  out-of-the-box (default high enough for normal use; useful for
+  containing a leaked token's blast radius). PALADIN's existing
+  `middleware.RateLimit` is per-tenant, not per-token. A
+  Postgres-backed sliding window keyed by api_token.id would close
+  the gap.
+- **Definition of Done:**
+  - `internal/auth/api_token/ratelimit` package with a Postgres
+    sliding-window counter (one row per (token_id, minute_bucket)).
+  - APITokenInterceptor reads the counter on the verify path, bumps
+    the bucket, rejects with CodeResourceExhausted when over the
+    per-token cap.
+  - Configured per-token via a new `rate_limit_rpm` column on
+    api_tokens; 0 = unlimited.
+- **Blockers:** none. Lower-priority polish.
 
 ### LLM provider wiring
 

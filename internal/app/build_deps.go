@@ -51,6 +51,10 @@ type SharedDeps struct {
 	// Capability is the agent-runtime authorisation primitive. Nil when
 	// cfg.Capability.Enabled is false; callers must guard.
 	Capability *CapabilityBundle
+
+	// APIToken is the hashed-bearer M2M auth primitive. Nil when
+	// cfg.APIToken.Enabled is false; callers must guard.
+	APIToken *APITokenBundle
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -126,13 +130,20 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		S3:        s3c,
 	}
 
-	// Capability subsystem — additive; absence is fine. Built last so
-	// the bundle can take a *SharedDeps for logging convenience.
+	// Capability subsystem — additive; absence is fine. Built after the
+	// rest so the bundle can take a *SharedDeps for logging convenience.
 	cap, err := BuildCapabilityBundle(cfg.Capability, deps)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability bundle: %w", err)
 	}
 	deps.Capability = cap
+
+	// API-token subsystem — additive; same disabled-by-default rule.
+	apiTok, err := BuildAPITokenBundle(cfg.APIToken, deps)
+	if err != nil {
+		return nil, fmt.Errorf("app: api_token bundle: %w", err)
+	}
+	deps.APIToken = apiTok
 
 	return deps, nil
 }

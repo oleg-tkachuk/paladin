@@ -258,6 +258,12 @@ workers: {
     interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
   }
+  // APIToken: drop expired api_tokens rows. Same shape as Capability
+  // — interval=0 disables.
+  api_token: {
+    interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"   // 7 days
+  }
 }
 
 // Storage is the registry of physical object-storage backends. Each
@@ -358,6 +364,13 @@ capability: {
   default_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   verifier_leeway:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   revocation_cache_ttl:  =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+}
+
+api_token: {
+  enabled:          bool | *false
+  max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h"   // 1 year
+  verifier_leeway:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  touch_last_used:  bool | *true
 }
 
 #SecretRef: string | {

@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// APITokenService manages hashed-bearer M2M tokens (`paladin_pat_…`). Distinct
+// from capability tokens (CapabilityService) which serve agent-runtime
+// federation in JWT format. API tokens are long-lived service-to-
+// service credentials that follow the Hatchet / GitHub PATs / Stripe
+// pattern: stored as argon2id PHC hash, plaintext returned exactly
+// once at creation.
+//
+// Naming: request / response types use the `APITokenService<Method>`
+// prefix because the bare verbs (Create / Revoke / List) collide with
+// other admin services in the same proto package — buf STANDARD lint
+// requires the prefix when method names alone aren't unique.
+service APITokenService {
+  // Create mints a new API token. Plaintext is returned exactly once
+  // in `token`; afterwards only the hash is persisted. Caller MUST
+  // treat the returned `token` as a write-once secret — the service
+  // can't recover it.
+  rpc Create(APITokenServiceCreateRequest) returns (APITokenServiceCreateResponse);
+
+  // Revoke marks a token as revoked at NOW(). Idempotent — re-revoking
+  // a revoked token is a no-op. Cannot be undone; caller mints a new
+  // one to replace.
+  rpc Revoke(APITokenServiceRevokeRequest) returns (APITokenServiceRevokeResponse);
+
+  // List enumerates tokens for a tenant. Paginated cursor-style. The
+  // `token_hash` is never returned; callers see metadata only.
+  rpc List(APITokenServiceListRequest) returns (APITokenServiceListResponse);
+
+  // GetSelf introspects the API token attached to the calling request,
+  // if any. Returns NOT_FOUND when the request was authenticated via
+  // JWT or capability instead of an API token. Used by clients that
+  // want to display "you are authenticated as token X" without an
+  // out-of-band lookup.
+  rpc GetSelf(APITokenServiceGetSelfRequest) returns (APITokenServiceGetSelfResponse);
+}
+
+// APIToken is the metadata view returned by every RPC. The plaintext
+// is delivered separately as `token` on Create and never elsewhere.
+message APIToken {
+  string id = 1;
+  string tenant_id = 2;
+  string name = 3;
+  // prefix is the 8-char display string (first chars of the body
+  // after the `paladin_pat_` literal). Operators identify tokens by it.
+  string prefix = 4;
+  repeated string scopes = 5;
+  repeated string audience = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  google.protobuf.Timestamp revoked_at = 8;
+  google.protobuf.Timestamp last_used_at = 9;
+  google.protobuf.Timestamp created_at = 10;
+  string created_by = 11;
+}
+
+message APITokenServiceCreateRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  // ttl_seconds caps lifetime. 0 → server default (1 year).
+  // Application clamps to MaxTTL configured on the issuer.
+  int64 ttl_seconds = 3 [(buf.validate.field).int64.gte = 0];
+  repeated string scopes = 4;
+  // audience must include at least one plane the token is presented
+  // to. Subset of {data, admin, iam, mcp}.
+  repeated string audience = 5 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message APITokenServiceCreateResponse {
+  APIToken api_token = 1;
+  // The full `paladin_pat_…` plaintext. Returned exactly once. Store it
+  // securely on the consuming side; it cannot be recovered.
+  string token = 2;
+}
+
+message APITokenServiceRevokeRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message APITokenServiceRevokeResponse {
+  // Empty on success. Forward-compat slot for future fields.
+}
+
+message APITokenServiceListRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  bool include_revoked = 2;
+  bool include_expired = 3;
+  int32 page_size = 4 [(buf.validate.field).int32.gte = 0];
+  string page_token = 5;
+}
+
+message APITokenServiceListResponse {
+  repeated APIToken api_tokens = 1;
+  string next_page_token = 2;
+}
+
+message APITokenServiceGetSelfRequest {
+  // Empty — the call's auth context identifies the token.
+}
+
+message APITokenServiceGetSelfResponse {
+  APIToken api_token = 1;
+}

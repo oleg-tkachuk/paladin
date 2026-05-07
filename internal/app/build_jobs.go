@@ -119,6 +119,18 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Logger:     l.Named("capability-purger"),
 		})
 	}
+
+	// API-token purger — same shape as capability purger. Bounds the
+	// api_tokens table size; expired rows can never satisfy the time
+	// gate so dropping them is safe.
+	if deps.APIToken != nil && cfg.Workers.APIToken.Interval > 0 {
+		out = append(out, &worker.APITokenPurger{
+			Store:      deps.APIToken.Store,
+			Interval:   cfg.Workers.APIToken.Interval,
+			ExpiredFor: cfg.Workers.APIToken.ExpiredFor,
+			Logger:     l.Named("api-token-purger"),
+		})
+	}
 	return out
 }
 
