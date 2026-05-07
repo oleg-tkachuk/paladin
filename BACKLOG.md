@@ -108,28 +108,74 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Phase 5b — Drop own IAM, accept OIDC
+### Phase 5b.1 — Drop user-authn IAM, accept OIDC
 
 - **Status:** Blocked
-- **Reason:** Phase 5a wraps the agent-runtime authorisation primitive
-  (capabilities) but the data plane still authenticates via HS256 JWTs
-  minted by `internal/api/iam` against local `users` / `api_keys` /
-  `refresh_tokens` tables. The agentic-plane spec calls those tables
-  an anti-feature for B2B integration — every buyer already runs Okta
-  / Auth0 / Cognito / Keycloak.
+- **Reason:** PALADIN currently mints HS256 JWTs against local `users` /
+  `refresh_tokens` and exposes a login flow through
+  `internal/api/iam/v1/auth_service`. The agentic-plane spec calls
+  this an anti-feature for B2B integration — every buyer already
+  runs Okta / Auth0 / Cognito / Keycloak. User authn is the
+  customer's IdP problem, not PALADIN's.
+- **Scope clarification (added after the M2M discussion):** this
+  phase is about **user authentication only**. It does NOT touch
+  `api_keys`, which serve a different purpose (machine-to-machine
+  service tokens) and are modernised in Phase 5b.2 instead.
 - **Definition of Done:**
   - `internal/auth` accepts JWKS-issued tokens from configured
     issuers; HS256 path retained only for `bootstrap.admin` first-run.
-  - `users`, `api_keys`, `refresh_tokens` tables removed via migration
-    after a deprecation cycle; existing tenants migrated by a runbook.
-  - IAM Connect plane (`internal/api/iam/v1`) deleted entirely; the
-    `serve api` subcommand drops its IAM listener; Helm chart drops
-    the iam port from the api role.
-  - Cedar policy plane stays for tenant-admin authoring; capability
-    becomes the agent-runtime authorisation primitive (Phase 5a).
+  - `users`, `refresh_tokens` tables removed via migration after a
+    deprecation cycle; existing tenants migrated by a runbook.
+  - `internal/api/iam/v1/auth_service`, `user_service`,
+    `user_settings_service` deleted; the corresponding handlers,
+    proto, and Connect mux registrations gone.
+  - The `iam` listener stays for `api_key` operations until 5b.2
+    runs; the chart still maps the iam port to the api role.
 - **Blockers:** Customer IdP commitment (Auth0 / Cognito / Keycloak)
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
+
+### Phase 5b.2 — Modernize api_keys → api_tokens (hashed bearer)
+
+- **Status:** Aspirational
+- **Reason:** The current `api_keys` table is a working machine-to-
+  machine token primitive but the implementation is dated: token may
+  be stored without prefix-display, hash function isn't argon2id,
+  expiry can be NULL, no rate-limit-per-token, no `last_used_at`.
+  Industry-standard hashed-bearer pattern (Hatchet / GitHub PATs /
+  Stripe / GitLab) is what most M2M consumers expect; we modernise
+  rather than drop. Distinct from capability tokens, which serve
+  agent-runtime federation and need JWT format.
+- **Definition of Done:**
+  - Migration 017: new `api_tokens` table — `id`, `tenant_id`,
+    `name`, `prefix` (8-char display), `token_hash` (argon2id),
+    `scopes` (text[]), `audience` (text[]), `expires_at` (NOT NULL),
+    `revoked_at`, `last_used_at`, `created_by`, `created_at`.
+  - `internal/auth/api_token` package: Issue (return plaintext once),
+    Verify (hash + lookup + time gate), Revoke, ListByTenant.
+    Argon2id default; SHA-256 alternative for token-with-256-bit-
+    entropy fast path.
+  - Token format: `paladin_pat_<base32(32 random bytes)>`. Prefix-aware
+    so secret-scanners (gitleaks / GitHub) recognise; logs show the
+    8-char prefix only.
+  - `auth.APITokenInterceptor` — additive Connect interceptor,
+    runs alongside `CapabilityInterceptor` and JWT auth; reads
+    `Authorization: Bearer paladin_pat_…`. `last_used_at` updated on
+    successful verify (write-behind, batched).
+  - Proto + Connect handler `APITokenService` under the admin plane:
+    Create / Revoke / List / GetSelf. Token returned only on
+    Create.
+  - Old `internal/api/iam/v1/api_key_service` migrated to the new
+    surface; existing `api_keys` rows re-hashed via a one-shot
+    migration job; the legacy table is dropped.
+  - Helm `serve worker` config: optional rate-limit-per-token
+    using a Postgres-backed sliding window (default off).
+  - CLI: `paladin api-token create --tenant=acme --name=ingest-svc
+    --scopes=api:write --audience=data --ttl=90d`.
+  - `last_used_at` exposed in `ListAPITokens` UI for "stale token"
+    cleanup.
+- **Blockers:** none. Discrete work; can land before, after, or in
+  parallel with 5b.1.
 
 ### LLM provider wiring
 
