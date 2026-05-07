@@ -21,9 +21,9 @@ import (
 
 // Flags scoped to `serve mcp`. Cobra binds them in init().
 var (
-	mcpTransport  string // "stdio" | "http"
-	mcpAllowWrite bool
-	mcpEmbedded   bool
+	mcpTransport string // "stdio" | "http"
+	mcpProfile   string // "" → use cfg.MCP.{Stdio,HTTP}.Profile, else override
+	mcpEmbedded  bool
 )
 
 // serveMCPCmd hosts the MCP server using the official modelcontextprotocol/
@@ -67,7 +67,7 @@ var serveMCPCmd = &cobra.Command{
 
 func init() {
 	serveMCPCmd.Flags().StringVar(&mcpTransport, "transport", "http", `MCP client transport: "stdio" or "http"`)
-	serveMCPCmd.Flags().BoolVar(&mcpAllowWrite, "allow-write", false, "Enable mutating tools (off by default)")
+	serveMCPCmd.Flags().StringVar(&mcpProfile, "profile", "", "Override the MCP tool catalog profile (read_only | agent_safe | admin | <custom>). Empty = use cfg.MCP.{Stdio,HTTP}.Profile.")
 	serveMCPCmd.Flags().BoolVar(&mcpEmbedded, "embedded", false, "Co-host api/admin/iam handlers in-process; route Connect calls via inline transport instead of HTTP")
 }
 
@@ -180,14 +180,30 @@ func runMCPEmbedded(ctx context.Context) {
 	}
 }
 
+// pickProfile chooses the MCP tool catalog profile name. CLI flag wins
+// over config; empty config falls back to "read_only" — the same
+// closed-by-default discipline the gating layer applies. Operators
+// who deliberately want a tighter or looser catalog set the flag /
+// cfg explicitly.
+func pickProfile(flag, cfgValue string) string {
+	if flag != "" {
+		return flag
+	}
+	if cfgValue != "" {
+		return cfgValue
+	}
+	return "read_only"
+}
+
 // runStdio runs the stdio MCP transport with the supplied Connect clients.
 // The clients are built once (network mode) or per-call wouldn't make
 // sense on stdio because there is exactly one session per process.
 func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mcp.Clients) {
-	allow := mcpAllowWrite || cfg.MCP.Stdio.AllowWrite
-	server := mcp.NewServer("paladin-mcp", version, clients, allow)
+	profile := pickProfile(mcpProfile, cfg.MCP.Stdio.Profile)
+	filter := mcp.NewToolFilter(cfg.MCP, profile)
+	server := mcp.NewServer("paladin-mcp", version, clients, filter)
 
-	l.Info("mcp stdio starting", zap.Bool("allow_write", allow))
+	l.Info("mcp stdio starting", zap.String("profile", profile))
 	if err := server.Run(ctx, &mcpsdk.StdioTransport{}); err != nil {
 		l.Fatal("mcp stdio run failed", zap.Error(err))
 	}
@@ -197,14 +213,15 @@ func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mc
 // is invoked per-session; it returns nil to refuse the session (which
 // the SDK surfaces as 400 Bad Request to the LLM client).
 func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clientsFor func(*http.Request) *mcp.Clients) {
-	allow := mcpAllowWrite || cfg.MCP.HTTP.AllowWrite
+	profile := pickProfile(mcpProfile, cfg.MCP.HTTP.Profile)
+	filter := mcp.NewToolFilter(cfg.MCP, profile)
 
 	handler := mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
 		clients := clientsFor(r)
 		if clients == nil {
 			return nil
 		}
-		return mcp.NewServer("paladin-mcp", version, clients, allow)
+		return mcp.NewServer("paladin-mcp", version, clients, filter)
 	}, &mcpsdk.StreamableHTTPOptions{
 		SessionTimeout: cfg.MCP.HTTP.SessionTimeout,
 	})
@@ -236,7 +253,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	l.Info("mcp http starting",
 		zap.String("addr", addr),
 		zap.String("mode", modeLabel),
-		zap.Bool("allow_write", allow),
+		zap.String("profile", profile),
 	)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		l.Fatal("mcp http listen failed", zap.Error(err))

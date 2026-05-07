@@ -513,12 +513,17 @@ config:
       iam_url: ""
     stdio:
       enabled: false
-      allow_write: false
+      profile: read_only
     http:
       enabled: true
       addr: ":8095"
-      allow_write: false
+      profile: read_only
       session_timeout: 10m
+    # Tool catalog gating. Profiles + always_deny live in
+    # internal/mcp/profile.go (built-in defaults); these blocks are the
+    # operator override seam. Leave empty to use the defaults.
+    profiles: {}
+    # always_deny: []
 
 # ─── Bootstrap admin Secret ────────────────────────────────────────────────
 #

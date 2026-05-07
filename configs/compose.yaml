@@ -188,11 +188,11 @@ mcp:
     iam_url:   "http://paladin-api:8085"
   stdio:
     enabled: false
-    allow_write: false
+    profile: read_only
   http:
     enabled: true
     addr: "0.0.0.0:8095"
-    allow_write: false
+    profile: agent_safe
     session_timeout: 10m
 
 # Subsystems disabled by default in the smoke stack — they're config-

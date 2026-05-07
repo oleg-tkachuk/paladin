@@ -276,14 +276,23 @@ cedar:
   policy_cache_ttl: 30s                 # short TTL — missed LISTEN/NOTIFY self-corrects
 
 # ─── MCP (Model Context Protocol) bridges ───────────────────────────────────
-# LLM-facing entry points. Each transport flips off independently;
-# `allow_write` toggles the catalog from read-only to also include mutating
-# tools (create_user, set_quota, set_lifecycle_rules, …).
+# LLM-facing entry points. Each transport flips off independently. The
+# tool catalog exposed to the LLM is gated by a named `profile`:
 #
-# Env-var overrides (always win over YAML so a Claude Desktop config can pin
-# behaviour without editing cluster YAML):
-#   PALADIN_MCP_STDIO_ENABLED, PALADIN_MCP_STDIO_ALLOW_WRITE
-#   PALADIN_MCP_HTTP_ENABLED, PALADIN_MCP_HTTP_ALLOW_WRITE,
+#   read_only   — list/get/query + audit + simulate_authz; no mutations
+#   agent_safe  — read_only + presign get/put + complete_object + tag mutations
+#   admin       — every registered tool, except items in mcp.always_deny
+#
+# Built-in profiles live in internal/mcp/profile.go. Custom profiles
+# can be defined under mcp.profiles below; tool-name patterns support
+# trailing-* wildcard. The mcp.always_deny list applies regardless of
+# profile (it encodes the capability-model antithesis: agent issuing
+# its own caps, role escalation, login, tenant lifecycle).
+#
+# Env-var overrides (always win over YAML so a Claude Desktop config
+# can pin behaviour without editing cluster YAML):
+#   PALADIN_MCP_STDIO_ENABLED, PALADIN_MCP_STDIO_PROFILE
+#   PALADIN_MCP_HTTP_ENABLED, PALADIN_MCP_HTTP_PROFILE,
 #   PALADIN_MCP_HTTP_ADDR, PALADIN_MCP_HTTP_SESSION_TIMEOUT
 #   PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL
 mcp:
@@ -293,9 +302,18 @@ mcp:
     iam_url: "http://localhost:8085"
   stdio:
     enabled: true                       # set false to ship a build with no local LLM bridge
-    allow_write: false                  # read-only by default
+    profile: read_only                  # read-only inspection by default
   http:
     enabled: true                       # set false in prod if no remote LLM platforms connect
     addr: ":8095"
-    allow_write: false
+    profile: read_only
     session_timeout: 10m                # idle sessions auto-close after this
+  # Custom / overridden profiles (optional). When empty the built-in
+  # set from internal/mcp/profile.go is used. Tool-name patterns
+  # support trailing-* wildcard. `deny` wins over `tools` within a
+  # profile.
+  profiles: {}
+  # Global deny list — applied AFTER profile expansion. Empty list
+  # explicitly = no global denial (override for built-in defaults).
+  # Leave commented to keep the built-in DefaultAlwaysDeny.
+  # always_deny: []

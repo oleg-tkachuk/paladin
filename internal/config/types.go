@@ -542,6 +542,30 @@ type MCP struct {
 	Upstreams MCPUpstreams `yaml:"upstreams" json:"upstreams"`
 	Stdio     MCPStdio     `yaml:"stdio" json:"stdio"`
 	HTTP      MCPHTTP      `yaml:"http" json:"http"`
+
+	// Profiles defines named tool allow-lists. Each transport (stdio/http)
+	// picks one by name. Empty map → built-in defaults are used (see
+	// internal/mcp/profile.go: DefaultProfiles). User-supplied entries
+	// override built-ins of the same name. Tool-name patterns support
+	// trailing-* wildcard, e.g. "paladin_list_*".
+	Profiles map[string]MCPProfile `yaml:"profiles" json:"profiles"`
+
+	// AlwaysDeny is a global blacklist applied AFTER profile expansion
+	// regardless of which profile a transport selects. It encodes the
+	// "antithesis to capability model" set: tool names an agentic
+	// runtime must never see in its catalog (Issue/Revoke its own
+	// capability, mint API tokens, manage users, rewrite policies).
+	// Tool-name patterns support trailing-* wildcard. Default list
+	// (when empty) is the built-in DefaultAlwaysDeny.
+	AlwaysDeny []string `yaml:"always_deny" json:"always_deny"`
+}
+
+// MCPProfile is a named tool allow-list. Tool-name patterns support a
+// trailing `*` wildcard (e.g. "paladin_list_*"), and the literal "*" matches
+// every registered tool. Deny entries take precedence over Allow.
+type MCPProfile struct {
+	Tools []string `yaml:"tools" json:"tools"`
+	Deny  []string `yaml:"deny,omitempty" json:"deny,omitempty"`
 }
 
 // MCPUpstreams holds the PALADIN plane URLs the MCP bridge dispatches to. They
@@ -553,22 +577,23 @@ type MCPUpstreams struct {
 }
 
 // MCPStdio configures the local stdio bridge (Claude Desktop / Cursor /
-// IDE plugins). When AllowWrite=false the binary registers only read-only
-// tools — the safe default for ad-hoc LLM exploration on a developer
-// workstation.
+// IDE plugins). Profile selects which tool catalog the binary registers
+// — the safe default is "read_only" (read-only inspection tools only),
+// "agent_safe" adds presign + tag mutations, "admin" exposes everything
+// not in MCP.AlwaysDeny.
 type MCPStdio struct {
-	Enabled    bool `yaml:"enabled" json:"enabled"`
-	AllowWrite bool `yaml:"allow_write" json:"allow_write"`
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Profile string `yaml:"profile" json:"profile"`
 }
 
 // MCPHTTP configures the streamable-HTTP bridge (remote LLM platforms).
-// AllowWrite carries higher blast radius here than for the stdio binary;
-// keep it false unless the deployment is behind mTLS and short-lived
+// Higher blast radius than stdio; pin Profile conservatively (read_only
+// or agent_safe) unless the deployment is behind mTLS and short-lived
 // service-account tokens.
 type MCPHTTP struct {
 	Enabled        bool          `yaml:"enabled" json:"enabled"`
 	Addr           string        `yaml:"addr" json:"addr"`
-	AllowWrite     bool          `yaml:"allow_write" json:"allow_write"`
+	Profile        string        `yaml:"profile" json:"profile"`
 	SessionTimeout time.Duration `yaml:"session_timeout" json:"session_timeout"`
 }
 

@@ -43,7 +43,7 @@ mcp:
   http:
     enabled: true
     addr: ":9000"
-    allow_write: true
+    profile: agent_safe
     session_timeout: 5m
 `)
 	cfg, err := LoadMCP(path)
@@ -56,8 +56,8 @@ mcp:
 	if cfg.HTTP.Addr != ":9000" {
 		t.Errorf("addr: got %q want :9000", cfg.HTTP.Addr)
 	}
-	if !cfg.HTTP.AllowWrite {
-		t.Error("http allow_write should be true")
+	if cfg.HTTP.Profile != "agent_safe" {
+		t.Errorf("http profile: got %q want agent_safe", cfg.HTTP.Profile)
 	}
 	if cfg.HTTP.SessionTimeout != 5*time.Minute {
 		t.Errorf("session_timeout: got %v want 5m", cfg.HTTP.SessionTimeout)

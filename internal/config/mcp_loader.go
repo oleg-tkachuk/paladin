@@ -19,8 +19,8 @@ func MCPDefaults() MCP {
 			DataURL:  "http://localhost:8080",
 			IAMURL:   "http://localhost:8085",
 		},
-		Stdio: MCPStdio{Enabled: true, AllowWrite: false},
-		HTTP:  MCPHTTP{Enabled: true, Addr: ":8095", AllowWrite: false, SessionTimeout: 10 * time.Minute},
+		Stdio: MCPStdio{Enabled: true, Profile: "read_only"},
+		HTTP:  MCPHTTP{Enabled: true, Addr: ":8095", Profile: "read_only", SessionTimeout: 10 * time.Minute},
 	}
 }
 
@@ -38,10 +38,10 @@ func MCPDefaults() MCP {
 //
 //	PALADIN_ADMIN_URL, PALADIN_DATA_URL, PALADIN_IAM_URL — upstream plane URLs
 //	PALADIN_MCP_STDIO_ENABLED                    — true|false (default true)
-//	PALADIN_MCP_STDIO_ALLOW_WRITE                — 1|true to enable mutations
+//	PALADIN_MCP_STDIO_PROFILE                    — read_only | agent_safe | admin
 //	PALADIN_MCP_HTTP_ENABLED                     — true|false (default true)
 //	PALADIN_MCP_HTTP_ADDR                        — listen address, default :8095
-//	PALADIN_MCP_HTTP_ALLOW_WRITE                 — 1|true to enable mutations
+//	PALADIN_MCP_HTTP_PROFILE                     — read_only | agent_safe | admin
 //	PALADIN_MCP_HTTP_SESSION_TIMEOUT             — Go duration, default 10m
 func LoadMCP(path string) (MCP, error) {
 	cfg := MCPDefaults()
@@ -75,8 +75,8 @@ func LoadMCP(path string) (MCP, error) {
 	if v, ok := envBool("PALADIN_MCP_STDIO_ENABLED"); ok {
 		cfg.Stdio.Enabled = v
 	}
-	if v, ok := envBool("PALADIN_MCP_STDIO_ALLOW_WRITE"); ok {
-		cfg.Stdio.AllowWrite = v
+	if v := os.Getenv("PALADIN_MCP_STDIO_PROFILE"); v != "" {
+		cfg.Stdio.Profile = v
 	}
 	if v, ok := envBool("PALADIN_MCP_HTTP_ENABLED"); ok {
 		cfg.HTTP.Enabled = v
@@ -84,8 +84,8 @@ func LoadMCP(path string) (MCP, error) {
 	if v := os.Getenv("PALADIN_MCP_HTTP_ADDR"); v != "" {
 		cfg.HTTP.Addr = v
 	}
-	if v, ok := envBool("PALADIN_MCP_HTTP_ALLOW_WRITE"); ok {
-		cfg.HTTP.AllowWrite = v
+	if v := os.Getenv("PALADIN_MCP_HTTP_PROFILE"); v != "" {
+		cfg.HTTP.Profile = v
 	}
 	if v := os.Getenv("PALADIN_MCP_HTTP_SESSION_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
