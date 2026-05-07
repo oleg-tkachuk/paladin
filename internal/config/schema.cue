@@ -314,6 +314,33 @@ mcp: {
   }
 }
 
+llm: {
+  enabled:            bool   | *false
+  base_url:           string | *""
+  master_key:         string | *""
+  master_key_secret?: #SecretRef
+  timeout:            =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  bindings: [string]: {
+    model: string
+  }
+}
+
+vector: {
+  enabled: bool | *false
+  backend: "pgvector" | "qdrant" | *"pgvector"
+  pgvector: {
+    dimension:     int | *1536
+    default_model: string | *""
+  }
+  qdrant: {
+    endpoint:        string | *""
+    api_key:         string | *""
+    api_key_secret?: #SecretRef
+    collection:      string | *"paladin"
+    dimension:       int | *1536
+  }
+}
+
 #SecretRef: string | {
   name:      string
   key:       string | *"password"

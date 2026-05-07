@@ -22,6 +22,8 @@ type Config struct {
 	Storage    Storage    `yaml:"storage" json:"storage"`
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
+	LLM        LLM        `yaml:"llm" json:"llm"`
+	Vector     Vector     `yaml:"vector" json:"vector"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -533,4 +535,74 @@ type MCPHTTP struct {
 	Addr           string        `yaml:"addr" json:"addr"`
 	AllowWrite     bool          `yaml:"allow_write" json:"allow_write"`
 	SessionTimeout time.Duration `yaml:"session_timeout" json:"session_timeout"`
+}
+
+// LLM configures the LiteLLM proxy that fronts every server-side model
+// invocation PALADIN makes (out-of-band summarization, embeddings, classifiers,
+// rerank). MCP `sampling` covers in-loop calls and goes through the host —
+// this section is for what PALADIN needs when no host is connected. See
+// internal/llm and internal/llm/litellm for rationale.
+//
+// Bindings is a Role -> {Model} map; the same logical role
+// ("embeddings.default", "summarize.cheap", "classify.pii") can point at
+// different LiteLLM model aliases per environment without code changes.
+type LLM struct {
+	// Enabled gates the whole subsystem. When false, callers see
+	// llm.ErrProviderUnavailable from the noop registry and fall back to
+	// heuristics.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// BaseURL of the LiteLLM proxy (e.g. http://litellm:4000). No trailing slash.
+	BaseURL string `yaml:"base_url" json:"base_url"`
+	// MasterKeySecret resolves the proxy's master bearer token. In dev
+	// the inline MasterKey field can be used instead; never both.
+	MasterKey       string    `yaml:"master_key" json:"master_key"`
+	MasterKeySecret SecretRef `yaml:"master_key_secret" json:"master_key_secret"`
+	// Timeout caps each request to the proxy. Embedding batches above
+	// this threshold must be chunked by the caller.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+	// Bindings maps logical roles to LiteLLM model aliases. Key is the
+	// Role string from internal/llm/provider.go (e.g. "embeddings.default").
+	Bindings map[string]LLMBinding `yaml:"bindings" json:"bindings"`
+}
+
+// LLMBinding pins one role to a concrete model alias as configured in the
+// LiteLLM proxy's `model_list`.
+type LLMBinding struct {
+	Model string `yaml:"model" json:"model"`
+}
+
+// Vector configures the embeddings index. Day-1 backend is pgvector; the
+// Qdrant block is reserved for later (placeholder adapter returns
+// ErrNotImplemented). Backend selection is single — multi-backend lands
+// when the migration trigger fires.
+type Vector struct {
+	// Enabled gates the whole subsystem. When false, semantic search and
+	// memory recall return empty results — non-fatal degradation.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Backend selects the implementation: "pgvector" (default) or "qdrant".
+	Backend string `yaml:"backend" json:"backend"`
+	// Pgvector holds the pgvector-specific knobs. Reuses the main
+	// Postgres pool; no separate DSN.
+	Pgvector VectorPgvector `yaml:"pgvector" json:"pgvector"`
+	// Qdrant holds the Qdrant-specific knobs. Honoured only when
+	// Backend == "qdrant" and the real client lands.
+	Qdrant VectorQdrant `yaml:"qdrant" json:"qdrant"`
+}
+
+// VectorPgvector mirrors internal/vector/pgvector.Config.
+type VectorPgvector struct {
+	// Dimension must match migrations/014_pgvector.sql vector(N).
+	Dimension int `yaml:"dimension" json:"dimension"`
+	// DefaultModel is used when SearchRequest.EmbeddingModel is empty
+	// and the tenant has only one model registered.
+	DefaultModel string `yaml:"default_model" json:"default_model"`
+}
+
+// VectorQdrant mirrors internal/vector/qdrant.Config.
+type VectorQdrant struct {
+	Endpoint     string    `yaml:"endpoint" json:"endpoint"`
+	APIKey       string    `yaml:"api_key" json:"api_key"`
+	APIKeySecret SecretRef `yaml:"api_key_secret" json:"api_key_secret"`
+	Collection   string    `yaml:"collection" json:"collection"`
+	Dimension    int       `yaml:"dimension" json:"dimension"`
 }

@@ -31,6 +31,119 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Agentic plane / single-binary multi-mode migration
+
+### Phase 2 — `serve` subcommand tree on cmd/server
+
+- **Status:** Aspirational
+- **Reason:** `cmd/server/root.go` currently runs all listeners (data /
+  admin / iam) plus the full worker fan in one process via a single
+  `cobra.Command`. The agentic / one-binary-multi-role plan calls for
+  `serve api`, `serve worker`, `serve mcp`, `serve admin`, plus a
+  backwards-compat `serve all` alias.
+- **Definition of Done:**
+  - `buildListeners` and `buildBackgroundJobs` extracted out of
+    `cmd/server/root.go` into `internal/app/build_listeners.go` and
+    `internal/app/build_jobs.go` so both subcommands can call them.
+  - New `serve` subcommand tree on root with `api`, `worker`, `mcp`,
+    `admin`, `all`. `all` keeps the current rootCmd.Run behaviour for
+    one release.
+  - Helm chart switches to `args: ["serve", "<role>"]` per-Deployment.
+  - Workers acquire a Postgres advisory lock when running in `worker`
+    mode so two replicas don't double-process the reaper backlog.
+- **Blockers:** none. Pure refactor; no behaviour change at the wire.
+
+### Phase 3 — Inline MCP mode + collapse cmd/paladin-mcp-* binaries
+
+- **Status:** Aspirational
+- **Reason:** `cmd/paladin-mcp-stdio` and `cmd/paladin-mcp-http` are separate
+  binaries that proxy over the network into the PALADIN planes. Inline
+  mode (`serve mcp --transport=http|stdio`) running in the same
+  process as the api avoids the extra hop for in-cluster deploys
+  while keeping the standalone binaries for laptop / IDE plugin use.
+- **Definition of Done:**
+  - `serve mcp` subcommand on cmd/server speaks both stdio and
+    streamable HTTP per `--transport`.
+  - `cmd/paladin-mcp-stdio` and `cmd/paladin-mcp-http` become thin wrappers
+    that re-dispatch to `serve mcp`, then a release later are deleted.
+  - MCP server can call PALADIN handlers directly (in-process) when the
+    `--inline=true` flag is set and the same Wire graph is available.
+- **Blockers:** Phase 2 must land first.
+
+### Phase 4 — Helm chart: per-role Deployments
+
+- **Status:** Aspirational
+- **Reason:** `deploy/chart/templates/deployment.yaml` renders a single
+  Deployment with all roles in-process. Independent scaling, RBAC,
+  and resource limits per role require the chart to iterate over a
+  `deployments` map keyed by role.
+- **Definition of Done:**
+  - `values.yaml` exposes a `deployments:` map with default entries
+    `api`, `worker`, `mcp`, `admin`, each carrying `replicas`,
+    `resources`, `args`, `serviceAccountName`, `nodeSelector`.
+  - `templates/deployment.yaml` becomes a `range` over the map.
+  - Per-role `Service`, `ServiceAccount`, optional `NetworkPolicy`.
+  - Bootstrap (admin / migrate) runs as a one-shot Job, not in api.
+- **Blockers:** Phases 2–3.
+
+### Phase 5 — Drop own IAM, accept OIDC + capability tokens
+
+- **Status:** Blocked
+- **Reason:** The agentic-plane spec calls `internal/api/iam` (own
+  user / api_key / refresh-token store) an anti-feature for B2B
+  integration. Replacement: OIDC RP that accepts JWT/JWKS from the
+  customer's IdP, plus a capability service that mints short-lived
+  scoped tokens. The current code still mints HS256 JWTs locally and
+  the database has live `users`, `api_keys`, `refresh_tokens` tables.
+- **Definition of Done:**
+  - `internal/auth` accepts JWKS-issued tokens from configured
+    issuers; HS256 path retained only for `bootstrap.admin` first-run.
+  - `users`, `api_keys`, `refresh_tokens` tables removed via migration
+    after a deprecation cycle; existing tenants migrated by a runbook.
+  - `internal/capability` service with Ed25519-signed tokens, caveats,
+    delegation, revocation list, and JWKS endpoint for verifiers.
+  - Cedar policy plane stays for tenant-admin authoring; capability
+    becomes the agent-runtime authorisation primitive.
+- **Blockers:** Customer IdP commitment (Auth0 / Cognito / Keycloak)
+  + a migration plan for existing PALADIN-IAM users.
+
+### LLM provider wiring
+
+- **Status:** Aspirational
+- **Reason:** `internal/llm` interface + LiteLLM proxy client landed in
+  Phase 1 but no caller invokes it yet. The first user is on-store
+  summarization (server-side, async).
+- **Definition of Done:**
+  - `internal/llm/registry` constructed at boot from `cfg.LLM.Bindings`.
+  - At least one caller exercises the path end-to-end: object PUT →
+    background worker → LiteLLM → summary stored on object metadata.
+  - Failure path (LiteLLM down) returns `ErrProviderUnavailable` and
+    the caller skips silently — never fails the hot path.
+  - A docker-compose service for LiteLLM in `deploy/docker-compose.yaml`
+    so dev gets the full stack.
+- **Blockers:** Decision on which models to enable per role
+  (embeddings, summarize, classify) — needs config from the product
+  side.
+
+### Vector index wiring
+
+- **Status:** Aspirational
+- **Reason:** `internal/vector` interface + pgvector adapter +
+  migration 014 landed in Phase 1 but no caller indexes or searches
+  yet. First users: agent memory (`remember` / `recall`) and chunk-
+  level RAG search.
+- **Definition of Done:**
+  - Embedding pipeline writes to pgvector on object PUT (kind-gated
+    so we don't embed binary blobs).
+  - MCP search tool exposes `search` resource backed by
+    `vector.Indexer.Search`.
+  - Per-tenant stats surfaced on the admin SystemService.
+  - Soft-delete cascade calls `DeleteByObject` so vector store stays
+    consistent with object metadata.
+- **Blockers:** LLM provider wiring (above) — no embeddings without it.
+
+---
+
 ## Security
 
 ### RLS as defence-in-depth
