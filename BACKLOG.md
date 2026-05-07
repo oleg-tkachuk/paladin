@@ -389,21 +389,32 @@ the same commit. Treat this file like a runtime invariant.
   - Integration with the federated IdP (depends on JWKS work above).
 - **Blockers:** Email sender selection (SES / Sendgrid / SMTP).
 
-### Operation execution: `BatchDelete` / `BatchCopy` / `BatchRestoreObjects`
+### Operation execution: BatchCopy / BatchUpdateTags / BatchRestoreObjects
 
-- **Status:** Deferred
-- **Reason:** Operations are gated by Cedar and have a state machine
-  via [internal/api/v1/operation](internal/api/v1/operation), but
-  actual batch execution is a stub —
-  [batch_server.go:77](internal/api/connectshim/data/batch_server.go)
-  returns `Unimplemented` for `BatchRestoreObjects`. The other
-  Batch* RPCs submit operation rows but no worker processes them.
+- **Status:** Aspirational
+- **Reason:** Operations runner landed (`internal/worker/operations`)
+  with atomic `ClaimNext` (`FOR UPDATE SKIP LOCKED`) and
+  `BatchDeleteExecutor` wired in `BuildBackgroundJobs`. Calls to
+  BatchCopy / BatchUpdateTags / BatchRestoreObjects now mark the
+  operation row FAILED with `code=UNKNOWN_TYPE` instead of
+  silently hanging — surfaces the gap to clients but the gap
+  remains: no executor for those types.
 - **Definition of Done:**
-  - Batch worker drains `state='PENDING' AND type IN
-    ('BatchDelete','BatchCopy','BatchRestore')`.
-  - Per-batch progress recorded in `metadata` proto.
-  - Cancel honors the state machine.
-- **Blockers:** none. Was originally tracked as "slice 4".
+  - `BatchCopyExecutor` — needs storage client (S3 server-side
+    copy), bucket lookup, statemachine for the destination row.
+    Per-object error contract same as BatchDelete (partial success
+    + failures list).
+  - `BatchUpdateTagsExecutor` — repo.UpdateMetadata per object,
+    merging the supplied tags map into the existing row.
+  - `BatchRestoreExecutor` + connect handler unstub on
+    `internal/api/connectshim/data/batch_server.go:77`. Currently
+    returns `Unimplemented`.
+  - Per-operation progress field on the metadata blob (e.g.
+    `processed: N / total: M`) so polling clients can render a
+    progress bar without waiting for terminal state.
+  - Cancel path: when a polling client cancels, runner aborts
+    mid-iteration cleanly (partial progress recorded).
+- **Blockers:** none. Per-executor work; can land independently.
 
 ### Event dispatcher: Kafka / SQS sinks
 

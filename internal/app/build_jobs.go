@@ -9,6 +9,7 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
+	"github.com/oleg-tkachuk/paladin/internal/worker/operations"
 )
 
 // BuildBackgroundJobs assembles the worker fan that the `serve worker`
@@ -99,7 +100,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	}
 	if cfg.Workers.Housekeeping.OperationsTTL > 0 {
 		out = append(out, &worker.OperationsReaper{
-			Repo:     adapters.NewOperationRepo(db.Queries),
+			Repo:     adapters.NewOperationRepo(db.Queries, deps.Pool),
 			TTL:      cfg.Workers.Housekeeping.OperationsTTL,
 			Interval: cfg.Workers.Housekeeping.Interval,
 			Logger:   l.Named("operations-reaper"),
@@ -130,6 +131,32 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Interval:   cfg.Workers.APIToken.Interval,
 			ExpiredFor: cfg.Workers.APIToken.ExpiredFor,
 			Logger:     l.Named("api-token-purger"),
+		})
+	}
+
+	// Operations runner — dequeues PENDING rows from the operations
+	// table and dispatches to per-type Executors. Without this every
+	// BatchXxx RPC stages a row that never reaches a terminal state.
+	// Disabled by setting interval to 0.
+	if cfg.Workers.Operations.Interval > 0 {
+		opRepo := adapters.NewOperationRepo(db.Queries, deps.Pool)
+		executors := map[string]operations.Executor{
+			"BatchDelete": &operations.BatchDeleteExecutor{
+				Objects:     deps.Repos.Object,
+				Transitions: deps.SM,
+			},
+			// BatchCopy / BatchUpdateTags / BatchRestoreObjects
+			// executors are intentionally not registered — handlers
+			// that enqueue those types will see the runner mark the
+			// row FAILED with code=UNKNOWN_TYPE on the first claim,
+			// surfacing the gap to clients instead of silently
+			// hanging. Track in BACKLOG for follow-up.
+		}
+		out = append(out, &operations.Runner{
+			Repo:      opRepo,
+			Executors: executors,
+			Interval:  cfg.Workers.Operations.Interval,
+			Logger:    l.Named("operations-runner"),
 		})
 	}
 	return out

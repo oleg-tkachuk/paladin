@@ -2,22 +2,100 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
-// OperationRepo satisfies operation.Repository.
+// OperationRepo satisfies operation.Repository plus the worker-side
+// ClaimNext extension used by the operations runner.
 type OperationRepo struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
-func NewOperationRepo(q *sqlc.Queries) *OperationRepo { return &OperationRepo{q: q} }
+// NewOperationRepo constructs an OperationRepo. The pool argument is
+// used by ClaimNext (raw SQL with FOR UPDATE SKIP LOCKED — not exposed
+// through sqlc because the locking semantics matter and stay clearer
+// in raw SQL). Pass nil only in test paths that don't exercise the
+// runner.
+func NewOperationRepo(q *sqlc.Queries, pool *pgxpool.Pool) *OperationRepo {
+	return &OperationRepo{q: q, pool: pool}
+}
+
+// ClaimNext atomically picks the oldest PENDING operation and flips
+// it to RUNNING. Returns operation.ErrNoOperationToClaim when nothing
+// is pending — workers loop on a ticker and this is the cheap
+// no-op signal.
+//
+// SQL pattern: `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` inside an
+// UPDATE so concurrent workers grab disjoint rows. SKIP LOCKED is the
+// load-bearing piece; without it two workers would block each other
+// instead of getting separate rows.
+func (r *OperationRepo) ClaimNext(ctx context.Context) (operation.Operation, error) {
+	if r.pool == nil {
+		return operation.Operation{}, errors.New("operation: pool unavailable on this OperationRepo")
+	}
+	const stmt = `
+UPDATE operations
+SET    state = 'RUNNING', updated_at = NOW()
+WHERE  operation_id = (
+    SELECT operation_id FROM operations
+    WHERE  state = 'PENDING'
+    ORDER  BY created_at ASC
+    LIMIT  1
+    FOR    UPDATE SKIP LOCKED
+)
+RETURNING operation_id, tenant_id, type, state, metadata, response,
+          error_code, error_message, created_at, updated_at, done_at;
+`
+	var (
+		opID, tenantID   uuid.UUID
+		opType           string
+		state            string
+		metadata         []byte
+		response         []byte
+		errCode, errMsg  *string
+		createdAt, updAt time.Time
+		doneAt           *time.Time
+	)
+	err := r.pool.QueryRow(ctx, stmt).Scan(
+		&opID, &tenantID, &opType, &state, &metadata, &response,
+		&errCode, &errMsg, &createdAt, &updAt, &doneAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return operation.Operation{}, operation.ErrNoOperationToClaim
+		}
+		return operation.Operation{}, fmt.Errorf("operation: claim: %w", err)
+	}
+	out := operation.Operation{
+		OperationID: opID,
+		TenantID:    tenantID,
+		Type:        opType,
+		State:       operation.State(state),
+		Metadata:    metadata,
+		Response:    response,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updAt,
+		DoneAt:      doneAt,
+	}
+	if errCode != nil {
+		out.ErrorCode = *errCode
+	}
+	if errMsg != nil {
+		out.ErrorMessage = *errMsg
+	}
+	return out, nil
+}
 
 var _ operation.Repository = (*OperationRepo)(nil)
 

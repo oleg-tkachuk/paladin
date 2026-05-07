@@ -264,6 +264,12 @@ workers: {
     interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"   // 7 days
   }
+  // Operations runner: dequeues PENDING rows from the operations
+  // table and runs the registered Executor. Without it, BatchXxx
+  // RPCs enqueue work that nothing ever completes.
+  operations: {
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+  }
 }
 
 // Storage is the registry of physical object-storage backends. Each

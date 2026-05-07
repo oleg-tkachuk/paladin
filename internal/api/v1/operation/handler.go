@@ -51,6 +51,12 @@ type Repository interface {
 	UpdateState(ctx context.Context, opID uuid.UUID, newState State, metadata, response []byte, errCode, errMsg string) error
 	Cancel(ctx context.Context, opID, tenantID uuid.UUID) error
 	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32) ([]Operation, string, error)
+
+	// ClaimNext is the worker-side atomic dequeue: pick the oldest
+	// PENDING row, flip it to RUNNING, return it. Returns
+	// ErrNoOperationToClaim when nothing's pending — workers loop on
+	// a ticker and treat it as "nothing to do".
+	ClaimNext(ctx context.Context) (Operation, error)
 }
 
 type Handler struct {
@@ -161,3 +167,9 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 // ErrNotCancellable is surfaced by repositories when the operation is in a
 // terminal state and cannot be cancelled.
 var ErrNotCancellable = errors.New("operation not in cancellable state")
+
+// ErrNoOperationToClaim is the typed sentinel returned by ClaimNext on
+// the worker side when nothing is PENDING. Worker loops gate on it as
+// the cheap "nothing to do; sleep until next tick" signal — distinct
+// from a real error.
+var ErrNoOperationToClaim = errors.New("no PENDING operation to claim")

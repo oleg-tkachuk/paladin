@@ -297,6 +297,20 @@ type Workers struct {
 	Replication      Replication      `yaml:"replication" json:"replication"`
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
+	Operations       OperationsWorker `yaml:"operations" json:"operations"`
+}
+
+// OperationsWorker drives the long-running operation queue
+// (BatchDelete / BatchCopy / BatchUpdateTags / BatchRestoreObjects).
+// Handlers in internal/api/v1/batch enqueue rows; this worker
+// dequeues and runs them. Disable by setting interval to 0 — but
+// note that calling BatchXxx RPCs without a runner stages
+// PENDING operations that nothing will ever complete.
+type OperationsWorker struct {
+	// Interval is the tick rate. The runner drains aggressively per
+	// tick (up to 100 ops), so this can be a few seconds — backlog
+	// burns down quickly without polling pressure.
+	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 
 // CapabilityWorker drops capability_revocations rows for tokens whose
