@@ -68,32 +68,34 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Capability service: issuer / verifier / RPC wiring
+### Capability service: RPC surface + interceptor + housekeeping
 
 - **Status:** Aspirational
-- **Reason:** Phase 5a landed `internal/capability` (types, Ed25519
-  signer, delegation guard, store interface) and migration 016
-  (`capability_records`, `capability_revocations`). What's missing is
-  the runtime glue: issuer service, verifier with revocation cache,
-  Connect RPC surface, and the interceptor swap.
+- **Reason:** Phase 5a landed the in-process primitives (types, signer,
+  delegation guard, Postgres Store, cached Verifier, Issuer with
+  atomic persist-then-sign, JWKS document helpers, full unit-test
+  coverage of the happy path and 9 widening rejections). What's left
+  to ship is the network surface that lets callers (admin UI, MCP
+  server, agent runtimes) actually issue and verify against this
+  primitive.
 - **Definition of Done:**
-  - `internal/capability/postgres` implements the Store interface
-    against migration 016 tables.
-  - `internal/capability/verifier` wraps Decode + VerifySignature +
-    revocation cache lookup + audience / time / generation gates,
-    returns a typed `*Capability` to interceptor code.
-  - Issuer holds an Ed25519 keypair (KMS-wrapped in production), mints
-    capabilities atomically (Insert + Sign in one transaction so a
-    crash mid-issue can't strand a row without a token).
-  - JWKS endpoint on the admin plane (`/jwks.json`) so verifiers in
-    other planes / pods fetch public keys without an extra RPC layer.
-  - Connect RPC surface — `proto/paladin/admin/v1/capability_service.proto`
-    with Issue / Delegate / Revoke / List / VerifySelf — generated and
-    handler-wired.
+  - `proto/paladin/admin/v1/capability_service.proto` with Issue /
+    Delegate / Revoke / List / VerifySelf — buf-generated.
+  - Connect handler in `internal/api/admin/v1/capabilityh` calling the
+    Issuer / Store; admin-plane mux registers it.
+  - JWKS endpoint mounted on the admin plane at
+    `/.well-known/jwks.json` — serves the issuer's public key set so
+    other planes / pods fetch and cache without an RPC roundtrip.
   - Interceptor variant `auth.CapabilityInterceptor` accepts capability
-    tokens alongside the existing JWT verifier (additive; not yet a
-    swap).
-  - Housekeeping worker calls `Store.PurgeExpired` on cadence.
+    tokens alongside the existing JWT verifier (additive — runs after
+    the JWT path so existing flows are unaffected). Returns a
+    `*capability.Capability` on the request context for handler code
+    that wants to gate on caveats.
+  - Housekeeping worker calls `Store.PurgeExpired` on cadence
+    (default 1h, gated by `cfg.Workers.Capability.Interval`).
+  - Issuer key wiring in `internal/app.BuildSharedDeps`: load
+    Ed25519 private key from `cfg.Capability.SigningKey` (file path
+    or KMS ref); generate ephemeral one in dev mode.
 - **Blockers:** none. Discrete work; unblocks Phase 5b.
 
 ### Phase 5b — Drop own IAM, accept OIDC

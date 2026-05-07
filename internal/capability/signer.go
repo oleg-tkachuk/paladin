@@ -232,6 +232,24 @@ func Decode(token string) (*Capability, error) {
 	return cap, nil
 }
 
+// decodeHeader decodes only the JWT protected header. Used by Verify
+// to read the kid without paying for full claim parsing on every call.
+func decodeHeader(token string) (jwtHeader, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return jwtHeader{}, errors.New("capability: token must have 3 segments")
+	}
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return jwtHeader{}, fmt.Errorf("capability: decode header: %w", err)
+	}
+	var h jwtHeader
+	if err := json.Unmarshal(headerJSON, &h); err != nil {
+		return jwtHeader{}, fmt.Errorf("capability: parse header: %w", err)
+	}
+	return h, nil
+}
+
 // VerifySignature checks the Ed25519 signature on a compact token
 // against the supplied public key. Time / audience / revocation gates
 // are NOT applied here — Verify in the production verifier wraps this
