@@ -140,46 +140,6 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### Legacy api_keys → api_tokens migration runbook
-
-- **Status:** Blocked
-- **Reason:** The api_token primitive is wire-complete via the
-  admin Connect API — Web UI handles human-facing issuance, no CLI
-  is needed. What remains is moving live tenants off the legacy
-  `internal/api/iam/v1/api_key_service` onto `APITokenService` and
-  dropping the old `api_keys` table.
-- **Definition of Done:**
-  - One-shot migration Job (separate from the migrate hook):
-    re-hashes existing `api_keys` rows into `api_tokens` using
-    their original plaintext when stored as such, or invalidates
-    and re-issues when only sha256(token) is on the legacy row.
-  - After the runbook runs in production: drop the legacy
-    `internal/api/iam/v1/api_key_service` handler; remove the
-    `api_keys` table via a follow-up migration; admin UI swaps to
-    APITokenService.
-- **Blockers:** Production migration plan signed off by the team
-  who runs the existing api_keys consumers. Without that, dropping
-  the legacy table breaks live integrations.
-
-### api_token: Retry-After end-to-end smoke test
-
-- **Status:** Deferred
-- **Reason:** APITokenInterceptor sets the Retry-After header on
-  err.Meta() when the rate-limit gate denies a call. Connect-go
-  propagates Meta to the response — but we've never confirmed it
-  end-to-end against a real Connect client. A smoke test would
-  verify the header shows up where downstream HTTP clients
-  actually look for it.
-- **Definition of Done:**
-  - Integration test boots a minimal Connect server with the
-    APITokenInterceptor wired against a recordingLimiter that
-    forces denial; client makes a call; assert response headers
-    contain Retry-After with the expected seconds value.
-  - Optionally extend to verify the header flow through h2c +
-    h2 transport variants — Connect documents both as supported.
-- **Blockers:** none. Low priority; the unit test on err.Meta()
-  already confirms the interceptor sets the header.
-
 ### LLM provider wiring
 
 - **Status:** Aspirational
