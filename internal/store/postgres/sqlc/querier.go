@@ -158,18 +158,6 @@ type Querier interface {
 	// CEL filter is applied by the caller post-load. Keyset page uses object_id
 	// (UUIDv7) which is monotonic-by-time.
 	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
-	// Returns AVAILABLE objects with a summary but no embedding marker.
-	// Embedding rides on the summary text (much smaller payload than the
-	// raw object body) — keeps day-1 simple. Future: chunk-level embedding
-	// of the body for objects above a configurable size threshold.
-	ListObjectsForEmbedding(ctx context.Context, batchSize int32) ([]ListObjectsForEmbeddingRow, error)
-	// Object AI markers — drives the on-store summarization + embedding
-	// workers. Both queries are batch-bounded so a long-overdue first run
-	// doesn't pin connections; workers loop on a ticker.
-	// Returns AVAILABLE objects without a summary, oldest first. Caller
-	// joins object_keys → bucket inline so the worker can call S3 in a
-	// single round-trip per item.
-	ListObjectsForSummary(ctx context.Context, batchSize int32) ([]ListObjectsForSummaryRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
@@ -207,7 +195,6 @@ type Querier interface {
 	// retried on the next tick after the configured backoff.
 	MarkBucketProvisionFailed(ctx context.Context, backendID string, bucketName string, terminal bool, errMsg string) (int64, error)
 	MarkBucketProvisionReady(ctx context.Context, backendID string, bucketName string) (int64, error)
-	MarkObjectEmbedded(ctx context.Context, objectID pgtype.UUID) (int64, error)
 	MarkObjectFailed(ctx context.Context, objectID pgtype.UUID) (int64, error)
 	// Idempotent promotion from PENDING → AVAILABLE. The sequencer guard keeps
 	// out-of-order S3 events + reconciler + RPC calls from regressing state.
@@ -253,10 +240,6 @@ type Querier interface {
 	SetBucketReplication(ctx context.Context, backendID string, bucketName string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
 	SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error
-	// No OCC. Workers run one-at-a-time per object (batch dedupe is by the
-	// partial index above) and the column is write-once-then-stable; a lost
-	// update would only re-run the summarizer.
-	SetObjectSummary(ctx context.Context, summary *string, objectID pgtype.UUID) (int64, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error

@@ -298,21 +298,6 @@ type Workers struct {
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
-	Summarization    AIWorker         `yaml:"summarization" json:"summarization"`
-	Embedding        AIWorker         `yaml:"embedding" json:"embedding"`
-}
-
-// AIWorker controls the on-store AI workers (summarization + embedding).
-// Both share the same shape: a tick interval, a per-tick batch cap, a
-// content-type allow-list (we only summarize/embed text-shaped objects),
-// and a max-bytes cap so the worker never reads a 5GB blob into memory.
-// Disable by setting interval to 0 OR LLM/Vector subsystems disabled —
-// the worker fan only registers them when their dependencies are wired.
-type AIWorker struct {
-	Interval       time.Duration `yaml:"interval" json:"interval"`
-	BatchSize      int32         `yaml:"batch_size" json:"batch_size"`
-	MaxObjectBytes int64         `yaml:"max_object_bytes" json:"max_object_bytes"`
-	AllowedTypes   []string      `yaml:"allowed_content_types" json:"allowed_content_types"`
 }
 
 // OperationsWorker drives the long-running operation queue

@@ -160,52 +160,6 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
-	// Summarization worker — first caller of the LLM Registry. Runs
-	// only when LLM is wired (deps.LLM != nil) AND a tick interval is
-	// configured. Without LLM the worker has no provider to call; it
-	// would skip every row but still burn CPU. Empty allow-list also
-	// short-circuits — operators must opt content types in explicitly.
-	if deps.LLM != nil && cfg.Workers.Summarization.Interval > 0 && len(cfg.Workers.Summarization.AllowedTypes) > 0 {
-		out = append(out, &worker.SummarizationWorker{
-			Source:       db.Queries,
-			Fetcher:      deps.S3,
-			Registry:     deps.LLM.Registry,
-			Interval:     cfg.Workers.Summarization.Interval,
-			BatchSize:    cfg.Workers.Summarization.BatchSize,
-			MaxBytes:     cfg.Workers.Summarization.MaxObjectBytes,
-			AllowedTypes: stringSet(cfg.Workers.Summarization.AllowedTypes),
-			Logger:       l.Named("summarize"),
-		})
-	}
-
-	// Embedding worker — first caller of the Vector Indexer. Rides on
-	// the summary text that SummarizationWorker stamps; gates on both
-	// LLM (need a provider for RoleEmbeddings) and Vector (need a
-	// backend to write to).
-	if deps.LLM != nil && deps.Vector != nil && cfg.Workers.Embedding.Interval > 0 {
-		out = append(out, &worker.EmbeddingWorker{
-			Source:    db.Queries,
-			Indexer:   deps.Vector.Indexer,
-			Registry:  deps.LLM.Registry,
-			Interval:  cfg.Workers.Embedding.Interval,
-			BatchSize: cfg.Workers.Embedding.BatchSize,
-			Logger:    l.Named("embed"),
-		})
-	}
-
-	return out
-}
-
-// stringSet builds a lookup set from a config-supplied list. Cheap
-// helper kept here because no other call site needs it.
-func stringSet(in []string) map[string]struct{} {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]struct{}, len(in))
-	for _, s := range in {
-		out[s] = struct{}{}
-	}
 	return out
 }
 

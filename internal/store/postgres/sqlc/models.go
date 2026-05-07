@@ -250,32 +250,30 @@ type MultipartUpload struct {
 }
 
 type Object struct {
-	ObjectID           pgtype.UUID        `json:"object_id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	ObjectKey          string             `json:"object_key"`
-	Key                string             `json:"key"`
-	State              ObjectState        `json:"state"`
-	ContentType        string             `json:"content_type"`
-	SizeBytes          *int64             `json:"size_bytes"`
-	Etag               *string            `json:"etag"`
-	ChecksumAlgorithm  int16              `json:"checksum_algorithm"`
-	Checksum           *string            `json:"checksum"`
-	Sequencer          *string            `json:"sequencer"`
-	Metadata           []byte             `json:"metadata"`
-	Tags               []byte             `json:"tags"`
-	ExternalRef        *string            `json:"external_ref"`
-	ResourceVersion    int64              `json:"resource_version"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
-	TerminatedAt       pgtype.Timestamptz `json:"terminated_at"`
-	PresignExpiresAt   pgtype.Timestamptz `json:"presign_expires_at"`
-	CurrentVersionID   pgtype.UUID        `json:"current_version_id"`
-	LockMode           string             `json:"lock_mode"`
-	LockRetainUntil    pgtype.Timestamptz `json:"lock_retain_until"`
-	LegalHold          bool               `json:"legal_hold"`
-	Summary            *string            `json:"summary"`
-	EmbeddingIndexedAt pgtype.Timestamptz `json:"embedding_indexed_at"`
+	ObjectID          pgtype.UUID        `json:"object_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	ObjectKey         string             `json:"object_key"`
+	Key               string             `json:"key"`
+	State             ObjectState        `json:"state"`
+	ContentType       string             `json:"content_type"`
+	SizeBytes         *int64             `json:"size_bytes"`
+	Etag              *string            `json:"etag"`
+	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
+	Checksum          *string            `json:"checksum"`
+	Sequencer         *string            `json:"sequencer"`
+	Metadata          []byte             `json:"metadata"`
+	Tags              []byte             `json:"tags"`
+	ExternalRef       *string            `json:"external_ref"`
+	ResourceVersion   int64              `json:"resource_version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
+	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
+	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
+	CurrentVersionID  pgtype.UUID        `json:"current_version_id"`
+	LockMode          string             `json:"lock_mode"`
+	LockRetainUntil   pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold         bool               `json:"legal_hold"`
 }
 
 type ObjectKey struct {
