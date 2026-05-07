@@ -58,6 +58,21 @@ type Clients struct {
 // NewClients constructs a Clients bundle. Bearer is the access token the MCP
 // service-account holds; it is injected into every outbound Connect request.
 func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *Clients {
+	return NewClientsWithCapability(httpc, adminURL, dataURL, iamURL, bearer, "")
+}
+
+// NewClientsWithCapability is the cap-aware constructor. capabilityToken
+// (when non-empty) is forwarded as `X-PALADIN-Capability` on every outbound
+// Connect call so the destination plane's auth.CapabilityInterceptor
+// sees and stamps it on the request context.
+//
+// The two tokens stack: bearer is the JWT auth (admin / iam audience),
+// capabilityToken is the optional capability that grants fine-grained
+// caveats. Either or both may be present. Empty values are not sent.
+//
+// MCP HTTP transport forwards the capability via the same X-PALADIN-Capability
+// header the streamable-HTTP getServer hook reads — see cmd/server/serve_mcp.go.
+func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string) *Clients {
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
@@ -66,6 +81,9 @@ func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *C
 			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 				if bearer != "" {
 					req.Header().Set("Authorization", "Bearer "+bearer)
+				}
+				if capabilityToken != "" {
+					req.Header().Set("X-PALADIN-Capability", capabilityToken)
 				}
 				return next(ctx, req)
 			}

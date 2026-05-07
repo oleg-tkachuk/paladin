@@ -68,25 +68,30 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Capability interceptor: wire into data + iam + mcp planes
+### Capability caveats — extend gating beyond GetObject
 
 - **Status:** Aspirational
-- **Reason:** `auth.CapabilityInterceptor` exists and is unit-tested,
-  but no plane mounts it yet. It needs to land in the data / iam / mcp
-  interceptor stacks (additive — JWT path stays as-is) so handlers can
-  read capability context and gate on caveats.
+- **Reason:** Phase 5b.0 wired `auth.CapabilityInterceptor` into the
+  data + admin mux opts and added `auth.AssertCapabilityOp` so handlers
+  can honour caveats with one line. `ObjectService.GetObject` is the
+  reference user. Other read / write ops on the data plane don't yet
+  call AssertCapabilityOp, so a capability that reaches them via the
+  interceptor is observed but not enforced.
 - **Definition of Done:**
-  - `AssembleAPIMuxes` (data + iam) appends the capability interceptor
-    to both `dataOpts` / `iamOpts` when `deps.Capability != nil`.
-  - MCP bridge passes the capability through to inline / network
-    Connect calls (X-PALADIN-Capability header forwarding).
-  - At least one handler reads `auth.CapabilityFromContext` and gates a
-    real op on `cap.Caveats.Ops` / `ResourcePrefixes` end-to-end —
-    typical first user is `ObjectService.GetObject` honouring `OpGet`
-    + prefix scope before falling through to Cedar.
-  - Integration test: bad caveats → CodePermissionDenied; valid
-    capability → handler runs; no capability → JWT path runs unchanged.
-- **Blockers:** none. Pure wiring.
+  - Every mutating op on `ObjectService` / `MultipartUploadService` /
+    `PresignService` / `BatchService` calls AssertCapabilityOp with
+    the appropriate `capability.Op` and the resolved object URI.
+  - Search / list ops (when they land for the agentic plane) honour
+    OpList / OpSearch.
+  - The `capability.OpShare` path lights up when the MCP `share` tool
+    routes to `CapabilityService.Delegate` — the caller's capability
+    must include OpShare for the delegation request to succeed.
+  - Budget caveat (`MaxBudgetUSD`) plumbed: at least one handler
+    bumps the bundle's budget tracker so an exhausted budget surfaces
+    as `ErrBudgetExceeded` from the next call.
+  - Source-IP CIDR caveat enforced on the interceptor side so it
+    rejects before any handler runs.
+- **Blockers:** none. Discrete per-handler edits; track per RPC.
 
 ### KMS-wrapped capability signing key
 

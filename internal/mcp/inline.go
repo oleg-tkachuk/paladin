@@ -101,6 +101,14 @@ func (t *inlineRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 // the network mode does, so the caller must produce a real auth string
 // (typically a service-account JWT minted at boot).
 func NewInlineClients(h InlineHandlers, bearer string) *Clients {
+	return NewInlineClientsWithCapability(h, bearer, "")
+}
+
+// NewInlineClientsWithCapability is the cap-aware inline constructor.
+// capabilityToken (when non-empty) is forwarded as `X-PALADIN-Capability`
+// to the in-process plane handler so the data plane's interceptor sees
+// it identically to the network path.
+func NewInlineClientsWithCapability(h InlineHandlers, bearer, capabilityToken string) *Clients {
 	httpc := &http.Client{Transport: NewInlineTransport(h)}
-	return NewClients(httpc, InlineAdminURL, InlineDataURL, InlineIAMURL, bearer)
+	return NewClientsWithCapability(httpc, InlineAdminURL, InlineDataURL, InlineIAMURL, bearer, capabilityToken)
 }

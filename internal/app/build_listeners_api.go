@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
@@ -89,9 +90,27 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		return nil, nil, nil, err
 	}
 
+	// Capability interceptor on the data plane — additive. When the
+	// capability subsystem is off (deps.Capability == nil) the helper
+	// returns a no-op, so existing JWT-only deploys are unaffected.
+	// When a capability token IS supplied, the interceptor stamps
+	// *capability.Capability on the context and handlers branch via
+	// auth.CapabilityFromContext.
+	//
+	// IAM plane intentionally has NO capability interceptor: capabilities
+	// don't have an "iam" audience (the audiences are data / admin /
+	// mcp). User-authn flows that go through iam are not the agent path.
+	var capData connect.Interceptor
+	if deps.Capability != nil {
+		capData = auth.CapabilityInterceptor(deps.Capability.Verifier, capability.AudiencePlaneData)
+	} else {
+		capData = auth.CapabilityInterceptor(nil, "")
+	}
+
 	dataOpts := connect.WithInterceptors(
 		auth.Interceptor(verifierData),
 		auth.RequireAudience(auth.AudienceData),
+		capData,
 		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)

@@ -132,6 +132,99 @@ func extractCapabilityToken(xocp, authz string) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// AssertCapabilityOp is the handler-side gate. Call early in any
+// handler that wants to honour capability caveats:
+//
+//	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, key); err != nil {
+//	    return nil, err
+//	}
+//
+// Behaviour:
+//
+//   - No capability on context (caller used JWT auth) → returns nil.
+//     Handler proceeds as before; existing role / Cedar gates still run.
+//
+//   - Capability present and op + resource allowed → returns nil.
+//     Handler proceeds; downstream code may also call CapabilityFromContext
+//     to read budget / source-IP / other caveats.
+//
+//   - Capability present but op not in Caveats.Ops, or resource not
+//     under any of Caveats.ResourcePrefixes / ResourceURIs → returns a
+//     CodePermissionDenied connect.Error so the caller sees an
+//     unambiguous "your capability didn't allow this" instead of
+//     falling through to a more generic 403.
+//
+// resourceURI is matched as a string against ResourcePrefixes (HasPrefix)
+// and ResourceURIs (exact). Empty resourceURI skips the resource check —
+// useful for ops that don't target a specific URI (e.g. capability self-
+// introspect).
+func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI string) error {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok {
+		return nil // no capability presented; not our gate
+	}
+	if !containsOp(cap.Caveats.Ops, op) {
+		return connect.NewError(connect.CodePermissionDenied,
+			capabilityOpNotAllowed{op: op, allowed: cap.Caveats.Ops})
+	}
+	if resourceURI != "" && !resourceAllowed(cap.Caveats, resourceURI) {
+		return connect.NewError(connect.CodePermissionDenied,
+			capabilityResourceNotAllowed{uri: resourceURI})
+	}
+	return nil
+}
+
+// containsOp checks Op set membership without dragging slices.Contains
+// into every call site.
+func containsOp(set []capability.Op, want capability.Op) bool {
+	for _, op := range set {
+		if op == want {
+			return true
+		}
+	}
+	return false
+}
+
+// resourceAllowed reports whether the supplied URI is reachable under
+// the capability's resource caveats. Empty caveats = unrestricted within
+// tenant scope (the verifier already enforced that).
+func resourceAllowed(c capability.Caveats, uri string) bool {
+	if len(c.ResourcePrefixes) == 0 && len(c.ResourceURIs) == 0 {
+		return true
+	}
+	for _, exact := range c.ResourceURIs {
+		if exact == uri {
+			return true
+		}
+	}
+	for _, prefix := range c.ResourcePrefixes {
+		if len(prefix) > 0 && len(uri) >= len(prefix) && uri[:len(prefix)] == prefix {
+			return true
+		}
+	}
+	return false
+}
+
+// capabilityOpNotAllowed and capabilityResourceNotAllowed are typed
+// errors so callers / tests can branch on the rejection reason without
+// string-matching connect error messages.
+type capabilityOpNotAllowed struct {
+	op      capability.Op
+	allowed []capability.Op
+}
+
+func (e capabilityOpNotAllowed) Error() string {
+	return "capability op " + string(e.op) + " not in allowed set"
+}
+
+type capabilityResourceNotAllowed struct {
+	uri string
+}
+
+func (e capabilityResourceNotAllowed) Error() string {
+	return "capability does not authorise resource " + e.uri
+}
+
 // passthroughInterceptor is the no-op variant returned when the
 // capability subsystem is disabled. Implements connect.Interceptor by
 // forwarding every callback unchanged.

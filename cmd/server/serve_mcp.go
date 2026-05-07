@@ -89,26 +89,37 @@ func runMCPBridge(ctx context.Context) {
 	}
 	logger.ReplaceGlobals(l)
 
-	makeClients := func(token string) *mcp.Clients {
-		return mcp.NewClients(
-			&http.Client{Timeout: 30 * time.Second},
+	httpc := &http.Client{Timeout: 30 * time.Second}
+	makeClients := func(bearer, capToken string) *mcp.Clients {
+		return mcp.NewClientsWithCapability(
+			httpc,
 			cfg.MCP.Upstreams.AdminURL,
 			cfg.MCP.Upstreams.DataURL,
 			cfg.MCP.Upstreams.IAMURL,
-			token,
+			bearer,
+			capToken,
 		)
 	}
 
 	switch mcpTransport {
 	case "stdio":
-		runStdio(ctx, cfg, l, makeClients(os.Getenv("PALADIN_MCP_TOKEN")))
+		// stdio sessions are one-per-process; pick up an optional
+		// capability from env so a developer can experiment without
+		// hand-editing JSON-RPC frames.
+		runStdio(ctx, cfg, l, makeClients(
+			os.Getenv("PALADIN_MCP_TOKEN"),
+			os.Getenv("PALADIN_MCP_CAPABILITY"),
+		))
 	case "http":
 		runHTTP(ctx, cfg, l, "bridge", func(r *http.Request) *mcp.Clients {
 			token := r.Header.Get("X-PALADIN-Token")
 			if token == "" {
 				return nil
 			}
-			return makeClients(token)
+			// Capability optional — forwarded only when the MCP host
+			// supplies it. Absent capability → JWT-only auth flow.
+			cap := r.Header.Get("X-PALADIN-Capability")
+			return makeClients(token, cap)
 		})
 	default:
 		l.Fatal("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
@@ -145,20 +156,24 @@ func runMCPEmbedded(ctx context.Context) {
 		IAM:   muxes.IAM,
 	}
 
-	makeInlineClients := func(token string) *mcp.Clients {
-		return mcp.NewInlineClients(inlineHandlers, token)
+	makeInlineClients := func(bearer, capToken string) *mcp.Clients {
+		return mcp.NewInlineClientsWithCapability(inlineHandlers, bearer, capToken)
 	}
 
 	switch mcpTransport {
 	case "stdio":
-		runStdio(ctx, cfg, l, makeInlineClients(os.Getenv("PALADIN_MCP_TOKEN")))
+		runStdio(ctx, cfg, l, makeInlineClients(
+			os.Getenv("PALADIN_MCP_TOKEN"),
+			os.Getenv("PALADIN_MCP_CAPABILITY"),
+		))
 	case "http":
 		runHTTP(ctx, cfg, l, "embedded", func(r *http.Request) *mcp.Clients {
 			token := r.Header.Get("X-PALADIN-Token")
 			if token == "" {
 				return nil
 			}
-			return makeInlineClients(token)
+			cap := r.Header.Get("X-PALADIN-Capability")
+			return makeInlineClients(token, cap)
 		})
 	default:
 		l.Fatal("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))

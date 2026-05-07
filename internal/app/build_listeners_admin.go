@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
@@ -56,9 +57,22 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	if err != nil {
 		return nil, nil, err
 	}
+	// Capability interceptor — additive, runs after JWT verify so a
+	// missing token falls through to JWT auth and an invalid token
+	// fails loud. Most admin RPCs gate on roles (platform.admin), but
+	// future delegation paths (cap-issuer minting sub-caps from a parent
+	// the caller holds) read the capability via auth.CapabilityFromContext.
+	var capAdmin connect.Interceptor
+	if deps.Capability != nil {
+		capAdmin = auth.CapabilityInterceptor(deps.Capability.Verifier, capability.AudiencePlaneAdmin)
+	} else {
+		capAdmin = auth.CapabilityInterceptor(nil, "")
+	}
+
 	adminOpts := connect.WithInterceptors(
 		auth.Interceptor(verifierAdmin),
 		auth.RequireAudience(auth.AudienceAdmin),
+		capAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
 	)

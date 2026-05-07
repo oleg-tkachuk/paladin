@@ -25,6 +25,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
@@ -582,6 +583,21 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 // ─── Read RPCs ──────────────────────────────────────────────────────────────
 
 // GetObject returns metadata for an object addressed by (objectKey, objectID).
+//
+// Auth chain on this RPC:
+//  1. Interceptor stack already verified the caller's JWT and (when
+//     present) capability token.
+//  2. Capability gate: if the caller presented a capability, it must
+//     authorise OpGet on this object's URI. Missing capability → no-op.
+//     This runs BEFORE Cedar so a capability holder gets a clean
+//     "your capability disallows this op" error rather than a generic
+//     "Cedar denied" mask.
+//  3. Cedar gate: regardless of capability, the principal's tenant /
+//     role / scope must permit GetObject on the resource.
+//
+// The double gate is intentional: capabilities narrow what an agent can
+// do; Cedar enforces tenant-admin policy. Both must agree before the
+// read happens.
 func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*Object, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -593,6 +609,10 @@ func (h *Handler) GetObject(ctx context.Context, objectKey, objectID string) (*O
 	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
