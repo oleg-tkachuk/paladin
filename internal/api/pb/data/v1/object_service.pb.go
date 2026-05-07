@@ -430,10 +430,15 @@ func (x *RestoreObjectVersionRequest) GetResourceVersion() string {
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
-	Parent            string               `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	Key               string               `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
-	ContentType       string               `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	SizeHintBytes     int64                `protobuf:"varint,4,opt,name=size_hint_bytes,json=sizeHintBytes,proto3" json:"size_hint_bytes,omitempty"`
+	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
+	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	SizeHintBytes int64  `protobuf:"varint,4,opt,name=size_hint_bytes,json=sizeHintBytes,proto3" json:"size_hint_bytes,omitempty"`
+	// UNSPECIFIED is allowed and means "let the server pick" — handler
+	// resolves the empty value to SHA256 (the data-plane default the
+	// PresignedPUT verification path expects). The earlier
+	// `not_in: [0]` rule was failing every JSON client that omits
+	// enum-zero on the wire, including stale browser bundles.
 	ChecksumAlgorithm v1.ChecksumAlgorithm `protobuf:"varint,5,opt,name=checksum_algorithm,json=checksumAlgorithm,proto3,enum=paladin.common.v1.ChecksumAlgorithm" json:"checksum_algorithm,omitempty"`
 	Metadata          map[string]string    `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Tags              map[string]string    `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -1577,14 +1582,13 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"e\n" +
 	"\x1bRestoreObjectVersionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
-	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\x84\x05\n" +
+	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\"\x82\x05\n" +
 	"\x13UploadObjectRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
 	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12&\n" +
-	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12[\n" +
-	"\x12checksum_algorithm\x18\x05 \x01(\x0e2 .paladin.common.v1.ChecksumAlgorithmB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x11checksumAlgorithm\x12J\n" +
+	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12Y\n" +
+	"\x12checksum_algorithm\x18\x05 \x01(\x0e2 .paladin.common.v1.ChecksumAlgorithmB\b\xbaH\x05\x82\x01\x02\x10\x01R\x11checksumAlgorithm\x12J\n" +
 	"\bmetadata\x18\x06 \x03(\v2..paladin.data.v1.UploadObjectRequest.MetadataEntryR\bmetadata\x12>\n" +
 	"\x04tags\x18\a \x03(\v2*.paladin.data.v1.UploadObjectRequest.TagsEntryR\x04tags\x12!\n" +
 	"\fexternal_ref\x18\b \x01(\tR\vexternalRef\x12;\n" +

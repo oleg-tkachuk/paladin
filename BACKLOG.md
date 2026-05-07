@@ -68,35 +68,45 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Capability service: RPC surface + interceptor + housekeeping
+### Capability interceptor: wire into data + iam + mcp planes
 
 - **Status:** Aspirational
-- **Reason:** Phase 5a landed the in-process primitives (types, signer,
-  delegation guard, Postgres Store, cached Verifier, Issuer with
-  atomic persist-then-sign, JWKS document helpers, full unit-test
-  coverage of the happy path and 9 widening rejections). What's left
-  to ship is the network surface that lets callers (admin UI, MCP
-  server, agent runtimes) actually issue and verify against this
-  primitive.
+- **Reason:** `auth.CapabilityInterceptor` exists and is unit-tested,
+  but no plane mounts it yet. It needs to land in the data / iam / mcp
+  interceptor stacks (additive — JWT path stays as-is) so handlers can
+  read capability context and gate on caveats.
 - **Definition of Done:**
-  - `proto/paladin/admin/v1/capability_service.proto` with Issue /
-    Delegate / Revoke / List / VerifySelf — buf-generated.
-  - Connect handler in `internal/api/admin/v1/capabilityh` calling the
-    Issuer / Store; admin-plane mux registers it.
-  - JWKS endpoint mounted on the admin plane at
-    `/.well-known/jwks.json` — serves the issuer's public key set so
-    other planes / pods fetch and cache without an RPC roundtrip.
-  - Interceptor variant `auth.CapabilityInterceptor` accepts capability
-    tokens alongside the existing JWT verifier (additive — runs after
-    the JWT path so existing flows are unaffected). Returns a
-    `*capability.Capability` on the request context for handler code
-    that wants to gate on caveats.
-  - Housekeeping worker calls `Store.PurgeExpired` on cadence
-    (default 1h, gated by `cfg.Workers.Capability.Interval`).
-  - Issuer key wiring in `internal/app.BuildSharedDeps`: load
-    Ed25519 private key from `cfg.Capability.SigningKey` (file path
-    or KMS ref); generate ephemeral one in dev mode.
-- **Blockers:** none. Discrete work; unblocks Phase 5b.
+  - `AssembleAPIMuxes` (data + iam) appends the capability interceptor
+    to both `dataOpts` / `iamOpts` when `deps.Capability != nil`.
+  - MCP bridge passes the capability through to inline / network
+    Connect calls (X-PALADIN-Capability header forwarding).
+  - At least one handler reads `auth.CapabilityFromContext` and gates a
+    real op on `cap.Caveats.Ops` / `ResourcePrefixes` end-to-end —
+    typical first user is `ObjectService.GetObject` honouring `OpGet`
+    + prefix scope before falling through to Cedar.
+  - Integration test: bad caveats → CodePermissionDenied; valid
+    capability → handler runs; no capability → JWT path runs unchanged.
+- **Blockers:** none. Pure wiring.
+
+### KMS-wrapped capability signing key
+
+- **Status:** Deferred
+- **Reason:** Production deploys mount a PEM PKCS#8 file via Secret +
+  RO volume. KMS-wrapped keys (AWS KMS, GCP KMS, Vault Transit) keep
+  the private key from ever touching disk in cleartext — necessary for
+  HIPAA / PCI / FedRAMP-tier compliance positioning the agentic plane
+  spec calls out.
+- **Definition of Done:**
+  - `cfg.Capability.SigningKeyKMS` block with provider selector
+    (aws-kms / gcp-kms / vault-transit) plus per-provider opts
+    (key ARN / resource name / mount path).
+  - `internal/capability/kms` package with KMS-backed Signer
+    implementations. The Signer.Sign call emits a Sign-API request
+    instead of holding the key locally.
+  - SigningKeyPath stays as fallback for dev / on-prem deploys
+    without KMS access.
+- **Blockers:** none functional, but it's a compliance-driver feature;
+  needs a customer ask before the KMS adapter implementations land.
 
 ### Phase 5b — Drop own IAM, accept OIDC
 

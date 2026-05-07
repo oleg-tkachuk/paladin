@@ -47,6 +47,10 @@ type SharedDeps struct {
 	// Workers and admin bucket-provision flows reuse this single client.
 	// Stored as *s3adapter.Client; the wire.Storage view above wraps it.
 	S3 *s3adapter.Client
+
+	// Capability is the agent-runtime authorisation primitive. Nil when
+	// cfg.Capability.Enabled is false; callers must guard.
+	Capability *CapabilityBundle
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -108,7 +112,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, fmt.Errorf("app: policy engine start: %w", err)
 	}
 
-	return &SharedDeps{
+	deps := &SharedDeps{
 		Cfg:       cfg,
 		Logger:    l,
 		DB:        db,
@@ -120,5 +124,15 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		SM:        statemachine.New(pool),
 		CELEval:   cel.NewEvaluator(),
 		S3:        s3c,
-	}, nil
+	}
+
+	// Capability subsystem — additive; absence is fine. Built last so
+	// the bundle can take a *SharedDeps for logging convenience.
+	cap, err := BuildCapabilityBundle(cfg.Capability, deps)
+	if err != nil {
+		return nil, fmt.Errorf("app: capability bundle: %w", err)
+	}
+	deps.Capability = cap
+
+	return deps, nil
 }

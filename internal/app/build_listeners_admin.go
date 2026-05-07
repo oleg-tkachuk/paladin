@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
@@ -79,6 +80,22 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
 		adminOpts,
 	))
+
+	// JWKS endpoint — public, unauthenticated. Verifiers in other pods
+	// fetch and cache the issuer's public key set so capability checks
+	// stay local. Mounted only when the capability subsystem is on; a
+	// disabled deploy returns 404 from the default mux instead of an
+	// empty {"keys": []} that leaks "we have a JWKS endpoint but no
+	// keys yet" to scanners.
+	if deps.Capability != nil {
+		mux.Handle("/.well-known/jwks.json", JWKSHandler(deps.Capability.PublicKeys))
+
+		// CapabilityService — Issue / Delegate / Revoke / List. The
+		// admin interceptor stack already enforces audience + JWT
+		// authentication; the handler does its own Cedar gate per RPC.
+		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, polEngine)
+		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
+	}
 
 	return mux, healthH, nil
 }

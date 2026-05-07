@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// CapabilityService manages capability tokens — short-lived, signed,
+// delegable, individually revocable authorisation primitives for agent
+// runtimes. See internal/capability for the in-process types and
+// migrations/016_capabilities.sql for the schema.
+//
+// Audience semantics: capabilities are issued by the admin plane and
+// presented by callers to data / admin / mcp planes. The interceptor
+// verifies signature + audience + expiry + revocation locally — no
+// per-request RPC to this service.
+//
+// Naming: request / response types use the `CapabilityService<Method>`
+// prefix because the bare RPC verbs (Issue / Revoke / List) collide
+// with other admin services in the same proto package. The verbose
+// prefix is what buf STANDARD lint requires when method names alone
+// aren't unique.
+service CapabilityService {
+  // Issue mints a top-level capability for a principal. Caller is
+  // platform-admin or a delegating service. Returns the typed
+  // capability metadata plus the compact JWT in `token`.
+  rpc Issue(CapabilityServiceIssueRequest) returns (CapabilityServiceIssueResponse);
+
+  // Delegate issues a strictly-narrower child capability under a
+  // parent the caller already holds. Narrowing is enforced at issuance:
+  // widening attempts fail before any token is emitted.
+  rpc Delegate(CapabilityServiceDelegateRequest) returns (CapabilityServiceIssueResponse);
+
+  // Revoke adds the supplied capability ID to the revocation list.
+  // CascadeChildren=true revokes every descendant in the delegation
+  // tree. Idempotent — re-revoking a revoked capability is a no-op.
+  rpc Revoke(CapabilityServiceRevokeRequest) returns (CapabilityServiceRevokeResponse);
+
+  // List enumerates capabilities issued to a principal. Cursor-paginated.
+  rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse);
+}
+
+// PrincipalKind discriminates the principal-shape oneof. Mirrors the
+// in-process capability.PrincipalType.
+enum PrincipalKind {
+  PRINCIPAL_KIND_UNSPECIFIED = 0;
+  PRINCIPAL_KIND_USER = 1;
+  PRINCIPAL_KIND_AGENT = 2;
+  PRINCIPAL_KIND_SERVICE = 3;
+}
+
+// CapabilityPrincipal is the subject the capability is issued to.
+// Agent fields are populated only when kind=PRINCIPAL_KIND_AGENT.
+message CapabilityPrincipal {
+  PrincipalKind kind = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string tenant_id = 2 [(buf.validate.field).string.uuid = true];
+  string subject = 3 [(buf.validate.field).string.min_len = 1];
+
+  // Optional agent context — populated for kind=PRINCIPAL_KIND_AGENT.
+  string agent_type = 10;
+  string agent_version = 11;
+  string run_id = 12;
+  string parent_agent_id = 13;
+  string model = 14;
+  string mcp_client = 15;
+}
+
+// CapabilityCaveats mirrors the in-process capability.Caveats struct.
+// Empty fields = "no restriction on that axis".
+message CapabilityCaveats {
+  // ops is the set of authorised operations (get / put / list / delete /
+  // presign / tag / search / embed / share / manage). Required.
+  repeated string ops = 1 [(buf.validate.field).repeated.min_items = 1];
+
+  repeated string resource_prefixes = 2;
+  repeated string resource_uris = 3;
+  int32 max_requests = 4;
+  double max_budget_usd = 5;
+  bool allow_tainted_read = 6;
+  bool idempotency_key_required = 7;
+  repeated string source_ip_cidr = 8;
+}
+
+// Capability is the typed metadata view of an issued or stored
+// capability. Returned by every RPC; the compact JWT is delivered
+// separately as `token` so handlers can choose whether to surface it.
+message Capability {
+  string id = 1;
+  string issuer = 2;
+  CapabilityPrincipal subject = 3;
+  repeated string audience = 4;
+  CapabilityCaveats caveats = 5;
+  google.protobuf.Timestamp issued_at = 6;
+  google.protobuf.Timestamp not_before = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  string parent_id = 9;
+  int64 generation = 10;
+}
+
+message CapabilityServiceIssueRequest {
+  CapabilityPrincipal subject = 1 [(buf.validate.field).required = true];
+  repeated string audience = 2 [(buf.validate.field).repeated.min_items = 1];
+  CapabilityCaveats caveats = 3 [(buf.validate.field).required = true];
+  // ttl_seconds caps the capability lifetime. 0 → server default.
+  int64 ttl_seconds = 4 [(buf.validate.field).int64.gte = 0];
+  google.protobuf.Timestamp not_before = 5;
+}
+
+message CapabilityServiceIssueResponse {
+  Capability capability = 1;
+  // Compact JWT — return to the caller exactly once; never persisted.
+  string token = 2;
+}
+
+message CapabilityServiceDelegateRequest {
+  // parent_id is the capability the caller is narrowing under. The
+  // server fetches it from the store; the caller need not keep the
+  // full token around to delegate.
+  string parent_id = 1 [(buf.validate.field).string.uuid = true];
+  CapabilityPrincipal subject = 2;
+  repeated string audience = 3;
+  CapabilityCaveats caveats = 4;
+  int64 ttl_seconds = 5 [(buf.validate.field).int64.gte = 0];
+  google.protobuf.Timestamp not_before = 6;
+}
+
+message CapabilityServiceRevokeRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2;
+  bool cascade_children = 3;
+}
+
+message CapabilityServiceRevokeResponse {
+  // Empty on success; protobuf forward-compat slot for fields like
+  // descendants_revoked when cascade is on.
+}
+
+message CapabilityServiceListRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  PrincipalKind principal_kind = 2 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string subject = 3 [(buf.validate.field).string.min_len = 1];
+  bool include_expired = 4;
+  bool include_revoked = 5;
+  int32 page_size = 6 [(buf.validate.field).int32.gte = 0];
+  string page_token = 7;
+}
+
+message CapabilityServiceListResponse {
+  repeated Capability capabilities = 1;
+  string next_page_token = 2;
+}

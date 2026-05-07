@@ -24,6 +24,7 @@ type Config struct {
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
 	LLM        LLM        `yaml:"llm" json:"llm"`
 	Vector     Vector     `yaml:"vector" json:"vector"`
+	Capability Capability `yaml:"capability" json:"capability"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -293,6 +294,17 @@ type Workers struct {
 	ApiKeyReap       ApiKeyReap       `yaml:"api_key_reap" json:"api_key_reap"`
 	Lifecycle        Lifecycle        `yaml:"lifecycle" json:"lifecycle"`
 	Replication      Replication      `yaml:"replication" json:"replication"`
+	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
+}
+
+// CapabilityWorker drops capability_revocations rows for tokens whose
+// underlying capability has been expired for at least `expired_for`.
+// Keeps the denylist bounded; the verifier doesn't notice (an expired
+// row can never match a verifying token by definition). Disable by
+// setting interval to 0.
+type CapabilityWorker struct {
+	Interval   time.Duration `yaml:"interval" json:"interval"`
+	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
 }
 
 // RefreshTokenReap drops expired refresh-token rows. Always on; tune
@@ -605,4 +617,54 @@ type VectorQdrant struct {
 	APIKeySecret SecretRef `yaml:"api_key_secret" json:"api_key_secret"`
 	Collection   string    `yaml:"collection" json:"collection"`
 	Dimension    int       `yaml:"dimension" json:"dimension"`
+}
+
+// Capability configures the agent-runtime authorisation primitive. See
+// internal/capability for the package and migrations/016_capabilities.sql
+// for the schema.
+//
+// In dev (`enabled: true`, no `signing_key_path` set) the boot path
+// generates an ephemeral Ed25519 keypair so smoke tests work without
+// pre-provisioned material. Production deploys mount the private key
+// via Secret + readOnly volume; key rotation is graceful (multiple
+// kids in the JWKS document while clients catch up).
+type Capability struct {
+	// Enabled gates the whole subsystem. When false, the issuer +
+	// verifier are not built and the interceptor short-circuits to
+	// "no capability supplied" (callers fall through to JWT auth).
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// IssuerName is placed in the `iss` claim of every minted token
+	// and required to be in TrustedIssuers on the verifier side.
+	// Conventional value: the PALADIN deployment's external URL or a
+	// stable label like "paladin-prod-eu".
+	IssuerName string `yaml:"issuer_name" json:"issuer_name"`
+
+	// TrustedIssuers is the set of `iss` values the verifier accepts.
+	// Always include IssuerName; add others when federating across
+	// PALADIN instances.
+	TrustedIssuers []string `yaml:"trusted_issuers" json:"trusted_issuers"`
+
+	// SigningKeyPath is a filesystem path to the Ed25519 private key
+	// (PEM-encoded PKCS#8). Empty in dev → ephemeral keypair generated
+	// at boot. Production deploys mount the key via a Secret + readOnly
+	// volume.
+	SigningKeyPath string `yaml:"signing_key_path" json:"signing_key_path"`
+
+	// SigningKeyKID is the key ID emitted in the JWT header. When
+	// empty, the boot path derives one from the public key bytes.
+	SigningKeyKID string `yaml:"signing_key_kid" json:"signing_key_kid"`
+
+	// DefaultTTL caps Issue.TTL when the request omits it. Default 15
+	// minutes — short enough that revocation propagation rarely matters.
+	DefaultTTL time.Duration `yaml:"default_ttl" json:"default_ttl"`
+
+	// VerifierLeeway is the clock-skew window applied to nbf / exp.
+	// Default 30s; matches existing internal/auth.Auth.Leeway.
+	VerifierLeeway time.Duration `yaml:"verifier_leeway" json:"verifier_leeway"`
+
+	// RevocationCacheTTL is how long the verifier caches IsRevoked
+	// answers. Default 2s; the SLO for revocation propagation. Set <0
+	// to disable caching (every check hits the DB).
+	RevocationCacheTTL time.Duration `yaml:"revocation_cache_ttl" json:"revocation_cache_ttl"`
 }

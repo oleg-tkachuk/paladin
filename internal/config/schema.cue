@@ -250,6 +250,14 @@ workers: {
     interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
     lookback_window: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
   }
+  // Capability: drop expired revocation rows so the denylist stays
+  // bounded. interval=0 disables; expired_for is the grace window
+  // beyond a capability's natural expiry before its revocation row
+  // can be dropped.
+  capability: {
+    interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+  }
 }
 
 // Storage is the registry of physical object-storage backends. Each
@@ -339,6 +347,17 @@ vector: {
     collection:      string | *"paladin"
     dimension:       int | *1536
   }
+}
+
+capability: {
+  enabled:               bool   | *false
+  issuer_name:           string | *""
+  trusted_issuers:       [...string] | *[]
+  signing_key_path:      string | *""
+  signing_key_kid:       string | *""
+  default_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  verifier_leeway:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  revocation_cache_ttl:  =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
 }
 
 #SecretRef: string | {

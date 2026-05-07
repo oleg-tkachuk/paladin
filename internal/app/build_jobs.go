@@ -105,6 +105,20 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Logger:   l.Named("operations-reaper"),
 		})
 	}
+
+	// Capability revocation purger — only when the capability subsystem
+	// is wired (deps.Capability != nil) AND the worker config carries a
+	// non-zero interval. Keeps the denylist bounded; verifier correctness
+	// is unaffected (an expired token can never verify, so dropping its
+	// revocation row is safe).
+	if deps.Capability != nil && cfg.Workers.Capability.Interval > 0 {
+		out = append(out, &worker.CapabilityPurger{
+			Store:      deps.Capability.Store,
+			Interval:   cfg.Workers.Capability.Interval,
+			ExpiredFor: cfg.Workers.Capability.ExpiredFor,
+			Logger:     l.Named("capability-purger"),
+		})
+	}
 	return out
 }
 
