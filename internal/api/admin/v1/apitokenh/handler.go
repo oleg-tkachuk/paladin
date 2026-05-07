@@ -13,6 +13,7 @@ package apitokenh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,23 +25,34 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 // Handler wires the dependencies the RPCs need.
 type Handler struct {
-	issuer *api_token.Issuer
-	store  api_token.Store
-	policy cedar.Authorizer
+	issuer  *api_token.Issuer
+	store   api_token.Store
+	limiter ratelimit.Limiter
+	policy  cedar.Authorizer
 }
 
-// NewHandler builds the Handler. issuer / store / policy are required;
-// passing nil panics — wiring bugs should fail loud at boot.
-func NewHandler(issuer *api_token.Issuer, store api_token.Store, policy cedar.Authorizer) *Handler {
-	if issuer == nil || store == nil || policy == nil {
-		panic("apitokenh: issuer / store / policy are required")
+// NewHandler builds the Handler. issuer / store / limiter / policy are
+// required; passing nil panics — wiring bugs should fail loud at boot.
+//
+// limiter must be non-nil even on deploys that don't use rate limits;
+// pass ratelimit.NoopLimiter{} in that case so GetUsage degrades to an
+// empty snapshot rather than a runtime nil-deref.
+func NewHandler(
+	issuer *api_token.Issuer,
+	store api_token.Store,
+	limiter ratelimit.Limiter,
+	policy cedar.Authorizer,
+) *Handler {
+	if issuer == nil || store == nil || limiter == nil || policy == nil {
+		panic("apitokenh: issuer / store / limiter / policy are required")
 	}
-	return &Handler{issuer: issuer, store: store, policy: policy}
+	return &Handler{issuer: issuer, store: store, limiter: limiter, policy: policy}
 }
 
 // authorize gates an RPC against Cedar under the resource kind
@@ -162,6 +174,49 @@ func (h *Handler) GetSelf(ctx context.Context, _ *connect.Request[adminv1.APITok
 	return connect.NewResponse(&adminv1.APITokenServiceGetSelfResponse{
 		ApiToken: tokenToProto(*tok),
 	}), nil
+}
+
+// GetUsage returns a readonly rate-limit snapshot for a token. Cedar-
+// gated under api_token:read so admin-tier callers can inspect any
+// tenant's tokens without a separate per-token authorisation rule.
+// Web UI consumes this from token-detail cards; safe to poll.
+func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.APITokenServiceGetUsageRequest]) (*connect.Response[adminv1.APITokenServiceGetUsageResponse], error) {
+	if _, err := h.authorize(ctx, "read"); err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(req.Msg.GetId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+	}
+	tok, err := h.store.Get(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	snap, err := h.limiter.Usage(ctx, id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	resp := &adminv1.APITokenServiceGetUsageResponse{
+		Id:                  id.String(),
+		LimitRpm:            int32(tok.RateLimitRPM),
+		CurrentBucketCount:  snap.CurrentBucketCount,
+		PreviousBucketCount: snap.PreviousBucketCount,
+		WeightedCount:       snap.WeightedCount,
+		WindowResetsAt:      timestamppb.New(snap.WindowResetsAt),
+	}
+	if tok.LastUsedAt != nil {
+		resp.LastUsedAt = timestamppb.New(*tok.LastUsedAt)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// isNotFound matches sentinel errors that indicate "no row" — keeps the
+// callsite tidy and lets handlers branch on a single helper.
+func isNotFound(err error) bool {
+	return errors.Is(err, api_token.ErrTokenNotFound)
 }
 
 // tokenToProto maps the in-process Token to the proto shape. Plaintext

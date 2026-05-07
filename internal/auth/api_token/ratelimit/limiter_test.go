@@ -50,6 +50,10 @@ func (r *recordingLimiter) Allow(_ context.Context, _ uuid.UUID, _ int) (Decisio
 	return r.resp, nil
 }
 
+func (r *recordingLimiter) Usage(context.Context, uuid.UUID) (Snapshot, error) {
+	return Snapshot{}, nil
+}
+
 func (r *recordingLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }
 
 // TestRecordingLimiter_RoundTrip is a smoke test for the test helper —

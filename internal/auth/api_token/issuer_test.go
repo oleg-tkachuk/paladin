@@ -38,6 +38,14 @@ func (m *memStore) FindByPrefix(_ context.Context, prefix string) ([]Token, []st
 	return ts, hs, nil
 }
 
+func (m *memStore) Get(_ context.Context, id uuid.UUID) (Token, error) {
+	t, ok := m.rows[id]
+	if !ok {
+		return Token{}, ErrTokenNotFound
+	}
+	return t, nil
+}
+
 func (m *memStore) Revoke(_ context.Context, id uuid.UUID) error {
 	if t, ok := m.rows[id]; ok && t.RevokedAt == nil {
 		now := time.Now().UTC()

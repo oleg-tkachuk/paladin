@@ -101,6 +101,45 @@ SELECT
 	return d, nil
 }
 
+// Usage implements ratelimit.Limiter — readonly snapshot. Reads both
+// buckets via a single round-trip; computes weighted_count + window
+// reset time. Crucially does NOT bump anything: Web UI dashboards can
+// poll this every few seconds without distorting the rate counters
+// they're trying to display.
+func (l *Limiter) Usage(ctx context.Context, tokenID uuid.UUID) (ratelimit.Snapshot, error) {
+	const stmt = `
+WITH
+  cur_start AS (SELECT date_trunc('minute', NOW()) AS s)
+SELECT
+  COALESCE((
+    SELECT count FROM api_token_rate_buckets
+    WHERE token_id = $1 AND bucket_start = (SELECT s FROM cur_start)
+  ), 0)::bigint AS current_count,
+  COALESCE((
+    SELECT count FROM api_token_rate_buckets
+    WHERE token_id = $1 AND bucket_start = (SELECT s - interval '1 minute' FROM cur_start)
+  ), 0)::bigint AS previous_count,
+  EXTRACT(EPOCH FROM NOW() - (SELECT s FROM cur_start))::float8 AS elapsed_seconds,
+  (SELECT s + interval '1 minute' FROM cur_start)::timestamptz AS resets_at;
+`
+	var (
+		curCount, prevCount int64
+		elapsed             float64
+		resetsAt            time.Time
+	)
+	if err := l.pool.QueryRow(ctx, stmt, tokenID).
+		Scan(&curCount, &prevCount, &elapsed, &resetsAt); err != nil {
+		return ratelimit.Snapshot{}, fmt.Errorf("ratelimit/postgres: usage: %w", err)
+	}
+	weighted := float64(curCount) + float64(prevCount)*(1.0-elapsed/60.0)
+	return ratelimit.Snapshot{
+		CurrentBucketCount:  curCount,
+		PreviousBucketCount: prevCount,
+		WeightedCount:       weighted,
+		WindowResetsAt:      resetsAt.UTC(),
+	}, nil
+}
+
 // Sweep implements ratelimit.Limiter. Drops bucket rows older than
 // (now - olderThan). Called from the api_token purger.
 func (l *Limiter) Sweep(ctx context.Context, olderThan time.Duration) (int64, error) {

@@ -40,6 +40,13 @@ service APITokenService {
   // want to display "you are authenticated as token X" without an
   // out-of-band lookup.
   rpc GetSelf(APITokenServiceGetSelfRequest) returns (APITokenServiceGetSelfResponse);
+
+  // GetUsage returns a readonly snapshot of a token's current rate-
+  // limit consumption — current/previous bucket counters, the
+  // weighted sliding-window count, and when the window rolls. Does
+  // NOT bump the bucket; safe to poll from a Web UI dashboard.
+  // Returns NOT_FOUND when the token id doesn't exist.
+  rpc GetUsage(APITokenServiceGetUsageRequest) returns (APITokenServiceGetUsageResponse);
 }
 
 // APIToken is the metadata view returned by every RPC. The plaintext
@@ -115,4 +122,29 @@ message APITokenServiceGetSelfRequest {
 
 message APITokenServiceGetSelfResponse {
   APIToken api_token = 1;
+}
+
+message APITokenServiceGetUsageRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message APITokenServiceGetUsageResponse {
+  string id = 1;
+  // limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
+  // remaining counters are still returned so UIs can render
+  // "uncapped, current rate: N rpm".
+  int32 limit_rpm = 2;
+  // current_bucket_count is the raw counter for the in-progress
+  // minute. previous_bucket_count is the previous full minute.
+  // weighted_count = current + previous * (1 - elapsed / 60). Mirrors
+  // the math the Limiter uses on the verify path.
+  int64 current_bucket_count = 3;
+  int64 previous_bucket_count = 4;
+  double weighted_count = 5;
+  // window_resets_at is when the current minute bucket rolls — UI
+  // renders "resets in Ns" by computing window_resets_at - now.
+  google.protobuf.Timestamp window_resets_at = 6;
+  // last_used_at is the most recent successful Verify on this token.
+  // NULL when the token has never been verified.
+  google.protobuf.Timestamp last_used_at = 7;
 }

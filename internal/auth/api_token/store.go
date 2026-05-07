@@ -28,6 +28,11 @@ type Store interface {
 	// callers from accidentally logging it.
 	FindByPrefix(ctx context.Context, prefix string) ([]Token, []string, error)
 
+	// Get loads one token row by id. Used by admin tooling
+	// (GetUsage RPC) to surface metadata + rate-limit cap without
+	// scanning the table. Returns ErrTokenNotFound when no row.
+	Get(ctx context.Context, id uuid.UUID) (Token, error)
+
 	// Revoke marks a token as revoked at NOW(). Idempotent: re-revoking
 	// a revoked token returns nil with no row update.
 	Revoke(ctx context.Context, id uuid.UUID) error

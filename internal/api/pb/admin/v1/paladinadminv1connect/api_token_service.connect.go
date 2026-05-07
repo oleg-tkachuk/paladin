@@ -42,6 +42,9 @@ const (
 	APITokenServiceListProcedure = "/paladin.admin.v1.APITokenService/List"
 	// APITokenServiceGetSelfProcedure is the fully-qualified name of the APITokenService's GetSelf RPC.
 	APITokenServiceGetSelfProcedure = "/paladin.admin.v1.APITokenService/GetSelf"
+	// APITokenServiceGetUsageProcedure is the fully-qualified name of the APITokenService's GetUsage
+	// RPC.
+	APITokenServiceGetUsageProcedure = "/paladin.admin.v1.APITokenService/GetUsage"
 )
 
 // APITokenServiceClient is a client for the paladin.admin.v1.APITokenService service.
@@ -64,6 +67,12 @@ type APITokenServiceClient interface {
 	// want to display "you are authenticated as token X" without an
 	// out-of-band lookup.
 	GetSelf(context.Context, *connect.Request[v1.APITokenServiceGetSelfRequest]) (*connect.Response[v1.APITokenServiceGetSelfResponse], error)
+	// GetUsage returns a readonly snapshot of a token's current rate-
+	// limit consumption — current/previous bucket counters, the
+	// weighted sliding-window count, and when the window rolls. Does
+	// NOT bump the bucket; safe to poll from a Web UI dashboard.
+	// Returns NOT_FOUND when the token id doesn't exist.
+	GetUsage(context.Context, *connect.Request[v1.APITokenServiceGetUsageRequest]) (*connect.Response[v1.APITokenServiceGetUsageResponse], error)
 }
 
 // NewAPITokenServiceClient constructs a client for the paladin.admin.v1.APITokenService service. By
@@ -101,15 +110,22 @@ func NewAPITokenServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(aPITokenServiceMethods.ByName("GetSelf")),
 			connect.WithClientOptions(opts...),
 		),
+		getUsage: connect.NewClient[v1.APITokenServiceGetUsageRequest, v1.APITokenServiceGetUsageResponse](
+			httpClient,
+			baseURL+APITokenServiceGetUsageProcedure,
+			connect.WithSchema(aPITokenServiceMethods.ByName("GetUsage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // aPITokenServiceClient implements APITokenServiceClient.
 type aPITokenServiceClient struct {
-	create  *connect.Client[v1.APITokenServiceCreateRequest, v1.APITokenServiceCreateResponse]
-	revoke  *connect.Client[v1.APITokenServiceRevokeRequest, v1.APITokenServiceRevokeResponse]
-	list    *connect.Client[v1.APITokenServiceListRequest, v1.APITokenServiceListResponse]
-	getSelf *connect.Client[v1.APITokenServiceGetSelfRequest, v1.APITokenServiceGetSelfResponse]
+	create   *connect.Client[v1.APITokenServiceCreateRequest, v1.APITokenServiceCreateResponse]
+	revoke   *connect.Client[v1.APITokenServiceRevokeRequest, v1.APITokenServiceRevokeResponse]
+	list     *connect.Client[v1.APITokenServiceListRequest, v1.APITokenServiceListResponse]
+	getSelf  *connect.Client[v1.APITokenServiceGetSelfRequest, v1.APITokenServiceGetSelfResponse]
+	getUsage *connect.Client[v1.APITokenServiceGetUsageRequest, v1.APITokenServiceGetUsageResponse]
 }
 
 // Create calls paladin.admin.v1.APITokenService.Create.
@@ -132,6 +148,11 @@ func (c *aPITokenServiceClient) GetSelf(ctx context.Context, req *connect.Reques
 	return c.getSelf.CallUnary(ctx, req)
 }
 
+// GetUsage calls paladin.admin.v1.APITokenService.GetUsage.
+func (c *aPITokenServiceClient) GetUsage(ctx context.Context, req *connect.Request[v1.APITokenServiceGetUsageRequest]) (*connect.Response[v1.APITokenServiceGetUsageResponse], error) {
+	return c.getUsage.CallUnary(ctx, req)
+}
+
 // APITokenServiceHandler is an implementation of the paladin.admin.v1.APITokenService service.
 type APITokenServiceHandler interface {
 	// Create mints a new API token. Plaintext is returned exactly once
@@ -152,6 +173,12 @@ type APITokenServiceHandler interface {
 	// want to display "you are authenticated as token X" without an
 	// out-of-band lookup.
 	GetSelf(context.Context, *connect.Request[v1.APITokenServiceGetSelfRequest]) (*connect.Response[v1.APITokenServiceGetSelfResponse], error)
+	// GetUsage returns a readonly snapshot of a token's current rate-
+	// limit consumption — current/previous bucket counters, the
+	// weighted sliding-window count, and when the window rolls. Does
+	// NOT bump the bucket; safe to poll from a Web UI dashboard.
+	// Returns NOT_FOUND when the token id doesn't exist.
+	GetUsage(context.Context, *connect.Request[v1.APITokenServiceGetUsageRequest]) (*connect.Response[v1.APITokenServiceGetUsageResponse], error)
 }
 
 // NewAPITokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -185,6 +212,12 @@ func NewAPITokenServiceHandler(svc APITokenServiceHandler, opts ...connect.Handl
 		connect.WithSchema(aPITokenServiceMethods.ByName("GetSelf")),
 		connect.WithHandlerOptions(opts...),
 	)
+	aPITokenServiceGetUsageHandler := connect.NewUnaryHandler(
+		APITokenServiceGetUsageProcedure,
+		svc.GetUsage,
+		connect.WithSchema(aPITokenServiceMethods.ByName("GetUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.APITokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case APITokenServiceCreateProcedure:
@@ -195,6 +228,8 @@ func NewAPITokenServiceHandler(svc APITokenServiceHandler, opts ...connect.Handl
 			aPITokenServiceListHandler.ServeHTTP(w, r)
 		case APITokenServiceGetSelfProcedure:
 			aPITokenServiceGetSelfHandler.ServeHTTP(w, r)
+		case APITokenServiceGetUsageProcedure:
+			aPITokenServiceGetUsageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -218,4 +253,8 @@ func (UnimplementedAPITokenServiceHandler) List(context.Context, *connect.Reques
 
 func (UnimplementedAPITokenServiceHandler) GetSelf(context.Context, *connect.Request[v1.APITokenServiceGetSelfRequest]) (*connect.Response[v1.APITokenServiceGetSelfResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.APITokenService.GetSelf is not implemented"))
+}
+
+func (UnimplementedAPITokenServiceHandler) GetUsage(context.Context, *connect.Request[v1.APITokenServiceGetUsageRequest]) (*connect.Response[v1.APITokenServiceGetUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.APITokenService.GetUsage is not implemented"))
 }

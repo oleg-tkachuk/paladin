@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -105,7 +106,13 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 		return nil
 	}
 	d, err := i.limiter.Allow(ctx, tok.ID, tok.RateLimitRPM)
-	if err != nil || d.Allowed {
+	if err != nil {
+		// Fail-open on limiter errors; nothing to record (the call
+		// didn't actually go through the rate-limit decision).
+		return nil
+	}
+	recordRateLimitDecision(ctx, tok.TenantID.String(), d.Allowed, d.WeightedCount, tok.RateLimitRPM)
+	if d.Allowed {
 		return nil
 	}
 	ce := connect.NewError(connect.CodeResourceExhausted,
@@ -122,9 +129,18 @@ func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFun
 		if token == "" {
 			return next(ctx, req)
 		}
-		t, err := i.verifier.Verify(ctx, token, i.audience)
-		if err != nil {
-			return nil, mapAPITokenErr(err)
+		start := time.Now()
+		t, verr := i.verifier.Verify(ctx, token, i.audience)
+		// Tenant attribution: only known on success. On failure the
+		// metric is recorded with empty tenant_id; cardinality stays
+		// bounded.
+		var tenantID string
+		if t != nil {
+			tenantID = t.TenantID.String()
+		}
+		recordVerifyDuration(ctx, float64(time.Since(start).Microseconds())/1000.0, tenantID, verr == nil)
+		if verr != nil {
+			return nil, mapAPITokenErr(verr)
 		}
 		if err := i.rateLimitGate(ctx, t); err != nil {
 			return nil, err

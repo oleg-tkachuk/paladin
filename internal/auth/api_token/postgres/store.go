@@ -103,6 +103,36 @@ WHERE  prefix = $1;
 	return tokens, hashes, nil
 }
 
+// Get implements api_token.Store. Returns ErrTokenNotFound when no
+// row matches.
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (api_token.Token, error) {
+	const stmt = `
+SELECT id, tenant_id, name, prefix, token_hash,
+       scopes, audience, expires_at, rate_limit_rpm,
+       revoked_at, last_used_at, created_by, created_at
+FROM   api_tokens
+WHERE  id = $1;
+`
+	var t api_token.Token
+	var hash string
+	var revokedAt, lastUsedAt *time.Time
+	err := s.pool.QueryRow(ctx, stmt, id).Scan(
+		&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
+		&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+		&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return api_token.Token{}, api_token.ErrTokenNotFound
+		}
+		return api_token.Token{}, fmt.Errorf("api_token/postgres: get: %w", err)
+	}
+	t.RevokedAt = revokedAt
+	t.LastUsedAt = lastUsedAt
+	_ = hash // not surfaced to callers
+	return t, nil
+}
+
 // Revoke implements api_token.Store. Idempotent — a re-revoke leaves
 // revoked_at unchanged (we only update when it's NULL).
 func (s *Store) Revoke(ctx context.Context, id uuid.UUID) error {

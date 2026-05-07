@@ -123,7 +123,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// the interceptor (caller must hold a valid token); the rest are
 	// platform-admin via Cedar.
 	if deps.APIToken != nil {
-		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, polEngine)
+		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
 		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
 	}
 

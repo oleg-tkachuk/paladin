@@ -40,6 +40,30 @@ type Decision struct {
 	RetryAfter time.Duration
 }
 
+// Snapshot is the readonly view of a token's current rate-limit state.
+// Returned by Limiter.Usage; never mutates the store. Web UI consumes
+// this to render progress bars without taking the verify-path
+// shortcut of always bumping the bucket.
+type Snapshot struct {
+	// CurrentBucketCount is the raw counter for the in-progress
+	// minute. Bumped by every Allow call (allowed or denied).
+	CurrentBucketCount int64
+
+	// PreviousBucketCount is the raw counter for the previous full
+	// minute. Used by Allow's weighted-window calculation.
+	PreviousBucketCount int64
+
+	// WeightedCount is the same number Allow returns — current +
+	// previous * (1 - elapsed_in_current / 60). Surfaced here so UI
+	// callers don't have to redo the math.
+	WeightedCount float64
+
+	// WindowResetsAt is when the current minute bucket rolls — i.e.
+	// when the bucket counter starts fresh and the previous bucket
+	// becomes the new "previous". Useful for the "resets in Ns" UI.
+	WindowResetsAt time.Time
+}
+
 // Limiter gates per-token request rates. The interceptor calls Allow
 // after a successful Verify; on Allowed=false the interceptor returns
 // connect.CodeResourceExhausted with a Retry-After header.
@@ -49,6 +73,11 @@ type Limiter interface {
 	// (api_tokens.rate_limit_rpm); 0 means unlimited and the
 	// implementation must short-circuit without touching the store.
 	Allow(ctx context.Context, tokenID uuid.UUID, capacity int) (Decision, error)
+
+	// Usage returns the readonly Snapshot for a token. Does NOT bump
+	// the bucket — distinct from Allow which always bumps. Cheap
+	// query, suitable for UI dashboards refreshing every few seconds.
+	Usage(ctx context.Context, tokenID uuid.UUID) (Snapshot, error)
 
 	// Sweep drops bucket rows older than the supplied grace window.
 	// Called by the api_token purger; safe to invoke from a goroutine.
@@ -68,6 +97,13 @@ type NoopLimiter struct{}
 // Allow implements Limiter.
 func (NoopLimiter) Allow(context.Context, uuid.UUID, int) (Decision, error) {
 	return Decision{Allowed: true}, nil
+}
+
+// Usage implements Limiter — empty snapshot for the noop variant.
+// Callers that wire NoopLimiter shouldn't be surfacing UI progress
+// bars in the first place.
+func (NoopLimiter) Usage(context.Context, uuid.UUID) (Snapshot, error) {
+	return Snapshot{}, nil
 }
 
 // Sweep implements Limiter.

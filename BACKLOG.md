@@ -161,37 +161,24 @@ the same commit. Treat this file like a runtime invariant.
   who runs the existing api_keys consumers. Without that, dropping
   the legacy table breaks live integrations.
 
-### api_token: per-token rate limit observability
+### api_token: Retry-After end-to-end smoke test
 
-- **Status:** Aspirational
-- **Reason:** The sliding-window rate limit primitive landed —
-  `internal/auth/api_token/ratelimit` Postgres-backed window,
-  wired into APITokenInterceptor, exposed via
-  APITokenService.Create, swept by APITokenPurger. Real-time
-  visibility (Web UI progress bars, ops dashboards, anomaly
-  detection) needs a read-only introspection surface plus
-  OpenTelemetry instrumentation so operators don't have to query
-  the table directly.
+- **Status:** Deferred
+- **Reason:** APITokenInterceptor sets the Retry-After header on
+  err.Meta() when the rate-limit gate denies a call. Connect-go
+  propagates Meta to the response — but we've never confirmed it
+  end-to-end against a real Connect client. A smoke test would
+  verify the header shows up where downstream HTTP clients
+  actually look for it.
 - **Definition of Done:**
-  - `APITokenService.GetUsage(token_id)` — read-only RPC. Returns
-    current weighted_count, current_bucket_count,
-    previous_bucket_count, window_resets_at, last_used_at. Does
-    NOT bump the bucket. Web UI consumes this on the token detail
-    card to render progress bars.
-  - OpenTelemetry metrics on the verify path (we already wire
-    `go.opentelemetry.io/otel/metric` in internal/observability):
-      * counter `paladin.api_token.ratelimit.decisions` with attrs
-        {tenant_id, allowed}.
-      * histogram `paladin.api_token.ratelimit.weighted_ratio`
-        (weighted_count / capacity).
-      * histogram `paladin.api_token.verify.duration_ms` per
-        verification.
-    Token IDs deliberately NOT in attribute set — high cardinality
-    blows out exporters; tenant_id is the right granularity.
-  - Retry-After end-to-end smoke test against a real Connect
-    client confirming the header lands on the response from the
-    err.Meta() path the interceptor sets.
-- **Blockers:** none. Polish on a working primitive.
+  - Integration test boots a minimal Connect server with the
+    APITokenInterceptor wired against a recordingLimiter that
+    forces denial; client makes a call; assert response headers
+    contain Retry-After with the expected seconds value.
+  - Optionally extend to verify the header flow through h2c +
+    h2 transport variants — Connect documents both as supported.
+- **Blockers:** none. Low priority; the unit test on err.Meta()
+  already confirms the interceptor sets the header.
 
 ### LLM provider wiring
 

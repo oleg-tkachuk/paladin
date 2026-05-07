@@ -27,6 +27,10 @@ func (r *recordingLimiter) Allow(context.Context, uuid.UUID, int) (ratelimit.Dec
 	return r.resp, nil
 }
 
+func (r *recordingLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot, error) {
+	return ratelimit.Snapshot{}, nil
+}
+
 func (r *recordingLimiter) Sweep(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
