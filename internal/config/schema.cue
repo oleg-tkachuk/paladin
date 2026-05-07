@@ -329,13 +329,21 @@ mcp: {
 }
 
 llm: {
-  enabled:            bool   | *false
-  base_url:           string | *""
-  master_key:         string | *""
-  master_key_secret?: #SecretRef
-  timeout:            =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  enabled: bool | *false
+  litellm: {
+    base_url:        string | *""
+    api_key:         string | *""
+    api_key_secret?: #SecretRef
+    timeout:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  }
+  ollama: {
+    base_url: string | *""
+    // Local inference is slower than cloud — wider default timeout.
+    timeout:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"120s"
+  }
   bindings: [string]: {
-    model: string
+    provider: "litellm" | "ollama"
+    model:    string
   }
 }
 

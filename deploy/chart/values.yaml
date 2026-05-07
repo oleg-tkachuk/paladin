@@ -520,6 +520,51 @@ config:
       allow_write: false
       session_timeout: 10m
 
+  # ─── LLM providers ────────────────────────────────────────────────────
+  #
+  # Two providers supported:
+  #
+  #   - litellm: OpenAI-compatible proxy fronting every major vendor.
+  #     Holds the proxy bearer key; PALADIN holds no vendor keys directly.
+  #     Cross-namespace SecretRef is honoured by K8sSecretResolver
+  #     (RBAC `clusterWide=true` on the secret-reader ClusterRole),
+  #     so api_key_secret can live in the team's IdP/secret namespace.
+  #
+  #   - ollama: local CPU/GPU inference. No auth (NetworkPolicy is the
+  #     boundary); cost is always 0; useful for embedding workloads
+  #     and air-gapped deploys.
+  #
+  # Bindings map a logical Role to a (provider, model) pair. Operators
+  # flip a deployment from one provider to another with a YAML edit.
+  llm:
+    enabled: false
+    litellm:
+      base_url: ""
+      api_key: ""
+      # Example: cross-namespace ref to a key the rag-mvp namespace
+      # already manages. The chart-level RBAC must permit GET on the
+      # secret name in that namespace (rbac.secretReader.secretNames
+      # below).
+      # api_key_secret:
+      #   name: litellm-client-key
+      #   key: LITELLM_API_KEY
+      #   namespace: rag-mvp
+      timeout: 30s
+    ollama:
+      base_url: ""
+      timeout: 120s
+    bindings: {}
+      # Example bindings (uncomment + tune per environment):
+      # embeddings.default:
+      #   provider: litellm
+      #   model: text-embedding-3-small
+      # summarize.cheap:
+      #   provider: ollama
+      #   model: llama3.1:8b
+      # classify.pii:
+      #   provider: litellm
+      #   model: openai/gpt-4o-mini
+
 # ─── Bootstrap admin Secret ────────────────────────────────────────────────
 #
 # When chart-level `bootstrap.admin.enabled=true` the chart provisions
@@ -588,3 +633,8 @@ rbac:
       - paladin-postgresql-migrate-user
       - paladin-admin-key
       - paladin-bootstrap-admin
+      # LLM provider keys. K8sSecretResolver reads these via the
+      # cross-namespace SecretRef (e.g. config.llm.litellm.api_key_secret
+      # with namespace: rag-mvp). Comment out when llm.enabled=false to
+      # tighten the RBAC surface.
+      - litellm-client-key

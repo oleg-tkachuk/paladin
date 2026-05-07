@@ -55,6 +55,12 @@ type SharedDeps struct {
 	// APIToken is the hashed-bearer M2M auth primitive. Nil when
 	// cfg.APIToken.Enabled is false; callers must guard.
 	APIToken *APITokenBundle
+
+	// LLM is the configured-provider Registry. Nil when
+	// cfg.LLM.Enabled is false. Callers degrade on
+	// llm.ErrProviderUnavailable; LLM is never load-bearing on the
+	// hot path.
+	LLM *LLMBundle
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -144,6 +150,13 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, fmt.Errorf("app: api_token bundle: %w", err)
 	}
 	deps.APIToken = apiTok
+
+	// LLM subsystem — additive; absence is fine.
+	llmBundle, err := BuildLLMBundle(cfg.LLM, deps)
+	if err != nil {
+		return nil, fmt.Errorf("app: llm bundle: %w", err)
+	}
+	deps.LLM = llmBundle
 
 	return deps, nil
 }

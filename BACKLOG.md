@@ -138,23 +138,29 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### LLM provider wiring
+### LLM provider — first caller (on-store summarization)
 
 - **Status:** Aspirational
-- **Reason:** `internal/llm` interface + LiteLLM proxy client landed in
-  Phase 1 but no caller invokes it yet. The first user is on-store
-  summarization (server-side, async).
+- **Reason:** Provider plumbing landed: cfg.LLM with LiteLLM + Ollama
+  subsections, Ollama OpenAI-compat client, LLMBundle + StaticRegistry
+  built from cfg.LLM.Bindings in BuildSharedDeps. Helm values exposes
+  the config skeleton with cross-namespace SecretRef (RBAC permits
+  `litellm-client-key` reads from arbitrary namespaces). What's not
+  wired: an actual caller. The first one should be on-store
+  summarization — object PUT → background worker → Registry.Resolve(
+  RoleSummarize) → set `summary` on object metadata.
 - **Definition of Done:**
-  - `internal/llm/registry` constructed at boot from `cfg.LLM.Bindings`.
-  - At least one caller exercises the path end-to-end: object PUT →
-    background worker → LiteLLM → summary stored on object metadata.
-  - Failure path (LiteLLM down) returns `ErrProviderUnavailable` and
-    the caller skips silently — never fails the hot path.
-  - A docker-compose service for LiteLLM in `deploy/docker-compose.yaml`
-    so dev gets the full stack.
-- **Blockers:** Decision on which models to enable per role
-  (embeddings, summarize, classify) — needs config from the product
-  side.
+  - Worker that consumes object-PUT events (S3 bucket notification
+    or polling marker), looks up the binding for RoleSummarize,
+    asks the provider to summarize, stores result on the object
+    row's metadata column.
+  - Failure path (provider unreachable / unconfigured) returns
+    ErrProviderUnavailable and the worker skips silently — never
+    fails the hot path; the row simply has no summary.
+  - Optional docker-compose service for LiteLLM + Ollama so dev
+    gets the full stack.
+- **Blockers:** Decision on which models to use per Role — needs
+  configuration sign-off from the product side. Wiring is unblocked.
 
 ### Vector index wiring
 

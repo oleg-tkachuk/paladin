@@ -560,37 +560,80 @@ type MCPHTTP struct {
 	SessionTimeout time.Duration `yaml:"session_timeout" json:"session_timeout"`
 }
 
-// LLM configures the LiteLLM proxy that fronts every server-side model
-// invocation PALADIN makes (out-of-band summarization, embeddings, classifiers,
-// rerank). MCP `sampling` covers in-loop calls and goes through the host —
-// this section is for what PALADIN needs when no host is connected. See
-// internal/llm and internal/llm/litellm for rationale.
+// LLM configures the server-side model providers PALADIN uses for out-of-band
+// flows (on-store summarization, embeddings, classifiers, rerank). MCP
+// `sampling` covers in-loop calls and goes through the host — this
+// section is what PALADIN needs when no host is connected.
 //
-// Bindings is a Role -> {Model} map; the same logical role
-// ("embeddings.default", "summarize.cheap", "classify.pii") can point at
-// different LiteLLM model aliases per environment without code changes.
+// Two providers are supported:
+//
+//   - LiteLLM: an OpenAI-compatible proxy fronting every major vendor.
+//     Multi-provider routing, retries, fallbacks, per-virtual-key
+//     budgets and cost dashboards live in the proxy. PALADIN holds only the
+//     proxy bearer key.
+//
+//   - Ollama: local CPU/GPU inference. Speaks OpenAI-compat at /v1/*.
+//     No auth; cost is always 0. Useful for air-gapped deploys, embedding
+//     workloads where vendor-API costs are prohibitive, and dev mode.
+//
+// Bindings map a logical Role ("embeddings.default", "summarize.cheap")
+// to a (provider, model) pair so PALADIN code stays decoupled from vendor
+// identity. Operators flip a deployment from LiteLLM-Anthropic to
+// Ollama-llama3 with a YAML edit, no code change.
 type LLM struct {
 	// Enabled gates the whole subsystem. When false, callers see
-	// llm.ErrProviderUnavailable from the noop registry and fall back to
-	// heuristics.
+	// llm.ErrProviderUnavailable and fall back to heuristics.
 	Enabled bool `yaml:"enabled" json:"enabled"`
-	// BaseURL of the LiteLLM proxy (e.g. http://litellm:4000). No trailing slash.
-	BaseURL string `yaml:"base_url" json:"base_url"`
-	// MasterKeySecret resolves the proxy's master bearer token. In dev
-	// the inline MasterKey field can be used instead; never both.
-	MasterKey       string    `yaml:"master_key" json:"master_key"`
-	MasterKeySecret SecretRef `yaml:"master_key_secret" json:"master_key_secret"`
-	// Timeout caps each request to the proxy. Embedding batches above
-	// this threshold must be chunked by the caller.
-	Timeout time.Duration `yaml:"timeout" json:"timeout"`
-	// Bindings maps logical roles to LiteLLM model aliases. Key is the
-	// Role string from internal/llm/provider.go (e.g. "embeddings.default").
+
+	// LiteLLM is the proxy-fronted multi-vendor provider. Optional;
+	// when BaseURL is empty, LiteLLM bindings won't resolve and will
+	// surface ErrProviderUnavailable to callers.
+	LiteLLM LLMLiteLLM `yaml:"litellm" json:"litellm"`
+
+	// Ollama is the local-inference provider. Optional; when BaseURL
+	// is empty, Ollama bindings won't resolve.
+	Ollama LLMOllama `yaml:"ollama" json:"ollama"`
+
+	// Bindings maps Role → (provider, model). Key is the Role string
+	// from internal/llm/provider.go.
 	Bindings map[string]LLMBinding `yaml:"bindings" json:"bindings"`
 }
 
-// LLMBinding pins one role to a concrete model alias as configured in the
-// LiteLLM proxy's `model_list`.
+// LLMLiteLLM is the LiteLLM-proxy provider config.
+type LLMLiteLLM struct {
+	// BaseURL of the LiteLLM proxy (e.g. http://litellm:4000/v1). The
+	// `/v1` suffix is the OpenAI-compat API root the client appends
+	// `/chat/completions`/`/embeddings` to.
+	BaseURL string `yaml:"base_url" json:"base_url"`
+	// APIKey / APIKeySecret resolve the proxy bearer key. In dev the
+	// inline APIKey is convenient; production deploys mount via Secret
+	// (cross-namespace SecretRefs are honoured by K8sSecretResolver).
+	APIKey       string    `yaml:"api_key" json:"api_key"`
+	APIKeySecret SecretRef `yaml:"api_key_secret" json:"api_key_secret"`
+	// Timeout caps each request. Embedding batches above this size
+	// must be chunked by the caller.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+}
+
+// LLMOllama is the local-Ollama provider config.
+type LLMOllama struct {
+	// BaseURL of the Ollama daemon (e.g. http://ollama:11434). The
+	// client appends `/v1/chat/completions` / `/v1/embeddings`.
+	BaseURL string `yaml:"base_url" json:"base_url"`
+	// Timeout caps each request. Defaults to 120s — local inference
+	// is slower than cloud APIs, especially on cold starts.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+}
+
+// LLMBinding pins one role to a (provider, model) pair.
 type LLMBinding struct {
+	// Provider selects which configured provider to use. One of
+	// "litellm" / "ollama".
+	Provider string `yaml:"provider" json:"provider"`
+	// Model is the provider-specific model identifier. For LiteLLM
+	// it's the alias in the proxy's `model_list` (e.g.
+	// "openai/gpt-4o-mini"); for Ollama it's the model tag
+	// ("llama3.1:8b").
 	Model string `yaml:"model" json:"model"`
 }
 
