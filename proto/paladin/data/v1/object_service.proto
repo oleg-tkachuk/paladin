@@ -103,8 +103,13 @@ message UploadObjectRequest {
   string key = 2; // empty → server uses object_id as key
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
   int64 size_hint_bytes = 4;
+  // UNSPECIFIED is allowed and means "let the server pick" — handler
+  // resolves the empty value to SHA256 (the data-plane default the
+  // PresignedPUT verification path expects). The earlier
+  // `not_in: [0]` rule was failing every JSON client that omits
+  // enum-zero on the wire, including stale browser bundles.
   paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5
-      [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+      [(buf.validate.field).enum = {defined_only: true}];
   map<string, string> metadata = 6;
   map<string, string> tags = 7;
   string external_ref = 8;

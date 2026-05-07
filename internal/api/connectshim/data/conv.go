@@ -188,7 +188,12 @@ func checksumAlgoStr(a commonpb.ChecksumAlgorithm) string {
 	case commonpb.ChecksumAlgorithm_CHECKSUM_ALGORITHM_MD5:
 		return "MD5"
 	}
-	return ""
+	// UNSPECIFIED → SHA256 default. Connect-JSON omits enum-zero on
+	// the wire, so any client (including stale browser bundles) that
+	// forgets to set the field would otherwise blow up at the
+	// validator. SHA256 is what the data-plane verifies on
+	// CompleteObject anyway.
+	return "SHA256"
 }
 
 func presignedUrlProto(url, method string, headers map[string]string, expires time.Time, postAction string, postFields map[string]string) *commonpb.PresignedUrl {
