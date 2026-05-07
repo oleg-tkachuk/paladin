@@ -159,6 +159,17 @@ workers:
     # 1s tick during smoke so a BatchDelete enqueued at t=0 is
     # actually processed before the test polls at t=2s.
     interval: 1s
+  # AI workers are off in the smoke stack — interval=0 disables and
+  # keeps the test path independent of LLM/Vector provider availability.
+  # Enable per-scenario when adding agentic-flow tests.
+  summarization:
+    interval: 0
+    batch_size: 16
+    max_object_bytes: 262144
+    allowed_content_types: []
+  embedding:
+    interval: 0
+    batch_size: 16
 
 storage:
   default_backend: primary

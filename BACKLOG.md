@@ -138,53 +138,34 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### LLM provider — first caller (on-store summarization)
+### Vector / LLM — additional callers + body chunking
 
 - **Status:** Aspirational
-- **Reason:** Provider plumbing landed: cfg.LLM with LiteLLM + Ollama
-  subsections, Ollama OpenAI-compat client, LLMBundle + StaticRegistry
-  built from cfg.LLM.Bindings in BuildSharedDeps. Helm values exposes
-  the config skeleton with cross-namespace SecretRef (RBAC permits
-  `litellm-client-key` reads from arbitrary namespaces). What's not
-  wired: an actual caller. The first one should be on-store
-  summarization — object PUT → background worker → Registry.Resolve(
-  RoleSummarize) → set `summary` on object metadata.
+- **Reason:** First callers landed: SummarizationWorker + EmbeddingWorker
+  poll AVAILABLE objects, summarize the body via Registry.Resolve(
+  RoleSummarize), embed the summary text via RoleEmbeddings, and push
+  one Record per object into the configured Vector Indexer. Day-1 scope
+  is intentionally narrow:
+    - Embeddings ride on the *summary* text, not the raw body —
+      avoids chunk-level work for the first wired-up flow.
+    - SummarizationWorker only processes content types in the
+      `workers.summarization.allowed_content_types` allow-list; PDFs,
+      images, and binary blobs need a content-extract pre-step.
+    - There is no MCP `search` tool yet — the indexer is populated
+      but not yet queryable via the agent surface.
+  What's not wired:
 - **Definition of Done:**
-  - Worker that consumes object-PUT events (S3 bucket notification
-    or polling marker), looks up the binding for RoleSummarize,
-    asks the provider to summarize, stores result on the object
-    row's metadata column.
-  - Failure path (provider unreachable / unconfigured) returns
-    ErrProviderUnavailable and the worker skips silently — never
-    fails the hot path; the row simply has no summary.
-  - Optional docker-compose service for LiteLLM + Ollama so dev
-    gets the full stack.
-- **Blockers:** Decision on which models to use per Role — needs
-  configuration sign-off from the product side. Wiring is unblocked.
-
-### Vector index — first caller (RAG search + agent memory)
-
-- **Status:** Aspirational
-- **Reason:** Backend plumbing landed: pgvector adapter (Phase 1) plus
-  the real Qdrant REST client (Round 3). cfg.Vector picks one backend
-  at boot via `vector.backend: pgvector|qdrant`; VectorBundle on
-  SharedDeps holds the live Indexer. Helm chart exposes the Qdrant
-  config skeleton + cross-namespace SecretRef + an opt-in
-  `secretCopy` pre-install hook for operators who prefer a copy of
-  `qdrant-client-key` into the PALADIN namespace. What's not wired is an
-  actual caller; first users: agent memory (`remember` / `recall`),
-  chunk-level RAG search exposed via MCP, on-store embedding pipeline.
-- **Definition of Done:**
-  - Embedding pipeline writes to the Indexer on object PUT (kind-gated
-    so we don't embed binary blobs). Uses the LLM Registry's
-    RoleEmbeddings binding.
-  - MCP `search` tool exposes a search resource backed by
-    `vector.Indexer.Search`.
-  - Per-tenant stats surfaced on the admin SystemService.
+  - Chunk-level embedding for objects above a configured size
+    threshold (split on token count, not bytes; preserve byte-range
+    refs in `Record.ChunkRef`).
+  - Content-extract pre-step for PDFs / images so non-text-shaped
+    objects become eligible for the summary worker.
+  - MCP `search` / `recall` tools backed by `vector.Indexer.Search`.
   - Soft-delete cascade calls `DeleteByObject` so the vector store
-    stays consistent with object metadata.
-- **Blockers:** "LLM provider — first caller" lands first (no
-  embeddings without an embedding-model binding).
+    stays consistent with object lifecycle.
+  - Per-tenant vector stats surfaced on admin SystemService.
+- **Blockers:** None on the wiring side — these are additive on top of
+  the first-caller workers. Chunking design needs a tokenizer choice.
 
 ---
 

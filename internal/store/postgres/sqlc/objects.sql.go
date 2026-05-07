@@ -78,7 +78,7 @@ func (q *Queries) CreateObject(ctx context.Context, objectID pgtype.UUID, tenant
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold, objects.summary, objects.embedding_indexed_at
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2
 `
@@ -115,6 +115,8 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 		&i.Object.LockMode,
 		&i.Object.LockRetainUntil,
 		&i.Object.LegalHold,
+		&i.Object.Summary,
+		&i.Object.EmbeddingIndexedAt,
 	)
 	return i, err
 }
@@ -138,7 +140,7 @@ func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, ob
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold, objects.summary, objects.embedding_indexed_at
 FROM objects
 WHERE tenant_id = $1
   AND object_key = $2
@@ -196,6 +198,8 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectK
 			&i.Object.LockMode,
 			&i.Object.LockRetainUntil,
 			&i.Object.LegalHold,
+			&i.Object.Summary,
+			&i.Object.EmbeddingIndexedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -245,7 +249,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, objectID pgtype.UUID) (L
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold, objects.summary, objects.embedding_indexed_at
 FROM objects
 WHERE tenant_id = $1 AND object_key = $2 AND key = $3 AND state <> 'DELETED'
 `
@@ -283,6 +287,8 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, o
 		&i.Object.LockMode,
 		&i.Object.LockRetainUntil,
 		&i.Object.LegalHold,
+		&i.Object.Summary,
+		&i.Object.EmbeddingIndexedAt,
 	)
 	return i, err
 }
@@ -356,7 +362,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, objec
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold, objects.summary, objects.embedding_indexed_at
 FROM objects
 WHERE state = 'PENDING'
   AND presign_expires_at < now()
@@ -403,6 +409,8 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.LockMode,
 			&i.Object.LockRetainUntil,
 			&i.Object.LegalHold,
+			&i.Object.Summary,
+			&i.Object.EmbeddingIndexedAt,
 		); err != nil {
 			return nil, err
 		}

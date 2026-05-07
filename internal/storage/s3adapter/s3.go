@@ -364,6 +364,29 @@ func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, ob
 	return etag, size, checksum, "", nil
 }
 
+// Download streams the object body. Used by server-side workers (the
+// summarization + embedding workers) that need to read the bytes
+// without going through the presign / client path.
+//
+// maxBytes caps the read so a malicious or oversized object can't OOM
+// the worker. 0 means "no cap"; callers should always supply a sane
+// value (workers cap at a few hundred KB).
+func (c *Client) Download(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, maxBytes int64) ([]byte, error) {
+	out, err := c.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.resolveBucket(bucket)),
+		Key:    aws.String(composeKey(tenantID, objectKey, key)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("download: %w", err)
+	}
+	defer out.Body.Close()
+	r := io.Reader(out.Body)
+	if maxBytes > 0 {
+		r = io.LimitReader(out.Body, maxBytes)
+	}
+	return io.ReadAll(r)
+}
+
 func (c *Client) CopyObject(ctx context.Context, src, dst object.Location) error {
 	srcBucket := c.resolveBucket(src.Bucket)
 	dstBucket := c.resolveBucket(dst.Bucket)
