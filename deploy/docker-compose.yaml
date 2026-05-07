@@ -1,18 +1,25 @@
 # Smoke / integration stack. One container per `paladin` subcommand —
 # matches Helm's per-role Deployment topology so behaviour mirrors prod.
+# The UI rides on the same network so its BFF reaches the planes via
+# container DNS, no host.docker.internal hop.
 #
 #   docker compose -f deploy/docker-compose.yaml up --build
+#
+# Requires sibling checkout at ../../paladin-ui for the UI
+# build context. To bring up backend only: `--scale paladin-ui=0`.
 #
 # Boot order via `condition: service_completed_successfully`:
 #   postgres healthy → paladin-migrate (one-shot) → paladin-bootstrap (one-shot)
 #                                              → paladin-api / paladin-admin /
 #                                                paladin-worker / paladin-mcp
+#                                              → paladin-ui (waits for api+admin)
 #
-# Verify all four planes:
+# Verify all four planes + UI:
 #   curl http://localhost:8080/readyz   # data
 #   curl http://localhost:8085/readyz   # iam
 #   curl http://localhost:8090/readyz   # admin
 #   curl http://localhost:8095/healthz  # mcp
+#   open http://localhost:3002          # UI (login page)
 
 x-build-meta: &build-meta
   APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
@@ -132,6 +139,42 @@ services:
     command: ["serve", "mcp", "--config", "/app/configs/compose.yaml"]
     ports:
       - "8095:8095"
+    depends_on:
+      paladin-api:
+        condition: service_started
+      paladin-admin:
+        condition: service_started
+
+  # UI BFF (Next.js). Browser hits localhost:3002 → /api/rpc/<plane>/...
+  # is proxied by the UI process to paladin-api / paladin-admin via container
+  # DNS. No host.docker.internal: same network as the planes.
+  #
+  # Build context is the sibling repo. If you don't have it checked out,
+  # bring up the backend with `--scale paladin-ui=0` to skip this service.
+  paladin-ui:
+    image: paladin-ui
+    container_name: paladin-ui
+    build:
+      context: ../../paladin-ui
+      dockerfile: ./deploy/Dockerfile
+      network: host
+      args:
+        APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
+        GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
+        BUILD_TIME: ${BUILD_TIME:-now}
+    init: true
+    restart: on-failure
+    ports:
+      # Host 3002 → container 3000. Matches the UI repo's standalone
+      # compose so dev muscle memory carries over.
+      - "3002:3000"
+    environment:
+      # Per-plane backend URLs read by the BFF (src/app/api/rpc/...
+      # /route.ts and src/lib/auth/bff.ts). Browser never sees these —
+      # it only ever hits /api/rpc on this container.
+      PALADIN_DATA_URL: http://paladin-api:8080
+      PALADIN_IAM_URL: http://paladin-api:8085
+      PALADIN_ADMIN_URL: http://paladin-admin:8090
     depends_on:
       paladin-api:
         condition: service_started
