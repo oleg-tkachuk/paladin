@@ -140,60 +140,57 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### api_token CLI + legacy api_keys migration runbook
+### Legacy api_keys → api_tokens migration runbook
 
-- **Status:** Aspirational
-- **Reason:** The api_token primitive is now wire-complete (boot
-  bundle, interceptor on data/admin/iam, APITokenService proto +
-  Connect handler, APITokenPurger worker, helm config). What's left
-  is operator UX:
-    - a CLI to mint tokens from a terminal without going through
-      the admin Connect API directly;
-    - a one-shot job + runbook that walks an upgrading customer
-      from the legacy `api_keys` table to `api_tokens` (re-hash via
-      argon2id, copy scopes / expires_at / revoked_at, drop the
-      old table after a cool-down).
+- **Status:** Blocked
+- **Reason:** The api_token primitive is wire-complete via the
+  admin Connect API — Web UI handles human-facing issuance, no CLI
+  is needed. What remains is moving live tenants off the legacy
+  `internal/api/iam/v1/api_key_service` onto `APITokenService` and
+  dropping the old `api_keys` table.
 - **Definition of Done:**
-  - `paladin api-token create --tenant=… --name=… --scopes=… --audience=…
-    --ttl=…` subcommand on cmd/server. Shells out via Connect client
-    to the admin plane. Plaintext printed to stdout once with a
-    big "store now, won't show again" warning.
-  - `paladin api-token revoke <id>` and `paladin api-token list --tenant=…`
-    for symmetry.
-  - One-shot migration Job (separate from migrate hook): re-hashes
-    existing `api_keys` rows into `api_tokens` using their original
-    plaintext when stored as such, or invalidates and re-issues
-    when only sha256(token) is on the legacy row.
+  - One-shot migration Job (separate from the migrate hook):
+    re-hashes existing `api_keys` rows into `api_tokens` using
+    their original plaintext when stored as such, or invalidates
+    and re-issues when only sha256(token) is on the legacy row.
   - After the runbook runs in production: drop the legacy
     `internal/api/iam/v1/api_key_service` handler; remove the
-    `api_keys` table via migration 018; admin UI swaps to
+    `api_keys` table via a follow-up migration; admin UI swaps to
     APITokenService.
 - **Blockers:** Production migration plan signed off by the team
   who runs the existing api_keys consumers. Without that, dropping
   the legacy table breaks live integrations.
 
-### api_token: per-token rate limit observability + admin tooling
+### api_token: per-token rate limit observability
 
-- **Status:** Deferred
-- **Reason:** The sliding-window rate limit primitive landed
-  (`internal/auth/api_token/ratelimit` with Postgres-backed sliding
-  window, wired into APITokenInterceptor, exposed in
-  APITokenService.Create proto, swept by APITokenPurger). What's
-  not exposed yet: real-time rate-limit observability and admin
-  tooling to inspect / tune.
+- **Status:** Aspirational
+- **Reason:** The sliding-window rate limit primitive landed —
+  `internal/auth/api_token/ratelimit` Postgres-backed window,
+  wired into APITokenInterceptor, exposed via
+  APITokenService.Create, swept by APITokenPurger. Real-time
+  visibility (Web UI progress bars, ops dashboards, anomaly
+  detection) needs a read-only introspection surface plus
+  OpenTelemetry instrumentation so operators don't have to query
+  the table directly.
 - **Definition of Done:**
-  - `APITokenService.GetUsage(token_id)` RPC returning current
-    weighted_count, current bucket count, and trailing-window
-    average. Useful for "is my token close to the cap" UX in the
-    admin UI.
-  - Prometheus counters: `paladin_api_token_ratelimit_decisions_total{token_id,allowed}`
-    plus a histogram of weighted_count vs capacity ratio.
-  - CLI: `paladin api-token usage <id>` to print the same numbers
-    without an admin UI.
-  - Optional Retry-After header propagation in the existing
-    middleware stack so the data-plane Connect responses surface
-    it correctly (interceptor sets it on err.Meta(), needs end-to-
-    end smoke test against a real Connect client).
+  - `APITokenService.GetUsage(token_id)` — read-only RPC. Returns
+    current weighted_count, current_bucket_count,
+    previous_bucket_count, window_resets_at, last_used_at. Does
+    NOT bump the bucket. Web UI consumes this on the token detail
+    card to render progress bars.
+  - OpenTelemetry metrics on the verify path (we already wire
+    `go.opentelemetry.io/otel/metric` in internal/observability):
+      * counter `paladin.api_token.ratelimit.decisions` with attrs
+        {tenant_id, allowed}.
+      * histogram `paladin.api_token.ratelimit.weighted_ratio`
+        (weighted_count / capacity).
+      * histogram `paladin.api_token.verify.duration_ms` per
+        verification.
+    Token IDs deliberately NOT in attribute set — high cardinality
+    blows out exporters; tenant_id is the right granularity.
+  - Retry-After end-to-end smoke test against a real Connect
+    client confirming the header lands on the response from the
+    err.Meta() path the interceptor sets.
 - **Blockers:** none. Polish on a working primitive.
 
 ### LLM provider wiring
