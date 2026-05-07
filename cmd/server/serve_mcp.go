@@ -13,6 +13,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
@@ -22,72 +23,152 @@ import (
 var (
 	mcpTransport  string // "stdio" | "http"
 	mcpAllowWrite bool
+	mcpEmbedded   bool
 )
 
 // serveMCPCmd hosts the MCP server using the official modelcontextprotocol/
-// go-sdk. Two transports:
+// go-sdk. Two transports for the protocol facing the LLM client:
 //
 //   - stdio:  reads JSON-RPC frames from stdin, writes to stdout. For
 //     local IDE plugins (Claude Desktop / Cursor / Cline). All
 //     logs route to stderr to keep the protocol stream clean.
 //
-//   - http:   streamable-HTTP transport per the MCP spec. Mounts on /mcp.
-//     Token comes from X-PALADIN-Token header per request, injected
-//     into the PALADIN Connect calls. getServer hook mints a fresh
+//   - http:   streamable-HTTP per the MCP spec, mounted on /mcp. Token
+//     comes from X-PALADIN-Token per request; getServer mints a fresh
 //     server (and Clients bundle) per session so concurrent MCP
 //     clients never share auth state.
 //
-// The MCP server here is the bridge implementation in internal/mcp: it
-// dispatches each MCP tool call into a Connect RPC against the PALADIN
-// admin/data/iam planes. Inline mode (sharing the wire graph in the
-// same process as `serve api`) is BACKLOG Phase 3.
+// Two transports for PALADIN-internal Connect dispatch:
+//
+//   - bridge (default): MCP server holds Connect HTTP clients pointed at
+//     cfg.MCP.Upstreams.{admin,data,iam}URL. Suitable when MCP runs in
+//     its own pod separately from api/admin. No DB connection needed.
+//
+//   - embedded (--embedded): MCP server runs in the same process as the
+//     api/admin/iam handlers, plumbed through internal/mcp.NewInlineTransport.
+//     Avoids the network roundtrip; needed for laptop dev (no infra),
+//     edge deploys (one binary near the agent runtime), and integration
+//     testing. Requires DB + bootstrap; effectively a single-process
+//     superset of `serve api` + `serve admin` minus their TCP listeners.
 var serveMCPCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Run the MCP server (stdio or streamable-HTTP)",
+	Short: "Run the MCP server (stdio or streamable-HTTP, bridge or embedded)",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, stop := signalCtx()
 		defer stop()
 
-		// Logger only — no DB, the MCP bridge speaks Connect over HTTP.
-		bootstrapLog, err := logger.NewBootstrapLogger()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
-			os.Exit(1)
+		if mcpEmbedded {
+			runMCPEmbedded(ctx)
+			return
 		}
-		cfg, err := config.Load(configPath, bootstrapLog)
-		if err != nil {
-			bootstrapLog.Fatal("failed to load config", zap.Error(err))
-		}
-		l, err := logger.New(cfg.Logger)
-		if err != nil {
-			bootstrapLog.Fatal("failed to build logger", zap.Error(err))
-		}
-		logger.ReplaceGlobals(l)
-
-		switch mcpTransport {
-		case "stdio":
-			runMCPStdio(ctx, cfg, l)
-		case "http":
-			runMCPHTTP(ctx, cfg, l)
-		default:
-			l.Fatal("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
-		}
+		runMCPBridge(ctx)
 	},
 }
 
 func init() {
-	serveMCPCmd.Flags().StringVar(&mcpTransport, "transport", "http", `MCP transport: "stdio" or "http"`)
+	serveMCPCmd.Flags().StringVar(&mcpTransport, "transport", "http", `MCP client transport: "stdio" or "http"`)
 	serveMCPCmd.Flags().BoolVar(&mcpAllowWrite, "allow-write", false, "Enable mutating tools (off by default)")
+	serveMCPCmd.Flags().BoolVar(&mcpEmbedded, "embedded", false, "Co-host api/admin/iam handlers in-process; route Connect calls via inline transport instead of HTTP")
 }
 
-func runMCPStdio(ctx context.Context, cfg config.Config, l *zap.Logger) {
-	clients := mcp.NewClients(
-		&http.Client{Timeout: 30 * time.Second},
-		cfg.MCP.Upstreams.AdminURL,
-		cfg.MCP.Upstreams.DataURL,
-		cfg.MCP.Upstreams.IAMURL,
-		os.Getenv("PALADIN_MCP_TOKEN"),
-	)
+// runMCPBridge is the network-mode codepath. No DB; speaks Connect over HTTP
+// against the upstream URLs in cfg.MCP.Upstreams.
+func runMCPBridge(ctx context.Context) {
+	bootstrapLog, err := logger.NewBootstrapLogger()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
+		os.Exit(1)
+	}
+	cfg, err := config.Load(configPath, bootstrapLog)
+	if err != nil {
+		bootstrapLog.Fatal("failed to load config", zap.Error(err))
+	}
+	l, err := logger.New(cfg.Logger)
+	if err != nil {
+		bootstrapLog.Fatal("failed to build logger", zap.Error(err))
+	}
+	logger.ReplaceGlobals(l)
+
+	makeClients := func(token string) *mcp.Clients {
+		return mcp.NewClients(
+			&http.Client{Timeout: 30 * time.Second},
+			cfg.MCP.Upstreams.AdminURL,
+			cfg.MCP.Upstreams.DataURL,
+			cfg.MCP.Upstreams.IAMURL,
+			token,
+		)
+	}
+
+	switch mcpTransport {
+	case "stdio":
+		runStdio(ctx, cfg, l, makeClients(os.Getenv("PALADIN_MCP_TOKEN")))
+	case "http":
+		runHTTP(ctx, cfg, l, "bridge", func(r *http.Request) *mcp.Clients {
+			token := r.Header.Get("X-PALADIN-Token")
+			if token == "" {
+				return nil
+			}
+			return makeClients(token)
+		})
+	default:
+		l.Fatal("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
+	}
+}
+
+// runMCPEmbedded co-hosts api/admin/iam handlers in this process and routes
+// Connect calls through the inline transport. Boots the full SharedDeps
+// graph the listener subcommands use; the only difference is no TCP.
+func runMCPEmbedded(ctx context.Context) {
+	cfg, l, db := boot(ctx)
+	defer func() { _ = db.Close }()
+
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, l)
+	if err != nil {
+		l.Fatal("failed to build shared deps", zap.Error(err))
+	}
+
+	meta := app.BuildMeta{
+		Version:    version,
+		Commit:     commit,
+		BuildTime:  buildTime,
+		ConfigPath: configPath,
+	}
+
+	muxes, err := app.BuildEmbedMuxes(ctx, deps, meta)
+	if err != nil {
+		l.Fatal("failed to build embed muxes", zap.Error(err))
+	}
+
+	inlineHandlers := mcp.InlineHandlers{
+		Data:  muxes.Data,
+		Admin: muxes.Admin,
+		IAM:   muxes.IAM,
+	}
+
+	makeInlineClients := func(token string) *mcp.Clients {
+		return mcp.NewInlineClients(inlineHandlers, token)
+	}
+
+	switch mcpTransport {
+	case "stdio":
+		runStdio(ctx, cfg, l, makeInlineClients(os.Getenv("PALADIN_MCP_TOKEN")))
+	case "http":
+		runHTTP(ctx, cfg, l, "embedded", func(r *http.Request) *mcp.Clients {
+			token := r.Header.Get("X-PALADIN-Token")
+			if token == "" {
+				return nil
+			}
+			return makeInlineClients(token)
+		})
+	default:
+		l.Fatal("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
+	}
+}
+
+// runStdio runs the stdio MCP transport with the supplied Connect clients.
+// The clients are built once (network mode) or per-call wouldn't make
+// sense on stdio because there is exactly one session per process.
+func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mcp.Clients) {
 	allow := mcpAllowWrite || cfg.MCP.Stdio.AllowWrite
 	server := mcp.NewServer("paladin-mcp", version, clients, allow)
 
@@ -97,24 +178,17 @@ func runMCPStdio(ctx context.Context, cfg config.Config, l *zap.Logger) {
 	}
 }
 
-func runMCPHTTP(ctx context.Context, cfg config.Config, l *zap.Logger) {
-	httpc := &http.Client{Timeout: 30 * time.Second}
+// runHTTP runs the streamable-HTTP MCP transport. The clientsFor closure
+// is invoked per-session; it returns nil to refuse the session (which
+// the SDK surfaces as 400 Bad Request to the LLM client).
+func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clientsFor func(*http.Request) *mcp.Clients) {
 	allow := mcpAllowWrite || cfg.MCP.HTTP.AllowWrite
 
 	handler := mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
-		token := r.Header.Get("X-PALADIN-Token")
-		if token == "" {
-			// nil → SDK responds 400 Bad Request. Cheaper than failing
-			// inside an RPC and burning quota for the agent host.
+		clients := clientsFor(r)
+		if clients == nil {
 			return nil
 		}
-		clients := mcp.NewClients(
-			httpc,
-			cfg.MCP.Upstreams.AdminURL,
-			cfg.MCP.Upstreams.DataURL,
-			cfg.MCP.Upstreams.IAMURL,
-			token,
-		)
 		return mcp.NewServer("paladin-mcp", version, clients, allow)
 	}, &mcpsdk.StreamableHTTPOptions{
 		SessionTimeout: cfg.MCP.HTTP.SessionTimeout,
@@ -144,7 +218,11 @@ func runMCPHTTP(ctx context.Context, cfg config.Config, l *zap.Logger) {
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
-	l.Info("mcp http starting", zap.String("addr", addr), zap.Bool("allow_write", allow))
+	l.Info("mcp http starting",
+		zap.String("addr", addr),
+		zap.String("mode", modeLabel),
+		zap.Bool("allow_write", allow),
+	)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		l.Fatal("mcp http listen failed", zap.Error(err))
 	}

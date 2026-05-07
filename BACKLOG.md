@@ -33,42 +33,24 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Agentic plane / single-binary multi-mode migration
 
-### Phase 2 — `serve` subcommand tree on cmd/server
+### Streaming RPCs through the inline transport
 
-- **Status:** Aspirational
-- **Reason:** `cmd/server/root.go` currently runs all listeners (data /
-  admin / iam) plus the full worker fan in one process via a single
-  `cobra.Command`. The agentic / one-binary-multi-role plan calls for
-  `serve api`, `serve worker`, `serve mcp`, `serve admin`, plus a
-  backwards-compat `serve all` alias.
+- **Status:** Deferred
+- **Reason:** `internal/mcp/inline.go` routes Connect calls through
+  `httptest.ResponseRecorder` — perfect for unary RPCs (which is all
+  PALADIN exposes today) but the recorder buffers the full response before
+  the round-trip returns. A streaming RPC would deadlock waiting for
+  EOF that never comes until the handler also finishes reading the
+  request body.
 - **Definition of Done:**
-  - `buildListeners` and `buildBackgroundJobs` extracted out of
-    `cmd/server/root.go` into `internal/app/build_listeners.go` and
-    `internal/app/build_jobs.go` so both subcommands can call them.
-  - New `serve` subcommand tree on root with `api`, `worker`, `mcp`,
-    `admin`, `all`. `all` keeps the current rootCmd.Run behaviour for
-    one release.
-  - Helm chart switches to `args: ["serve", "<role>"]` per-Deployment.
-  - Workers acquire a Postgres advisory lock when running in `worker`
-    mode so two replicas don't double-process the reaper backlog.
-- **Blockers:** none. Pure refactor; no behaviour change at the wire.
-
-### Phase 3 — Inline MCP mode + collapse cmd/paladin-mcp-* binaries
-
-- **Status:** Aspirational
-- **Reason:** `cmd/paladin-mcp-stdio` and `cmd/paladin-mcp-http` are separate
-  binaries that proxy over the network into the PALADIN planes. Inline
-  mode (`serve mcp --transport=http|stdio`) running in the same
-  process as the api avoids the extra hop for in-cluster deploys
-  while keeping the standalone binaries for laptop / IDE plugin use.
-- **Definition of Done:**
-  - `serve mcp` subcommand on cmd/server speaks both stdio and
-    streamable HTTP per `--transport`.
-  - `cmd/paladin-mcp-stdio` and `cmd/paladin-mcp-http` become thin wrappers
-    that re-dispatch to `serve mcp`, then a release later are deleted.
-  - MCP server can call PALADIN handlers directly (in-process) when the
-    `--inline=true` flag is set and the same Wire graph is available.
-- **Blockers:** Phase 2 must land first.
+  - Replace the recorder-based RoundTripper with an `io.Pipe` pair
+    plus a goroutine running the handler concurrently, draining
+    request body and producing a streamed response on the fly.
+  - Smoke test: a server-streaming RPC (when one is added) returns
+    chunks before the handler completes.
+- **Blockers:** No streaming RPC in the current proto surface. Land
+  the first one (likely a `WatchEvents` for the agentic event bus)
+  before this becomes load-bearing.
 
 ### Phase 4 — Helm chart: per-role Deployments
 
@@ -84,7 +66,7 @@ the same commit. Treat this file like a runtime invariant.
   - `templates/deployment.yaml` becomes a `range` over the map.
   - Per-role `Service`, `ServiceAccount`, optional `NetworkPolicy`.
   - Bootstrap (admin / migrate) runs as a one-shot Job, not in api.
-- **Blockers:** Phases 2–3.
+- **Blockers:** none. Phase 2 + Phase 3 landed.
 
 ### Phase 5 — Drop own IAM, accept OIDC + capability tokens
 

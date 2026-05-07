@@ -32,15 +32,15 @@ type BuildMeta struct {
 	ConfigPath string
 }
 
-// BuildAPIListeners materialises the data and iam Connect listeners.
-// They share one health.Handler so a SIGTERM flips both /readyz to 503
-// at the same instant, giving kube-proxy a single window to drain
-// in-flight traffic before listeners go away.
+// AssembleAPIMuxes builds the data and iam Connect mux'es plus their
+// shared *health.Handler. Pure mux assembly — no http.Server wrapping,
+// no port binding. Both `serve api` (which wraps these in TCP listeners)
+// and `serve mcp --embedded` (which hands them to the inline transport)
+// reuse this function.
 //
-// Returns the listener slice plus the shared *health.Handler so the
-// caller can register it on the App container and call MarkShuttingDown
-// during graceful shutdown.
-func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
+// One health handler is shared between data and iam so a SIGTERM flips
+// both /readyz to 503 simultaneously when the planes co-host.
+func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (dataMux, iamMux *http.ServeMux, healthH *health.Handler, err error) {
 	cfg := deps.Cfg
 	l := deps.Logger
 	repos := deps.Repos
@@ -63,7 +63,7 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	// ─── IAM-plane handlers ──────────────────────────────────────────────
 	iss, err := wire.ProvideIssuer(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	dec := wire.ProvideRefreshDecoder(cfg)
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
@@ -78,15 +78,15 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	// ─── Per-plane interceptor stacks ────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
-		return nil, nil, fmt.Errorf("init protovalidate: %w", err)
+		return nil, nil, nil, fmt.Errorf("init protovalidate: %w", err)
 	}
 	verifierData, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceData, l)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceIAM, l)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	dataOpts := connect.WithInterceptors(
@@ -95,9 +95,6 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
-	// IAM mux has unauthenticated RPCs (Login, RefreshToken, ExchangeAudience);
-	// PermissiveInterceptor passes through when no Authorization header is
-	// present and gated RPCs reject at the role/audience layer.
 	iamOpts := connect.WithInterceptors(
 		auth.NewPermissiveInterceptor(verifierIAM,
 			"Login",
@@ -108,10 +105,9 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
 
-	// ─── Shared health handler (data + iam) ──────────────────────────────
-	healthH := NewHealthHandler(deps.DB, cfg.Server, l)
+	healthH = NewHealthHandler(deps.DB, cfg.Server, l)
 
-	dataMux := http.NewServeMux()
+	dataMux = http.NewServeMux()
 	healthH.Register(dataMux)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(connectdata.NewObjectServer(objH, versionH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
@@ -120,7 +116,7 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	dataMux.Handle(paladindatav1connect.NewBatchServiceHandler(connectdata.NewBatchServer(batchH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewOperationServiceHandler(connectdata.NewOperationServer(opH), dataOpts))
 
-	iamMux := http.NewServeMux()
+	iamMux = http.NewServeMux()
 	healthH.Register(iamMux)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
@@ -134,6 +130,19 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 		iamOpts,
 	))
 
+	return dataMux, iamMux, healthH, nil
+}
+
+// BuildAPIListeners materialises the data and iam Connect listeners.
+// Wraps the muxes returned by AssembleAPIMuxes in h2c-enabled http.Servers
+// bound to cfg.Server.DataHTTP / IAMHTTP.
+func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
+	dataMux, iamMux, healthH, err := AssembleAPIMuxes(ctx, deps, meta)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg := deps.Cfg
+	l := deps.Logger
 	listeners := []HTTPListener{
 		{Plane: "data", Server: BuildHTTPServer(cfg.Server.DataHTTP, dataMux, l), TLS: cfg.Server.DataHTTP.TLS},
 		{Plane: "iam", Server: BuildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},

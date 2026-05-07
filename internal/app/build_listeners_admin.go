@@ -18,17 +18,11 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
-// BuildAdminListener materialises the admin-plane Connect listener. The
-// admin plane carries privileged operations (tenant CRUD, policy authoring,
-// backend management, audit reads) and is expected to run with stricter
-// network controls than the data/iam planes — typically behind a separate
-// ingress with mTLS and tighter NetworkPolicy.
-//
-// Returns an independent *health.Handler. When the admin plane is co-
-// hosted with api in `serve all` (the legacy collapsed mode), wire it up
-// so a single shutdown flips both at once. Post-Phase-2 the admin pod is
-// separate and gets its own readiness lifecycle.
-func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (HTTPListener, *health.Handler, error) {
+// AssembleAdminMux builds the admin Connect mux plus its *health.Handler.
+// Pure mux assembly — no http.Server, no port binding. Both
+// `serve admin` (TCP listener) and `serve mcp --embedded` (inline
+// transport) consume this.
+func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*http.ServeMux, *health.Handler, error) {
 	cfg := deps.Cfg
 	l := deps.Logger
 	repos := deps.Repos
@@ -55,11 +49,11 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
-		return HTTPListener{}, nil, fmt.Errorf("init protovalidate: %w", err)
+		return nil, nil, fmt.Errorf("init protovalidate: %w", err)
 	}
 	verifierAdmin, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l)
 	if err != nil {
-		return HTTPListener{}, nil, err
+		return nil, nil, err
 	}
 	adminOpts := connect.WithInterceptors(
 		auth.Interceptor(verifierAdmin),
@@ -81,15 +75,24 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
-	// SystemService.GetConfig surfaces the running config (with secrets
-	// redacted) so the UI's /config page renders the live YAML rather than
-	// pointing operators at kubectl. platform.admin only; the role check
-	// lives inside the shim.
 	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(
 		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
 		adminOpts,
 	))
 
+	return mux, healthH, nil
+}
+
+// BuildAdminListener wraps AssembleAdminMux in an h2c http.Server bound to
+// cfg.Server.AdminHTTP. Sized for low replica counts (1–2) and a separate
+// ingress with mTLS / tighter NetworkPolicy than data/iam.
+func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (HTTPListener, *health.Handler, error) {
+	mux, healthH, err := AssembleAdminMux(ctx, deps, meta)
+	if err != nil {
+		return HTTPListener{}, nil, err
+	}
+	cfg := deps.Cfg
+	l := deps.Logger
 	listener := HTTPListener{
 		Plane:  "admin",
 		Server: BuildHTTPServer(cfg.Server.AdminHTTP, mux, l),
@@ -99,9 +102,7 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 }
 
 // eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository under
-// the worker.SubscriptionStore interface (List-only). Lives here because
-// the admin plane wires it; workers pick it up via the same admindomain
-// repo when running in dispatch mode.
+// the worker.SubscriptionStore interface (List-only).
 type eventSubStoreAdapter struct {
 	r admindomain.EventSubscriptionRepository
 }
