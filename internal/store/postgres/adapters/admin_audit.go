@@ -42,6 +42,10 @@ func (r *AuditRepoV2) Insert(ctx context.Context, e admindomain.AuditEntry) erro
 		e.BeforeJSON,
 		e.AfterJSON,
 		strPtr(e.ErrorMessage),
+		// CapabilityID is uuid.Nil when no capability was presented;
+		// pgUUIDOptional maps that to a NULL DB value so the partial
+		// index on the column stays small.
+		pgUUIDOptional(e.CapabilityID),
 	)
 }
 
@@ -116,5 +120,6 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		BeforeJSON:    row.BeforeJson,
 		AfterJSON:     row.AfterJson,
 		ErrorMessage:  derefStr(row.ErrorMessage),
+		CapabilityID:  uuidFrom(row.CapabilityID),
 	}
 }

@@ -14,7 +14,7 @@ import (
 const getAuditEntry = `-- name: GetAuditEntry :one
 SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message
+       before_json, after_json, error_message, capability_id
 FROM audit_log
 WHERE entry_id = $1
 `
@@ -35,6 +35,7 @@ func (q *Queries) GetAuditEntry(ctx context.Context, entryID pgtype.UUID) (Audit
 		&i.BeforeJson,
 		&i.AfterJson,
 		&i.ErrorMessage,
+		&i.CapabilityID,
 	)
 	return i, err
 }
@@ -43,11 +44,11 @@ const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO audit_log (
     entry_id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
-    before_json, after_json, error_message
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    before_json, after_json, error_message, capability_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
-func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string) error {
+func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, insertAuditEntry,
 		entryID,
 		at,
@@ -61,6 +62,7 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at 
 		beforeJson,
 		afterJson,
 		errorMessage,
+		capabilityID,
 	)
 	return err
 }
@@ -68,7 +70,7 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at 
 const listAuditEntries = `-- name: ListAuditEntries :many
 SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message
+       before_json, after_json, error_message, capability_id
 FROM audit_log
 WHERE ($1::text IS NULL
        OR actor_subject = $1::text)
@@ -111,6 +113,7 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 			&i.BeforeJson,
 			&i.AfterJson,
 			&i.ErrorMessage,
+			&i.CapabilityID,
 		); err != nil {
 			return nil, err
 		}

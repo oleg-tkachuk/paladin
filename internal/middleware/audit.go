@@ -148,6 +148,7 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 		ResourceName:  resourceFromMessage(req.Any()),
 		RequestID:     req.Header().Get("X-Request-Id"),
 		SourceIP:      req.Header().Get("X-Forwarded-For"),
+		CapabilityID:  capabilityID(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -167,6 +168,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 		ActorAudience: a.audience,
 		Action:        procedure,
 		RequestID:     requestID,
+		CapabilityID:  capabilityID(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -180,6 +182,19 @@ func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {
 		return "", uuid.Nil
 	}
 	return p.Subject, p.TenantID
+}
+
+// capabilityID returns the verified capability's ID if one was presented
+// on this request, else uuid.Nil. Read directly from the auth context
+// value the CapabilityInterceptor stamps on success — no extra lookup,
+// no fallback. JWT-only flows return uuid.Nil and the audit row has
+// NULL capability_id.
+func capabilityID(ctx context.Context) uuid.UUID {
+	c, ok := auth.CapabilityFromContext(ctx)
+	if !ok || c == nil {
+		return uuid.Nil
+	}
+	return c.ID
 }
 
 // resourceFromMessage extracts a `name`/`parent` field from the request, if

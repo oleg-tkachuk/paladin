@@ -2,13 +2,13 @@
 INSERT INTO audit_log (
     entry_id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
-    before_json, after_json, error_message
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+    before_json, after_json, error_message, capability_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: GetAuditEntry :one
 SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message
+       before_json, after_json, error_message, capability_id
 FROM audit_log
 WHERE entry_id = $1;
 
@@ -35,7 +35,7 @@ WHERE ctid IN (
 -- compiles to an in-memory pass after the SQL fetch.
 SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
-       before_json, after_json, error_message
+       before_json, after_json, error_message, capability_id
 FROM audit_log
 WHERE (sqlc.narg('actor_subject')::text IS NULL
        OR actor_subject = sqlc.narg('actor_subject')::text)

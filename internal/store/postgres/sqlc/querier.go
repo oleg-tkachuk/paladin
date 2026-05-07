@@ -105,7 +105,7 @@ type Querier interface {
 	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
 	IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
-	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string) error
+	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, s3Key string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error

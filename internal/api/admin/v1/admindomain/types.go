@@ -152,6 +152,16 @@ type AuditEntry struct {
 	BeforeJSON    []byte
 	AfterJSON     []byte
 	ErrorMessage  string
+
+	// CapabilityID is the ID of the capability token attached to the
+	// request, if any. Threaded by middleware.Audit from
+	// auth.CapabilityFromContext. uuid.Nil when the call was
+	// JWT- or API-token-authenticated (no capability presented).
+	// Required for per-tool-call rollups in the agentic-plane
+	// positioning — every MCP / agent action gets attributed to the
+	// cap that authorised it without joining across capability_records
+	// by request_id.
+	CapabilityID uuid.UUID
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────

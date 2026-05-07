@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
 
 type ObjectState string
@@ -116,6 +117,28 @@ type ApiKey struct {
 	LastUsedAt         pgtype.Timestamptz `json:"last_used_at"`
 }
 
+type ApiToken struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	Name         string             `json:"name"`
+	Prefix       string             `json:"prefix"`
+	TokenHash    string             `json:"token_hash"`
+	Scopes       []string           `json:"scopes"`
+	Audience     []string           `json:"audience"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
+	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy    string             `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	RateLimitRpm int32              `json:"rate_limit_rpm"`
+}
+
+type ApiTokenRateBucket struct {
+	TokenID     pgtype.UUID        `json:"token_id"`
+	BucketStart pgtype.Timestamptz `json:"bucket_start"`
+	Count       int64              `json:"count"`
+}
+
 type AuditLog struct {
 	EntryID       pgtype.UUID        `json:"entry_id"`
 	At            pgtype.Timestamptz `json:"at"`
@@ -129,6 +152,7 @@ type AuditLog struct {
 	BeforeJson    []byte             `json:"before_json"`
 	AfterJson     []byte             `json:"after_json"`
 	ErrorMessage  *string            `json:"error_message"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
 }
 
 type Bucket struct {
@@ -157,6 +181,31 @@ type Bucket struct {
 	ProvisionError                    string             `json:"provision_error"`
 	ProvisionAttempts                 int32              `json:"provision_attempts"`
 	LastProvisionAt                   pgtype.Timestamptz `json:"last_provision_at"`
+}
+
+type CapabilityRecord struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Issuer           string             `json:"issuer"`
+	PrincipalKind    string             `json:"principal_kind"`
+	PrincipalSubject string             `json:"principal_subject"`
+	PrincipalPayload []byte             `json:"principal_payload"`
+	Audience         []string           `json:"audience"`
+	Caveats          []byte             `json:"caveats"`
+	ParentID         pgtype.UUID        `json:"parent_id"`
+	Generation       int64              `json:"generation"`
+	IssuedAt         pgtype.Timestamptz `json:"issued_at"`
+	NotBefore        pgtype.Timestamptz `json:"not_before"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy        string             `json:"created_by"`
+}
+
+type CapabilityRevocation struct {
+	ID        pgtype.UUID        `json:"id"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
+	Reason    string             `json:"reason"`
+	Actor     string             `json:"actor"`
+	Cascade   bool               `json:"cascade"`
 }
 
 type EventSubscription struct {
@@ -378,4 +427,27 @@ type UserSetting struct {
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type VectorRecord struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	Kind      string             `json:"kind"`
+	ObjectUri string             `json:"object_uri"`
+	ChunkRef  string             `json:"chunk_ref"`
+	Model     string             `json:"model"`
+	Embedding *pgvector.Vector   `json:"embedding"`
+	Payload   []byte             `json:"payload"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkerLease struct {
+	Name       string             `json:"name"`
+	HolderID   pgtype.UUID        `json:"holder_id"`
+	HolderMeta []byte             `json:"holder_meta"`
+	AcquiredAt pgtype.Timestamptz `json:"acquired_at"`
+	RenewedAt  pgtype.Timestamptz `json:"renewed_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	Generation int64              `json:"generation"`
 }
