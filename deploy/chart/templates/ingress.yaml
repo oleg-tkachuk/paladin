@@ -1,4 +1,16 @@
+{{- /*
+  Ingress targets the api role's Service. Admin gets no public ingress
+  by default — operators stand one up at the manifest layer behind their
+  own mTLS / VPN / bastion. Per-host `port` overrides land directly in
+  the path block; otherwise we fall back to the api Service's first port.
+*/}}
 {{- if .Values.ingress.enabled -}}
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $apiSpec := index .Values.deployments "api" -}}
+{{- $defaultPort := 8080 -}}
+{{- if and $apiSpec $apiSpec.service $apiSpec.service.ports -}}
+{{- $defaultPort = (index $apiSpec.service.ports 0).port -}}
+{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -35,12 +47,9 @@ spec:
             {{- end }}
             backend:
               service:
-                name: {{ include "chart.fullname" $ }}
+                name: {{ $apiSvc }}
                 port:
-                  # Per-host override wins; otherwise fall back to the
-                  # data-plane port. The legacy `service.port` value is
-                  # kept aligned with `ports.data` for back-compat.
-                  number: {{ default $.Values.service.ports.data .port }}
+                  number: {{ default $defaultPort .port }}
           {{- end }}
     {{- end }}
 {{- end }}

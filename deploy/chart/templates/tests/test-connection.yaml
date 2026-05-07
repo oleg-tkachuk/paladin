@@ -1,3 +1,9 @@
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $apiSpec := index .Values.deployments "api" -}}
+{{- $dataPort := 8080 -}}
+{{- if and $apiSpec $apiSpec.service $apiSpec.service.ports -}}
+{{- $dataPort = (index $apiSpec.service.ports 0).port -}}
+{{- end -}}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -12,14 +18,12 @@ spec:
   containers:
     - name: probe
       image: busybox:1.37
-      # /livez returns 200 once the binary is up — root path returns 404
-      # because no top-level handler is registered. Probing the actual
-      # health endpoint catches misconfigurations the previous root-path
-      # GET would silently report as "connected".
+      # /livez returns 200 once the api binary is up. Targets the api
+      # Service since data plane is what end-users actually consume.
       command: ["wget"]
       args:
         - "--quiet"
         - "--server-response"
         - "--tries=1"
         - "--timeout=5"
-        - "{{ include "chart.fullname" . }}:{{ .Values.service.ports.data }}/livez"
+        - "{{ $apiSvc }}:{{ $dataPort }}/livez"

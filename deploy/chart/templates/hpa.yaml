@@ -1,32 +1,44 @@
-{{- if .Values.autoscaling.enabled }}
+{{- /*
+  Per-role HPA. Autoscaling can be enabled independently — typically only
+  the api role scales horizontally, while admin / worker / mcp stay at
+  fixed replicas. A role autoscales when its own `autoscaling.enabled` is
+  true (defaults block doesn't auto-enable everything; explicit per-role).
+*/}}
+{{- $defaults := .Values.defaults -}}
+{{- range $role, $spec := .Values.deployments }}
+{{- $auto := default $defaults.autoscaling $spec.autoscaling }}
+{{- if and $spec.enabled $auto $auto.enabled }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "chart.fullname" . }}
+  name: {{ $fullname }}
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "chart.fullname" . }}
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+    name: {{ $fullname }}
+  minReplicas: {{ $auto.minReplicas }}
+  maxReplicas: {{ $auto.maxReplicas }}
   metrics:
-    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if $auto.targetCPUUtilizationPercentage }}
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ $auto.targetCPUUtilizationPercentage }}
     {{- end }}
-    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- if $auto.targetMemoryUtilizationPercentage }}
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+          averageUtilization: {{ $auto.targetMemoryUtilizationPercentage }}
     {{- end }}
+{{- end }}
 {{- end }}

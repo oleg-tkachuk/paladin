@@ -1,13 +1,17 @@
 {{- /*
   RBAC for the in-process K8sSecretResolver. The resolver issues exactly
-  one verb (GET) per referenced secret name — list/watch are NOT needed
-  and were narrowed in this refactor to comply with least-privilege.
+  one verb (GET) per referenced secret name — list/watch are NOT used.
 
   ClusterRole vs Role: Postgres / S3 credentials commonly live in a
   separate namespace from the PALADIN deployment (e.g. `database/` for the
   PG operator's secrets). clusterWide=true binds at cluster scope so the
   resolver can reach them; clusterWide=false keeps everything in the
   release namespace.
+
+  Bindings: one (Cluster)RoleBinding subjects all per-role SAs the chart
+  generated. If a role pins its own SA name and that SA isn't created by
+  this chart, the operator owns the binding too — we don't bind external
+  identities.
 */}}
 {{- if and .Values.rbac .Values.rbac.secretReader.enabled -}}
 {{- $name := printf "%s-secret-reader" (include "chart.fullname" .) -}}
@@ -37,7 +41,20 @@ roleRef:
   kind: {{ $kind }}
   name: {{ $name }}
 subjects:
+  {{- /*
+    Bind every distinct SA the chart created — same de-dup logic as
+    serviceaccount.yaml so we never list the same subject twice.
+  */}}
+  {{- $seen := dict -}}
+  {{- range $role, $spec := .Values.deployments }}
+    {{- if $spec.enabled -}}
+      {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) -}}
+      {{- if not (hasKey $seen $sa) -}}
+        {{- $_ := set $seen $sa true }}
   - kind: ServiceAccount
-    name: {{ include "chart.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ $sa }}
+    namespace: {{ $.Release.Namespace }}
+      {{- end -}}
+    {{- end -}}
+  {{- end }}
 {{- end -}}

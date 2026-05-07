@@ -1,11 +1,21 @@
+{{- /*
+  HTTPRoute (Gateway API) targets the api role's Service. Same scoping
+  as Ingress: admin gets no public route by default. Per-rule overrides
+  via `backendRefs` would let operators target other roles (e.g. mcp);
+  not exposed in chart values yet — operators with that need can fork or
+  patch.
+*/}}
 {{- if .Values.httpRoute.enabled -}}
-{{- $fullName := include "chart.fullname" . -}}
-{{- /* Default backend port — data plane. Rules can override per-rule. */ -}}
-{{- $svcPort := .Values.service.ports.data -}}
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $apiSpec := index .Values.deployments "api" -}}
+{{- $svcPort := 8080 -}}
+{{- if and $apiSpec $apiSpec.service $apiSpec.service.ports -}}
+{{- $svcPort = (index $apiSpec.service.ports 0).port -}}
+{{- end -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: {{ $fullName }}
+  name: {{ include "chart.fullname" . }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   {{- with .Values.httpRoute.annotations }}
@@ -32,7 +42,7 @@ spec:
       {{- toYaml . | nindent 8 }}
     {{- end }}
       backendRefs:
-        - name: {{ $fullName }}
+        - name: {{ $apiSvc }}
           port: {{ $svcPort }}
           weight: 1
     {{- end }}

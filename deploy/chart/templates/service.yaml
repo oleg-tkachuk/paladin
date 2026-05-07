@@ -1,26 +1,29 @@
+{{- /*
+  One Service per role, scoped via app.kubernetes.io/component selector.
+  Roles without a `service:` block (rare, e.g. a hypothetical worker
+  variant with no listener) skip Service rendering — kubelet still
+  probes the container directly.
+*/}}
+{{- range $role, $spec := .Values.deployments }}
+{{- if and $spec.enabled $spec.service }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "chart.fullname" . }}
+  name: {{ $fullname }}
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ default "ClusterIP" $spec.service.type }}
   ports:
-    {{- /*
-      Three-plane HTTP. Iterating in a deterministic order (data → iam →
-      admin) keeps `kubectl describe svc` output stable across releases,
-      and pins .spec.ports[0] to the data plane so default port-forwards
-      land where operators expect.
-    */}}
-    {{- $ports := .Values.service.ports }}
-    {{- range $name := list "data" "iam" "admin" }}
-    {{- with index $ports $name }}
-    - name: {{ $name }}
-      port: {{ . }}
-      targetPort: {{ $name }}
-      protocol: TCP
-    {{- end }}
+    {{- range $spec.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ default "TCP" .protocol }}
     {{- end }}
   selector:
-    {{- include "chart.selectorLabels" . | nindent 4 }}
+    {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
+{{- end }}
+{{- end }}

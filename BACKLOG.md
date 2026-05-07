@@ -52,21 +52,21 @@ the same commit. Treat this file like a runtime invariant.
   the first one (likely a `WatchEvents` for the agentic event bus)
   before this becomes load-bearing.
 
-### Phase 4 — Helm chart: per-role Deployments
+### NetworkPolicies per role
 
-- **Status:** Aspirational
-- **Reason:** `deploy/chart/templates/deployment.yaml` renders a single
-  Deployment with all roles in-process. Independent scaling, RBAC,
-  and resource limits per role require the chart to iterate over a
-  `deployments` map keyed by role.
+- **Status:** Deferred
+- **Reason:** Phase 4 landed per-role Deployments / Services / SAs but
+  not NetworkPolicies. Today every pod can reach every other pod in
+  the namespace; the role split is purely a process-isolation gain.
 - **Definition of Done:**
-  - `values.yaml` exposes a `deployments:` map with default entries
-    `api`, `worker`, `mcp`, `admin`, each carrying `replicas`,
-    `resources`, `args`, `serviceAccountName`, `nodeSelector`.
-  - `templates/deployment.yaml` becomes a `range` over the map.
-  - Per-role `Service`, `ServiceAccount`, optional `NetworkPolicy`.
-  - Bootstrap (admin / migrate) runs as a one-shot Job, not in api.
-- **Blockers:** none. Phase 2 + Phase 3 landed.
+  - Per-role `NetworkPolicy` keyed off `app.kubernetes.io/component`
+    selectors. Default-deny ingress in the namespace, with explicit
+    allow rules for ingress → api / mcp from ingress-controller pods,
+    api → admin only from the worker (event dispatcher reasons), and
+    api/admin/worker → Postgres + S3 egress.
+  - Toggleable via `values.yaml` `networkPolicies.enabled` because
+    not every operator runs a CNI that enforces them.
+- **Blockers:** none. Pure chart work.
 
 ### Phase 5 — Drop own IAM, accept OIDC + capability tokens
 

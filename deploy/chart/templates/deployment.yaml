@@ -1,118 +1,120 @@
+{{- /*
+  One Deployment per role. The same image runs in every pod; only the
+  argv (`serve <role>`), ports, probes and resource defaults differ.
+  Iteration order is alphabetised by Helm's `range` over a map — stable
+  across releases, no template-side sorting needed.
+
+  Per-role override convention: any key absent from `deployments.<role>`
+  falls back to `defaults.*`. Resources / autoscaling / podLabels / etc.
+  are merged via `default`.
+*/}}
+{{- $defaults := .Values.defaults -}}
+{{- range $role, $spec := .Values.deployments }}
+{{- if $spec.enabled }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
+{{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) -}}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "chart.fullname" . }}
+  name: {{ $fullname }}
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  {{- if not (default $defaults.autoscaling.enabled (and $spec.autoscaling $spec.autoscaling.enabled)) }}
+  replicas: {{ default $defaults.replicas $spec.replicas }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "chart.selectorLabels" . | nindent 6 }}
+      {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $role) | nindent 6 }}
   template:
     metadata:
       annotations:
         # Roll the pod when the configmap changes — checksum is the
-        # rendered ConfigMap contents, so any tweak to `config.*` triggers
-        # a fresh rollout instead of waiting for the next manual restart.
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- with .Values.podAnnotations }}
+        # rendered ConfigMap, so any tweak to `config.*` triggers a
+        # fresh rollout instead of waiting for the next manual restart.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        {{- with default $defaults.podAnnotations $spec.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "chart.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
+        {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 8 }}
+        {{- with default $defaults.podLabels $spec.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "chart.serviceAccountName" . }}
-      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
-      {{- with .Values.podSecurityContext }}
+      serviceAccountName: {{ $sa }}
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- with $.Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
-          {{- with .Values.securityContext }}
+        - name: {{ $.Chart.Name }}
+          {{- with $.Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           args:
-            - "--config"
-            - "/app/configs/config.yaml"
-          ports:
-            {{- /*
-              Named ports match the Service. Order pinned so HPA / probes
-              by name resolve identically across releases.
-            */}}
-            {{- $ports := .Values.service.ports }}
-            {{- range $name := list "data" "iam" "admin" }}
-            {{- with index $ports $name }}
-            - name: {{ $name }}
-              containerPort: {{ . }}
-              protocol: TCP
-            {{- end }}
-            {{- end }}
+            {{- toYaml $spec.args | nindent 12 }}
           env:
             - name: APP_VERSION
-              value: {{ .Values.metadata.version | default .Chart.AppVersion | quote }}
+              value: {{ $.Values.metadata.version | default $.Chart.AppVersion | quote }}
             - name: GIT_COMMIT_HASH
-              value: {{ .Values.metadata.commit | quote }}
+              value: {{ $.Values.metadata.commit | quote }}
             - name: BUILD_TIME
-              value: {{ .Values.metadata.buildTime | quote }}
-          # The bootstrap-admin password is NOT mounted as an env var — the
-          # server resolves it via K8sSecretResolver, same way it reads the
-          # postgres password. See templates/secret-bootstrap-admin.yaml.
-          {{- with .Values.livenessProbe }}
+              value: {{ $.Values.metadata.buildTime | quote }}
+            - name: PALADIN_ROLE
+              value: {{ $role | quote }}
+          ports:
+            {{- toYaml $spec.ports | nindent 12 }}
+          {{- with $spec.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.readinessProbe }}
+          {{- with $spec.readinessProbe }}
           readinessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.startupProbe }}
+          {{- with $spec.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.resources }}
+          {{- with default $defaults.resources $spec.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            # ConfigMap mounted RO at /app/configs — matches the binary's
-            # default config path. Always present; user-supplied volumes
-            # append below.
             - name: config
               mountPath: /app/configs
               readOnly: true
-            {{- with .Values.volumeMounts }}
+            {{- with default $defaults.volumeMounts $spec.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
         - name: config
           configMap:
-            name: {{ include "chart.fullname" . }}-config
-        {{- with .Values.volumes }}
+            name: {{ include "chart.fullname" $ }}-config
+        {{- with default $defaults.volumes $spec.volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with default $defaults.nodeSelector $spec.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with default $defaults.affinity $spec.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with default $defaults.tolerations $spec.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}
+{{- end }}

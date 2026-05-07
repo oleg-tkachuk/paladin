@@ -1,22 +1,323 @@
-replicaCount: 1
+# PALADIN Helm chart — per-role Deployments.
+#
+# The chart renders one Deployment per entry in `deployments:` plus a
+# matching Service / ServiceAccount / optional HPA. Each role boots the
+# same `paladin` binary with a different `serve <role>` argv, so a release is
+# always one image with N pods carrying disjoint responsibilities.
+#
+# Roles (default keys):
+#   api      — data + iam Connect listeners (public-ish traffic)
+#   admin    — admin Connect listener (privileged operations)
+#   worker   — background jobs with Postgres-leased leadership
+#   mcp      — Model Context Protocol bridge (LLM-facing)
+#
+# Migrate and bootstrap run as Helm hook Jobs (pre-install / pre-upgrade)
+# rather than from inside an api pod, so DDL never races a serve loop.
+#
+# To disable a role: `deployments.<role>.enabled: false`.
+
 metadata:
   version: ""
   commit: "unknown"
   buildTime: "unknown"
 
-# Time the kubelet waits for a graceful shutdown before SIGKILL. Should
-# match `config.server.shutdown_timeout` plus a small buffer so in-flight
-# requests have time to drain before the pod is killed.
+# Time the kubelet waits for graceful shutdown before SIGKILL. Should
+# exceed `config.server.shutdown_timeout` plus a small drain buffer.
 terminationGracePeriodSeconds: 30
 
+image:
+  repository: registry.local/paladin
+  pullPolicy: Always
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Default service account spec. Per-role `serviceAccount.name` overrides
+# this — leave create=true at this level and the chart will mint one SA
+# per role automatically (chart-fullname-rolename) so RBAC is naturally
+# role-scoped.
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod-level security context. Defaults intentionally non-empty — distroless
+# nonroot UID, RuntimeDefault seccomp.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level. readOnlyRootFilesystem is safe because the binary
+# writes only to stdout/stderr; configs are mounted RO from the ConfigMap;
+# migrations are embedded in the binary.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities:
+    drop:
+      - ALL
+
+# Defaults shared across every role. Each `deployments.<role>` block can
+# override any of these via the same key name; the role-level value wins.
+# Empty / unset role-level keys fall back to here.
+defaults:
+  replicas: 1
+  resources: {}
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  volumes: []
+  volumeMounts: []
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+# ─── Per-role Deployments ──────────────────────────────────────────────────
+#
+# Each role pins:
+#   - args     — argv passed to `paladin` (always starts with "serve")
+#   - ports    — named container ports the Service maps onto
+#   - probes   — liveness / readiness / startup, targeted at a role-port
+#   - replicas, resources, autoscaling — independent scaling per role
+#
+# Probe paths (`/livez`, `/readyz`, `/startupz` for api/admin; `/healthz`
+# for worker/mcp) map to the in-handler check sets — see internal/health
+# for api/admin and serve_worker.go / serve_mcp.go for the simpler ops
+# endpoints on worker / mcp.
+
+deployments:
+
+  api:
+    enabled: true
+    replicas: 2
+    args:
+      - "serve"
+      - "api"
+    ports:
+      - name: data
+        containerPort: 8080
+      - name: iam
+        containerPort: 8085
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: data
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: data
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /startupz
+        port: data
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      # First port lands at .spec.ports[0]; default port-forward hits
+      # data:8080 which is what most operators expect.
+      ports:
+        - name: data
+          port: 8080
+          targetPort: data
+        - name: iam
+          port: 8085
+          targetPort: iam
+
+  admin:
+    enabled: true
+    # Admin pod sits behind a stricter ingress; single replica is fine.
+    replicas: 1
+    args:
+      - "serve"
+      - "admin"
+    ports:
+      - name: admin
+        containerPort: 8090
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: admin
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: admin
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /startupz
+        port: admin
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      ports:
+        - name: admin
+          port: 8090
+          targetPort: admin
+
+  worker:
+    enabled: true
+    # Two replicas with anti-affinity so leases distribute; the lease
+    # package guarantees only one pod runs each job at a time.
+    replicas: 2
+    args:
+      - "serve"
+      - "worker"
+    ports:
+      - name: ops
+        containerPort: 8099
+    # Worker speaks no Connect; ops port serves the simple /healthz +
+    # /readyz handlers from cmd/server/serve_worker.go.
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: ops
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: ops
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /readyz
+        port: ops
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      # Ops port exposed as a Service so kube-proxy can probe; not
+      # consumed by external clients.
+      ports:
+        - name: ops
+          port: 8099
+          targetPort: ops
+    # Anti-affinity keeps the two worker pods on different nodes — a
+    # node failure should never take both leaders out at once.
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: worker
+
+  mcp:
+    enabled: true
+    replicas: 1
+    args:
+      - "serve"
+      - "mcp"
+      - "--transport=http"
+    ports:
+      - name: mcp
+        containerPort: 8095
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: mcp
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: mcp
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    service:
+      type: ClusterIP
+      ports:
+        - name: mcp
+          port: 8095
+          targetPort: mcp
+
+# ─── Lifecycle Jobs ────────────────────────────────────────────────────────
+#
+# Migrate + bootstrap run as Helm hook Jobs so DDL is gated outside the
+# serve loop. Default schedule:
+#
+#   pre-install:  migrate (weight=0) → bootstrap (weight=10)
+#   pre-upgrade:  migrate (weight=0) → bootstrap (weight=10)
+#
+# Either can be disabled (e.g. external migrator owns DDL).
+
+jobs:
+  migrate:
+    enabled: true
+    backoffLimit: 1
+    activeDeadlineSeconds: 600
+    resources: {}
+  bootstrap:
+    enabled: true
+    backoffLimit: 1
+    activeDeadlineSeconds: 120
+    resources: {}
+
+# ─── Application config ────────────────────────────────────────────────────
+#
+# Single ConfigMap shared by every role. The Go binary reads only the
+# subset relevant to its subcommand (e.g. `serve worker` ignores the
+# server.* listener block).
 config:
   app:
     name: paladin
     env: local                            # local | staging | prod
 
   logger:
-    level: debug                          # debug | info | warn | error | dpanic | panic | fatal
-    format: json                          # json | console
+    level: debug
+    format: json
     development: true
     disable_caller: false
     disable_stacktrace: true
@@ -24,18 +325,13 @@ config:
       enabled: false
       initial: 100
       thereafter: 100
-    # logger.fields.{service,env} default from app.name / app.env via CUE.
 
   otel:
     enabled: false
     endpoint: "otel-collector:4317"
     protocol: http
     insecure: true
-    # otel.resource.{service.name,deployment.environment} default from
-    # app.name / app.env via CUE.
 
-  # Three-plane HTTP listeners: data (end-user object operations),
-  # admin (internal/SRE), iam (login + token exchange).
   server:
     mode: debug
     shutdown_timeout: 20s
@@ -51,10 +347,6 @@ config:
       request_id_header: "X-Request-Id"
       real_ip_header: "X-Forwarded-For"
       trusted_proxies: []
-      # No browsers ever talk to the backend directly — the UI hits its own
-      # Next.js BFF (/api/rpc/{plane}) which proxies in-cluster. Closed by
-      # default; opening to a specific origin would only be needed if a
-      # third-party browser-side client is introduced.
       cors_allowed_origins: []
       tls: { enabled: false }
     admin_http:
@@ -66,15 +358,11 @@ config:
 
   datastores:
     postgres:
-      # Runtime DSN — must point at the minimum-privilege role
-      # (`paladin_app`). See migrations/011_app_role.sql + docs/db-roles.md.
       dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
       password_secret:
         name: paladin-postgresql-app-user
         key: password
         namespace: database
-      # DDL-capable DSN used only by goose at startup. Distinct from the
-      # runtime role so the runtime pool can be locked down.
       migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
       migrate_password_secret:
         name: paladin-postgresql-migrate-user
@@ -115,12 +403,9 @@ config:
       max_ttl: 168h
       default_max_size: 5368709120
 
-  # PALADIN IAM mints HS256 JWTs and verifies them per plane. signing_key
-  # is the same on both sides. In production, prefer signing_key_secret.
   auth:
     issuer: "paladin-dev"
     signing_key: "dev-secret-change-me-32-bytes-min"
-    # signing_key_secret: { name: paladin-iam, key: signing_key }
     jwks_url: ""
     leeway: 30s
     access_token_ttl: 15m
@@ -132,12 +417,6 @@ config:
     reject_tenant_mismatch: true
     log_sensitive: false
 
-  # ArgoCD-style platform-admin bootstrap. When enabled, the chart creates
-  # the Secret itself (templates/secret-bootstrap-admin.yaml) and the
-  # server resolves the password through K8sSecretResolver — no env vars,
-  # no operator pre-creating the Secret. The `password_secret.name` /
-  # `.key` MUST match the chart-root `bootstrap.admin.passwordSecret` so
-  # the resolver sees the Secret the chart created.
   bootstrap:
     admin:
       enabled: true
@@ -149,7 +428,6 @@ config:
       password_secret:
         name: "paladin-bootstrap-admin"
         key: "password"
-        # Empty namespace → resolver falls back to the pod's own namespace.
         namespace: ""
       min_password_length: 0
       force_reset: true
@@ -198,10 +476,6 @@ config:
       interval: 5m
       lookback_window: 1h
 
-  # SeaweedFS-backed storage. The static keys here must match the
-  # accessKey / secretKey configured in the SeaweedFS s3-secret manifest
-  # (deploy/manifests/storage/seaweedfs/s3-secret.yaml). For non-local
-  # environments swap the inline values for *_secret refs.
   storage:
     default_backend: primary
     backends:
@@ -215,9 +489,7 @@ config:
         auth:
           mode: static_keys
           access_key: dummy_access_key
-          # access_key_secret: { name: paladin-s3, key: access_key, namespace: storage }
           secret_key: dummy_secret_key
-          # secret_key_secret: { name: paladin-s3, key: secret_key, namespace: storage }
         part_size: "8MB"
         sse:
           type: ""
@@ -233,11 +505,14 @@ config:
 
   mcp:
     upstreams:
-      admin_url: "http://localhost:8090"
-      data_url: "http://localhost:8080"
-      iam_url: "http://localhost:8085"
+      # Inside the cluster the MCP pod talks to the api / admin Services
+      # (not localhost — that was the standalone-binary era). Helm keeps
+      # the values in sync via the chart-fullname-suffixed Service names.
+      admin_url: ""
+      data_url: ""
+      iam_url: ""
     stdio:
-      enabled: true
+      enabled: false
       allow_write: false
     http:
       enabled: true
@@ -245,110 +520,29 @@ config:
       allow_write: false
       session_timeout: 10m
 
-image:
-  repository: registry.local/paladin
-  pullPolicy: Always
-  tag: ""
-
-# Bootstrap (chart-level) — password / Secret-name override surface for
-# the platform-admin Secret the chart creates. The Go bootstrap step
-# reads the Secret via K8sSecretResolver, so there is no env var or
-# secretKeyRef on the deployment. The same `name` / `key` MUST appear
-# in `config.bootstrap.admin.password_secret` so the resolver finds
-# the Secret the chart provisioned.
+# ─── Bootstrap admin Secret ────────────────────────────────────────────────
 #
-# Two independent flags (intentionally — the topologies that need them
-# split are real):
-#
-#   config.bootstrap.admin.enabled  — does the SERVER run the boot step?
-#                                     (read by Go via cfg.Bootstrap.Admin.Enabled)
-#   bootstrap.admin.enabled         — does THIS chart render the Secret?
-#
-# Combinations:
-#
-#   • Chart-managed Secret + boot step on:
-#       config.bootstrap.admin.enabled: true
-#       bootstrap.admin.enabled:        true
-#     Single-chart install where you trust Helm's `lookup` semantics.
-#
-#   • Externally-managed Secret + boot step on (the GitOps shape):
-#       config.bootstrap.admin.enabled: true
-#       bootstrap.admin.enabled:        false
-#     ArgoCD ships the Secret via a sibling Application (SealedSecret /
-#     ExternalSecret / SOPS). Avoids the `lookup`-under-`helm template`
-#     drift where randAlphaNum churns the password on every sync.
-#
-#   • Off entirely — both false (default).
-#
-# Password resolution when bootstrap.admin.enabled=true:
-#   1. Pre-existing Secret in the namespace → preserved (no rotation).
-#   2. `--set bootstrap.admin.password=<value>` (or --set-file) → that value.
-#   3. Otherwise → chart auto-generates a 24-char random password.
-#
-# After install, retrieve the auto-generated password with:
-#   kubectl get secret <name> -n <ns> -o jsonpath='{.data.password}' | base64 -d
+# When chart-level `bootstrap.admin.enabled=true` the chart provisions
+# the platform-admin password Secret so K8sSecretResolver can read it on
+# first boot. The two-flag split (`config.bootstrap.admin.enabled` =
+# server runs the boot step; `bootstrap.admin.enabled` = chart provisions
+# the Secret) is intentional — GitOps shapes use the SealedSecret path
+# and need to set the chart flag to false. See secret-bootstrap-admin.yaml
+# for the full matrix of combinations.
 bootstrap:
   admin:
     enabled: false
-    # Inline password override. Empty + no existing Secret → chart auto-
-    # generates a random one. Pass via --set-file to keep it out of shell
-    # history. Never commit a real value to git.
     password: ""
     passwordSecret:
       name: "paladin-bootstrap-admin"
       key: "password"
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: true
-  automount: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-podLabels: {}
-
-# Pod-level security context. Defaults intentionally non-empty —
-# locked-down runtime is the right default; operators who need to relax
-# it for sidecar tooling override per-release.
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 65532             # distroless 'nonroot' UID
-  runAsGroup: 65532
-  fsGroup: 65532
-  seccompProfile:
-    type: RuntimeDefault
-
-# Container-level. readOnlyRootFilesystem is safe because the binary
-# writes only to stdout/stderr; configs are mounted RO from the
-# ConfigMap; migrations are embedded into the binary.
-securityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65532
-  runAsGroup: 65532
-  capabilities:
-    drop:
-      - ALL
-
-service:
-  type: ClusterIP
-  # Three-plane HTTP service. Order matters for the Service object — the
-  # first port stays at .spec.ports[0] so out-of-the-box `kubectl
-  # port-forward svc/<name>` lands on data:8080, which is what most
-  # operators expect.
-  ports:
-    data: 8080
-    iam: 8085
-    admin: 8090
-  # Backwards-compat shim. Charts that imported old values are likely
-  # using `.Values.service.port` for templating; we keep it pointed at
-  # the data plane so existing references keep working.
-  port: 8080
+# ─── Ingress / Gateway API ─────────────────────────────────────────────────
+#
+# Both target the api Service (data + iam ports). Admin gets no public
+# ingress by default — operators bring their own behind mTLS / VPN /
+# bastion. To expose admin externally, render a separate Ingress at the
+# manifest layer or fork this chart.
 
 ingress:
   enabled: false
@@ -375,89 +569,16 @@ httpRoute:
             type: PathPrefix
             value: /
 
-resources: {}
-
-# Probes target the data-plane port. The internal/health package mounts
-# /livez, /readyz, /startupz on every plane's mux, so any of the three
-# would work — data is the natural default.
+# ─── RBAC for K8sSecretResolver ────────────────────────────────────────────
 #
-# Probe semantics (see internal/health/health.go):
-#   /livez    — process alive, dependency-free; flips to 503 only after
-#               graceful-shutdown signalling.
-#   /readyz   — pod ready to serve; checks DB ping with a 2s budget.
-#   /startupz — bootstrap done; same checks as readyz, used until
-#               kubelet sees the first 200.
-#
-# `timeoutSeconds: 3` exceeds the in-handler 2s check budget so kubelet's
-# own deadline doesn't kill probes that are already correctly bounded
-# server-side. Without this, a 1s kubelet default would race the in-pod
-# check and kubelet would mark the pod NotReady before the handler even
-# returned its real status.
-livenessProbe:
-  httpGet:
-    path: /livez
-    port: data
-  initialDelaySeconds: 15
-  periodSeconds: 20
-  timeoutSeconds: 1            # /livez never blocks, 1s is plenty
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /readyz
-    port: data
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 3            # exceeds the 2s in-handler check budget
-  # 3 consecutive failures (≈30s) before kube-proxy removes us — gives
-  # the dependency room to recover from blips without bouncing traffic.
-  failureThreshold: 3
-  successThreshold: 1
-
-startupProbe:
-  httpGet:
-    path: /startupz
-    port: data
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  timeoutSeconds: 3
-  # 24 × 5s = 120s startup window — long enough for first-time goose
-  # migrations against a fresh cluster (which can run hundreds of DDL
-  # statements) plus connection-pool warm-up. Once startupz returns 200
-  # once, kubelet stops calling it and switches to live+ready probes.
-  failureThreshold: 24
-
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-
-# Default volumes. The configmap name is templated in deployment.yaml so
-# this list intentionally references the chart-fullname-suffixed
-# configmap; do not hardcode 'paladin-config' here.
-#
-# Migrations are NOT a volume — they're embedded into the binary via
-# go:embed. The previous emptyDir mount was dead weight and has been
-# removed.
-volumes: []
-
-volumeMounts: []
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-# RBAC for the K8sSecretResolver. The resolver issues exactly one verb
-# (GET) per referenced secret — list/watch are NOT used. We narrow the
-# verbs to match.
-#
+# The resolver issues exactly one verb (GET) per referenced secret name.
 # `secretNames` lists every secret referenced from `config.*.password_secret`
-# / `config.*.access_key_secret` / `config.*.secret_key_secret`. Operators
-# who add new secret references must extend this list, otherwise the
-# resolver will 403 at startup.
+# / `config.*.access_key_secret` / `config.*.secret_key_secret`. New secret
+# references must extend this list or the resolver 403s at startup.
+#
+# The single ClusterRole is bound to every role's ServiceAccount — keeps
+# RBAC minimal. To split (e.g. mcp gets a wider key set), copy the
+# ClusterRole and bind only mcp's SA.
 rbac:
   secretReader:
     enabled: true
@@ -466,9 +587,4 @@ rbac:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user
       - paladin-admin-key
-      # Bootstrap admin password — read once at startup when
-      # config.bootstrap.admin.enabled=true. Resolver looks in the
-      # pod's own namespace (config.bootstrap.admin.password_secret.namespace
-      # is empty → falls back to the SA namespace). Drop this entry
-      # when bootstrap is permanently disabled.
       - paladin-bootstrap-admin

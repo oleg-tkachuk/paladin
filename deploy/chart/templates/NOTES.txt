@@ -1,70 +1,76 @@
 {{ include "chart.fullname" . }} ({{ .Chart.AppVersion }}) installed in {{ .Release.Namespace }}.
 
-PALADIN exposes three HTTP planes on one Pod (data / iam / admin). Pick how
-to reach them:
+PALADIN runs as one binary in multiple Deployments — one per role:
+
+  api      data + iam Connect listeners (public-ish traffic)
+  admin    admin Connect listener (privileged operations)
+  worker   background jobs with Postgres-leased leadership
+  mcp      Model Context Protocol bridge (LLM-facing)
+
+Migrate + bootstrap ran as Helm hook Jobs before any Deployment rolled.
+
+──────────────────────────────────────────────────────────────────────────
+
+Inspect the rollout:
+
+  kubectl -n {{ .Release.Namespace }} get deploy,svc -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Per-role pods:
+
+{{- range $role, $spec := .Values.deployments }}
+{{- if $spec.enabled }}
+  kubectl -n {{ $.Release.Namespace }} get pods -l app.kubernetes.io/instance={{ $.Release.Name }},app.kubernetes.io/component={{ $role }}
+{{- end }}
+{{- end }}
+
+──────────────────────────────────────────────────────────────────────────
+
+Reach the api plane (data + iam):
 
 {{- if .Values.httpRoute.enabled }}
 
-  1. Gateway API (HTTPRoute)
-
-     {{- if .Values.httpRoute.hostnames }}
-     export APP_HOSTNAME={{ first .Values.httpRoute.hostnames }}
-     {{- else }}
-     export APP_HOSTNAME=$(kubectl -n {{(first .Values.httpRoute.parentRefs).namespace | default .Release.Namespace }} get gateway/{{ (first .Values.httpRoute.parentRefs).name }} -o jsonpath='{.spec.listeners[0].hostname}')
-     {{- end }}
-     {{- if and .Values.httpRoute.rules (first .Values.httpRoute.rules).matches (first (first .Values.httpRoute.rules).matches).path.value }}
-     echo "Visit http://$APP_HOSTNAME{{ (first (first .Values.httpRoute.rules).matches).path.value }}"
-     {{- end }}
+  Via Gateway API:
+    {{- if .Values.httpRoute.hostnames }}
+    export APP_HOSTNAME={{ first .Values.httpRoute.hostnames }}
+    {{- else }}
+    export APP_HOSTNAME=$(kubectl -n {{(first .Values.httpRoute.parentRefs).namespace | default .Release.Namespace }} get gateway/{{ (first .Values.httpRoute.parentRefs).name }} -o jsonpath='{.spec.listeners[0].hostname}')
+    {{- end }}
+    {{- if and .Values.httpRoute.rules (first .Values.httpRoute.rules).matches (first (first .Values.httpRoute.rules).matches).path.value }}
+    curl "http://$APP_HOSTNAME{{ (first (first .Values.httpRoute.rules).matches).path.value }}livez"
+    {{- end }}
 
 {{- else if .Values.ingress.enabled }}
 
-  1. Ingress
-
-     {{- range $host := .Values.ingress.hosts }}
-     {{- range .paths }}
-     http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-     {{- end }}
-     {{- end }}
-
-{{- else if contains "NodePort" .Values.service.type }}
-
-  1. NodePort
-
-     export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "chart.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
-     export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
-     echo "data plane: http://$NODE_IP:$NODE_PORT"
-
-{{- else if contains "LoadBalancer" .Values.service.type }}
-
-  1. LoadBalancer
-
-     NOTE: It may take a few minutes for the LB IP to be available.
-     kubectl -n {{ .Release.Namespace }} get svc -w {{ include "chart.fullname" . }}
-
-     export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "chart.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-     echo "data plane: http://$SERVICE_IP:{{ .Values.service.ports.data }}"
+  Via Ingress:
+    {{- range $host := .Values.ingress.hosts }}
+    {{- range .paths }}
+    curl http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}livez
+    {{- end }}
+    {{- end }}
 
 {{- else }}
 
-  1. Port-forward (one of the three planes at a time)
-
-     export POD=$(kubectl -n {{ .Release.Namespace }} get pod -l app.kubernetes.io/name={{ include "chart.name" . }},app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}')
-
-     # Data plane (object operations)
-     kubectl -n {{ .Release.Namespace }} port-forward $POD {{ .Values.service.ports.data }}:{{ .Values.service.ports.data }}
-
-     # IAM plane (login + token exchange)
-     # kubectl -n {{ .Release.Namespace }} port-forward $POD {{ .Values.service.ports.iam }}:{{ .Values.service.ports.iam }}
-
-     # Admin plane (internal/SRE)
-     # kubectl -n {{ .Release.Namespace }} port-forward $POD {{ .Values.service.ports.admin }}:{{ .Values.service.ports.admin }}
+  Via port-forward (api Service):
+    {{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") }}
+    {{- $apiSpec := index .Values.deployments "api" }}
+    {{- $dataPort := 8080 }}
+    {{- if and $apiSpec $apiSpec.service $apiSpec.service.ports }}
+    {{- $dataPort = (index $apiSpec.service.ports 0).port }}
+    {{- end }}
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $apiSvc }} {{ $dataPort }}:{{ $dataPort }}
+    curl http://localhost:{{ $dataPort }}/livez
 
 {{- end }}
 
-  2. Health check (any plane works — addProbes mounts on all three)
+──────────────────────────────────────────────────────────────────────────
 
-     curl http://<host>:{{ .Values.service.ports.data }}/livez
+Disable a role: `--set deployments.<role>.enabled=false`. Toggling the
+api role takes the public listeners offline; toggling the worker or mcp
+roles is safe (no client traffic).
 
-  3. Verify the role split (production-only — see docs/db-roles.md)
+Worker leases:
 
-     kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "chart.fullname" . }} | grep 'pool initialized'
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "chart.roleFullname" (dict "ctx" . "role" "api") }} -- paladin cap show     # (placeholder — when the cap CLI lands)
+
+  Until then, inspect lease state directly via psql:
+    SELECT name, holder_id, expires_at, generation FROM worker_leases;
