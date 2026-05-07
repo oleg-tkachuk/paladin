@@ -140,47 +140,40 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### Phase 5b.2 — Modernize api_keys → api_tokens (hashed bearer)
+### Phase 5b.2 — api_tokens RPC surface, mux wiring, legacy migration
 
 - **Status:** Aspirational
-- **Reason:** The current `api_keys` table is a working machine-to-
-  machine token primitive but the implementation is dated: token may
-  be stored without prefix-display, hash function isn't argon2id,
-  expiry can be NULL, no rate-limit-per-token, no `last_used_at`.
-  Industry-standard hashed-bearer pattern (Hatchet / GitHub PATs /
-  Stripe / GitLab) is what most M2M consumers expect; we modernise
-  rather than drop. Distinct from capability tokens, which serve
-  agent-runtime federation and need JWT format.
+- **Reason:** Phase 5b.2 foundation landed: migration 017
+  (api_tokens table), `internal/auth/api_token` package (types,
+  argon2id format, Store interface, Issuer, Verifier),
+  `internal/auth/api_token/postgres` Store impl,
+  `auth.APITokenInterceptor` (additive). Tests cover the format
+  invariants, issuance round-trip, audience / TTL / revocation /
+  tampered-plaintext rejections.
+  What's left: the network surface (proto + handler), boot wiring,
+  legacy `api_keys` migration, housekeeping, CLI.
 - **Definition of Done:**
-  - Migration 017: new `api_tokens` table — `id`, `tenant_id`,
-    `name`, `prefix` (8-char display), `token_hash` (argon2id),
-    `scopes` (text[]), `audience` (text[]), `expires_at` (NOT NULL),
-    `revoked_at`, `last_used_at`, `created_by`, `created_at`.
-  - `internal/auth/api_token` package: Issue (return plaintext once),
-    Verify (hash + lookup + time gate), Revoke, ListByTenant.
-    Argon2id default; SHA-256 alternative for token-with-256-bit-
-    entropy fast path.
-  - Token format: `paladin_pat_<base32(32 random bytes)>`. Prefix-aware
-    so secret-scanners (gitleaks / GitHub) recognise; logs show the
-    8-char prefix only.
-  - `auth.APITokenInterceptor` — additive Connect interceptor,
-    runs alongside `CapabilityInterceptor` and JWT auth; reads
-    `Authorization: Bearer paladin_pat_…`. `last_used_at` updated on
-    successful verify (write-behind, batched).
+  - Boot wiring: `internal/app.BuildSharedDeps` builds an
+    `*api_token.Issuer` + `*api_token.Verifier` against the same
+    Postgres pool as the rest of PALADIN. Bundle stored on `SharedDeps`
+    so listener builders can hand the verifier to the interceptor.
+  - `AssembleAPIMuxes` / `AssembleAdminMux` append APITokenInterceptor
+    to data / admin / iam opts, audience-pinned per plane.
   - Proto + Connect handler `APITokenService` under the admin plane:
-    Create / Revoke / List / GetSelf. Token returned only on
-    Create.
-  - Old `internal/api/iam/v1/api_key_service` migrated to the new
-    surface; existing `api_keys` rows re-hashed via a one-shot
-    migration job; the legacy table is dropped.
-  - Helm `serve worker` config: optional rate-limit-per-token
-    using a Postgres-backed sliding window (default off).
+    Create (returns plaintext exactly once), Revoke, List, GetSelf
+    (introspect current token from request context).
+  - Helm `serve worker`: append a `worker.APITokenPurger` calling
+    `Store.PurgeExpired` on cadence (gated by `cfg.Workers.APIToken`).
+  - Legacy migration: drop `api_keys` table after re-hashing existing
+    rows into `api_tokens` (one-shot Job, runbook). The old
+    `internal/api/iam/v1/api_key_service` handler stays in place
+    until the runbook runs in production; afterwards delete it.
   - CLI: `paladin api-token create --tenant=acme --name=ingest-svc
-    --scopes=api:write --audience=data --ttl=90d`.
-  - `last_used_at` exposed in `ListAPITokens` UI for "stale token"
-    cleanup.
-- **Blockers:** none. Discrete work; can land before, after, or in
-  parallel with 5b.1.
+    --scopes=api:write --audience=data --ttl=90d` calls Create
+    via the admin plane.
+  - Optional sliding-window rate limit per token (Postgres-backed,
+    default off) — separate worker, low priority.
+- **Blockers:** none. Discrete work.
 
 ### LLM provider wiring
 
