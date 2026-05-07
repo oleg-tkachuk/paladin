@@ -16,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
@@ -152,6 +153,10 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("size_bytes is required for multipart uploads"))
 	}
+	objectURI := "object://" + tenantID.String() + "/" + args.ObjectKey + "/" + args.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, args.Key, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
 		return nil, err
 	}
@@ -187,6 +192,10 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	sess, err := h.repo.GetSession(ctx, args.UploadID)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return err
 	}
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPutObject, 0, ""); err != nil {
 		return err
@@ -241,6 +250,10 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
+	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
+		return err
+	}
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
@@ -284,6 +297,16 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("part_number %d out of range (1..%d)", partNumber, sess.TotalParts))
 	}
+	objectURI := "object://" + tenantID.String() + "/" + sess.ObjectKey + "/" + sess.Key
+	// Presigned part URL grants Put on the underlying object; gate on
+	// both OpPresign (the act of issuing a URL) and OpPut (the op the
+	// URL ultimately authorises). Either failure short-circuits.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
 	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -313,6 +336,9 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	}
 	if sess.TenantID != tenantID {
 		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+		return nil, "", err
 	}
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err

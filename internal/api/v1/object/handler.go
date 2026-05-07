@@ -301,6 +301,11 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
+	objectURI := "object://" + tenantID.String() + "/" + in.ObjectKey + "/" + in.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
+	}
+
 	// 1. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
 	decision, err := h.policy.IsAuthorized(ctx,
@@ -441,6 +446,10 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
+	}
 	principal, _ := auth.PrincipalFromContext(ctx)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
@@ -510,6 +519,12 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err != nil {
 		return nil, "", err
 	}
+	// Capability gate: list ops are scoped at the prefix level, so we
+	// skip the URI check (empty arg) and only verify the Op caveat.
+	// Per-row prefix filtering still happens inside the repo.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+		return nil, "", err
+	}
 	// One tenant+objectKey-scoped Cedar check up front; per-row Cedar would
 	// dominate pagination cost.
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
@@ -555,6 +570,9 @@ type CountObjectsOutput struct {
 func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
 	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
@@ -638,6 +656,10 @@ func (h *Handler) LookupObject(ctx context.Context, objectKey, key string) (*Obj
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
+	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
@@ -670,6 +692,16 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	// Download issues a presigned URL — capability needs OpPresign and
+	// OpGet (the underlying op the URL grants). Two assertions, one per
+	// caveat axis; either failure short-circuits.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+		return nil, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+		return nil, err
 	}
 	if obj.State != statemachine.StateAvailable {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -733,6 +765,10 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
+	objectURI := "object://" + tenantID.String() + "/" + in.ObjectKey + "/"
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.ObjectKey,
 	}, cedar.ActionUpdateObject, 0, ""); err != nil {
@@ -778,6 +814,10 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + obj.Key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
+		return err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: objectKey, Key: obj.Key,
@@ -848,6 +888,12 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	obj, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + obj.ObjectKey + "/" + obj.Key
+	// Restore is conceptually a Put (re-creates the live object from a
+	// soft-deleted row). Capability gate on OpPut.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: obj.ObjectKey, Key: obj.Key,
@@ -937,6 +983,15 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	destKey := in.DestKey
 	if destKey == "" {
 		destKey = src.Key
+	}
+	// Copy = Put on the destination URI (semantically a write of new
+	// content) — gated by OpPut. The source must already be readable
+	// to the caller; we don't separately gate OpGet on it because the
+	// underlying access model treats source-readable-and-dest-writable
+	// as the union of the same Cedar policy below.
+	destURI := "object://" + tenantID.String() + "/" + in.DestObjectKey + "/" + destKey
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, ObjectKey: in.DestObjectKey, Key: destKey,

@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -72,6 +73,14 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
+	// Capability gate: BatchDelete spans many objects under one
+	// objectKey. We assert OpDelete with an empty URI (the prefix-
+	// scope check happens per-row in the worker against
+	// cap.Caveats.ResourcePrefixes — this surface only enforces the
+	// op caveat). Per-row resource gating runs inside the worker.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, ""); err != nil {
+		return uuid.Nil, err
+	}
 	// ObjectKey-level authorization. Per-object authorization happens inside
 	// the worker on each row (slower but safer).
 	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionDeleteObject); err != nil {
@@ -95,6 +104,9 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
+		return uuid.Nil, err
+	}
 	// Require copy on source and put on destination — objectKey-level check.
 	if err := h.authorize(ctx, p, tenantID, args.SrcObjectKey, cedar.ActionCopyObject); err != nil {
 		return uuid.Nil, err
@@ -115,6 +127,9 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if len(args.ObjectIDs) == 0 {
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("object_ids must be non-empty"))
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionUpdateObject); err != nil {
 		return uuid.Nil, err

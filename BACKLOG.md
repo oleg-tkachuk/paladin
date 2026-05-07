@@ -68,30 +68,28 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Capability caveats — extend gating beyond GetObject
+### Capability caveats — Budget + Source-IP CIDR enforcement
 
 - **Status:** Aspirational
-- **Reason:** Phase 5b.0 wired `auth.CapabilityInterceptor` into the
-  data + admin mux opts and added `auth.AssertCapabilityOp` so handlers
-  can honour caveats with one line. `ObjectService.GetObject` is the
-  reference user. Other read / write ops on the data plane don't yet
-  call AssertCapabilityOp, so a capability that reaches them via the
-  interceptor is observed but not enforced.
+- **Reason:** Op + ResourcePrefixes / ResourceURIs caveats now gate
+  every read/write/list on ObjectService / MultipartUploadService /
+  PresignService / BatchService / ObjectTagService (Phase 1). The
+  remaining caveat axes — `MaxBudgetUSD` and `SourceIPCIDR` — are
+  declared on Capability but not yet enforced anywhere.
 - **Definition of Done:**
-  - Every mutating op on `ObjectService` / `MultipartUploadService` /
-    `PresignService` / `BatchService` calls AssertCapabilityOp with
-    the appropriate `capability.Op` and the resolved object URI.
-  - Search / list ops (when they land for the agentic plane) honour
-    OpList / OpSearch.
+  - Budget tracker: per-capability USD spend on object PUT (storage
+    bytes × tiered rate), GetObject (egress estimate), Embed /
+    Sampling LLM calls (proxy-reported cost). Decrement on each op;
+    surface `ErrBudgetExceeded` from the next call once exhausted.
+    Lives in `internal/auth` with a Postgres-backed counter table.
+  - Source-IP CIDR caveat enforced in the interceptor (before any
+    handler runs) — connect.RealIP + cap.Caveats.SourceIPCIDR
+    membership check; deny with CodePermissionDenied otherwise.
   - The `capability.OpShare` path lights up when the MCP `share` tool
     routes to `CapabilityService.Delegate` — the caller's capability
     must include OpShare for the delegation request to succeed.
-  - Budget caveat (`MaxBudgetUSD`) plumbed: at least one handler
-    bumps the bundle's budget tracker so an exhausted budget surfaces
-    as `ErrBudgetExceeded` from the next call.
-  - Source-IP CIDR caveat enforced on the interceptor side so it
-    rejects before any handler runs.
-- **Blockers:** none. Discrete per-handler edits; track per RPC.
+- **Blockers:** none. Independent of the Op/Resource caveats which
+  are wired.
 
 ### KMS-wrapped capability signing key
 

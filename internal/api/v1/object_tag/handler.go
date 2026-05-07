@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
 type ObjectTag struct {
@@ -62,6 +63,9 @@ func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*Object
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+		return nil, err
+	}
 	args.TenantID = t
 	ot, err := h.repo.Create(ctx, args)
 	if err != nil {
@@ -75,6 +79,9 @@ func (h *Handler) GetObjectTag(ctx context.Context, slug string) (*ObjectTag, er
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+		return nil, err
+	}
 	ot, err := h.repo.Get(ctx, t, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
@@ -86,6 +93,9 @@ func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*Object
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+		return nil, err
 	}
 	args.TenantID = t
 	ot, err := h.repo.Update(ctx, args)
@@ -103,6 +113,9 @@ func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVers
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+		return err
+	}
 	if err := h.repo.Delete(ctx, t, slug, expectedVersion); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
@@ -116,6 +129,9 @@ func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken 
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+		return nil, "", err
 	}
 	return h.repo.List(ctx, t, pageSize, pageToken)
 }

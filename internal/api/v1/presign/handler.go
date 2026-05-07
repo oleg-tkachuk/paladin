@@ -16,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
@@ -70,6 +71,16 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow GET", state))
 	}
+	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	// Presigned GET URL grants OpGet on the underlying object; gate
+	// on both OpPresign (the act of issuing a URL) and OpGet (the op
+	// the URL ultimately authorises).
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -103,6 +114,13 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow PUT", state))
 	}
+	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -121,6 +139,13 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	storageUploadID, objectKey, key, err := h.repo.LookupMultipartSession(ctx, uploadID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	objectURI := "object://" + tenantID.String() + "/" + objectKey + "/" + key
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
