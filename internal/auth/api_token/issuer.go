@@ -52,12 +52,13 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 
 // IssueRequest is the input shape for Issuer.Issue.
 type IssueRequest struct {
-	TenantID  uuid.UUID
-	Name      string
-	Scopes    []string
-	Audience  []string
-	TTL       time.Duration // 0 → MaxTTL
-	CreatedBy string
+	TenantID     uuid.UUID
+	Name         string
+	Scopes       []string
+	Audience     []string
+	TTL          time.Duration // 0 → MaxTTL
+	RateLimitRPM int           // 0 → unlimited
+	CreatedBy    string
 }
 
 // Issue mints a new token, persists the row, returns the typed Token
@@ -86,18 +87,23 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		return nil, err
 	}
 
+	if req.RateLimitRPM < 0 {
+		return nil, errors.New("api_token: RateLimitRPM must be >= 0")
+	}
+
 	now := i.clock().UTC()
 	tok := Token{
-		ID:        uuid.New(),
-		TenantID:  req.TenantID,
-		Name:      req.Name,
-		Prefix:    prefix,
-		Scopes:    req.Scopes,
-		Audience:  req.Audience,
-		ExpiresAt: now.Add(ttl),
-		CreatedBy: req.CreatedBy,
-		CreatedAt: now,
-		Plaintext: plaintext,
+		ID:           uuid.New(),
+		TenantID:     req.TenantID,
+		Name:         req.Name,
+		Prefix:       prefix,
+		Scopes:       req.Scopes,
+		Audience:     req.Audience,
+		ExpiresAt:    now.Add(ttl),
+		RateLimitRPM: req.RateLimitRPM,
+		CreatedBy:    req.CreatedBy,
+		CreatedAt:    now,
+		Plaintext:    plaintext,
 	}
 
 	if err := i.store.Insert(ctx, tok, hash); err != nil {

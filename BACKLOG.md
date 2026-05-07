@@ -172,24 +172,29 @@ the same commit. Treat this file like a runtime invariant.
   who runs the existing api_keys consumers. Without that, dropping
   the legacy table breaks live integrations.
 
-### api_token: optional sliding-window rate limit
+### api_token: per-token rate limit observability + admin tooling
 
 - **Status:** Deferred
-- **Reason:** Hatchet / GitHub PATs include per-token rate limits
-  out-of-the-box (default high enough for normal use; useful for
-  containing a leaked token's blast radius). PALADIN's existing
-  `middleware.RateLimit` is per-tenant, not per-token. A
-  Postgres-backed sliding window keyed by api_token.id would close
-  the gap.
+- **Reason:** The sliding-window rate limit primitive landed
+  (`internal/auth/api_token/ratelimit` with Postgres-backed sliding
+  window, wired into APITokenInterceptor, exposed in
+  APITokenService.Create proto, swept by APITokenPurger). What's
+  not exposed yet: real-time rate-limit observability and admin
+  tooling to inspect / tune.
 - **Definition of Done:**
-  - `internal/auth/api_token/ratelimit` package with a Postgres
-    sliding-window counter (one row per (token_id, minute_bucket)).
-  - APITokenInterceptor reads the counter on the verify path, bumps
-    the bucket, rejects with CodeResourceExhausted when over the
-    per-token cap.
-  - Configured per-token via a new `rate_limit_rpm` column on
-    api_tokens; 0 = unlimited.
-- **Blockers:** none. Lower-priority polish.
+  - `APITokenService.GetUsage(token_id)` RPC returning current
+    weighted_count, current bucket count, and trailing-window
+    average. Useful for "is my token close to the cap" UX in the
+    admin UI.
+  - Prometheus counters: `paladin_api_token_ratelimit_decisions_total{token_id,allowed}`
+    plus a histogram of weighted_count vs capacity ratio.
+  - CLI: `paladin api-token usage <id>` to print the same numbers
+    without an admin UI.
+  - Optional Retry-After header propagation in the existing
+    middleware stack so the data-plane Connect responses surface
+    it correctly (interceptor sets it on err.Meta(), needs end-to-
+    end smoke test against a real Connect client).
+- **Blockers:** none. Polish on a working primitive.
 
 ### LLM provider wiring
 

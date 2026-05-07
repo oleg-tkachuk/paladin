@@ -3,11 +3,14 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
 )
 
 // HeaderAPIToken is the additional accepted header for API tokens.
@@ -61,16 +64,56 @@ func WithAPIToken(ctx context.Context, t *api_token.Token) context.Context {
 //
 // When verifier is nil the returned interceptor is a passthrough, same
 // shape as CapabilityInterceptor — disabled deploys pay zero cost.
+//
+// limiter is optional: when nil OR the verified token's RateLimitRPM
+// is 0, the rate-limit gate is skipped entirely. When both are set,
+// the interceptor calls Allow on every successful verify; on
+// Decision.Allowed=false it returns CodeResourceExhausted with a
+// Retry-After header so well-behaved clients back off.
 func APITokenInterceptor(verifier *api_token.Verifier, audience string) connect.Interceptor {
+	return APITokenInterceptorWithLimiter(verifier, nil, audience)
+}
+
+// APITokenInterceptorWithLimiter is the rate-limit-aware variant.
+// Production wires both verifier and limiter from
+// internal/app.APITokenBundle; tests / dev deploys can pass nil
+// limiter and get verify-only semantics.
+func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
 	}
-	return &apiTokenInterceptor{verifier: verifier, audience: audience}
+	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience}
 }
 
 type apiTokenInterceptor struct {
 	verifier *api_token.Verifier
+	limiter  ratelimit.Limiter
 	audience string
+}
+
+// rateLimitGate runs the limiter for a verified token. Returns nil to
+// continue, or a connect.Error to short-circuit. Skipped entirely
+// when the limiter is unconfigured or the token has no per-token cap.
+//
+// On deny the Retry-After header is attached to the connect.Error's
+// Meta — connect-go propagates that to the response so well-behaved
+// clients back off the right amount. Failing the limiter call itself
+// fails open: a rate-limit infra outage shouldn't deny otherwise-
+// valid requests; the token already passed signature / time / audience.
+func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.Token) error {
+	if i.limiter == nil || tok.RateLimitRPM <= 0 {
+		return nil
+	}
+	d, err := i.limiter.Allow(ctx, tok.ID, tok.RateLimitRPM)
+	if err != nil || d.Allowed {
+		return nil
+	}
+	ce := connect.NewError(connect.CodeResourceExhausted,
+		fmt.Errorf("api_token: rate limit %d rpm exceeded (weighted=%.1f)", tok.RateLimitRPM, d.WeightedCount))
+	if d.RetryAfter > 0 {
+		ce.Meta().Set("Retry-After", strconv.Itoa(int(d.RetryAfter.Seconds())))
+	}
+	return ce
 }
 
 func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -82,6 +125,9 @@ func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFun
 		t, err := i.verifier.Verify(ctx, token, i.audience)
 		if err != nil {
 			return nil, mapAPITokenErr(err)
+		}
+		if err := i.rateLimitGate(ctx, t); err != nil {
+			return nil, err
 		}
 		return next(WithAPIToken(ctx, t), req)
 	}
@@ -100,6 +146,9 @@ func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandler
 		t, err := i.verifier.Verify(ctx, token, i.audience)
 		if err != nil {
 			return mapAPITokenErr(err)
+		}
+		if err := i.rateLimitGate(ctx, t); err != nil {
+			return err
 		}
 		return next(WithAPIToken(ctx, t), conn)
 	}

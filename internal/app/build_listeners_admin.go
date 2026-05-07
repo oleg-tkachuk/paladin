@@ -70,7 +70,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capAdmin = auth.CapabilityInterceptor(nil, "")
 	}
 	if deps.APIToken != nil {
-		apiTokAdmin = auth.APITokenInterceptor(deps.APIToken.Verifier, "admin")
+		apiTokAdmin = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")
 	} else {
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}

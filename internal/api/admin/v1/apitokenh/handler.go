@@ -87,12 +87,13 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
 
 	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
-		TenantID:  tenantID,
-		Name:      req.Msg.GetName(),
-		Scopes:    req.Msg.GetScopes(),
-		Audience:  req.Msg.GetAudience(),
-		TTL:       ttl,
-		CreatedBy: caller.Subject,
+		TenantID:     tenantID,
+		Name:         req.Msg.GetName(),
+		Scopes:       req.Msg.GetScopes(),
+		Audience:     req.Msg.GetAudience(),
+		TTL:          ttl,
+		RateLimitRPM: int(req.Msg.GetRateLimitRpm()),
+		CreatedBy:    caller.Subject,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -168,15 +169,16 @@ func (h *Handler) GetSelf(ctx context.Context, _ *connect.Request[adminv1.APITok
 // from the Issuer's return, not from this converter.
 func tokenToProto(t api_token.Token) *adminv1.APIToken {
 	out := &adminv1.APIToken{
-		Id:        t.ID.String(),
-		TenantId:  t.TenantID.String(),
-		Name:      t.Name,
-		Prefix:    t.Prefix,
-		Scopes:    t.Scopes,
-		Audience:  t.Audience,
-		ExpiresAt: timestamppb.New(t.ExpiresAt),
-		CreatedAt: timestamppb.New(t.CreatedAt),
-		CreatedBy: t.CreatedBy,
+		Id:           t.ID.String(),
+		TenantId:     t.TenantID.String(),
+		Name:         t.Name,
+		Prefix:       t.Prefix,
+		Scopes:       t.Scopes,
+		Audience:     t.Audience,
+		ExpiresAt:    timestamppb.New(t.ExpiresAt),
+		CreatedAt:    timestamppb.New(t.CreatedAt),
+		CreatedBy:    t.CreatedBy,
+		RateLimitRpm: int32(t.RateLimitRPM),
 	}
 	if t.RevokedAt != nil {
 		out.RevokedAt = timestamppb.New(*t.RevokedAt)

@@ -58,6 +58,10 @@ message APIToken {
   google.protobuf.Timestamp last_used_at = 9;
   google.protobuf.Timestamp created_at = 10;
   string created_by = 11;
+  // rate_limit_rpm caps the bearer's request rate. 0 = unlimited.
+  // Enforced by APITokenInterceptor via a sliding-window counter
+  // when the value is positive.
+  int32 rate_limit_rpm = 12;
 }
 
 message APITokenServiceCreateRequest {
@@ -70,6 +74,11 @@ message APITokenServiceCreateRequest {
   // audience must include at least one plane the token is presented
   // to. Subset of {data, admin, iam, mcp}.
   repeated string audience = 5 [(buf.validate.field).repeated.min_items = 1];
+  // rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
+  // Recommended for any token whose blast radius matters: leaked
+  // tokens with a 60 rpm cap can do far less harm before discovery
+  // than uncapped equivalents.
+  int32 rate_limit_rpm = 6 [(buf.validate.field).int32.gte = 0];
 }
 
 message APITokenServiceCreateResponse {

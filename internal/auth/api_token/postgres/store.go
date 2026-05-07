@@ -37,10 +37,12 @@ func (s *Store) Insert(ctx context.Context, t api_token.Token, hash string) erro
 	const stmt = `
 INSERT INTO api_tokens (
     id, tenant_id, name, prefix, token_hash,
-    scopes, audience, expires_at, created_by, created_at
+    scopes, audience, expires_at, rate_limit_rpm,
+    created_by, created_at
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10
+    $6, $7, $8, $9,
+    $10, $11
 );
 `
 	if _, err := s.pool.Exec(ctx, stmt,
@@ -52,6 +54,7 @@ INSERT INTO api_tokens (
 		t.Scopes,
 		t.Audience,
 		t.ExpiresAt,
+		t.RateLimitRPM,
 		t.CreatedBy,
 		t.CreatedAt,
 	); err != nil {
@@ -64,8 +67,8 @@ INSERT INTO api_tokens (
 func (s *Store) FindByPrefix(ctx context.Context, prefix string) ([]api_token.Token, []string, error) {
 	const stmt = `
 SELECT id, tenant_id, name, prefix, token_hash,
-       scopes, audience, expires_at, revoked_at, last_used_at,
-       created_by, created_at
+       scopes, audience, expires_at, rate_limit_rpm,
+       revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  prefix = $1;
 `
@@ -83,8 +86,8 @@ WHERE  prefix = $1;
 		var revokedAt, lastUsedAt *time.Time
 		err := rows.Scan(
 			&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
-			&t.Scopes, &t.Audience, &t.ExpiresAt, &revokedAt, &lastUsedAt,
-			&t.CreatedBy, &t.CreatedAt,
+			&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+			&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("api_token/postgres: scan: %w", err)
@@ -155,8 +158,8 @@ func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArg
 	bindArgs = append(bindArgs, limit+1) // +1 to detect next page
 	stmt := fmt.Sprintf(`
 SELECT id, tenant_id, name, prefix, token_hash,
-       scopes, audience, expires_at, revoked_at, last_used_at,
-       created_by, created_at
+       scopes, audience, expires_at, rate_limit_rpm,
+       revoked_at, last_used_at, created_by, created_at
 FROM   api_tokens
 WHERE  tenant_id = $1
   %s
@@ -177,8 +180,8 @@ LIMIT  $%d;
 		var revokedAt, lastUsedAt *time.Time
 		err := rows.Scan(
 			&t.ID, &t.TenantID, &t.Name, &t.Prefix, &hash,
-			&t.Scopes, &t.Audience, &t.ExpiresAt, &revokedAt, &lastUsedAt,
-			&t.CreatedBy, &t.CreatedAt,
+			&t.Scopes, &t.Audience, &t.ExpiresAt, &t.RateLimitRPM,
+			&revokedAt, &lastUsedAt, &t.CreatedBy, &t.CreatedAt,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf("api_token/postgres: scan: %w", err)

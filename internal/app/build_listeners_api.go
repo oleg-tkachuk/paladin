@@ -110,10 +110,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// APIToken interceptor — additive, parallel to capability and JWT.
 	// Mounted on data + iam (the public-facing planes); admin gets its
 	// own in build_listeners_admin.go. Audience-pinned per plane.
+	// Limiter wired so per-token rate caps apply on the data + iam
+	// planes (high-QPS surfaces); admin uses the same limiter.
 	var apiTokData, apiTokIAM connect.Interceptor
 	if deps.APIToken != nil {
-		apiTokData = auth.APITokenInterceptor(deps.APIToken.Verifier, "data")
-		apiTokIAM = auth.APITokenInterceptor(deps.APIToken.Verifier, "iam")
+		apiTokData = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "data")
+		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "iam")
 	} else {
 		apiTokData = auth.APITokenInterceptor(nil, "")
 		apiTokIAM = auth.APITokenInterceptor(nil, "")

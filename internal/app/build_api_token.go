@@ -6,17 +6,25 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/auth/api_token"
 	apitokenpg "github.com/oleg-tkachuk/paladin/internal/auth/api_token/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit"
+	ratelimitpg "github.com/oleg-tkachuk/paladin/internal/auth/api_token/ratelimit/postgres"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
-// APITokenBundle bundles the issuer + verifier + store for the
-// hashed-bearer M2M auth path. Lives on SharedDeps when the subsystem
-// is enabled; nil otherwise. Callers (interceptor wiring, admin handler)
-// pull the pieces they need.
+// APITokenBundle bundles the issuer + verifier + store + rate limiter
+// for the hashed-bearer M2M auth path. Lives on SharedDeps when the
+// subsystem is enabled; nil otherwise. Callers (interceptor wiring,
+// admin handler, purger) pull the pieces they need.
 type APITokenBundle struct {
 	Store    api_token.Store
 	Issuer   *api_token.Issuer
 	Verifier *api_token.Verifier
+
+	// Limiter enforces the per-token rate limit when a token's
+	// RateLimitRPM > 0. Always populated when the subsystem is
+	// enabled — Postgres-backed sliding window. Tokens with
+	// RateLimitRPM = 0 are unrestricted (the limiter short-circuits).
+	Limiter ratelimit.Limiter
 }
 
 // BuildAPITokenBundle wires the api_token subsystem from cfg.APIToken
@@ -49,10 +57,16 @@ func BuildAPITokenBundle(cfg config.APIToken, deps *SharedDeps) (*APITokenBundle
 		return nil, fmt.Errorf("app: api_token verifier: %w", err)
 	}
 
+	limiter, err := ratelimitpg.New(deps.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("app: api_token rate limiter: %w", err)
+	}
+
 	return &APITokenBundle{
 		Store:    store,
 		Issuer:   issuer,
 		Verifier: verifier,
+		Limiter:  limiter,
 	}, nil
 }
 
