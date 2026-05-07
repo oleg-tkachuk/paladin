@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/pgvector/pgvector-go"
 )
 
 type ObjectState string
@@ -427,19 +426,6 @@ type UserSetting struct {
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-type VectorRecord struct {
-	ID        pgtype.UUID        `json:"id"`
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	Kind      string             `json:"kind"`
-	ObjectUri string             `json:"object_uri"`
-	ChunkRef  string             `json:"chunk_ref"`
-	Model     string             `json:"model"`
-	Embedding *pgvector.Vector   `json:"embedding"`
-	Payload   []byte             `json:"payload"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkerLease struct {

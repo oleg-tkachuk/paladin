@@ -138,31 +138,6 @@ the same commit. Treat this file like a runtime invariant.
   + a migration plan for existing PALADIN-IAM users + a clear cutover
   signal (no live tenants on the local IAM path).
 
-### Vector / LLM bundles — decide whether to keep or remove
-
-- **Status:** Open question
-- **Reason:** PALADIN's positioning has been clarified: it is a control plane
-  for object storage with multi-tenant authz + capability flow, **not** a
-  content-aware system. Content analysis (RAG, summaries, embeddings) is
-  the responsibility of an external system that consumes PALADIN via MCP +
-  capability tokens + presigned GETs. The earlier "first callers"
-  (SummarizationWorker + EmbeddingWorker) were removed because they
-  required server-side reads of object bodies, which crosses that line.
-  What's left in the codebase from earlier phases:
-    - `cfg.LLM` + `LLMBundle` + `internal/llm/{litellm,ollama}` clients
-    - `cfg.Vector` + `VectorBundle` + `internal/vector/{pgvector,qdrant}`
-    - Helm chart secret refs for both
-  These have no callers today. Two options:
-    - **Keep** as latent infrastructure for non-content use cases (e.g.
-      LLM-assisted Cedar policy authoring, semantic search over
-      audit_log entries, classification of metadata only).
-    - **Remove** entirely so the codebase doesn't suggest content
-      capabilities PALADIN does not have. Cleaner story, smaller surface.
-- **Definition of Done:** Either a decision + cleanup commit removing
-  `cfg.LLM`, `cfg.Vector`, `internal/llm`, `internal/vector`, and Helm
-  refs; or a documented non-content first caller that justifies keeping
-  the wiring.
-- **Blockers:** Product decision. No technical blocker either way.
 
 ---
 

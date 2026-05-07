@@ -202,7 +202,3 @@ capability:
   enabled: false
 api_token:
   enabled: false
-llm:
-  enabled: false
-vector:
-  enabled: false
