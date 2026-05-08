@@ -156,6 +156,8 @@ func pickSource(format string) (eventingest.Source, error) {
 	switch format {
 	case "seaweedfs":
 		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
+	case "minio":
+		return &eventingest.MinIOSource{URI: "minio://primary"}, nil
 	case "":
 		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | minio | cloudevents)")
 	default:
@@ -190,10 +192,14 @@ func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, e
 		URI:        "seaweedfs://primary",
 	}
 
-	// Future-friendly: stub the cloudevents passthrough behind the
-	// same dispatcher. Adapter is a fall-through — first source we
-	// add for it lands in a follow-up commit.
-	// sources["/webhook/cloudevents"] = &cloudEventsSource{}
+	// MinIO bucket-notifications POST to /webhook/minio with the
+	// AWS S3 event-notification JSON envelope. BucketName is empty
+	// so the adapter accepts every bucket; a multi-bucket deploy
+	// can split into per-route adapters later.
+	sources["/webhook/minio"] = &eventingest.MinIOSource{
+		BucketName: "",
+		URI:        "minio://primary",
+	}
 
 	return &eventingest.WebhookDriver{
 		Addr:           cfg.Webhook.Addr,
