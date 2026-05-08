@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/tenant_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
@@ -16,31 +24,42 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/tenant_service.proto.
  */
-export const file_paladin_admin_v1_tenant_service: GenFile = /*@__PURE__*/
-  fileDesc("CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJWChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQEiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIk4KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkiZwoTTGlzdFRlbmFudHNSZXNwb25zZRIlCgd0ZW5hbnRzGAEgAygLMhQub2NwLmFkbWluLnYxLlRlbmFudBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJMuQDCg1UZW5hbnRTZXJ2aWNlEkcKDENyZWF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5DcmVhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJBCglHZXRUZW5hbnQSHi5vY3AuYWRtaW4udjEuR2V0VGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSRwoMVXBkYXRlVGVuYW50EiEub2NwLmFkbWluLnYxLlVwZGF0ZVRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50ElUKDERlbGV0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlc3BvbnNlElIKC0xpc3RUZW5hbnRzEiAub2NwLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVxdWVzdBohLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1Jlc3BvbnNlElMKElNldEluaGVyaXRlZFBvbGljeRInLm9jcC5hZG1pbi52MS5TZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudEJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_admin_v1_types, file_paladin_common_v1_pagination]);
+export const file_paladin_admin_v1_tenant_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJWChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQEiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIk4KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkiZwoTTGlzdFRlbmFudHNSZXNwb25zZRIlCgd0ZW5hbnRzGAEgAygLMhQub2NwLmFkbWluLnYxLlRlbmFudBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATK1BAoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_admin_v1_types,
+      file_paladin_common_v1_pagination,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.CreateTenantRequest
  */
-export type CreateTenantRequest = Message<"paladin.admin.v1.CreateTenantRequest"> & {
-  /**
-   * optional; UUIDv7 generated when empty
-   *
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
+export type CreateTenantRequest =
+  Message<"paladin.admin.v1.CreateTenantRequest"> & {
+    /**
+     * optional; UUIDv7 generated when empty
+     *
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.Tenant tenant = 2;
-   */
-  tenant?: Tenant | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.Tenant tenant = 2;
+     */
+    tenant?: Tenant | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CreateTenantRequest.
  * Use `create(CreateTenantRequestSchema)` to create a new message.
  */
-export const CreateTenantRequestSchema: GenMessage<CreateTenantRequest> = /*@__PURE__*/
+export const CreateTenantRequestSchema: GenMessage<CreateTenantRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 0);
 
 /**
@@ -57,81 +76,87 @@ export type GetTenantRequest = Message<"paladin.admin.v1.GetTenantRequest"> & {
  * Describes the message paladin.admin.v1.GetTenantRequest.
  * Use `create(GetTenantRequestSchema)` to create a new message.
  */
-export const GetTenantRequestSchema: GenMessage<GetTenantRequest> = /*@__PURE__*/
+export const GetTenantRequestSchema: GenMessage<GetTenantRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.UpdateTenantRequest
  */
-export type UpdateTenantRequest = Message<"paladin.admin.v1.UpdateTenantRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type UpdateTenantRequest =
+  Message<"paladin.admin.v1.UpdateTenantRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: google.protobuf.FieldMask update_mask = 3;
-   */
-  updateMask?: FieldMask | undefined;
+    /**
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 
-  /**
-   * @generated from field: paladin.admin.v1.Tenant tenant = 4;
-   */
-  tenant?: Tenant | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.Tenant tenant = 4;
+     */
+    tenant?: Tenant | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.UpdateTenantRequest.
  * Use `create(UpdateTenantRequestSchema)` to create a new message.
  */
-export const UpdateTenantRequestSchema: GenMessage<UpdateTenantRequest> = /*@__PURE__*/
+export const UpdateTenantRequestSchema: GenMessage<UpdateTenantRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.DeleteTenantRequest
  */
-export type DeleteTenantRequest = Message<"paladin.admin.v1.DeleteTenantRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteTenantRequest =
+  Message<"paladin.admin.v1.DeleteTenantRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * Refuse delete when object_keys/users/api_keys still reference the tenant.
-   *
-   * @generated from field: bool force = 3;
-   */
-  force: boolean;
-};
+    /**
+     * Refuse delete when object_keys/users/api_keys still reference the tenant.
+     *
+     * @generated from field: bool force = 3;
+     */
+    force: boolean;
+  };
 
 /**
  * Describes the message paladin.admin.v1.DeleteTenantRequest.
  * Use `create(DeleteTenantRequestSchema)` to create a new message.
  */
-export const DeleteTenantRequestSchema: GenMessage<DeleteTenantRequest> = /*@__PURE__*/
+export const DeleteTenantRequestSchema: GenMessage<DeleteTenantRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.DeleteTenantResponse
  */
-export type DeleteTenantResponse = Message<"paladin.admin.v1.DeleteTenantResponse"> & {
-};
+export type DeleteTenantResponse =
+  Message<"paladin.admin.v1.DeleteTenantResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.DeleteTenantResponse.
  * Use `create(DeleteTenantResponseSchema)` to create a new message.
  */
-export const DeleteTenantResponseSchema: GenMessage<DeleteTenantResponse> = /*@__PURE__*/
+export const DeleteTenantResponseSchema: GenMessage<DeleteTenantResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 4);
 
 /**
@@ -153,57 +178,98 @@ export type ListTenantsRequest = Message<"paladin.admin.v1.ListTenantsRequest"> 
  * Describes the message paladin.admin.v1.ListTenantsRequest.
  * Use `create(ListTenantsRequestSchema)` to create a new message.
  */
-export const ListTenantsRequestSchema: GenMessage<ListTenantsRequest> = /*@__PURE__*/
+export const ListTenantsRequestSchema: GenMessage<ListTenantsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.ListTenantsResponse
  */
-export type ListTenantsResponse = Message<"paladin.admin.v1.ListTenantsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.Tenant tenants = 1;
-   */
-  tenants: Tenant[];
+export type ListTenantsResponse =
+  Message<"paladin.admin.v1.ListTenantsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.Tenant tenants = 1;
+     */
+    tenants: Tenant[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListTenantsResponse.
  * Use `create(ListTenantsResponseSchema)` to create a new message.
  */
-export const ListTenantsResponseSchema: GenMessage<ListTenantsResponse> = /*@__PURE__*/
+export const ListTenantsResponseSchema: GenMessage<ListTenantsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.SetInheritedPolicyRequest
  */
-export type SetInheritedPolicyRequest = Message<"paladin.admin.v1.SetInheritedPolicyRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetInheritedPolicyRequest =
+  Message<"paladin.admin.v1.SetInheritedPolicyRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: string cedar_policy = 3;
-   */
-  cedarPolicy: string;
-};
+    /**
+     * @generated from field: string cedar_policy = 3;
+     */
+    cedarPolicy: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetInheritedPolicyRequest.
  * Use `create(SetInheritedPolicyRequestSchema)` to create a new message.
  */
-export const SetInheritedPolicyRequestSchema: GenMessage<SetInheritedPolicyRequest> = /*@__PURE__*/
+export const SetInheritedPolicyRequestSchema: GenMessage<SetInheritedPolicyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_service, 7);
+
+/**
+ * @generated from message paladin.admin.v1.RenameTenantSlugRequest
+ */
+export type RenameTenantSlugRequest =
+  Message<"paladin.admin.v1.RenameTenantSlugRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * resource_version — current tenant version, OCC-guarded.
+     *
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
+
+    /**
+     * new_slug — kebab-case, validated by the same rules as
+     * CreateTenantRequest.slug. Uniqueness enforced by the database.
+     *
+     * @generated from field: string new_slug = 3;
+     */
+    newSlug: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.RenameTenantSlugRequest.
+ * Use `create(RenameTenantSlugRequestSchema)` to create a new message.
+ */
+export const RenameTenantSlugRequestSchema: GenMessage<RenameTenantSlugRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 8);
 
 /**
  * TenantService manages tenants. Platform-admin only.
@@ -218,7 +284,7 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof CreateTenantRequestSchema;
     output: typeof TenantSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.TenantService.GetTenant
    */
@@ -226,7 +292,7 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof GetTenantRequestSchema;
     output: typeof TenantSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.TenantService.UpdateTenant
    */
@@ -234,7 +300,7 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof UpdateTenantRequestSchema;
     output: typeof TenantSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.TenantService.DeleteTenant
    */
@@ -242,7 +308,7 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof DeleteTenantRequestSchema;
     output: typeof DeleteTenantResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.TenantService.ListTenants
    */
@@ -250,7 +316,7 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof ListTenantsRequestSchema;
     output: typeof ListTenantsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.TenantService.SetInheritedPolicy
    */
@@ -258,7 +324,19 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof SetInheritedPolicyRequestSchema;
     output: typeof TenantSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_tenant_service, 0);
-
+  };
+  /**
+   * RenameTenantSlug rewrites the tenant's `slug` and rewrites every
+   * `Tenant::"<old_slug>"` reference in the tenant's
+   * inherited_cedar_policy AND in every object_key's cedar_policy to
+   * `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
+   * the supplied resource_version. Returns the renamed Tenant.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.RenameTenantSlug
+   */
+  renameTenantSlug: {
+    methodKind: "unary";
+    input: typeof RenameTenantSlugRequestSchema;
+    output: typeof TenantSchema;
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_service, 0);

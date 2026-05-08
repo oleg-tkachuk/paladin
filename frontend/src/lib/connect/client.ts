@@ -16,6 +16,7 @@ import { SystemService as AdminSystemService } from "@/gen/paladin/admin/v1/syst
 import { APITokenService } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import { MCPInspectService } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 
 // data plane
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
@@ -57,6 +58,7 @@ export const tenantBudgetClient = createClient(
   TenantBudgetService,
   adminTransport,
 );
+export const mcpInspectClient = createClient(MCPInspectService, adminTransport);
 
 // data
 export const objectClient = createClient(ObjectService, dataTransport);

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowPathIcon,
   ClipboardDocumentListIcon,
@@ -66,7 +67,12 @@ export default function AuditPage() {
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(100, "");
 
-  const [search, setSearch] = useState("");
+  // Optional ?audience=… deep-link (used by /mcp → audit) — preset
+  // the search box on first mount via the lazy useState initialiser.
+  // Chip stays editable; clearing the search input clears the
+  // filter.
+  const params = useSearchParams();
+  const [search, setSearch] = useState(() => params?.get("audience") ?? "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

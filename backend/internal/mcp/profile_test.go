@@ -118,8 +118,8 @@ func TestMatchPattern(t *testing.T) {
 		{"paladin_get_object", "paladin_get_object_tags", false},
 	}
 	for _, c := range cases {
-		if got := matchPattern(c.pat, c.name); got != c.want {
-			t.Errorf("matchPattern(%q, %q) = %v, want %v", c.pat, c.name, got, c.want)
+		if got := PatternMatch(c.pat, c.name); got != c.want {
+			t.Errorf("PatternMatch(%q, %q) = %v, want %v", c.pat, c.name, got, c.want)
 		}
 	}
 }

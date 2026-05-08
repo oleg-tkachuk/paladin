@@ -22,6 +22,7 @@ import {
   ArrowRightOnRectangleIcon,
   CubeTransparentIcon,
   BanknotesIcon,
+  CommandLineIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -111,6 +112,7 @@ const navigationGroups: Array<{
     accent: "text-chart-3/85",
     items: [
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
+      { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
       { name: "Health Status", path: "/health", icon: CheckCircleIcon },
     ],
   },

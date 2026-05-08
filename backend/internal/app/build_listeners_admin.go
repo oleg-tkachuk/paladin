@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
@@ -112,6 +113,14 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
+	// MCPInspectService — read-only operator visibility into the MCP
+	// bridge configuration (profiles, deny-list, tool catalog,
+	// upstreams, transport state). Always mounted; the admin's Cedar
+	// gate keeps it platform-admin only.
+	mux.Handle(paladinadminv1connect.NewMCPInspectServiceHandler(
+		mcpinspecth.NewHandler(cfg.MCP, polEngine),
+		adminOpts,
+	))
 	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(
 		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
 		adminOpts,

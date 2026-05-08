@@ -28,6 +28,72 @@ import (
 // "*" matches every tool. No regexp, no infix matching — keeps
 // operator-supplied YAML predictable.
 
+// ToolMeta is the static metadata for one MCP tool. Mirrored by every
+// addTool call in bridge.go; kept here so the operator-visibility
+// surface (admin/v1.MCPInspectService) can render the catalog without
+// importing the heavy bridge package.
+//
+// Audience pins which PALADIN plane the underlying Connect RPC lands on:
+// "admin" / "data" / "iam". CapabilityOp is the capability.Op the
+// caller's capability must include for the call to succeed (empty
+// when the tool is JWT-only). Mutates is true when the tool issues
+// a state-changing RPC — UI flags these for visual emphasis.
+type ToolMeta struct {
+	Name         string
+	Audience     string
+	Description  string
+	CapabilityOp string
+	Mutates      bool
+}
+
+// DefaultCatalog is the ground-truth list of tools registered by
+// internal/mcp/bridge.go. Order mirrors the addTool calls so a diff
+// against bridge.go is direct. Add a tool? Append a row here AND, if
+// it should be visible by default, add it to the appropriate
+// DefaultProfiles entry below.
+var DefaultCatalog = []ToolMeta{
+	// ── admin plane: discovery / inspection ──────────────────────
+	{Name: "paladin_list_backends", Audience: "admin", Description: "List storage backends registered with the platform."},
+	{Name: "paladin_list_buckets", Audience: "admin", Description: "List buckets across all backends."},
+	{Name: "paladin_get_bucket", Audience: "admin", Description: "Read a single bucket's metadata + lifecycle."},
+	{Name: "paladin_list_tenants", Audience: "admin", Description: "Enumerate tenants the caller can see."},
+	{Name: "paladin_get_tenant", Audience: "admin", Description: "Read a tenant's metadata + inherited Cedar policy."},
+	{Name: "paladin_list_object_keys", Audience: "admin", Description: "List logical object_keys in a bucket."},
+	{Name: "paladin_get_object_key", Audience: "admin", Description: "Read object_key metadata + per-key Cedar policy."},
+	{Name: "paladin_create_object_key", Audience: "admin", Description: "Create a new logical object_key.", Mutates: true},
+	{Name: "paladin_get_quota", Audience: "admin", Description: "Read tenant or bucket-scoped quota."},
+	{Name: "paladin_set_quota", Audience: "admin", Description: "Upsert tenant or bucket quota.", Mutates: true},
+	{Name: "paladin_validate_policy", Audience: "admin", Description: "Compile + validate a Cedar policy without applying."},
+	{Name: "paladin_get_effective_policy", Audience: "admin", Description: "Read the merged tenant + object_key policy text."},
+	{Name: "paladin_simulate_authz", Audience: "admin", Description: "Run a Cedar authz check without performing the call."},
+	{Name: "paladin_audit_recent", Audience: "admin", Description: "Tail the audit log; supports CEL filter."},
+	{Name: "paladin_audit_export", Audience: "admin", Description: "Materialise an audit-log dump for compliance."},
+	{Name: "paladin_list_subscriptions", Audience: "admin", Description: "List event subscriptions per tenant."},
+	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true},
+
+	// ── data plane: object operations ────────────────────────────
+	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under an object_key with CEL filter.", CapabilityOp: "list"},
+	{Name: "paladin_get_object", Audience: "data", Description: "Read object metadata.", CapabilityOp: "get"},
+	{Name: "paladin_list_versions", Audience: "data", Description: "List versions of one object.", CapabilityOp: "list"},
+	{Name: "paladin_get_version", Audience: "data", Description: "Read one version's metadata.", CapabilityOp: "get"},
+	{Name: "paladin_restore_version", Audience: "data", Description: "Promote an older version as current.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_get_object_tags", Audience: "data", Description: "Read object tags.", CapabilityOp: "tag"},
+	{Name: "paladin_set_object_tags", Audience: "data", Description: "Update object tags.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_presign_download", Audience: "data", Description: "Mint a signed GET URL.", CapabilityOp: "presign"},
+	{Name: "paladin_upload_object", Audience: "data", Description: "Initiate object upload (presigned PUT).", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_complete_object", Audience: "data", Description: "Finalise upload + commit object metadata.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_list_operations", Audience: "data", Description: "List async batch operations."},
+	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
+
+	// ── iam plane: identity surface ──────────────────────────────
+	// NB: most iam tools (login, mint-token, manage-user, manage-api-key)
+	// are in DefaultAlwaysDeny — they're never exposed to agents. The few
+	// kept here support read-only debugging via admin profile.
+	{Name: "paladin_create_user", Audience: "iam", Description: "Create a user (denied by default; admin-profile only).", Mutates: true},
+	{Name: "paladin_grant_user_scopes", Audience: "iam", Description: "Grant scopes (denied by default; admin-profile only).", Mutates: true},
+	{Name: "paladin_revoke_api_key", Audience: "iam", Description: "Revoke an API key (denied by default).", Mutates: true},
+}
+
 // DefaultProfiles is the baked-in profile set used when cfg.MCP.Profiles
 // is empty or doesn't define a requested name. Each value is the full
 // list of tool patterns the profile allows.
@@ -138,21 +204,21 @@ func (f *ToolFilter) Allow(toolName string) bool {
 		return true
 	}
 	for _, p := range f.deny {
-		if matchPattern(p, toolName) {
+		if PatternMatch(p, toolName) {
 			return false
 		}
 	}
 	for _, p := range f.allow {
-		if matchPattern(p, toolName) {
+		if PatternMatch(p, toolName) {
 			return true
 		}
 	}
 	return false
 }
 
-// matchPattern: literal "*" matches anything; "prefix*" matches any
+// PatternMatch: literal "*" matches anything; "prefix*" matches any
 // name with that prefix; otherwise exact-match.
-func matchPattern(pattern, name string) bool {
+func PatternMatch(pattern, name string) bool {
 	if pattern == "*" {
 		return true
 	}

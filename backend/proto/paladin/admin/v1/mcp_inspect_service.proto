@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+// MCPInspectService — read-only operator visibility into the MCP
+// (Model Context Protocol) bridge. The MCP plane sits between agentic
+// runtimes (Claude Desktop, Cursor, Hatchet workers) and the PALADIN
+// Connect API; what tools agents see, which are denied, and which
+// upstreams the bridge dispatches to is config + built-in defaults
+// merged at boot. This service flattens that resolution so an admin
+// UI can render the *effective* surface without re-implementing the
+// merge logic.
+//
+// Stateless: every Inspect call returns the same data unless the
+// operator hot-reloads config (no hot-reload today, but the response
+// shape allows for it).
+//
+// Authorisation: platform-admin only — same gate as the rest of
+// admin/v1 services.
+service MCPInspectService {
+  rpc Inspect(MCPInspectRequest) returns (MCPInspectResponse);
+}
+
+message MCPInspectRequest {}
+
+message MCPInspectResponse {
+  // Profiles is the merged map: built-in DefaultProfiles overlaid by
+  // operator overrides from cfg.MCP.Profiles. Keys are profile names
+  // (read_only, agent_safe, admin, plus operator-defined).
+  repeated MCPProfile profiles = 1;
+
+  // AlwaysDeny is the global blacklist applied AFTER profile
+  // expansion. cfg.MCP.AlwaysDeny when set; otherwise the built-in
+  // DefaultAlwaysDeny.
+  repeated string always_deny = 2;
+
+  // ToolCatalog is the full list of MCP tools the bridge registers.
+  // Mirrors internal/mcp.DefaultCatalog. Per-tool metadata lets the
+  // UI explain what the tool does + which plane it dispatches to.
+  repeated MCPTool tool_catalog = 3;
+
+  // Upstreams reflects cfg.MCP.Upstreams. Not secrets; the per-
+  // request bearer token is what gates access.
+  MCPUpstreams upstreams = 4;
+
+  // Transports describes which MCP transports are enabled and their
+  // active profile.
+  MCPTransports transports = 5;
+}
+
+message MCPProfile {
+  string name = 1;
+  // Tools is the resolved allow-list with patterns expanded — every
+  // tool name actually visible under this profile after the catalog
+  // is filtered. Patterns themselves (with wildcards) are exposed
+  // separately for operator audit.
+  repeated string tools = 2;
+  // RawPatterns is what the operator actually wrote in config (or
+  // the built-in default), trailing-* wildcards intact.
+  repeated string raw_patterns = 3;
+  // Deny is the per-profile deny list (rare; usually empty).
+  repeated string deny = 4;
+  // Source: "built_in" | "user_override" | "user_only" — which layer
+  // the profile came from. Operators can confirm their override
+  // landed by looking for "user_override".
+  string source = 5;
+}
+
+message MCPTool {
+  string name = 1;
+  // Audience: "admin" | "data" | "iam" — which PALADIN plane the
+  // underlying Connect call lands on.
+  string audience = 2;
+  string description = 3;
+  // CapabilityOp is the capability.Op the caller's capability must
+  // include for the call to succeed. Empty when JWT-only.
+  string capability_op = 4;
+  // Mutates is true when the tool issues a state-changing RPC.
+  // UI flags these for visual emphasis; deny-list candidates by
+  // default.
+  bool mutates = 5;
+}
+
+message MCPUpstreams {
+  string admin_url = 1;
+  string data_url = 2;
+  string iam_url = 3;
+}
+
+message MCPTransports {
+  MCPTransportStdio stdio = 1;
+  MCPTransportHTTP http = 2;
+}
+
+message MCPTransportStdio {
+  bool enabled = 1;
+  string profile = 2;
+}
+
+message MCPTransportHTTP {
+  bool enabled = 1;
+  string addr = 2;
+  string profile = 3;
+  // Session timeout in seconds; 0 = no timeout.
+  int64 session_timeout_seconds = 4;
+}
