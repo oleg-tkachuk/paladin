@@ -4,19 +4,17 @@ on:
   push:
     branches:
       - main
+    # Trigger on either half of the monorepo plus root release
+    # machinery. semantic-release walks commit history across the
+    # whole tree — this filter just avoids unnecessary workflow runs
+    # for pure docs / tooling changes.
     paths:
-      - "api/**"
-      - "cmd/**"
-      - "configs/**"
-      - "deploy/**"
-      - "internal/**"
-      - "migrations/**"
-      - "tests/**"
-      - "go.mod"
-      - "go.sum"
+      - "backend/**"
+      - "frontend/**"
+      - "tasks/**"
       - "Taskfile.yaml"
-      - "*.json"
-      - "*.cjs"
+      - "release.config.cjs"
+      - "package.json"
 
 permissions:
   contents: write

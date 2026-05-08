@@ -1,0 +1,8 @@
+# gitleaks runs from the repo root and scans both halves of the
+# monorepo. Paths are repo-root relative.
+[allowlist]
+description = "Generated / fixture files that legitimately contain secret-shaped strings."
+paths = [
+  '''backend/internal/generated/api/api\.gen\.go''',
+  '''backend/tests/hurl/.*\.hurl''',
+]
