@@ -31,8 +31,16 @@ WHERE ctid IN (
 );
 
 -- name: ListAuditEntries :many
--- Cursor: (at, entry_id) tuple. Filter args are intentionally simple — CEL
--- compiles to an in-memory pass after the SQL fetch.
+-- Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+-- sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
+-- constant-folds the disabled branches at plan time.
+--
+-- The action_eq / action_prefix / at_gte / at_lte predicates are
+-- populated by audith.applyAuditPushdown when the caller supplies a
+-- CEL filter whose top-level conjuncts the extractor recognises. The
+-- full CEL program ALWAYS still runs in-memory after this fetch, so
+-- pushdown only narrows the candidate set; correctness lives in the
+-- handler, not in this WHERE clause.
 SELECT entry_id, at, actor_subject, actor_tenant_id, actor_audience,
        action, resource_name, request_id, source_ip,
        before_json, after_json, error_message, capability_id
@@ -41,6 +49,14 @@ WHERE (sqlc.narg('actor_subject')::text IS NULL
        OR actor_subject = sqlc.narg('actor_subject')::text)
   AND (sqlc.narg('actor_tenant_id')::uuid IS NULL
        OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
+  AND (sqlc.narg('action_eq')::text IS NULL
+       OR action = sqlc.narg('action_eq')::text)
+  AND (sqlc.narg('action_prefix')::text IS NULL
+       OR action LIKE sqlc.narg('action_prefix')::text)
+  AND (sqlc.narg('at_gte')::timestamptz IS NULL
+       OR at >= sqlc.narg('at_gte')::timestamptz)
+  AND (sqlc.narg('at_lte')::timestamptz IS NULL
+       OR at <= sqlc.narg('at_lte')::timestamptz)
   AND (sqlc.narg('after_at')::timestamptz IS NULL
        OR at < sqlc.narg('after_at')::timestamptz
        OR (at = sqlc.narg('after_at')::timestamptz AND entry_id < sqlc.arg('after_id')::uuid))

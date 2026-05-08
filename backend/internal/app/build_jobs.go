@@ -92,7 +92,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 
 	if cfg.Workers.Housekeeping.AuditLogTTL > 0 {
 		out = append(out, &worker.AuditLogPurger{
-			Purger:   adapters.NewAuditRepoV2(db.Queries, deps.Pool),
+			Purger:   adapters.NewAuditRepoV2(db.Queries),
 			TTL:      cfg.Workers.Housekeeping.AuditLogTTL,
 			Interval: cfg.Workers.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),

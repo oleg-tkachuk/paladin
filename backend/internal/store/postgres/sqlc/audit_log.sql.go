@@ -76,19 +76,39 @@ WHERE ($1::text IS NULL
        OR actor_subject = $1::text)
   AND ($2::uuid IS NULL
        OR actor_tenant_id = $2::uuid)
-  AND ($3::timestamptz IS NULL
-       OR at < $3::timestamptz
-       OR (at = $3::timestamptz AND entry_id < $4::uuid))
+  AND ($3::text IS NULL
+       OR action = $3::text)
+  AND ($4::text IS NULL
+       OR action LIKE $4::text)
+  AND ($5::timestamptz IS NULL
+       OR at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL
+       OR at <= $6::timestamptz)
+  AND ($7::timestamptz IS NULL
+       OR at < $7::timestamptz
+       OR (at = $7::timestamptz AND entry_id < $8::uuid))
 ORDER BY at DESC, entry_id DESC
-LIMIT $5
+LIMIT $9
 `
 
-// Cursor: (at, entry_id) tuple. Filter args are intentionally simple — CEL
-// compiles to an in-memory pass after the SQL fetch.
-func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error) {
+// Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
+// constant-folds the disabled branches at plan time.
+//
+// The action_eq / action_prefix / at_gte / at_lte predicates are
+// populated by audith.applyAuditPushdown when the caller supplies a
+// CEL filter whose top-level conjuncts the extractor recognises. The
+// full CEL program ALWAYS still runs in-memory after this fetch, so
+// pushdown only narrows the candidate set; correctness lives in the
+// handler, not in this WHERE clause.
+func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		actorSubject,
 		actorTenantID,
+		actionEq,
+		actionPrefix,
+		atGte,
+		atLte,
 		afterAt,
 		afterID,
 		pageSize,

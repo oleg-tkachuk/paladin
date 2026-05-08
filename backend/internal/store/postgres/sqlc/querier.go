@@ -149,9 +149,17 @@ type Querier interface {
 	// guard, `api_key_id > NULL` evaluates to NULL → all rows filtered out
 	// and the first call returns empty even when rows exist.
 	ListApiKeysByTenant(ctx context.Context, tenantID pgtype.UUID, column2 bool, column3 pgtype.UUID, limit int32) ([]ApiKey, error)
-	// Cursor: (at, entry_id) tuple. Filter args are intentionally simple — CEL
-	// compiles to an in-memory pass after the SQL fetch.
-	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
+	// Cursor: (at, entry_id) tuple. Optional predicates use the canonical
+	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
+	// constant-folds the disabled branches at plan time.
+	//
+	// The action_eq / action_prefix / at_gte / at_lte predicates are
+	// populated by audith.applyAuditPushdown when the caller supplies a
+	// CEL filter whose top-level conjuncts the extractor recognises. The
+	// full CEL program ALWAYS still runs in-memory after this fetch, so
+	// pushdown only narrows the candidate set; correctness lives in the
+	// handler, not in this WHERE clause.
+	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
 	ListBucketsV2(ctx context.Context, backendID *string, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
