@@ -2,7 +2,6 @@ package data
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"connectrpc.com/connect"
@@ -73,8 +72,26 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 }
 
 func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Request[pb.BatchRestoreObjectsRequest]) (*connect.Response[pb.Operation], error) {
-	// existing batch handler doesn't expose restore; slice 4.
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("BatchRestoreObjects: TODO slice 4"))
+	m := req.Msg
+	objectKey, err := objectKeyNameParts(ctx, m.GetParent())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ids, err := resolveObjectIDs(ctx, m.GetSelector())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	opID, err := s.H.BatchRestoreObjects(ctx, batch.BatchRestoreObjectsArgs{
+		ObjectKey: objectKey,
+		ObjectIDs: ids,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.Operation{
+		Name: fmt.Sprintf("operations/%s", opID),
+		Type: "BatchRestoreObjects",
+	}), nil
 }
 
 func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[pb.BatchUpdateTagsRequest]) (*connect.Response[pb.Operation], error) {

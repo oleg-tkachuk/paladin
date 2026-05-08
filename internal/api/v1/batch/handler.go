@@ -43,6 +43,12 @@ type BatchUpdateTagsArgs struct {
 	Tags      map[string]string
 }
 
+type BatchRestoreObjectsArgs struct {
+	TenantID  uuid.UUID
+	ObjectKey string
+	ObjectIDs []uuid.UUID
+}
+
 // Submitter records LROs. Provided by the operation package.
 type Submitter interface {
 	Submit(ctx context.Context, opType string, metadata []byte) (uuid.UUID, error)
@@ -136,6 +142,32 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	}
 	md, _ := json.Marshal(args)
 	return h.submitter.Submit(ctx, "BatchUpdateTags", md)
+}
+
+func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObjectsArgs) (uuid.UUID, error) {
+	tenantID, p, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	args.TenantID = tenantID
+	if len(args.ObjectIDs) == 0 {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("object_ids must be non-empty"))
+	}
+	if len(args.ObjectIDs) > maxBatchSize {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+	}
+	// Restoring a soft-deleted object is a write to the lifecycle —
+	// the operator authority required mirrors the put path.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
+		return uuid.Nil, err
+	}
+	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionRestoreObject); err != nil {
+		return uuid.Nil, err
+	}
+	md, _ := json.Marshal(args)
+	return h.submitter.Submit(ctx, "BatchRestoreObjects", md)
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {

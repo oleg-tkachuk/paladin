@@ -146,12 +146,19 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Objects:     deps.Repos.Object,
 				Transitions: deps.SM,
 			},
-			// BatchCopy / BatchUpdateTags / BatchRestoreObjects
-			// executors are intentionally not registered — handlers
-			// that enqueue those types will see the runner mark the
-			// row FAILED with code=UNKNOWN_TYPE on the first claim,
-			// surfacing the gap to clients instead of silently
-			// hanging. Track in BACKLOG for follow-up.
+			"BatchCopy": &operations.BatchCopyExecutor{
+				Objects:           deps.Repos.Object,
+				Storage:           deps.S3,
+				Transitions:       deps.SM,
+				PresignDefaultTTL: cfg.Limits.Presign.DefaultTTL,
+			},
+			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
+				Objects: deps.Repos.Object,
+			},
+			"BatchRestoreObjects": &operations.BatchRestoreExecutor{
+				Objects:     deps.Repos.Object,
+				Transitions: deps.SM,
+			},
 		}
 		out = append(out, &operations.Runner{
 			Repo:      opRepo,
