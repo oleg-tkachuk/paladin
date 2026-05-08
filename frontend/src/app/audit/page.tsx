@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowPathIcon,
   ClipboardDocumentListIcon,
@@ -142,20 +143,23 @@ export default function AuditPage() {
               <TableHead className="hidden xl:table-cell w-[180px]">
                 Request
               </TableHead>
+              <TableHead className="hidden 2xl:table-cell w-[140px]">
+                Capability
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && entries.length === 0 ? (
               [0, 1, 2, 3].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={5} className="py-3">
+                  <TableCell colSpan={6} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-40 text-center">
+                <TableCell colSpan={6} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <ClipboardDocumentListIcon className="size-8 opacity-40" />
                     <p className="text-sm">
@@ -230,6 +234,24 @@ export default function AuditPage() {
                         <div className="font-mono text-[10px] text-muted-foreground">
                           {e.sourceIp}
                         </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden 2xl:table-cell">
+                      {e.capabilityId ? (
+                        // Cross-link: clicking jumps to /capabilities
+                        // and pre-fills the cap_id filter on that
+                        // page (the page reads ?id=… on mount).
+                        // Truncated display so the column stays
+                        // narrow; full id in title for hover.
+                        <Link
+                          href={`/capabilities?id=${e.capabilityId}`}
+                          className="font-mono text-[11px] text-primary hover:underline"
+                          title={e.capabilityId}
+                        >
+                          {e.capabilityId.slice(0, 8)}…
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                   </TableRow>

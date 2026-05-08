@@ -10,7 +10,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -66,11 +66,10 @@ import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 //              we drop it from memory.
 //   • Revoke — APITokenService.Revoke; idempotent on the server.
 //
-// GetUsage (sliding-window counters) is intentionally NOT surfaced in
-// the first version: most operators want issue / list / revoke, and a
-// per-token usage popover is its own design problem (live polling,
-// reset-clock countdown, threshold colouring). Adding it later is
-// purely additive.
+//   • Usage  — APITokenService.GetUsage; sliding-window snapshot
+//              fetched per-token after List. NOT_FOUND ⇒ token has
+//              never been verified ("never"). Rendered as
+//              weighted / limit with "resets in Xs" subtitle.
 
 const TTL_OPTIONS: { label: string; value: string; seconds: number | null }[] =
   [
@@ -114,6 +113,20 @@ export default function M2MTokensPage() {
   const [includeRevoked, setIncludeRevoked] = useState(false);
   const [includeExpired, setIncludeExpired] = useState(false);
 
+  // Per-token sliding-window snapshot fetched after list. Map keyed
+  // by token.id; "never" sentinel for NOT_FOUND (token never used).
+  // Re-fetched whenever the list refreshes; UI renders weighted /
+  // limit with a "resets in Ns" subtitle.
+  type UsageSnap = {
+    limitRpm: number;
+    weighted: number;
+    currentBucket: bigint;
+    resetsAtMs: number;
+  };
+  const [usage, setUsage] = useState<Map<string, UsageSnap | "never">>(
+    new Map(),
+  );
+
   const fetchTokens = useCallback(async () => {
     if (!tenantId) return;
     setLoading(true);
@@ -125,6 +138,42 @@ export default function M2MTokensPage() {
         pageSize: 100,
       });
       setTokens(res.apiTokens);
+
+      // Fan-out usage fetches for non-revoked tokens. Revoked
+      // tokens have no live counters worth showing.
+      void Promise.all(
+        res.apiTokens.map(async (t) => {
+          if (isRevoked(t)) return null;
+          try {
+            const u = await apiTokenClient.getUsage({ id: t.id });
+            const resetsAtMs = u.windowResetsAt
+              ? Number(u.windowResetsAt.seconds) * 1000
+              : 0;
+            return [
+              t.id,
+              {
+                limitRpm: u.limitRpm,
+                weighted: u.weightedCount,
+                currentBucket: u.currentBucketCount,
+                resetsAtMs,
+              },
+            ] as const;
+          } catch (err) {
+            if (err instanceof ConnectError && err.code === Code.NotFound) {
+              return [t.id, "never" as const] as const;
+            }
+            return null;
+          }
+        }),
+      ).then((entries) => {
+        setUsage(
+          new Map(
+            entries.filter(
+              (e): e is readonly [string, UsageSnap | "never"] => e !== null,
+            ),
+          ),
+        );
+      });
     } catch (err) {
       const msg =
         err instanceof ConnectError
@@ -335,6 +384,9 @@ export default function M2MTokensPage() {
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Audience</TableHead>
               <TableHead className="hidden lg:table-cell">Rate (rpm)</TableHead>
+              <TableHead className="hidden xl:table-cell w-[140px]">
+                Usage (1m)
+              </TableHead>
               <TableHead className="hidden lg:table-cell">Last used</TableHead>
               <TableHead className="hidden lg:table-cell">Expires</TableHead>
               <TableHead className="w-[100px]">Status</TableHead>
@@ -347,14 +399,14 @@ export default function M2MTokensPage() {
             {loading && visibleTokens.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={8} className="py-3">
+                  <TableCell colSpan={9} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : visibleTokens.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-40 text-center">
+                <TableCell colSpan={9} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <KeyIcon className="size-8 opacity-40" />
                     <p className="text-sm">No M2M tokens yet.</p>
@@ -415,6 +467,56 @@ export default function M2MTokensPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
                       {t.rateLimitRpm > 0 ? t.rateLimitRpm : "∞"}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell font-mono text-[11px]">
+                      {(() => {
+                        if (revoked) {
+                          return (
+                            <span className="text-muted-foreground">—</span>
+                          );
+                        }
+                        const u = usage.get(t.id);
+                        if (u === undefined) {
+                          return (
+                            <span className="text-muted-foreground">…</span>
+                          );
+                        }
+                        if (u === "never") {
+                          return (
+                            <span className="text-muted-foreground">
+                              never used
+                            </span>
+                          );
+                        }
+                        const resetsInS = Math.max(
+                          0,
+                          Math.round((u.resetsAtMs - Date.now()) / 1000),
+                        );
+                        const limit = u.limitRpm > 0 ? u.limitRpm : 0;
+                        const weighted = u.weighted.toFixed(1);
+                        const overCap =
+                          limit > 0 && u.weighted >= limit * 0.9;
+                        return (
+                          <div className="space-y-0.5">
+                            <div className={overCap ? "text-warning" : ""}>
+                              {weighted}
+                              {limit > 0 ? (
+                                <span className="text-muted-foreground">
+                                  {" / "}
+                                  {limit}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {" / ∞"}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              resets in {resetsInS}s
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
                       {t.lastUsedAt ? formatTimestamp(t.lastUsedAt) : "never"}

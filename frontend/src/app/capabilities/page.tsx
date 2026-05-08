@@ -10,7 +10,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError } from "@connectrpc/connect";
+import { ConnectError, Code } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -145,9 +145,17 @@ export default function CapabilitiesPage() {
   const [loading, setLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
 
+  // Per-capability usage snapshots fetched after list. Map keyed by
+  // cap.id; absent ⇒ never used (NOT_FOUND), pending ⇒ fetch
+  // in-flight. Re-fetched whenever the list refreshes.
+  const [usage, setUsage] = useState<
+    Map<string, { requestCount: bigint; spentUsd: number } | "never">
+  >(new Map());
+
   const fetchList = useCallback(async () => {
     if (!tenantId || !subject.trim()) {
       setItems([]);
+      setUsage(new Map());
       setHasFetched(false);
       return;
     }
@@ -163,6 +171,38 @@ export default function CapabilitiesPage() {
       });
       setItems(res.capabilities);
       setHasFetched(true);
+
+      // Fan-out usage fetches in parallel. Each cap's request is
+      // a single Postgres index hit on the server, so 100 rows in
+      // flight is fine. NOT_FOUND maps to "never" sentinel.
+      void Promise.all(
+        res.capabilities.map(async (c) => {
+          try {
+            const u = await capabilityClient.getUsage({ id: c.id });
+            return [
+              c.id,
+              { requestCount: u.requestCount, spentUsd: u.spentUsd },
+            ] as const;
+          } catch (err) {
+            if (
+              err instanceof ConnectError &&
+              err.code === Code.NotFound
+            ) {
+              return [c.id, "never" as const] as const;
+            }
+            return null;
+          }
+        }),
+      ).then((entries) => {
+        setUsage(
+          new Map(
+            entries.filter(
+              (e): e is readonly [string, { requestCount: bigint; spentUsd: number } | "never"] =>
+                e !== null,
+            ),
+          ),
+        );
+      });
     } catch (err) {
       const msg =
         err instanceof ConnectError
@@ -468,6 +508,7 @@ export default function CapabilitiesPage() {
               <TableHead className="hidden md:table-cell">Audience</TableHead>
               <TableHead className="hidden lg:table-cell">Issued</TableHead>
               <TableHead className="hidden lg:table-cell">Expires</TableHead>
+              <TableHead className="hidden xl:table-cell">Usage</TableHead>
               <TableHead className="w-[100px]">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
@@ -571,6 +612,33 @@ export default function CapabilitiesPage() {
                     </TableCell>
                     <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
                       {formatTimestamp(c.expiresAt)}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell font-mono text-[11px]">
+                      {(() => {
+                        const u = usage.get(c.id);
+                        if (u === undefined) return <span className="text-muted-foreground">…</span>;
+                        if (u === "never") return <span className="text-muted-foreground">never used</span>;
+                        const reqCap = c.caveats?.maxRequests ?? 0;
+                        const budgetCap = c.caveats?.maxBudgetUsd ?? 0;
+                        return (
+                          <div className="space-y-0.5">
+                            <div>
+                              <span className="text-muted-foreground">req </span>
+                              {u.requestCount.toString()}
+                              {reqCap > 0 && (
+                                <span className="text-muted-foreground"> / {reqCap}</span>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">$ </span>
+                              {u.spentUsd.toFixed(4)}
+                              {budgetCap > 0 && (
+                                <span className="text-muted-foreground"> / {budgetCap.toFixed(2)}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {expired ? (
