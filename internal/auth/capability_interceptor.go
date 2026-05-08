@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
@@ -289,16 +290,21 @@ func WithChargeStore(ctx context.Context, s capability.UsageStore) context.Conte
 // Behaviour:
 //
 //   - No capability on context (JWT auth) → no-op, returns nil.
-//   - Capability without MaxBudgetUSD set → records spend but never
-//     rejects (operator audits via capability.UsageStore.Get).
-//   - Capability with MaxBudgetUSD set and the new charge would
-//     exceed it → returns CodeResourceExhausted; row is NOT mutated
-//     so the handler can decide to refund / log / retry.
+//   - Capability without MaxBudgetUSD AND tenant without aggregate
+//     cap → records spend on both counters but never rejects
+//     (operator audits via capability.UsageStore.Get / GetTenantBudget).
+//   - Capability cap set and the new charge would exceed it →
+//     CodeResourceExhausted; per-capability row NOT mutated so the
+//     handler can decide to refund / log / retry. Tenant counter
+//     also untouched.
+//   - Tenant aggregate cap set and the new charge would exceed it
+//     after the per-capability charge already committed → the
+//     UsageStore compensates the capability counter, returns
+//     CodeResourceExhausted with ErrTenantBudgetExceeded.
 //   - UsageStore not wired → no-op (operator opted out).
 //
-// Refunds are an explicit op (not yet exposed). For now: handlers
-// that detect a partial failure after charging are responsible for
-// either tolerating the over-charge or compensating manually.
+// Refunds are exposed via auth.RefundCapability for handlers that
+// detect a partial failure after the charge.
 func ChargeCapability(ctx context.Context, amountUSD float64) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
@@ -311,12 +317,45 @@ func ChargeCapability(ctx context.Context, amountUSD float64) error {
 	if amountUSD <= 0 {
 		return nil
 	}
-	_, err := store.Charge(ctx, cap.ID, amountUSD, cap.Caveats.MaxBudgetUSD)
+	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
+	_, err := store.Charge(ctx, cap.ID, amountUSD, cap.Caveats.MaxBudgetUSD, tenantID)
 	if err != nil {
-		if errors.Is(err, capability.ErrBudgetExceeded) {
+		if errors.Is(err, capability.ErrBudgetExceeded) ||
+			errors.Is(err, capability.ErrTenantBudgetExceeded) {
 			return connect.NewError(connect.CodeResourceExhausted, err)
 		}
 		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	return nil
+}
+
+// RefundCapability subtracts amountUSD from the per-capability spend
+// AND the tenant aggregate. Use it when a handler detects that an
+// already-charged operation must be rolled back (storage write
+// failed after presign was issued, agent cancelled mid-flow).
+//
+// Idempotent on both counters — flooring at 0 means a double-refund
+// doesn't go negative. No-op when no capability is on context, no
+// store wired, or amountUSD <= 0.
+func RefundCapability(ctx context.Context, amountUSD float64) error {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore)
+	if !ok || store == nil {
+		return nil
+	}
+	if amountUSD <= 0 {
+		return nil
+	}
+	if err := store.RefundCapability(ctx, cap.ID, amountUSD); err != nil {
+		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	if cap.Subject.TenantID != uuid.Nil {
+		if err := store.RefundTenant(ctx, cap.Subject.TenantID, amountUSD); err != nil {
+			return connect.NewError(connect.CodeUnavailable, err)
+		}
 	}
 	return nil
 }

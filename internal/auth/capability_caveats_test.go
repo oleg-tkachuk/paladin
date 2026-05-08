@@ -38,7 +38,7 @@ func (f *fakeUsage) BumpRequest(_ context.Context, id uuid.UUID, max int64) (int
 	return next, nil
 }
 
-func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64) (float64, error) {
+func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ uuid.UUID) (float64, error) {
 	next := f.spent[id] + amount
 	if max > 0 && next > max {
 		return 0, capability.ErrBudgetExceeded
@@ -47,6 +47,17 @@ func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64)
 	return next, nil
 }
 
+func (f *fakeUsage) RefundCapability(_ context.Context, id uuid.UUID, amount float64) error {
+	v := f.spent[id] - amount
+	if v < 0 {
+		v = 0
+	}
+	f.spent[id] = v
+	return nil
+}
+
+func (f *fakeUsage) RefundTenant(_ context.Context, _ uuid.UUID, _ float64) error { return nil }
+
 func (f *fakeUsage) Get(_ context.Context, id uuid.UUID) (capability.Usage, error) {
 	c, ok := f.requests[id]
 	s, sok := f.spent[id]
@@ -54,6 +65,14 @@ func (f *fakeUsage) Get(_ context.Context, id uuid.UUID) (capability.Usage, erro
 		return capability.Usage{}, capability.ErrUsageNotFound
 	}
 	return capability.Usage{CapabilityID: id, RequestCount: c, SpentUSD: s}, nil
+}
+
+func (f *fakeUsage) GetTenantBudget(_ context.Context, _ uuid.UUID) (capability.TenantBudget, error) {
+	return capability.TenantBudget{}, capability.ErrTenantBudgetNotFound
+}
+
+func (f *fakeUsage) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+	return capability.TenantBudget{TenantID: args.TenantID, MaxBudgetUSD: args.MaxBudgetUSD}, nil
 }
 
 func (f *fakeUsage) Delete(_ context.Context, id uuid.UUID) error {
@@ -162,5 +181,52 @@ func TestChargeCapability_NegativeOrZero_NoOp(t *testing.T) {
 	}
 	if u, _ := store.Get(ctx, cap.ID); u.SpentUSD != 0 {
 		t.Errorf("spent should be 0, got %v", u.SpentUSD)
+	}
+}
+
+// ─── RefundCapability ───────────────────────────────────────────────
+
+func TestRefundCapability_AfterCharge_DecrementsSpend(t *testing.T) {
+	store := newFakeUsage()
+	cap := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{MaxBudgetUSD: 1.0}}
+	ctx := WithChargeStore(WithCapability(context.Background(), cap), store)
+
+	if err := ChargeCapability(ctx, 0.50); err != nil {
+		t.Fatalf("charge: %v", err)
+	}
+	if err := RefundCapability(ctx, 0.30); err != nil {
+		t.Fatalf("refund: %v", err)
+	}
+	u, _ := store.Get(ctx, cap.ID)
+	if u.SpentUSD < 0.19 || u.SpentUSD > 0.21 {
+		t.Errorf("spent after refund = %v, want ~0.20", u.SpentUSD)
+	}
+}
+
+func TestRefundCapability_FloorsAtZero(t *testing.T) {
+	store := newFakeUsage()
+	cap := &capability.Capability{ID: uuid.New()}
+	ctx := WithChargeStore(WithCapability(context.Background(), cap), store)
+
+	if err := ChargeCapability(ctx, 0.10); err != nil {
+		t.Fatalf("charge: %v", err)
+	}
+	// Refund larger than current spend → floors at 0, never negative.
+	if err := RefundCapability(ctx, 1.00); err != nil {
+		t.Fatalf("refund: %v", err)
+	}
+	if u, _ := store.Get(ctx, cap.ID); u.SpentUSD != 0 {
+		t.Errorf("spent must floor at 0, got %v", u.SpentUSD)
+	}
+}
+
+func TestRefundCapability_NoCapNoStore_NoOp(t *testing.T) {
+	if err := RefundCapability(context.Background(), 1.0); err != nil {
+		t.Errorf("no cap: %v", err)
+	}
+	cap := &capability.Capability{ID: uuid.New()}
+	ctx := WithCapability(context.Background(), cap)
+	if err := RefundCapability(ctx, 1.0); err != nil {
+		t.Errorf("no store: %v", err)
 	}
 }

@@ -24,6 +24,11 @@ type Querier interface {
 	// Adds amount to spent_usd and rejects when over the supplied cap.
 	// max_budget=0 means unlimited.
 	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
+	// Atomic UPSERT-and-check, same shape as ChargeCapability. When the
+	// row is missing, treats max as 0 (no cap enforced) and inserts a
+	// fresh accumulator row. Returns the new spent_usd; pgx.ErrNoRows
+	// means "would exceed cap" — caller maps to ErrTenantBudgetExceeded.
+	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) (pgtype.Numeric, error)
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
@@ -107,6 +112,7 @@ type Querier interface {
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
+	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (TenantBudget, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
@@ -244,6 +250,12 @@ type Querier interface {
 	PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error)
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
 	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
+	// Symmetric refund on the per-capability counter. Same floor rule.
+	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error
+	// Subtracts amount; floors at 0 so a refund larger than current
+	// spend doesn't go negative (which would silently grant the
+	// difference back as future budget).
+	RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) error
 	ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error
 	// Undeletes a soft-deleted object iff no live row exists with the same
 	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
@@ -263,6 +275,12 @@ type Querier interface {
 	SetBucketReplication(ctx context.Context, backendID string, bucketName string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
 	SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error
+	// Tenant aggregate budget queries.
+	// Upserts the cap and rolls the period. Operators call this from
+	// admin tooling on every billing cycle; spent_usd is reset to 0
+	// when reset_spend = true (idiomatic monthly close), preserved
+	// otherwise (mid-cycle adjustment that just changes the cap).
+	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, periodEnd pgtype.Timestamptz, resetSpend bool) (TenantBudget, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error

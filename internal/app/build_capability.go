@@ -99,7 +99,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
 	}
 
-	usage := capabilitypg.NewUsageStore(deps.DB.Queries)
+	// Metering decorator: BumpRequest / Charge / Refund emit OTel
+	// metrics for the runtime counters. Pure pass-through on cold
+	// MeterProvider so test paths and sidecar tools don't pay for
+	// instrument lookups.
+	usage := capability.WithMetering(capabilitypg.NewUsageStore(deps.DB.Queries))
 
 	return &CapabilityBundle{
 		Store:        store,

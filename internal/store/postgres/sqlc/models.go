@@ -416,6 +416,15 @@ type Tenant struct {
 	Slug                 string             `json:"slug"`
 }
 
+type TenantBudget struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	PeriodStart  pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type User struct {
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
