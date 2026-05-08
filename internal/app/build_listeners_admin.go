@@ -129,7 +129,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// CapabilityService — Issue / Delegate / Revoke / List. The
 		// admin interceptor stack already enforces audience + JWT
 		// authentication; the handler does its own Cedar gate per RPC.
-		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, polEngine)
+		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine)
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
 	}
 

@@ -1622,7 +1622,12 @@ type AuditLogEntry struct {
 	BeforeJson []byte `protobuf:"bytes,10,opt,name=before_json,json=beforeJson,proto3" json:"before_json,omitempty"`
 	AfterJson  []byte `protobuf:"bytes,11,opt,name=after_json,json=afterJson,proto3" json:"after_json,omitempty"`
 	// Set when the action failed; empty on success.
-	ErrorMessage  string `protobuf:"bytes,12,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ErrorMessage string `protobuf:"bytes,12,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// capability_id is the UUID of the capability token that
+	// authorised this action, when one was presented. Empty when the
+	// call was JWT- or API-token-authenticated. UI clients render
+	// this as a link to the capability detail surface.
+	CapabilityId  string `protobuf:"bytes,13,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1737,6 +1742,13 @@ func (x *AuditLogEntry) GetAfterJson() []byte {
 func (x *AuditLogEntry) GetErrorMessage() string {
 	if x != nil {
 		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetCapabilityId() string {
+	if x != nil {
+		return x.CapabilityId
 	}
 	return ""
 }
@@ -2254,7 +2266,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vbytes_today\x18\x03 \x01(\x03R\n" +
 	"bytesToday\x12#\n" +
 	"\robjects_today\x18\x04 \x01(\x03R\fobjectsToday\x12>\n" +
-	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlastResetAt\"\xa8\x03\n" +
+	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vlastResetAt\"\xcd\x03\n" +
 	"\rAuditLogEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12*\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12#\n" +
@@ -2271,7 +2283,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"beforeJson\x12\x1d\n" +
 	"\n" +
 	"after_json\x18\v \x01(\fR\tafterJson\x12#\n" +
-	"\rerror_message\x18\f \x01(\tR\ferrorMessage\"\xc6\x02\n" +
+	"\rerror_message\x18\f \x01(\tR\ferrorMessage\x12#\n" +
+	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\"\xc6\x02\n" +
 	"\x11EventSubscription\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +

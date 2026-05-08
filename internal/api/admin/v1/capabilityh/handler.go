@@ -31,16 +31,24 @@ import (
 type Handler struct {
 	issuer *capability.Issuer
 	store  capability.Store
+	usage  capability.UsageStore
 	policy cedar.Authorizer
 }
 
 // NewHandler builds the Handler. issuer / store / policy are required;
-// passing nil panics — wiring bugs should fail loud at boot.
-func NewHandler(issuer *capability.Issuer, store capability.Store, policy cedar.Authorizer) *Handler {
+// passing nil panics — wiring bugs should fail loud at boot. usage may
+// be nil when the operator hasn't wired the runtime-counter store —
+// GetUsage then returns CodeUnavailable so the misconfig is visible.
+func NewHandler(
+	issuer *capability.Issuer,
+	store capability.Store,
+	usage capability.UsageStore,
+	policy cedar.Authorizer,
+) *Handler {
 	if issuer == nil || store == nil || policy == nil {
 		panic("capabilityh: issuer / store / policy are required")
 	}
-	return &Handler{issuer: issuer, store: store, policy: policy}
+	return &Handler{issuer: issuer, store: store, usage: usage, policy: policy}
 }
 
 // authorize gates an RPC against Cedar. Capability operations are
@@ -224,6 +232,44 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	return connect.NewResponse(&adminv1.CapabilityServiceListResponse{
 		Capabilities:  out,
 		NextPageToken: next,
+	}), nil
+}
+
+// GetUsage returns the runtime counters (request_count, spent_usd)
+// for a capability. NOT_FOUND when the cap has never been used —
+// distinct from "exists but unused" (the caller's List having
+// returned the cap proves it exists; an absent usage row just
+// means no Charge / no BumpRequest has fired yet).
+//
+// Authorization: same Cedar action as List (read-side admin), so
+// the operator who can List a tenant's caps can also see their
+// usage.
+func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
+	if _, err := h.authorize(ctx, "list"); err != nil {
+		return nil, err
+	}
+	if h.usage == nil {
+		return nil, connect.NewError(connect.CodeUnavailable,
+			fmt.Errorf("capability runtime counter store not wired"))
+	}
+	id, err := uuid.Parse(req.Msg.GetId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+	}
+	u, err := h.usage.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, capability.ErrUsageNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
+		CapabilityId: u.CapabilityID.String(),
+		RequestCount: u.RequestCount,
+		SpentUsd:     u.SpentUSD,
+		// updated_at not surfaced today — the UsageStore.Get value
+		// doesn't carry it consistently across the postgres /
+		// metering decorators. Add when telemetry needs it.
 	}), nil
 }
 

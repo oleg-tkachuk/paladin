@@ -256,6 +256,11 @@ message AuditLogEntry {
   bytes after_json = 11;
   // Set when the action failed; empty on success.
   string error_message = 12;
+  // capability_id is the UUID of the capability token that
+  // authorised this action, when one was presented. Empty when the
+  // call was JWT- or API-token-authenticated. UI clients render
+  // this as a link to the capability detail surface.
+  string capability_id = 13;
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────

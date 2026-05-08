@@ -219,7 +219,7 @@ workers:
     # prod is the typical setting — gives support a restore window
     # before the bytes go away. Worker race-with-PUT mitigation is
     # OCC-gated; see internal/worker/lifecycle_hard_delete.go.
-    hard_delete_after: 0
+    hard_delete_after: "0s"
     hard_delete_batch_size: 100
   refresh_token_reap:                   # drops expired refresh tokens
     interval: 1h

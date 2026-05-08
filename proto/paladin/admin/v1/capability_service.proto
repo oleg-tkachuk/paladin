@@ -40,6 +40,12 @@ service CapabilityService {
 
   // List enumerates capabilities issued to a principal. Cursor-paginated.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse);
+
+  // GetUsage returns the runtime counters for a capability:
+  // request_count (vs Caveats.max_requests) and spent_usd
+  // (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+  // capability has never been used (no requests, no charges).
+  rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse);
 }
 
 // PrincipalKind discriminates the principal-shape oneof. Mirrors the
@@ -150,4 +156,15 @@ message CapabilityServiceListRequest {
 message CapabilityServiceListResponse {
   repeated Capability capabilities = 1;
   string next_page_token = 2;
+}
+
+message CapabilityServiceGetUsageRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message CapabilityServiceGetUsageResponse {
+  string capability_id = 1;
+  int64 request_count = 2;
+  double spent_usd = 3;
+  google.protobuf.Timestamp updated_at = 4;
 }

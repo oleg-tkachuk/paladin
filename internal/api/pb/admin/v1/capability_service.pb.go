@@ -869,6 +869,118 @@ func (x *CapabilityServiceListResponse) GetNextPageToken() string {
 	return ""
 }
 
+type CapabilityServiceGetUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapabilityServiceGetUsageRequest) Reset() {
+	*x = CapabilityServiceGetUsageRequest{}
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapabilityServiceGetUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapabilityServiceGetUsageRequest) ProtoMessage() {}
+
+func (x *CapabilityServiceGetUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapabilityServiceGetUsageRequest.ProtoReflect.Descriptor instead.
+func (*CapabilityServiceGetUsageRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CapabilityServiceGetUsageRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CapabilityServiceGetUsageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CapabilityId  string                 `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	RequestCount  int64                  `protobuf:"varint,2,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	SpentUsd      float64                `protobuf:"fixed64,3,opt,name=spent_usd,json=spentUsd,proto3" json:"spent_usd,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapabilityServiceGetUsageResponse) Reset() {
+	*x = CapabilityServiceGetUsageResponse{}
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapabilityServiceGetUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapabilityServiceGetUsageResponse) ProtoMessage() {}
+
+func (x *CapabilityServiceGetUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapabilityServiceGetUsageResponse.ProtoReflect.Descriptor instead.
+func (*CapabilityServiceGetUsageResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CapabilityServiceGetUsageResponse) GetCapabilityId() string {
+	if x != nil {
+		return x.CapabilityId
+	}
+	return ""
+}
+
+func (x *CapabilityServiceGetUsageResponse) GetRequestCount() int64 {
+	if x != nil {
+		return x.RequestCount
+	}
+	return 0
+}
+
+func (x *CapabilityServiceGetUsageResponse) GetSpentUsd() float64 {
+	if x != nil {
+		return x.SpentUsd
+	}
+	return 0
+}
+
+func (x *CapabilityServiceGetUsageResponse) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
@@ -953,17 +1065,26 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"page_token\x18\a \x01(\tR\tpageToken\"\x85\x01\n" +
 	"\x1dCapabilityServiceListResponse\x12<\n" +
 	"\fcapabilities\x18\x01 \x03(\v2\x18.paladin.admin.v1.CapabilityR\fcapabilities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*~\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
+	" CapabilityServiceGetUsageRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xc5\x01\n" +
+	"!CapabilityServiceGetUsageResponse\x12#\n" +
+	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12#\n" +
+	"\rrequest_count\x18\x02 \x01(\x03R\frequestCount\x12\x1b\n" +
+	"\tspent_usd\x18\x03 \x01(\x01R\bspentUsd\x129\n" +
+	"\n" +
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*~\n" +
 	"\rPrincipalKind\x12\x1e\n" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_AGENT\x10\x02\x12\x1a\n" +
-	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\xa9\x03\n" +
+	"\x16PRINCIPAL_KIND_SERVICE\x10\x032\x96\x04\n" +
 	"\x11CapabilityService\x12b\n" +
 	"\x05Issue\x12+.paladin.admin.v1.CapabilityServiceIssueRequest\x1a,.paladin.admin.v1.CapabilityServiceIssueResponse\x12h\n" +
 	"\bDelegate\x12..paladin.admin.v1.CapabilityServiceDelegateRequest\x1a,.paladin.admin.v1.CapabilityServiceIssueResponse\x12e\n" +
 	"\x06Revoke\x12,.paladin.admin.v1.CapabilityServiceRevokeRequest\x1a-.paladin.admin.v1.CapabilityServiceRevokeResponse\x12_\n" +
-	"\x04List\x12*.paladin.admin.v1.CapabilityServiceListRequest\x1a+.paladin.admin.v1.CapabilityServiceListResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x04List\x12*.paladin.admin.v1.CapabilityServiceListRequest\x1a+.paladin.admin.v1.CapabilityServiceListResponse\x12k\n" +
+	"\bGetUsage\x12..paladin.admin.v1.CapabilityServiceGetUsageRequest\x1a/.paladin.admin.v1.CapabilityServiceGetUsageResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_capability_service_proto_rawDescOnce sync.Once
@@ -978,50 +1099,55 @@ func file_paladin_admin_v1_capability_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_capability_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_admin_v1_capability_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_paladin_admin_v1_capability_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_paladin_admin_v1_capability_service_proto_goTypes = []any{
-	(PrincipalKind)(0),                       // 0: paladin.admin.v1.PrincipalKind
-	(*CapabilityPrincipal)(nil),              // 1: paladin.admin.v1.CapabilityPrincipal
-	(*CapabilityCaveats)(nil),                // 2: paladin.admin.v1.CapabilityCaveats
-	(*Capability)(nil),                       // 3: paladin.admin.v1.Capability
-	(*CapabilityServiceIssueRequest)(nil),    // 4: paladin.admin.v1.CapabilityServiceIssueRequest
-	(*CapabilityServiceIssueResponse)(nil),   // 5: paladin.admin.v1.CapabilityServiceIssueResponse
-	(*CapabilityServiceDelegateRequest)(nil), // 6: paladin.admin.v1.CapabilityServiceDelegateRequest
-	(*CapabilityServiceRevokeRequest)(nil),   // 7: paladin.admin.v1.CapabilityServiceRevokeRequest
-	(*CapabilityServiceRevokeResponse)(nil),  // 8: paladin.admin.v1.CapabilityServiceRevokeResponse
-	(*CapabilityServiceListRequest)(nil),     // 9: paladin.admin.v1.CapabilityServiceListRequest
-	(*CapabilityServiceListResponse)(nil),    // 10: paladin.admin.v1.CapabilityServiceListResponse
-	(*timestamppb.Timestamp)(nil),            // 11: google.protobuf.Timestamp
+	(PrincipalKind)(0),                        // 0: paladin.admin.v1.PrincipalKind
+	(*CapabilityPrincipal)(nil),               // 1: paladin.admin.v1.CapabilityPrincipal
+	(*CapabilityCaveats)(nil),                 // 2: paladin.admin.v1.CapabilityCaveats
+	(*Capability)(nil),                        // 3: paladin.admin.v1.Capability
+	(*CapabilityServiceIssueRequest)(nil),     // 4: paladin.admin.v1.CapabilityServiceIssueRequest
+	(*CapabilityServiceIssueResponse)(nil),    // 5: paladin.admin.v1.CapabilityServiceIssueResponse
+	(*CapabilityServiceDelegateRequest)(nil),  // 6: paladin.admin.v1.CapabilityServiceDelegateRequest
+	(*CapabilityServiceRevokeRequest)(nil),    // 7: paladin.admin.v1.CapabilityServiceRevokeRequest
+	(*CapabilityServiceRevokeResponse)(nil),   // 8: paladin.admin.v1.CapabilityServiceRevokeResponse
+	(*CapabilityServiceListRequest)(nil),      // 9: paladin.admin.v1.CapabilityServiceListRequest
+	(*CapabilityServiceListResponse)(nil),     // 10: paladin.admin.v1.CapabilityServiceListResponse
+	(*CapabilityServiceGetUsageRequest)(nil),  // 11: paladin.admin.v1.CapabilityServiceGetUsageRequest
+	(*CapabilityServiceGetUsageResponse)(nil), // 12: paladin.admin.v1.CapabilityServiceGetUsageResponse
+	(*timestamppb.Timestamp)(nil),             // 13: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_capability_service_proto_depIdxs = []int32{
 	0,  // 0: paladin.admin.v1.CapabilityPrincipal.kind:type_name -> paladin.admin.v1.PrincipalKind
 	1,  // 1: paladin.admin.v1.Capability.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	2,  // 2: paladin.admin.v1.Capability.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	11, // 3: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
-	11, // 4: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
-	11, // 5: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
+	13, // 3: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
+	13, // 4: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
+	13, // 5: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 6: paladin.admin.v1.CapabilityServiceIssueRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	2,  // 7: paladin.admin.v1.CapabilityServiceIssueRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	11, // 8: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
+	13, // 8: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
 	3,  // 9: paladin.admin.v1.CapabilityServiceIssueResponse.capability:type_name -> paladin.admin.v1.Capability
 	1,  // 10: paladin.admin.v1.CapabilityServiceDelegateRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	2,  // 11: paladin.admin.v1.CapabilityServiceDelegateRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	11, // 12: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
+	13, // 12: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
 	0,  // 13: paladin.admin.v1.CapabilityServiceListRequest.principal_kind:type_name -> paladin.admin.v1.PrincipalKind
 	3,  // 14: paladin.admin.v1.CapabilityServiceListResponse.capabilities:type_name -> paladin.admin.v1.Capability
-	4,  // 15: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
-	6,  // 16: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
-	7,  // 17: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
-	9,  // 18: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
-	5,  // 19: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	5,  // 20: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	8,  // 21: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
-	10, // 22: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
-	19, // [19:23] is the sub-list for method output_type
-	15, // [15:19] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	13, // 15: paladin.admin.v1.CapabilityServiceGetUsageResponse.updated_at:type_name -> google.protobuf.Timestamp
+	4,  // 16: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
+	6,  // 17: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
+	7,  // 18: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
+	9,  // 19: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
+	11, // 20: paladin.admin.v1.CapabilityService.GetUsage:input_type -> paladin.admin.v1.CapabilityServiceGetUsageRequest
+	5,  // 21: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	5,  // 22: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	8,  // 23: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
+	10, // 24: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
+	12, // 25: paladin.admin.v1.CapabilityService.GetUsage:output_type -> paladin.admin.v1.CapabilityServiceGetUsageResponse
+	21, // [21:26] is the sub-list for method output_type
+	16, // [16:21] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_capability_service_proto_init() }
@@ -1035,7 +1161,7 @@ func file_paladin_admin_v1_capability_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_capability_service_proto_rawDesc), len(file_paladin_admin_v1_capability_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

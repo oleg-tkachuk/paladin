@@ -44,6 +44,9 @@ const (
 	CapabilityServiceRevokeProcedure = "/paladin.admin.v1.CapabilityService/Revoke"
 	// CapabilityServiceListProcedure is the fully-qualified name of the CapabilityService's List RPC.
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
+	// CapabilityServiceGetUsageProcedure is the fully-qualified name of the CapabilityService's
+	// GetUsage RPC.
+	CapabilityServiceGetUsageProcedure = "/paladin.admin.v1.CapabilityService/GetUsage"
 )
 
 // CapabilityServiceClient is a client for the paladin.admin.v1.CapabilityService service.
@@ -62,6 +65,11 @@ type CapabilityServiceClient interface {
 	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
+	// GetUsage returns the runtime counters for a capability:
+	// request_count (vs Caveats.max_requests) and spent_usd
+	// (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+	// capability has never been used (no requests, no charges).
+	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
 }
 
 // NewCapabilityServiceClient constructs a client for the paladin.admin.v1.CapabilityService service. By
@@ -99,6 +107,12 @@ func NewCapabilityServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(capabilityServiceMethods.ByName("List")),
 			connect.WithClientOptions(opts...),
 		),
+		getUsage: connect.NewClient[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse](
+			httpClient,
+			baseURL+CapabilityServiceGetUsageProcedure,
+			connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -108,6 +122,7 @@ type capabilityServiceClient struct {
 	delegate *connect.Client[v1.CapabilityServiceDelegateRequest, v1.CapabilityServiceIssueResponse]
 	revoke   *connect.Client[v1.CapabilityServiceRevokeRequest, v1.CapabilityServiceRevokeResponse]
 	list     *connect.Client[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse]
+	getUsage *connect.Client[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse]
 }
 
 // Issue calls paladin.admin.v1.CapabilityService.Issue.
@@ -130,6 +145,11 @@ func (c *capabilityServiceClient) List(ctx context.Context, req *connect.Request
 	return c.list.CallUnary(ctx, req)
 }
 
+// GetUsage calls paladin.admin.v1.CapabilityService.GetUsage.
+func (c *capabilityServiceClient) GetUsage(ctx context.Context, req *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error) {
+	return c.getUsage.CallUnary(ctx, req)
+}
+
 // CapabilityServiceHandler is an implementation of the paladin.admin.v1.CapabilityService service.
 type CapabilityServiceHandler interface {
 	// Issue mints a top-level capability for a principal. Caller is
@@ -146,6 +166,11 @@ type CapabilityServiceHandler interface {
 	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
+	// GetUsage returns the runtime counters for a capability:
+	// request_count (vs Caveats.max_requests) and spent_usd
+	// (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+	// capability has never been used (no requests, no charges).
+	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
 }
 
 // NewCapabilityServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -179,6 +204,12 @@ func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.H
 		connect.WithSchema(capabilityServiceMethods.ByName("List")),
 		connect.WithHandlerOptions(opts...),
 	)
+	capabilityServiceGetUsageHandler := connect.NewUnaryHandler(
+		CapabilityServiceGetUsageProcedure,
+		svc.GetUsage,
+		connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.CapabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CapabilityServiceIssueProcedure:
@@ -189,6 +220,8 @@ func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.H
 			capabilityServiceRevokeHandler.ServeHTTP(w, r)
 		case CapabilityServiceListProcedure:
 			capabilityServiceListHandler.ServeHTTP(w, r)
+		case CapabilityServiceGetUsageProcedure:
+			capabilityServiceGetUsageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -212,4 +245,8 @@ func (UnimplementedCapabilityServiceHandler) Revoke(context.Context, *connect.Re
 
 func (UnimplementedCapabilityServiceHandler) List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.List is not implemented"))
+}
+
+func (UnimplementedCapabilityServiceHandler) GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.GetUsage is not implemented"))
 }
