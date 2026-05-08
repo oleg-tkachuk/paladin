@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// BackendService manages physical storage backends. Exclusive to platform
+// admins; bucket admins use ListBackends (read-only) to pick a target.
+service BackendService {
+  rpc CreateBackend(CreateBackendRequest) returns (StorageBackend);
+  rpc GetBackend(GetBackendRequest) returns (StorageBackend);
+  rpc UpdateBackend(UpdateBackendRequest) returns (StorageBackend);
+  rpc DeleteBackend(DeleteBackendRequest) returns (DeleteBackendResponse);
+  rpc ListBackends(ListBackendsRequest) returns (ListBackendsResponse);
+
+  // RotateCredentials swaps the credentials_secret_ref. The previous secret
+  // remains valid for `grace_period` so in-flight presigns don't break.
+  rpc RotateCredentials(RotateCredentialsRequest) returns (StorageBackend);
+
+  // TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
+  rpc TestBackend(TestBackendRequest) returns (TestBackendResponse);
+}
+
+message CreateBackendRequest {
+  string backend_id = 1 [(buf.validate.field).string.min_len = 1];
+  StorageBackend backend = 2 [(buf.validate.field).required = true];
+}
+
+message GetBackendRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateBackendRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  StorageBackend backend = 4;
+}
+
+message DeleteBackendRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  // Refuse delete when buckets still reference the backend.
+  bool force = 3;
+}
+
+message DeleteBackendResponse {}
+
+message ListBackendsRequest {
+  paladin.common.v1.PageRequest page = 1;
+  string filter = 2; // CEL over StorageBackend
+}
+
+message ListBackendsResponse {
+  repeated StorageBackend backends = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message RotateCredentialsRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string new_secret_ref = 2 [(buf.validate.field).string.min_len = 1];
+  // After this period the old secret is removed from cache.
+  string grace_period = 3; // duration as RFC3339-style or "30m"
+}
+
+message TestBackendRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message TestBackendResponse {
+  bool reachable = 1;
+  string error_message = 2;
+  int32 latency_ms = 3;
+}

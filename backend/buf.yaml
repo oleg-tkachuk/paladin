@@ -1,0 +1,19 @@
+version: v2
+modules:
+  - path: proto
+    name: buf.build/oleg-tkachuk/paladin
+deps:
+  - buf.build/bufbuild/protovalidate
+  - buf.build/googleapis/googleapis
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_DIRECTORY_MATCH
+    # v1 follows AIP-131/133: Get/Update/Delete RPCs return the resource
+    # directly (e.g. GetObject returns Object, not GetObjectResponse).
+    # This is the pattern used by GCP's own published APIs. We accept the
+    # tradeoff: no wrapper types means no dedicated spot to add sibling
+    # fields on a response — add them to the resource message if needed.
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE

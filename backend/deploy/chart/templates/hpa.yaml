@@ -1,0 +1,45 @@
+{{- /*
+  Per-role HPA. Autoscaling can be enabled independently — typically only
+  the api role scales horizontally, while admin / worker / mcp stay at
+  fixed replicas. A role autoscales when its own `autoscaling.enabled` is
+  true (defaults block doesn't auto-enable everything; explicit per-role).
+*/}}
+{{- $defaults := .Values.defaults -}}
+{{- range $role, $spec := .Values.deployments }}
+{{- $auto := default $defaults.autoscaling $spec.autoscaling }}
+{{- if and $spec.enabled $auto $auto.enabled }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $fullname }}
+  minReplicas: {{ $auto.minReplicas }}
+  maxReplicas: {{ $auto.maxReplicas }}
+  metrics:
+    {{- if $auto.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $auto.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $auto.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $auto.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{- end }}

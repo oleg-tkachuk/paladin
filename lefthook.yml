@@ -1,20 +1,35 @@
-# lefthook.yml
-# Standardized Go Git hooks runner configuration.
+# Repo-root lefthook config. Both backend/ and frontend/ hooks live here
+# so a single `lefthook install` from the repo root wires them up.
+#
+# Per-command `root:` is the lefthook idiom for monorepos: lefthook
+# chdir-s into that directory before running the command, and the
+# `glob:` filter is matched relative to the command's root. So a
+# pure-frontend change never triggers a Go hook and vice versa.
+#
+# Cross-cutting hygiene (trailing whitespace, JSON validity, secret
+# scanning) lives in .pre-commit-config.yaml, not here, so the two
+# tools stay focused: pre-commit = format / hygiene, lefthook = build
+# / lint / type-check / commit-msg.
 
-skip_output:
-  meta: true
-  summary: true
+output:
+  # Suppress lefthook's own meta + summary banners; keep command
+  # output (so failures still surface their stderr in full).
+  - execution
+  - execution_info
+  - execution_out
+  - failure
 
 pre-commit:
-  skip_save: true
   parallel: true
   commands:
-    # 1) Block real compiled binaries
+    # ─── Repo-wide ──────────────────────────────────────────────────
+
+    # Block accidental commits of compiled binaries (ELF / Mach-O).
+    # Cheap byte-test, runs on every staged file regardless of half.
     forbid-binaries:
       tags: [security, hygiene]
       run: |
         set -euo pipefail
-        # Only check staged files
         for f in {staged_files}; do
           [ -f "$f" ] || continue
           if file -b "$f" | grep -qE '(^| )ELF( |$)|(^| )Mach-O( |$)'; then
@@ -23,31 +38,38 @@ pre-commit:
           fi
         done
 
-    # 2) Prevent committing secrets
+    # Secret scanning runs once at repo root so .gitleaks.toml lives
+    # alongside it (allowlist paths are repo-relative).
     gitleaks:
       tags: [security]
-      run: gitleaks protect --staged --redact --verbose=true
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks protect --staged --redact --verbose=true
+        fi
 
-    # 3) SQLC generation (if changes in sqlc configs or sql files)
-    sqlc:
+    # ─── Backend (Go) ───────────────────────────────────────────────
+
+    backend-sqlc:
+      root: backend/
       tags: [go, sqlc]
-      glob: "{sqlc.yaml,sqlc.yml,sqlc.json,**/query/*.sql,**/schema/*.sql}"
+      glob: "{sqlc.yaml,sqlc.yml,sqlc.json,internal/store/postgres/queries/*.sql}"
       run: |
         set -euo pipefail
         command -v sqlc >/dev/null 2>&1 || exit 0
         sqlc generate
         if ! git diff --quiet; then
-          echo "ERROR: sqlc generated files are out of date. Run 'sqlc generate' and commit."
+          echo "ERROR: sqlc generated files are out of date. Run 'task gen:all' and commit."
           exit 1
         fi
 
-    # 4) Formatting and Imports
-    gofmt:
+    backend-gofmt:
+      root: backend/
       tags: [go, fmt]
       glob: "*.go"
       run: gofmt -w {staged_files} && git add {staged_files}
 
-    goimports:
+    backend-goimports:
+      root: backend/
       tags: [go, fmt]
       glob: "*.go"
       run: |
@@ -55,26 +77,58 @@ pre-commit:
           goimports -w {staged_files} && git add {staged_files}
         fi
 
-    # 5) Static Analysis
-    govet:
+    backend-govet:
+      root: backend/
       tags: [go, lint]
+      glob: "*.go"
       run: go vet ./...
 
-    # 6) Buf Lint (if proto changes)
-    buf-lint:
+    backend-buf-lint:
+      root: backend/
       tags: [proto, lint]
-      glob: "*.proto"
+      glob: "proto/**/*.proto"
       run: |
-        if [ -f "buf.yaml" ] && command -v buf >/dev/null 2>&1; then
+        if command -v buf >/dev/null 2>&1; then
           buf lint
         fi
+
+    # ─── Frontend (Next.js / TS) ────────────────────────────────────
+
+    frontend-eslint:
+      root: frontend/
+      tags: [ui, lint]
+      glob: "*.{js,jsx,ts,tsx}"
+      run: npx eslint {staged_files}
+
+    frontend-prettier:
+      root: frontend/
+      tags: [ui, fmt]
+      glob: "*.{js,jsx,ts,tsx,css,scss,json,md}"
+      run: npx prettier --write {staged_files} && git add {staged_files}
 
 pre-push:
   parallel: true
   commands:
-    gotest:
+    backend-test:
+      root: backend/
       tags: [go, test]
       run: go test ./... -count=1
+
+    # Gate against the multi-doc YAML separator bug — `{{- ... -}}`
+    # whitespace strip can collapse the newline before `---`, gluing
+    # the separator onto the previous line and silently dropping
+    # every resource after the first one. Runs only when chart files
+    # change so non-chart pushes don't pay the helm-template cost.
+    backend-chart-verify:
+      root: backend/
+      tags: [chart, lint]
+      glob: "deploy/chart/**/*"
+      run: task chart:verify
+
+    frontend-tsc:
+      root: frontend/
+      tags: [ui, typecheck]
+      run: npx tsc --noEmit
 
 commit-msg:
   commands:
@@ -86,10 +140,10 @@ commit-msg:
         [ -f "$file" ] || exit 0
 
         first_line="$(head -n1 "$file" | tr -d '\r')"
-        # Allow merge/revert
+        # Allow merge / revert auto-generated subjects.
         echo "$first_line" | grep -Eq '^(Merge|Revert)\b' && exit 0
-        
-        # CC Regex
+
+        # Conventional Commits: <type>(<scope>)!: <subject>
         cc_re='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security)(\([A-Za-z0-9._/-]+\))?(!)?: .+'
         if ! echo "$first_line" | grep -Eq "$cc_re"; then
           echo "ERROR: Invalid commit message format (Conventional Commits required)."

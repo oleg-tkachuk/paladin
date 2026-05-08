@@ -1,0 +1,639 @@
+// Package cedar wraps the Cedar policy engine for PALADIN authorization decisions.
+//
+// Decisions are synchronous, in-process, and sub-millisecond. Policies are
+// loaded from Postgres (see Store) and compiled on change. Hot-path callers
+// get a pre-compiled *cedar.PolicySet via Engine.compiledFor.
+package cedar
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	cedar "github.com/cedar-policy/cedar-go"
+	cedartypes "github.com/cedar-policy/cedar-go/types"
+	"github.com/google/uuid"
+)
+
+// Decision is the outcome of an authorization check.
+type Decision uint8
+
+const (
+	DecisionDeny Decision = iota
+	DecisionAllow
+)
+
+// Action identifiers mirror the Cedar schema (policies/schema.cedarschema).
+const (
+	// Object-scoped actions (data plane).
+	ActionPutObject     = "PutObject"
+	ActionPresignPut    = "PresignPut"
+	ActionGetObject     = "GetObject"
+	ActionPresignGet    = "PresignGet"
+	ActionHeadObject    = "HeadObject"
+	ActionDeleteObject  = "DeleteObject"
+	ActionRestoreObject = "RestoreObject"
+	ActionUpdateObject  = "UpdateObject"
+	ActionCopyObject    = "CopyObject"
+
+	// ObjectKey-scoped actions (admin plane).
+	ActionManageObjectKey       = "ManageObjectKey"
+	ActionBindObjectKeyToBucket = "BindObjectKeyToBucket"
+
+	// Backend-scoped actions.
+	ActionManageBackend = "ManageBackend"
+	ActionReadBackend   = "ReadBackend"
+
+	// Bucket-scoped actions.
+	ActionManageBucket = "ManageBucket"
+	ActionReadBucket   = "ReadBucket"
+
+	// Granular bucket sub-actions. Splitting ManageBucket lets compliance
+	// roles get fine-grained authority — e.g. ConfigureLock without
+	// SetReplication (data-residency risk) — without granting full bucket
+	// ownership.
+	ActionConfigureBucketPolicy = "ConfigureBucketPolicy"
+	ActionConfigureLifecycle    = "ConfigureLifecycle"
+	ActionConfigureLock         = "ConfigureLock"
+	ActionConfigureVersioning   = "ConfigureVersioning"
+	ActionConfigureReplication  = "ConfigureReplication"
+
+	// Sensitive backend ops. Separate action so a "secrets.rotator" role
+	// can rotate credentials without inheriting full ManageBackend rights.
+	ActionRotateBackendCredentials = "RotateBackendCredentials"
+
+	// Policy engine introspection. Gates ValidatePolicy / SimulateAuthz /
+	// GetEffectivePolicy — these leak schema/policy text and shouldn't be
+	// open to any authenticated principal.
+	ActionInspectPolicy = "InspectPolicy"
+
+	// Tenant-scoped actions.
+	ActionManageTenant = "ManageTenant"
+	ActionReadTenant   = "ReadTenant"
+
+	// IAM User-scoped actions (manage other users, not the principal).
+	ActionManageUser    = "ManageUser"
+	ActionReadUser      = "ReadUser"
+	ActionResetPassword = "ResetPassword"
+	ActionGrantScopes   = "GrantScopes"
+
+	// User-settings actions. Resource is the User entity (the user whose
+	// settings are read/written). The principal-as-target case (a user
+	// editing their own settings) is the common path — handlers short-circuit
+	// to allow without a Cedar round-trip when subject matches. Cedar still
+	// gates the cross-user case (admin viewing a teammate's timezone).
+	ActionReadUserSettings   = "ReadUserSettings"
+	ActionManageUserSettings = "ManageUserSettings"
+
+	// IAM ApiKey-scoped actions.
+	ActionManageApiKey    = "ManageApiKey"
+	ActionReadApiKey      = "ReadApiKey"
+	ActionRotateApiKey    = "RotateApiKey"
+	ActionMintScopedToken = "MintScopedToken"
+
+	// Quota-scoped actions. Resource is the Tenant or Bucket entity (no
+	// dedicated Quota entity — quota config attaches 1:1 to the parent).
+	ActionManageQuota     = "ManageQuota"
+	ActionReadQuota       = "ReadQuota"
+	ActionResetQuotaUsage = "ResetQuotaUsage"
+
+	// AuditLog-scoped actions. Resource is the Tenant entity (audit lines
+	// are tenant-scoped via actor_tenant_id).
+	ActionReadAuditLog   = "ReadAuditLog"
+	ActionExportAuditLog = "ExportAuditLog"
+
+	// EventSubscription-scoped actions. Resource is the Tenant entity.
+	ActionManageSubscription = "ManageSubscription"
+	ActionReadSubscription   = "ReadSubscription"
+	ActionTestSubscription   = "TestSubscription"
+
+	// Operation-scoped actions (long-running async ops: BatchDelete /
+	// BatchCopy / etc.). Resource is the Tenant entity carrying the
+	// op's tenant_id.
+	ActionReadOperation   = "ReadOperation"
+	ActionCancelOperation = "CancelOperation"
+)
+
+// Entity type names — must match the Cedar schema exactly.
+const (
+	entityTypeTenant         = "Tenant"
+	entityTypeObjectKey      = "ObjectKey"
+	entityTypeBucket         = "Bucket"         // physical S3 bucket
+	entityTypeStorageBackend = "StorageBackend" // physical backend
+	entityTypeObject         = "Object"
+	entityTypeUser           = "User"
+	entityTypeApiKey         = "ApiKey"
+	entityTypeAction         = "Action"
+)
+
+// Principal represents the authenticated caller, matching Cedar entity `User`.
+//
+// TenantSlug is optional. When set, it becomes the canonical Cedar `Tenant::"…"`
+// UID key (so policies read `Tenant::"acme"` rather than the UUID). The UUID
+// stays as a `tenant_id` attribute for policies that key on it. When unset,
+// the UID falls back to the UUID string for backwards compatibility.
+type Principal struct {
+	Subject    string
+	TenantID   uuid.UUID
+	TenantSlug string
+	Roles      []string
+	// Scopes are the JWT-carried scope strings (already in wire form,
+	// e.g. "objects:read:tenant_id/object_key/key"). Exposed to Cedar as
+	// `principal.scopes` so policies can match scope prefixes for
+	// fine-grained delegation. Empty when the principal carries roles only.
+	Scopes []string
+}
+
+// Resource is the entity under authorization. Different fields are
+// populated depending on the action target:
+//
+//   - Object:        TenantID + ObjectKey + Key + ObjectID + bucket fields
+//   - ObjectKey:     TenantID + ObjectKey  (+ bucket fields if known)
+//   - Bucket:        BackendID + BucketName + (optional OwnerTenantID)
+//   - StorageBackend: BackendID
+//   - Tenant:        TenantID
+//
+// The engine uses the populated fields to emit only the relevant Cedar
+// entities. Unknown fields stay zero-valued.
+type Resource struct {
+	// Tenant scope.
+	TenantID   uuid.UUID
+	TenantSlug string // optional; preferred for Cedar Tenant UID when set
+
+	// ObjectKey + Object.
+	ObjectKey   string
+	Key         string
+	ObjectID    uuid.UUID
+	State       string
+	SizeBytes   int64
+	ContentType string
+	Tags        map[string]string
+
+	// Physical bucket + backend (admin plane).
+	BackendID     string
+	BucketName    string
+	OwnerTenantID uuid.UUID // empty = shared bucket
+
+	// IAM target identity (the user/api-key BEING managed — distinct
+	// from the principal, who is always a User keyed by Subject).
+	TargetUserID   uuid.UUID
+	TargetApiKeyID uuid.UUID
+	TargetSubject  string // user's login subject — exposed to Cedar as resource.subject
+}
+
+// RequestContext carries per-request attributes matched against Cedar context.
+type RequestContext struct {
+	SizeBytes   int64
+	ContentType string
+	Now         time.Time
+	IP          string
+}
+
+// Engine is a thread-safe Cedar authorizer with a compiled-policy cache.
+//
+// The cache is keyed by (tenant, objectKey). Empty objectKey means "tenant-level
+// inherited policy only". Cache entries are invalidated by Store.Watch
+// events.
+type Engine struct {
+	store Store
+
+	// compiled is a sync.Map[cacheKey] *compiledPolicy{hash, policy, expiresAt}
+	compiled sync.Map
+
+	// ttl bounds how long a cached compile is served before re-fetch.
+	// Set short (~30s) so a missed invalidation event self-corrects.
+	ttl time.Duration
+
+	m metrics
+}
+
+type cacheKey struct {
+	tenant    uuid.UUID
+	objectKey string
+}
+
+type compiledPolicy struct {
+	hash      []byte
+	policySet *cedar.PolicySet
+	expiresAt time.Time
+}
+
+// NewEngine constructs an Engine. Call Start to kick off the invalidation loop.
+func NewEngine(store Store, ttl time.Duration) *Engine {
+	if ttl == 0 {
+		ttl = 30 * time.Second
+	}
+	return &Engine{store: store, ttl: ttl}
+}
+
+// Start begins watching the Store for policy changes. Cancel ctx to stop.
+func (e *Engine) Start(ctx context.Context) error {
+	events, err := e.store.Watch(ctx)
+	if err != nil {
+		return fmt.Errorf("cedar: watch store: %w", err)
+	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ev, ok := <-events:
+				if !ok {
+					return
+				}
+				e.compiled.Delete(cacheKey{tenant: ev.TenantID, objectKey: ev.ObjectKey})
+			}
+		}
+	}()
+	return nil
+}
+
+// IsAuthorized evaluates the applicable policies for (principal, action, resource).
+//
+// Authorizer is the narrow interface handlers depend on. *Engine is the
+// production implementation; tests inject a permissive or recording fake.
+type Authorizer interface {
+	IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error)
+}
+
+// Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
+// Errors indicate engine faults (policy fetch/compile), not denials.
+func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
+	set, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
+	if err != nil {
+		e.m.compileErrs.Add(1)
+		return DecisionDeny, err
+	}
+
+	entities := buildEntities(p, r)
+	req := cedartypes.Request{
+		Principal: userUID(p),
+		Action:    actionUID(action),
+		Resource:  resourceUID(r),
+		Context:   buildContext(rc),
+	}
+
+	decision, _ := cedar.Authorize(set, entities, req)
+	if bool(decision) {
+		e.m.authzAllowed.Add(1)
+		return DecisionAllow, nil
+	}
+	e.m.authzDenied.Add(1)
+	return DecisionDeny, nil
+}
+
+func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, error) {
+	key := cacheKey{tenant: tenantID, objectKey: objectKey}
+	if v, ok := e.compiled.Load(key); ok {
+		cp := v.(*compiledPolicy)
+		if time.Now().Before(cp.expiresAt) {
+			e.m.cacheHits.Add(1)
+			return cp.policySet, nil
+		}
+	}
+	e.m.cacheMisses.Add(1)
+
+	text, hash, err := e.store.Fetch(ctx, tenantID, objectKey)
+	if err != nil {
+		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
+	}
+	set, err := compile(text)
+	if err != nil {
+		return nil, fmt.Errorf("cedar: compile policy: %w", err)
+	}
+	cp := &compiledPolicy{
+		hash:      hash,
+		policySet: set,
+		expiresAt: time.Now().Add(e.ttl),
+	}
+	e.compiled.Store(key, cp)
+	return set, nil
+}
+
+// builtinPolicy is concatenated with every fetched tenant/objectKey
+// policy before compile. It carries the platform-admin escape hatch:
+// any principal whose `roles` set contains "platform.admin" gets ALLOW
+// on every action and resource. Without this, cross-tenant RPCs whose
+// resource has TenantID=uuid.Nil (e.g. TenantService.ListTenants) load
+// an empty policy from the store and Cedar's deny-by-default kicks in,
+// surfacing as `[permission_denied] denied by policy` even for the
+// bootstrap admin who's supposed to be able to do everything.
+//
+// Tenant-scoped policies in the store can still `forbid` specific
+// actions; Cedar's first-forbid wins so an explicit ban beats this.
+const builtinPolicy = `// Built-in: platform.admin gets unconditional ALLOW. Edit at your own
+// risk — removing this strands a fresh cluster's bootstrap admin.
+permit (
+  principal,
+  action,
+  resource
+)
+when {
+  principal has roles && principal.roles.contains("platform.admin")
+};
+`
+
+// compile parses the policy text into a cedar.PolicySet, prepending the
+// built-in platform-admin permit. Empty input still produces a non-empty
+// set because of the builtin, which is the whole point.
+func compile(text string) (*cedar.PolicySet, error) {
+	combined := builtinPolicy
+	if text != "" {
+		combined += "\n// --- tenant policy follows ---\n" + text
+	}
+	return cedar.NewPolicySetFromBytes("", []byte(combined))
+}
+
+// Validate parses the policy text and returns the parser error (or nil).
+// Exposed for pre-save UI validation; does not persist or compile into cache.
+func Validate(text string) error {
+	_, err := compile(text)
+	return err
+}
+
+func userUID(p *Principal) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeUser, cedartypes.String(p.Subject))
+}
+
+// tenantUID encodes the Tenant entity UID. Slug wins when set so that Cedar
+// policies (and the resource_name format `tenants/{slug}`) read with
+// human-friendly identifiers; UUID is the fallback for legacy callers and
+// for tenants that have not yet been migrated to a slug.
+func tenantUID(tenantID uuid.UUID, slug string) cedartypes.EntityUID {
+	if slug != "" {
+		return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(slug))
+	}
+	return cedartypes.NewEntityUID(entityTypeTenant, cedartypes.String(tenantID.String()))
+}
+
+func objectKeyUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
+	// Namespace by tenant to keep objectKey IDs unique across tenants.
+	return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(tenantID.String()+"/"+objectKey))
+}
+
+func physicalBucketUID(backendID, bucketName string) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(backendID+"/"+bucketName))
+}
+
+func storageBackendUID(backendID string) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeStorageBackend, cedartypes.String(backendID))
+}
+
+// resourceUID picks the most-specific entity type populated on the resource:
+//   - Object         when Key/ObjectID set
+//   - ObjectKey      when ObjectKey set (without Object)
+//   - Bucket         when BackendID+BucketName set (without ObjectKey)
+//   - StorageBackend when only BackendID set
+//   - ApiKey         when TargetApiKeyID set
+//   - User           when TargetUserID or TargetSubject set
+//   - Tenant         when only TenantID set (admin tenant ops)
+func resourceUID(r *Resource) cedartypes.EntityUID {
+	if r.Key != "" || r.ObjectID != uuid.Nil {
+		id := r.ObjectID.String()
+		if r.ObjectID == uuid.Nil {
+			id = r.ObjectKey + "/" + r.Key
+		}
+		return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
+	}
+	if r.ObjectKey != "" {
+		return objectKeyUID(r.TenantID, r.ObjectKey)
+	}
+	if r.BackendID != "" && r.BucketName != "" {
+		return physicalBucketUID(r.BackendID, r.BucketName)
+	}
+	if r.BackendID != "" {
+		return storageBackendUID(r.BackendID)
+	}
+	if r.TargetApiKeyID != uuid.Nil {
+		return targetApiKeyUID(r.TenantID, r.TargetApiKeyID)
+	}
+	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
+		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
+	}
+	return tenantUID(r.TenantID, r.TenantSlug)
+}
+
+// targetUserUID encodes a user-as-resource UID. The principal-User entity
+// is keyed by Subject (set in userUID); this resource-User entity is keyed
+// by tenant + UUID so policies can write `principal != resource` cleanly.
+func targetUserUID(tenantID, userID uuid.UUID, subject string) cedartypes.EntityUID {
+	id := tenantID.String() + "/"
+	if userID != uuid.Nil {
+		id += userID.String()
+	} else {
+		id += subject
+	}
+	return cedartypes.NewEntityUID(entityTypeUser, cedartypes.String(id))
+}
+
+func targetApiKeyUID(tenantID, apiKeyID uuid.UUID) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeApiKey,
+		cedartypes.String(tenantID.String()+"/"+apiKeyID.String()))
+}
+
+func actionUID(name string) cedartypes.EntityUID {
+	return cedartypes.NewEntityUID(entityTypeAction, cedartypes.String(name))
+}
+
+// buildEntities assembles the transient entity graph passed to Authorize.
+// PALADIN treats all attribute data as request-scoped — nothing is stored as
+// long-lived entities in cedar-go.
+//
+// Entities are emitted only when the corresponding resource fields are
+// populated, so admin-plane requests against a StorageBackend don't bring
+// along an unrelated Tenant entity that the policy never references.
+func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
+	uUID := userUID(p)
+	rolesSet := make([]cedartypes.Value, 0, len(p.Roles))
+	for _, role := range p.Roles {
+		rolesSet = append(rolesSet, cedartypes.String(role))
+	}
+	scopesSet := make([]cedartypes.Value, 0, len(p.Scopes))
+	for _, sc := range p.Scopes {
+		scopesSet = append(scopesSet, cedartypes.String(sc))
+	}
+
+	m := cedartypes.EntityMap{}
+
+	// Tenant — emitted whenever a tenant is in scope (either the principal's
+	// or the resource's). Most data-plane calls hit this branch.
+	var tUID cedartypes.EntityUID
+	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
+		// Prefer slug for the Tenant UID when known so policies key on the
+		// human-readable handle. Both tenant_id (uuid) and slug are exposed
+		// as attributes so policies can match either form.
+		tUID = tenantUID(r.TenantID, r.TenantSlug)
+		m[tUID] = cedartypes.Entity{
+			UID: tUID,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"tenant_id":    cedartypes.String(r.TenantID.String()),
+				"slug":         cedartypes.String(r.TenantSlug),
+				"display_name": cedartypes.String(""),
+				"labels":       cedartypes.NewSet(),
+			}),
+		}
+	}
+
+	// User — anchors the principal under their tenant when known.
+	userParents := cedartypes.EntityUIDSet{}
+	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
+		userParents = cedartypes.NewEntityUIDSet(tUID)
+	}
+	m[uUID] = cedartypes.Entity{
+		UID:     uUID,
+		Parents: userParents,
+		Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+			"subject":     cedartypes.String(p.Subject),
+			"tenant_id":   cedartypes.String(p.TenantID.String()),
+			"tenant_slug": cedartypes.String(p.TenantSlug),
+			"roles":       cedartypes.NewSet(rolesSet...),
+			"scopes":      cedartypes.NewSet(scopesSet...),
+		}),
+	}
+
+	// StorageBackend — admin-plane only.
+	var sbUID cedartypes.EntityUID
+	if r.BackendID != "" {
+		sbUID = storageBackendUID(r.BackendID)
+		m[sbUID] = cedartypes.Entity{
+			UID: sbUID,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"backend_id": cedartypes.String(r.BackendID),
+			}),
+		}
+	}
+
+	// Bucket (physical) — child of StorageBackend.
+	var bUID cedartypes.EntityUID
+	if r.BackendID != "" && r.BucketName != "" {
+		bUID = physicalBucketUID(r.BackendID, r.BucketName)
+		bucketParents := cedartypes.NewEntityUIDSet(sbUID)
+		bucketEntity := cedartypes.Entity{
+			UID:     bUID,
+			Parents: bucketParents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"bucket_name":     cedartypes.String(r.BucketName),
+				"backend_id":      cedartypes.String(r.BackendID),
+				"owner_tenant_id": cedartypes.String(r.OwnerTenantID.String()),
+				"labels":          cedartypes.NewSet(),
+			}),
+		}
+		m[bUID] = bucketEntity
+	}
+
+	// ObjectKey — child of Tenant (and Bucket when bucket is in scope).
+	var okUID cedartypes.EntityUID
+	if r.ObjectKey != "" && r.TenantID != uuid.Nil {
+		okUID = objectKeyUID(r.TenantID, r.ObjectKey)
+		parents := cedartypes.NewEntityUIDSet(tUID)
+		if r.BackendID != "" && r.BucketName != "" {
+			parents = cedartypes.NewEntityUIDSet(tUID, bUID)
+		}
+		m[okUID] = cedartypes.Entity{
+			UID:     okUID,
+			Parents: parents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"object_key":  cedartypes.String(r.ObjectKey),
+				"tenant_id":   cedartypes.String(r.TenantID.String()),
+				"bucket_name": cedartypes.String(r.BucketName),
+				"backend_id":  cedartypes.String(r.BackendID),
+			}),
+		}
+	}
+
+	// Object — child of ObjectKey.
+	if r.Key != "" || r.ObjectID != uuid.Nil {
+		oUID := resourceUID(r)
+		tagsSet := make([]cedartypes.Value, 0, len(r.Tags))
+		for k := range r.Tags {
+			tagsSet = append(tagsSet, cedartypes.String(k))
+		}
+		var parents cedartypes.EntityUIDSet
+		if okUID != (cedartypes.EntityUID{}) {
+			parents = cedartypes.NewEntityUIDSet(okUID)
+		}
+		m[oUID] = cedartypes.Entity{
+			UID:     oUID,
+			Parents: parents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"key":          cedartypes.String(r.Key),
+				"state":        cedartypes.String(r.State),
+				"size_bytes":   cedartypes.Long(r.SizeBytes),
+				"content_type": cedartypes.String(r.ContentType),
+				"tenant_id":    cedartypes.String(r.TenantID.String()),
+				"object_key":   cedartypes.String(r.ObjectKey),
+				"bucket_name":  cedartypes.String(r.BucketName),
+				"backend_id":   cedartypes.String(r.BackendID),
+				"tags":         cedartypes.NewSet(tagsSet...),
+			}),
+		}
+	}
+
+	// User-as-resource — distinct UID family from the principal-User. Policies
+	// can write rules about managing other users; principal != resource
+	// because Subjects and (tenant_id/user_id) keys never collide.
+	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
+		uResUID := targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
+		var parents cedartypes.EntityUIDSet
+		if r.TenantID != uuid.Nil {
+			parents = cedartypes.NewEntityUIDSet(tUID)
+		}
+		m[uResUID] = cedartypes.Entity{
+			UID:     uResUID,
+			Parents: parents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"user_id":   cedartypes.String(r.TargetUserID.String()),
+				"subject":   cedartypes.String(r.TargetSubject),
+				"tenant_id": cedartypes.String(r.TenantID.String()),
+			}),
+		}
+	}
+
+	// ApiKey-as-resource — child of Tenant for tenant-scoped keys.
+	if r.TargetApiKeyID != uuid.Nil {
+		akUID := targetApiKeyUID(r.TenantID, r.TargetApiKeyID)
+		var parents cedartypes.EntityUIDSet
+		if r.TenantID != uuid.Nil {
+			parents = cedartypes.NewEntityUIDSet(tUID)
+		}
+		m[akUID] = cedartypes.Entity{
+			UID:     akUID,
+			Parents: parents,
+			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+				"api_key_id": cedartypes.String(r.TargetApiKeyID.String()),
+				"tenant_id":  cedartypes.String(r.TenantID.String()),
+			}),
+		}
+	}
+
+	return m
+}
+
+func buildContext(rc RequestContext) cedartypes.Record {
+	now := rc.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	return cedartypes.NewRecord(cedartypes.RecordMap{
+		"size_bytes":   cedartypes.Long(rc.SizeBytes),
+		"content_type": cedartypes.String(rc.ContentType),
+		"now":          cedartypes.Long(now.Unix()),
+		"ip":           cedartypes.String(rc.IP),
+	})
+}
+
+// metrics reserves counters the production wire-up should export via OTEL.
+type metrics struct {
+	authzAllowed atomic.Uint64
+	authzDenied  atomic.Uint64
+	compileErrs  atomic.Uint64
+	cacheHits    atomic.Uint64
+	cacheMisses  atomic.Uint64
+}
+
+// Stats returns a snapshot of the internal metrics.
+func (e *Engine) Stats() (allowed, denied, compileErrs, hits, misses uint64) {
+	return e.m.authzAllowed.Load(), e.m.authzDenied.Load(), e.m.compileErrs.Load(), e.m.cacheHits.Load(), e.m.cacheMisses.Load()
+}

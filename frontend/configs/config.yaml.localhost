@@ -1,0 +1,20 @@
+runtimeConfig:
+  public:
+    objectControlPlane:
+      baseUrl: "/api/paladin"
+      upstreamUrl: "http://localhost:8080"
+      timeoutMs: 5000
+    oidc:
+      authority: ""
+      clientId: ""
+      redirectUri: ""
+      postLogoutRedirectUri: ""
+      scope: "openid profile email"
+      disableAuth: true
+    auth:
+      # DEV ONLY. Pre-minted JWT used as a fallback Bearer token when
+      # localStorage.paladin_token is empty. Generate with:
+      #   jwt encode --alg HS256 --secret "dev-secret-change-me-32-bytes-min" \
+      #     --iss paladin-dev --aud paladin-api --sub "dev-user" \
+      #     --exp +24h '{"tenant":"<uuid>","roles":["admin"]}'
+      devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJvY3AtYXBpIiwiZXhwIjoxNzc3MDk3Njk5LCJpYXQiOjE3NzcwMTEzMDAsImlzcyI6Im9jcC1kZXYiLCJqdGkiOiI1OGY2M2MzZDQxM2FhNmU2NWJlODcyMzZjYWFhNWMxNDdmNjU5Nzc0NGUxNjM2MDRjYTY0NjUzOTlmZDA4ZjIzIiwibmJmIjoxNzc3MDExMzAwLCJzdWIiOiJkZXYtdXNlciJ9.9ifZdhriNnzzr5TD2H9Ktt4uagRgha4ERb0h3yZ2IgU"

@@ -1,0 +1,306 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "paladin/common/v1/resource.proto";
+
+// ─── Storage backend ────────────────────────────────────────────────────────
+
+// StorageBackend is the physical S3-compatible target. Provisioned by
+// platform admins. Credentials are NEVER returned in responses — only
+// `credentials_secret_ref` (an opaque reference to the secret manager).
+message StorageBackend {
+  // Resource name: "storageBackends/{backend_id}".
+  string name = 1;
+  string backend_id = 2;
+  string display_name = 3;
+  StorageKind kind = 4;
+  string endpoint = 5;          // internal endpoint PALADIN uses
+  string public_endpoint = 6;   // endpoint embedded into presigned URLs
+  string region = 7;
+  bool force_path_style = 8;
+  // Reference to credentials in the secret store (e.g. "vault://kv/paladin/primary").
+  string credentials_secret_ref = 9;
+  // SSE configuration applied at presign time when objects do not specify one.
+  ServerSideEncryption sse = 10;
+  EventSourceConfig events = 11;
+  // Cedar policy attached to the backend itself — typically a forbid-rule
+  // that pins which tenants may bind buckets here.
+  string cedar_policy = 12;
+  string resource_version = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+enum StorageKind {
+  STORAGE_KIND_UNSPECIFIED = 0;
+  STORAGE_KIND_AWS_S3 = 1;
+  STORAGE_KIND_S3_COMPATIBLE = 2; // SeaweedFS, MinIO, Ceph RGW, etc.
+  STORAGE_KIND_GCS = 3;
+}
+
+message ServerSideEncryption {
+  SseType type = 1;
+  string key_id = 2; // required when type=KMS
+}
+
+enum SseType {
+  SSE_TYPE_UNSPECIFIED = 0;
+  SSE_TYPE_NONE = 1;
+  SSE_TYPE_AES256 = 2;
+  SSE_TYPE_KMS = 3;
+}
+
+message EventSourceConfig {
+  bool enabled = 1;
+  EventTarget target = 2;
+  string queue_url = 3;
+  google.protobuf.Duration poll_interval = 4;
+}
+
+enum EventTarget {
+  EVENT_TARGET_UNSPECIFIED = 0;
+  EVENT_TARGET_NONE = 1;
+  EVENT_TARGET_SQS = 2;
+  EVENT_TARGET_REDIS = 3;
+}
+
+// ─── Bucket ─────────────────────────────────────────────────────────────────
+
+message Bucket {
+  // Resource name: "storageBackends/{backend_id}/buckets/{bucket_name}".
+  string name = 1;
+  string backend_id = 2;
+  string bucket_name = 3;
+  string display_name = 4;
+  string region = 5;
+  // Optional binding to a single tenant. Empty → shared bucket; tenants
+  // bind ObjectKeys to it via prefixes.
+  string owner_tenant_id = 6;
+  // Per-bucket Cedar policy layered on top of tenant policy.
+  string cedar_policy = 7;
+  // Per-bucket constraints — overrides config.policy globals when set.
+  BucketConstraints constraints = 8;
+  // Lifecycle rules (transition / expire) executed by the lifecycle worker.
+  repeated LifecycleRule lifecycle_rules = 9;
+  // Object lock configuration (WORM). Optional.
+  ObjectLockConfig object_lock = 10;
+  // Versioning configuration. Optional.
+  BucketVersioning versioning = 11;
+  // Replication policy (cross-backend). Optional.
+  BucketReplication replication = 12;
+  map<string, string> labels = 13;
+  string resource_version = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+  // Outbox status of the underlying physical bucket. One of:
+  //   "ready"           — DB row + backend bucket are in sync.
+  //   "pending"         — handler accepted CreateBucket; backend
+  //                       provisioning still in flight.
+  //   "failed"          — provisioning hit a non-retryable error;
+  //                       provision_error carries the message.
+  //   "deleting"        — handler accepted DeleteBucket; backend
+  //                       teardown still in flight.
+  //   "deletion_failed" — deletion hit a non-retryable error;
+  //                       provision_error carries the message.
+  // Clients should treat anything other than "ready" as "do not bind /
+  // upload to this bucket yet"; the row stays visible so admin tooling
+  // can render progress or surface a stuck operation.
+  string provision_state = 17;
+}
+
+message BucketConstraints {
+  // Max bytes per single object. 0 → inherit global default.
+  int64 max_object_size_bytes = 1;
+  // Multipart constraints. 0 fields → inherit globals.
+  int64 min_part_size_bytes = 2;
+  int64 max_part_size_bytes = 3;
+  int32 max_parts = 4;
+  // Allowed Content-Type values. Empty → allow all.
+  repeated string allowed_content_types = 5;
+  // Presign TTL ceilings. 0 → inherit globals.
+  google.protobuf.Duration max_presign_put_ttl = 6;
+  google.protobuf.Duration max_presign_get_ttl = 7;
+  // Required checksum algorithm for uploads. UNSPECIFIED → no requirement.
+  paladin.common.v1.ChecksumAlgorithm required_checksum_algorithm = 8;
+}
+
+message LifecycleRule {
+  string id = 1;
+  bool enabled = 2;
+  // CEL expression evaluated against Object fields.
+  string match = 3;
+  oneof action {
+    LifecycleTransition transition = 4;
+    LifecycleExpiration expiration = 5;
+  }
+}
+
+message LifecycleTransition {
+  google.protobuf.Duration after = 1;
+  string storage_class = 2;
+}
+
+message LifecycleExpiration {
+  google.protobuf.Duration after = 1;
+}
+
+message ObjectLockConfig {
+  bool enabled = 1;
+  ObjectLockMode default_mode = 2;
+  google.protobuf.Duration default_retention = 3;
+}
+
+enum ObjectLockMode {
+  OBJECT_LOCK_MODE_UNSPECIFIED = 0;
+  OBJECT_LOCK_MODE_GOVERNANCE = 1; // bypassable by privileged role
+  OBJECT_LOCK_MODE_COMPLIANCE = 2; // not bypassable until expiry
+}
+
+message BucketVersioning {
+  bool enabled = 1;
+  // When versioning is on, soft-deletes never reclaim storage; opt-in.
+  bool keep_deletes_forever = 2;
+}
+
+message BucketReplication {
+  bool enabled = 1;
+  // Replication target: another Bucket resource name.
+  string destination_bucket = 2;
+  // CEL filter — only objects matching are replicated. Empty → all.
+  string filter = 3;
+}
+
+// ─── Tenant ─────────────────────────────────────────────────────────────────
+
+message Tenant {
+  // Resource name: "tenants/{tenant_id_or_slug}".
+  string name = 1;
+  string tenant_id = 2;
+  string display_name = 3;
+  map<string, string> labels = 4;
+  // Cedar policy inherited by all object_keys/buckets bound to this tenant.
+  string inherited_cedar_policy = 5;
+  string resource_version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// ─── ObjectKey ──────────────────────────────────────────────────────────────
+
+message ObjectKey {
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}".
+  string name = 1;
+  string tenant_id = 2;
+  string object_key = 3;
+  string display_name = 4;
+  // Bucket the object_key is bound to (resource name).
+  string bucket = 5; // "storageBackends/{backend_id}/buckets/{bucket_name}"
+  // Effective completion mode (derived from bucket → backend events).
+  paladin.common.v1.CompletionMode completion_mode = 6;
+  // Cedar policy at the object_key layer.
+  string cedar_policy = 7;
+  // Per-object_key constraints overlay on top of bucket constraints.
+  BucketConstraints constraints = 8;
+  string resource_version = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+// ─── Quota ──────────────────────────────────────────────────────────────────
+
+// Quota caps usage at tenant or bucket scope. Enforced at presign time.
+message Quota {
+  // Resource name: "tenants/{tenant_id_or_slug}/quota" or
+  // "storageBackends/{backend_id}/buckets/{bucket_name}/quota".
+  string name = 1;
+  // Hard caps. 0 → no cap.
+  int64 max_total_bytes = 2;
+  int64 max_object_count = 3;
+  int64 max_bytes_per_day = 4;
+  int64 max_objects_per_day = 5;
+  // Current usage (read-only; updated by accounting worker).
+  QuotaUsage usage = 6;
+  string resource_version = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message QuotaUsage {
+  int64 total_bytes = 1;
+  int64 object_count = 2;
+  int64 bytes_today = 3;
+  int64 objects_today = 4;
+  google.protobuf.Timestamp last_reset_at = 5;
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+
+// AuditLogEntry is append-only. Every admin/iam mutation emits one row.
+message AuditLogEntry {
+  string entry_id = 1;
+  google.protobuf.Timestamp at = 2;
+  string actor_subject = 3;
+  string actor_tenant_id = 4;
+  string actor_audience = 5;
+  string action = 6;        // "admin.BucketService.CreateBucket"
+  string resource_name = 7; // canonical resource name acted upon
+  string request_id = 8;
+  string source_ip = 9;
+  // Encoded as JSON; before/after diffs are stripped of secret fields by the
+  // serializer (whitelisted field projection).
+  bytes before_json = 10;
+  bytes after_json = 11;
+  // Set when the action failed; empty on success.
+  string error_message = 12;
+  // capability_id is the UUID of the capability token that
+  // authorised this action, when one was presented. Empty when the
+  // call was JWT- or API-token-authenticated. UI clients render
+  // this as a link to the capability detail surface.
+  string capability_id = 13;
+}
+
+// ─── Event subscription ─────────────────────────────────────────────────────
+
+// EventSubscription describes a webhook / queue sink for PALADIN events.
+// Replaces the need for clients to consume S3 events directly.
+message EventSubscription {
+  string name = 1; // "tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"
+  string tenant_id = 2;
+  // CEL filter against EventEnvelope; empty → all events for the tenant.
+  string filter = 3;
+  EventSink sink = 4;
+  bool disabled = 5;
+  string resource_version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message EventSink {
+  oneof target {
+    HttpSink http = 1;
+    KafkaSink kafka = 2;
+    SqsSink sqs = 3;
+  }
+}
+
+message HttpSink {
+  string url = 1;
+  // HMAC-SHA256 signing secret reference; PALADIN signs each delivery with this.
+  string signing_secret_ref = 2;
+  // Server applies exponential backoff up to max_attempts.
+  int32 max_attempts = 3;
+}
+
+message KafkaSink {
+  string brokers = 1;
+  string topic = 2;
+}
+
+message SqsSink {
+  string queue_url = 1;
+  string region = 2;
+}

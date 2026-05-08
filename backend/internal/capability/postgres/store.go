@@ -1,0 +1,330 @@
+// Package postgres is the Store implementation for capability records,
+// backed by migration 016. SQL is hand-written rather than sqlc-generated
+// because the surface is small (six methods) and the JSON-encoded claim
+// payload is awkward through sqlc's typed-mapping path. Schema lives at
+// migrations/016_capabilities.sql.
+//
+// Connection ownership: Store does not Close the pool — the caller
+// (cmd/server boot path) owns the *pgxpool.Pool lifecycle. The hot-path
+// methods (IsRevoked, Get) issue exactly one round-trip; admin methods
+// (Revoke with cascade) issue one transaction.
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/oleg-tkachuk/paladin/internal/capability"
+)
+
+// ErrNotFound is the typed not-found return — distinguishes "no such
+// capability ID" from a database error. Verifiers map this to an
+// invalid-token response (the JTI was forged or the row was purged).
+var ErrNotFound = errors.New("capability/postgres: not found")
+
+// Store implements capability.Store against the migration-016 tables.
+type Store struct {
+	pool *pgxpool.Pool
+}
+
+// New constructs a Store. Caller owns pool lifecycle.
+func New(pool *pgxpool.Pool) (*Store, error) {
+	if pool == nil {
+		return nil, errors.New("capability/postgres: pool required")
+	}
+	return &Store{pool: pool}, nil
+}
+
+// Insert implements capability.Store.
+func (s *Store) Insert(ctx context.Context, c capability.Capability) error {
+	principalPayload, err := json.Marshal(c.Subject)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
+	}
+	caveats, err := json.Marshal(c.Caveats)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: marshal caveats: %w", err)
+	}
+
+	const stmt = `
+INSERT INTO capability_records (
+    id, tenant_id, issuer, principal_kind, principal_subject,
+    principal_payload, audience, caveats, parent_id, generation,
+    issued_at, not_before, expires_at, created_by
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6::jsonb, $7, $8::jsonb, $9, $10,
+    $11, $12, $13, $14
+);
+`
+	var parent *uuid.UUID
+	if c.ParentID != uuid.Nil {
+		parent = &c.ParentID
+	}
+	var nbf *time.Time
+	if !c.NotBefore.IsZero() {
+		nbf = &c.NotBefore
+	}
+	if _, err := s.pool.Exec(ctx, stmt,
+		c.ID,
+		c.Subject.TenantID,
+		c.Issuer,
+		string(c.Subject.Type),
+		c.Subject.Subject,
+		principalPayload,
+		c.Audience,
+		caveats,
+		parent,
+		c.Generation,
+		c.IssuedAt,
+		nbf,
+		c.ExpiresAt,
+		"", // created_by populated by callers that have a richer principal context
+	); err != nil {
+		return fmt.Errorf("capability/postgres: insert: %w", err)
+	}
+	return nil
+}
+
+// Get implements capability.Store.
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+	const stmt = `
+SELECT id, tenant_id, issuer, principal_kind, principal_subject,
+       principal_payload, audience, caveats, parent_id, generation,
+       issued_at, not_before, expires_at
+FROM   capability_records
+WHERE  id = $1;
+`
+	row := s.pool.QueryRow(ctx, stmt, id)
+	return scanRow(row)
+}
+
+// IsRevoked implements capability.Store. The query is intentionally
+// trivial — verifiers wrap this with an in-memory TTL cache so the
+// per-request cost stays flat.
+func (s *Store) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
+	const stmt = `SELECT EXISTS (SELECT 1 FROM capability_revocations WHERE id = $1)`
+	var exists bool
+	if err := s.pool.QueryRow(ctx, stmt, id).Scan(&exists); err != nil {
+		return false, fmt.Errorf("capability/postgres: is_revoked: %w", err)
+	}
+	return exists, nil
+}
+
+// Revoke implements capability.Store. CascadeChildren walks the
+// delegation tree via a recursive CTE and inserts a revocation row for
+// every descendant in one transaction, so the tree is denied atomically.
+//
+// The recursive CTE bounds depth via WHERE NOT in the cycle — capability
+// records are a forest (parent_id is nullable, no cycles by construction
+// because the FK is set NULL on parent delete), but a depth limit is
+// kept as a defensive guard against pathological dataset corruption.
+func (s *Store) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+	if args.ID == uuid.Nil {
+		return errors.New("capability/postgres: revoke ID required")
+	}
+
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("capability/postgres: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if args.CascadeChildren {
+		const cascade = `
+WITH RECURSIVE descendants(id, depth) AS (
+    SELECT id, 0 FROM capability_records WHERE id = $1
+    UNION ALL
+    SELECT r.id, d.depth + 1
+    FROM   capability_records r
+    JOIN   descendants d ON r.parent_id = d.id
+    WHERE  d.depth < 64
+)
+INSERT INTO capability_revocations (id, reason, actor, cascade)
+SELECT id, $2, $3, true FROM descendants
+ON CONFLICT (id) DO NOTHING;
+`
+		if _, err := tx.Exec(ctx, cascade, args.ID, args.Reason, args.Actor); err != nil {
+			return fmt.Errorf("capability/postgres: revoke cascade: %w", err)
+		}
+	} else {
+		const single = `
+INSERT INTO capability_revocations (id, reason, actor, cascade)
+VALUES ($1, $2, $3, false)
+ON CONFLICT (id) DO NOTHING;
+`
+		if _, err := tx.Exec(ctx, single, args.ID, args.Reason, args.Actor); err != nil {
+			return fmt.Errorf("capability/postgres: revoke: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("capability/postgres: commit: %w", err)
+	}
+	return nil
+}
+
+// PurgeExpired implements capability.Store. Drops revocation rows whose
+// underlying capability has been expired for at least the supplied
+// grace; keeps the denylist bounded over time.
+func (s *Store) PurgeExpired(ctx context.Context, expiredFor time.Duration) (int64, error) {
+	const stmt = `
+DELETE FROM capability_revocations
+WHERE id IN (
+    SELECT r.id
+    FROM   capability_revocations r
+    JOIN   capability_records cr ON cr.id = r.id
+    WHERE  cr.expires_at < NOW() - ($1::bigint || ' microseconds')::interval
+);
+`
+	tag, err := s.pool.Exec(ctx, stmt, expiredFor.Microseconds())
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: purge: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ListByPrincipal implements capability.Store. Cursor is the last seen
+// id encoded as a hex string; a follow-up page seeks past it. Page size
+// is bounded by Limit (default 50, max 500).
+func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+	if args.TenantID == uuid.Nil {
+		return nil, "", errors.New("capability/postgres: tenant_id required")
+	}
+	limit := args.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	// Build clauses incrementally so the query plan stays readable.
+	whereExtra := ""
+	bindArgs := []any{args.TenantID, string(args.PrincipalT), args.Subject}
+	if !args.IncludeExpired {
+		whereExtra += " AND cr.expires_at > NOW()"
+	}
+	if !args.IncludeRevoked {
+		whereExtra += " AND NOT EXISTS (SELECT 1 FROM capability_revocations rv WHERE rv.id = cr.id)"
+	}
+	if args.Cursor != "" {
+		bindArgs = append(bindArgs, args.Cursor)
+		whereExtra += fmt.Sprintf(" AND cr.id > $%d::uuid", len(bindArgs))
+	}
+	bindArgs = append(bindArgs, limit+1) // fetch +1 to detect next page
+	stmt := fmt.Sprintf(`
+SELECT id, tenant_id, issuer, principal_kind, principal_subject,
+       principal_payload, audience, caveats, parent_id, generation,
+       issued_at, not_before, expires_at
+FROM   capability_records cr
+WHERE  cr.tenant_id = $1
+  AND  cr.principal_kind = $2
+  AND  cr.principal_subject = $3
+  %s
+ORDER  BY cr.id
+LIMIT  $%d;
+`, whereExtra, len(bindArgs))
+
+	rows, err := s.pool.Query(ctx, stmt, bindArgs...)
+	if err != nil {
+		return nil, "", fmt.Errorf("capability/postgres: list: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]capability.Capability, 0, limit)
+	for rows.Next() {
+		c, err := scanRow(rows)
+		if err != nil {
+			return nil, "", err
+		}
+		out = append(out, *c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("capability/postgres: list scan: %w", err)
+	}
+
+	nextCursor := ""
+	if int32(len(out)) > limit {
+		nextCursor = out[limit].ID.String()
+		out = out[:limit]
+	}
+	return out, nextCursor, nil
+}
+
+// scanRow is the shared row decoder for Get / ListByPrincipal. Accepts
+// any pgx Scanner so it works against single-row and multi-row results.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRow(r scanner) (*capability.Capability, error) {
+	var (
+		id, tenantID          uuid.UUID
+		issuer, kind, subject string
+		principalRaw, caveats []byte
+		audience              []string
+		parent                *uuid.UUID
+		generation            int64
+		issuedAt              time.Time
+		notBefore             *time.Time
+		expiresAt             time.Time
+	)
+	err := r.Scan(
+		&id, &tenantID, &issuer, &kind, &subject,
+		&principalRaw, &audience, &caveats, &parent, &generation,
+		&issuedAt, &notBefore, &expiresAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("capability/postgres: scan: %w", err)
+	}
+
+	var principal capability.Principal
+	if err := json.Unmarshal(principalRaw, &principal); err != nil {
+		return nil, fmt.Errorf("capability/postgres: parse principal: %w", err)
+	}
+	// Defensive: principal payload sometimes lacks tenant_id when it was
+	// written by a buggy issuer. Fall back to the column we indexed on.
+	if principal.TenantID == uuid.Nil {
+		principal.TenantID = tenantID
+	}
+	if principal.Type == "" {
+		principal.Type = capability.PrincipalType(kind)
+	}
+	if principal.Subject == "" {
+		principal.Subject = subject
+	}
+
+	var cav capability.Caveats
+	if err := json.Unmarshal(caveats, &cav); err != nil {
+		return nil, fmt.Errorf("capability/postgres: parse caveats: %w", err)
+	}
+
+	out := &capability.Capability{
+		ID:         id,
+		Issuer:     issuer,
+		Subject:    principal,
+		Audience:   audience,
+		Caveats:    cav,
+		IssuedAt:   issuedAt.UTC(),
+		ExpiresAt:  expiresAt.UTC(),
+		Generation: generation,
+	}
+	if parent != nil {
+		out.ParentID = *parent
+	}
+	if notBefore != nil {
+		out.NotBefore = notBefore.UTC()
+	}
+	return out, nil
+}

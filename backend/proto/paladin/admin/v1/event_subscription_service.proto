@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// EventSubscriptionService manages outbound event sinks. Subscriptions are
+// owned by a tenant and require tenant.admin (or above).
+service EventSubscriptionService {
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (EventSubscription);
+  rpc GetSubscription(GetSubscriptionRequest) returns (EventSubscription);
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (EventSubscription);
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse);
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+
+  // TestSubscription delivers a synthetic event to the configured sink.
+  rpc TestSubscription(TestSubscriptionRequest) returns (TestSubscriptionResponse);
+}
+
+message CreateSubscriptionRequest {
+  string parent = 1 [(buf.validate.field).string.min_len = 1]; // "tenants/{tenant_id_or_slug}"
+  EventSubscription subscription = 2 [(buf.validate.field).required = true];
+}
+
+message GetSubscriptionRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateSubscriptionRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  EventSubscription subscription = 4;
+}
+
+message DeleteSubscriptionRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+}
+
+message DeleteSubscriptionResponse {}
+
+message ListSubscriptionsRequest {
+  string parent = 1;
+  paladin.common.v1.PageRequest page = 2;
+}
+
+message ListSubscriptionsResponse {
+  repeated EventSubscription subscriptions = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message TestSubscriptionRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message TestSubscriptionResponse {
+  bool delivered = 1;
+  int32 status_code = 2;
+  string error_message = 3;
+}

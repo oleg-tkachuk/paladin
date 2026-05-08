@@ -1,153 +1,83 @@
 version: "3"
 
+# Top-level orchestrator for the integrated repo. The two project-
+# specific Taskfiles live at backend/Taskfile.yaml and
+# frontend/Taskfile.yaml; this file delegates to them via the
+# `backend:*` and `frontend:*` namespaces, plus exposes a few
+# repo-level meta-tasks (verify-all, e2e-up, e2e-down) that span
+# both halves.
+#
+# Naming convention:
+#   backend:<task>       runs in backend/, forwards to its Taskfile
+#   frontend:<task>      runs in frontend/, forwards to its Taskfile
+#   <bare-name>          repo-level (compose orchestration, audits)
+#
+# Usage:
+#   task                       # list every task across the namespace
+#   task verify-all            # build + test both halves
+#   task backend:test          # forwards to backend's task test
+#   task frontend:tsc          # forwards to frontend's task tsc
+
 silent: true
 
 vars:
-  PROJECT_NAME: paladin
-  COMPOSE_FILE: ./deploy/docker-compose.yaml
-  DEPLOY_INFO_ENV_FILE: ./deploy/info.env
-  DOCKERFILE: ./deploy/Dockerfile
-  CHART_DIR: ./deploy/chart
-  TIMEZONE: Europe/Kyiv
-  K8S_NAMESPACE: paladin
-  K8S_DEPLOYMENT_NAME: paladin
-
-  # OCI Registry
-  OCI_REGISTRY: "registry.local"
-  CHART_REPO: "oci://registry.local/charts"
+  ROOT: "{{.USER_WORKING_DIR}}"
 
 includes:
-  core:
-    taskfile: tasks/_core.task.yaml
-    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
-    dir: .
-  docker:
-    taskfile: tasks/docker.task.yaml
-    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
-    dir: .
-  test:
-    taskfile: tasks/test.task.yaml
-    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
-    dir: .
-  gen:
-    taskfile: tasks/gen.task.yaml
-    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
-    dir: .
-  k8s:
-    taskfile: tasks/k8s.task.yaml
-    vars: { ROOT: "{{.USER_WORKING_DIR}}" }
+  backend:
+    taskfile: backend/Taskfile.yaml
+    dir: backend
+  frontend:
+    taskfile: frontend/Taskfile.yaml
+    dir: frontend
+  meta:
+    taskfile: tasks/meta.task.yaml
     dir: .
 
 tasks:
   default:
-    desc: "Lists tasks with or without a description"
+    desc: List the cross-project task index.
     cmds:
-      - task -a
+      - task --list-all
 
-  build:
-    desc: "Build and push image + Helm chart to OCI registry"
+  verify-all:
+    desc: Build + test both halves. CI's default green-bar gate.
     cmds:
-      - task: build:version:bump
-      - task: build:env:write
-      - task: docker:build
+      - task: backend:build
+      - task: backend:test
+      - task: frontend:tsc
+      - task: frontend:build
 
-  build-local:
-    desc: "Build directly in Minikube Docker daemon (Zero-push flow)"
+  deploy-all:
+    desc: |
+      Build + push image and Helm chart for both halves to the OCI
+      registry. Sequential — frontend depends on the backend planes
+      being reachable, so backend ships first; if the backend deploy
+      fails the frontend never runs.
     cmds:
-      - task: build:version:bump
-      - task: build:env:write
-      - task: docker:build-local
+      - task: backend:deploy
+      - task: frontend:deploy
 
-  build:version:bump:
-    desc: "Auto-increment VERSION (patch)"
-    internal: true
-    silent: true
+  deploy-all-local:
+    desc: |
+      Build both images directly into the Minikube Docker daemon (no
+      push). Useful for in-cluster smoke tests without round-tripping
+      the registry.
     cmds:
-      - cmd: |-
-          set -euo pipefail
-          if [ ! -f {{.DEPLOY_INFO_ENV_FILE}} ]; then mkdir -p $(dirname {{.DEPLOY_INFO_ENV_FILE}}) && touch {{.DEPLOY_INFO_ENV_FILE}}; fi
-          check_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2 || echo "0.1.0")
-          if [ -z "$check_version" ]; then check_version="0.1.0"; fi
-          next_version="$(printf "%s" "$check_version" | awk -F. -v OFS=. '{$NF += 1 ; print}')"
-          if grep -q "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}}; then
-            sed -i '' "s/APP_VERSION=.*/APP_VERSION=$next_version/" {{.DEPLOY_INFO_ENV_FILE}}
-          else
-            echo "APP_VERSION=$next_version" >> {{.DEPLOY_INFO_ENV_FILE}}
-          fi
-          printf "INFO: %s: Bumped version from %s to %s\n" "{{.K8S_DEPLOYMENT_NAME}}" "$check_version" "$next_version"
+      - task: backend:deploy-local
+      - task: frontend:deploy-local
 
-  build:env:write:
-    desc: "Write build metadata to env file"
-    internal: true
-    silent: true
+  e2e-up:
+    desc: Bring the whole compose stack up (backend planes + UI).
     cmds:
-      - cmd: |-
-          set -euo pipefail
-          printf "INFO: %s: Writing build metadata to env file...\n" "{{.K8S_DEPLOYMENT_NAME}}"
-          next_version=$(grep "APP_VERSION=" {{.DEPLOY_INFO_ENV_FILE}} | cut -d'=' -f2)
-          {
-            printf "GIT_COMMIT_HASH=%s\n" "$(git rev-parse --short HEAD)"
-            printf "BUILD_TIME=%s\n" "$(TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z)"
-            printf "APP_VERSION=%s\n" "$next_version"
-          } > {{.DEPLOY_INFO_ENV_FILE}}
+      - task: meta:compose-up
 
-  up:
-    desc: "Start the local stack"
+  e2e-down:
+    desc: Tear the compose stack down. Volumes preserved.
     cmds:
-      - task: docker:up
+      - task: meta:compose-down
 
-  test:
-    desc: "Run unit tests"
+  e2e-clean:
+    desc: Tear down + drop volumes (Postgres, SeaweedFS data lost).
     cmds:
-      - task: test:unit
-
-  generate:
-    desc: "Generate all code (Proto, Mocks, SQLC)"
-    cmds:
-      - task: gen:all
-
-  auth:mint-token:
-    desc: "Mint HS256 JWT for local dev (override JWT_SECRET/JWT_ISS/JWT_AUD/JWT_SUB/JWT_ROLES/JWT_TENANT/JWT_TTL_SECONDS)"
-    vars:
-      JWT_SECRET: "dev-secret-change-me-32-bytes-min"
-      JWT_ISS: "paladin-dev"
-      JWT_AUD: "paladin-api"
-      JWT_SUB: "dev-user"
-      # Comma-separated list. platform-admin is required by TenantService RPCs.
-      JWT_ROLES: "platform-admin"
-      # Tenant UUID. Required by per-tenant RPCs (ObjectKey, ObjectTag, Object...).
-      # Leave empty for cross-tenant admin-only tokens.
-      JWT_TENANT: "3a823fd4-0b3d-4ce2-a280-93b8d75cc07b"
-      JWT_TTL_SECONDS: "604800" # 7 days
-    cmds:
-      - cmd: |-
-          set -euo pipefail
-          NOW=$(date +%s)
-          EXP=$((NOW + {{.JWT_TTL_SECONDS}}))
-          ROLES_JSON=$(printf '%s' "{{.JWT_ROLES}}" | awk -F, '{
-            printf "["
-            for (i = 1; i <= NF; i++) {
-              if (i > 1) printf ","
-              printf "\"%s\"", $i
-            }
-            printf "]"
-          }')
-          TENANT_JSON=""
-          if [ -n "{{.JWT_TENANT}}" ]; then
-            TENANT_JSON=$(printf ',"tenant":"%s"' "{{.JWT_TENANT}}")
-          fi
-          b64() { openssl base64 -e -A | tr '+/' '-_' | tr -d '='; }
-          HEADER=$(printf '%s' '{"alg":"HS256","typ":"JWT"}' | b64)
-          PAYLOAD=$(printf '{"iss":"%s","aud":"%s","sub":"%s","iat":%d,"nbf":%d,"exp":%d,"roles":%s%s}' \
-            "{{.JWT_ISS}}" "{{.JWT_AUD}}" "{{.JWT_SUB}}" "$NOW" "$NOW" "$EXP" "$ROLES_JSON" "$TENANT_JSON" | b64)
-          SIG=$(printf '%s' "${HEADER}.${PAYLOAD}" | openssl dgst -binary -sha256 -hmac "{{.JWT_SECRET}}" | b64)
-          printf '%s.%s.%s\n' "$HEADER" "$PAYLOAD" "$SIG"
-
-  # -------------------------
-  # Legacy Aliases / Utility
-  # -------------------------
-
-  restart:
-    desc: "Alias for k8s:restart"
-    cmds:
-      - task: k8s:restart
+      - task: meta:compose-clean

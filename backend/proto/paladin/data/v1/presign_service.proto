@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "paladin/common/v1/resource.proto";
+
+// PresignService regenerates URLs for already-registered objects.
+// Initial URL is bundled with UploadObject; this service handles refresh.
+service PresignService {
+  rpc RegenerateUploadUrl(RegenerateUploadUrlRequest) returns (RegenerateUploadUrlResponse);
+  rpc PresignDownload(PresignDownloadRequest) returns (PresignDownloadResponse);
+}
+
+message RegenerateUploadUrlRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Duration ttl = 2;
+}
+
+message RegenerateUploadUrlResponse {
+  paladin.common.v1.PresignedUrl upload_url = 1;
+  paladin.common.v1.CompletionMode completion_mode = 2;
+}
+
+message PresignDownloadRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Duration ttl = 2;
+  string content_disposition = 3;
+}
+
+message PresignDownloadResponse {
+  paladin.common.v1.PresignedUrl download_url = 1;
+}

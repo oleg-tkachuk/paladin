@@ -1,0 +1,112 @@
+version: "3"
+
+# Image + Helm chart deploy flow. Two entry points — `deploy` (push to
+# OCI registry) and `deploy-local` (load straight into Minikube without
+# a push) — share one internal builder so the docker-build invocation
+# isn't duplicated.
+
+vars:
+  TAG: latest
+
+tasks:
+  # ─── Public entry points ─────────────────────────────────────────────────
+
+  deploy:
+    desc: "Build, push image (TAG + :latest), package and push the Helm chart"
+    deps: [":core:tools:build"]
+    vars: &build-vars
+      IMAGE: "{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}"
+      _TAG_AUTO: { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
+      _TAG: '{{.TAG | default ._TAG_AUTO}}'
+      _COMMIT: { sh: "git rev-parse --short HEAD" }
+      _TIME:   { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+      # Helm rejects non-SemVer chart versions (e.g. literal "latest").
+      # Chart packaging — and the chart's appVersion — always use the
+      # auto-bumped numeric version, never the literal "latest". A
+      # chart with appVersion=latest would lie about what's pinned;
+      # consumers reading the chart manifest expect a real version
+      # they can correlate to a release.
+      _CHART_VER: '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
+      _APP_VER:   '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._APP_VER}} (chart {{._CHART_VER}})" }
+      # Build with the numeric version as the primary tag — the
+      # Helm chart's templates default image.tag to .Chart.AppVersion
+      # (which is _APP_VER), so the image MUST exist under that
+      # numeric tag in the registry or Pods can't pull. APP_VERSION
+      # build-arg also threads the numeric into NEXT_PUBLIC_-prefixed
+      # env vars baked into the bundle.
+      - task: _docker:build
+        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._APP_VER}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
+      # Push the numeric tag, then alias as :latest so consumers
+      # pinning `:latest` keep working. Order matters: a fresh host
+      # without `:latest` cached must have the numeric pushed first
+      # so the docker tag step has a source to mirror from.
+      - docker push {{.IMAGE}}:{{._APP_VER}}
+      - docker tag  {{.IMAGE}}:{{._APP_VER}} {{.IMAGE}}:latest
+      - docker push {{.IMAGE}}:latest
+      # Helm chart — package, push, clean up the tarball.
+      - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._APP_VER}}
+      - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
+      - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
+      - task: ":core:banner"
+        vars: { MESSAGE: "[OCI] pushed image + chart {{._APP_VER}}" }
+
+  deploy-local:
+    desc: "Build the image directly into the Minikube Docker daemon (no push)"
+    deps: [":core:tools:build"]
+    vars: *build-vars
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "[LOCAL] building {{.PROJECT_NAME}} {{._APP_VER}} into Minikube" }
+      # Wrap the shared builder in a subshell that targets Minikube's
+      # Docker daemon. `eval` mutates the shell's env only for the
+      # duration of this cmd block. Tag with both the numeric version
+      # AND :latest so the Helm chart (which defaults image.tag to
+      # .Chart.AppVersion = numeric) and any local manifest pinning
+      # :latest both find the just-built image.
+      - cmd: |-
+          eval "$(minikube docker-env)"
+          docker build \
+            --network=host \
+            --tag {{.IMAGE}}:{{._APP_VER}} \
+            --tag {{.IMAGE}}:latest \
+            --file {{.DOCKERFILE}} \
+            --build-arg APP_VERSION={{._APP_VER}} \
+            --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
+            --build-arg BUILD_TIME="{{._TIME}}" \
+            .
+      - task: ":core:banner"
+        vars: { MESSAGE: "[LOCAL] built {{._APP_VER}} into Minikube" }
+
+  # ─── Local stack (Docker Compose) ────────────────────────────────────────
+
+  up:
+    desc: "Bring up the local stack (UI + backend) via docker compose"
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "starting local stack" }
+      - cmd: |-
+          docker compose \
+            --progress={{.PROGRESS | default "auto"}} \
+            -f {{.COMPOSE_FILE}} \
+            -p {{.PROJECT_NAME}} \
+            --env-file {{.DEPLOY_INFO_ENV_FILE}} \
+            up -d --build
+
+  # ─── Internal helpers ────────────────────────────────────────────────────
+
+  _docker:build:
+    desc: "Internal: invoke `docker build` with the standard build-arg set"
+    internal: true
+    cmds:
+      - cmd: |-
+          docker build \
+            --network=host \
+            --tag {{.IMAGE}}:{{.TAG}} \
+            --file {{.DOCKERFILE}} \
+            --build-arg APP_VERSION={{.TAG}} \
+            --build-arg GIT_COMMIT_HASH={{.COMMIT}} \
+            --build-arg BUILD_TIME="{{.TIME}}" \
+            .

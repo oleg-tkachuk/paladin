@@ -1,0 +1,42 @@
+# SeaweedFS filer notification config — drives the webhook publish for
+# PALADIN's ingest plane.
+#
+# In compose `seaweedfs` mounts this at /etc/seaweedfs/notification.toml
+# and runs with `-filer.notification=/etc/seaweedfs/notification.toml`.
+#
+# Webhook flow: each filer event (create / update / delete on a path
+# under SeaweedFS) becomes a JSON POST to the configured endpoint.
+# We point that at paladin-ingest:8100 — same compose network.
+#
+# bearer_token / shared_secret: leave blank in compose. Production
+# deploys MUST set both — wire `bearer_token` here and the matching
+# value in cfg.ingest.webhook.shared_secret on the PALADIN side. The PALADIN
+# side then verifies HMAC on the body using that shared secret.
+
+[notification.log]
+enabled = false
+
+[notification.webhook]
+enabled = true
+endpoint = "http://paladin-ingest:8100/webhook/seaweedfs"
+bearer_token = ""
+timeout_seconds = 10
+max_retries = 3
+backoff_seconds = 3
+max_backoff_seconds = 30
+workers = 5
+buffer_size = 10000
+
+# Other backends explicitly off so the SeaweedFS log doesn't complain
+# about them looking for envvar config that isn't set.
+[notification.kafka]
+enabled = false
+
+[notification.aws_sqs]
+enabled = false
+
+[notification.google_pub_sub]
+enabled = false
+
+[notification.gocdk_pub_sub]
+enabled = false

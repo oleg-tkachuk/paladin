@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package paladin.iam.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
+
+import "google/protobuf/timestamp.proto";
+
+// SystemService exposes process-level metadata (version, build info) and
+// dependency health to authenticated callers. The K8s probe endpoints
+// (/livez, /readyz, /startupz) remain available as plain HTTP so the
+// kubelet doesn't need a JWT — this RPC surface is for the UI dashboard
+// (topbar status, /health page) which already runs over an authenticated
+// transport.
+//
+// Lives on the IAM plane so any authenticated user can call it; there is
+// no tenant-sensitive data in the response. If we ever expose redacted
+// configuration through here it gets gated separately by role.
+service SystemService {
+  // GetVersion returns build metadata embedded in the binary at link time
+  // (-ldflags). Cheap, no dependencies touched. Safe to poll.
+  rpc GetVersion(GetVersionRequest) returns (VersionInfo);
+
+  // GetHealth runs the same per-component checks as /readyz but returns
+  // them itemised so the UI can render a per-dependency table. Each
+  // component carries its own status + latency so a single slow
+  // dependency is identifiable without log scraping.
+  rpc GetHealth(GetHealthRequest) returns (HealthInfo);
+}
+
+message GetVersionRequest {}
+
+message VersionInfo {
+  // Semver string (e.g. "0.1.471"). Empty when the binary was built
+  // without -ldflags (local `go run`).
+  string version = 1;
+  // Short git SHA. Empty in local builds.
+  string commit = 2;
+  // Build timestamp. Optional; absent in local builds.
+  google.protobuf.Timestamp build_time = 3;
+  // `go version` of the toolchain that produced the binary, e.g. "go1.26.0".
+  string go_version = 4;
+}
+
+message GetHealthRequest {}
+
+// ComponentStatus is a small enum so the UI can colour-code rows without
+// matching free-form strings. UNKNOWN is for components that haven't been
+// probed yet (rare; the handler runs every check before responding).
+enum ComponentStatus {
+  COMPONENT_STATUS_UNSPECIFIED = 0;
+  COMPONENT_STATUS_HEALTHY = 1;
+  COMPONENT_STATUS_DEGRADED = 2;
+  COMPONENT_STATUS_UNHEALTHY = 3;
+}
+
+message ComponentHealth {
+  // Stable identifier ("postgres", "policy-engine", etc.). Used as the
+  // React key in the UI so don't rename casually.
+  string name = 1;
+  ComponentStatus status = 2;
+  // Free-form context shown next to the status pill. Error message on
+  // failure; empty on healthy.
+  string message = 3;
+  // How long the check took. Useful for spotting a degrading dep before
+  // it tips over into unhealthy.
+  int64 latency_ms = 4;
+}
+
+message HealthInfo {
+  // Aggregate status — UNHEALTHY iff any component is UNHEALTHY,
+  // DEGRADED iff any is DEGRADED and none is UNHEALTHY, else HEALTHY.
+  ComponentStatus status = 1;
+  repeated ComponentHealth components = 2;
+}

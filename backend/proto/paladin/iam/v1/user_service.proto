@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package paladin.iam.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1;paladiniamv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "paladin/common/v1/pagination.proto";
+import "paladin/common/v1/scope.proto";
+import "paladin/iam/v1/types.proto";
+
+// UserService is the admin-only side of IAM. CRUD users, grant scopes/roles,
+// reset passwords. Requires role `iam.admin` or `platform.admin`.
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (User);
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
+  // than UpdateUser with a scopes field).
+  rpc GrantScopes(GrantScopesRequest) returns (User);
+  rpc RevokeScopes(RevokeScopesRequest) returns (User);
+
+  // ResetPassword forces a password change on next login. Local IdP only.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+}
+
+message CreateUserRequest {
+  // Parent: "tenants/{tenant_id_or_slug}". Empty for platform-level users.
+  string parent = 1;
+  string subject = 2 [(buf.validate.field).string.min_len = 1];
+  string display_name = 3;
+  string initial_password = 4 [(buf.validate.field).string.min_len = 12];
+  repeated string roles = 5;
+  repeated paladin.common.v1.Scope scopes = 6;
+}
+
+message GetUserRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message UpdateUserRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+  google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
+  // Mutable fields:
+  string display_name = 4;
+  bool disabled = 5;
+  repeated string roles = 6;
+}
+
+message DeleteUserRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_version = 2;
+}
+
+message DeleteUserResponse {}
+
+message ListUsersRequest {
+  string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant (platform admin only)
+  paladin.common.v1.PageRequest page = 2;
+  // CEL filter against User schema.
+  string filter = 3;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message GrantScopesRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  repeated paladin.common.v1.Scope scopes = 2 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message RevokeScopesRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  repeated paladin.common.v1.Scope scopes = 2 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message ResetPasswordRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // If empty, server generates a random one and returns it once.
+  string new_password = 2;
+}
+
+message ResetPasswordResponse {
+  // Set only when caller didn't provide a password — return-once.
+  string generated_password = 1;
+}

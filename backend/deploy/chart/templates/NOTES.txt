@@ -1,0 +1,76 @@
+{{ include "chart.fullname" . }} ({{ .Chart.AppVersion }}) installed in {{ .Release.Namespace }}.
+
+PALADIN runs as one binary in multiple Deployments — one per role:
+
+  api      data + iam Connect listeners (public-ish traffic)
+  admin    admin Connect listener (privileged operations)
+  worker   background jobs with Postgres-leased leadership
+  mcp      Model Context Protocol bridge (LLM-facing)
+
+Migrate + bootstrap ran as Helm hook Jobs before any Deployment rolled.
+
+──────────────────────────────────────────────────────────────────────────
+
+Inspect the rollout:
+
+  kubectl -n {{ .Release.Namespace }} get deploy,svc -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Per-role pods:
+
+{{- range $role, $spec := .Values.deployments }}
+{{- if $spec.enabled }}
+  kubectl -n {{ $.Release.Namespace }} get pods -l app.kubernetes.io/instance={{ $.Release.Name }},app.kubernetes.io/component={{ $role }}
+{{- end }}
+{{- end }}
+
+──────────────────────────────────────────────────────────────────────────
+
+Reach the api plane (data + iam):
+
+{{- if .Values.httpRoute.enabled }}
+
+  Via Gateway API:
+    {{- if .Values.httpRoute.hostnames }}
+    export APP_HOSTNAME={{ first .Values.httpRoute.hostnames }}
+    {{- else }}
+    export APP_HOSTNAME=$(kubectl -n {{(first .Values.httpRoute.parentRefs).namespace | default .Release.Namespace }} get gateway/{{ (first .Values.httpRoute.parentRefs).name }} -o jsonpath='{.spec.listeners[0].hostname}')
+    {{- end }}
+    {{- if and .Values.httpRoute.rules (first .Values.httpRoute.rules).matches (first (first .Values.httpRoute.rules).matches).path.value }}
+    curl "http://$APP_HOSTNAME{{ (first (first .Values.httpRoute.rules).matches).path.value }}livez"
+    {{- end }}
+
+{{- else if .Values.ingress.enabled }}
+
+  Via Ingress:
+    {{- range $host := .Values.ingress.hosts }}
+    {{- range .paths }}
+    curl http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}livez
+    {{- end }}
+    {{- end }}
+
+{{- else }}
+
+  Via port-forward (api Service):
+    {{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") }}
+    {{- $apiSpec := index .Values.deployments "api" }}
+    {{- $dataPort := 8080 }}
+    {{- if and $apiSpec $apiSpec.service $apiSpec.service.ports }}
+    {{- $dataPort = (index $apiSpec.service.ports 0).port }}
+    {{- end }}
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $apiSvc }} {{ $dataPort }}:{{ $dataPort }}
+    curl http://localhost:{{ $dataPort }}/livez
+
+{{- end }}
+
+──────────────────────────────────────────────────────────────────────────
+
+Disable a role: `--set deployments.<role>.enabled=false`. Toggling the
+api role takes the public listeners offline; toggling the worker or mcp
+roles is safe (no client traffic).
+
+Worker leases:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "chart.roleFullname" (dict "ctx" . "role" "api") }} -- paladin cap show     # (placeholder — when the cap CLI lands)
+
+  Until then, inspect lease state directly via psql:
+    SELECT name, holder_id, expires_at, generation FROM worker_leases;

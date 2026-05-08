@@ -1,0 +1,97 @@
+# Build context for deploy/Dockerfile (`docker build .` from backend/).
+#
+# The backend Dockerfile uses explicit `COPY --link <dir>/ <dir>/` for
+# each tree it actually needs (cmd/, internal/, migrations/, proto/,
+# go.mod, go.sum, buf*.yaml, sqlc.yaml). So .dockerignore here doesn't
+# decide what lands in the *image* — that's already pinned by the
+# Dockerfile. What it does decide is the size of the build context the
+# Docker daemon receives. Excluding the obvious junk (.git, tests/,
+# bin/, agent caches) takes the context from ~hundreds of MB down to
+# the source files that matter, which speeds every uncached build.
+
+# ── Self-reference ──────────────────────────────────────────────────
+.dockerignore
+deploy/Dockerfile
+deploy/docker-compose.yaml
+deploy/chart/
+
+# ── VCS / CI metadata ───────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ── Build artifacts (Go output anywhere in the tree) ────────────────
+bin/
+out/
+dist/
+*.test
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ── Coverage / profile output ───────────────────────────────────────
+coverage/
+coverage.*
+*.coverprofile
+*.out
+profile.cov
+
+# ── Tests trees we never need at build time ─────────────────────────
+# These live in backend/tests/ but are exercised by `go test ./...`
+# and out-of-band Hurl / grpcurl harnesses — never by `go build`. The
+# `internal/` tree IS copied (the Go compiler needs it for the
+# package graph); these external tests are not.
+tests/grpcurl/reports/
+tests/api/mutations/reports/
+tests/api/security/reports/
+tests/integration/testdata/
+
+# ── Secrets / local-only ────────────────────────────────────────────
+# Runtime configs are mounted via Helm ConfigMap or compose bind
+# mount, never baked in — exclude every dev-only artifact under
+# configs/local/ plus any stray dotenv. Keep configs/config.yaml
+# (the schema reference) so docs builds can render it.
+.env
+.env.*
+!.env.example
+configs/local/
+
+# ── Editor / OS / agent detritus ────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.agents/
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log
+
+# ── Repo-tooling configs not needed at build time ───────────────────
+.golangci.yaml
+.mockery.yaml
+lefthook.yml
+README.md
+CHANGELOG.md
+CLAUDE.md
+skills-lock.json
+docs/
+scripts/
+
+# ── Trees the Dockerfile doesn't COPY ───────────────────────────────
+# These are real source dirs, but the binary build doesn't reach
+# them: `pkg/` exposes the public Connect SDK to external consumers
+# (image carries internal/api/pb/... already), `policies/` ships
+# Cedar policy fixtures used by tests + docs, `tasks/` and
+# Taskfile.yaml are the developer-side build orchestrator. Excluding
+# them keeps the context tight; if a future Dockerfile starts to
+# COPY one of these, drop the matching entry here.
+pkg/
+policies/
+tasks/
+Taskfile.yaml
+tools.go

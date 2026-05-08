@@ -1,0 +1,129 @@
+version: "3"
+
+# Helm chart hygiene tasks for backend/deploy/chart.
+#
+# Why this file exists: the PALADIN chart had a multi-doc YAML bug where
+# `{{- range }}` blocks stripped the newline before `---`, gluing the
+# document separator to the previous line (e.g.
+# `automountServiceAccountToken: true---`). YAML parsers treated the
+# whole stream as one garbage document and silently dropped every
+# resource after the first one — ArgoCD shipped chart 0.2.8 with only
+# 1 of 4 Deployments and the cluster ran wedged for hours before the
+# root cause surfaced.
+#
+# `task backend:chart:verify` runs every gate that would have caught
+# this: `helm lint`, `helm template` parse, and a strict regex check
+# for glued separators. Wired as a dep of `task backend:deploy` so a
+# regression can never escape to OCI again.
+
+tasks:
+  # ─── Public entry point ──────────────────────────────────────────────────
+
+  verify:
+    desc: "Lint chart + render + check multi-doc YAML separators"
+    cmds:
+      - task: lint
+      - task: render-check
+
+  # ─── Component checks ────────────────────────────────────────────────────
+
+  lint:
+    desc: "Run `helm lint` against the PALADIN chart"
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+          if ! command -v helm >/dev/null 2>&1; then
+            echo "ERROR: helm not found in PATH" >&2
+            exit 1
+          fi
+          helm lint {{.CHART_DIR}}
+
+  render-check:
+    desc: "Render chart + assert no glued `---` separators or YAML parse errors"
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+
+          if ! command -v helm >/dev/null 2>&1; then
+            echo "ERROR: helm not found in PATH" >&2
+            exit 1
+          fi
+
+          # Render with a representative release-name + namespace —
+          # whatever values cause conditional template paths to fire
+          # are exercised here, not skipped.
+          rendered=$(helm template paladin {{.CHART_DIR}} \
+                       --namespace paladin 2>&1)
+
+          # ── Gate 1: no glued document separators ─────────────────
+          # Helms whitespace-strip directive on a range loop can
+          # collapse the newline before --- producing true--- /
+          # admin--- patterns. Any non-whitespace character right
+          # before --- is a render bug; YAML treats it as part of
+          # the value, not a doc boundary.
+          if echo "$rendered" | grep -nE '[^[:space:]]---' >&2; then
+            echo "" >&2
+            echo "ERROR: broken multi-doc YAML separator(s) above." >&2
+            echo "       The \`---\` separator is glued to the" >&2
+            echo "       previous line, so YAML parsers (kubectl," >&2
+            echo "       ArgoCD) silently drop every resource after" >&2
+            echo "       the first one." >&2
+            echo "" >&2
+            echo "       Fix: add a literal blank line before ---" >&2
+            echo "       in the offending template. Replace the" >&2
+            echo "       trailing whitespace-strip on the line before:" >&2
+            echo "" >&2
+            echo "         BAD:  trailing dash-strip eats the newline," >&2
+            echo "               so --- glues to the previous line." >&2
+            echo "         GOOD: drop the trailing strip and add" >&2
+            echo "               a blank line above ---." >&2
+            echo "" >&2
+            echo "       See backend/deploy/chart/templates/service.yaml" >&2
+            echo "       for the canonical pattern." >&2
+            exit 1
+          fi
+
+          # ── Gate 2: every document parses as valid YAML ──────────
+          # Use yq when available (richer error messages); fall back
+          # to python's PyYAML which ships on most distros. Without
+          # either, skip — we don't want to make CI brittle on
+          # missing tools, the regex above already catches the
+          # specific bug we lost hours to.
+          if command -v yq >/dev/null 2>&1; then
+            if ! echo "$rendered" | yq ea '.' >/dev/null 2>&1; then
+              echo "ERROR: yq failed to parse rendered chart" >&2
+              echo "$rendered" | yq ea '.' >&2 || true
+              exit 1
+            fi
+          elif command -v python3 >/dev/null 2>&1; then
+            # f-strings would confuse Tasks template engine on the
+            # double-curly tokens, so the script uses %-format.
+            if ! echo "$rendered" | python3 -c '
+          import sys, yaml
+          try:
+              docs = list(yaml.safe_load_all(sys.stdin))
+              # Skip None docs (trailing --- with nothing after)
+              kinds = [d.get("kind") for d in docs if d]
+              if not kinds:
+                  raise SystemExit("rendered chart contains zero kinded docs")
+          except yaml.YAMLError as e:
+              raise SystemExit("YAML parse error: %s" % e)
+          ' 2>&1 >&2; then
+              exit 1
+            fi
+          fi
+
+          # ── Gate 3: sanity count ─────────────────────────────────
+          # When a chart silently drops resources, the count crashes
+          # — typical multi-role chart renders 15-25 kinds. A drop
+          # to <10 is a strong signal of a separator regression that
+          # the regex didn't catch (e.g. wrapping bytes that don't
+          # match [^[:space:]]).
+          count=$(echo "$rendered" | grep -c '^kind:' || true)
+          if [ "$count" -lt 8 ]; then
+            echo "ERROR: rendered only $count resources — chart likely dropped" >&2
+            echo "       documents from a separator bug not caught by Gate 1." >&2
+            exit 1
+          fi
+
+          printf 'OK: chart renders %d resources cleanly\n' "$count"

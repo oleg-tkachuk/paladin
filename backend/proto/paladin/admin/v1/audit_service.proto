@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "paladin/admin/v1/operation_service.proto";
+import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
+
+// AuditLogService is read-only access to the immutable audit log. Writes
+// happen automatically through middleware on every admin/iam mutation.
+service AuditLogService {
+  rpc ListAuditLog(ListAuditLogRequest) returns (ListAuditLogResponse);
+  rpc GetAuditLogEntry(GetAuditLogEntryRequest) returns (AuditLogEntry);
+
+  // ExportAuditLog emits entries to a sink (S3 object, webhook batch).
+  // Returns an Operation whose response contains the export location.
+  rpc ExportAuditLog(ExportAuditLogRequest) returns (Operation);
+}
+
+message ListAuditLogRequest {
+  paladin.common.v1.PageRequest page = 1;
+  // CEL filter: actor_subject == "x", action prefix, resource_name pattern,
+  // time range via at >= ts && at < ts.
+  string filter = 2;
+}
+
+message ListAuditLogResponse {
+  repeated AuditLogEntry entries = 1;
+  paladin.common.v1.PageResponse page = 2;
+}
+
+message GetAuditLogEntryRequest {
+  string entry_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ExportAuditLogRequest {
+  string filter = 1;
+  // "object_name" of the destination object inside an PALADIN bucket, OR an
+  // EventSubscription resource name to fan-out to.
+  string destination = 2 [(buf.validate.field).string.min_len = 1];
+}

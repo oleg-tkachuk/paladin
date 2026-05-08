@@ -1,0 +1,123 @@
+version: "3"
+
+# silent: true at file scope keeps tasks free of repeated `silent: true`
+# declarations. Individual tasks that NEED output still get it via
+# explicit echo / printf inside their cmds.
+silent: true
+
+vars:
+  PROJECT_NAME: paladin
+  COMPOSE_FILE: ./deploy/docker-compose.yaml
+  DEPLOY_INFO_ENV_FILE: ./deploy/info.env
+  DOCKERFILE: ./deploy/Dockerfile
+  CHART_DIR: ./deploy/chart
+  TIMEZONE: Europe/Kyiv
+  K8S_NAMESPACE: paladin
+
+  # OCI Registry — image pushes land at
+  # OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; Helm chart pushes
+  # land at CHART_REPO/PROJECT_NAME:CHART_VERSION (separate /charts
+  # path under the same registry, so they don't collide).
+  #
+  # IMAGE_NAMESPACE is the registry sub-path under which all PALADIN
+  # images live; the Helm chart's values.yaml and the ArgoCD overlay
+  # both pin this prefix, so the push path here MUST match or Pods
+  # ImagePullBackOff with a 404.
+  OCI_REGISTRY: registry.local
+  IMAGE_NAMESPACE: paladin
+  CHART_REPO: oci://registry.local/charts
+
+# Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
+# pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
+# the repo root. ROOT is forwarded for the few tasks that emit absolute
+# paths in messages.
+includes:
+  core: { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  chart: { taskfile: tasks/chart.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  docker: { taskfile: tasks/docker.task.yaml, vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  test:   { taskfile: tasks/test.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  gen:    { taskfile: tasks/gen.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  k8s:    { taskfile: tasks/k8s.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  auth:   { taskfile: tasks/auth.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+
+tasks:
+  default:
+    desc: "List every available task (descriptions + namespaces)"
+    cmds:
+      - task --list-all
+
+  # ─── Deploy / release ────────────────────────────────────────────────────
+  # `deploy` is the registry-push pipeline (build → tag → push image +
+  # chart). `deploy-local` is the same flow targeting the in-cluster
+  # Minikube Docker daemon — no push, no chart packaging — used by the
+  # local dev loop.
+  deploy:
+    desc: "Build, tag, and push image + Helm chart to the OCI registry"
+    cmds:
+      # Gate before any push: the chart must lint clean AND render
+      # without the multi-doc separator bug (see tasks/chart.task.yaml).
+      # Catching this here means a regression can never escape to OCI.
+      - task: chart:verify
+      - task: metadata:write
+      - task: docker:deploy
+
+  deploy-local:
+    desc: "Build the image directly into the Minikube Docker daemon (no push)"
+    cmds:
+      # Same gate as `deploy` — local Minikube installs would also
+      # silently lose roles to a separator regression.
+      - task: chart:verify
+      - task: metadata:write
+      - task: docker:deploy-local
+
+  metadata:write:
+    desc: "Bump APP_VERSION and write GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
+    internal: true
+    cmds:
+      - cmd: |-
+          set -euo pipefail
+          # Ensure the file exists so the awk below has something to read.
+          mkdir -p "$(dirname '{{.DEPLOY_INFO_ENV_FILE}}')"
+          touch '{{.DEPLOY_INFO_ENV_FILE}}'
+
+          # Read current APP_VERSION (default 0.1.0 if missing/blank).
+          current=$(awk -F= '$1=="APP_VERSION"{print $2; exit}' '{{.DEPLOY_INFO_ENV_FILE}}')
+          : "${current:=0.1.0}"
+
+          # Bump patch component. Pure-awk so this is portable across
+          # macOS BSD coreutils and Linux GNU coreutils — the previous
+          # `sed -i ''` form silently broke Linux CI.
+          next=$(printf '%s\n' "$current" | awk -F. -v OFS=. '{$NF += 1; print}')
+
+          # Rewrite the entire file in one shot — three keys, deterministic
+          # order, no in-place editing tricks.
+          {
+            printf 'APP_VERSION=%s\n'      "$next"
+            printf 'GIT_COMMIT_HASH=%s\n'  "$(git rev-parse --short HEAD)"
+            printf 'BUILD_TIME=%s\n'       "$(TZ='{{.TIMEZONE}}' date +%Y-%m-%dT%H:%M:%S%z)"
+          } > '{{.DEPLOY_INFO_ENV_FILE}}'
+
+          printf 'INFO: %s: bumped %s → %s\n' '{{.PROJECT_NAME}}' "$current" "$next"
+
+  # ─── Local stack ─────────────────────────────────────────────────────────
+  up:
+    desc: "Start the local stack (postgres + seaweedfs + service) via docker compose"
+    cmds:
+      - task: docker:up
+
+  # ─── Codegen / tests ─────────────────────────────────────────────────────
+  generate:
+    desc: "Regenerate all generated code (mocks, proto, sqlc)"
+    cmds:
+      - task: gen:all
+
+  test:
+    desc: "Run unit tests"
+    cmds:
+      - task: test:unit
+
+  # ─── Convenience aliases (kept for muscle memory) ────────────────────────
+  restart:
+    desc: "Alias for k8s:restart — rolls the deployment in K8S_NAMESPACE"
+    cmds:
+      - task: k8s:restart

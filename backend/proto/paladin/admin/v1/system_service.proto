@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+// SystemService on the admin plane exposes operator-only diagnostics
+// that contain redacted-but-sensitive configuration. Distinct from
+// paladin.iam.v1.SystemService (which is open to any authenticated user
+// for build/version/health) — admin SystemService is gated to
+// platform.admin role so we can ship the running config without
+// leaking shape to regular tenants.
+//
+// Today only GetConfig lives here; future surfaces (per-replica
+// runtime stats, feature-flag dump, queue depths) will join.
+service SystemService {
+  // GetConfig returns the running control-plane configuration as a
+  // single YAML blob with all secrets replaced by "***". The shape
+  // matches the on-disk config.yaml exactly so an operator can diff
+  // what's loaded against what's checked in. Cheap; no DB touch.
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+}
+
+message GetConfigRequest {}
+
+message GetConfigResponse {
+  // YAML-encoded redacted config. Sized in single-digit kilobytes
+  // for any realistic deployment, so a single unary call is fine.
+  string yaml = 1;
+  // Optional: filesystem path the binary loaded the config from
+  // ("/app/configs/config.yaml" in production, "—" otherwise). Helps
+  // the UI label the panel.
+  string source_path = 2;
+}

@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "paladin/common/v1/pagination.proto";
+import "paladin/common/v1/resource.proto";
+import "paladin/data/v1/types.proto";
+
+// MultipartUploadService — for objects too large for a single PUT.
+// CompletionMode is always EXPLICIT here regardless of bucket events.
+service MultipartUploadService {
+  rpc InitiateMultipartUpload(InitiateMultipartUploadRequest) returns (InitiateMultipartUploadResponse);
+  rpc PresignPart(PresignPartRequest) returns (PresignPartResponse);
+  rpc CompleteMultipartUpload(CompleteMultipartUploadRequest) returns (Object);
+  rpc AbortMultipartUpload(AbortMultipartUploadRequest) returns (AbortMultipartUploadResponse);
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
+}
+
+message InitiateMultipartUploadRequest {
+  string parent = 1 [(buf.validate.field).string.min_len = 1]; // ObjectKey
+  string key = 2;
+  string content_type = 3 [(buf.validate.field).string.min_len = 1];
+  int64 size_bytes = 4 [(buf.validate.field).int64.gt = 0];
+  paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5
+      [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  map<string, string> metadata = 6;
+  map<string, string> tags = 7;
+  string external_ref = 8;
+  string idempotency_key = 9;
+}
+
+message InitiateMultipartUploadResponse {
+  Object object = 1;
+  string upload_id = 2;
+  int64 recommended_part_size = 3;
+  int32 total_parts = 4;
+}
+
+message PresignPartRequest {
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  int32 part_number = 3 [(buf.validate.field).int32 = {gte: 1, lte: 10000}];
+  google.protobuf.Duration ttl = 4;
+}
+
+message PresignPartResponse {
+  paladin.common.v1.PresignedUrl upload_url = 1;
+}
+
+message CompleteMultipartUploadRequest {
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  repeated CompletedPart parts = 3 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message AbortMultipartUploadRequest {
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message AbortMultipartUploadResponse {}
+
+message ListPartsRequest {
+  string object_name = 1 [(buf.validate.field).string.min_len = 1];
+  string upload_id = 2 [(buf.validate.field).string.min_len = 1];
+  paladin.common.v1.PageRequest page = 3;
+}
+
+message ListPartsResponse {
+  repeated PartInfo parts = 1;
+  paladin.common.v1.PageResponse page = 2;
+}

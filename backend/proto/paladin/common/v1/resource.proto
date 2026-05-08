@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1;paladincommonv1";
+
+// PresignedUrl: time-limited URL the client uses to talk to the storage
+// backend directly. PALADIN is a control plane — it never proxies S3 traffic;
+// these URLs are issued by `internal/storage` adapters and verbatim-passed
+// to the client.
+message PresignedUrl {
+  string url = 1;
+  // HTTP method: PUT for upload, GET for download, POST for presigned POST.
+  string method = 2;
+  map<string, string> required_headers = 3;
+  // Populated only for presigned-POST uploads.
+  PresignedPostPolicy post_policy = 4;
+  // Authoritative expiry as reported by the signer; clients MUST treat as
+  // upper bound (server-side TTL clamping may have shortened it).
+  string expires_at_rfc3339 = 5;
+}
+
+message PresignedPostPolicy {
+  // S3 form fields the client must submit verbatim.
+  map<string, string> fields = 1;
+  // POST action URL (the bucket endpoint).
+  string action = 2;
+}
+
+// CompletionMode communicates whether the client must explicitly call
+// CompleteObject or whether the server will receive an event from the
+// storage backend.
+enum CompletionMode {
+  COMPLETION_MODE_UNSPECIFIED = 0;
+  COMPLETION_MODE_IMPLICIT = 1; // server promotes via S3 event stream
+  COMPLETION_MODE_EXPLICIT = 2; // client MUST call CompleteObject
+}
+
+// ChecksumAlgorithm — wire enum for content-integrity algorithms negotiated
+// with the storage backend.
+enum ChecksumAlgorithm {
+  CHECKSUM_ALGORITHM_UNSPECIFIED = 0;
+  CHECKSUM_ALGORITHM_CRC32C = 1;
+  CHECKSUM_ALGORITHM_SHA256 = 2;
+  CHECKSUM_ALGORITHM_MD5 = 3;
+}

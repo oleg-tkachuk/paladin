@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+
+// PolicyService offers Cedar policy authoring helpers — validation,
+// dry-run evaluation, and inspection of effective (merged) policies.
+// Used heavily by the MCP server and the admin UI.
+service PolicyService {
+  // Validate parses + type-checks Cedar text against the PALADIN schema.
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+
+  // SimulateAuthz answers "would this principal be allowed to take this
+  // action against this resource right now?" without performing the action.
+  // Useful for UI access-pre-flight and for LLM tools.
+  rpc SimulateAuthz(SimulateAuthzRequest) returns (SimulateAuthzResponse);
+
+  // GetEffectivePolicy returns the merged policy stack for a target
+  // (tenant + bucket + object_key inheritance), useful for debugging.
+  rpc GetEffectivePolicy(GetEffectivePolicyRequest) returns (GetEffectivePolicyResponse);
+}
+
+message ValidateRequest {
+  string cedar_policy = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ValidateResponse {
+  bool ok = 1;
+  repeated PolicyDiagnostic diagnostics = 2;
+}
+
+message PolicyDiagnostic {
+  string severity = 1; // "error" | "warning"
+  string message = 2;
+  int32 line = 3;
+  int32 column = 4;
+}
+
+message SimulateAuthzRequest {
+  // Subject of the simulated principal (does not need to match a real user).
+  string principal_subject = 1 [(buf.validate.field).string.min_len = 1];
+  string principal_tenant_id = 2;
+  repeated string principal_roles = 3;
+  string action = 4 [(buf.validate.field).string.min_len = 1];
+  // Resource name to authorize against.
+  string resource_name = 5 [(buf.validate.field).string.min_len = 1];
+}
+
+message SimulateAuthzResponse {
+  bool allowed = 1;
+  // Decision diagnostics — which permit/forbid rules fired.
+  repeated string matched_policies = 2;
+  string explanation = 3;
+}
+
+message GetEffectivePolicyRequest {
+  string resource_name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetEffectivePolicyResponse {
+  // Concatenated cedar text in evaluation order: tenant → bucket → object_key.
+  string merged_cedar_policy = 1;
+  repeated PolicyLayer layers = 2;
+}
+
+message PolicyLayer {
+  string source = 1; // resource name owning the layer
+  string cedar_policy = 2;
+}

@@ -1,0 +1,72 @@
+{{- /*
+  Migrate Job — pre-install / pre-upgrade hook. Runs `paladin migrate` once
+  per release operation; goose ignores already-applied versions, so the
+  Job is safe to re-run on upgrade.
+
+  Hook ordering:
+    weight=0  — migrate runs first (this Job)
+    weight=10 — bootstrap runs after migrate (job-bootstrap.yaml)
+    serve <role> Deployments roll only after both Jobs succeed.
+
+  Hook delete policy: clean up successful pods immediately, but keep
+  failed pods for `kubectl logs` so an operator can diagnose without
+  re-running.
+
+  RBAC: reuses the same K8sSecretResolver-bound SA as the serve roles
+  (the migrator needs the same secrets to build its DSN).
+*/}}
+{{- if .Values.jobs.migrate.enabled }}
+{{- $fullname := printf "%s-migrate" (include "chart.fullname" .) -}}
+{{- $sa := include "chart.roleServiceAccountName" (dict "ctx" . "role" "migrate" "spec" dict) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "migrate") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "argocd.argoproj.io/sync-wave": "0"
+spec:
+  backoffLimit: {{ .Values.jobs.migrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.jobs.migrate.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.roleLabels" (dict "ctx" . "role" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $sa }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "migrate"
+          {{- with .Values.jobs.migrate.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "chart.fullname" . }}-config
+{{- end }}

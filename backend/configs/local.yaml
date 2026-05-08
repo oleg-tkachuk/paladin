@@ -1,0 +1,140 @@
+# Localhost-targeted config for `tests/api/run-all.sh` against a
+# `docker compose -f deploy/docker-compose.yaml up -d postgres seaweedfs`
+# stack. Differs from the in-cluster default (configs/config.yaml) only
+# in the connection strings, which point at the published host ports.
+
+app:
+  name: paladin
+  env: local
+
+logger:
+  level: info
+  format: console
+  development: true
+  disable_caller: true
+  disable_stacktrace: true
+
+otel:
+  enabled: false
+  endpoint: ""
+  protocol: http
+  insecure: true
+
+server:
+  mode: debug
+  data_http: &http_defaults
+    addr: "127.0.0.1:8080"
+    read_header_timeout: 5s
+    read_timeout: 30s
+    write_timeout: 60s
+    idle_timeout: 90s
+    max_header_bytes: 1048576
+    max_body_bytes: 10485760
+    request_id_header: "X-Request-Id"
+    real_ip_header: "X-Forwarded-For"
+    cors_allowed_origins: ["*"]
+    tls: { enabled: false }
+  admin_http:
+    <<: *http_defaults
+    addr: "127.0.0.1:8090"
+  iam_http:
+    <<: *http_defaults
+    addr: "127.0.0.1:8085"
+  shutdown_timeout: 5s
+
+datastores:
+  postgres:
+    # Local dev runs migrations and runtime as the same `paladin` superuser —
+    # role split is enforced only when `migrate_dsn` is set. Production
+    # configs flip this on (see docs/db-roles.md).
+    dsn: "postgres://paladin:paladin@127.0.0.1:5433/paladin?sslmode=disable"
+    migrate_dsn: ""                     # empty → reuse `dsn` (dev path)
+    pool: { max_conns: 10, min_conns: 1, max_conn_lifetime: 30m, max_conn_idle_time: 5m }
+    timeouts: { connect: 5s, statement: 30s }
+    healthcheck_period: 30s
+
+limits:
+  max_object_size: "100MB"
+  max_multipart_size: "1TB"
+  min_part_size: "5MB"
+  max_part_size: "5GB"
+  max_parts: 10000
+  allowed_content_types:
+    - "image/jpeg"
+    - "image/png"
+    - "text/plain"
+    - "application/pdf"
+    - "application/json"
+    - "application/octet-stream"
+  presign:
+    put_ttl: 15m
+    get_ttl: 15m
+    part_ttl: 15m
+    default_ttl: 15m
+    max_ttl: 168h
+    default_max_size: 5368709120
+
+auth:
+  issuer: "paladin-dev"
+  signing_key: "dev-secret-change-me-32-bytes-min"
+  leeway: 30s
+  access_token_ttl: 15m
+  refresh_token_ttl: 168h
+  scoped_token_max_ttl: 24h
+
+security:
+  trust_tenant_id_from_request: true
+  reject_tenant_mismatch: false
+  log_sensitive: false
+
+middleware:
+  timeouts:
+    fast_operation: 5s
+    default_operation: 30s
+    s3_operation: 60s
+    long_operation: 2m
+  rate_limit:
+    requests_per_second: 1000
+    burst: 2000
+    max_tenants: 1000
+    cleanup_ttl: 10m
+    cleanup_interval: 5m
+  cache:
+    enabled: true
+    max_size: 1000
+    ttl: 5m
+  idempotency:
+    enabled: true
+    ttl: 1h
+
+workers:
+  reconciler:
+    interval: 30s
+    min_object_age: 2h
+    batch_size: 100
+  housekeeping:
+    pending_ttl: "24h"
+    multipart_ttl: "72h"
+    interval: "1h"
+    delete_orphaned_parts: false
+
+storage:
+  default_backend: primary
+  backends:
+    primary:
+      kind: s3-compatible
+      bucket: paladin-primary
+      region: us-east-1
+      endpoint: "http://127.0.0.1:8333"
+      public_endpoint: "http://127.0.0.1:8333"
+      force_path_style: true
+      auth:
+        mode: static_keys
+        access_key: dummy
+        secret_key: dummy
+      part_size: "8MB"
+      sse: { type: "", key_id: "" }
+      events: { enabled: false, target: "none", queue_url: "", poll_interval: 20s }
+
+cedar:
+  policy_cache_ttl: 30s

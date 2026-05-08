@@ -1,0 +1,301 @@
+package adapters
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+)
+
+// TenantRepo satisfies tenant.Repository. The raw pool is needed because the
+// sqlc DeleteTenant query bakes in an OCC guard (`AND resource_version = $2`)
+// and the current DeleteTenantRequest proto has no resource_version field —
+// see Delete below for the unconditional path.
+type TenantRepo struct {
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
+}
+
+func NewTenantRepo(q *sqlc.Queries, pool *pgxpool.Pool) *TenantRepo {
+	return &TenantRepo{q: q, pool: pool}
+}
+
+var _ tenant.Repository = (*TenantRepo)(nil)
+
+func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (tenant.Tenant, error) {
+	// tenants.labels is JSONB NOT NULL DEFAULT '{}'. The INSERT binds it
+	// explicitly, so a nil []byte becomes SQL NULL and violates the
+	// constraint. Normalize to an empty JSON object.
+	labels := args.Labels
+	if len(labels) == 0 {
+		labels = []byte("{}")
+	}
+	if err := r.q.CreateTenant(ctx,
+		pgUUID(args.TenantID),
+		args.Slug,
+		strPtr(args.DisplayName),
+		labels,
+		args.InheritedCedarPolicy,
+	); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("create tenant: %w", err)
+	}
+	return r.Get(ctx, args.TenantID)
+}
+
+func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
+	row, err := r.q.GetTenant(ctx, pgUUID(tenantID))
+	if err != nil {
+		return tenant.Tenant{}, err
+	}
+	return tenantFromSQLC(row.Tenant), nil
+}
+
+func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+	var policyHash []byte
+	if args.InheritedCedarPolicy != nil {
+		sum := sha256.Sum256([]byte(*args.InheritedCedarPolicy))
+		policyHash = sum[:]
+	}
+	rows, err := r.q.UpdateTenant(ctx,
+		pgUUID(args.TenantID),
+		args.DisplayName,
+		args.Labels,
+		args.InheritedCedarPolicy,
+		policyHash,
+		args.ExpectedVersion,
+	)
+	if err != nil {
+		return tenant.Tenant{}, fmt.Errorf("update tenant: %w", err)
+	}
+	if rows == 0 {
+		return tenant.Tenant{}, tenant.ErrVersionMismatch
+	}
+	return r.Get(ctx, args.TenantID)
+}
+
+func (r *TenantRepo) Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
+	// expectedVersion == 0 means "no OCC guard" — DeleteTenantRequest doesn't
+	// carry a resource_version, so the connect shim always passes 0. Drop the
+	// version predicate in that case; sqlc's DeleteTenant hardcodes it.
+	if expectedVersion == 0 {
+		tag, err := r.pool.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, pgUUID(tenantID))
+		if err != nil {
+			return fmt.Errorf("delete tenant: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return tenant.ErrNotFound
+		}
+		return nil
+	}
+	rows, err := r.q.DeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
+	if err != nil {
+		return fmt.Errorf("delete tenant: %w", err)
+	}
+	if rows == 0 {
+		return tenant.ErrVersionMismatch
+	}
+	return nil
+}
+
+func (r *TenantRepo) List(ctx context.Context, pageSize int32, afterID uuid.UUID) ([]tenant.Tenant, string, error) {
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	rows, err := r.q.ListTenants(ctx, pgUUID(afterID), pageSize)
+	if err != nil {
+		return nil, "", fmt.Errorf("list tenants: %w", err)
+	}
+	out := make([]tenant.Tenant, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, tenantFromSQLC(row.Tenant))
+	}
+	var next string
+	if int32(len(out)) == pageSize && len(out) > 0 {
+		next = out[len(out)-1].TenantID.String()
+	}
+	return out, next, nil
+}
+
+// Rename atomically rotates the tenant slug AND rewrites every
+// `Tenant::"<old_slug>"` reference in the tenant's
+// inherited_cedar_policy plus every object_keys.cedar_policy for the
+// tenant. Bumps resource_version on the tenant row (but NOT on the
+// object_keys rows — the rewrite is a derived consequence of the
+// tenant slug rotation, not an independent edit; bumping each
+// object_key's RV would invalidate every in-flight client that holds
+// an object_key resource_version mid-transaction). Operators that
+// need a per-objectKey audit row can list the affected rows from the
+// audit_log entry's after_json.
+//
+// Uniqueness on the new slug is enforced by the tenants_slug_unique
+// constraint (migration 009) — caught here as ErrSlugConflict.
+//
+// Implementation uses a single tx so a partial rewrite (tenant
+// updated, object_keys not) cannot leak.
+func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArgs) (tenant.Tenant, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Read + lock the tenant row. SELECT FOR UPDATE so a concurrent
+	// rename or update can't race past us between the read and the
+	// rewrite.
+	var oldSlug string
+	var oldPolicy string
+	var rv int64
+	err = tx.QueryRow(ctx,
+		`SELECT slug, inherited_cedar_policy, resource_version
+		   FROM tenants
+		  WHERE tenant_id = $1
+		    FOR UPDATE`,
+		pgUUID(args.TenantID),
+	).Scan(&oldSlug, &oldPolicy, &rv)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tenant.Tenant{}, tenant.ErrNotFound
+		}
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: select: %w", err)
+	}
+	if rv != args.ExpectedVersion {
+		return tenant.Tenant{}, tenant.ErrVersionMismatch
+	}
+	if oldSlug == args.NewSlug {
+		// Idempotent no-op — nothing to rewrite, no version bump.
+		row, err := r.q.GetTenant(ctx, pgUUID(args.TenantID))
+		if err != nil {
+			return tenant.Tenant{}, err
+		}
+		return tenantFromSQLC(row.Tenant), nil
+	}
+
+	newPolicy := rewriteTenantSlugRefs(oldPolicy, oldSlug, args.NewSlug)
+	newPolicySum := sha256.Sum256([]byte(newPolicy))
+
+	// Bump tenant: slug, inherited_cedar_policy, hash, RV.
+	tag, err := tx.Exec(ctx,
+		`UPDATE tenants
+		    SET slug                   = $2,
+		        inherited_cedar_policy = $3,
+		        inherited_policy_hash  = $4,
+		        resource_version       = resource_version + 1,
+		        updated_at             = NOW()
+		  WHERE tenant_id        = $1
+		    AND resource_version = $5`,
+		pgUUID(args.TenantID),
+		args.NewSlug,
+		newPolicy,
+		newPolicySum[:],
+		args.ExpectedVersion,
+	)
+	if err != nil {
+		// Slug uniqueness violation surfaces as a unique-constraint
+		// PG error — translate to ErrSlugConflict so the handler can
+		// return AlreadyExists.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "tenants_slug_unique" {
+			return tenant.Tenant{}, tenant.ErrSlugConflict
+		}
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: update tenant: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return tenant.Tenant{}, tenant.ErrVersionMismatch
+	}
+
+	// Rewrite per-objectKey policies. The cedar_policy column is
+	// nullable in some object_keys rows; use COALESCE so empty
+	// policies don't produce phantom hashes.
+	rows, err := tx.Query(ctx,
+		`SELECT object_key, cedar_policy
+		   FROM object_keys
+		  WHERE tenant_id = $1
+		    AND cedar_policy IS NOT NULL
+		    AND cedar_policy <> ''
+		    FOR UPDATE`,
+		pgUUID(args.TenantID),
+	)
+	if err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: list object_keys: %w", err)
+	}
+	type okRewrite struct {
+		key       string
+		newPolicy string
+		newHash   []byte
+	}
+	var rewrites []okRewrite
+	for rows.Next() {
+		var key, pol string
+		if err := rows.Scan(&key, &pol); err != nil {
+			rows.Close()
+			return tenant.Tenant{}, fmt.Errorf("rename tenant: scan object_key: %w", err)
+		}
+		rewritten := rewriteTenantSlugRefs(pol, oldSlug, args.NewSlug)
+		if rewritten == pol {
+			continue
+		}
+		sum := sha256.Sum256([]byte(rewritten))
+		rewrites = append(rewrites, okRewrite{key: key, newPolicy: rewritten, newHash: sum[:]})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: iterate object_keys: %w", err)
+	}
+	for _, w := range rewrites {
+		if _, err := tx.Exec(ctx,
+			`UPDATE object_keys
+			    SET cedar_policy      = $3,
+			        cedar_policy_hash = $4,
+			        resource_version  = resource_version + 1,
+			        updated_at        = NOW()
+			  WHERE tenant_id  = $1
+			    AND object_key = $2`,
+			pgUUID(args.TenantID), w.key, w.newPolicy, w.newHash,
+		); err != nil {
+			return tenant.Tenant{}, fmt.Errorf("rename tenant: update object_key %q: %w", w.key, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: commit: %w", err)
+	}
+	return r.Get(ctx, args.TenantID)
+}
+
+// rewriteTenantSlugRefs replaces every `Tenant::"<oldSlug>"` literal
+// with `Tenant::"<newSlug>"`. Match is exact (case-sensitive, full-
+// quoted UID) so policies that mention <oldSlug> as a label substring
+// elsewhere — e.g. inside a string value — are NOT rewritten. This is
+// the safe default: false-positives on an over-eager rewrite would
+// leak into unrelated rules and break Cedar parsing.
+func rewriteTenantSlugRefs(policy, oldSlug, newSlug string) string {
+	if oldSlug == "" || policy == "" {
+		return policy
+	}
+	oldRef := `Tenant::"` + oldSlug + `"`
+	newRef := `Tenant::"` + newSlug + `"`
+	return strings.ReplaceAll(policy, oldRef, newRef)
+}
+
+func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
+	return tenant.Tenant{
+		TenantID:             uuidFrom(t.TenantID),
+		Slug:                 t.Slug,
+		DisplayName:          derefStr(t.DisplayName),
+		Labels:               t.Labels,
+		InheritedCedarPolicy: t.InheritedCedarPolicy,
+		InheritedPolicyHash:  t.InheritedPolicyHash,
+		ResourceVersion:      t.ResourceVersion,
+		CreatedAt:            timeFrom(t.CreatedAt),
+		UpdatedAt:            timeFrom(t.UpdatedAt),
+	}
+}

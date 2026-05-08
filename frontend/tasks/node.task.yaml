@@ -1,0 +1,55 @@
+version: "3"
+
+# Node / npm wrappers. Thin shims over `npm run …` so the entire
+# developer surface lives in `task --list-all` rather than splitting
+# across npm-scripts and Taskfile commands. Each task emits the same
+# `:core:banner` style as the Go side for consistent log scraping.
+
+tasks:
+  install:
+    desc: "Install npm dependencies (npm ci, honours package-lock.json)"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "npm ci" }
+      - npm ci
+
+  dev:
+    desc: "Run the Next.js development server"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "next dev" }
+      - npm run dev
+
+  build:
+    desc: "Build the Next.js production bundle (standalone output)"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "next build" }
+      - npm run build
+
+  lint:
+    desc: "Run ESLint over src/"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "eslint" }
+      - npm run lint
+
+  lint:fix:
+    desc: "Run ESLint with --fix"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "eslint --fix" }
+      - npm run lint:fix
+
+  generate:
+    desc: "Regenerate Connect-RPC TypeScript stubs from ../paladin/proto"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "buf generate" }
+      - npm run generate

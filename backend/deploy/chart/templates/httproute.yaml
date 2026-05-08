@@ -1,0 +1,49 @@
+{{- /*
+  HTTPRoute (Gateway API) targets the api role's Service. Same scoping
+  as Ingress: admin gets no public route by default. Per-rule overrides
+  via `backendRefs` would let operators target other roles (e.g. mcp);
+  not exposed in chart values yet — operators with that need can fork or
+  patch.
+*/}}
+{{- if .Values.httpRoute.enabled -}}
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $apiSpec := index .Values.deployments "api" -}}
+{{- $svcPort := 8080 -}}
+{{- if and $apiSpec $apiSpec.service $apiSpec.service.ports -}}
+{{- $svcPort = (index $apiSpec.service.ports 0).port -}}
+{{- end -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "chart.fullname" . }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- with .Values.httpRoute.parentRefs }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.httpRoute.rules }}
+    {{- with .matches }}
+    - matches:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .filters }}
+      filters:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+      backendRefs:
+        - name: {{ $apiSvc }}
+          port: {{ $svcPort }}
+          weight: 1
+    {{- end }}
+{{- end }}

@@ -1,0 +1,30 @@
+{{- /*
+  One Service per role, scoped via app.kubernetes.io/component selector.
+  Roles without a `service:` block (rare, e.g. a hypothetical worker
+  variant with no listener) skip Service rendering — kubelet still
+  probes the container directly.
+*/}}
+{{- range $role, $spec := .Values.deployments }}
+{{- if and $spec.enabled $spec.service }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
+spec:
+  type: {{ default "ClusterIP" $spec.service.type }}
+  ports:
+    {{- range $spec.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ default "TCP" .protocol }}
+    {{- end }}
+  selector:
+    {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
+{{- end }}
+{{- end }}

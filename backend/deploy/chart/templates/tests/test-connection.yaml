@@ -1,0 +1,29 @@
+{{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $apiSpec := index .Values.deployments "api" -}}
+{{- $dataPort := 8080 -}}
+{{- if and $apiSpec $apiSpec.service $apiSpec.service.ports -}}
+{{- $dataPort = (index $apiSpec.service.ports 0).port -}}
+{{- end -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "chart.fullname" . }}-test-connection"
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: busybox:1.37
+      # /livez returns 200 once the api binary is up. Targets the api
+      # Service since data plane is what end-users actually consume.
+      command: ["wget"]
+      args:
+        - "--quiet"
+        - "--server-response"
+        - "--tries=1"
+        - "--timeout=5"
+        - "{{ $apiSvc }}:{{ $dataPort }}/livez"

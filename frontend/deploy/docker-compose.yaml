@@ -1,0 +1,38 @@
+# Local-development stack for the PALADIN UI. Stand it up alongside the
+# backend's compose file:
+#
+#   docker compose -f deploy/docker-compose.yaml --env-file deploy/info.env up --build
+#
+# The PALADIN backend runs from paladin/deploy/docker-compose.yaml
+# in a sibling project and exposes its three planes on the host:
+# data:8080, iam:8085, admin:8090. We talk to them through host.docker.internal
+# because the compose project boundary keeps the networks separate.
+
+x-build-meta: &build-meta
+  APP_VERSION:     ${APP_VERSION:-v0.0.1-dev}
+  GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
+  BUILD_TIME:      ${BUILD_TIME:-now}
+
+services:
+  paladin-ui:
+    image: paladin-ui
+    container_name: paladin-ui
+    build:
+      context: ..
+      dockerfile: ./deploy/Dockerfile
+      network: host
+      args:
+        <<: *build-meta
+    ports:
+      # Host 3002 → container 3000 keeps the dev port (3000) free for
+      # `task dev` running natively against the same backend.
+      - "3002:3000"
+    environment:
+      # Per-plane backend URLs read by the BFF route handlers
+      # (src/app/api/rpc/[[...connect]]/route.ts and src/lib/auth/bff.ts).
+      # The browser never sees these — it only ever hits /api/rpc on the
+      # UI container.
+      - PALADIN_DATA_URL=http://host.docker.internal:8080
+      - PALADIN_IAM_URL=http://host.docker.internal:8085
+      - PALADIN_ADMIN_URL=http://host.docker.internal:8090
+    restart: unless-stopped

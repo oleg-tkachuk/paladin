@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package paladin.data.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1";
+
+import "google/protobuf/timestamp.proto";
+
+// Object is the data-plane representation. Hides backend internals;
+// `bucket` and `backend_id` surface only when the caller has the
+// `view.physical_storage` role (set in JWT claims).
+message Object {
+  // Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{object_key}/objects/{object_id}".
+  string name = 1;
+  string object_id = 2;
+  string tenant_id = 3;
+  string object_key = 4;
+  // Storage path inside the object_key.
+  string key = 5;
+  ObjectState state = 6;
+  string content_type = 7;
+  int64 size_bytes = 8;
+  string etag = 9;
+  ChecksumDigest checksum = 10;
+  string sequencer = 11;
+  map<string, string> metadata = 12;
+  map<string, string> tags = 13;
+  string external_ref = 14;
+  // Resource version for optimistic concurrency control.
+  string resource_version = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+  google.protobuf.Timestamp committed_at = 18;
+  google.protobuf.Timestamp terminated_at = 19;
+  google.protobuf.Timestamp presign_expires_at = 20;
+  // Object-lock retention; populated when the parent bucket has lock enabled.
+  ObjectLockState lock = 21;
+  // Optional — physical placement; populated only for privileged callers.
+  PhysicalPlacement placement = 22;
+}
+
+enum ObjectState {
+  OBJECT_STATE_UNSPECIFIED = 0;
+  OBJECT_STATE_PENDING = 1;
+  OBJECT_STATE_AVAILABLE = 2;
+  OBJECT_STATE_FAILED = 3;
+  OBJECT_STATE_DELETED = 4;
+}
+
+message ChecksumDigest {
+  string algorithm = 1; // CRC32C | SHA256 | MD5
+  string value = 2;     // base64-encoded
+}
+
+message ObjectLockState {
+  string mode = 1; // GOVERNANCE | COMPLIANCE
+  google.protobuf.Timestamp retain_until = 2;
+  bool legal_hold = 3;
+}
+
+message PhysicalPlacement {
+  string backend_id = 1;
+  string bucket_name = 2;
+  string s3_key = 3; // composed: "<tenant>/<object_key>/<key>"
+}
+
+// CompletedPart / PartInfo for multipart.
+message CompletedPart {
+  int32 part_number = 1;
+  string etag = 2;
+  string checksum_value = 3; // optional
+}
+
+message PartInfo {
+  int32 part_number = 1;
+  int64 size_bytes = 2;
+  string etag = 3;
+  google.protobuf.Timestamp uploaded_at = 4;
+}

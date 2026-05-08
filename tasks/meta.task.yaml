@@ -1,0 +1,37 @@
+version: "3"
+
+# Repo-level meta-tasks that span both backend and frontend. Lives at
+# tasks/ rather than under backend/ or frontend/ so neither side
+# carries the cross-project knowledge in its own Taskfile.
+#
+# Compose orchestration: backend's compose file is the single source
+# of truth — it builds backend services AND mounts the frontend as
+# the paladin-ui container with a build context resolving to ../../frontend.
+# We don't have a separate top-level compose file; the path above
+# stays canonical as long as the two trees live side-by-side.
+
+silent: true
+
+vars:
+  COMPOSE_FILE: ./backend/deploy/docker-compose.yaml
+
+tasks:
+  compose-up:
+    desc: docker compose up --build for the integrated stack.
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} up --build -d
+
+  compose-down:
+    desc: docker compose down. Volumes preserved.
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down
+
+  compose-clean:
+    desc: docker compose down -v. Volumes dropped — data loss.
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down -v
+
+  compose-logs:
+    desc: Tail logs from every service in the integrated stack.
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} logs -f --tail=200

@@ -1,0 +1,211 @@
+# Smoke / integration stack. One container per `paladin` subcommand —
+# matches Helm's per-role Deployment topology so behaviour mirrors prod.
+# The UI rides on the same network so its BFF reaches the planes via
+# container DNS, no host.docker.internal hop.
+#
+#   docker compose -f deploy/docker-compose.yaml up --build
+#
+# UI build context resolves to the sibling `frontend/` directory of
+# the integrated repo. To bring up backend only: `--scale paladin-ui=0`.
+#
+# Boot order via `condition: service_completed_successfully`:
+#   postgres healthy → paladin-migrate (one-shot) → paladin-bootstrap (one-shot)
+#                                              → paladin-api / paladin-admin /
+#                                                paladin-worker / paladin-mcp
+#                                              → paladin-ui (waits for api+admin)
+#
+# Verify the planes + UI:
+#   curl http://localhost:8080/readyz   # data
+#   curl http://localhost:8085/readyz   # iam
+#   curl http://localhost:8090/readyz   # admin
+#   curl http://localhost:8095/healthz  # mcp
+#   curl http://localhost:8100/readyz   # ingest (webhook receiver)
+#   open http://localhost:3002          # UI (login page)
+
+x-build-meta: &build-meta
+  APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
+  GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
+  BUILD_TIME: ${BUILD_TIME:-now}
+
+x-paladin-base: &paladin-base
+  image: paladin
+  build:
+    context: ..
+    dockerfile: ./deploy/Dockerfile
+    network: host
+    args: *build-meta
+  volumes:
+    - ../configs:/app/configs:ro
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: paladin-postgres
+    environment:
+      POSTGRES_DB: paladin
+      POSTGRES_USER: paladin
+      POSTGRES_PASSWORD: paladin
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paladin -d paladin"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - paladin_pg_data:/var/lib/postgresql/data
+      - ./postgres-custom.conf:/etc/postgresql/postgresql.conf:ro
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: paladin-seaweedfs
+    # `-filer.notification` enables the webhook publisher that posts
+    # filer events to paladin-ingest. The notification.toml mounted at
+    # /etc/seaweedfs/notification.toml is the source of truth for
+    # which backend (webhook / kafka / nats / …) is actually live.
+    command: >-
+      server -ip.bind=0.0.0.0 -dir=/data -s3 -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+      -filer.notification=/etc/seaweedfs/notification.toml
+    ports:
+      - "9333:9333"
+      - "8081:8080"
+      - "8888:8888"
+      - "8333:8333"
+    volumes:
+      - paladin_seaweed_data:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - ./seaweedfs-notification.toml:/etc/seaweedfs/notification.toml:ro
+
+  # One-shot: applies SQL migrations and exits 0. The api/admin/worker/mcp
+  # services gate on `service_completed_successfully` so they never see a
+  # half-migrated schema.
+  paladin-migrate:
+    <<: *paladin-base
+    container_name: paladin-migrate
+    restart: "no"
+    command: ["migrate", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-shot: provisions the platform admin user + storage backend rows.
+  # Idempotent — safe to re-run on every `up`.
+  paladin-bootstrap:
+    <<: *paladin-base
+    container_name: paladin-bootstrap
+    restart: "no"
+    command: ["bootstrap", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      paladin-migrate:
+        condition: service_completed_successfully
+
+  paladin-api:
+    <<: *paladin-base
+    container_name: paladin-api
+    init: true
+    restart: on-failure
+    command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8080:8080"   # data
+      - "8085:8085"   # iam
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
+
+  paladin-admin:
+    <<: *paladin-base
+    container_name: paladin-admin
+    init: true
+    restart: on-failure
+    command: ["serve", "admin", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8090:8090"
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
+
+  paladin-worker:
+    <<: *paladin-base
+    container_name: paladin-worker
+    init: true
+    restart: on-failure
+    command: ["serve", "worker", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
+
+  paladin-mcp:
+    <<: *paladin-base
+    container_name: paladin-mcp
+    init: true
+    restart: on-failure
+    command: ["serve", "mcp", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8095:8095"
+    depends_on:
+      paladin-api:
+        condition: service_started
+      paladin-admin:
+        condition: service_started
+
+  # Ingest plane: receives storage-backend events (SeaweedFS webhook
+  # by default in compose; NATS / RabbitMQ in prod) and promotes
+  # PENDING → AVAILABLE on matching object rows. Standalone process
+  # so its HTTP receiver doesn't share lifecycle with Connect listeners.
+  paladin-ingest:
+    <<: *paladin-base
+    container_name: paladin-ingest
+    init: true
+    restart: on-failure
+    command: ["serve", "ingest", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8100:8100"   # webhook receiver
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
+
+  # UI BFF (Next.js). Browser hits localhost:3002 → /api/rpc/<plane>/...
+  # is proxied by the UI process to paladin-api / paladin-admin via container
+  # DNS. No host.docker.internal: same network as the planes.
+  #
+  # Build context is the sibling repo. If you don't have it checked out,
+  # bring up the backend with `--scale paladin-ui=0` to skip this service.
+  paladin-ui:
+    image: paladin-ui
+    container_name: paladin-ui
+    build:
+      context: ../../frontend
+      dockerfile: ./deploy/Dockerfile
+      network: host
+      args:
+        APP_VERSION: ${APP_VERSION:-v0.0.1-dev}
+        GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-local-dev}
+        BUILD_TIME: ${BUILD_TIME:-now}
+    init: true
+    restart: on-failure
+    ports:
+      # Host 3002 → container 3000. Matches the UI repo's standalone
+      # compose so dev muscle memory carries over.
+      - "3002:3000"
+    environment:
+      # Per-plane backend URLs read by the BFF (src/app/api/rpc/...
+      # /route.ts and src/lib/auth/bff.ts). Browser never sees these —
+      # it only ever hits /api/rpc on this container.
+      PALADIN_DATA_URL: http://paladin-api:8080
+      PALADIN_IAM_URL: http://paladin-api:8085
+      PALADIN_ADMIN_URL: http://paladin-admin:8090
+    depends_on:
+      paladin-api:
+        condition: service_started
+      paladin-admin:
+        condition: service_started
+
+volumes:
+  paladin_pg_data:
+  paladin_seaweed_data:

@@ -1,48 +1,40 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Repo-root .gitignore for the PALADIN monorepo. Path-specific ignores
+# live in backend/ and frontend/ where applicable; this file covers
+# the cross-cutting cases (compiled binaries, OS junk, dotenv files,
+# IDE detritus that may land in either half or in tasks/).
+
+# ── Compiled binaries (Go output anywhere in the tree) ──────────────
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
+server
+!server/
 
-# Code coverage profiles and other test artifacts
+# ── Coverage / profile output ───────────────────────────────────────
 *.out
 coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
+# ── Go workspace files ──────────────────────────────────────────────
 go.work
 go.work.sum
 
-# env file
+# ── Dotenv ──────────────────────────────────────────────────────────
 .env
-!deploy/.env
+.env.*
+!**/.env.example
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# ── OS / editor cruft ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+# .idea/    # uncomment if any contributor commits IntelliJ project files
+# .vscode/  # uncomment if any contributor commits VSCode workspace files
 
-# Build data
-deploy/env/service.env
-
-# Binary files
-# Ignore only file named "server" in any directory
-server
-
-# But do NOT ignore directory named "server"
-!server/
-
-tests/grpcurl/reports
-tests/api/mutations/reports
-tests/api/security/reports
-
+# ── Generated reports (when locally produced; CI uploads as artifacts) ─
+backend/tests/grpcurl/reports/
+backend/tests/api/mutations/reports/
+backend/tests/api/security/reports/

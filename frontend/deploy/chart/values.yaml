@@ -1,0 +1,138 @@
+replicaCount: 1
+metadata:
+  version: ""
+  commit: "unknown"
+  buildTime: "unknown"
+
+# Per-plane backend URLs consumed by the BFF (src/app/api/rpc/[[...connect]]/route.ts
+# and src/lib/auth/bff.ts) via the PALADIN_<PLANE>_URL env vars. The browser
+# never sees these — it only ever hits the in-cluster Next.js service.
+#
+# Service-name assumption: the backend chart renders one Service per
+# role via roleFullname (`<release>-<chart>-<role>`). The defaults
+# below assume `helm install paladin paladin …` in namespace
+# `paladin`, which gives:
+#   paladin-paladin-api    (ports data:8080, iam:8085)
+#   paladin-paladin-admin  (port  admin:8090)
+# Note that data + iam share the api role — same Service, different
+# port. Admin sits on its own role / Service.
+#
+# If your backend release name differs (e.g. installed as just
+# `paladin`), override these URLs in the ArgoCD overlay
+# at applications/overlays/local/patches/paladin-values.yaml so the BFF
+# resolves to the actual Service names in your cluster.
+backend:
+  urls:
+    data:  "http://paladin-paladin-api.paladin.svc.cluster.local:8080"
+    iam:   "http://paladin-paladin-api.paladin.svc.cluster.local:8085"
+    admin: "http://paladin-paladin-admin.paladin.svc.cluster.local:8090"
+
+image:
+  repository: registry.local/paladin/paladin-ui
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: paladin.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - paladin.local
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+
+resources: {}
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 15
+  periodSeconds: 15
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+volumes:
+  - name: config
+    configMap:
+      name: paladin-ui-config
+
+volumeMounts:
+  - name: config
+    mountPath: /app/configs
+    readOnly: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Application Configuration
+config:
+  runtimeConfig:
+    public:
+      objectControlPlane:
+        baseUrl: "/api/paladin"
+        upstreamUrl: "http://paladin.paladin.svc.cluster.local:8080"
+        timeoutMs: 5000
+      oidc:
+        authority: ""
+        clientId: ""
+        redirectUri: ""
+        postLogoutRedirectUri: ""
+        scope: "openid profile email"
+        disableAuth: true
+      auth:
+        # DEV ONLY. Pre-minted JWT used as a fallback Bearer token when
+        # localStorage.paladin_token is empty. Do not set in production builds —
+        # the value is exposed to the browser. Carries roles=[platform-admin]
+        # and tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b (seeded dev tenant).
+        # Regenerate with `task auth:mint-token` in the PALADIN repo.
+        devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvY3AtZGV2IiwiYXVkIjoib2NwLWFwaSIsInN1YiI6ImRldi11c2VyIiwiaWF0IjoxNzc3MDIyMjI5LCJuYmYiOjE3NzcwMjIyMjksImV4cCI6MTc3NzYyNzAyOSwicm9sZXMiOlsicGxhdGZvcm0tYWRtaW4iXSwidGVuYW50IjoiM2E4MjNmZDQtMGIzZC00Y2UyLWEyODAtOTNiOGQ3NWNjMDdiIn0.OK8MEvjpI-l1LoAO0raCx3xb7TAUEPqiU6YLypJE1o4"
