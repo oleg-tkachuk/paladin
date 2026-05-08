@@ -58,7 +58,7 @@ type Deps struct {
 	Users   authstore.UserRepository
 	Audit   AuditWriter
 	Logger  *zap.Logger
-	// Mode mirrors cfg.Server.Mode and gates production-grade password
+	// Mode mirrors cfg.Runtime.Mode and gates production-grade password
 	// length enforcement. Empty defaults to "release".
 	Mode string
 }

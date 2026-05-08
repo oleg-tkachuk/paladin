@@ -82,7 +82,7 @@ func ParseBuildTime(s string) time.Time {
 // so the shutting-down state stays unified. When planes run in different
 // pods (post-Phase-2 Helm split) they get independent handlers — that is
 // the correct behaviour because each pod has its own readiness lifecycle.
-func NewHealthHandler(db *postgres.DB, cfg config.Server, l *zap.Logger) *health.Handler {
+func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *health.Handler {
 	dbPing := health.Check{
 		Name: "postgres",
 		Func: func(ctx context.Context) error { return db.Ping(ctx) },

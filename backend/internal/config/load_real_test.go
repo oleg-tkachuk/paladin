@@ -67,7 +67,7 @@ storage:
 	}
 	// Defaults must have populated every three-plane addr.
 	if cfg.API.Server.Data.Addr == "" || cfg.Admin.Server.Addr == "" || cfg.API.Server.IAM.Addr == "" {
-		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Server)
+		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Runtime)
 	}
 	if cfg.API.Server.Data.Addr == cfg.Admin.Server.Addr {
 		t.Errorf("data and admin defaulted to the same addr: %q", cfg.API.Server.Data.Addr)

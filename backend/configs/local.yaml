@@ -20,7 +20,7 @@ otel:
   protocol: http
   insecure: true
 
-server:
+runtime:
   mode: debug
   shutdown_timeout: 5s
 

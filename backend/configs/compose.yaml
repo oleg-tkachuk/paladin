@@ -27,7 +27,7 @@ logger:
 otel:
   enabled: false
 
-server:
+runtime:
   mode: debug
   shutdown_timeout: 5s
 

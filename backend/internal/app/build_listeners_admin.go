@@ -91,7 +91,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
 	)
 
-	healthH := NewHealthHandler(deps.DB, cfg.Server, l)
+	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l)
 
 	mux := http.NewServeMux()
 	healthH.Register(mux)

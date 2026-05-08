@@ -43,7 +43,7 @@ otel:
 # Settings every role inherits regardless of which listener it opens.
 # Per-listener addresses + timeouts + TLS live under api / admin /
 # worker blocks below.
-server:
+runtime:
   mode: debug                           # debug | test | release
   shutdown_timeout: 20s
   log_probes: false                     # spam reduction for k8s livenessProbe

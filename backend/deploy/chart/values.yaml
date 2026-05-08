@@ -368,7 +368,7 @@ config:
     protocol: http
     insecure: true
 
-  server:
+  runtime:
     mode: debug
     shutdown_timeout: 20s
     log_probes: false

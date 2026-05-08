@@ -42,10 +42,11 @@ otel: {
   }
 }
 
-// Server holds runtime-wide HTTP-server settings shared across every
+// Runtime holds process-wide HTTP-server settings shared across every
 // role's listener. Per-listener address / timeouts / TLS live under
-// the per-service blocks (api / admin / worker).
-server: {
+// the per-service blocks (api / admin / worker). Renamed from
+// `server` to disambiguate from `api.server` / `admin.server`.
+runtime: {
   mode:             "debug" | "test" | *"release"
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
   log_probes:       bool | *false

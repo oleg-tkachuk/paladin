@@ -8,9 +8,14 @@ import (
 )
 
 type Config struct {
-	App        App        `yaml:"app" json:"app"`
-	Logger     Logger     `yaml:"logger" json:"logger"`
-	Server     Server     `yaml:"server" json:"server"`
+	App    App    `yaml:"app" json:"app"`
+	Logger Logger `yaml:"logger" json:"logger"`
+	// Runtime holds process-wide HTTP-server flags shared by every
+	// role (mode / shutdown_timeout / log_probes). Per-listener
+	// addresses + timeouts + TLS live under api.server / admin.server
+	// / worker.ops. Renamed from `server` to avoid collision with
+	// the per-role server blocks.
+	Runtime    Runtime    `yaml:"runtime" json:"runtime"`
 	Datastores Datastores `yaml:"datastores" json:"datastores"`
 	Limits     Limits     `yaml:"limits" json:"limits"`
 	Auth       Auth       `yaml:"auth" json:"auth"`
@@ -111,15 +116,20 @@ type LoggerFields struct {
 	Env     string `yaml:"env" json:"env"`
 }
 
-// Server holds runtime-wide HTTP-server settings shared across every
-// role's listener. Per-listener address / timeouts / TLS live under the
-// per-service blocks:
+// Runtime holds process-wide HTTP-server settings shared across every
+// role's listener. Per-listener address / timeouts / TLS live under
+// the per-service blocks:
 //
 //	api.server.data   — was server.data_http
 //	api.server.iam    — was server.iam_http
 //	admin.server      — was server.admin_http
 //	worker.ops        — separate ops listener for the worker role
-type Server struct {
+//
+// Renamed from `Server` to disambiguate from `api.Server`,
+// `admin.Server`, etc. — operators reading the YAML used to see
+// two `server:` blocks at different nesting levels and miss the
+// connection.
+type Runtime struct {
 	Mode            string        `yaml:"mode" json:"mode"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`

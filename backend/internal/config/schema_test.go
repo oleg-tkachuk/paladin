@@ -69,8 +69,8 @@ storage:
 	if cfg.Datastores.Postgres.Pool.MaxConns != 20 {
 		t.Errorf("Postgres.Pool.MaxConns: got %d want 20", cfg.Datastores.Postgres.Pool.MaxConns)
 	}
-	if cfg.Server.ShutdownTimeout.String() != "20s" {
-		t.Errorf("Server.ShutdownTimeout: got %v want 20s", cfg.Server.ShutdownTimeout)
+	if cfg.Runtime.ShutdownTimeout.String() != "20s" {
+		t.Errorf("Server.ShutdownTimeout: got %v want 20s", cfg.Runtime.ShutdownTimeout)
 	}
 	if !cfg.Middleware.RateLimit.Enabled {
 		t.Error("Middleware.RateLimit.Enabled: default should be true")

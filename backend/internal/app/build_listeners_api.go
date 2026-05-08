@@ -146,7 +146,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
 
-	healthH = NewHealthHandler(deps.DB, cfg.Server, l)
+	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l)
 
 	dataMux = http.NewServeMux()
 	healthH.Register(dataMux)
