@@ -48,10 +48,10 @@ func TestWorker_DedupSkipsDuplicate(t *testing.T) {
 
 	ev := CloudEvent{ID: "evt-1", Type: EventTypeUploaded, Source: "test"}
 
-	if err := w.deliver(context.Background(), ev); err != nil {
+	if err := w.Deliver(context.Background(), ev); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	if err := w.deliver(context.Background(), ev); err != nil {
+	if err := w.Deliver(context.Background(), ev); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 	if len(handler.calls) != 1 {
@@ -61,7 +61,7 @@ func TestWorker_DedupSkipsDuplicate(t *testing.T) {
 
 func TestWorker_RejectsEmptyID(t *testing.T) {
 	w := &Worker{Dedup: &fakeDedup{}, Handler: &recordingHandler{}}
-	err := w.deliver(context.Background(), CloudEvent{ID: ""})
+	err := w.Deliver(context.Background(), CloudEvent{ID: ""})
 	if err == nil {
 		t.Error("empty id must fail (closed-by-default)")
 	}
@@ -73,7 +73,7 @@ func TestWorker_HandlerErrorPropagates(t *testing.T) {
 		Dedup:   &fakeDedup{},
 		Handler: &recordingHandler{err: wantErr},
 	}
-	err := w.deliver(context.Background(), CloudEvent{ID: "evt-1", Type: EventTypeUploaded})
+	err := w.Deliver(context.Background(), CloudEvent{ID: "evt-1", Type: EventTypeUploaded})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("err = %v, want %v", err, wantErr)
 	}
@@ -84,7 +84,7 @@ func TestWorker_DedupClaimDBErrorPropagates(t *testing.T) {
 		Dedup:   &fakeDedup{failOn: "evt-1"},
 		Handler: &recordingHandler{},
 	}
-	err := w.deliver(context.Background(), CloudEvent{ID: "evt-1", Type: EventTypeUploaded})
+	err := w.Deliver(context.Background(), CloudEvent{ID: "evt-1", Type: EventTypeUploaded})
 	if err == nil {
 		t.Error("expected dedup-claim DB error to propagate")
 	}

@@ -74,12 +74,14 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 	logger := w.log().With(zap.String("driver", w.Driver.Name()))
 	logger.Info("ingest worker starting")
-	err := w.Driver.Run(ctx, w.deliver)
+	err := w.Driver.Run(ctx, w.Deliver)
 	logger.Info("ingest worker stopped", zap.Error(err))
 	return err
 }
 
-// deliver is the per-event critical path. Order:
+// Deliver is the per-event critical path. Exported so tests + drivers
+// in other packages can reuse the dedup-then-handler flow without
+// going through Run. Order:
 //
 //  1. Validate id non-empty (closed-by-default — no id, no dedup).
 //  2. Claim dedup row. ON CONFLICT DO NOTHING means "first sighting"
@@ -101,7 +103,7 @@ func (w *Worker) Run(ctx context.Context) error {
 // transports (JetStream, RabbitMQ) the broker retry interval is
 // ours to tune, so the operator can balance "retry budget" vs.
 // "dedup table size" via reaper TTL.
-func (w *Worker) deliver(ctx context.Context, ev CloudEvent) error {
+func (w *Worker) Deliver(ctx context.Context, ev CloudEvent) error {
 	logger := w.log().With(
 		zap.String("event_id", ev.ID),
 		zap.String("event_type", string(ev.Type)),
