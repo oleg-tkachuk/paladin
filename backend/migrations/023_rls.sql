@@ -56,10 +56,35 @@
 -- AND the worker / housekeeping pods that legitimately span tenants
 -- (audit purger, lifecycle worker, reaper). The runtime DML role
 -- `paladin_app` does NOT have BYPASSRLS.
+--
+-- ALTER ROLE … BYPASSRLS requires SUPERUSER in Postgres — a regular
+-- CREATEROLE user can't grant the attribute. Three deploy shapes:
+--
+--   1. Migrations run as superuser → ALTER succeeds, role gets the
+--      attribute, runtime is correct.
+--   2. Migrations run as a non-superuser CREATEROLE user → ALTER
+--      fails with 42501 (insufficient_privilege). The operator must
+--      have created `paladin_migrate` with `BYPASSRLS` already (the
+--      provisioning runbook covers this); the migration tolerates
+--      the missing privilege so deploys don't wedge.
+--   3. Migrations run as `paladin_migrate` itself → same as (2); a role
+--      can't ALTER its own attributes without superuser.
+--
+-- Operators on shape (2)/(3) MUST have provisioned paladin_migrate with
+-- BYPASSRLS at role-creation time (e.g. via the cluster provisioning
+-- script). Without it, cross-tenant operations from the worker /
+-- migrate pods (audit purger, lifecycle, reaper) silently return
+-- zero rows — RLS hides what they should see.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'paladin_migrate') THEN
-        ALTER ROLE paladin_migrate BYPASSRLS;
+        BEGIN
+            ALTER ROLE paladin_migrate BYPASSRLS;
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                RAISE NOTICE 'cannot ALTER ROLE paladin_migrate BYPASSRLS without SUPERUSER; '
+                             'operator must provision the role with BYPASSRLS out-of-band';
+        END;
     END IF;
 END $$;
 
