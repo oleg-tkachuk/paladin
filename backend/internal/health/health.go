@@ -39,12 +39,48 @@ import (
 // kubelet's own deadline fires.
 const DefaultCheckTimeout = 2 * time.Second
 
+// Category groups checks for the SystemService.GetHealth UI render.
+// Keep the set small + stable — the frontend renders one section per
+// category, so adding a new category is a UI change too.
+type Category string
+
+const (
+	// CategoryDatabase — Postgres pool, migrations, sqlc-driven repos.
+	// Always Critical=true; the runtime can't serve a single RPC
+	// without it.
+	CategoryDatabase Category = "database"
+	// CategoryStorage — per-backend S3 reachability + bucket
+	// existence. Critical when the backend is the default backend or
+	// hosts in-flight uploads; non-critical for archival-only
+	// backends listed in storage.backends but not actively used.
+	CategoryStorage Category = "storage"
+	// CategorySubsystem — internal subsystems gated by config:
+	// capability issuer + verifier (signing key loaded), Cedar policy
+	// engine, ingest driver. Critical=true when the subsystem is
+	// enabled and required by the request path.
+	CategorySubsystem Category = "subsystem"
+	// CategoryUpstream — outbound dependencies the role calls
+	// directly: MCP bridge upstreams (admin / data / iam URLs from
+	// the mcp role), JWKS issuers from the federated-IdP path, etc.
+	// Typically Critical=false on the api role (an unreachable MCP
+	// upstream doesn't break tenant-data RPCs) and Critical=true on
+	// the mcp role.
+	CategoryUpstream Category = "upstream"
+)
+
 // Check is one named health check. Returning a non-nil error fails the
 // probe; the name appears in the JSON failures list so operators can
 // pinpoint the degraded dependency without reading process logs.
+//
+// Category + Critical are optional — zero values default to
+// `CategorySubsystem` + `Critical=true` so legacy call sites that
+// register `health.Check{Name, Func}` keep their old semantics
+// (every check counted toward /readyz).
 type Check struct {
-	Name string
-	Func func(context.Context) error
+	Name     string
+	Category Category
+	Critical bool
+	Func     func(context.Context) error
 }
 
 // Handler is the probe registrar. Build one per process; share it across
@@ -115,18 +151,39 @@ func (h *Handler) serveLive(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, r, http.StatusOK, "ok", nil)
 }
 
-// serveReady: 503 if shutting down OR any Ready check fails.
+// serveReady: 503 if shutting down OR any *critical* Ready check fails.
+//
+// Non-critical failures still appear in the response body and in
+// SystemService.GetHealth, but they do NOT pull the pod out of the
+// kubelet endpoint set — they're informational ("degraded" rather
+// than "unhealthy"). Use Critical=true for the small set of deps the
+// runtime can't serve a single RPC without (Postgres) and
+// Critical=false for everything else (storage backends, MCP upstreams)
+// so a flapping S3 endpoint doesn't take the whole api Deployment
+// off line when reads still work from the cache.
 func (h *Handler) serveReady(w http.ResponseWriter, r *http.Request) {
 	if h.shuttingDown.Load() {
 		h.respond(w, r, http.StatusServiceUnavailable, "draining", nil)
 		return
 	}
-	failures := h.runChecks(r.Context(), h.Ready)
-	if len(failures) > 0 {
-		h.respond(w, r, http.StatusServiceUnavailable, "unhealthy", failures)
-		return
+	all := h.runChecks(r.Context(), h.Ready)
+	var critical []failure
+	for _, f := range all {
+		if f.Critical {
+			critical = append(critical, f)
+		}
 	}
-	h.respond(w, r, http.StatusOK, "ok", nil)
+	switch {
+	case len(critical) > 0:
+		h.respond(w, r, http.StatusServiceUnavailable, "unhealthy", all)
+	case len(all) > 0:
+		// Non-critical failures: 200 with status="degraded" so the
+		// kubelet keeps routing traffic but operators see the
+		// per-component state in the body.
+		h.respond(w, r, http.StatusOK, "degraded", all)
+	default:
+		h.respond(w, r, http.StatusOK, "ok", nil)
+	}
 }
 
 // serveStartup: 503 if any Startup check fails. Does NOT honour
@@ -141,10 +198,13 @@ func (h *Handler) serveStartup(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, r, http.StatusOK, "ok", nil)
 }
 
-// runChecks invokes each check in sequence with an independent timeout.
-// Sequential rather than parallel because (a) the v1 dep set is small —
-// one DB ping, maybe an S3 ping later — and (b) sequential failures
-// preserve cause-first ordering in the failures slice for log readability.
+// runChecks invokes each check in sequence with an independent timeout
+// and returns the failures only. Sequential rather than parallel
+// because (a) the dep set is small enough that ~5 sequential pings
+// finish within the kubelet's 3s probe budget, (b) sequential
+// failures preserve cause-first ordering for log readability, and
+// (c) parallelising would need to duplicate the Critical-marker so
+// the caller can still tell which failures gate /readyz.
 func (h *Handler) runChecks(ctx context.Context, checks []Check) []failure {
 	if len(checks) == 0 {
 		return nil
@@ -166,7 +226,11 @@ func (h *Handler) runChecks(ctx context.Context, checks []Check) []failure {
 				// debuggable from the response body alone.
 				msg = "check timed out after " + timeout.String()
 			}
-			out = append(out, failure{Name: c.Name, Error: msg})
+			out = append(out, failure{
+				Name:     c.Name,
+				Error:    msg,
+				Critical: c.Critical,
+			})
 		}
 	}
 	return out
@@ -184,8 +248,9 @@ type response struct {
 }
 
 type failure struct {
-	Name  string `json:"name"`
-	Error string `json:"error"`
+	Name     string `json:"name"`
+	Error    string `json:"error"`
+	Critical bool   `json:"critical,omitempty"`
 }
 
 func (h *Handler) respond(w http.ResponseWriter, r *http.Request, code int, status string, failures []failure) {

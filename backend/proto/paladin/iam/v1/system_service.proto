@@ -55,8 +55,9 @@ enum ComponentStatus {
 }
 
 message ComponentHealth {
-  // Stable identifier ("postgres", "policy-engine", etc.). Used as the
-  // React key in the UI so don't rename casually.
+  // Stable identifier ("postgres", "policy-engine", "storage:primary",
+  // "mcp:admin"). Used as the React key in the UI so don't rename
+  // casually.
   string name = 1;
   ComponentStatus status = 2;
   // Free-form context shown next to the status pill. Error message on
@@ -65,11 +66,27 @@ message ComponentHealth {
   // How long the check took. Useful for spotting a degrading dep before
   // it tips over into unhealthy.
   int64 latency_ms = 4;
+  // Category — one of "database", "storage", "subsystem", "upstream".
+  // The /health page renders one section per category so operators
+  // can scan at a glance which class of dependency is degraded.
+  string category = 5;
+  // Critical=true means this check gates /readyz on the role that
+  // produced it. Critical=false is informational — a non-critical
+  // failure shows in the UI but doesn't take the pod out of the
+  // kubelet endpoint set. Frontend uses this to badge components
+  // ("required" vs "informational") so an operator sees the runtime
+  // impact without reading runbooks.
+  bool critical = 6;
 }
 
 message HealthInfo {
-  // Aggregate status — UNHEALTHY iff any component is UNHEALTHY,
-  // DEGRADED iff any is DEGRADED and none is UNHEALTHY, else HEALTHY.
+  // Aggregate status — UNHEALTHY iff any *critical* component is
+  // UNHEALTHY, DEGRADED iff any component is UNHEALTHY without being
+  // critical OR any component is DEGRADED, else HEALTHY.
   ComponentStatus status = 1;
   repeated ComponentHealth components = 2;
+  // Role the snapshot came from ("api", "admin", "worker", "mcp").
+  // The api / admin binaries register different check sets; the UI
+  // calls each plane's GetHealth and merges them into one tree.
+  string role = 3;
 }

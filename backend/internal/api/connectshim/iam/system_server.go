@@ -30,18 +30,25 @@ type SystemServer struct {
 	// GoVersion defaults to runtime.Version() when empty.
 	GoVersion string
 
+	// Role labels the GetHealth response so the UI can attribute a
+	// degraded check to the binary that ran it ("api", "admin",
+	// "worker", "mcp"). The api binary opens both data + iam planes
+	// in one process; both record `role=api`.
+	Role string
+
 	// Health gives us the registered Ready checks. Each check carries a
 	// bounded-timeout func; we run them with their own per-call timer to
 	// surface latency to the UI.
 	Health *health.Handler
 }
 
-func NewSystemServer(version, commit string, buildTime time.Time, h *health.Handler) *SystemServer {
+func NewSystemServer(version, commit string, buildTime time.Time, role string, h *health.Handler) *SystemServer {
 	return &SystemServer{
 		Version:   version,
 		Commit:    commit,
 		BuildTime: buildTime,
 		GoVersion: runtime.Version(),
+		Role:      role,
 		Health:    h,
 	}
 }
@@ -93,6 +100,8 @@ func (s *SystemServer) GetHealth(
 		ch := &pb.ComponentHealth{
 			Name:      c.Name,
 			LatencyMs: latency.Milliseconds(),
+			Category:  string(c.Category),
+			Critical:  c.Critical,
 		}
 		switch {
 		case err == nil:
@@ -105,8 +114,19 @@ func (s *SystemServer) GetHealth(
 			ch.Message = err.Error()
 		}
 
-		// Aggregate: degraded < unhealthy in the enum-int ordering.
-		if ch.Status > worst {
+		// Aggregate is asymmetric on Critical: a non-critical
+		// UNHEALTHY component drops the roll-up to DEGRADED instead
+		// of UNHEALTHY, so the UI can distinguish "runtime broken"
+		// from "informational dep flapping". Matches /readyz: only
+		// critical failures take the pod out of the endpoint set.
+		switch {
+		case ch.Status == pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY && c.Critical:
+			worst = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
+		case ch.Status == pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY:
+			if worst < pb.ComponentStatus_COMPONENT_STATUS_DEGRADED {
+				worst = pb.ComponentStatus_COMPONENT_STATUS_DEGRADED
+			}
+		case ch.Status > worst:
 			worst = ch.Status
 		}
 		components = append(components, ch)
@@ -115,5 +135,6 @@ func (s *SystemServer) GetHealth(
 	return connect.NewResponse(&pb.HealthInfo{
 		Status:     worst,
 		Components: components,
+		Role:       s.Role,
 	}), nil
 }

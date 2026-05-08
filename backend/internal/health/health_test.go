@@ -70,7 +70,7 @@ func TestReadyz_FailingCheck(t *testing.T) {
 	t.Parallel()
 	h := &Handler{
 		Ready: []Check{
-			{Name: "db", Func: func(context.Context) error { return errors.New("connection refused") }},
+			{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("connection refused") }},
 		},
 	}
 	code, body := probe(t, h, "/readyz")
@@ -95,8 +95,8 @@ func TestReadyz_ManyChecks_AllFailuresReported(t *testing.T) {
 	// pick the "first failure" off the top reliably.
 	h := &Handler{
 		Ready: []Check{
-			{Name: "db", Func: func(context.Context) error { return errors.New("db down") }},
-			{Name: "s3", Func: func(context.Context) error { return errors.New("s3 down") }},
+			{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("db down") }},
+			{Name: "s3", Critical: true, Func: func(context.Context) error { return errors.New("s3 down") }},
 		},
 	}
 	_, body := probe(t, h, "/readyz")
@@ -117,7 +117,7 @@ func TestReadyz_DrainingShortCircuits(t *testing.T) {
 	checkRan := false
 	h := &Handler{
 		Ready: []Check{
-			{Name: "expensive", Func: func(context.Context) error {
+			{Name: "expensive", Critical: true, Func: func(context.Context) error {
 				checkRan = true
 				return nil
 			}},
@@ -140,7 +140,7 @@ func TestStartupz_FailureSetsStarting(t *testing.T) {
 	t.Parallel()
 	h := &Handler{
 		Startup: []Check{
-			{Name: "migrations", Func: func(context.Context) error { return errors.New("not yet applied") }},
+			{Name: "migrations", Critical: true, Func: func(context.Context) error { return errors.New("not yet applied") }},
 		},
 	}
 	code, body := probe(t, h, "/startupz")
@@ -162,7 +162,7 @@ func TestStartupz_IgnoresShuttingDown(t *testing.T) {
 	// endpoint; the probe still exercises its checks.
 	h := &Handler{
 		Startup: []Check{
-			{Name: "always-ok", Func: func(context.Context) error { return nil }},
+			{Name: "always-ok", Critical: true, Func: func(context.Context) error { return nil }},
 		},
 	}
 	h.MarkShuttingDown()
@@ -183,7 +183,7 @@ func TestCheck_RespectsTimeout(t *testing.T) {
 	h := &Handler{
 		Timeout: 30 * time.Millisecond,
 		Ready: []Check{
-			{Name: "slow", Func: func(ctx context.Context) error {
+			{Name: "slow", Critical: true, Func: func(ctx context.Context) error {
 				select {
 				case <-time.After(500 * time.Millisecond):
 					return nil
