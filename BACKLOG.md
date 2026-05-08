@@ -258,48 +258,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Features
 
-### UserSettings — buf-generated connect-rpc swap
-
-- **Status:** Deferred
-- **Reason:** The feature is fully reachable today via a hand-written
-  JSON shim at [internal/api/connectshim/iam/user_settings_server.go](internal/api/connectshim/iam/user_settings_server.go).
-  The proto definition lives at
-  [proto/paladin/iam/v1/user_settings_service.proto](proto/paladin/iam/v1/user_settings_service.proto)
-  but `buf generate` hasn't been run for it — the generated `*.pb.go`
-  + `*_connect.go` artifacts are missing. The shim mounts at the same
-  path namespace (`/paladin.iam.v1.UserSettingsService/{Method}`) so
-  swap-in is mechanical once codegen runs.
-- **Definition of Done:**
-  - `buf generate` produces `user_settings_service.pb.go` +
-    `user_settings_service.connect.go`.
-  - `connectiam.UserSettingsServer` rewritten to satisfy the generated
-    service interface (replace the JSON shim).
-  - `cmd/server/root.go` swaps `connectiam.RegisterUserSettings` for
-    the `paladiniamv1connect.NewUserSettingsServiceHandler` form.
-- **Blockers:** none — mechanical once codegen runs.
-
-### Tenant slug rollout — Phase 3 (resource-name slug acceptance)
-
-- **Status:** Deferred
-- **Reason:** Phase 1+2 landed: `tenants.slug` column, slug-aware
-  `cedar.Principal/Resource`, default-policy templating on slug, JWT
-  `tenant_slug` claim minted by both `authh` and `apikeyh` (via
-  `WithTenantSlugLookup` + `wire.tenantSlugLookup`), MCP/proto comment
-  hints rewritten to `tenants/{tenant_id_or_slug}`, and
-  `apiutil.ParseTenantNameRef` is available alongside the legacy parser.
-  What remains is the actual handler-side acceptance: most RPCs still
-  call `apiutil.ParseTenantName` (UUID-only) instead of `ParseTenantNameRef`
-  with slug-resolution.
-- **Definition of Done:**
-  - All `apiutil.ParseTenantName` callers migrated to
-    `ParseTenantNameRef` + slug-resolution via
-    `TenantRepo.GetTenantBySlug` (already wired in sqlc).
-  - Admin RPC `RenameTenantSlug` (with policy rewrite — replace old slug
-    in `tenants.inherited_cedar_policy` + per-objectKey policies) plus
-    audit-log emission.
-- **Blockers:** none — incremental work; tracked here so handlers don't
-  drift apart as they migrate.
-
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational

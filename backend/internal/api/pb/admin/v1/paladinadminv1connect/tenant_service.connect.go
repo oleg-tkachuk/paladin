@@ -5,13 +5,12 @@
 package paladinadminv1connect
 
 import (
+	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
-
-	connect "connectrpc.com/connect"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -51,6 +50,9 @@ const (
 	// TenantServiceSetInheritedPolicyProcedure is the fully-qualified name of the TenantService's
 	// SetInheritedPolicy RPC.
 	TenantServiceSetInheritedPolicyProcedure = "/paladin.admin.v1.TenantService/SetInheritedPolicy"
+	// TenantServiceRenameTenantSlugProcedure is the fully-qualified name of the TenantService's
+	// RenameTenantSlug RPC.
+	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
 )
 
 // TenantServiceClient is a client for the paladin.admin.v1.TenantService service.
@@ -61,6 +63,12 @@ type TenantServiceClient interface {
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
+	// `Tenant::"<old_slug>"` reference in the tenant's
+	// inherited_cedar_policy AND in every object_key's cedar_policy to
+	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
+	// the supplied resource_version. Returns the renamed Tenant.
+	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 }
 
 // NewTenantServiceClient constructs a client for the paladin.admin.v1.TenantService service. By
@@ -110,6 +118,12 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
 			connect.WithClientOptions(opts...),
 		),
+		renameTenantSlug: connect.NewClient[v1.RenameTenantSlugRequest, v1.Tenant](
+			httpClient,
+			baseURL+TenantServiceRenameTenantSlugProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -121,6 +135,7 @@ type tenantServiceClient struct {
 	deleteTenant       *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
 	listTenants        *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
 	setInheritedPolicy *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
+	renameTenantSlug   *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
 }
 
 // CreateTenant calls paladin.admin.v1.TenantService.CreateTenant.
@@ -153,6 +168,11 @@ func (c *tenantServiceClient) SetInheritedPolicy(ctx context.Context, req *conne
 	return c.setInheritedPolicy.CallUnary(ctx, req)
 }
 
+// RenameTenantSlug calls paladin.admin.v1.TenantService.RenameTenantSlug.
+func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
+	return c.renameTenantSlug.CallUnary(ctx, req)
+}
+
 // TenantServiceHandler is an implementation of the paladin.admin.v1.TenantService service.
 type TenantServiceHandler interface {
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
@@ -161,6 +181,12 @@ type TenantServiceHandler interface {
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
+	// `Tenant::"<old_slug>"` reference in the tenant's
+	// inherited_cedar_policy AND in every object_key's cedar_policy to
+	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
+	// the supplied resource_version. Returns the renamed Tenant.
+	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
 }
 
 // NewTenantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -206,6 +232,12 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantServiceRenameTenantSlugHandler := connect.NewUnaryHandler(
+		TenantServiceRenameTenantSlugProcedure,
+		svc.RenameTenantSlug,
+		connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.TenantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TenantServiceCreateTenantProcedure:
@@ -220,6 +252,8 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 			tenantServiceListTenantsHandler.ServeHTTP(w, r)
 		case TenantServiceSetInheritedPolicyProcedure:
 			tenantServiceSetInheritedPolicyHandler.ServeHTTP(w, r)
+		case TenantServiceRenameTenantSlugProcedure:
+			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -251,4 +285,8 @@ func (UnimplementedTenantServiceHandler) ListTenants(context.Context, *connect.R
 
 func (UnimplementedTenantServiceHandler) SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.SetInheritedPolicy is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RenameTenantSlug is not implemented"))
 }

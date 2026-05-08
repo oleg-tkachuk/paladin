@@ -63,6 +63,20 @@ type Repository interface {
 	Update(ctx context.Context, args UpdateTenantArgs) (Tenant, error)
 	Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
 	List(ctx context.Context, pageSize int32, afterID uuid.UUID) ([]Tenant, string, error)
+	// Rename atomically updates tenants.slug AND rewrites every
+	// `Tenant::"<old>"` reference in the tenant's
+	// inherited_cedar_policy + every object_keys row's cedar_policy
+	// for that tenant. Returns the renamed Tenant (with the new
+	// resource_version). ErrVersionMismatch on OCC failure.
+	Rename(ctx context.Context, args RenameTenantSlugArgs) (Tenant, error)
+}
+
+// RenameTenantSlugArgs is the input shape for Repository.Rename and
+// Handler.RenameTenantSlug.
+type RenameTenantSlugArgs struct {
+	TenantID        uuid.UUID
+	NewSlug         string
+	ExpectedVersion int64
 }
 
 type Handler struct {
@@ -192,6 +206,43 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 	return nil
 }
 
+// RenameTenantSlug rewrites the tenant's slug AND rewrites every
+// `Tenant::"<old_slug>"` reference in the tenant's inherited
+// cedar_policy plus every object_key's cedar_policy for the tenant.
+// Single transaction in the repository; OCC-guarded against
+// args.ExpectedVersion. Platform-admin only.
+//
+// Out of scope: per-bucket cedar_policy is not touched today — buckets
+// don't carry slug references in current default policies. If a future
+// bucket policy template starts referring to the slug, extend
+// Repository.Rename to cover it.
+func (h *Handler) RenameTenantSlug(ctx context.Context, args RenameTenantSlugArgs) (*Tenant, error) {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
+		return nil, err
+	}
+	if err := apiutil.ValidateTenantSlug(args.NewSlug); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("new_slug: %w", err))
+	}
+	t, err := h.repo.Rename(ctx, args)
+	if err != nil {
+		if errors.Is(err, ErrVersionMismatch) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		if errors.Is(err, ErrSlugConflict) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &t, nil
+}
+
 func (h *Handler) ListTenants(ctx context.Context, pageSize int32, pageToken string) ([]Tenant, string, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, "", err
@@ -230,3 +281,7 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // and the operation did not use an OCC guard (so a 0-rows result is an
 // unambiguous "missing", not a version conflict).
 var ErrNotFound = errors.New("tenant not found")
+
+// ErrSlugConflict — Repository.Rename returns this when the requested
+// new_slug is already in use by another tenant (uniqueness violation).
+var ErrSlugConflict = errors.New("tenant slug already in use")

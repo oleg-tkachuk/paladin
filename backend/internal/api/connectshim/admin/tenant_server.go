@@ -151,6 +151,33 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(tenantDomainToProto(t)), nil
 }
 
+// RenameTenantSlug rotates the tenant's slug and rewrites every
+// `Tenant::"<old_slug>"` reference in inherited + per-objectKey
+// policies. See proto comments and tenant.Handler.RenameTenantSlug.
+func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Request[pb.RenameTenantSlugRequest]) (*connect.Response[pb.Tenant], error) {
+	idStr, err := tenantIDFromName(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	t, err := s.H.RenameTenantSlug(ctx, tenant.RenameTenantSlugArgs{
+		TenantID:        id,
+		NewSlug:         req.Msg.GetNewSlug(),
+		ExpectedVersion: rv,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(tenantDomainToProto(t)), nil
+}
+
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)
 
 func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
