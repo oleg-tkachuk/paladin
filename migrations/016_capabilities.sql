@@ -25,7 +25,7 @@
 
 CREATE TABLE IF NOT EXISTS capability_records (
     id                 uuid PRIMARY KEY,
-    tenant_id          uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id          uuid NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
     issuer             text NOT NULL,
     principal_kind     text NOT NULL,
     principal_subject  text NOT NULL,

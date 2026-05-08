@@ -116,13 +116,13 @@ CREATE POLICY tenant_isolation ON event_subscriptions
     WITH CHECK (tenant_id = paladin_session_tenant_id());
 
 -- capability_records (issued capabilities are per-tenant by subject;
--- the rows have `subject_tenant_id`).
+-- the rows have `tenant_id`).
 ALTER TABLE capability_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE capability_records FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON capability_records
     FOR ALL
-    USING (subject_tenant_id = paladin_session_tenant_id())
-    WITH CHECK (subject_tenant_id = paladin_session_tenant_id());
+    USING (tenant_id = paladin_session_tenant_id())
+    WITH CHECK (tenant_id = paladin_session_tenant_id());
 
 -- api_tokens
 ALTER TABLE api_tokens ENABLE ROW LEVEL SECURITY;
@@ -178,12 +178,12 @@ CREATE POLICY tenant_isolation ON capability_usage
     USING (EXISTS (
         SELECT 1 FROM capability_records c
         WHERE c.id = capability_usage.capability_id
-          AND c.subject_tenant_id = paladin_session_tenant_id()
+          AND c.tenant_id = paladin_session_tenant_id()
     ))
     WITH CHECK (EXISTS (
         SELECT 1 FROM capability_records c
         WHERE c.id = capability_usage.capability_id
-          AND c.subject_tenant_id = paladin_session_tenant_id()
+          AND c.tenant_id = paladin_session_tenant_id()
     ));
 
 -- +goose StatementEnd

@@ -43,7 +43,7 @@
 
 CREATE TABLE IF NOT EXISTS api_tokens (
     id            uuid PRIMARY KEY,
-    tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id     uuid NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
     name          text NOT NULL,
     -- Display prefix: first 8 chars after the `paladin_pat_` literal. Shown
     -- in admin UIs and audit log; useful for narrowing a leak hunt
