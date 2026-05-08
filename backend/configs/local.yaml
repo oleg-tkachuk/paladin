@@ -107,16 +107,17 @@ middleware:
     enabled: true
     ttl: 1h
 
-workers:
-  reconciler:
-    interval: 30s
-    min_object_age: 2h
-    batch_size: 100
-  housekeeping:
-    pending_ttl: "24h"
-    multipart_ttl: "72h"
-    interval: "1h"
-    delete_orphaned_parts: false
+worker:
+  jobs:
+    reconciler:
+      interval: 30s
+      min_object_age: 2h
+      batch_size: 100
+    housekeeping:
+      pending_ttl: "24h"
+      multipart_ttl: "72h"
+      interval: "1h"
+      delete_orphaned_parts: false
 
 storage:
   default_backend: primary

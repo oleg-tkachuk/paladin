@@ -128,37 +128,38 @@ middleware:
     enabled: true
     ttl: 1h
 
-workers:
-  reconciler:
-    interval: 30s
-    min_object_age: 2h
-    batch_size: 100
-  housekeeping:
-    pending_ttl: "24h"
-    multipart_ttl: "72h"
-    interval: "1h"
-    delete_orphaned_parts: false
-  refresh_token_reap:
-    interval: 1h
-  api_key_reap:
-    interval: 1h
-  lifecycle:
-    enabled: false
-    interval: 30m
-  replication:
-    enabled: false
-    interval: 5m
-    lookback_window: 1h
-  capability:
-    interval: 1h
-    expired_for: 24h
-  api_token:
-    interval: 1h
-    expired_for: 168h
-  operations:
-    # 1s tick during smoke so a BatchDelete enqueued at t=0 is
-    # actually processed before the test polls at t=2s.
-    interval: 1s
+worker:
+  jobs:
+    reconciler:
+      interval: 30s
+      min_object_age: 2h
+      batch_size: 100
+    housekeeping:
+      pending_ttl: "24h"
+      multipart_ttl: "72h"
+      interval: "1h"
+      delete_orphaned_parts: false
+    refresh_token_reap:
+      interval: 1h
+    api_key_reap:
+      interval: 1h
+    lifecycle:
+      enabled: false
+      interval: 30m
+    replication:
+      enabled: false
+      interval: 5m
+      lookback_window: 1h
+    capability:
+      interval: 1h
+      expired_for: 24h
+    api_token:
+      interval: 1h
+      expired_for: 168h
+    operations:
+      # 1s tick during smoke so a BatchDelete enqueued at t=0 is
+      # actually processed before the test polls at t=2s.
+      interval: 1s
 
 storage:
   default_backend: primary

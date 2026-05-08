@@ -212,8 +212,11 @@ middleware: {
   }
 }
 
-// Workers groups every background-loop subsystem.
-workers: {
+// Worker is the per-role config block for the worker binary; today
+// it holds only the background-job catalog under `jobs:`. Future
+// role-exclusive knobs hang here.
+worker: {
+  jobs: {
   // Reconciler: closes gaps when S3 events are unavailable / lost.
   reconciler: {
     interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
@@ -270,7 +273,8 @@ workers: {
   operations: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
   }
-}
+  } // close worker.jobs
+} // close worker
 
 // Storage is the registry of physical object-storage backends. Each
 // logical object_key picks one by name; when its `storage_backend`

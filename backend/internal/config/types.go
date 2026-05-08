@@ -17,7 +17,7 @@ type Config struct {
 	Security   Security   `yaml:"security" json:"security"`
 	Bootstrap  Bootstrap  `yaml:"bootstrap" json:"bootstrap"`
 	Middleware Middleware `yaml:"middleware" json:"middleware"`
-	Workers    Workers    `yaml:"workers" json:"workers"`
+	Worker     Worker     `yaml:"worker" json:"worker"`
 	OTel       OTel       `yaml:"otel" json:"otel"`
 	Storage    Storage    `yaml:"storage" json:"storage"`
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
@@ -306,7 +306,18 @@ type BootstrapAdmin struct {
 // Workers groups every background-loop subsystem under a single section
 // so an operator looking for "what runs in the background?" finds them
 // in one place.
-type Workers struct {
+// Worker is the per-role config block for the worker binary. Today it
+// only carries the background-job spec under `jobs:`; future role-
+// exclusive knobs (separate ops listener address, dedicated metrics
+// endpoint, leader-election tuning) hang off this block too.
+type Worker struct {
+	Jobs WorkerJobs `yaml:"jobs" json:"jobs"`
+}
+
+// WorkerJobs is the catalog of background-job configs the worker
+// binary consumes. Renamed from `Workers` (top-level) when the config
+// migrated to per-service blocks; struct field-set is unchanged.
+type WorkerJobs struct {
 	Reconciler       Reconciler       `yaml:"reconciler" json:"reconciler"`
 	Housekeeping     Housekeeping     `yaml:"housekeeping" json:"housekeeping"`
 	RefreshTokenReap RefreshTokenReap `yaml:"refresh_token_reap" json:"refresh_token_reap"`

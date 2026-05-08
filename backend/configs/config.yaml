@@ -198,40 +198,45 @@ middleware:
     enabled: true
     ttl: 24h
 
-# ─── Background workers ────────────────────────────────────────────────────
-# Long-running goroutines that close gaps the request path can't handle:
-# reconciler reverifies stuck-PENDING objects against S3; housekeeping
-# reaps orphaned rows on a schedule.
-workers:
-  reconciler:                           # closes gaps when S3 events are unavailable / lost
-    interval: 30s                       # how often to run a reconcile pass
-    min_object_age: 2h                  # only objects older than this are eligible
-    batch_size: 100
-  housekeeping:                         # audit-log reaper
-    interval: 1h                        # how often the reaper loop runs
-    pending_ttl: 24h                    # PENDING objects older than this are GC'd
-    multipart_ttl: 72h                  # abandoned multipart sessions
-    audit_log_ttl: 8760h                # 365 days
-    delete_orphaned_parts: false        # WARNING: enable in prod to reclaim S3 storage
-    # Lifecycle hard-delete cascade: after this cooling-off window
-    # the LifecycleHardDeleter calls storage.DeleteObject AND drops
-    # the PALADIN row. 0 disables (audit-only, dev default). 7d-30d in
-    # prod is the typical setting — gives support a restore window
-    # before the bytes go away. Worker race-with-PUT mitigation is
-    # OCC-gated; see internal/worker/lifecycle_hard_delete.go.
-    hard_delete_after: "0s"
-    hard_delete_batch_size: 100
-  refresh_token_reap:                   # drops expired refresh tokens
-    interval: 1h
-  api_key_reap:                         # auto-revokes api-keys past expires_at
-    interval: 1h
-  lifecycle:                            # CEL-based per-bucket expiration
-    enabled: true
-    interval: 30m
-  replication:                          # cross-backend copy (dry-run until wired)
-    enabled: false
-    interval: 5m
-    lookback_window: 1h
+# ─── worker role: background jobs ──────────────────────────────────────────
+# Long-running goroutines run by `serve worker`. Closes gaps the request
+# path can't handle: reconciler reverifies stuck-PENDING objects against
+# S3; housekeeping reaps orphaned rows on a schedule.
+#
+# Wrapped under `worker.jobs:` so future worker-only knobs (separate ops
+# listener, leader-election tuning, metrics endpoint) can hang at the
+# `worker:` level without further nesting.
+worker:
+  jobs:
+    reconciler:                         # closes gaps when S3 events are unavailable / lost
+      interval: 30s                     # how often to run a reconcile pass
+      min_object_age: 2h                # only objects older than this are eligible
+      batch_size: 100
+    housekeeping:                       # audit-log reaper
+      interval: 1h                      # how often the reaper loop runs
+      pending_ttl: 24h                  # PENDING objects older than this are GC'd
+      multipart_ttl: 72h                # abandoned multipart sessions
+      audit_log_ttl: 8760h              # 365 days
+      delete_orphaned_parts: false      # WARNING: enable in prod to reclaim S3 storage
+      # Lifecycle hard-delete cascade: after this cooling-off window
+      # the LifecycleHardDeleter calls storage.DeleteObject AND drops
+      # the PALADIN row. 0 disables (audit-only, dev default). 7d-30d in
+      # prod is the typical setting — gives support a restore window
+      # before the bytes go away. Worker race-with-PUT mitigation is
+      # OCC-gated; see internal/worker/lifecycle_hard_delete.go.
+      hard_delete_after: "0s"
+      hard_delete_batch_size: 100
+    refresh_token_reap:                 # drops expired refresh tokens
+      interval: 1h
+    api_key_reap:                       # auto-revokes api-keys past expires_at
+      interval: 1h
+    lifecycle:                          # CEL-based per-bucket expiration
+      enabled: true
+      interval: 30m
+    replication:                        # cross-backend copy (dry-run until wired)
+      enabled: false
+      interval: 5m
+      lookback_window: 1h
 
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks

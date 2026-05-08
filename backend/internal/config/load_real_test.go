@@ -144,16 +144,16 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	}
 	// Every worker subsystem must have a non-zero interval after CUE
 	// applies its defaults — silent-zero would hot-loop the goroutine.
-	if cfg.Workers.RefreshTokenReap.Interval == 0 {
+	if cfg.Worker.Jobs.RefreshTokenReap.Interval == 0 {
 		t.Error("workers.refresh_token_reap.interval defaulted to zero")
 	}
-	if cfg.Workers.ApiKeyReap.Interval == 0 {
+	if cfg.Worker.Jobs.ApiKeyReap.Interval == 0 {
 		t.Error("workers.api_key_reap.interval defaulted to zero")
 	}
-	if cfg.Workers.Lifecycle.Interval == 0 {
+	if cfg.Worker.Jobs.Lifecycle.Interval == 0 {
 		t.Error("workers.lifecycle.interval defaulted to zero")
 	}
-	if cfg.Workers.Replication.Interval == 0 || cfg.Workers.Replication.LookbackWindow == 0 {
+	if cfg.Worker.Jobs.Replication.Interval == 0 || cfg.Worker.Jobs.Replication.LookbackWindow == 0 {
 		t.Error("workers.replication interval/lookback_window defaulted to zero")
 	}
 }

@@ -17,7 +17,7 @@ import (
 // BackgroundJob shape; the caller wraps each with a Lease so only one
 // pod runs the job at a time.
 //
-// Reconciler is conditionally appended depending on cfg.Workers.Reconciler;
+// Reconciler is conditionally appended depending on cfg.Worker.Jobs.Reconciler;
 // the same pattern applies to lifecycle, replication, and audit-log purger.
 // Empty slice in dev when no housekeeping is configured.
 func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
@@ -28,23 +28,23 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	out := []BackgroundJob{
 		&worker.RefreshTokenPurger{
 			Repo:     adapters.NewRefreshTokenRepo(db.Queries),
-			Interval: cfg.Workers.RefreshTokenReap.Interval,
+			Interval: cfg.Worker.Jobs.RefreshTokenReap.Interval,
 			Logger:   l.Named("refresh-purger"),
 		},
 		&worker.ApiKeyExpirer{
 			Repo:     &apiKeyExpirerAdapter{r: adapters.NewApiKeyRepo(db.Queries)},
-			Interval: cfg.Workers.ApiKeyReap.Interval,
+			Interval: cfg.Worker.Jobs.ApiKeyReap.Interval,
 			Logger:   l.Named("api-key-expirer"),
 		},
 	}
 
-	if cfg.Workers.Lifecycle.Enabled {
+	if cfg.Worker.Jobs.Lifecycle.Enabled {
 		out = append(out, &worker.LifecycleWorker{
 			Buckets:      adapters.NewLifecycleSource(db.Queries),
 			Objects:      adapters.NewLifecycleObjectIter(db.Queries),
 			SoftDeleter:  deps.SM,
 			CELEvaluator: deps.CELEval,
-			Interval:     cfg.Workers.Lifecycle.Interval,
+			Interval:     cfg.Worker.Jobs.Lifecycle.Interval,
 			Logger:       l.Named("lifecycle"),
 		})
 	}
@@ -53,27 +53,27 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// lands. Walks objects in replicated buckets and logs intent without
 	// actually copying. Operators flip to live mode by injecting a real
 	// replicator from internal/storage in the slice that lands replication.
-	if cfg.Workers.Replication.Enabled {
+	if cfg.Worker.Jobs.Replication.Enabled {
 		out = append(out, &worker.ReplicationWorker{
 			Buckets:        adapters.NewLifecycleSource(db.Queries),
 			Objects:        adapters.NewLifecycleObjectIter(db.Queries),
 			Replicator:     nil, // dry-run
 			Watermarks:     adapters.NewReplicationWatermarkRepo(db.Queries),
-			Interval:       cfg.Workers.Replication.Interval,
-			LookbackWindow: cfg.Workers.Replication.LookbackWindow,
+			Interval:       cfg.Worker.Jobs.Replication.Interval,
+			LookbackWindow: cfg.Worker.Jobs.Replication.LookbackWindow,
 			Logger:         l.Named("replication"),
 		})
 	}
 
-	if cfg.Workers.Reconciler.Interval > 0 {
+	if cfg.Worker.Jobs.Reconciler.Interval > 0 {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
 			deps.SM,
 			adapters.NewReconcilerProbe(db.Queries, deps.S3),
 			worker.ReconcilerV2Config{
-				PollInterval:    cfg.Workers.Reconciler.Interval,
-				PendingGraceTTL: cfg.Workers.Reconciler.MinObjectAge,
-				BatchSize:       cfg.Workers.Reconciler.BatchSize,
+				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
+				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
+				BatchSize:       cfg.Worker.Jobs.Reconciler.BatchSize,
 			},
 			l.Named("reconciler"),
 		))
@@ -83,26 +83,26 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			adapters.NewBucketRepoV2(db.Queries),
 			deps.S3,
 			worker.BucketReconcilerConfig{
-				Interval:  cfg.Workers.Reconciler.Interval,
-				BatchSize: int32(cfg.Workers.Reconciler.BatchSize),
+				Interval:  cfg.Worker.Jobs.Reconciler.Interval,
+				BatchSize: int32(cfg.Worker.Jobs.Reconciler.BatchSize),
 			},
 			l.Named("bucket-reconciler"),
 		))
 	}
 
-	if cfg.Workers.Housekeeping.AuditLogTTL > 0 {
+	if cfg.Worker.Jobs.Housekeeping.AuditLogTTL > 0 {
 		out = append(out, &worker.AuditLogPurger{
 			Purger:   adapters.NewAuditRepoV2(db.Queries),
-			TTL:      cfg.Workers.Housekeeping.AuditLogTTL,
-			Interval: cfg.Workers.Housekeeping.Interval,
+			TTL:      cfg.Worker.Jobs.Housekeeping.AuditLogTTL,
+			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("audit-purger"),
 		})
 	}
-	if cfg.Workers.Housekeeping.OperationsTTL > 0 {
+	if cfg.Worker.Jobs.Housekeeping.OperationsTTL > 0 {
 		out = append(out, &worker.OperationsReaper{
 			Repo:     adapters.NewOperationRepo(db.Queries, deps.Pool),
-			TTL:      cfg.Workers.Housekeeping.OperationsTTL,
-			Interval: cfg.Workers.Housekeeping.Interval,
+			TTL:      cfg.Worker.Jobs.Housekeeping.OperationsTTL,
+			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("operations-reaper"),
 		})
 	}
@@ -113,13 +113,13 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// duration enables the cascade. Uses deps.S3 because every
 	// production path mints presigned URLs against the same client;
 	// reusing it keeps storage credentials in one place.
-	if cfg.Workers.Housekeeping.HardDeleteAfter > 0 {
+	if cfg.Worker.Jobs.Housekeeping.HardDeleteAfter > 0 {
 		out = append(out, &worker.LifecycleHardDeleter{
 			Q:         db.Queries,
 			Storage:   deps.S3,
-			TTL:       cfg.Workers.Housekeeping.HardDeleteAfter,
-			Interval:  cfg.Workers.Housekeeping.Interval,
-			BatchSize: cfg.Workers.Housekeeping.HardDeleteBatchSize,
+			TTL:       cfg.Worker.Jobs.Housekeeping.HardDeleteAfter,
+			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
+			BatchSize: cfg.Worker.Jobs.Housekeeping.HardDeleteBatchSize,
 			Logger:    l.Named("hard-deleter"),
 		})
 	}
@@ -129,12 +129,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// non-zero interval. Keeps the denylist bounded; verifier correctness
 	// is unaffected (an expired token can never verify, so dropping its
 	// revocation row is safe).
-	if deps.Capability != nil && cfg.Workers.Capability.Interval > 0 {
+	if deps.Capability != nil && cfg.Worker.Jobs.Capability.Interval > 0 {
 		out = append(out, &worker.CapabilityPurger{
 			Store:      deps.Capability.Store,
 			Usage:      deps.Capability.Usage,
-			Interval:   cfg.Workers.Capability.Interval,
-			ExpiredFor: cfg.Workers.Capability.ExpiredFor,
+			Interval:   cfg.Worker.Jobs.Capability.Interval,
+			ExpiredFor: cfg.Worker.Jobs.Capability.ExpiredFor,
 			Logger:     l.Named("capability-purger"),
 		})
 	}
@@ -142,12 +142,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// API-token purger — same shape as capability purger. Bounds the
 	// api_tokens table size; expired rows can never satisfy the time
 	// gate so dropping them is safe.
-	if deps.APIToken != nil && cfg.Workers.APIToken.Interval > 0 {
+	if deps.APIToken != nil && cfg.Worker.Jobs.APIToken.Interval > 0 {
 		out = append(out, &worker.APITokenPurger{
 			Store:      deps.APIToken.Store,
 			Limiter:    deps.APIToken.Limiter,
-			Interval:   cfg.Workers.APIToken.Interval,
-			ExpiredFor: cfg.Workers.APIToken.ExpiredFor,
+			Interval:   cfg.Worker.Jobs.APIToken.Interval,
+			ExpiredFor: cfg.Worker.Jobs.APIToken.ExpiredFor,
 			Logger:     l.Named("api-token-purger"),
 		})
 	}
@@ -156,7 +156,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// table and dispatches to per-type Executors. Without this every
 	// BatchXxx RPC stages a row that never reaches a terminal state.
 	// Disabled by setting interval to 0.
-	if cfg.Workers.Operations.Interval > 0 {
+	if cfg.Worker.Jobs.Operations.Interval > 0 {
 		opRepo := adapters.NewOperationRepo(db.Queries, deps.Pool)
 		executors := map[string]operations.Executor{
 			"BatchDelete": &operations.BatchDeleteExecutor{
@@ -180,7 +180,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		out = append(out, &operations.Runner{
 			Repo:      opRepo,
 			Executors: executors,
-			Interval:  cfg.Workers.Operations.Interval,
+			Interval:  cfg.Worker.Jobs.Operations.Interval,
 			Logger:    l.Named("operations-runner"),
 		})
 	}
