@@ -384,7 +384,21 @@ type Housekeeping struct {
 	AuditLogTTL  time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
 	// OperationsTTL bounds how long a terminal-state operation row is
 	// retained. 0 disables the reaper. See [worker.OperationsReaper].
-	OperationsTTL       time.Duration `yaml:"operations_ttl" json:"operations_ttl"`
+	OperationsTTL time.Duration `yaml:"operations_ttl" json:"operations_ttl"`
+
+	// HardDeleteAfter is the cooling-off window between soft-delete
+	// (row state='DELETED') and hard-delete (S3 DELETE + DB row
+	// removal). 0 disables the LifecycleHardDeleter — the row stays
+	// DELETED forever, useful for an audit-only deployment.
+	//
+	// Default 0 (off); recommended 7d-30d in prod so support has a
+	// restore window. The worker's race-with-PUT mitigation is OCC-
+	// gated; see [worker.LifecycleHardDeleter] for the failure-mode
+	// matrix.
+	HardDeleteAfter time.Duration `yaml:"hard_delete_after" json:"hard_delete_after"`
+	// HardDeleteBatchSize caps rows per sweep. 0 → 100.
+	HardDeleteBatchSize int32 `yaml:"hard_delete_batch_size" json:"hard_delete_batch_size"`
+
 	Interval            time.Duration `yaml:"interval" json:"interval"`
 	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
 }

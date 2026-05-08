@@ -107,6 +107,23 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
+	// Lifecycle hard-deleter — closes the loop on soft-delete by
+	// reclaiming the S3 bytes after the cooling-off window. 0 keeps
+	// rows DELETED forever (audit-friendly, dev default); a non-zero
+	// duration enables the cascade. Uses deps.S3 because every
+	// production path mints presigned URLs against the same client;
+	// reusing it keeps storage credentials in one place.
+	if cfg.Workers.Housekeeping.HardDeleteAfter > 0 {
+		out = append(out, &worker.LifecycleHardDeleter{
+			Q:         db.Queries,
+			Storage:   deps.S3,
+			TTL:       cfg.Workers.Housekeeping.HardDeleteAfter,
+			Interval:  cfg.Workers.Housekeeping.Interval,
+			BatchSize: cfg.Workers.Housekeeping.HardDeleteBatchSize,
+			Logger:    l.Named("hard-deleter"),
+		})
+	}
+
 	// Capability revocation purger — only when the capability subsystem
 	// is wired (deps.Capability != nil) AND the worker config carries a
 	// non-zero interval. Keeps the denylist bounded; verifier correctness

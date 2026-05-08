@@ -124,6 +124,13 @@ type Querier interface {
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.
 	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Defence-in-depth variant of HardDeleteObject for the worker path.
+	// Re-asserts state='DELETED' AND resource_version=$2 in the WHERE
+	// clause so a concurrent Restore (DELETED → AVAILABLE bumps
+	// resource_version via the trigger) makes the worker's DELETE a
+	// no-op. Worker callers pass the version they read from
+	// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
+	HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
 	IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
 	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
@@ -168,6 +175,13 @@ type Querier interface {
 	// Returns api_keys whose `expires_at` has passed and that are still active.
 	// Used by the housekeeping worker to flip them to revoked.
 	ListExpiredApiKeys(ctx context.Context, expiresAt pgtype.Timestamptz, limit int32) ([]ApiKey, error)
+	// Picks DELETED objects past the cooling-off window for the
+	// LifecycleHardDeleter worker. Joins object_keys to materialise
+	// (backend_id, bucket_name) so the worker issues the storage DELETE
+	// in one round-trip per row without a second lookup.
+	// Bounded at the caller's batch_size; the worker loops on the
+	// ticker to drain a backlog without holding a single statement open.
+	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
 	ListMultipartParts(ctx context.Context, uploadID string) ([]MultipartPart, error)
 	// Lists every (tenant_id, object_key) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.

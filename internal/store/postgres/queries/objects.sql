@@ -87,6 +87,36 @@ WHERE tenant_id = $1 AND object_id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
+-- name: ListHardDeletable :many
+-- Picks DELETED objects past the cooling-off window for the
+-- LifecycleHardDeleter worker. Joins object_keys to materialise
+-- (backend_id, bucket_name) so the worker issues the storage DELETE
+-- in one round-trip per row without a second lookup.
+-- Bounded at the caller's batch_size; the worker loops on the
+-- ticker to drain a backlog without holding a single statement open.
+SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.resource_version,
+       k.backend_id, k.bucket_name
+FROM objects o
+JOIN object_keys k
+  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
+WHERE o.state = 'DELETED'
+  AND o.terminated_at IS NOT NULL
+  AND o.terminated_at < $1
+ORDER BY o.terminated_at
+LIMIT sqlc.arg('batch_size');
+
+-- name: HardDeleteObjectIfStillDeleted :execrows
+-- Defence-in-depth variant of HardDeleteObject for the worker path.
+-- Re-asserts state='DELETED' AND resource_version=$2 in the WHERE
+-- clause so a concurrent Restore (DELETED → AVAILABLE bumps
+-- resource_version via the trigger) makes the worker's DELETE a
+-- no-op. Worker callers pass the version they read from
+-- ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
+DELETE FROM objects
+WHERE object_id = $1
+  AND state = 'DELETED'
+  AND resource_version = sqlc.arg('expected_version')::bigint;
+
 -- name: CheckLiveCollision :one
 -- True when a non-DELETED row already exists at (tenant, object_key, key).
 -- Used by RestoreObject to refuse restoring into a slot that's been reused.

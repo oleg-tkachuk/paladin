@@ -137,6 +137,84 @@ func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, ob
 	return result.RowsAffected(), nil
 }
 
+const hardDeleteObjectIfStillDeleted = `-- name: HardDeleteObjectIfStillDeleted :execrows
+DELETE FROM objects
+WHERE object_id = $1
+  AND state = 'DELETED'
+  AND resource_version = $2::bigint
+`
+
+// Defence-in-depth variant of HardDeleteObject for the worker path.
+// Re-asserts state='DELETED' AND resource_version=$2 in the WHERE
+// clause so a concurrent Restore (DELETED → AVAILABLE bumps
+// resource_version via the trigger) makes the worker's DELETE a
+// no-op. Worker callers pass the version they read from
+// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
+func (q *Queries) HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteObjectIfStillDeleted, objectID, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listHardDeletable = `-- name: ListHardDeletable :many
+SELECT o.object_id, o.tenant_id, o.object_key, o.key, o.resource_version,
+       k.backend_id, k.bucket_name
+FROM objects o
+JOIN object_keys k
+  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
+WHERE o.state = 'DELETED'
+  AND o.terminated_at IS NOT NULL
+  AND o.terminated_at < $1
+ORDER BY o.terminated_at
+LIMIT $2
+`
+
+type ListHardDeletableRow struct {
+	ObjectID        pgtype.UUID `json:"object_id"`
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	ObjectKey       string      `json:"object_key"`
+	Key             string      `json:"key"`
+	ResourceVersion int64       `json:"resource_version"`
+	BackendID       string      `json:"backend_id"`
+	BucketName      string      `json:"bucket_name"`
+}
+
+// Picks DELETED objects past the cooling-off window for the
+// LifecycleHardDeleter worker. Joins object_keys to materialise
+// (backend_id, bucket_name) so the worker issues the storage DELETE
+// in one round-trip per row without a second lookup.
+// Bounded at the caller's batch_size; the worker loops on the
+// ticker to drain a backlog without holding a single statement open.
+func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error) {
+	rows, err := q.db.Query(ctx, listHardDeletable, terminatedAt, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHardDeletableRow
+	for rows.Next() {
+		var i ListHardDeletableRow
+		if err := rows.Scan(
+			&i.ObjectID,
+			&i.TenantID,
+			&i.ObjectKey,
+			&i.Key,
+			&i.ResourceVersion,
+			&i.BackendID,
+			&i.BucketName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listObjects = `-- name: ListObjects :many
 SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects

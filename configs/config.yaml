@@ -213,6 +213,14 @@ workers:
     multipart_ttl: 72h                  # abandoned multipart sessions
     audit_log_ttl: 8760h                # 365 days
     delete_orphaned_parts: false        # WARNING: enable in prod to reclaim S3 storage
+    # Lifecycle hard-delete cascade: after this cooling-off window
+    # the LifecycleHardDeleter calls storage.DeleteObject AND drops
+    # the PALADIN row. 0 disables (audit-only, dev default). 7d-30d in
+    # prod is the typical setting — gives support a restore window
+    # before the bytes go away. Worker race-with-PUT mitigation is
+    # OCC-gated; see internal/worker/lifecycle_hard_delete.go.
+    hard_delete_after: 0
+    hard_delete_batch_size: 100
   refresh_token_reap:                   # drops expired refresh tokens
     interval: 1h
   api_key_reap:                         # auto-revokes api-keys past expires_at
