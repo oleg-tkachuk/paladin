@@ -14,9 +14,17 @@ vars:
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
 
-  # OCI Registry — image pushes land at OCI_REGISTRY/PROJECT_NAME:TAG;
-  # Helm chart pushes land at CHART_REPO/PROJECT_NAME:CHART_VERSION.
+  # OCI Registry — image pushes land at
+  # OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; Helm chart pushes
+  # land at CHART_REPO/PROJECT_NAME:CHART_VERSION (separate /charts
+  # path under the same registry, so they don't collide).
+  #
+  # IMAGE_NAMESPACE is the registry sub-path under which all PALADIN
+  # images live; the Helm chart's values.yaml and the ArgoCD overlay
+  # both pin this prefix, so the push path here MUST match or Pods
+  # ImagePullBackOff with a 404.
   OCI_REGISTRY: registry.local
+  IMAGE_NAMESPACE: paladin
   CHART_REPO: oci://registry.local/charts
 
 # Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and

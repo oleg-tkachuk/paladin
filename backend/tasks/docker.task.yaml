@@ -15,7 +15,7 @@ tasks:
     desc: "Build, push image (TAG + :latest), package and push the Helm chart"
     deps: [":core:tools:build"]
     vars: &build-vars
-      IMAGE: "{{.OCI_REGISTRY}}/{{.PROJECT_NAME}}"
+      IMAGE: "{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}"
       _TAG_AUTO: { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
       _TAG: '{{.TAG | default ._TAG_AUTO}}'
       _COMMIT: { sh: "git rev-parse --short HEAD" }
