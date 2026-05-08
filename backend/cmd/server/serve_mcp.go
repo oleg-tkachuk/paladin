@@ -15,6 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
 )
@@ -228,9 +229,34 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", handler)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+
+	// Probe surface — same shape as api / admin / worker. /livez +
+	// /readyz + /startupz follow the K8s contract; /system/health.json
+	// is the structured snapshot the BFF aggregator fans out to. Probe
+	// set is intentionally minimal here: an MCP pod runs in two modes
+	// (bridge → no DB, embedded → has DB). Bridge can't probe DB; we
+	// expose a "process" component so the snapshot is non-empty and the
+	// UI can show "mcp: healthy" rather than treating an empty
+	// components list as missing data. Upstream probes (admin / data /
+	// iam reachability from the bridge) are BACKLOG — needs an MCP
+	// client Ping method.
+	healthH := &health.Handler{
+		Logger:       l.Named("health"),
+		LogSuccesses: cfg.Runtime.LogProbes,
+		Ready: []health.Check{{
+			Name:     "process",
+			Category: health.CategorySubsystem,
+			Critical: true,
+			Func:     func(context.Context) error { return nil },
+		}},
+	}
+	healthH.WithRole("mcp")
+	healthH.Register(mux)
+	// Backwards-compatible alias for the chart's existing /healthz path.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/livez"
+		mux.ServeHTTP(w, r2)
 	})
 
 	addr := cfg.MCP.HTTP.Addr

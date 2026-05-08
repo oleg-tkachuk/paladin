@@ -111,6 +111,12 @@ type Handler struct {
 	// Empty list = "always ready".
 	Ready []Check
 
+	// role names the role that produced this Handler ("api", "admin",
+	// "worker", "mcp"). Surfaced on the JSON snapshot endpoint so a
+	// fan-out aggregator can attribute components without having to
+	// pass the role label per request.
+	role string
+
 	// Startup checks run on /startupz. Typically a superset of Ready
 	// during bootstrap (e.g. migrations applied + first DB ping). Once
 	// kubelet observes a 200 it stops polling startupz forever.
@@ -143,6 +149,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /livez", h.serveLive)
 	mux.HandleFunc("GET /readyz", h.serveReady)
 	mux.HandleFunc("GET /startupz", h.serveStartup)
+	mux.HandleFunc("GET /system/health.json", h.serveSnapshot)
 }
 
 // ─── handler impls ──────────────────────────────────────────────────────────
@@ -256,6 +263,137 @@ type failure struct {
 	Name     string `json:"name"`
 	Error    string `json:"error"`
 	Critical bool   `json:"critical,omitempty"`
+}
+
+// ─── snapshot ───────────────────────────────────────────────────────────────
+//
+// Snapshot is the canonical structured form of a /readyz run, used by:
+//
+//   - the unauthenticated `GET /system/health.json` endpoint exposed on
+//     every plane mux (consumed by the BFF aggregator at /api/health/all)
+//   - SystemService.GetHealth (admin/iam Connect RPCs, authenticated)
+//
+// Both surfaces share one runChecks invocation per request — the proto
+// shim in connectshim/iam converts Snapshot to its proto twin so the
+// authenticated path doesn't drift from the JSON path.
+
+// ComponentStatus enumerates the per-check rollup. Mirrors the proto
+// enum paladin.iam.v1.ComponentStatus 1:1 (HEALTHY/DEGRADED/UNHEALTHY).
+type ComponentStatus string
+
+const (
+	StatusHealthy   ComponentStatus = "healthy"
+	StatusDegraded  ComponentStatus = "degraded"
+	StatusUnhealthy ComponentStatus = "unhealthy"
+)
+
+// Component is one row in a Snapshot.
+type Component struct {
+	Name      string          `json:"name"`
+	Status    ComponentStatus `json:"status"`
+	Message   string          `json:"message,omitempty"`
+	LatencyMs int64           `json:"latency_ms"`
+	Category  string          `json:"category"`
+	Critical  bool            `json:"critical"`
+}
+
+// Snapshot is the aggregated health view for one role.
+type Snapshot struct {
+	// Role names the role that produced the snapshot ("api", "admin",
+	// "worker", "mcp"). Required so the UI can attribute degradation
+	// to the right binary.
+	Role       string          `json:"role"`
+	Status     ComponentStatus `json:"status"`
+	Components []Component     `json:"components"`
+	// CheckedAt is the wall clock at the moment runChecks finished.
+	// Useful for the UI to show staleness when a probe is slow.
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+// Snapshot runs every Ready check with its own timeout and returns the
+// aggregated result. Aggregate semantics match SystemService.GetHealth:
+// any *critical* UNHEALTHY → UNHEALTHY; any non-critical UNHEALTHY (or
+// any DEGRADED) → DEGRADED; else HEALTHY. Same asymmetry as /readyz so
+// the kubelet endpoint set and the UI agree.
+func (h *Handler) Snapshot(ctx context.Context, role string) Snapshot {
+	timeout := h.Timeout
+	if timeout <= 0 {
+		timeout = DefaultCheckTimeout
+	}
+	components := make([]Component, 0, len(h.Ready))
+	worst := StatusHealthy
+	for _, c := range h.Ready {
+		cctx, cancel := context.WithTimeout(ctx, timeout)
+		start := time.Now()
+		err := c.Func(cctx)
+		latency := time.Since(start)
+		cancel()
+
+		comp := Component{
+			Name:      c.Name,
+			LatencyMs: latency.Milliseconds(),
+			Category:  string(c.Category),
+			Critical:  c.Critical,
+		}
+		switch {
+		case err == nil:
+			comp.Status = StatusHealthy
+			comp.Message = c.Note
+		case errors.Is(err, context.DeadlineExceeded):
+			comp.Status = StatusUnhealthy
+			comp.Message = "check timed out after " + timeout.String()
+		default:
+			comp.Status = StatusUnhealthy
+			comp.Message = err.Error()
+		}
+
+		switch {
+		case comp.Status == StatusUnhealthy && c.Critical:
+			worst = StatusUnhealthy
+		case comp.Status == StatusUnhealthy:
+			if worst == StatusHealthy {
+				worst = StatusDegraded
+			}
+		}
+		components = append(components, comp)
+	}
+	return Snapshot{
+		Role:       role,
+		Status:     worst,
+		Components: components,
+		CheckedAt:  time.Now().UTC(),
+	}
+}
+
+// Role is the label embedded in the Snapshot the JSON endpoint emits.
+// Set on the Handler at construction time so each pod self-identifies
+// without callers having to pass it on every probe.
+func (h *Handler) WithRole(role string) *Handler {
+	h.role = role
+	return h
+}
+
+// serveSnapshot is the unauthenticated JSON endpoint at
+// `/system/health.json`. Same security posture as /readyz: no tenant
+// data leaks, every field is operator-visible info already exposed via
+// kubelet probes. The BFF's /api/health/all fans out to this endpoint
+// across the four roles and returns the merged result to the UI.
+func (h *Handler) serveSnapshot(w http.ResponseWriter, r *http.Request) {
+	role := h.role
+	if role == "" {
+		role = "unknown"
+	}
+	snap := h.Snapshot(r.Context(), role)
+	w.Header().Set("Content-Type", "application/json")
+	if h.shuttingDown.Load() {
+		// Respect drain state — same rationale as /readyz returning 503
+		// while draining. The body still carries the per-component
+		// detail so the UI shows what's degrading even mid-shutdown.
+		w.WriteHeader(http.StatusServiceUnavailable)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	_ = json.NewEncoder(w).Encode(snap)
 }
 
 func (h *Handler) respond(w http.ResponseWriter, r *http.Request, code int, status string, failures []failure) {

@@ -91,7 +91,28 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
 	)
 
-	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l)
+	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")
+	// Mirror the api builder's subsystem rows so the admin probe surfaces
+	// the same capability + api_token components — operators viewing the
+	// admin pod alone (e.g. via /system/health.json) shouldn't have to
+	// cross-reference the api pod to learn that capability is disabled.
+	if deps.Capability != nil && deps.Capability.Issuer != nil {
+		AddSubsystemCheck(healthH, "capability", true, func(ctx context.Context) error {
+			if deps.Capability.Issuer == nil {
+				return fmt.Errorf("capability issuer not initialised")
+			}
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "capability")
+	}
+	if deps.APIToken != nil {
+		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "api_token")
+	}
 
 	mux := http.NewServeMux()
 	healthH.Register(mux)
@@ -141,13 +162,17 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine)
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
 	} else {
-		// Subsystem disabled — mount the Unimplemented stub so callers
-		// receive a proper Connect CodeUnimplemented (HTTP 501) rather
-		// than a default-mux 404. 404 is indistinguishable from "wrong
-		// path" and trips the BFF into reporting "unimplemented HTTP
-		// 404", which obscures that the subsystem is intentionally off.
+		// Subsystem disabled — mount the disabled-subsystem stub so
+		// callers receive Connect CodeUnimplemented (HTTP 501) plus
+		// X-Paladin-Reason: subsystem_disabled / X-Paladin-Subsystem: capability
+		// headers and a message naming the config flag to flip. Beats
+		// the default-mux 404 ("path not found") and the bare
+		// Unimplemented from the generated stub ("not implemented")
+		// which can't distinguish "binary lacks this RPC" from "the
+		// operator turned this subsystem off". See disabled_subsystem.go
+		// for the full contract.
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(
-			paladinadminv1connect.UnimplementedCapabilityServiceHandler{}, adminOpts,
+			disabledCapabilityServiceHandler{}, adminOpts,
 		))
 	}
 
@@ -160,8 +185,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
 		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
 	} else {
+		// See disabledCapabilityServiceHandler rationale.
 		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(
-			paladinadminv1connect.UnimplementedAPITokenServiceHandler{}, adminOpts,
+			disabledAPITokenServiceHandler{}, adminOpts,
 		))
 	}
 

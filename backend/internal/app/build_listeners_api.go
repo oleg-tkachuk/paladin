@@ -146,7 +146,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
 
-	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l)
+	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
 
 	// Capability subsystem — when enabled, verify the issuer signer
 	// has a key loaded. Cheap: no I/O, just nil-check on the

@@ -2,7 +2,6 @@ package iam
 
 import (
 	"context"
-	"errors"
 	"runtime"
 	"time"
 
@@ -80,62 +79,46 @@ func (s *SystemServer) GetHealth(
 		// production wiring always passes a real *health.Handler.
 		return connect.NewResponse(&pb.HealthInfo{
 			Status: pb.ComponentStatus_COMPONENT_STATUS_HEALTHY,
+			Role:   s.Role,
 		}), nil
 	}
+	snap := s.Health.Snapshot(ctx, s.Role)
+	return connect.NewResponse(snapshotToProto(snap)), nil
+}
 
-	timeout := s.Health.Timeout
-	if timeout <= 0 {
-		timeout = health.DefaultCheckTimeout
-	}
-
-	components := make([]*pb.ComponentHealth, 0, len(s.Health.Ready))
-	worst := pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
-	for _, c := range s.Health.Ready {
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		start := time.Now()
-		err := c.Func(cctx)
-		latency := time.Since(start)
-		cancel()
-
-		ch := &pb.ComponentHealth{
-			Name:      c.Name,
-			LatencyMs: latency.Milliseconds(),
-			Category:  string(c.Category),
-			Critical:  c.Critical,
-		}
-		switch {
-		case err == nil:
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
-			ch.Message = c.Note
-		case errors.Is(err, context.DeadlineExceeded):
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
-			ch.Message = "check timed out after " + timeout.String()
-		default:
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
-			ch.Message = err.Error()
-		}
-
-		// Aggregate is asymmetric on Critical: a non-critical
-		// UNHEALTHY component drops the roll-up to DEGRADED instead
-		// of UNHEALTHY, so the UI can distinguish "runtime broken"
-		// from "informational dep flapping". Matches /readyz: only
-		// critical failures take the pod out of the endpoint set.
-		switch {
-		case ch.Status == pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY && c.Critical:
-			worst = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
-		case ch.Status == pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY:
-			if worst < pb.ComponentStatus_COMPONENT_STATUS_DEGRADED {
-				worst = pb.ComponentStatus_COMPONENT_STATUS_DEGRADED
-			}
-		case ch.Status > worst:
-			worst = ch.Status
-		}
-		components = append(components, ch)
-	}
-
-	return connect.NewResponse(&pb.HealthInfo{
-		Status:     worst,
-		Components: components,
+// snapshotToProto converts the canonical health.Snapshot into the proto
+// twin SystemService publishes. Keeping this in one place ensures the
+// authenticated RPC and the unauthenticated /system/health.json endpoint
+// can never drift on aggregation semantics — both are derived from the
+// same Snapshot run.
+func snapshotToProto(s health.Snapshot) *pb.HealthInfo {
+	out := &pb.HealthInfo{
+		Status:     statusToProto(s.Status),
+		Components: make([]*pb.ComponentHealth, 0, len(s.Components)),
 		Role:       s.Role,
-	}), nil
+	}
+	for _, c := range s.Components {
+		out.Components = append(out.Components, &pb.ComponentHealth{
+			Name:      c.Name,
+			Status:    statusToProto(c.Status),
+			Message:   c.Message,
+			LatencyMs: c.LatencyMs,
+			Category:  c.Category,
+			Critical:  c.Critical,
+		})
+	}
+	return out
+}
+
+func statusToProto(s health.ComponentStatus) pb.ComponentStatus {
+	switch s {
+	case health.StatusHealthy:
+		return pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
+	case health.StatusDegraded:
+		return pb.ComponentStatus_COMPONENT_STATUS_DEGRADED
+	case health.StatusUnhealthy:
+		return pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
+	default:
+		return pb.ComponentStatus_COMPONENT_STATUS_UNSPECIFIED
+	}
 }

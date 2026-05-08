@@ -13,6 +13,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/config"
+	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/worker/lease"
 )
 
@@ -91,11 +93,13 @@ var serveWorkerCmd = &cobra.Command{
 		if opsAddr == "" {
 			opsAddr = ":8099"
 		}
+		opsMux, opsHealth := workerOpsMux(cfg.Runtime, deps, l)
 		opsSrv := &http.Server{
 			Addr:              opsAddr,
 			ReadHeaderTimeout: 5 * time.Second,
-			Handler:           workerOpsMux(deps),
+			Handler:           opsMux,
 		}
+		_ = opsHealth // exported for future subsystem-check registration
 		go func() {
 			l.Info("worker ops listener", zap.String("addr", opsAddr))
 			if err := opsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -133,27 +137,31 @@ func jobLeaseName(j app.BackgroundJob, idx int) string {
 	return "paladin." + t
 }
 
-// workerOpsMux assembles the minimal ops surface the worker pod exposes:
-// /healthz (liveness) and /readyz (we report ready iff the DB ping
-// succeeds; lease state is a separate axis the worker keeps trying on).
-func workerOpsMux(deps *app.SharedDeps) http.Handler {
+// workerOpsMux assembles the worker pod's ops surface — same shape as
+// the api / admin planes: /livez (process is up), /readyz (deps green),
+// /startupz (boot done), and /system/health.json (structured snapshot
+// the BFF aggregator fetches). Built off a real *health.Handler so the
+// per-component contract matches every other role.
+//
+// Worker probe set: Postgres only. Lease state is intentionally NOT a
+// readiness gate — workers race for leases continuously and a pod
+// without a lease is still "ready" in the kubelet sense (fellow replicas
+// hold them). We surface lease state through metrics, not /readyz.
+func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http.Handler, *health.Handler) {
+	healthH := app.NewHealthHandler(deps.DB, cfg, l).WithRole("worker")
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	healthH.Register(mux)
+	// Backwards-compatible alias for the chart's existing probe paths
+	// (/healthz on worker pods). Maps to the same /livez handler.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		// Re-issue the request as /livez so the kubelet sees identical
+		// semantics regardless of which path the chart is configured
+		// to hit.
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/livez"
+		mux.ServeHTTP(w, r2)
 	})
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		if err := deps.DB.Ping(ctx); err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("db: " + err.Error()))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-	return mux
+	return mux, healthH
 }
 
 func hostname() string {
