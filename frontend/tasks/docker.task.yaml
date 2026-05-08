@@ -20,9 +20,14 @@ tasks:
       _TAG: '{{.TAG | default ._TAG_AUTO}}'
       _COMMIT: { sh: "git rev-parse --short HEAD" }
       _TIME:   { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
-      # Helm rejects non-SemVer chart versions (e.g. literal "latest"),
-      # so chart packaging always uses the auto-bumped numeric version.
+      # Helm rejects non-SemVer chart versions (e.g. literal "latest").
+      # Chart packaging — and the chart's appVersion — always use the
+      # auto-bumped numeric version, never the literal "latest". A
+      # chart with appVersion=latest would lie about what's pinned;
+      # consumers reading the chart manifest expect a real version
+      # they can correlate to a release.
       _CHART_VER: '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
+      _APP_VER:   '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
     cmds:
       - task: ":core:banner"
         vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._TAG}} (chart {{._CHART_VER}})" }
@@ -36,7 +41,7 @@ tasks:
       - docker tag  {{.IMAGE}}:{{._TAG}} {{.IMAGE}}:latest
       - docker push {{.IMAGE}}:latest
       # Helm chart — package, push, clean up the tarball.
-      - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._TAG}}
+      - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._APP_VER}}
       - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
       - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
       - task: ":core:banner"
