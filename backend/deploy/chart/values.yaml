@@ -100,7 +100,6 @@ defaults:
 # endpoints on worker / mcp.
 
 deployments:
-
   api:
     enabled: true
     replicas: 2
@@ -148,7 +147,6 @@ deployments:
         - name: iam
           port: 8085
           targetPort: iam
-
   admin:
     enabled: true
     # Admin pod sits behind a stricter ingress; single replica is fine.
@@ -190,7 +188,6 @@ deployments:
         - name: admin
           port: 8090
           targetPort: admin
-
   worker:
     enabled: true
     # Two replicas with anti-affinity so leases distribute; the lease
@@ -252,7 +249,6 @@ deployments:
               labelSelector:
                 matchLabels:
                   app.kubernetes.io/component: worker
-
   mcp:
     enabled: true
     replicas: 1
@@ -333,7 +329,6 @@ deployments:
 #   pre-upgrade:  migrate (weight=0) → bootstrap (weight=10)
 #
 # Either can be disabled (e.g. external migrator owns DDL).
-
 jobs:
   migrate:
     enabled: true
