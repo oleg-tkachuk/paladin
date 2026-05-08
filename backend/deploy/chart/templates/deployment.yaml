@@ -11,8 +11,9 @@
 {{- $defaults := .Values.defaults -}}
 {{- range $role, $spec := .Values.deployments }}
 {{- if $spec.enabled }}
-{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
-{{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) -}}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+{{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) }}
+
 ---
 apiVersion: apps/v1
 kind: Deployment

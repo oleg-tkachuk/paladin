@@ -6,7 +6,8 @@
 */}}
 {{- range $role, $spec := .Values.deployments }}
 {{- if and $spec.enabled $spec.service }}
-{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+
 ---
 apiVersion: v1
 kind: Service

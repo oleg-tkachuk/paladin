@@ -8,7 +8,8 @@
 {{- range $role, $spec := .Values.deployments }}
 {{- $auto := default $defaults.autoscaling $spec.autoscaling }}
 {{- if and $spec.enabled $auto $auto.enabled }}
-{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) -}}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
