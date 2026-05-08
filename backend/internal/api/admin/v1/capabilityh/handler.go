@@ -3,11 +3,14 @@
 // (the in-process types + Issuer + Store) into a Connect handler suitable
 // for mux registration.
 //
-// Authorisation: every RPC currently requires the caller to be a
-// platform.admin (gated via Cedar). Fine-grained delegation (an agent
-// minting a sub-capability for itself) lands later — when MCP integrates
-// the `share` tool the path will route through Delegate without an admin
-// principal, gated by capability.OpShare on the caller's own token.
+// Authorisation:
+//
+//   - Issue / Revoke / List / GetUsage require platform.admin (Cedar).
+//   - Delegate accepts EITHER a platform.admin (Cedar) OR a capability-
+//     authenticated caller whose own capability includes OpShare AND
+//     whose ID matches the requested parent_id. The latter is the
+//     MCP `share`-tool path — agents minting sub-capabilities for
+//     downstream callers without going through an admin.
 package capabilityh
 
 import (
@@ -49,6 +52,18 @@ func NewHandler(
 		panic("capabilityh: issuer / store / policy are required")
 	}
 	return &Handler{issuer: issuer, store: store, usage: usage, policy: policy}
+}
+
+// hasOp reports whether the caveat op-set includes the requested op.
+// Empty op-set means "no operation allowed", so the result is false in
+// that case.
+func hasOp(ops []capability.Op, want capability.Op) bool {
+	for _, o := range ops {
+		if o == want {
+			return true
+		}
+	}
+	return false
 }
 
 // authorize gates an RPC against Cedar. Capability operations are
@@ -118,19 +133,45 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	}), nil
 }
 
-// Delegate narrows a parent capability the caller already supplies. The
-// parent is fetched from the store by ID — caller doesn't ship the full
-// token. Caller must be platform-admin (the share-tool path will use a
-// different Cedar action when it lands).
+// Delegate narrows a parent capability. Two authentication paths are
+// accepted:
+//
+//  1. Platform-admin (JWT/admin) — Cedar action "delegate" gates the
+//     call. Admin may delegate from any parent in the store.
+//
+//  2. Capability-bearing caller (the agent share-tool path) — caller
+//     must present a verified capability via the X-PALADIN-Capability
+//     header. The caller's capability MUST include `OpShare` in its
+//     allowed ops, AND `parent_id` MUST equal the caller's own
+//     capability ID. This prevents an agent from delegating off some
+//     other principal's capability.
+//
+// Caveat narrowing is enforced downstream by Issuer.Delegate
+// (ErrDelegationTooWide); this handler only gates *who* may delegate.
 func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceDelegateRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
-	if _, err := h.authorize(ctx, "delegate"); err != nil {
-		return nil, err
-	}
-
 	parentID, err := uuid.Parse(req.Msg.GetParentId())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
+
+	// Path 2: capability-authenticated caller. Gated entirely by the
+	// caller's own caveats — no Cedar admin check.
+	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
+		if !hasOp(callerCap.Caveats.Ops, capability.OpShare) {
+			return nil, connect.NewError(connect.CodePermissionDenied,
+				errors.New("capability: caller lacks OpShare"))
+		}
+		if callerCap.ID != parentID {
+			return nil, connect.NewError(connect.CodePermissionDenied,
+				errors.New("capability: parent_id must equal caller's own capability id"))
+		}
+	} else {
+		// Path 1: admin. Re-use the existing Cedar gate.
+		if _, err := h.authorize(ctx, "delegate"); err != nil {
+			return nil, err
+		}
+	}
+
 	parent, err := h.store.Get(ctx, parentID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)

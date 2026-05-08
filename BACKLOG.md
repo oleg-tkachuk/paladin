@@ -68,29 +68,6 @@ the same commit. Treat this file like a runtime invariant.
     not every operator runs a CNI that enforces them.
 - **Blockers:** none. Pure chart work.
 
-### Capability caveats — Budget + Source-IP CIDR enforcement
-
-- **Status:** Aspirational
-- **Reason:** Op + ResourcePrefixes / ResourceURIs caveats now gate
-  every read/write/list on ObjectService / MultipartUploadService /
-  PresignService / BatchService / ObjectTagService (Phase 1). The
-  remaining caveat axes — `MaxBudgetUSD` and `SourceIPCIDR` — are
-  declared on Capability but not yet enforced anywhere.
-- **Definition of Done:**
-  - Budget tracker: per-capability USD spend on object PUT (storage
-    bytes × tiered rate), GetObject (egress estimate), Embed /
-    Sampling LLM calls (proxy-reported cost). Decrement on each op;
-    surface `ErrBudgetExceeded` from the next call once exhausted.
-    Lives in `internal/auth` with a Postgres-backed counter table.
-  - Source-IP CIDR caveat enforced in the interceptor (before any
-    handler runs) — connect.RealIP + cap.Caveats.SourceIPCIDR
-    membership check; deny with CodePermissionDenied otherwise.
-  - The `capability.OpShare` path lights up when the MCP `share` tool
-    routes to `CapabilityService.Delegate` — the caller's capability
-    must include OpShare for the delegation request to succeed.
-- **Blockers:** none. Independent of the Op/Resource caveats which
-  are wired.
-
 ### KMS-wrapped capability signing key
 
 - **Status:** Deferred
