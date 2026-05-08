@@ -93,7 +93,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
-	return h.submitter.Submit(ctx, "BatchDelete", md)
+	return h.chargeAndSubmit(ctx, "BatchDelete", md)
 }
 
 func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID, error) {
@@ -121,7 +121,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
-	return h.submitter.Submit(ctx, "BatchCopy", md)
+	return h.chargeAndSubmit(ctx, "BatchCopy", md)
 }
 
 func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs) (uuid.UUID, error) {
@@ -141,7 +141,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
-	return h.submitter.Submit(ctx, "BatchUpdateTags", md)
+	return h.chargeAndSubmit(ctx, "BatchUpdateTags", md)
 }
 
 func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObjectsArgs) (uuid.UUID, error) {
@@ -167,7 +167,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
-	return h.submitter.Submit(ctx, "BatchRestoreObjects", md)
+	return h.chargeAndSubmit(ctx, "BatchRestoreObjects", md)
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, objectKey, action string) error {
@@ -184,6 +184,19 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 	return nil
+}
+
+// chargeAndSubmit charges the per-request capability budget BEFORE
+// enqueuing the operation. Order matters: an over-budget caller
+// must NOT leave a dangling PENDING row that the runner will then
+// pick up and execute. ChargeRequest is a no-op when no capability
+// is on context (JWT path) or when cfg.Capability.ChargePerRequest
+// is 0 (default), so the JWT/unmetered call shape is unchanged.
+func (h *Handler) chargeAndSubmit(ctx context.Context, opType string, md []byte) (uuid.UUID, error) {
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return uuid.Nil, err
+	}
+	return h.submitter.Submit(ctx, opType, md)
 }
 
 // maxBatchSize caps the number of objects per BatchXxx call.

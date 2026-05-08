@@ -184,6 +184,52 @@ func TestChargeCapability_NegativeOrZero_NoOp(t *testing.T) {
 	}
 }
 
+// ─── ChargeRequest ──────────────────────────────────────────────────
+
+func TestChargeRequest_NoAmountInContext_NoOp(t *testing.T) {
+	store := newFakeUsage()
+	cap := &capability.Capability{ID: uuid.New()}
+	// Cap + store but NO amount on context — handler shouldn't be
+	// charged because cfg.ChargePerRequest defaulted to 0.
+	ctx := WithChargeStore(WithCapability(context.Background(), cap), store)
+
+	if err := ChargeRequest(ctx); err != nil {
+		t.Errorf("no amount stamped = no-op, got %v", err)
+	}
+	if u, _ := store.Get(ctx, cap.ID); u.SpentUSD != 0 {
+		t.Errorf("spent should stay 0, got %v", u.SpentUSD)
+	}
+}
+
+func TestChargeRequest_AmountPresent_Charges(t *testing.T) {
+	store := newFakeUsage()
+	cap := &capability.Capability{ID: uuid.New()}
+	ctx := WithChargeAmount(
+		WithChargeStore(WithCapability(context.Background(), cap), store),
+		0.001,
+	)
+	if err := ChargeRequest(ctx); err != nil {
+		t.Fatalf("charge: %v", err)
+	}
+	u, _ := store.Get(ctx, cap.ID)
+	if u.SpentUSD < 0.0009 || u.SpentUSD > 0.0011 {
+		t.Errorf("spent = %v, want ~0.001", u.SpentUSD)
+	}
+}
+
+func TestChargeRequest_NoCapability_NoOp(t *testing.T) {
+	// No capability on context — JWT auth path. Even with an amount
+	// stamped, ChargeRequest returns nil without touching the store.
+	store := newFakeUsage()
+	ctx := WithChargeAmount(
+		WithChargeStore(context.Background(), store),
+		0.5,
+	)
+	if err := ChargeRequest(ctx); err != nil {
+		t.Errorf("no capability = no-op, got %v", err)
+	}
+}
+
 // ─── RefundCapability ───────────────────────────────────────────────
 
 func TestRefundCapability_AfterCharge_DecrementsSpend(t *testing.T) {

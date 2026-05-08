@@ -88,6 +88,12 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
+	// Capability budget burn — gates issuance for over-budget callers
+	// before we hand them a usable presigned URL. No-op when the
+	// caller is JWT-authenticated or ChargePerRequest is 0.
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return "", nil, time.Time{}, err
+	}
 	return h.storage.PresignGet(ctx, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
 }
 
@@ -128,6 +134,9 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
 	}
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return "", nil, time.Time{}, err
+	}
 	return h.storage.PresignPut(ctx, bucket, tenantID, objectKey, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
 }
 
@@ -153,6 +162,9 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	return h.storage.PresignPart(ctx, bucket, tenantID, storageUploadID, objectKey, key, partNumber, h.resolveTTL(ttl))
 }

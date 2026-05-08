@@ -417,6 +417,13 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		out.ExpiresAt = exp
 	}
 
+	// Capability budget — burns AFTER the row + URL exist so the
+	// caller's response is meaningful when charge succeeds. If the
+	// charge fails the row is PENDING and the reaper will GC it
+	// once presign expires.
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -495,6 +502,12 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
 		h.touchQuota(ctx, fresh)
+		// Capability burn fires only on the actual transition;
+		// idempotent retries (changed=false) are free so callers
+		// implementing at-least-once delivery aren't double-charged.
+		if err := auth.ChargeRequest(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return &fresh, nil
 }

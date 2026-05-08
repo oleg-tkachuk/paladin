@@ -83,6 +83,7 @@ func CapabilityInterceptor(
 	audience string,
 	usage capability.UsageStore,
 	realIPHeader string,
+	chargePerRequest float64,
 ) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
@@ -91,18 +92,20 @@ func CapabilityInterceptor(
 		realIPHeader = "X-Forwarded-For"
 	}
 	return &capabilityInterceptor{
-		verifier:     verifier,
-		audience:     audience,
-		usage:        usage,
-		realIPHeader: realIPHeader,
+		verifier:         verifier,
+		audience:         audience,
+		usage:            usage,
+		realIPHeader:     realIPHeader,
+		chargePerRequest: chargePerRequest,
 	}
 }
 
 type capabilityInterceptor struct {
-	verifier     *capability.StandardVerifier
-	audience     string
-	usage        capability.UsageStore
-	realIPHeader string
+	verifier         *capability.StandardVerifier
+	audience         string
+	usage            capability.UsageStore
+	realIPHeader     string
+	chargePerRequest float64
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -124,6 +127,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		}
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
+		ctx = WithChargeAmount(ctx, i.chargePerRequest)
 		return next(ctx, req)
 	}
 }
@@ -147,6 +151,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		}
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
+		ctx = WithChargeAmount(ctx, i.chargePerRequest)
 		return next(ctx, conn)
 	}
 }
@@ -269,6 +274,12 @@ func extractCapabilityToken(xocp, authz string) string {
 // subsystem is wired so handlers don't need a global reference.
 type chargeKey struct{}
 
+// chargeAmountKey carries the per-request default charge amount
+// (cfg.Capability.ChargePerRequest) so handlers don't need to read
+// config — they call auth.ChargeRequest(ctx) and the interceptor's
+// stamp determines the amount.
+type chargeAmountKey struct{}
+
 // WithChargeStore stamps the UsageStore onto a context. Wired by the
 // capability interceptor at request time; tests can preset for unit
 // coverage of charging handlers.
@@ -277,6 +288,16 @@ func WithChargeStore(ctx context.Context, s capability.UsageStore) context.Conte
 		return ctx
 	}
 	return context.WithValue(ctx, chargeKey{}, s)
+}
+
+// WithChargeAmount stamps the per-request default charge amount.
+// Independent of WithChargeStore so a test can wire one without the
+// other (e.g. verify the no-store path is a no-op).
+func WithChargeAmount(ctx context.Context, amountUSD float64) context.Context {
+	if amountUSD <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, chargeAmountKey{}, amountUSD)
 }
 
 // ChargeCapability is the handler-side spend hook. Handlers that emit
@@ -327,6 +348,38 @@ func ChargeCapability(ctx context.Context, amountUSD float64) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	return nil
+}
+
+// ChargeRequest is the canonical post-work hook handlers call to
+// burn the cfg-driven per-request budget against the active
+// capability. Equivalent to ChargeCapability(ctx, amount) where
+// amount comes from cfg.Capability.ChargePerRequest stamped onto
+// the context by the interceptor.
+//
+// Behaviour mirrors ChargeCapability:
+//
+//   - No capability on context (JWT auth) → no-op.
+//   - No charge amount on context (cfg.ChargePerRequest = 0) →
+//     no-op. Handlers wire this defensively so the path is hot
+//     even when ops haven't tuned a non-zero charge yet.
+//   - Otherwise: forwards to ChargeCapability with the stamped
+//     amount.
+//
+// Idiomatic call site:
+//
+//	if err := h.work(...); err != nil { return nil, err }
+//	if err := auth.ChargeRequest(ctx); err != nil { return nil, err }
+//	return result, nil
+//
+// Charging AFTER successful work avoids burning budget on requests
+// that never produced a billable artifact (denied, panicked,
+// validation failure).
+func ChargeRequest(ctx context.Context) error {
+	amount, ok := ctx.Value(chargeAmountKey{}).(float64)
+	if !ok || amount <= 0 {
+		return nil
+	}
+	return ChargeCapability(ctx, amount)
 }
 
 // RefundCapability subtracts amountUSD from the per-capability spend

@@ -661,6 +661,19 @@ type Capability struct {
 	// Default 30s; matches existing internal/auth.Auth.Leeway.
 	VerifierLeeway time.Duration `yaml:"verifier_leeway" json:"verifier_leeway"`
 
+	// ChargePerRequest is the USD amount automatically charged
+	// against the capability + tenant budgets for each "billable"
+	// handler call (presign, complete object, batch op kick-off).
+	// 0 = no automatic charge (default) — handlers still emit the
+	// request-count bump, but spent_usd never moves.
+	//
+	// One uniform knob covers the typical "track per-call cost"
+	// model. Operators who want per-handler differentiation extend
+	// the call sites with explicit ChargeCapability(ctx, custom)
+	// invocations; this default is the "bare minimum so caveats
+	// matter".
+	ChargePerRequest float64 `yaml:"charge_per_request" json:"charge_per_request"`
+
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers. Default 2s; the SLO for revocation propagation. Set <0
 	// to disable caching (every check hits the DB).
