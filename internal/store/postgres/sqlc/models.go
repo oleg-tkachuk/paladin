@@ -207,6 +207,13 @@ type CapabilityRevocation struct {
 	Cascade   bool               `json:"cascade"`
 }
 
+type CapabilityUsage struct {
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	RequestCount int64              `json:"request_count"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type EventSubscription struct {
 	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`

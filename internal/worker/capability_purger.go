@@ -21,10 +21,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
 
-// CapabilityPurger periodically calls Store.PurgeExpired. Disabled
-// when Interval <= 0.
+// CapabilityPurger periodically calls Store.PurgeExpired and, when
+// Usage is wired, sweeps orphan capability_usage rows whose parent
+// capability is gone. Disabled when Interval <= 0.
 type CapabilityPurger struct {
 	Store      capability.Store
+	Usage      capability.UsageStore
 	Interval   time.Duration
 	ExpiredFor time.Duration
 	Logger     *zap.Logger
@@ -54,6 +56,22 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 			}
 			if n > 0 {
 				p.log().Info("purged expired capability revocations", zap.Int64("rows", n))
+			}
+			if p.Usage != nil {
+				// Loop until 0 — bounded SQL keeps each statement
+				// short, but a backlog (operator just ran a mass
+				// revoke) needs more than one batch to drain.
+				for {
+					n, err := p.Usage.PurgeOrphans(ctx)
+					if err != nil {
+						p.log().Warn("failed to purge capability usage orphans", zap.Error(err))
+						break
+					}
+					if n == 0 {
+						break
+					}
+					p.log().Info("purged capability usage orphans", zap.Int64("rows", n))
+				}
 			}
 		}
 	}

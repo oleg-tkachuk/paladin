@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"net"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -64,16 +66,42 @@ func WithCapability(ctx context.Context, c *capability.Capability) context.Conte
 //
 // When verifier is nil (capability subsystem disabled) the returned
 // interceptor is a pass-through that never touches the context.
-func CapabilityInterceptor(verifier *capability.StandardVerifier, audience string) connect.Interceptor {
+//
+// usage is the runtime-counter store. When non-nil and the capability
+// carries Caveats.MaxRequests > 0, every request bumps the counter
+// and rejects when over. When nil, MaxRequests is silently un-enforced
+// — the operator opted out by not wiring the store.
+//
+// realIPHeader names the proxy header that carries the client IP
+// for SourceIPCIDR enforcement (e.g. "X-Forwarded-For"). Empty means
+// "fall back to req.Header().Get('X-Real-Ip') or skip CIDR check
+// entirely". The chart's HTTPServer config already pins the
+// trusted-proxy header per plane; this value mirrors it.
+func CapabilityInterceptor(
+	verifier *capability.StandardVerifier,
+	audience string,
+	usage capability.UsageStore,
+	realIPHeader string,
+) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
 	}
-	return &capabilityInterceptor{verifier: verifier, audience: audience}
+	if realIPHeader == "" {
+		realIPHeader = "X-Forwarded-For"
+	}
+	return &capabilityInterceptor{
+		verifier:     verifier,
+		audience:     audience,
+		usage:        usage,
+		realIPHeader: realIPHeader,
+	}
 }
 
 type capabilityInterceptor struct {
-	verifier *capability.StandardVerifier
-	audience string
+	verifier     *capability.StandardVerifier
+	audience     string
+	usage        capability.UsageStore
+	realIPHeader string
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -90,7 +118,12 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			// silently would mask the misconfiguration.
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
 		}
-		return next(WithCapability(ctx, cap), req)
+		if err := i.enforceCaveats(ctx, cap, req.Header()); err != nil {
+			return nil, err
+		}
+		ctx = WithCapability(ctx, cap)
+		ctx = WithChargeStore(ctx, i.usage)
+		return next(ctx, req)
 	}
 }
 
@@ -108,8 +141,106 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if err != nil {
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
-		return next(WithCapability(ctx, cap), conn)
+		if err := i.enforceCaveats(ctx, cap, conn.RequestHeader()); err != nil {
+			return err
+		}
+		ctx = WithCapability(ctx, cap)
+		ctx = WithChargeStore(ctx, i.usage)
+		return next(ctx, conn)
 	}
+}
+
+// enforceCaveats runs the runtime-bound caveat checks: source-IP CIDR
+// match and per-capability request-count limit. Order:
+//
+//  1. CIDR check first (cheap; pure in-memory match) — rejects
+//     before we hit the DB.
+//  2. Request-count bump (one round-trip; concurrency-safe via
+//     UPSERT-and-check). When usage store is nil, MaxRequests is a
+//     no-op even if the caveat is set — the operator opted out.
+//
+// Budget enforcement is NOT done here — Charge() is per-handler,
+// called after the cost-emitting work; it lives in this package as
+// auth.ChargeCapability for handlers to invoke.
+func (i *capabilityInterceptor) enforceCaveats(
+	ctx context.Context,
+	cap *capability.Capability,
+	header HeaderGetter,
+) error {
+	if len(cap.Caveats.SourceIPCIDR) > 0 {
+		clientIP := i.clientIP(header)
+		if clientIP == nil {
+			return connect.NewError(connect.CodePermissionDenied,
+				errors.New("capability: SourceIPCIDR set but client IP unknown"))
+		}
+		if !ipInAnyCIDR(clientIP, cap.Caveats.SourceIPCIDR) {
+			return connect.NewError(connect.CodePermissionDenied,
+				errors.New("capability: client IP not in SourceIPCIDR allow-list"))
+		}
+	}
+
+	if i.usage != nil && cap.Caveats.MaxRequests > 0 {
+		if _, err := i.usage.BumpRequest(ctx, cap.ID, int64(cap.Caveats.MaxRequests)); err != nil {
+			if errors.Is(err, capability.ErrRequestLimitExceeded) {
+				return connect.NewError(connect.CodeResourceExhausted, err)
+			}
+			// DB-side error: fail closed. A capability with a
+			// MaxRequests cap that can't be incremented atomically
+			// is safer to reject than to allow unbounded use.
+			return connect.NewError(connect.CodeUnavailable, err)
+		}
+	}
+	return nil
+}
+
+// HeaderGetter is the read-only header surface both connect.AnyRequest
+// and connect.StreamingHandlerConn expose. Local interface so
+// enforceCaveats accepts either without coupling to a specific
+// connect type.
+type HeaderGetter interface {
+	Get(key string) string
+}
+
+// clientIP extracts the caller's IP. Honours the configured proxy
+// header (X-Forwarded-For by default, leftmost client). Falls back
+// to X-Real-Ip. Returns nil when neither header is present —
+// SourceIPCIDR enforcement upstream rejects in that case.
+func (i *capabilityInterceptor) clientIP(header HeaderGetter) net.IP {
+	if v := header.Get(i.realIPHeader); v != "" {
+		// X-Forwarded-For format: "client, proxy1, proxy2". Leftmost
+		// non-empty entry is the client. Trim spaces; tolerate the
+		// "X-Real-Ip"-style single-value form too.
+		first := v
+		if idx := strings.IndexByte(v, ','); idx > 0 {
+			first = v[:idx]
+		}
+		if ip := net.ParseIP(strings.TrimSpace(first)); ip != nil {
+			return ip
+		}
+	}
+	if v := header.Get("X-Real-Ip"); v != "" {
+		if ip := net.ParseIP(strings.TrimSpace(v)); ip != nil {
+			return ip
+		}
+	}
+	return nil
+}
+
+// ipInAnyCIDR returns true when ip falls inside at least one CIDR
+// from the supplied list. Invalid CIDRs are skipped (delegation
+// narrowing already rejects them at issue time, but the verifier
+// path is defensive).
+func ipInAnyCIDR(ip net.IP, cidrs []string) bool {
+	for _, c := range cidrs {
+		_, network, err := net.ParseCIDR(c)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractCapabilityToken reads the token from either of the supported
@@ -130,6 +261,64 @@ func extractCapabilityToken(xocp, authz string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
+}
+
+// chargeKey context value carries the UsageStore the handler should
+// charge against. The interceptor stamps it whenever the capability
+// subsystem is wired so handlers don't need a global reference.
+type chargeKey struct{}
+
+// WithChargeStore stamps the UsageStore onto a context. Wired by the
+// capability interceptor at request time; tests can preset for unit
+// coverage of charging handlers.
+func WithChargeStore(ctx context.Context, s capability.UsageStore) context.Context {
+	if s == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, chargeKey{}, s)
+}
+
+// ChargeCapability is the handler-side spend hook. Handlers that emit
+// cost (e.g. presign issuance, batch op kickoff, future LLM calls)
+// call this once the work is committed:
+//
+//	if err := auth.ChargeCapability(ctx, 0.0001); err != nil {
+//	    return nil, err
+//	}
+//
+// Behaviour:
+//
+//   - No capability on context (JWT auth) → no-op, returns nil.
+//   - Capability without MaxBudgetUSD set → records spend but never
+//     rejects (operator audits via capability.UsageStore.Get).
+//   - Capability with MaxBudgetUSD set and the new charge would
+//     exceed it → returns CodeResourceExhausted; row is NOT mutated
+//     so the handler can decide to refund / log / retry.
+//   - UsageStore not wired → no-op (operator opted out).
+//
+// Refunds are an explicit op (not yet exposed). For now: handlers
+// that detect a partial failure after charging are responsible for
+// either tolerating the over-charge or compensating manually.
+func ChargeCapability(ctx context.Context, amountUSD float64) error {
+	cap, ok := CapabilityFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	store, ok := ctx.Value(chargeKey{}).(capability.UsageStore)
+	if !ok || store == nil {
+		return nil
+	}
+	if amountUSD <= 0 {
+		return nil
+	}
+	_, err := store.Charge(ctx, cap.ID, amountUSD, cap.Caveats.MaxBudgetUSD)
+	if err != nil {
+		if errors.Is(err, capability.ErrBudgetExceeded) {
+			return connect.NewError(connect.CodeResourceExhausted, err)
+		}
+		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	return nil
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any

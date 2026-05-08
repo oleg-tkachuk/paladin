@@ -15,7 +15,15 @@ type Querier interface {
 	// The DB trigger enforce_object_key_bucket_tenancy validates the tenancy
 	// constraint (single-tenant buckets reject mismatched tenants).
 	BindObjectKeyToBucket(ctx context.Context, tenantID pgtype.UUID, objectKey string, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	// Per-capability runtime counters. Atomic UPSERT-and-check shape so
+	// the hot path is a single round-trip with concurrency-safe semantics.
+	// Increments request_count by 1 and rejects when over the supplied cap.
+	// max=0 means unlimited; we still write the row for spend tracking + UI.
+	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests int64) (int64, error)
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
+	// Adds amount to spent_usd and rejects when over the supplied cap.
+	// max_budget=0 means unlimited.
+	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
@@ -58,6 +66,7 @@ type Querier interface {
 	// it flips state to 'deleting' via MarkBucketDeleting and lets the
 	// worker drive the physical delete.
 	DeleteBucketV2(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
+	DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (int64, error)
 	DeleteEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, expectedVersion int64) (int64, error)
 	DeleteMultipartUpload(ctx context.Context, uploadID string) error
 	DeleteObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string, expectedVersion int64) (int64, error)
@@ -77,6 +86,7 @@ type Querier interface {
 	GetBucketQuota(ctx context.Context, backendID *string, bucketName *string) (Quota, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, backendID string, bucketName string) (GetBucketV2Row, error)
+	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (CapabilityUsage, error)
 	// Reads the pointer the `objects` row carries.
 	GetCurrentVersionID(ctx context.Context, objectID pgtype.UUID) (pgtype.UUID, error)
 	// Returns tenant-inherited policy concatenated with the object_key-specific policy.
@@ -216,6 +226,10 @@ type Querier interface {
 	// unambiguously belongs to the inner FROM scope — but sqlc's parser
 	// treats it as ambiguous and errors out at codegen.
 	PurgeAuditOlderThan(ctx context.Context, at pgtype.Timestamptz) (int64, error)
+	// Drops usage rows whose capability_id is no longer in capability_records.
+	// Runs alongside CapabilityPurger so orphans don't accumulate when caps
+	// are revoked/expired without going through DeleteCapabilityUsage.
+	PurgeCapabilityUsageOrphans(ctx context.Context) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.

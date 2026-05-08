@@ -41,7 +41,7 @@ func TestExtractCapabilityToken(t *testing.T) {
 // unchanged.
 func TestCapabilityInterceptor_NilVerifier(t *testing.T) {
 	t.Parallel()
-	i := CapabilityInterceptor(nil, "data")
+	i := CapabilityInterceptor(nil, "data", nil, "")
 	if i == nil {
 		t.Fatalf("nil interceptor returned")
 	}

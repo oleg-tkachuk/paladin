@@ -18,6 +18,7 @@ import (
 // admin handler) pull the pieces they need.
 type CapabilityBundle struct {
 	Store    capability.Store
+	Usage    capability.UsageStore
 	Issuer   *capability.Issuer
 	Verifier *capability.StandardVerifier
 	Keys     *capability.StaticKeyResolver
@@ -98,8 +99,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
 	}
 
+	usage := capabilitypg.NewUsageStore(deps.DB.Queries)
+
 	return &CapabilityBundle{
 		Store:        store,
+		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,

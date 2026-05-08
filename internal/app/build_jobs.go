@@ -115,6 +115,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	if deps.Capability != nil && cfg.Workers.Capability.Interval > 0 {
 		out = append(out, &worker.CapabilityPurger{
 			Store:      deps.Capability.Store,
+			Usage:      deps.Capability.Usage,
 			Interval:   cfg.Workers.Capability.Interval,
 			ExpiredFor: cfg.Workers.Capability.ExpiredFor,
 			Logger:     l.Named("capability-purger"),

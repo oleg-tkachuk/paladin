@@ -102,9 +102,14 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// mcp). User-authn flows that go through iam are not the agent path.
 	var capData connect.Interceptor
 	if deps.Capability != nil {
-		capData = auth.CapabilityInterceptor(deps.Capability.Verifier, capability.AudiencePlaneData)
+		capData = auth.CapabilityInterceptor(
+			deps.Capability.Verifier,
+			capability.AudiencePlaneData,
+			deps.Capability.Usage,
+			cfg.Server.DataHTTP.RealIPHeader,
+		)
 	} else {
-		capData = auth.CapabilityInterceptor(nil, "")
+		capData = auth.CapabilityInterceptor(nil, "", nil, "")
 	}
 
 	// APIToken interceptor — additive, parallel to capability and JWT.
