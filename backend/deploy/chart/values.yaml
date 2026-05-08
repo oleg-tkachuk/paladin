@@ -200,8 +200,12 @@ deployments:
       - "serve"
       - "worker"
     ports:
+      # 8090 matches cmd/server/serve_worker.go which reuses
+      # cfg.Server.AdminHTTP.Addr (config.yaml: 0.0.0.0:8090) for the
+      # ops listener. Don't reuse 8099 — that's the default fallback
+      # the binary picks ONLY when AdminHTTP.Addr is empty in config.
       - name: ops
-        containerPort: 8099
+        containerPort: 8090
     # Worker speaks no Connect; ops port serves the simple /healthz +
     # /readyz handlers from cmd/server/serve_worker.go.
     livenessProbe:
