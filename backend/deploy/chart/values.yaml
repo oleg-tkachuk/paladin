@@ -26,7 +26,7 @@ metadata:
 terminationGracePeriodSeconds: 30
 
 image:
-  repository: registry.local/paladin
+  repository: registry.local/paladin/paladin
   pullPolicy: Always
   tag: ""
 

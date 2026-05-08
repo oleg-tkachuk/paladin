@@ -14,7 +14,7 @@ backend:
     admin: "http://paladin.paladin.svc.cluster.local:8090"
 
 image:
-  repository: registry.local/paladin-ui
+  repository: registry.local/paladin/paladin-ui
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
