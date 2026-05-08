@@ -106,6 +106,7 @@ func (s *SystemServer) GetHealth(
 		switch {
 		case err == nil:
 			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
+			ch.Message = c.Note
 		case errors.Is(err, context.DeadlineExceeded):
 			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
 			ch.Message = "check timed out after " + timeout.String()

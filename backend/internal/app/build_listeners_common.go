@@ -136,6 +136,21 @@ func AddSubsystemCheck(h *health.Handler, name string, critical bool, fn func(ct
 	})
 }
 
+// AddDisabledSubsystem registers an always-healthy informational
+// component for a subsystem that is off-by-config. Surfaces a "disabled"
+// note on the /health page so operators see the row instead of having
+// to grep config to confirm a subsystem is intentionally absent.
+// Critical=false: a disabled subsystem must never fail /readyz.
+func AddDisabledSubsystem(h *health.Handler, name string) {
+	h.Ready = append(h.Ready, health.Check{
+		Name:     name,
+		Category: health.CategorySubsystem,
+		Critical: false,
+		Func:     func(ctx context.Context) error { return nil },
+		Note:     "disabled",
+	})
+}
+
 // AddUpstreamCheck appends a Category=upstream check. Always
 // non-critical: an upstream blip on the mcp bridge shouldn't take
 // the data plane out of rotation.

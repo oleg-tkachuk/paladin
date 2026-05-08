@@ -140,15 +140,29 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// authentication; the handler does its own Cedar gate per RPC.
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine)
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
+	} else {
+		// Subsystem disabled — mount the Unimplemented stub so callers
+		// receive a proper Connect CodeUnimplemented (HTTP 501) rather
+		// than a default-mux 404. 404 is indistinguishable from "wrong
+		// path" and trips the BFF into reporting "unimplemented HTTP
+		// 404", which obscures that the subsystem is intentionally off.
+		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(
+			paladinadminv1connect.UnimplementedCapabilityServiceHandler{}, adminOpts,
+		))
 	}
 
-	// APITokenService — Create / Revoke / List / GetSelf. Mounted only
-	// when the api_token subsystem is wired. GetSelf is gated only by
-	// the interceptor (caller must hold a valid token); the rest are
-	// platform-admin via Cedar.
+	// APITokenService — Create / Revoke / List / GetSelf. GetSelf is
+	// gated only by the interceptor (caller must hold a valid token);
+	// the rest are platform-admin via Cedar. Mounted unconditionally —
+	// when the api_token subsystem is off we mount the Unimplemented
+	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
 		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
 		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
+	} else {
+		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(
+			paladinadminv1connect.UnimplementedAPITokenServiceHandler{}, adminOpts,
+		))
 	}
 
 	return mux, healthH, nil

@@ -339,3 +339,28 @@ mcp:
   # explicitly = no global denial (override for built-in defaults).
   # Leave commented to keep the built-in DefaultAlwaysDeny.
   # always_deny: []
+
+# ── Capability tokens (Ed25519 JWT, agent-runtime) ─────────────────────────
+# Short-lived, caveat-bearing JWTs minted by the admin plane and verified
+# on data/admin/mcp. Disabled by default — enable per-deploy once a
+# signing key is mounted. See internal/capability/.
+capability:
+  enabled: false                     # gate the whole subsystem
+  issuer_name: ""                    # `iss` claim; conventional: external URL or "paladin-prod-eu"
+  trusted_issuers: []                # `iss` values the verifier accepts; include issuer_name
+  signing_key_path: ""               # PEM PKCS#8 Ed25519 private key; empty → ephemeral keypair (dev only)
+  signing_key_kid: ""                # JWT header kid; empty → derived from public key bytes
+  default_ttl: 15m                   # cap when Issue.TTL omitted
+  verifier_leeway: 30s               # clock-skew window for nbf / exp
+  charge_per_request: 0              # USD auto-charged on billable handler calls; 0 = no auto-charge
+  revocation_cache_ttl: 2s           # IsRevoked cache TTL; <0 disables (every check hits DB)
+
+# ── API tokens (hashed-bearer M2M, long-lived) ─────────────────────────────
+# Service-to-service credentials following the GitHub-PAT / Stripe /
+# Hatchet pattern. Distinct from capability (agent JWT) and auth (user
+# OIDC). Disabled by default. See internal/auth/api_token/.
+api_token:
+  enabled: false                     # gate the subsystem
+  max_ttl: 8760h                     # cap on Issue lifetime; 1y default
+  verifier_leeway: 30s               # clock-skew on expires_at
+  touch_last_used: true              # bump last_used_at on verify (off for high-QPS deploys)

@@ -81,6 +81,11 @@ type Check struct {
 	Category Category
 	Critical bool
 	Func     func(context.Context) error
+	// Note is surfaced on the GetHealth RPC response even when the
+	// check passes. Use it to label informational components — e.g.
+	// "disabled" for an off-by-config subsystem so the /health page
+	// shows the row instead of silently omitting it. Empty by default.
+	Note string
 }
 
 // Handler is the probe registrar. Build one per process; share it across

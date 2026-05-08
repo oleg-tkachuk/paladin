@@ -570,6 +570,36 @@ config:
     profiles: {}
     # always_deny: []
 
+  # ─── Capability tokens (Ed25519 JWT, agent-runtime) ──────────────────
+  #
+  # Short-lived caveat-bearing JWTs minted by admin and verified on
+  # data/admin/mcp. Off by default — enable per-deploy once a signing
+  # key is mounted (production) or accept the ephemeral keypair (dev).
+  # See internal/capability/ for the package and proto/paladin/admin/v1
+  # CapabilityService for the issuance RPC.
+  capability:
+    enabled: false 
+    issuer_name: ""                     # `iss` claim; conventional: external URL or "paladin-prod-eu"
+    trusted_issuers: []                 # accepted `iss` values; include issuer_name
+    signing_key_path: ""                # PEM PKCS#8 Ed25519 private key; "" → ephemeral keypair (dev only)
+    signing_key_kid: ""                 # JWT header kid; "" → derived from public key bytes
+    default_ttl: 15m                    # cap when Issue.TTL omitted
+    verifier_leeway: 30s                # clock-skew window for nbf / exp
+    charge_per_request: 0               # USD auto-charged on billable handler calls; 0 = no auto-charge
+    revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
+
+  # ─── API tokens (hashed-bearer M2M, long-lived) ──────────────────────
+  #
+  # Service-to-service credentials following the GitHub-PAT / Stripe /
+  # Hatchet pattern. Distinct from capability (agent JWT, short-lived)
+  # and auth (user OIDC). Off by default — enable per-deploy once an
+  # issuance path (CLI or admin UI) is rolled out.
+  api_token:
+    enabled: false
+    max_ttl: 8760h                      # cap on Issue lifetime; 1y default
+    verifier_leeway: 30s                # clock-skew on expires_at
+    touch_last_used: true               # bump last_used_at on verify (off for high-QPS deploys)
+
   # ─── Ingest plane (storage-event consumer) ───────────────────────────
   #
   # Off by default; flip enabled=true when a publisher is wired up.

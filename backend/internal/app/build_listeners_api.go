@@ -160,6 +160,22 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			}
 			return nil
 		})
+	} else {
+		// Subsystem is off-by-config — register an informational row so
+		// the /health page surfaces "capability: disabled" instead of
+		// omitting the component entirely. Operators consistently
+		// misread an absent row as "missing/broken" rather than "off".
+		AddDisabledSubsystem(healthH, "capability")
+	}
+
+	// APIToken subsystem mirrors capability: probe when on, surface
+	// "disabled" when off so the /health page shows the row.
+	if deps.APIToken != nil {
+		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "api_token")
 	}
 
 	// Storage-backend reachability probes are tracked in BACKLOG —
