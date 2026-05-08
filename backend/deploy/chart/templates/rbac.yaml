@@ -22,6 +22,15 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: {{ $kind }}
 metadata:
   name: {{ $name }}
+  annotations:
+    # Pre-install hook with weight -5 — must land after the Job-side
+    # SAs (weight -10) but before the migrate (0) / bootstrap (10)
+    # Jobs that use K8sSecretResolver to read DB / S3 credentials.
+    # Without this, the Job's ServiceAccount has no GET right on the
+    # referenced Secrets and the resolver returns a 403.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 rules:
@@ -34,6 +43,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: {{ $bindingKind }}
 metadata:
   name: {{ $name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
   labels:
     {{- include "chart.labels" . | nindent 4 }}
 roleRef:
@@ -42,13 +55,28 @@ roleRef:
   name: {{ $name }}
 subjects:
   {{- /*
-    Bind every distinct SA the chart created — same de-dup logic as
-    serviceaccount.yaml so we never list the same subject twice.
+    Bind every distinct SA the chart created — deployments AND jobs.
+    Job SAs MUST be in the subject list or the migrate / bootstrap
+    Pods can't read the Postgres / S3 secrets they need.
+
+    Same de-dup logic as serviceaccount.yaml so we never list the
+    same subject twice.
   */}}
   {{- $seen := dict -}}
   {{- range $role, $spec := .Values.deployments }}
     {{- if $spec.enabled -}}
       {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) -}}
+      {{- if not (hasKey $seen $sa) -}}
+        {{- $_ := set $seen $sa true }}
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ $.Release.Namespace }}
+      {{- end -}}
+    {{- end -}}
+  {{- end }}
+  {{- range $jobName, $jobSpec := .Values.jobs }}
+    {{- if $jobSpec.enabled -}}
+      {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $jobName "spec" (default dict $jobSpec)) -}}
       {{- if not (hasKey $seen $sa) -}}
         {{- $_ := set $seen $sa true }}
   - kind: ServiceAccount
