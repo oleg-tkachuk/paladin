@@ -158,6 +158,8 @@ func pickSource(format string) (eventingest.Source, error) {
 		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
 	case "minio":
 		return &eventingest.MinIOSource{URI: "minio://primary"}, nil
+	case "cloudevents":
+		return &eventingest.CloudEventsSource{URI: "cloudevents://primary"}, nil
 	case "":
 		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | minio | cloudevents)")
 	default:
@@ -199,6 +201,13 @@ func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, e
 	sources["/webhook/minio"] = &eventingest.MinIOSource{
 		BucketName: "",
 		URI:        "minio://primary",
+	}
+
+	// Vendor-neutral CloudEvents 1.0 endpoint. Any publisher that
+	// can post a structured-mode CE envelope reaches the ingest
+	// plane through this route — no per-vendor adapter needed.
+	sources["/webhook/cloudevents"] = &eventingest.CloudEventsSource{
+		URI: "cloudevents://primary",
 	}
 
 	return &eventingest.WebhookDriver{
