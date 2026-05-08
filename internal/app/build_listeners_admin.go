@@ -100,6 +100,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
+	{
+		var usageStore capability.UsageStore
+		if deps.Capability != nil {
+			usageStore = deps.Capability.Usage
+		}
+		mux.Handle(paladinadminv1connect.NewTenantBudgetServiceHandler(
+			admin.NewTenantBudgetServer(usageStore), adminOpts,
+		))
+	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(

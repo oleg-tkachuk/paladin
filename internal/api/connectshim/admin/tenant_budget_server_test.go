@@ -1,0 +1,139 @@
+package admin
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+
+	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	"github.com/oleg-tkachuk/paladin/internal/capability"
+)
+
+// fakeUsageStore is a minimal in-memory capability.UsageStore that
+// covers just the methods TenantBudgetServer touches. The full
+// interface lives across many call sites; we mock only what's
+// reached in this test file.
+type fakeUsageStore struct {
+	budgets map[uuid.UUID]capability.TenantBudget
+	getErr  error
+}
+
+func (f *fakeUsageStore) BumpRequest(context.Context, uuid.UUID, int64) (int64, error) {
+	return 0, errors.New("not used")
+}
+func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, uuid.UUID) (float64, error) {
+	return 0, errors.New("not used")
+}
+func (f *fakeUsageStore) RefundCapability(context.Context, uuid.UUID, float64) error {
+	return errors.New("not used")
+}
+func (f *fakeUsageStore) RefundTenant(context.Context, uuid.UUID, float64) error {
+	return errors.New("not used")
+}
+func (f *fakeUsageStore) Get(context.Context, uuid.UUID) (capability.Usage, error) {
+	return capability.Usage{}, errors.New("not used")
+}
+
+func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
+	if f.getErr != nil {
+		return capability.TenantBudget{}, f.getErr
+	}
+	tb, ok := f.budgets[id]
+	if !ok {
+		return capability.TenantBudget{}, capability.ErrTenantBudgetNotFound
+	}
+	return tb, nil
+}
+
+func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+	if f.budgets == nil {
+		f.budgets = map[uuid.UUID]capability.TenantBudget{}
+	}
+	tb := capability.TenantBudget{
+		TenantID:     args.TenantID,
+		MaxBudgetUSD: args.MaxBudgetUSD,
+		// SpentUSD: ResetSpend semantics aren't unit-tested here —
+		// the postgres impl owns the SQL that zeroes it.
+		SpentUSD: f.budgets[args.TenantID].SpentUSD,
+	}
+	if args.ResetSpend {
+		tb.SpentUSD = 0
+	}
+	f.budgets[args.TenantID] = tb
+	return tb, nil
+}
+
+func (f *fakeUsageStore) Delete(context.Context, uuid.UUID) error {
+	return errors.New("not used")
+}
+func (f *fakeUsageStore) PurgeOrphans(context.Context) (int64, error) {
+	return 0, errors.New("not used")
+}
+
+func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	tenantID := uuid.New()
+	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+		TenantId: tenantID.String(),
+	}))
+	if err == nil {
+		t.Fatal("expected NotFound error")
+	}
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeNotFound {
+		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}
+
+func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
+	store := &fakeUsageStore{}
+	srv := NewTenantBudgetServer(store)
+	tenantID := uuid.New()
+
+	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:     tenantID.String(),
+		MaxBudgetUsd: 100.0,
+		ResetSpend:   true,
+	}))
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := setRes.Msg.GetBudget().GetMaxBudgetUsd(); got != 100.0 {
+		t.Errorf("max_budget_usd: got %v, want 100", got)
+	}
+
+	getRes, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+		TenantId: tenantID.String(),
+	}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := getRes.Msg.GetBudget().GetTenantId(); got != tenantID.String() {
+		t.Errorf("tenant_id: got %q, want %q", got, tenantID)
+	}
+}
+
+func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
+	srv := NewTenantBudgetServer(nil)
+	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+		TenantId: uuid.New().String(),
+	}))
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeUnavailable {
+		t.Errorf("expected CodeUnavailable on nil store, got %v", err)
+	}
+}
+
+func TestTenantBudgetServer_BadTenantID(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+		TenantId: "not-a-uuid",
+	}))
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
+		t.Errorf("expected CodeInvalidArgument, got %v", err)
+	}
+}

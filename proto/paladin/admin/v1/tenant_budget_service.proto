@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// TenantBudgetService manages the per-tenant aggregate USD spend cap
+// for the capability subsystem (cfg.Capability.* + migration 025
+// `tenant_budgets`). Distinct from QuotaService — quotas are bytes /
+// object counts; budgets are capability-spend dollars.
+//
+// Naming: methods carry the `TenantBudgetService` prefix on their
+// request types to satisfy buf STANDARD lint when bare verbs (Get /
+// Set / Reset) collide with other admin services.
+//
+// Authorization: platform-admin / tenant-admin only. The capability
+// path that emits charges goes through the regular Cedar gate; this
+// service is the operator surface for setting / inspecting the cap.
+service TenantBudgetService {
+  // Get returns the current snapshot for a tenant. Returns NOT_FOUND
+  // when the tenant has never had a budget configured AND has never
+  // been charged — distinct from "configured but unlimited" (cap=0).
+  rpc Get(TenantBudgetServiceGetRequest) returns (TenantBudgetServiceGetResponse);
+
+  // Set upserts the cap. ResetSpend=true rolls the accounting period
+  // and zeros spent_usd (typical: monthly billing close). false
+  // adjusts the cap mid-cycle without affecting accumulated spend.
+  rpc Set(TenantBudgetServiceSetRequest) returns (TenantBudgetServiceSetResponse);
+}
+
+// TenantBudget is the typed metadata view of a per-tenant aggregate
+// cap row. Returned by every RPC.
+message TenantBudget {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // max_budget_usd is the cap. 0 = unlimited (counter still
+  // accumulates so admin tooling can show "current spend").
+  double max_budget_usd = 2 [(buf.validate.field).double.gte = 0];
+
+  // spent_usd is the accumulated spend within the current period.
+  double spent_usd = 3;
+
+  google.protobuf.Timestamp period_start = 4;
+  // period_end is optional — NULL means open-ended.
+  google.protobuf.Timestamp period_end = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message TenantBudgetServiceGetRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message TenantBudgetServiceGetResponse {
+  TenantBudget budget = 1;
+}
+
+message TenantBudgetServiceSetRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // max_budget_usd is the new cap. 0 = unlimited.
+  double max_budget_usd = 2 [(buf.validate.field).double.gte = 0];
+
+  // reset_spend rolls the period: zeros spent_usd, moves
+  // period_start to now. false leaves the counter alone — the cap
+  // changes mid-window.
+  bool reset_spend = 3;
+
+  // period_end pins a closing time for the new accounting window.
+  // Optional; nil = open-ended.
+  google.protobuf.Timestamp period_end = 4;
+}
+
+message TenantBudgetServiceSetResponse {
+  TenantBudget budget = 1;
+}
