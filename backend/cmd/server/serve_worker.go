@@ -21,8 +21,8 @@ import (
 // is held by exactly one pod at a time; the loser sleeps and races to
 // claim on the winner's death (or stuck-process renew failure).
 //
-// An ops listener on cfg.Server.AdminHTTP.Addr (when set; otherwise a
-// fixed default) exposes /healthz and /readyz so kube-proxy keeps the
+// An ops listener on cfg.Worker.Ops.Addr (defaults to :8090) exposes
+// /healthz and /readyz so kube-proxy keeps the
 // pod in its endpoint slice until SIGTERM. We do NOT reuse the data /
 // iam handlers here — workers don't speak Connect.
 var serveWorkerCmd = &cobra.Command{
@@ -87,7 +87,7 @@ var serveWorkerCmd = &cobra.Command{
 		// ops port — the chart's worker Deployment exposes it as a named
 		// port for kube-proxy probes. Default 8099 keeps it out of the
 		// way of the Connect listeners.
-		opsAddr := cfg.Server.AdminHTTP.Addr
+		opsAddr := cfg.Worker.Ops.Addr
 		if opsAddr == "" {
 			opsAddr = ":8099"
 		}

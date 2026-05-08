@@ -69,7 +69,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			deps.Capability.Verifier,
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
-			cfg.Server.AdminHTTP.RealIPHeader,
+			cfg.Admin.Server.RealIPHeader,
 			cfg.Capability.ChargePerRequest,
 		)
 	} else {
@@ -146,7 +146,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 }
 
 // BuildAdminListener wraps AssembleAdminMux in an h2c http.Server bound to
-// cfg.Server.AdminHTTP. Sized for low replica counts (1–2) and a separate
+// cfg.Admin.Server. Sized for low replica counts (1–2) and a separate
 // ingress with mTLS / tighter NetworkPolicy than data/iam.
 func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (HTTPListener, *health.Handler, error) {
 	mux, healthH, err := AssembleAdminMux(ctx, deps, meta)
@@ -157,8 +157,8 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	l := deps.Logger
 	listener := HTTPListener{
 		Plane:  "admin",
-		Server: BuildHTTPServer(cfg.Server.AdminHTTP, mux, l),
-		TLS:    cfg.Server.AdminHTTP.TLS,
+		Server: BuildHTTPServer(cfg.Admin.Server, mux, l),
+		TLS:    cfg.Admin.Server.TLS,
 	}
 	return listener, healthH, nil
 }

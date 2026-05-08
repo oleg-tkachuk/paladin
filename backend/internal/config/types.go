@@ -23,6 +23,13 @@ type Config struct {
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
 	Ingest     Ingest     `yaml:"ingest" json:"ingest"`
+
+	// Per-role blocks — own role-exclusive knobs (per-listener
+	// addresses for now; future per-role middleware / limits hang
+	// here too). Cross-cutting config (auth, security, datastores,
+	// middleware defaults) stays at root.
+	API        API        `yaml:"api" json:"api"`
+	Admin      Admin      `yaml:"admin" json:"admin"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
 
@@ -104,14 +111,16 @@ type LoggerFields struct {
 	Env     string `yaml:"env" json:"env"`
 }
 
+// Server holds runtime-wide HTTP-server settings shared across every
+// role's listener. Per-listener address / timeouts / TLS live under the
+// per-service blocks:
+//
+//	api.server.data   — was server.data_http
+//	api.server.iam    — was server.iam_http
+//	admin.server      — was server.admin_http
+//	worker.ops        — separate ops listener for the worker role
 type Server struct {
-	Mode string `yaml:"mode" json:"mode"`
-	// DataHTTP, AdminHTTP, IAMHTTP — v2 three-plane listener configuration.
-	// All three must be set; each plane gets its own audience and interceptor
-	// stack.
-	DataHTTP        HTTPServer    `yaml:"data_http" json:"data_http"`
-	AdminHTTP       HTTPServer    `yaml:"admin_http" json:"admin_http"`
-	IAMHTTP         HTTPServer    `yaml:"iam_http" json:"iam_http"`
+	Mode            string        `yaml:"mode" json:"mode"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
@@ -306,11 +315,39 @@ type BootstrapAdmin struct {
 // Workers groups every background-loop subsystem under a single section
 // so an operator looking for "what runs in the background?" finds them
 // in one place.
-// Worker is the per-role config block for the worker binary. Today it
-// only carries the background-job spec under `jobs:`; future role-
-// exclusive knobs (separate ops listener address, dedicated metrics
-// endpoint, leader-election tuning) hang off this block too.
+// API is the per-role config block for the api binary (`serve api`).
+// Owns the data + iam listener configs that used to live as
+// server.data_http / server.iam_http; future role-exclusive limits
+// and per-listener middleware hang here too.
+type API struct {
+	Server APIServer `yaml:"server" json:"server"`
+}
+
+// APIServer holds the api role's two listeners. Same HTTPServer shape
+// as the rest; just two named entries because the api binary opens
+// data + iam on different ports under one process.
+type APIServer struct {
+	Data HTTPServer `yaml:"data" json:"data"`
+	IAM  HTTPServer `yaml:"iam" json:"iam"`
+}
+
+// Admin is the per-role config block for the admin binary
+// (`serve admin`). Currently a single listener; the block exists so
+// future admin-only knobs (audit-log rate limits, stricter timeouts,
+// dedicated trusted-proxy list) hang here without further nesting.
+type Admin struct {
+	Server HTTPServer `yaml:"server" json:"server"`
+}
+
+// Worker is the per-role config block for the worker binary. Carries
+// the ops listener (probes / observability) and the background-job
+// catalog under `jobs:`.
 type Worker struct {
+	// Ops is the worker's HTTP listener for /healthz + /readyz +
+	// future ops endpoints. Defaults to :8090 to match the chart's
+	// containerPort. Was server.admin_http re-read in the legacy
+	// flat config.
+	Ops  HTTPServer `yaml:"ops" json:"ops"`
 	Jobs WorkerJobs `yaml:"jobs" json:"jobs"`
 }
 

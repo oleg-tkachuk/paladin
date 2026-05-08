@@ -66,11 +66,11 @@ storage:
 		t.Fatalf("Load minimal yaml: %v", err)
 	}
 	// Defaults must have populated every three-plane addr.
-	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
+	if cfg.API.Server.Data.Addr == "" || cfg.Admin.Server.Addr == "" || cfg.API.Server.IAM.Addr == "" {
 		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Server)
 	}
-	if cfg.Server.DataHTTP.Addr == cfg.Server.AdminHTTP.Addr {
-		t.Errorf("data and admin defaulted to the same addr: %q", cfg.Server.DataHTTP.Addr)
+	if cfg.API.Server.Data.Addr == cfg.Admin.Server.Addr {
+		t.Errorf("data and admin defaulted to the same addr: %q", cfg.API.Server.Data.Addr)
 	}
 	// Storage backend disjunctions must default — no static-keys credentials
 	// supplied, so default_chain is the only auth.mode that won't be rejected
@@ -121,7 +121,7 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if _, ok := cfg.Storage.Backends["primary"]; !ok {
 		t.Error("Storage.Backends[primary] missing")
 	}
-	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
+	if cfg.API.Server.Data.Addr == "" || cfg.Admin.Server.Addr == "" || cfg.API.Server.IAM.Addr == "" {
 		t.Error("three-plane HTTP addrs incomplete")
 	}
 	// service / env identity must propagate from app.* to logger.fields and

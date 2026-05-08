@@ -106,7 +106,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
 			deps.Capability.Usage,
-			cfg.Server.DataHTTP.RealIPHeader,
+			cfg.API.Server.Data.RealIPHeader,
 			cfg.Capability.ChargePerRequest,
 		)
 	} else {
@@ -176,7 +176,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 // BuildAPIListeners materialises the data and iam Connect listeners.
 // Wraps the muxes returned by AssembleAPIMuxes in h2c-enabled http.Servers
-// bound to cfg.Server.DataHTTP / IAMHTTP.
+// bound to cfg.API.Server.Data / IAMHTTP.
 func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
 	dataMux, iamMux, healthH, err := AssembleAPIMuxes(ctx, deps, meta)
 	if err != nil {
@@ -185,8 +185,8 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	cfg := deps.Cfg
 	l := deps.Logger
 	listeners := []HTTPListener{
-		{Plane: "data", Server: BuildHTTPServer(cfg.Server.DataHTTP, dataMux, l), TLS: cfg.Server.DataHTTP.TLS},
-		{Plane: "iam", Server: BuildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},
+		{Plane: "data", Server: BuildHTTPServer(cfg.API.Server.Data, dataMux, l), TLS: cfg.API.Server.Data.TLS},
+		{Plane: "iam", Server: BuildHTTPServer(cfg.API.Server.IAM, iamMux, l), TLS: cfg.API.Server.IAM.TLS},
 	}
 	return listeners, healthH, nil
 }

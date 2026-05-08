@@ -42,17 +42,27 @@ otel: {
   }
 }
 
+// Server holds runtime-wide HTTP-server settings shared across every
+// role's listener. Per-listener address / timeouts / TLS live under
+// the per-service blocks (api / admin / worker).
 server: {
-  mode: "debug" | "test" | *"release"
-  // Three-plane HTTP listeners. v2 splits the API into paladin-data, paladin-admin
-  // and paladin-iam audiences, each on its own port so the operator can expose
-  // them on different network profiles. Each plane has a sensible default
-  // address so an operator running PALADIN locally can omit them entirely.
-  data_http:  #HTTPServer & {addr: string | *"0.0.0.0:8080"}
-  admin_http: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
-  iam_http:   #HTTPServer & {addr: string | *"0.0.0.0:8085"}
+  mode:             "debug" | "test" | *"release"
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
   log_probes:       bool | *false
+}
+
+// API role — the binary started by `serve api`. Hosts the data and
+// iam Connect listeners.
+api: {
+  server: {
+    data: #HTTPServer & {addr: string | *"0.0.0.0:8080"}
+    iam:  #HTTPServer & {addr: string | *"0.0.0.0:8085"}
+  }
+}
+
+// Admin role — `serve admin`. Single listener.
+admin: {
+  server: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
 }
 
 #HTTPServer: {
@@ -212,10 +222,12 @@ middleware: {
   }
 }
 
-// Worker is the per-role config block for the worker binary; today
-// it holds only the background-job catalog under `jobs:`. Future
-// role-exclusive knobs hang here.
+// Worker role — `serve worker`. Hosts a single ops HTTP listener
+// (probes / metrics) and the background-job catalog. The ops port
+// defaults to :8090 so the chart's containerPort can match a single
+// hard-coded value across the admin and worker roles.
 worker: {
+  ops: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
   jobs: {
   // Reconciler: closes gaps when S3 events are unavailable / lost.
   reconciler: {
