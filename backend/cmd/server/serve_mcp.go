@@ -79,7 +79,7 @@ func runMCPBridge(ctx context.Context) {
 		fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
 		os.Exit(1)
 	}
-	cfg, err := config.Load(configPath, bootstrapLog)
+	cfg, err := config.Load([]string{configPath}, bootstrapLog)
 	if err != nil {
 		bootstrapLog.Fatal("failed to load config", zap.Error(err))
 	}

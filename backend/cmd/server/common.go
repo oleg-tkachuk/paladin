@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -28,11 +29,33 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 		os.Exit(1)
 	}
 
+	// Config path resolves to absolute so log lines + error messages
+	// quote the canonical location regardless of cwd.
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
 
-	cfg, err := config.Load(configPath, bootstrap)
+	// Optional overlay chain via PALADIN_CONFIG_OVERLAYS env var (colon-
+	// separated paths). Operators stack environment-specific deltas
+	// over a shared base.yaml without touching the binary's CLI.
+	// Files merge in order; later wins. Common pattern in K8s:
+	//   PALADIN_CONFIG_PATH=/etc/paladin/base.yaml
+	//   PALADIN_CONFIG_OVERLAYS=/etc/paladin/local.yaml:/etc/paladin/secrets.yaml
+	paths := []string{configPath}
+	if overlays := os.Getenv("PALADIN_CONFIG_OVERLAYS"); overlays != "" {
+		for _, p := range strings.Split(overlays, ":") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if abs, err := filepath.Abs(p); err == nil {
+				p = abs
+			}
+			paths = append(paths, p)
+		}
+	}
+
+	cfg, err := config.Load(paths, bootstrap)
 	if err != nil {
 		bootstrap.Fatal("failed to load config", zap.Error(err))
 	}
