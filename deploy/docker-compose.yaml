@@ -14,11 +14,12 @@
 #                                                paladin-worker / paladin-mcp
 #                                              → paladin-ui (waits for api+admin)
 #
-# Verify all four planes + UI:
+# Verify the planes + UI:
 #   curl http://localhost:8080/readyz   # data
 #   curl http://localhost:8085/readyz   # iam
 #   curl http://localhost:8090/readyz   # admin
 #   curl http://localhost:8095/healthz  # mcp
+#   curl http://localhost:8100/readyz   # ingest (webhook receiver)
 #   open http://localhost:3002          # UI (login page)
 
 x-build-meta: &build-meta
@@ -59,7 +60,14 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:latest
     container_name: paladin-seaweedfs
-    command: server -ip.bind=0.0.0.0 -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    # `-filer.notification` enables the webhook publisher that posts
+    # filer events to paladin-ingest. The notification.toml mounted at
+    # /etc/seaweedfs/notification.toml is the source of truth for
+    # which backend (webhook / kafka / nats / …) is actually live.
+    command: >-
+      server -ip.bind=0.0.0.0 -dir=/data -s3 -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+      -filer.notification=/etc/seaweedfs/notification.toml
     ports:
       - "9333:9333"
       - "8081:8080"
@@ -68,6 +76,7 @@ services:
     volumes:
       - paladin_seaweed_data:/data
       - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - ./seaweedfs-notification.toml:/etc/seaweedfs/notification.toml:ro
 
   # One-shot: applies SQL migrations and exits 0. The api/admin/worker/mcp
   # services gate on `service_completed_successfully` so they never see a
@@ -144,6 +153,22 @@ services:
         condition: service_started
       paladin-admin:
         condition: service_started
+
+  # Ingest plane: receives storage-backend events (SeaweedFS webhook
+  # by default in compose; NATS / RabbitMQ in prod) and promotes
+  # PENDING → AVAILABLE on matching object rows. Standalone process
+  # so its HTTP receiver doesn't share lifecycle with Connect listeners.
+  paladin-ingest:
+    <<: *paladin-base
+    container_name: paladin-ingest
+    init: true
+    restart: on-failure
+    command: ["serve", "ingest", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8100:8100"   # webhook receiver
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
 
   # UI BFF (Next.js). Browser hits localhost:3002 → /api/rpc/<plane>/...
   # is proxied by the UI process to paladin-api / paladin-admin via container

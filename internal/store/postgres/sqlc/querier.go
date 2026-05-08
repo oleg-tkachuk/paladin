@@ -19,6 +19,11 @@ type Querier interface {
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
+	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
+	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
+	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
+	// first sighting (claimed = true → process) or a duplicate (false → skip).
+	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
@@ -215,6 +220,10 @@ type Querier interface {
 	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredRefreshTokens(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error)
+	// Drops rows older than the cutoff in batches of 10k. Reaper loops
+	// until 0 rows so a long-overdue first sweep doesn't pin a single
+	// statement for minutes.
+	PurgeIngestedEventsBefore(ctx context.Context, ingestedAt pgtype.Timestamptz) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0. Uses
 	// idx_operations_terminal_done_at (added in migration 008) so the planner
 	// never scans the live PENDING/RUNNING tail.

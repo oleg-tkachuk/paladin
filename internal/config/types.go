@@ -22,6 +22,7 @@ type Config struct {
 	Storage    Storage    `yaml:"storage" json:"storage"`
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
+	Ingest     Ingest     `yaml:"ingest" json:"ingest"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
 
@@ -678,4 +679,146 @@ type APIToken struct {
 	// token cleanup tooling; high-QPS deploys that can't tolerate the
 	// per-request UPDATE turn it off and rely on creation timestamps.
 	TouchLastUsed bool `yaml:"touch_last_used" json:"touch_last_used"`
+}
+
+// ─── Ingest plane (storage events) ──────────────────────────────────────────
+//
+// The ingest plane is PALADIN as a CONSUMER of storage-backend events. When
+// SeaweedFS or MinIO publishes "object uploaded" / "object deleted",
+// the ingest worker receives the event and promotes the matching PALADIN
+// row from PENDING → AVAILABLE (or marks it deleted).
+//
+// Three transport drivers, mutually exclusive — operator picks one
+// per deployment:
+//
+//	webhook   — receiver: HTTP endpoint the source POSTs to. Default
+//	            for dev because no extra infra is needed.
+//	nats      — subscriber: ingest worker subscribes to a NATS subject.
+//	            Production-grade; pairs with SeaweedFS gocdk_pub_sub.
+//	rabbitmq  — consumer: amqp091-go on a queue bound to an exchange
+//	            the source publishes to.
+//
+// Source adapters live alongside the drivers; they parse the wire
+// format (SeaweedFS filer event JSON / MinIO event notification JSON
+// / raw CloudEvents) into the internal CloudEvent shape and dispatch
+// to the handler.
+type Ingest struct {
+	// Enabled gates the whole subsystem. The `serve ingest` subcommand
+	// errors out at boot if this is false to fail fast on misconfig.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// Driver selects which transport adapter starts: "webhook" |
+	// "nats" | "rabbitmq". Required when Enabled.
+	Driver string `yaml:"driver" json:"driver"`
+
+	// Webhook configures the HTTP receiver. Honoured only when
+	// Driver=="webhook".
+	Webhook IngestWebhook `yaml:"webhook" json:"webhook"`
+
+	// NATS configures the NATS subscriber. Honoured only when
+	// Driver=="nats".
+	NATS IngestNATS `yaml:"nats" json:"nats"`
+
+	// RabbitMQ configures the AMQP consumer. Honoured only when
+	// Driver=="rabbitmq".
+	RabbitMQ IngestRabbitMQ `yaml:"rabbitmq" json:"rabbitmq"`
+
+	// DedupTTL controls how long ingested_events rows are retained.
+	// Must exceed the longest broker re-delivery window we expect.
+	// Default 24h.
+	DedupTTL time.Duration `yaml:"dedup_ttl" json:"dedup_ttl"`
+
+	// ReaperInterval is the cadence of the IngestEventReaper that
+	// drops ingested_events older than DedupTTL. Default 1h.
+	ReaperInterval time.Duration `yaml:"reaper_interval" json:"reaper_interval"`
+}
+
+// IngestWebhook is the receiver-side HTTP transport.
+type IngestWebhook struct {
+	// Addr is the listen address for the receiver mux. Default :8100.
+	// Endpoints exposed: /webhook/seaweedfs, /webhook/minio,
+	// /webhook/cloudevents, /healthz, /readyz.
+	Addr string `yaml:"addr" json:"addr"`
+
+	// SharedSecret is the HMAC key the source signs the body with.
+	// Empty in dev (publisher signs with literal "" → check trivially
+	// passes). Production deploys MUST set this — usually via
+	// SharedSecretRef and a K8s Secret.
+	SharedSecret    string    `yaml:"shared_secret" json:"shared_secret"`
+	SharedSecretRef SecretRef `yaml:"shared_secret_ref" json:"shared_secret_ref"`
+
+	// SignatureHeader names the header carrying the HMAC. Defaults
+	// to "X-PALADIN-Signature". SeaweedFS webhook uses an empty bearer
+	// pattern by default; configure the source to send this header.
+	SignatureHeader string `yaml:"signature_header" json:"signature_header"`
+
+	// MaxBodyBytes guards against runaway payloads. 1 MiB default.
+	MaxBodyBytes int64 `yaml:"max_body_bytes" json:"max_body_bytes"`
+
+	// ReadHeaderTimeout / ReadTimeout / WriteTimeout / IdleTimeout
+	// mirror the data plane HTTPServer config so the receiver stays
+	// hardened against slowloris and friends. Sensible defaults if
+	// left zero.
+	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout" json:"read_header_timeout"`
+	ReadTimeout       time.Duration `yaml:"read_timeout" json:"read_timeout"`
+	WriteTimeout      time.Duration `yaml:"write_timeout" json:"write_timeout"`
+	IdleTimeout       time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+}
+
+// IngestNATS is the subscriber-side NATS config.
+type IngestNATS struct {
+	// URL is the NATS server URL (nats://host:4222). Multiple URLs
+	// can be comma-separated for cluster failover.
+	URL string `yaml:"url" json:"url"`
+
+	// Subject is the subject the source publishes to. SeaweedFS
+	// gocdk_pub_sub style: "seaweedfs.filer".
+	Subject string `yaml:"subject" json:"subject"`
+
+	// QueueGroup, when non-empty, joins a NATS queue subscription so
+	// multiple ingest pods load-balance across messages instead of
+	// fanning each one out to every replica.
+	QueueGroup string `yaml:"queue_group" json:"queue_group"`
+
+	// JetStream toggles JetStream durable consumer mode (preferred
+	// for at-least-once). When false the subscriber uses the legacy
+	// at-most-once core NATS pubsub.
+	JetStream bool `yaml:"jetstream" json:"jetstream"`
+
+	// DurableName is the durable consumer id when JetStream is on.
+	// Pin to a stable string so the consumer position survives pod
+	// restarts.
+	DurableName string `yaml:"durable_name" json:"durable_name"`
+
+	// SourceFormat tells the worker which adapter to use:
+	// "seaweedfs" | "minio" | "cloudevents". Required.
+	SourceFormat string `yaml:"source_format" json:"source_format"`
+
+	// Auth — token / nkey / TLS. NATS-go has many auth flavours;
+	// expose the common pair for now (token + TLS).
+	Token    string    `yaml:"token" json:"token"`
+	TokenRef SecretRef `yaml:"token_ref" json:"token_ref"`
+	TLS      TLS       `yaml:"tls" json:"tls"`
+}
+
+// IngestRabbitMQ is the consumer-side AMQP config.
+type IngestRabbitMQ struct {
+	// URL is the AMQP URL (amqp://user:pass@host:5672/). Use TLS
+	// with amqps:// in production.
+	URL    string    `yaml:"url" json:"url"`
+	URLRef SecretRef `yaml:"url_ref" json:"url_ref"`
+
+	// Queue is the queue we consume from. Must be declared on the
+	// broker beforehand (the SeaweedFS gocdk publisher publishes to
+	// an exchange and binds via the management plugin); this
+	// consumer doesn't manage exchange/queue topology.
+	Queue string `yaml:"queue" json:"queue"`
+
+	// PrefetchCount caps in-flight unacked messages per consumer.
+	// Default 32.
+	PrefetchCount int `yaml:"prefetch_count" json:"prefetch_count"`
+
+	// SourceFormat tells the worker which adapter to use:
+	// "seaweedfs" | "minio" | "cloudevents". Required.
+	SourceFormat string `yaml:"source_format" json:"source_format"`
 }

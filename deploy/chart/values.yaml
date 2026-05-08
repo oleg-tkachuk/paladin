@@ -283,6 +283,43 @@ deployments:
           port: 8095
           targetPort: mcp
 
+  # Ingest plane — storage-event consumer. Disabled by default in the
+  # chart because it requires a publisher (SeaweedFS / MinIO / NATS /
+  # RabbitMQ) to be in place; flip enabled=true when the source is
+  # ready and `config.ingest` is filled in.
+  ingest:
+    enabled: false
+    replicas: 1
+    args:
+      - "serve"
+      - "ingest"
+    ports:
+      - name: ingest
+        containerPort: 8100
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: ingest
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: ingest
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    service:
+      type: ClusterIP
+      ports:
+        - name: ingest
+          port: 8100
+          targetPort: ingest
+
 # ─── Lifecycle Jobs ────────────────────────────────────────────────────────
 #
 # Migrate + bootstrap run as Helm hook Jobs so DDL is gated outside the
@@ -524,6 +561,27 @@ config:
     # operator override seam. Leave empty to use the defaults.
     profiles: {}
     # always_deny: []
+
+  # ─── Ingest plane (storage-event consumer) ───────────────────────────
+  #
+  # Off by default; flip enabled=true when a publisher is wired up.
+  # Driver picks the transport — webhook | nats | rabbitmq.
+  #
+  # Webhook is the simplest: SeaweedFS / MinIO POST events to
+  # http://<ingest-svc>:8100/webhook/<source>. Pair shared_secret
+  # here with the publisher's `bearer_token` (SeaweedFS) so HMAC
+  # verification passes.
+  ingest:
+    enabled: false
+    driver: webhook
+    webhook:
+      addr: ":8100"
+      shared_secret: ""
+      signature_header: "X-PALADIN-Signature"
+      max_body_bytes: 1048576
+    dedup_ttl: 24h
+    reaper_interval: 1h
+    # nats / rabbitmq blocks are populated when those drivers land.
 
 # ─── Bootstrap admin Secret ────────────────────────────────────────────────
 #

@@ -229,6 +229,14 @@ type IdempotencyKey struct {
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
+type IngestedEvent struct {
+	EventID    string             `json:"event_id"`
+	Source     string             `json:"source"`
+	Type       string             `json:"type"`
+	Subject    *string            `json:"subject"`
+	IngestedAt pgtype.Timestamptz `json:"ingested_at"`
+}
+
 type MultipartPart struct {
 	UploadID   string             `json:"upload_id"`
 	PartNumber int32              `json:"part_number"`

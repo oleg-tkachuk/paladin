@@ -202,3 +202,19 @@ capability:
   enabled: false
 api_token:
   enabled: false
+
+# Ingest plane is ON by default in compose so SeaweedFS-uploaded files
+# auto-promote PENDING → AVAILABLE without an explicit Complete RPC.
+# Webhook driver is the smallest setup — no MQ infra required.
+ingest:
+  enabled: true
+  driver: webhook
+  webhook:
+    addr: "0.0.0.0:8100"
+    # Empty shared_secret in compose. Production deploys MUST set this;
+    # SeaweedFS notification.toml's bearer_token uses the same value.
+    shared_secret: ""
+    signature_header: "X-PALADIN-Signature"
+    max_body_bytes: 1048576
+  dedup_ttl: 24h
+  reaper_interval: 1h
