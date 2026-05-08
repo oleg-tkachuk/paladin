@@ -87,6 +87,10 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
+	// Best-effort SQL pushdown of recognized conjuncts. The full CEL
+	// program still runs in-memory below; pushdown only narrows the
+	// candidate set on the way out of Postgres.
+	applyAuditPushdown(&args, filter)
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
 		return nil, "", err
@@ -105,6 +109,37 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 		}
 	}
 	return out, next, nil
+}
+
+// applyAuditPushdown extracts the SQL-expressible subset of the CEL
+// filter and stamps the recognised predicates onto args. A parse
+// failure is silently swallowed: the in-memory CEL eval will hit the
+// same expression next and surface the error there. The full CEL
+// program ALWAYS still runs after the SQL fetch — pushdown only
+// narrows the candidate set, never replaces evaluation.
+func applyAuditPushdown(args *admindomain.ListAuditArgs, filter string) {
+	if filter == "" {
+		return
+	}
+	pd, err := celpkg.ExtractAuditPushdown(filter)
+	if err != nil {
+		return
+	}
+	if args.ActorSubject == "" && pd.ActorSubjectEq != "" {
+		args.ActorSubject = pd.ActorSubjectEq
+	}
+	if args.ActionEq == "" && pd.ActionEq != "" {
+		args.ActionEq = pd.ActionEq
+	}
+	if args.ActionPrefix == "" && pd.ActionPrefix != "" {
+		args.ActionPrefix = pd.ActionPrefix
+	}
+	if args.AtGTE.IsZero() && !pd.AtGTE.IsZero() {
+		args.AtGTE = pd.AtGTE
+	}
+	if args.AtLTE.IsZero() && !pd.AtLTE.IsZero() {
+		args.AtLTE = pd.AtLTE
+	}
 }
 
 // auditEntryRow projects an AuditEntry into the map shape CEL expects.
@@ -198,6 +233,7 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
+	applyAuditPushdown(&args, filter)
 
 	out := &ExportAuditLogResult{
 		GeneratedAt: time.Now().UTC(),

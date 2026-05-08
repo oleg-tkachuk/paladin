@@ -91,6 +91,19 @@ type ListAuditArgs struct {
 	AfterAt       time.Time
 	AfterID       uuid.UUID
 	PageSize      int32
+
+	// CEL-pushdown predicates. Optional — populated by the audit
+	// handler from the caller's CEL filter when a recognised conjunct
+	// can be expressed in SQL. The handler still runs the full CEL
+	// program in-memory afterwards (correctness invariant), so these
+	// fields only narrow the candidate set, never replace evaluation.
+	//
+	// Empty string / zero-value means "no SQL predicate"; a populated
+	// field becomes a top-level AND.
+	ActionEq     string    // exact match on action
+	ActionPrefix string    // LIKE '<prefix>%'
+	AtGTE        time.Time // at >= AtGTE
+	AtLTE        time.Time // at <= AtLTE
 }
 
 // ─── Quota repository ───────────────────────────────────────────────────────

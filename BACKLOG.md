@@ -211,19 +211,21 @@ the same commit. Treat this file like a runtime invariant.
   (hourly or daily depending on idempotency-key TTL distribution).
 - **Blockers:** same as audit_log.
 
-### CEL filter SQL pushdown for AuditLog list/export
+### AuditLog CEL pushdown — production benchmark
 
 - **Status:** Deferred
-- **Reason:** [internal/api/admin/v1/audith/handler.go](internal/api/admin/v1/audith/handler.go)
-  applies the CEL predicate **after** SQL pagination — works for v1
-  (page size 1000), but selective filters waste 99% of fetched rows
-  on large audit logs.
+- **Reason:** Pushdown extractor + dynamic-WHERE adapter shipped
+  (`internal/filter/cel/auditpushdown.go`,
+  `internal/store/postgres/adapters/admin_audit.go`). What's missing
+  is the production-shaped benchmark proving the speedup is real:
+  unit tests cover translation correctness but not Postgres latency
+  on a representative dataset.
 - **Definition of Done:**
-  - CEL → partial SQL translator for the common predicates
-    (action prefix, actor_subject equality, time-range).
-  - Fallback to in-memory CEL for the residual.
-  - Benchmark proving ≥10× speedup on a representative filter.
-- **Blockers:** none.
+  - Bench harness that seeds ≥1M audit rows in testcontainers PG.
+  - Compare ListAuditLog with + without pushdown for a representative
+    filter (action.startsWith + at >= range). Document ≥10× p50
+    speedup or drop the claim.
+- **Blockers:** none — bench plumbing only.
 
 ### Per-row Cedar filtering in ListObjects
 

@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -30,10 +31,19 @@ var bootstrapCmd = &cobra.Command{
 		cfg, l, db := boot(ctx)
 		defer func() { _ = db.Close }()
 
+		// AuditRepoV2 needs the concrete pool for its dynamic-WHERE
+		// List path. The PgxPool interface used by db.Pool is a thin
+		// shim over *pgxpool.Pool — the assertion is defensive in
+		// case someone later swaps in a fake.
+		pool, ok := db.Pool.(*pgxpool.Pool)
+		if !ok {
+			l.Fatal("bootstrap: db.Pool is not *pgxpool.Pool")
+		}
+
 		if err := bootstrappkg.EnsureAdmin(ctx, cfg.Bootstrap.Admin, bootstrappkg.Deps{
 			Tenants: db.Queries,
 			Users:   adapters.NewUserRepo(db.Queries),
-			Audit:   adapters.NewAuditRepoV2(db.Queries),
+			Audit:   adapters.NewAuditRepoV2(db.Queries, pool),
 			Logger:  l.Named("bootstrap"),
 			Mode:    cfg.Server.Mode,
 		}); err != nil {
@@ -42,7 +52,7 @@ var bootstrapCmd = &cobra.Command{
 
 		if err := bootstrappkg.EnsureBackends(ctx, cfg.Storage, bootstrappkg.BackendDeps{
 			Backends: adapters.NewBackendRepoV2(db.Queries),
-			Audit:    adapters.NewAuditRepoV2(db.Queries),
+			Audit:    adapters.NewAuditRepoV2(db.Queries, pool),
 			Logger:   l.Named("bootstrap"),
 		}); err != nil {
 			l.Fatal("bootstrap backends failed", zap.Error(err))
