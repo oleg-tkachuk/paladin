@@ -30,23 +30,28 @@ tasks:
       _APP_VER:   '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
     cmds:
       - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._TAG}} (chart {{._CHART_VER}})" }
+        vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._APP_VER}} (chart {{._CHART_VER}})" }
+      # Build with the numeric version as the primary tag — the
+      # Helm chart's templates default image.tag to .Chart.AppVersion
+      # (which is _APP_VER), so the image MUST exist under that
+      # numeric tag in the registry or Pods can't pull. APP_VERSION
+      # build-arg also threads the numeric into -ldflags so the
+      # binary reports a real version on /healthz.
       - task: _docker:build
-        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._TAG}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
-      # Push the versioned tag, then mirror it as :latest so consumers
-      # pinning `:latest` get the just-built image. The previous form
-      # pushed `:latest` without first tagging — would silently re-push
-      # whatever stale `:latest` was sitting in the local cache, or 404
-      # outright on a fresh host.
-      - docker push {{.IMAGE}}:{{._TAG}}
-      - docker tag  {{.IMAGE}}:{{._TAG}} {{.IMAGE}}:latest
+        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._APP_VER}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
+      # Push the numeric tag, then alias as :latest so consumers
+      # pinning `:latest` keep working. Order matters: a fresh host
+      # without `:latest` cached must have the numeric pushed first
+      # so the docker tag step has a source to mirror from.
+      - docker push {{.IMAGE}}:{{._APP_VER}}
+      - docker tag  {{.IMAGE}}:{{._APP_VER}} {{.IMAGE}}:latest
       - docker push {{.IMAGE}}:latest
       # Helm chart — package, push, clean up the tarball.
       - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._APP_VER}}
       - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
       - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
       - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] pushed image + chart {{._TAG}}" }
+        vars: { MESSAGE: "[OCI] pushed image + chart {{._APP_VER}}" }
 
   deploy-local:
     desc: "Build the image directly into the Minikube Docker daemon (no push)"
@@ -54,22 +59,26 @@ tasks:
     vars: *build-vars
     cmds:
       - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] building {{.PROJECT_NAME}} {{._TAG}} into Minikube" }
+        vars: { MESSAGE: "[LOCAL] building {{.PROJECT_NAME}} {{._APP_VER}} into Minikube" }
       # Wrap the shared builder in a subshell that targets Minikube's
       # Docker daemon. `eval` mutates the shell's env only for the
-      # duration of this cmd block.
+      # duration of this cmd block. Tag with both the numeric version
+      # AND :latest so the Helm chart (which defaults image.tag to
+      # .Chart.AppVersion = numeric) and any local manifest pinning
+      # :latest both find the just-built image.
       - cmd: |-
           eval "$(minikube docker-env)"
           docker build \
             --network=host \
-            --tag {{.IMAGE}}:{{._TAG}} \
+            --tag {{.IMAGE}}:{{._APP_VER}} \
+            --tag {{.IMAGE}}:latest \
             --file {{.DOCKERFILE}} \
-            --build-arg APP_VERSION={{._TAG}} \
+            --build-arg APP_VERSION={{._APP_VER}} \
             --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
             --build-arg BUILD_TIME="{{._TIME}}" \
             .
       - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] built {{._TAG}} into Minikube" }
+        vars: { MESSAGE: "[LOCAL] built {{._APP_VER}} into Minikube" }
 
   # ─── Local stack (Docker Compose) ────────────────────────────────────────
 
