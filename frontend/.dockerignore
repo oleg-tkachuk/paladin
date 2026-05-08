@@ -1,0 +1,13 @@
+node_modules
+.git
+.github
+.gitignore
+.claude
+.agents
+lefthook.yml
+tsconfig.tsbuildinfo
+release.config.cjs
+README.md
+*.log
+.DS_Store
+

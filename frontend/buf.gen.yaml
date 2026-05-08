@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  # Local plugin from @bufbuild/protoc-gen-es node_module — avoids
+  # the remote-plugin pull that the buf.build registry sometimes
+  # makes flaky (CI, network-restricted dev). Same output as the
+  # remote variant.
+  - local: ./node_modules/.bin/protoc-gen-es
+    out: src/gen
+    opt: target=ts
+inputs:
+  - directory: ../backend/proto

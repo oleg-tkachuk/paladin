@@ -1,0 +1,19 @@
+runtimeConfig:
+  public:
+    objectControlPlane:
+      baseUrl: "/api/paladin"
+      upstreamUrl: "http://paladin.paladin.svc.cluster.local:8080"
+      timeoutMs: 5000
+    oidc:
+      authority: ""
+      clientId: ""
+      redirectUri: ""
+      postLogoutRedirectUri: ""
+      scope: "openid profile email"
+      disableAuth: true
+    auth:
+      # DEV ONLY. Pre-minted JWT used as a fallback Bearer token when
+      # localStorage.paladin_token is empty. Do not set in production builds —
+      # the value is exposed to the browser. Leave empty to require that
+      # each developer pastes their own token via /config.
+      devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvY3AtZGV2IiwiYXVkIjoib2NwLWFwaSIsInN1YiI6ImRldi11c2VyIiwiaWF0IjoxNzc3NzU3MzU2LCJuYmYiOjE3Nzc3NTczNTYsImV4cCI6MTc4MzgwNTM1Niwicm9sZXMiOlsicGxhdGZvcm0tYWRtaW4iXSwidGVuYW50IjoiM2E4MjNmZDQtMGIzZC00Y2UyLWEyODAtOTNiOGQ3NWNjMDdiIn0.zbTxsSNcB4fSPgepQ-bR2UDJwLePgpg6IKOJuaaxs0g"
