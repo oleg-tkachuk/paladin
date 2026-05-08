@@ -33,6 +33,7 @@ vars:
 # paths in messages.
 includes:
   core: { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  chart: { taskfile: tasks/chart.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   docker: { taskfile: tasks/docker.task.yaml, vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   test:   { taskfile: tasks/test.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   gen:    { taskfile: tasks/gen.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
@@ -53,12 +54,19 @@ tasks:
   deploy:
     desc: "Build, tag, and push image + Helm chart to the OCI registry"
     cmds:
+      # Gate before any push: the chart must lint clean AND render
+      # without the multi-doc separator bug (see tasks/chart.task.yaml).
+      # Catching this here means a regression can never escape to OCI.
+      - task: chart:verify
       - task: metadata:write
       - task: docker:deploy
 
   deploy-local:
     desc: "Build the image directly into the Minikube Docker daemon (no push)"
     cmds:
+      # Same gate as `deploy` — local Minikube installs would also
+      # silently lose roles to a separator regression.
+      - task: chart:verify
       - task: metadata:write
       - task: docker:deploy-local
 

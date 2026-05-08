@@ -114,6 +114,17 @@ pre-push:
       tags: [go, test]
       run: go test ./... -count=1
 
+    # Gate against the multi-doc YAML separator bug — `{{- ... -}}`
+    # whitespace strip can collapse the newline before `---`, gluing
+    # the separator onto the previous line and silently dropping
+    # every resource after the first one. Runs only when chart files
+    # change so non-chart pushes don't pay the helm-template cost.
+    backend-chart-verify:
+      root: backend/
+      tags: [chart, lint]
+      glob: "deploy/chart/**/*"
+      run: task chart:verify
+
     frontend-tsc:
       root: frontend/
       tags: [ui, typecheck]
