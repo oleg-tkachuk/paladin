@@ -142,9 +142,25 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("app name is required")
 	}
 
-	// Validate secret mutual exclusivity
+	// ── Secret mutual-exclusivity sweep ─────────────────────────────
+	// For every field with a `<field>_secret` sibling, accepting both
+	// inline + SecretRef is ambiguous: which one wins? We reject at
+	// load time so the operator's mental model can't drift from
+	// what the runtime actually uses. SecretRef is the production
+	// path; inline is for dev convenience.
 	if c.Datastores.Postgres.Password != "" && c.Datastores.Postgres.PasswordSecret != nil {
 		return fmt.Errorf("postgres: cannot specify both password and password_secret")
+	}
+	if c.Datastores.Postgres.MigratePassword != "" && c.Datastores.Postgres.MigratePasswordSecret != nil {
+		return fmt.Errorf("postgres: cannot specify both migrate_password and migrate_password_secret")
+	}
+	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
+		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
+	}
+	if c.Bootstrap.Admin.Enabled {
+		if c.Bootstrap.Admin.Password != "" && c.Bootstrap.Admin.PasswordSecret != nil {
+			return fmt.Errorf("bootstrap.admin: cannot specify both password and password_secret")
+		}
 	}
 
 	if c.Storage.DefaultBackend != "" {
@@ -158,6 +174,9 @@ func (c *Config) Validate() error {
 		}
 		if b.Auth.SecretKey != "" && b.Auth.SecretKeySecret != nil {
 			return fmt.Errorf("storage.backends.%s.auth: cannot specify both secret_key and secret_key_secret", name)
+		}
+		if b.Auth.SessionToken != "" && b.Auth.SessionTokenSecret != nil {
+			return fmt.Errorf("storage.backends.%s.auth: cannot specify both session_token and session_token_secret", name)
 		}
 		if b.SSE.Type == "aws:kms" && b.SSE.KeyID == "" {
 			return fmt.Errorf("storage.backends.%s: sse.key_id required when sse.type=aws:kms", name)
