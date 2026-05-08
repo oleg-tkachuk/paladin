@@ -7,11 +7,25 @@ metadata:
 # Per-plane backend URLs consumed by the BFF (src/app/api/rpc/[[...connect]]/route.ts
 # and src/lib/auth/bff.ts) via the PALADIN_<PLANE>_URL env vars. The browser
 # never sees these — it only ever hits the in-cluster Next.js service.
+#
+# Service-name assumption: the backend chart renders one Service per
+# role via roleFullname (`<release>-<chart>-<role>`). The defaults
+# below assume `helm install paladin paladin …` in namespace
+# `paladin`, which gives:
+#   paladin-paladin-api    (ports data:8080, iam:8085)
+#   paladin-paladin-admin  (port  admin:8090)
+# Note that data + iam share the api role — same Service, different
+# port. Admin sits on its own role / Service.
+#
+# If your backend release name differs (e.g. installed as just
+# `paladin`), override these URLs in the ArgoCD overlay
+# at applications/overlays/local/patches/paladin-values.yaml so the BFF
+# resolves to the actual Service names in your cluster.
 backend:
   urls:
-    data: "http://paladin.paladin.svc.cluster.local:8080"
-    iam: "http://paladin.paladin.svc.cluster.local:8085"
-    admin: "http://paladin.paladin.svc.cluster.local:8090"
+    data:  "http://paladin-paladin-api.paladin.svc.cluster.local:8080"
+    iam:   "http://paladin-paladin-api.paladin.svc.cluster.local:8085"
+    admin: "http://paladin-paladin-admin.paladin.svc.cluster.local:8090"
 
 image:
   repository: registry.local/paladin/paladin-ui
