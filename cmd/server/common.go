@@ -43,7 +43,12 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 	}
 	logger.ReplaceGlobals(l)
 
-	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"))
+	var pgOpts []postgres.Option
+	if cfg.Security.EnableRLS {
+		pgOpts = append(pgOpts, postgres.WithRLS())
+		l.Info("postgres: RLS enabled (defence-in-depth tenant isolation)")
+	}
+	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"), pgOpts...)
 	if err != nil {
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}

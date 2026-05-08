@@ -31,7 +31,24 @@ type DB struct {
 	log     *zap.Logger
 }
 
-func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error) {
+// Option mutates the pool config after parse and before the pool is
+// constructed. Used today only to install the RLS BeforeAcquire /
+// AfterRelease hooks; future hooks (telemetry, soft-delete defaults)
+// can plug in the same way.
+type Option func(*pgxpool.Config) *pgxpool.Config
+
+// WithRLS turns on tenant-isolating BeforeAcquire / AfterRelease hooks
+// that set / wipe `paladin.tenant_id` per acquisition. Migration 023
+// installs the matching per-table policies. The runtime DSN must
+// connect as `paladin_app` (NOBYPASSRLS); workers / migrations as
+// `paladin_migrate` (BYPASSRLS).
+func WithRLS() Option {
+	return func(cfg *pgxpool.Config) *pgxpool.Config {
+		return EnableRLS(cfg)
+	}
+}
+
+func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Option) (*DB, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool config parse: %w", err)
@@ -86,6 +103,10 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger) (*DB, error)
 	// PALADIN traffic from migrations / ad-hoc queries.
 	if _, set := poolCfg.ConnConfig.RuntimeParams["application_name"]; !set {
 		poolCfg.ConnConfig.RuntimeParams["application_name"] = "paladin"
+	}
+
+	for _, opt := range opts {
+		poolCfg = opt(poolCfg)
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)

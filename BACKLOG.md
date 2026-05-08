@@ -143,25 +143,33 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Security
 
-### RLS as defence-in-depth
+### RLS — coverage of cross-tenant tables
 
-- **Status:** Deferred
-- **Reason:** Tenant isolation is currently enforced at the application
-  layer (Cedar + handler-level tenant guards). The `security.enable_rls`
-  flag exists in config but is a no-op — there are no per-table policies
-  authored.
+- **Status:** Open
+- **Reason:** Migration 023 landed RLS on every directly-tenant-keyed
+  table (`objects`, `object_tags`, `quotas`, `event_subscriptions`,
+  `capability_records`, `api_tokens`, `multipart_uploads`,
+  `multipart_parts`, `capability_usage`). `cfg.Security.EnableRLS=true`
+  installs the BeforeAcquire / AfterRelease hooks on the pool that
+  set `paladin.tenant_id` per acquisition.
+  Out of scope for this slice (intentional, by table category):
+    - `tenants`, `storage_backends`, `buckets`, `object_keys` —
+      platform-admin reads cross-tenant.
+    - `audit_log` — security/compliance reads cross-tenant.
+    - `users`, `refresh_tokens`, `api_keys` (legacy iam) — login flow
+      runs before tenant context is established.
+    - `capability_revocations` — denylist must be visible to all
+      tenants.
+    - `operations` — workers consume across tenants.
 - **Definition of Done:**
-  - Per-table `CREATE POLICY` for every `tenant_id`-bearing table.
-  - `paladin_app` (already landed via migration 011) gains
-    `FORCE ROW LEVEL SECURITY` on each protected table; the role does
-    not have `BYPASSRLS`, so RLS will bite the moment policies are
-    installed.
-  - Policy fixtures + integration tests that prove cross-tenant
-    `SELECT`/`UPDATE` is denied with the app role.
-  - `security.enable_rls` becomes load-bearing again (panic on
-    `enable_rls=true` if policies aren't installed).
-- **Blockers:** none. Pure migration work — role split prerequisite is
-  done.
+  - Decision per table on whether stricter policies are wanted (e.g.
+    `audit_log` filter to writer's tenant on INSERT, free read on
+    SELECT for compliance roles).
+  - Integration tests that prove cross-tenant SELECT under
+    `paladin_app` returns zero rows when GUC is set to a different
+    tenant. (Today's test suite is unit-level; an integration
+    harness against a real Postgres fixture is needed.)
+- **Blockers:** none.
 
 ### Federated IdP via JWKS
 

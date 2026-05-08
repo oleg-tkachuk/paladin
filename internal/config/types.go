@@ -226,6 +226,25 @@ type Security struct {
 	TrustTenantIDFromRequest bool `yaml:"trust_tenant_id_from_request" json:"trust_tenant_id_from_request"`
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
+
+	// EnableRLS turns on Postgres row-level security as defence in
+	// depth. When true, the connection-acquire path stamps the
+	// `paladin.tenant_id` GUC from the auth context, and per-table
+	// policies (added in migrations/023_rls.sql) restrict reads/
+	// writes to rows whose tenant_id matches the GUC. Cross-tenant
+	// queries that the app layer would also reject get rejected at
+	// the DB.
+	//
+	// Disabled by default — the application-layer Cedar + handler
+	// guards already enforce isolation. RLS is for the case where a
+	// future bug in the app layer leaks tenant context; the DB
+	// catches it instead of returning the wrong tenant's rows.
+	//
+	// Worker / migrate / bootstrap paths bypass RLS via the
+	// `BYPASSRLS` role attribute on the migrate / runtime user
+	// (granted explicitly in migrations/023_rls.sql). See that file
+	// for the full role / policy matrix.
+	EnableRLS bool `yaml:"enable_rls" json:"enable_rls"`
 }
 
 // Bootstrap groups one-shot startup steps that prepare the cluster for
