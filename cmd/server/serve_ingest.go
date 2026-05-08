@@ -96,11 +96,70 @@ func buildIngestDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, er
 	case "webhook":
 		return buildWebhookDriver(cfg, l)
 	case "nats":
-		return nil, fmt.Errorf("ingest: nats driver not yet implemented in this build")
+		return buildNATSDriver(cfg, l)
 	case "rabbitmq":
-		return nil, fmt.Errorf("ingest: rabbitmq driver not yet implemented in this build")
+		return buildRabbitMQDriver(cfg, l)
 	default:
 		return nil, fmt.Errorf("ingest: unknown driver %q (expected webhook | nats | rabbitmq)", cfg.Driver)
+	}
+}
+
+// buildNATSDriver wires the NATS subscriber. Source format selects
+// which adapter parses each message — there's no per-subject routing
+// like the webhook driver does, so the binding is fixed at boot.
+func buildNATSDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
+	if cfg.NATS.URL == "" {
+		return nil, fmt.Errorf("ingest: nats.url required when driver=nats")
+	}
+	src, err := pickSource(cfg.NATS.SourceFormat)
+	if err != nil {
+		return nil, err
+	}
+	return &eventingest.NATSDriver{
+		URL:         cfg.NATS.URL,
+		Subject:     cfg.NATS.Subject,
+		QueueGroup:  cfg.NATS.QueueGroup,
+		JetStream:   cfg.NATS.JetStream,
+		DurableName: cfg.NATS.DurableName,
+		Token:       cfg.NATS.Token,
+		SourceAdapt: src,
+		Logger:      l.Named("ingest.nats"),
+	}, nil
+}
+
+// buildRabbitMQDriver wires the AMQP consumer. Operator-declared queue
+// is consumed at the configured prefetch.
+func buildRabbitMQDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
+	if cfg.RabbitMQ.URL == "" {
+		return nil, fmt.Errorf("ingest: rabbitmq.url required when driver=rabbitmq")
+	}
+	if cfg.RabbitMQ.Queue == "" {
+		return nil, fmt.Errorf("ingest: rabbitmq.queue required when driver=rabbitmq")
+	}
+	src, err := pickSource(cfg.RabbitMQ.SourceFormat)
+	if err != nil {
+		return nil, err
+	}
+	return &eventingest.RabbitMQDriver{
+		URL:           cfg.RabbitMQ.URL,
+		Queue:         cfg.RabbitMQ.Queue,
+		PrefetchCount: cfg.RabbitMQ.PrefetchCount,
+		SourceAdapt:   src,
+		Logger:        l.Named("ingest.rabbitmq"),
+	}, nil
+}
+
+// pickSource resolves a source-format string to the matching adapter.
+// Webhook driver picks per-route via its Sources map; NATS / RabbitMQ
+// drivers pick once via this helper.
+func pickSource(format string) (eventingest.Source, error) {
+	switch format {
+	case "seaweedfs":
+		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
+	case "":
+		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | minio | cloudevents)")
+	default:
+		return nil, fmt.Errorf("ingest: unknown source_format %q", format)
 	}
 }
 
