@@ -25,6 +25,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/nats-io/nats.go"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
@@ -693,4 +695,122 @@ func containsCI(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// seedNATSSubscription mirrors seedSubscription but writes a nats-sink
+// row with the supplied URL + subject. Kept distinct so the HTTP path
+// helper stays narrow (its sink_config is HTTP-shaped).
+func (f *dispatcherFixture) seedNATSSubscription(t *testing.T, tenant uuid.UUID, url, subject string) uuid.UUID {
+	t.Helper()
+	cfg, _ := json.Marshal(map[string]any{"url": url, "subject": subject})
+	subID := uuid.New()
+	if _, err := f.h.PoolMigrate.Exec(context.Background(),
+		`INSERT INTO event_subscriptions
+		   (subscription_id, tenant_id, cel_filter, sink_kind, sink_config, disabled)
+		 VALUES ($1, $2, '', 'nats', $3, false)`,
+		subID, tenant, cfg,
+	); err != nil {
+		t.Fatalf("seed nats sub: %v", err)
+	}
+	return subID
+}
+
+// TestDispatcher_OutboxToNATSDelivery_HappyPath: producer writes one
+// outbox row, runner picks it up and Publishes a CloudEvents envelope
+// to the in-process NATS subject. Row flips to delivered with
+// attempts=1 and last_status_code=0 (NATS publish is fire-and-forget).
+func TestDispatcher_OutboxToNATSDelivery_HappyPath(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+
+	url := runEmbeddedNATSForIntegration(t)
+	pc, err := nats.Connect(url, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect: %v", err)
+	}
+	defer pc.Close()
+	got := make(chan *nats.Msg, 1)
+	if _, err := pc.Subscribe("paladin.events.>", func(m *nats.Msg) { got <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-nats")
+	subject := "paladin.events." + tenant.String() + ".object.uploaded"
+	_ = f.seedNATSSubscription(t, tenant, url, subject)
+
+	pool := worker.NewNatsConnPool(nil)
+	defer pool.Close()
+	d := f.dispatcher()
+	d.NATS = pool
+
+	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant))
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+
+	rows := f.allDeliveryRows(t, tenant)
+	if len(rows) != 1 || rows[0].Status != "pending" {
+		t.Fatalf("rows = %#v, want one pending", rows)
+	}
+
+	r := f.outboxRunner(d)
+	if n := f.tickOnce(t, r); n != 1 {
+		t.Fatalf("tick processed = %d, want 1", n)
+	}
+
+	row := f.deliveryRow(t, rows[0].ID)
+	if row.Status != "delivered" {
+		t.Errorf("status = %q, want delivered (last_error=%q)", row.Status, row.LastError)
+	}
+	if row.Attempts != 1 {
+		t.Errorf("attempts = %d, want 1", row.Attempts)
+	}
+	if row.LastStatusCode != 0 {
+		t.Errorf("last_status_code = %d, want 0 (nats has no http status)", row.LastStatusCode)
+	}
+
+	select {
+	case m := <-got:
+		if m.Subject != subject {
+			t.Errorf("subject: got %q want %q", m.Subject, subject)
+		}
+		var env struct {
+			SpecVersion string `json:"specversion"`
+			Type        string `json:"type"`
+			TenantID    string `json:"tenantid"`
+		}
+		if err := json.Unmarshal(m.Data, &env); err != nil {
+			t.Fatalf("envelope: %v", err)
+		}
+		if env.SpecVersion != "1.0" || env.Type != "paladin.object.uploaded" || env.TenantID != tenant.String() {
+			t.Errorf("envelope mismatch: %+v", env)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nats: no message within 2s")
+	}
+}
+
+// runEmbeddedNATSForIntegration boots an in-process nats-server on a
+// random port. Distinct name from the unit-test helper since
+// integration tests live in a separate package and the helper is
+// duplicated rather than exported (test packages don't share helpers).
+func runEmbeddedNATSForIntegration(t *testing.T) string {
+	t.Helper()
+	opts := natstest.DefaultTestOptions
+	opts.Port = -1
+	srv := natstest.RunServer(&opts)
+	t.Cleanup(func() {
+		srv.Shutdown()
+		srv.WaitForShutdown()
+	})
+	if !srv.ReadyForConnections(2 * time.Second) {
+		t.Fatalf("embedded nats: not ready")
+	}
+	return srv.ClientURL()
 }

@@ -107,6 +107,11 @@ type Dispatcher struct {
 	Outbox     OutboxWriter // nil in TestSubscription-only deployments
 	HTTPClient *http.Client
 	Logger     *zap.Logger
+	// NATS is the optional shared connection pool used by the NATS
+	// sink. nil = no NATS subs configured (deliver() will reject the
+	// row with a clear error if one shows up). Owned by the
+	// dispatcher pod's main; closed at shutdown.
+	NATS *NatsConnPool
 	// MaxAttempts caps retry per subscription on the synchronous
 	// DeliverOne path. <=0 → 3. The outbox loop's retry budget is
 	// driven by OutboxRunner.DefaultMaxAttempts instead.
@@ -177,7 +182,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (
 // lookup, filter evaluation, AND the outbox — the operator clicked
 // "Test Webhook" and wants the connectivity / signature result now.
 func (d *Dispatcher) DeliverOne(ctx context.Context, sub admindomain.EventSubscription, eventType string) error {
-	return d.deliver(ctx, sub, Event{
+	_, err := d.deliver(ctx, sub, Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     sub.TenantID.String(),
@@ -186,18 +191,24 @@ func (d *Dispatcher) DeliverOne(ctx context.Context, sub admindomain.EventSubscr
 			"synthetic": true,
 		},
 	})
+	return err
 }
 
 // deliver is the shared sink-branching path. Used by DeliverOne (sync)
-// and by OutboxRunner via Dispatcher.deliverForRunner.
-func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscription, evt Event) error {
+// and by OutboxRunner. Returns (statusCode, err): statusCode is the
+// HTTP response code for the http sink and 0 for non-HTTP sinks /
+// transport errors. The runner persists statusCode on the row so the
+// admin UI can render the per-sink result uniformly.
+func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscription, evt Event) (int, error) {
 	switch sub.SinkKind {
 	case "http":
-		return d.deliverHTTP(ctx, sub, evt)
+		return d.deliverHTTPWithStatus(ctx, sub, evt)
+	case "nats":
+		return d.deliverNATS(ctx, sub, evt)
 	case "kafka", "sqs":
-		return fmt.Errorf("sink %q delivery not yet wired (slice 8)", sub.SinkKind)
+		return 0, fmt.Errorf("sink %q delivery not yet wired", sub.SinkKind)
 	default:
-		return fmt.Errorf("unknown sink kind %q", sub.SinkKind)
+		return 0, fmt.Errorf("unknown sink kind %q", sub.SinkKind)
 	}
 }
 
@@ -473,7 +484,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 			continue
 		}
 
-		status, deliverErr := r.Dispatcher.deliverHTTPWithStatus(ctx, sub, evt)
+		status, deliverErr := r.Dispatcher.deliver(ctx, sub, evt)
 		if deliverErr == nil {
 			if _, err := tx.Exec(ctx,
 				`UPDATE event_deliveries

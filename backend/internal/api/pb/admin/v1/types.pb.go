@@ -7,14 +7,15 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -1855,6 +1856,23 @@ func (x *EventSubscription) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// EventSink is a tagged union of the supported delivery targets. Sink
+// pick conventions, in order of preference for new operator subs:
+//
+//   - HttpSink  — universal "send a signed POST somewhere"; the right
+//     default for SaaS endpoints (Slack, PagerDuty) and
+//     customer-owned webhook receivers.
+//   - NatsSink  — cloud-native pub/sub. Fire-and-forget core publish
+//     keeps the dispatcher hot loop fast; the natural
+//     sink for in-cluster agent-platform consumers and
+//     anything that wants subject-based fan-out without
+//     owning an HTTP listener.
+//   - KafkaSink — durable, ordered, partitioned. Pick when the
+//     consumer needs replay or strict per-key ordering.
+//     Heavier dependency footprint (still BACKLOG).
+//   - SqsSink   — AWS-native at-least-once queue. Pick when the
+//     receiver lives inside the AWS managed-services
+//     boundary already (still BACKLOG).
 type EventSink struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Target:
@@ -1862,6 +1880,7 @@ type EventSink struct {
 	//	*EventSink_Http
 	//	*EventSink_Kafka
 	//	*EventSink_Sqs
+	//	*EventSink_Nats
 	Target        isEventSink_Target `protobuf_oneof:"target"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1931,6 +1950,15 @@ func (x *EventSink) GetSqs() *SqsSink {
 	return nil
 }
 
+func (x *EventSink) GetNats() *NatsSink {
+	if x != nil {
+		if x, ok := x.Target.(*EventSink_Nats); ok {
+			return x.Nats
+		}
+	}
+	return nil
+}
+
 type isEventSink_Target interface {
 	isEventSink_Target()
 }
@@ -1947,11 +1975,17 @@ type EventSink_Sqs struct {
 	Sqs *SqsSink `protobuf:"bytes,3,opt,name=sqs,proto3,oneof"`
 }
 
+type EventSink_Nats struct {
+	Nats *NatsSink `protobuf:"bytes,4,opt,name=nats,proto3,oneof"`
+}
+
 func (*EventSink_Http) isEventSink_Target() {}
 
 func (*EventSink_Kafka) isEventSink_Target() {}
 
 func (*EventSink_Sqs) isEventSink_Target() {}
+
+func (*EventSink_Nats) isEventSink_Target() {}
 
 type HttpSink struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2115,6 +2149,90 @@ func (x *SqsSink) GetQueueUrl() string {
 func (x *SqsSink) GetRegion() string {
 	if x != nil {
 		return x.Region
+	}
+	return ""
+}
+
+// NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS
+// subject via core publish (fire-and-forget). JetStream durable
+// streams are BACKLOG — opt-in once the agentic platform needs the
+// at-least-once guarantees beyond what core NATS gives us.
+type NatsSink struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NATS server URL. Comma-separated for cluster (e.g.
+	// "nats://nats-0.nats.svc:4222,nats://nats-1.nats.svc:4222").
+	// The dispatcher reuses one connection per server pool across all
+	// subscriptions targeting the same servers — connection-pooled by
+	// URL string equality.
+	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// Subject pattern. Static or interpolated; for v1 only static.
+	// Convention: `paladin.events.<tenant_id>.<event_type>` so consumers
+	// can wildcard-subscribe per tenant or per event class. Operator
+	// picks the convention that matches their downstream routing.
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	// Optional credentials. SecretRef so plaintext never lives in YAML.
+	// Auth modes:
+	//   - empty / no auth: anonymous publish (lab clusters only)
+	//   - `token:<plaintext>`: bare token auth
+	//   - `nkey:<plaintext>`: NKey-based auth (BACKLOG — needs file
+	//     materialisation; v1 ships token only)
+	//   - `jwt:<plaintext>`: JWT + nkey credential file (BACKLOG —
+	//     same materialisation gap)
+	//
+	// Format is `<scheme>:<value>` to keep one string field, parsed
+	// server-side. Validation rejects unknown schemes.
+	CredentialsRef string `protobuf:"bytes,3,opt,name=credentials_ref,json=credentialsRef,proto3" json:"credentials_ref,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *NatsSink) Reset() {
+	*x = NatsSink{}
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NatsSink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NatsSink) ProtoMessage() {}
+
+func (x *NatsSink) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NatsSink.ProtoReflect.Descriptor instead.
+func (*NatsSink) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *NatsSink) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *NatsSink) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *NatsSink) GetCredentialsRef() string {
+	if x != nil {
+		return x.CredentialsRef
 	}
 	return ""
 }
@@ -2294,11 +2412,12 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9f\x01\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xcd\x01\n" +
 	"\tEventSink\x12,\n" +
 	"\x04http\x18\x01 \x01(\v2\x16.paladin.admin.v1.HttpSinkH\x00R\x04http\x12/\n" +
 	"\x05kafka\x18\x02 \x01(\v2\x17.paladin.admin.v1.KafkaSinkH\x00R\x05kafka\x12)\n" +
-	"\x03sqs\x18\x03 \x01(\v2\x15.paladin.admin.v1.SqsSinkH\x00R\x03sqsB\b\n" +
+	"\x03sqs\x18\x03 \x01(\v2\x15.paladin.admin.v1.SqsSinkH\x00R\x03sqs\x12,\n" +
+	"\x04nats\x18\x04 \x01(\v2\x16.paladin.admin.v1.NatsSinkH\x00R\x04natsB\b\n" +
 	"\x06target\"m\n" +
 	"\bHttpSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
@@ -2309,7 +2428,11 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\">\n" +
 	"\aSqsSink\x12\x1b\n" +
 	"\tqueue_url\x18\x01 \x01(\tR\bqueueUrl\x12\x16\n" +
-	"\x06region\x18\x02 \x01(\tR\x06region*z\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\"_\n" +
+	"\bNatsSink\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\x12'\n" +
+	"\x0fcredentials_ref\x18\x03 \x01(\tR\x0ecredentialsRef*z\n" +
 	"\vStorageKind\x12\x1c\n" +
 	"\x18STORAGE_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13STORAGE_KIND_AWS_S3\x10\x01\x12\x1e\n" +
@@ -2343,7 +2466,7 @@ func file_paladin_admin_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_paladin_admin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_paladin_admin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(StorageKind)(0),              // 0: paladin.admin.v1.StorageKind
 	(SseType)(0),                  // 1: paladin.admin.v1.SseType
@@ -2370,61 +2493,63 @@ var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(*HttpSink)(nil),              // 22: paladin.admin.v1.HttpSink
 	(*KafkaSink)(nil),             // 23: paladin.admin.v1.KafkaSink
 	(*SqsSink)(nil),               // 24: paladin.admin.v1.SqsSink
-	nil,                           // 25: paladin.admin.v1.Bucket.LabelsEntry
-	nil,                           // 26: paladin.admin.v1.Tenant.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 28: google.protobuf.Duration
-	(v1.ChecksumAlgorithm)(0),     // 29: paladin.common.v1.ChecksumAlgorithm
-	(v1.CompletionMode)(0),        // 30: paladin.common.v1.CompletionMode
+	(*NatsSink)(nil),              // 25: paladin.admin.v1.NatsSink
+	nil,                           // 26: paladin.admin.v1.Bucket.LabelsEntry
+	nil,                           // 27: paladin.admin.v1.Tenant.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 29: google.protobuf.Duration
+	(v1.ChecksumAlgorithm)(0),     // 30: paladin.common.v1.ChecksumAlgorithm
+	(v1.CompletionMode)(0),        // 31: paladin.common.v1.CompletionMode
 }
 var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	0,  // 0: paladin.admin.v1.StorageBackend.kind:type_name -> paladin.admin.v1.StorageKind
 	5,  // 1: paladin.admin.v1.StorageBackend.sse:type_name -> paladin.admin.v1.ServerSideEncryption
 	6,  // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
-	27, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
-	27, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
+	28, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
 	1,  // 5: paladin.admin.v1.ServerSideEncryption.type:type_name -> paladin.admin.v1.SseType
 	2,  // 6: paladin.admin.v1.EventSourceConfig.target:type_name -> paladin.admin.v1.EventTarget
-	28, // 7: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
+	29, // 7: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
 	8,  // 8: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
 	9,  // 9: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
 	12, // 10: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
 	13, // 11: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
 	14, // 12: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
-	25, // 13: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
-	27, // 14: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	27, // 15: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	28, // 16: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
-	28, // 17: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
-	29, // 18: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	26, // 13: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
+	28, // 14: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	28, // 15: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	29, // 16: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
+	29, // 17: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
+	30, // 18: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
 	10, // 19: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
 	11, // 20: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
-	28, // 21: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
-	28, // 22: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
+	29, // 21: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
+	29, // 22: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
 	3,  // 23: paladin.admin.v1.ObjectLockConfig.default_mode:type_name -> paladin.admin.v1.ObjectLockMode
-	28, // 24: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
-	26, // 25: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
-	27, // 26: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	27, // 27: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
-	30, // 28: paladin.admin.v1.ObjectKey.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	29, // 24: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
+	27, // 25: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
+	28, // 26: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	28, // 27: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	31, // 28: paladin.admin.v1.ObjectKey.completion_mode:type_name -> paladin.common.v1.CompletionMode
 	8,  // 29: paladin.admin.v1.ObjectKey.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	27, // 30: paladin.admin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
-	27, // 31: paladin.admin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 30: paladin.admin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
+	28, // 31: paladin.admin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
 	18, // 32: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
-	27, // 33: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
-	27, // 34: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
-	27, // 35: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
+	28, // 33: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 34: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
+	28, // 35: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
 	21, // 36: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
-	27, // 37: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
-	27, // 38: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 37: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
+	28, // 38: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
 	22, // 39: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
 	23, // 40: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
 	24, // 41: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	25, // 42: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
+	43, // [43:43] is the sub-list for method output_type
+	43, // [43:43] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_types_proto_init() }
@@ -2440,6 +2565,7 @@ func file_paladin_admin_v1_types_proto_init() {
 		(*EventSink_Http)(nil),
 		(*EventSink_Kafka)(nil),
 		(*EventSink_Sqs)(nil),
+		(*EventSink_Nats)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2447,7 +2573,7 @@ func file_paladin_admin_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_types_proto_rawDesc), len(file_paladin_admin_v1_types_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

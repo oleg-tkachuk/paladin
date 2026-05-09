@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	natsserver "github.com/nats-io/nats-server/v2/server"
+	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/nats-io/nats.go"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
@@ -192,6 +195,146 @@ func TestDeliverOneSucceeds(t *testing.T) {
 	}
 	if len(bodies) != 1 {
 		t.Errorf("bodies: got %d want 1", len(bodies))
+	}
+}
+
+// runEmbeddedNATS spins up an in-process nats-server on a random port
+// and returns its client URL. The server is stopped on test cleanup.
+// Used by the NATS sink tests so we don't depend on external infra.
+func runEmbeddedNATS(t *testing.T) string {
+	t.Helper()
+	opts := natstest.DefaultTestOptions
+	opts.Port = -1 // pick a free port
+	srv := natstest.RunServer(&opts)
+	t.Cleanup(func() {
+		srv.Shutdown()
+		srv.WaitForShutdown()
+	})
+	if !srv.ReadyForConnections(2 * time.Second) {
+		t.Fatalf("embedded nats: not ready")
+	}
+	_ = natsserver.Options{} // keep import alive even when fields not referenced
+	return srv.ClientURL()
+}
+
+// TestDispatcher_NATSDelivery boots an in-process NATS server,
+// subscribes a probe consumer to the configured subject, drives one
+// DeliverOne, and asserts the CloudEvents envelope landed on the wire.
+func TestDispatcher_NATSDelivery(t *testing.T) {
+	url := runEmbeddedNATS(t)
+
+	// Probe consumer.
+	pc, err := nats.Connect(url, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect: %v", err)
+	}
+	defer pc.Close()
+	got := make(chan *nats.Msg, 1)
+	if _, err := pc.Subscribe("paladin.events.>", func(m *nats.Msg) { got <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush sub: %v", err)
+	}
+
+	tenantID := uuid.Must(uuid.NewV7())
+	subID := uuid.Must(uuid.NewV7())
+	subject := "paladin.events." + tenantID.String() + ".object.uploaded"
+	cfg, _ := json.Marshal(map[string]any{
+		"url":     url,
+		"subject": subject,
+	})
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool, MaxAttempts: 1}
+	sub := admindomain.EventSubscription{
+		SubscriptionID: subID,
+		TenantID:       tenantID,
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
+		t.Fatalf("DeliverOne: %v", err)
+	}
+
+	select {
+	case m := <-got:
+		if m.Subject != subject {
+			t.Errorf("subject: got %q want %q", m.Subject, subject)
+		}
+		var env struct {
+			SpecVersion string `json:"specversion"`
+			Type        string `json:"type"`
+			TenantID    string `json:"tenantid"`
+		}
+		if err := json.Unmarshal(m.Data, &env); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		if env.SpecVersion != "1.0" {
+			t.Errorf("specversion: got %q want 1.0", env.SpecVersion)
+		}
+		if env.Type != "paladin.object.uploaded" {
+			t.Errorf("type: got %q", env.Type)
+		}
+		if env.TenantID != tenantID.String() {
+			t.Errorf("tenantid: got %q want %s", env.TenantID, tenantID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nats: no message received within 2s")
+	}
+
+	// Pool reuses the conn — second DeliverOne shouldn't dial again.
+	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
+		t.Fatalf("DeliverOne (2): %v", err)
+	}
+	if got := pool.Statuses(); len(got) != 1 {
+		t.Errorf("pool size: got %d want 1 (connection reuse)", len(got))
+	}
+}
+
+// TestDispatcher_NATSMissingConfig: malformed sink config / empty URL
+// surfaces as a delivery error with status=0 (matches HTTP transport
+// error semantics on the row).
+func TestDispatcher_NATSMissingConfig(t *testing.T) {
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool}
+	cfg, _ := json.Marshal(map[string]any{"subject": "paladin.events.x"}) // url missing
+	sub := admindomain.EventSubscription{
+		SubscriptionID: uuid.Must(uuid.NewV7()),
+		TenantID:       uuid.Must(uuid.NewV7()),
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.test"); err == nil {
+		t.Fatal("expected error for missing url, got nil")
+	}
+}
+
+// TestParseNatsCredentials_Schemes locks the v1 contract: token works,
+// nkey/jwt are explicitly deferred, unknown schemes reject.
+func TestParseNatsCredentials_Schemes(t *testing.T) {
+	cases := []struct {
+		ref     string
+		wantErr bool
+		wantNil bool
+	}{
+		{"", false, true},
+		{"token:abc", false, false},
+		{"token:", true, false},
+		{"nkey:SUACS", true, false},
+		{"jwt:eyJ", true, false},
+		{"unknown:x", true, false},
+		{"noscheme", true, false},
+	}
+	for _, c := range cases {
+		opt, err := parseNatsCredentials(c.ref)
+		if (err != nil) != c.wantErr {
+			t.Errorf("ref=%q err=%v wantErr=%v", c.ref, err, c.wantErr)
+		}
+		if c.wantNil && opt != nil {
+			t.Errorf("ref=%q: expected nil option, got %v", c.ref, opt)
+		}
 	}
 }
 

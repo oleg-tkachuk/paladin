@@ -455,6 +455,10 @@ func sinkFromConfig(kind string, cfg []byte) *pb.EventSink {
 		var v pb.SqsSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Sqs{Sqs: &v}
+	case "nats":
+		var v pb.NatsSink
+		_ = json.Unmarshal(cfg, &v)
+		out.Target = &pb.EventSink_Nats{Nats: &v}
 	}
 	return out
 }
@@ -473,6 +477,9 @@ func sinkToConfig(sink *pb.EventSink) (kind string, cfg []byte) {
 	case *pb.EventSink_Sqs:
 		b, _ := json.Marshal(t.Sqs)
 		return "sqs", b
+	case *pb.EventSink_Nats:
+		b, _ := json.Marshal(t.Nats)
+		return "nats", b
 	}
 	return "", nil
 }

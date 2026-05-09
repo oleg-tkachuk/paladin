@@ -58,6 +58,7 @@ import type {
   EventSink,
   HttpSink,
   KafkaSink,
+  NatsSink,
   SqsSink,
 } from "@/gen/paladin/admin/v1/types_pb";
 
@@ -121,10 +122,15 @@ const TEMPLATES: readonly TemplateDef[] = [
   },
 ] as const;
 
-type SinkType = "http" | "kafka" | "sqs";
+type SinkType = "http" | "nats" | "kafka" | "sqs";
 
+// NATS sits second after HTTP — it's the second wired sink (Kafka/SQS
+// remain "not yet wired" stubs that operator pickers can still see for
+// visibility into roadmap, but EventSubscriptionService.Validate
+// rejects subs targeting them today).
 const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "http", label: "HTTP" },
+  { id: "nats", label: "NATS" },
   { id: "kafka", label: "Kafka" },
   { id: "sqs", label: "SQS" },
 ] as const;
@@ -274,6 +280,10 @@ type FormState = {
   httpUrl: string;
   httpSecret: string;
   httpMaxAttempts: string;
+  // NATS
+  natsUrl: string;
+  natsSubject: string;
+  natsCredentialsRef: string;
   // Kafka
   kafkaBrokers: string;
   kafkaTopic: string;
@@ -291,6 +301,9 @@ const EMPTY_FORM: FormState = {
   httpUrl: "",
   httpSecret: "",
   httpMaxAttempts: "5",
+  natsUrl: "nats://nats.nats.svc.cluster.local:4222",
+  natsSubject: "paladin.events",
+  natsCredentialsRef: "",
   kafkaBrokers: "",
   kafkaTopic: "",
   sqsQueueUrl: "",
@@ -311,6 +324,11 @@ function formFromSubscription(sub: EventSubscription): FormState {
     next.httpUrl = t.value.url;
     next.httpSecret = t.value.signingSecretRef;
     next.httpMaxAttempts = String(t.value.maxAttempts || 5);
+  } else if (t?.case === "nats") {
+    next.sinkType = "nats";
+    next.natsUrl = t.value.url;
+    next.natsSubject = t.value.subject;
+    next.natsCredentialsRef = t.value.credentialsRef;
   } else if (t?.case === "kafka") {
     next.sinkType = "kafka";
     next.kafkaBrokers = t.value.brokers;
@@ -334,6 +352,18 @@ function buildSink(form: FormState): EventSink {
     return {
       $typeName: "paladin.admin.v1.EventSink",
       target: { case: "http", value: http },
+    };
+  }
+  if (form.sinkType === "nats") {
+    const nats: NatsSink = {
+      $typeName: "paladin.admin.v1.NatsSink",
+      url: form.natsUrl.trim(),
+      subject: form.natsSubject.trim(),
+      credentialsRef: form.natsCredentialsRef.trim(),
+    };
+    return {
+      $typeName: "paladin.admin.v1.EventSink",
+      target: { case: "nats", value: nats },
     };
   }
   if (form.sinkType === "kafka") {
@@ -361,6 +391,8 @@ function buildSink(form: FormState): EventSink {
 interface FormErrors {
   httpUrl?: string;
   httpMaxAttempts?: string;
+  natsUrl?: string;
+  natsSubject?: string;
   kafkaBrokers?: string;
   kafkaTopic?: string;
   sqsQueueUrl?: string;
@@ -377,6 +409,16 @@ function validateForm(form: FormState): FormErrors {
     if (!Number.isFinite(n) || n < 1 || n > 10) {
       e.httpMaxAttempts = "Must be an integer between 1 and 10.";
     }
+  } else if (form.sinkType === "nats") {
+    const url = form.natsUrl.trim();
+    // NATS URL: nats:// or nats-tls:// (TLS-flavoured). Plain hostname
+    // OR cluster list (comma-separated). Loose check — defer real
+    // validation to the dispatcher's connect-time error which surfaces
+    // on the row's last_error.
+    if (!/^nats(-tls)?:\/\//.test(url)) {
+      e.natsUrl = "Must start with nats:// or nats-tls://";
+    }
+    if (!form.natsSubject.trim()) e.natsSubject = "Required.";
   } else if (form.sinkType === "kafka") {
     if (!form.kafkaBrokers.trim()) e.kafkaBrokers = "Required.";
     if (!form.kafkaTopic.trim()) e.kafkaTopic = "Required.";
@@ -1009,6 +1051,59 @@ export default function EventsPage() {
                         setForm((p) => ({
                           ...p,
                           httpMaxAttempts: e.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </>
+              )}
+
+              {form.sinkType === "nats" && (
+                <>
+                  <Field
+                    label="Server URL"
+                    htmlFor="sub-nats-url"
+                    hint="nats:// or nats-tls://. Comma-separated for cluster (nats://nats-0:4222,nats://nats-1:4222). One connection is pooled per unique URL across all subscriptions."
+                    error={errors.natsUrl}
+                  >
+                    <Input
+                      id="sub-nats-url"
+                      value={form.natsUrl}
+                      placeholder="nats://nats.nats.svc.cluster.local:4222"
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, natsUrl: e.target.value }))
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Subject"
+                    htmlFor="sub-nats-subject"
+                    hint="Where the CloudEvents JSON payload publishes. Static for v1; convention: paladin.events.<tenant_id>.<event_type>."
+                    error={errors.natsSubject}
+                  >
+                    <Input
+                      id="sub-nats-subject"
+                      value={form.natsSubject}
+                      placeholder="paladin.events"
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, natsSubject: e.target.value }))
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Credentials ref"
+                    htmlFor="sub-nats-creds"
+                    optional
+                    hint="Format <scheme>:<value>. v1 supports token:<plaintext>. NKey / JWT BACKLOG. Empty = anonymous (lab clusters only)."
+                  >
+                    <Input
+                      id="sub-nats-creds"
+                      value={form.natsCredentialsRef}
+                      placeholder="token:..."
+                      onChange={(e) =>
+                        setForm((p) => ({
+                          ...p,
+                          natsCredentialsRef: e.target.value,
                         }))
                       }
                     />
