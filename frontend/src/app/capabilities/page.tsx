@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -564,12 +564,32 @@ export default function CapabilitiesPage() {
   const { showNotification } = useNotification();
 
   // ── browse filters ──────────────────────────────────────────────────
+  // CapabilityService.List is principal-scoped at the SQL level —
+  // (tenant_id, principal_kind, principal_subject) is the lookup key.
+  // The protocol has no "show all caps in this tenant" path. So when
+  // an operator navigates back to /capabilities they need the
+  // browse filter pre-filled with whatever they last looked at,
+  // otherwise the page renders empty and reads as "the capabilities
+  // I just issued aren't there." Persist the last (kind, subject) in
+  // localStorage and auto-restore on mount; the matching useEffect
+  // below kicks fetchList once the restore completes.
+  //
+  // Tenant-scoped key so two tenants on the same browser profile
+  // don't bleed each other's last-used principal.
+  const lastBrowseKey = `paladin:capabilities:lastBrowse:${tenantId || "_"}`;
   const [principalKind, setPrincipalKind] = useState<string>(
     String(PrincipalKind.AGENT),
   );
   const [subject, setSubject] = useState("");
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeRevoked, setIncludeRevoked] = useState(false);
+
+  // hydrated guards the auto-restore + auto-fetch effects so we don't
+  // fire fetchList against an empty filter on the very first render
+  // before localStorage has been read. Set true once the restore
+  // attempt completes, regardless of whether anything was actually
+  // restored.
+  const hydratedRef = useRef(false);
 
   const [items, setItems] = useState<Capability[]>([]);
   const [loading, setLoading] = useState(false);
@@ -655,6 +675,63 @@ export default function CapabilitiesPage() {
     includeExpired,
     includeRevoked,
     showNotification,
+  ]);
+
+  // ── restore last browsed principal on mount ────────────────────────
+  // Read from localStorage once tenantId is available (the storage key
+  // is tenant-scoped so we can't read it during render-0 before
+  // useTenant resolves). Set state synchronously and mark hydrated; a
+  // separate effect picks up the state change and calls fetchList.
+  useEffect(() => {
+    if (!tenantId || hydratedRef.current) return;
+    try {
+      const raw = window.localStorage.getItem(lastBrowseKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          kind?: string;
+          subject?: string;
+        };
+        if (saved.kind) setPrincipalKind(saved.kind);
+        if (saved.subject) setSubject(saved.subject);
+      }
+    } catch {
+      // localStorage can throw in private-mode / quota scenarios — fall
+      // through to the default (empty subject) state.
+    }
+    hydratedRef.current = true;
+  }, [tenantId, lastBrowseKey]);
+
+  // Auto-fetch whenever the browse filter changes after hydration.
+  // Only fires once hydratedRef is set so we don't issue an empty-
+  // subject request on render-0. After the restore effect runs and
+  // sets subject/principalKind, this effect reacts to the state
+  // update and calls fetchList with the restored values.
+  //
+  // Side effect: persist the new (kind, subject) so a manual Browse
+  // click is remembered across reloads, not just the post-Issue
+  // synchronisation. The persist only fires when subject is non-
+  // empty — empty would clobber a previously-saved value with a
+  // useless filter.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (!tenantId || !subject.trim()) return;
+    void fetchList();
+    try {
+      window.localStorage.setItem(
+        lastBrowseKey,
+        JSON.stringify({ kind: principalKind, subject: subject.trim() }),
+      );
+    } catch {
+      // private-mode / quota — non-fatal.
+    }
+  }, [
+    tenantId,
+    principalKind,
+    subject,
+    includeExpired,
+    includeRevoked,
+    fetchList,
+    lastBrowseKey,
   ]);
 
   // ── issue dialog ────────────────────────────────────────────────────
@@ -819,6 +896,22 @@ export default function CapabilitiesPage() {
         setSubject(issueSubject.trim());
         setItems([res.capability]);
         setHasFetched(true);
+        // Persist so the next page load / navigation back to
+        // /capabilities restores this principal. Without this, the
+        // list is principal-scoped and any reload makes the just-
+        // issued capability "disappear" from the user's perspective.
+        try {
+          window.localStorage.setItem(
+            lastBrowseKey,
+            JSON.stringify({
+              kind: issuePrincipalKind,
+              subject: issueSubject.trim(),
+            }),
+          );
+        } catch {
+          // private-mode / quota — silent fall-through; the page
+          // still works for the current session.
+        }
       }
       showNotification({
         type: "success",
