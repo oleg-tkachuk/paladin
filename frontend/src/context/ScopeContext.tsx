@@ -1,29 +1,59 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { ConnectError } from "@connectrpc/connect";
 
 import { DEFAULT_OBJECT_KEY, STORAGE_KEYS } from "@/constants";
+import { tenantClient } from "@/lib/connect/client";
+import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
+import { useAuth } from "@/context/AuthContext";
 
 /**
- * Scope — three soft coordinates that locate the operator inside the
- * control plane. The hard coordinate (Tenant) lives in TenantContext
- * because it gates every RPC via the X-Tenant-ID header; everything
- * else here is opt-in and used by pages that want to share filter
- * state.
+ * ScopeContext — single source of truth for the operator's location
+ * inside the control plane. Merges what used to live in TenantContext
+ * + ScopeContext so consumers only have to learn one hook.
  *
- *   backend     → which storage backend the user is focused on
- *   bucket      → which physical bucket the user is focused on
- *   objectKey   → which ObjectKey namespace the user is browsing
- *                 (used by /objects, sidebar counts, command palette,
- *                 ObjectInspector — single source of truth so the badge
- *                 counts, scope picker, and CommandPalette searches
- *                 always agree)
+ * Hard scope (derived from the JWT, not user-selectable):
+ *   tenantId  → useAuth().user.tenantId — comes from the JWT `tenant`
+ *               claim via WhoAmI, never from localStorage. The 1:1
+ *               user-tenant model means switching tenants requires a
+ *               different login. ListMyMemberships + SwitchTenant on
+ *               the backend would relax that; until then the tenant
+ *               row in <ScopePicker> is read-only.
+ *   tenant    → full record fetched once via TenantService.GetTenant.
  *
- * All three are persisted to localStorage so refresh keeps the user's
- * mental model intact. Pages that don't `useScope()` keep working
- * unchanged.
+ * Soft scope (user-selectable, persisted to localStorage):
+ *   backendId → which storage backend the user is focused on
+ *   bucketName→ which physical bucket the user is focused on (cleared
+ *               when backendId changes — a bucket only makes sense in
+ *               the context of one backend)
+ *   objectKey → which ObjectKey namespace the user is browsing.
+ *               Single source of truth so /objects, sidebar counts,
+ *               CommandPalette searches, and ObjectInspector always
+ *               agree.
+ *
+ * UI bus:
+ *   isPickerOpen / openScopePicker / closeScopePicker — lets
+ *   PageHeader breadcrumb segments and other surfaces trigger the
+ *   shared <ScopePicker> popover without prop-drilling a ref.
+ *
+ * Pages that don't `useScope()` keep working unchanged.
  */
 interface ScopeContextType {
+  // Hard scope (JWT-derived)
+  tenantId: string | null;
+  tenant: Tenant | null;
+  isTenantLoading: boolean;
+  refreshTenant: () => Promise<void>;
+
+  // Soft scope (localStorage-persisted)
   backendId: string | null;
   bucketName: string | null;
   objectKey: string;
@@ -31,12 +61,18 @@ interface ScopeContextType {
   setBucket: (name: string | null) => void;
   setObjectKey: (key: string) => void;
   // setScope writes the backend + bucket pair atomically. Picking a
-  // bucket from the switcher needs this — `setBackend` clears the
+  // bucket from the picker needs this — `setBackend` clears the
   // bucket as a safety net, so calling setBackend(b.backendId) then
   // setBucket(b.bucketName) leaves you with only the bucket in
   // localStorage. Use setScope when you already know the canonical
   // (backend, bucket) pair.
   setScope: (backendId: string | null, bucketName: string | null) => void;
+
+  // UI bus — shared <ScopePicker> open state
+  isPickerOpen: boolean;
+  openScopePicker: () => void;
+  closeScopePicker: () => void;
+  setPickerOpen: (open: boolean) => void;
 }
 
 const ScopeContext = createContext<ScopeContextType | undefined>(undefined);
@@ -47,6 +83,55 @@ const safeRead = (key: string): string | null => {
 };
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
+  // ── Hard scope: tenant from JWT ────────────────────────────────────────
+  const { user, status } = useAuth();
+  const tenantId = user?.tenantId ?? null;
+
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [isTenantLoading, setIsTenantLoading] = useState(false);
+
+  const loadTenant = useCallback(async () => {
+    if (!tenantId) {
+      setTenant(null);
+      return;
+    }
+    setIsTenantLoading(true);
+    try {
+      const fetched = await tenantClient.getTenant({
+        name: `tenants/${tenantId}`,
+      });
+      setTenant(fetched ?? null);
+    } catch (err) {
+      // 404 / NotFound is plausible right after signup or in dev where
+      // the JWT carries a tenant id that doesn't exist yet — log and
+      // move on rather than red-toasting.
+      if (err instanceof ConnectError) {
+        console.warn(
+          `[ScopeContext] getTenant(${tenantId}) failed:`,
+          err.rawMessage,
+        );
+      } else {
+        console.error("[ScopeContext] getTenant failed:", err);
+      }
+      setTenant(null);
+    } finally {
+      setIsTenantLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      setTenant(null);
+      return;
+    }
+    void loadTenant();
+  }, [status, loadTenant]);
+
+  const refreshTenant = useCallback(async () => {
+    await loadTenant();
+  }, [loadTenant]);
+
+  // ── Soft scope: backend / bucket / objectKey ───────────────────────────
   const [backendId, setBackendIdState] = useState<string | null>(() =>
     safeRead(STORAGE_KEYS.scopeBackend),
   );
@@ -88,20 +173,54 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEYS.scopeObjectKey, normalized);
   }, []);
 
+  // ── UI bus ─────────────────────────────────────────────────────────────
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const openScopePicker = useCallback(() => setIsPickerOpen(true), []);
+  const closeScopePicker = useCallback(() => setIsPickerOpen(false), []);
+  const setPickerOpen = useCallback(
+    (open: boolean) => setIsPickerOpen(open),
+    [],
+  );
+
+  const value = useMemo<ScopeContextType>(
+    () => ({
+      tenantId,
+      tenant,
+      isTenantLoading,
+      refreshTenant,
+      backendId,
+      bucketName,
+      objectKey,
+      setBackend,
+      setBucket,
+      setObjectKey,
+      setScope,
+      isPickerOpen,
+      openScopePicker,
+      closeScopePicker,
+      setPickerOpen,
+    }),
+    [
+      tenantId,
+      tenant,
+      isTenantLoading,
+      refreshTenant,
+      backendId,
+      bucketName,
+      objectKey,
+      setBackend,
+      setBucket,
+      setObjectKey,
+      setScope,
+      isPickerOpen,
+      openScopePicker,
+      closeScopePicker,
+      setPickerOpen,
+    ],
+  );
+
   return (
-    <ScopeContext.Provider
-      value={{
-        backendId,
-        bucketName,
-        objectKey,
-        setBackend,
-        setBucket,
-        setObjectKey,
-        setScope,
-      }}
-    >
-      {children}
-    </ScopeContext.Provider>
+    <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>
   );
 }
 

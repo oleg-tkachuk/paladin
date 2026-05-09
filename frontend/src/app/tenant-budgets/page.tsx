@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { tenantBudgetClient } from "@/lib/connect/client";
 import type { TenantBudget } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { cn } from "@/lib/utils";
@@ -73,7 +73,7 @@ function progressColour(spent: number, max: number): string {
 }
 
 export default function TenantBudgetsPage() {
-  const { tenantId, tenant } = useTenant();
+  const { tenantId, tenant } = useScope();
   const { showNotification } = useNotification();
 
   // ── snapshot state ──────────────────────────────────────────────────

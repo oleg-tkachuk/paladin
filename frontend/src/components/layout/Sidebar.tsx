@@ -26,8 +26,6 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
-import { TenantSwitcher } from "./TenantSwitcher";
-import { useTenant } from "@/context/TenantContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebarCounts, SidebarCounts } from "@/hooks/useSidebarCounts";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -186,7 +184,6 @@ function SidebarBody({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { tenantId } = useTenant();
   const { user, logout } = useAuth();
   const counts = useSidebarCounts();
 
@@ -231,12 +228,10 @@ function SidebarBody({
         </Link>
       </div>
 
-      {/* Tenant switcher */}
-      {!collapsed && (
-        <div className="border-b border-sidebar-border">
-          <TenantSwitcher key={tenantId || "loading"} />
-        </div>
-      )}
+      {/* Scope picker now lives in the TopBar (see TopBar.tsx) so the
+          breadcrumb and trigger sit alongside the search and user menu.
+          The sidebar header keeps the tenantId-keyed layout below it
+          intact via `key={tenantId}` on the parent component. */}
 
       {/*
         Navigation. min-h-0 is load-bearing: without it the flex-1 child

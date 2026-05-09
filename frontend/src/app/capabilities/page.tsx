@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -560,7 +560,7 @@ function isExpired(c: Capability): boolean {
 }
 
 export default function CapabilitiesPage() {
-  const { tenantId } = useTenant();
+  const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
   // ── browse filters ──────────────────────────────────────────────────

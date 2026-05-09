@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { apiTokenClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -105,7 +105,7 @@ function isExpired(t: APIToken): boolean {
 }
 
 export default function M2MTokensPage() {
-  const { tenantId } = useTenant();
+  const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
   // ── list state ──────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useObjectKeys } from "@/hooks/useObjectKeys";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
@@ -126,7 +126,7 @@ export default function ObjectKeysPage() {
   } = useObjectKeys();
   const { buckets, fetchBuckets } = useBuckets();
   const { backends: backendRows } = useBackends();
-  const { tenantId, tenant } = useTenant();
+  const { tenantId, tenant } = useScope();
   const { showNotification } = useNotification();
 
   const backends = useMemo(

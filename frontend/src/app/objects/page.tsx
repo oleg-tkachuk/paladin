@@ -14,7 +14,6 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
-import { useTenant } from "@/context/TenantContext";
 import { useActions } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
 import { useObjects } from "@/hooks/useObjects";
@@ -131,7 +130,7 @@ function SortHeader({
 }
 
 function ObjectsPageContent() {
-  useTenant();
+  // (scope is read where needed below via useScope)
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
