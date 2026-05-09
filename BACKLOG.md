@@ -304,6 +304,87 @@ the same commit. Treat this file like a runtime invariant.
   - Integration test using two MinIO instances.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
+### OAuth 2.0 authorization-code flow for MCP clients (Claude Desktop / Cursor / agent hosts)
+
+- **Status:** Deferred
+- **Reason:** Claude Desktop's "Custom Connectors" prefer OAuth
+  authorization-code with PKCE for browser-based consent. PALADIN today
+  authenticates MCP requests with either short-lived JWTs (15m, painful
+  to refresh manually in a Connector form) or long-lived API tokens
+  (paste-once, works fine but lacks browser consent UX). For now the
+  documented Claude Desktop integration uses an API token minted via
+  `APITokenService.Create`; OAuth is the proper-but-deferred path.
+- **Definition of Done:**
+  - **Discovery:** `GET /.well-known/oauth-protected-resource` (RFC
+    9728) on the MCP plane pointing at the auth server, and
+    `GET /.well-known/oauth-authorization-server` (RFC 8414) on the
+    IAM plane listing supported response_types, grant_types, PKCE
+    methods, scopes, token endpoint URL.
+  - **Endpoints (RFC 6749 form-encoded, NOT Connect):**
+    - `GET /oauth/authorize` — reuses existing IAM session (refresh
+      cookie); when not logged in, redirects to `/login?next=...`.
+      Renders a consent screen (frontend route) showing client +
+      requested scopes; POST commits the decision and redirects with
+      `code` to the registered `redirect_uri`.
+    - `POST /oauth/token` — exchanges `code + code_verifier` for an
+      `access_token` (re-using the existing `auth.JWTIssuer` with
+      audience binding) and optionally a `refresh_token`. PKCE S256
+      mandatory for public clients.
+    - `POST /oauth/register` (RFC 7591) — dynamic client registration.
+      Behind a feature flag; first cut can hardcode known clients
+      (`claude-desktop`, `cursor`) in config.
+  - **Storage:**
+    - `oauth_clients` (id, redirect_uris[], allowed_scopes[],
+      secret_hash NULL for public, created_at).
+    - `oauth_authorization_codes` (code_hash PK, client_id, user_id,
+      redirect_uri, code_challenge, scopes[], expires_at <60s,
+      used_at NULL).
+    - `oauth_refresh_tokens` — either new table or extend the
+      existing `refresh_tokens` schema with an `oauth_client_id`
+      column + audience tag.
+    - All on `paladin_app` with RLS keyed on `user_id` / `tenant_id`.
+  - **Consent UI:** new `/oauth/consent` page in
+    `frontend/src/app/oauth/consent/page.tsx` rendering client name,
+    scope list, Allow/Deny buttons; posts the decision back to the
+    backend `/oauth/authorize` endpoint via the existing IAM
+    transport. Localised same as login.
+  - **Audience binding (RFC 8707):** access tokens carry `aud` set
+    to the resource indicator the client requested (e.g.
+    `mcp.paladin.local`); existing JWT verifier on the MCP plane
+    enforces it. No data-plane token usable on admin and vice versa.
+  - **Hardening:**
+    - Codes single-use (mark `used_at` atomically; reject reuse).
+    - Refresh tokens rotated on every grant (RFC 6749 §6).
+    - `client_secret` (when present) hashed with argon2id, like
+      api_tokens.
+    - Rate-limit `/oauth/token` per client_id (re-use the
+      api_token limiter).
+    - CORS on `/oauth/token` for browser-based clients (preflight
+      from Claude Desktop's renderer is acceptable).
+  - **Config block** `oauth: { enabled: bool, dynamic_registration:
+      bool, access_token_ttl, refresh_token_ttl,
+      allowed_redirect_schemes: [https, claude-desktop, cursor] }`.
+  - **Tests:**
+    - Unit: PKCE verifier, code single-use, expiry, audience
+      validation, refresh rotation.
+    - Integration (hurl in `tests/api/e2e/oauth.hurl`): full
+      authorise → token → refresh → revoke loop.
+    - Manual: real Claude Desktop Custom Connector against
+      `paladin.local` end-to-end.
+  - **Cedar gating:** `oauth:authorize` action — admins control
+    which roles can grant which scopes to which clients.
+  - BACKLOG.md entry deleted in the same commit that lands the
+    full Phase-1 slice.
+- **Blockers:**
+  - Decide whether to keep IAM as the auth server or fold it into a
+    federated OIDC IdP (overlaps with the existing
+    `Phase 5b.1 — Drop user-authn IAM, accept OIDC` entry above).
+    Building OAuth here makes the OIDC migration cheaper because
+    the discovery + endpoint shape is mostly the same; choose this
+    deliberately, not by accident.
+  - Consent-screen branding / scope-string copy — needs a product
+    pass before exposing to non-internal Claude Desktop users.
+
 ### `ResetPassword` — email/SSO delivery
 
 - **Status:** Deferred
