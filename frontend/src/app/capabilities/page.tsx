@@ -223,6 +223,62 @@ function ToggleRow({
   );
 }
 
+// LimitInput pairs a numeric input with an "Unlimited" toggle. The
+// previous "0 = unlimited" placeholder convention misread as
+// "0 = forbidden / nothing allowed" — exactly the opposite of the
+// protocol's intent. Now the toggle is the explicit unlimited
+// signal: when on, the input is disabled (grey, empty, ignored at
+// submit), the wire value is 0; when off, the input must hold a
+// positive number or submit is blocked. Internal protocol unchanged.
+function LimitInput({
+  id,
+  value,
+  onChange,
+  unlimited,
+  onUnlimitedChange,
+  placeholder,
+  type = "number",
+  step,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  unlimited: boolean;
+  onUnlimitedChange: (next: boolean) => void;
+  placeholder?: string;
+  type?: string;
+  step?: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        id={id}
+        type={type}
+        step={step}
+        min={0}
+        value={unlimited ? "" : value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={unlimited}
+        placeholder={unlimited ? "Unlimited" : placeholder}
+        className={cn(unlimited && "italic")}
+      />
+      <button
+        type="button"
+        onClick={() => onUnlimitedChange(!unlimited)}
+        aria-pressed={unlimited}
+        className={cn(
+          "shrink-0 rounded-md border px-2.5 py-1 text-xs transition-colors",
+          unlimited
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-input bg-background hover:bg-muted",
+        )}
+      >
+        Unlimited
+      </button>
+    </div>
+  );
+}
+
 // DetailsBody renders every field of a Capability in a stacked
 // label/value layout. Long mono strings (id, parent_id, prefixes)
 // `break-all` so the dialog doesn't blow out horizontally on UUIDs.
@@ -604,8 +660,19 @@ export default function CapabilitiesPage() {
     [],
   );
   const [issueSourceCidr, setIssueSourceCidr] = useState<string[]>([]);
+  // Quotas have an explicit "Unlimited" toggle rather than the
+  // "0 = unlimited" placeholder convention. The protocol still uses 0
+  // to mean "no cap" (see internal/capability/types.go.Caveats), but
+  // surfacing 0 in a number input reads as "forbidden / nothing
+  // allowed" — exactly the opposite. The toggle disables the input
+  // and submits 0 on the wire; toggling off requires a positive
+  // number. Default ON so the previous "leave it blank to skip"
+  // ergonomics still work.
   const [issueMaxRequests, setIssueMaxRequests] = useState("");
+  const [issueMaxRequestsUnlimited, setIssueMaxRequestsUnlimited] =
+    useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
+  const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
 
@@ -624,7 +691,9 @@ export default function CapabilitiesPage() {
     setIssueResourcePrefixes([]);
     setIssueSourceCidr([]);
     setIssueMaxRequests("");
+    setIssueMaxRequestsUnlimited(true);
     setIssueMaxBudget("");
+    setIssueMaxBudgetUnlimited(true);
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -660,10 +729,37 @@ export default function CapabilitiesPage() {
     // focus loss), so this is belt-and-braces — duplicates filtered.
     const prefixes = issueResourcePrefixes;
     const cidrs = issueSourceCidr;
-    const maxRequests = issueMaxRequests
-      ? Number.parseInt(issueMaxRequests, 10)
-      : 0;
-    const maxBudget = issueMaxBudget ? Number.parseFloat(issueMaxBudget) : 0;
+    // Unlimited toggle wins: protocol's 0 = "no cap". When the toggle
+    // is off the user must have entered a positive number — block
+    // submit otherwise so the dialog never silently sends 0 = forbid.
+    const maxRequests = issueMaxRequestsUnlimited
+      ? 0
+      : Number.parseInt(issueMaxRequests, 10);
+    const maxBudget = issueMaxBudgetUnlimited
+      ? 0
+      : Number.parseFloat(issueMaxBudget);
+    if (
+      !issueMaxRequestsUnlimited &&
+      (!Number.isFinite(maxRequests) || maxRequests <= 0)
+    ) {
+      showNotification({
+        type: "error",
+        title: "Validation",
+        message: "Max requests must be a positive number, or toggle Unlimited.",
+      });
+      return;
+    }
+    if (
+      !issueMaxBudgetUnlimited &&
+      (!Number.isFinite(maxBudget) || maxBudget <= 0)
+    ) {
+      showNotification({
+        type: "error",
+        title: "Validation",
+        message: "Max budget must be a positive number, or toggle Unlimited.",
+      });
+      return;
+    }
 
     setIssuing(true);
     try {
@@ -678,8 +774,10 @@ export default function CapabilitiesPage() {
           ops: Array.from(issueOps),
           resourcePrefixes: prefixes,
           resourceUris: [],
-          maxRequests: Number.isFinite(maxRequests) ? maxRequests : 0,
-          maxBudgetUsd: Number.isFinite(maxBudget) ? maxBudget : 0,
+          // Validation above guarantees these are sane: either
+          // explicitly toggled unlimited (→ 0) or a finite > 0.
+          maxRequests,
+          maxBudgetUsd: maxBudget,
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
           sourceIpCidr: cidrs,
@@ -1187,7 +1285,11 @@ export default function CapabilitiesPage() {
                     stable identity string the verifier sees in the
                     `sub` JWT claim. */}
                 <FormSection title="Principal">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr]">
+                  {/* Kind values are short ("user" / "agent" /
+                      "service") — a 180px column was 90% empty.
+                      Tighten to 140px so Subject (which holds long
+                      free-form names) gets the headroom it needs. */}
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[140px_1fr]">
                     <Field label="Kind">
                       <Select
                         options={PRINCIPAL_KIND_OPTIONS}
@@ -1248,10 +1350,13 @@ export default function CapabilitiesPage() {
                     Both fields use ChipInput so the parsed token list
                     is always visible — no surprise comma parsing. */}
                 <FormSection title="Restrictions">
-                  {/* Side-by-side — both fields are typically empty,
-                      so two narrow chip inputs read better than one
-                      wide stack with three lines of dead space. */}
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {/* Asymmetric grid: Resource prefixes hold long
+                      paths (object keys, bucket prefixes, often
+                      40+ chars) and need ~2/3 of the row. Source IP
+                      CIDR strings are short (e.g. 10.0.0.0/8 — 10
+                      chars) and fit comfortably in the remaining 1/3.
+                      A 50/50 split squeezed prefixes too tight. */}
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr]">
                     <Field
                       label="Resource prefixes"
                       optional
@@ -1288,24 +1393,25 @@ export default function CapabilitiesPage() {
                 <FormSection title="Limits">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <Field label="Max requests" htmlFor="cap-maxreq">
-                      <Input
+                      <LimitInput
                         id="cap-maxreq"
-                        type="number"
-                        min={0}
-                        placeholder="0 = unlimited"
                         value={issueMaxRequests}
-                        onChange={(e) => setIssueMaxRequests(e.target.value)}
+                        onChange={setIssueMaxRequests}
+                        unlimited={issueMaxRequestsUnlimited}
+                        onUnlimitedChange={setIssueMaxRequestsUnlimited}
+                        placeholder="e.g. 1000"
                       />
                     </Field>
                     <Field label="Max budget USD" htmlFor="cap-maxbudget">
-                      <Input
+                      <LimitInput
                         id="cap-maxbudget"
                         type="number"
                         step="0.01"
-                        min={0}
-                        placeholder="0 = unlimited"
                         value={issueMaxBudget}
-                        onChange={(e) => setIssueMaxBudget(e.target.value)}
+                        onChange={setIssueMaxBudget}
+                        unlimited={issueMaxBudgetUnlimited}
+                        onUnlimitedChange={setIssueMaxBudgetUnlimited}
+                        placeholder="e.g. 25.00"
                       />
                     </Field>
                     <Field label="TTL">
