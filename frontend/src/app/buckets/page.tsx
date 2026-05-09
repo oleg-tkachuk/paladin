@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
@@ -8,6 +9,7 @@ import {
   ArrowsUpDownIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  ClockIcon,
   EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
   PlusIcon,
@@ -424,6 +426,14 @@ export default function BucketsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link
+                            href={`/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketName)}/lifecycle`}
+                          >
+                            <ClockIcon className="size-4" />
+                            Lifecycle rules
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
                           onSelect={() => setDeleteTarget(b)}
