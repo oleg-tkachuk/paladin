@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ChipInput } from "@/components/ui/ChipInput";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
@@ -122,6 +124,101 @@ function formatTimestamp(ts: { seconds: bigint } | undefined): string {
   } catch {
     return "—";
   }
+}
+
+// ─── Issue-dialog layout helpers ───────────────────────────────────────────
+
+// FormSection groups related fields under a small heading so the
+// dialog reads as four distinct beats (Principal → Authorization →
+// Restrictions → Limits) rather than a flat 7-field stack.
+function FormSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+// Field is one labelled control. `optional` flag drops a low-contrast
+// "(optional)" tag next to the label so we don't have to bake the
+// hint into the label string itself; `hint` renders below the control
+// in muted small text.
+function Field({
+  label,
+  htmlFor,
+  optional,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  optional?: boolean;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor} className="text-xs">
+        {label}
+        {optional && (
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            (optional)
+          </span>
+        )}
+      </Label>
+      {children}
+      {hint && <p className={T.hint}>{hint}</p>}
+    </div>
+  );
+}
+
+// ToggleRow renders a horizontal row of pill-buttons for multi-select
+// enums. Replaces the previous bare-checkbox-with-label pattern: the
+// active state is now obvious (filled background) without relying on
+// a tiny native checkbox to read the truth, and keyboard activation
+// works through standard button semantics (Enter / Space) without us
+// re-implementing it.
+function ToggleRow({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: readonly string[];
+  selected: Set<string>;
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = selected.has(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onToggle(opt)}
+            aria-pressed={active}
+            className={cn(
+              "rounded-md border px-2.5 py-1 font-mono text-xs transition-colors",
+              active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-input bg-background hover:bg-muted",
+            )}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function isExpired(c: Capability): boolean {
@@ -240,10 +337,16 @@ export default function CapabilitiesPage() {
   const [issueAudience, setIssueAudience] = useState<Set<string>>(
     new Set(["data"]),
   );
-  const [issueResourcePrefixes, setIssueResourcePrefixes] = useState("");
+  // Chip-typed lists rather than free-text strings — the ChipInput
+  // commits one trimmed, deduped token per Enter / comma / space, so
+  // the state shape matches the API shape and there's no submit-time
+  // parse step to get wrong.
+  const [issueResourcePrefixes, setIssueResourcePrefixes] = useState<string[]>(
+    [],
+  );
+  const [issueSourceCidr, setIssueSourceCidr] = useState<string[]>([]);
   const [issueMaxRequests, setIssueMaxRequests] = useState("");
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
-  const [issueSourceCidr, setIssueSourceCidr] = useState("");
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
 
@@ -259,10 +362,10 @@ export default function CapabilitiesPage() {
     setIssuePrincipalKind(String(PrincipalKind.AGENT));
     setIssueOps(new Set(["get", "list"]));
     setIssueAudience(new Set(["data"]));
-    setIssueResourcePrefixes("");
+    setIssueResourcePrefixes([]);
+    setIssueSourceCidr([]);
     setIssueMaxRequests("");
     setIssueMaxBudget("");
-    setIssueSourceCidr("");
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -291,14 +394,13 @@ export default function CapabilitiesPage() {
       return;
     }
     const ttlSeconds = TTL_OPTIONS.find((o) => o.value === issueTtl)?.seconds;
-    const prefixes = issueResourcePrefixes
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const cidrs = issueSourceCidr
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // ChipInput already trimmed/deduped, but mirror the same flatten
+    // here so a user who types into the input and submits without
+    // pressing Enter still has their pending draft included. The
+    // ChipInput commits on blur (which form submission triggers via
+    // focus loss), so this is belt-and-braces — duplicates filtered.
+    const prefixes = issueResourcePrefixes;
+    const cidrs = issueSourceCidr;
     const maxRequests = issueMaxRequests
       ? Number.parseInt(issueMaxRequests, 10)
       : 0;
@@ -777,160 +879,139 @@ export default function CapabilitiesPage() {
                   enforced server-side on every RPC.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                {/* Principal */}
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr]">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Principal kind</Label>
-                    <Select
-                      options={PRINCIPAL_KIND_OPTIONS}
-                      value={issuePrincipalKind}
-                      onChange={setIssuePrincipalKind}
-                      className="w-full"
-                    />
+              <div className="space-y-5 py-4">
+                {/* ─── Principal ─────────────────────────────────────
+                    Who the capability is issued to. Subject is the
+                    stable identity string the verifier sees in the
+                    `sub` JWT claim. */}
+                <FormSection title="Principal">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr]">
+                    <Field label="Kind">
+                      <Select
+                        options={PRINCIPAL_KIND_OPTIONS}
+                        value={issuePrincipalKind}
+                        onChange={setIssuePrincipalKind}
+                        className="w-full"
+                      />
+                    </Field>
+                    <Field label="Subject" htmlFor="cap-issue-subj">
+                      <Input
+                        id="cap-issue-subj"
+                        autoFocus
+                        placeholder="agent-id / user subject / service-account name"
+                        value={issueSubject}
+                        onChange={(e) => setIssueSubject(e.target.value)}
+                      />
+                    </Field>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs" htmlFor="cap-issue-subj">
-                      Subject
-                    </Label>
-                    <Input
-                      id="cap-issue-subj"
-                      autoFocus
-                      placeholder="agent-id / user subject / service-account name"
-                      value={issueSubject}
-                      onChange={(e) => setIssueSubject(e.target.value)}
-                    />
-                  </div>
-                </div>
+                </FormSection>
 
-                {/* Ops */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Allowed ops</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {OP_CHOICES.map((op) => (
-                      <label
-                        key={op}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-                          issueOps.has(op)
-                            ? "border-primary bg-primary/10"
-                            : "border-input",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={issueOps.has(op)}
-                          onChange={() =>
-                            toggleSetEntry(setIssueOps, issueOps, op)
-                          }
-                          className="size-3 accent-primary"
-                        />
-                        <span className="font-mono">{op}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                <Separator />
 
-                {/* Audience */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Audience (planes)</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {AUDIENCE_CHOICES.map((aud) => (
-                      <label
-                        key={aud}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-                          issueAudience.has(aud)
-                            ? "border-primary bg-primary/10"
-                            : "border-input",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={issueAudience.has(aud)}
-                          onChange={() =>
-                            toggleSetEntry(setIssueAudience, issueAudience, aud)
-                          }
-                          className="size-3 accent-primary"
-                        />
-                        <span className="font-mono">{aud}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Resource prefixes */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs" htmlFor="cap-prefix">
-                    Resource prefixes (optional)
-                  </Label>
-                  <Input
-                    id="cap-prefix"
-                    placeholder="objects/contracts/2026/, buckets/acme-prod"
-                    value={issueResourcePrefixes}
-                    onChange={(e) => setIssueResourcePrefixes(e.target.value)}
-                  />
-                  <p className={T.hint}>
-                    Comma- or space-separated. Empty means &ldquo;no prefix
-                    restriction&rdquo;.
-                  </p>
-                </div>
-
-                {/* Quotas + CIDR */}
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs" htmlFor="cap-maxreq">
-                      Max requests
-                    </Label>
-                    <Input
-                      id="cap-maxreq"
-                      type="number"
-                      min={0}
-                      placeholder="0 = unlimited"
-                      value={issueMaxRequests}
-                      onChange={(e) => setIssueMaxRequests(e.target.value)}
+                {/* ─── Authorization ─────────────────────────────────
+                    What the capability is allowed to do, on which
+                    planes. Both lists are required (verifier rejects
+                    capabilities with empty `ops` or `aud`). */}
+                <FormSection title="Authorization">
+                  <Field label="Allowed ops" hint="At least one required.">
+                    <ToggleRow
+                      options={OP_CHOICES}
+                      selected={issueOps}
+                      onToggle={(v) => toggleSetEntry(setIssueOps, issueOps, v)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs" htmlFor="cap-maxbudget">
-                      Max budget USD
-                    </Label>
-                    <Input
-                      id="cap-maxbudget"
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      placeholder="0 = unlimited"
-                      value={issueMaxBudget}
-                      onChange={(e) => setIssueMaxBudget(e.target.value)}
+                  </Field>
+                  <Field
+                    label="Audience (planes)"
+                    hint="Which PALADIN planes accept this token."
+                  >
+                    <ToggleRow
+                      options={AUDIENCE_CHOICES}
+                      selected={issueAudience}
+                      onToggle={(v) =>
+                        toggleSetEntry(setIssueAudience, issueAudience, v)
+                      }
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">TTL</Label>
-                    <Select
-                      options={TTL_OPTIONS.map((o) => ({
-                        value: o.value,
-                        label: o.label,
-                      }))}
-                      value={issueTtl}
-                      onChange={setIssueTtl}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
+                  </Field>
+                </FormSection>
 
-                {/* CIDR */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs" htmlFor="cap-cidr">
-                    Source IP CIDR (optional)
-                  </Label>
-                  <Input
-                    id="cap-cidr"
-                    placeholder="10.0.0.0/8, 192.168.1.0/24"
-                    value={issueSourceCidr}
-                    onChange={(e) => setIssueSourceCidr(e.target.value)}
-                  />
-                </div>
+                <Separator />
+
+                {/* ─── Restrictions ──────────────────────────────────
+                    Optional caveats narrowing where the capability
+                    can be used. Empty = unrestricted on that axis.
+                    Both fields use ChipInput so the parsed token list
+                    is always visible — no surprise comma parsing. */}
+                <FormSection title="Restrictions">
+                  <Field
+                    label="Resource prefixes"
+                    optional
+                    htmlFor="cap-prefix"
+                    hint="Press Enter, comma, or space to add. Empty = no prefix restriction."
+                  >
+                    <ChipInput
+                      id="cap-prefix"
+                      values={issueResourcePrefixes}
+                      onChange={setIssueResourcePrefixes}
+                      placeholder="objects/contracts/2026/  buckets/acme-prod"
+                    />
+                  </Field>
+                  <Field
+                    label="Source IP CIDR"
+                    optional
+                    htmlFor="cap-cidr"
+                    hint="Restrict to clients whose observed IP is in one of these ranges."
+                  >
+                    <ChipInput
+                      id="cap-cidr"
+                      values={issueSourceCidr}
+                      onChange={setIssueSourceCidr}
+                      placeholder="10.0.0.0/8  192.168.1.0/24"
+                    />
+                  </Field>
+                </FormSection>
+
+                <Separator />
+
+                {/* ─── Limits ────────────────────────────────────────
+                    Per-capability quotas + lifetime. 0 = unlimited
+                    where applicable. TTL is selected from a curated
+                    list to discourage long-lived agent tokens. */}
+                <FormSection title="Limits">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <Field label="Max requests" htmlFor="cap-maxreq">
+                      <Input
+                        id="cap-maxreq"
+                        type="number"
+                        min={0}
+                        placeholder="0 = unlimited"
+                        value={issueMaxRequests}
+                        onChange={(e) => setIssueMaxRequests(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Max budget USD" htmlFor="cap-maxbudget">
+                      <Input
+                        id="cap-maxbudget"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        placeholder="0 = unlimited"
+                        value={issueMaxBudget}
+                        onChange={(e) => setIssueMaxBudget(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="TTL">
+                      <Select
+                        options={TTL_OPTIONS.map((o) => ({
+                          value: o.value,
+                          label: o.label,
+                        }))}
+                        value={issueTtl}
+                        onChange={setIssueTtl}
+                        className="w-full"
+                      />
+                    </Field>
+                  </div>
+                </FormSection>
               </div>
               <DialogFooter>
                 <Button
