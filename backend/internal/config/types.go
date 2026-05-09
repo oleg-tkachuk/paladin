@@ -246,31 +246,13 @@ type Security struct {
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
 
-	// EnableRLS installs the pgx BeforeAcquire / AfterRelease hooks
-	// (internal/store/postgres/rls.go) that stamp / wipe the
-	// `paladin.tenant_id` GUC per connection. Per-table RLS policies
-	// (migrations/023_rls.sql) key on this GUC; together they give
-	// us closed-by-default tenant isolation at the DB layer.
-	//
-	// MUST be true on any deploy where migration 023 has run. The
-	// migration enables RLS on `objects`, `object_tags`, `quotas`,
-	// etc. unconditionally — there is no DB-side toggle. The runtime
-	// DSN connects as `paladin_app`, which is NOBYPASSRLS by design (the
-	// security primitive is "app-layer Cedar + DB-layer RLS"). With
-	// EnableRLS=false, paladin.tenant_id is never set, every policy
-	// returns false on WITH CHECK, and every INSERT fails with
-	// 'new row violates row-level security policy' (SQLSTATE 42501).
-	//
-	// The historical "disabled by default" stance was a footgun: it
-	// only worked when the runtime role had BYPASSRLS, which defeats
-	// the whole point. Default is now true; flipping it false is
-	// only correct if migration 023 has been rolled back.
-	//
-	// Worker / migrate / bootstrap paths bypass RLS via the
-	// BYPASSRLS attribute on `paladin_migrate` (granted in
-	// migrations/023_rls.sql). They run cross-tenant by design and
-	// don't need the GUC.
-	EnableRLS bool `yaml:"enable_rls" json:"enable_rls"`
+	// RLS is intentionally not configurable here. Migration 023
+	// enables per-table policies unconditionally; the runtime always
+	// installs the BeforeAcquire hook that stamps paladin.tenant_id GUC
+	// (cmd/server/common.go). Operator-visible knob would only
+	// surface a footgun (every "off" position breaks writes since
+	// paladin_app is NOBYPASSRLS by design). See migrations/023_rls.sql
+	// for the full role + policy matrix.
 }
 
 // Bootstrap groups one-shot startup steps that prepare the cluster for

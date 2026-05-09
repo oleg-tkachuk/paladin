@@ -66,12 +66,17 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 	}
 	logger.ReplaceGlobals(l)
 
-	var pgOpts []postgres.Option
-	if cfg.Security.EnableRLS {
-		pgOpts = append(pgOpts, postgres.WithRLS())
-		l.Info("postgres: RLS enabled (defence-in-depth tenant isolation)")
-	}
-	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"), pgOpts...)
+	// RLS is non-optional. Migration 023 enables per-table policies
+	// unconditionally and the runtime DSN connects as paladin_app
+	// (NOBYPASSRLS), so the BeforeAcquire hook that stamps
+	// paladin.tenant_id is the only place tenant context reaches the
+	// session GUC. Without it, every INSERT fails 'new row violates
+	// row-level security policy'. The hook is microseconds per
+	// connection acquire — there is no operator-meaningful reason
+	// to ever disable it. Worker / migrate paths that legitimately
+	// span tenants run as paladin_migrate (BYPASSRLS), so the hook is
+	// a no-op for them at the policy level.
+	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"), postgres.WithRLS())
 	if err != nil {
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}
