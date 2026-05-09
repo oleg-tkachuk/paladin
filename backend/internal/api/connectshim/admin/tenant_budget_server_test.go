@@ -24,7 +24,7 @@ type fakeUsageStore struct {
 func (f *fakeUsageStore) BumpRequest(context.Context, uuid.UUID, int64) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID) (float64, error) {
+func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID, string, string) (float64, error) {
 	return 0, errors.New("not used")
 }
 func (f *fakeUsageStore) RefundCapability(context.Context, uuid.UUID, float64) error {

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -34,13 +35,18 @@ import (
 //     invalidate. The caveats themselves live in the JWT claim set;
 //     the row just tracks accumulated usage.
 type UsageStore struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool // optional; nil disables charges-ledger writes
 }
 
 // NewUsageStore wires the sqlc-generated queries to the
-// capability.UsageStore interface.
-func NewUsageStore(q *sqlc.Queries) *UsageStore {
-	return &UsageStore{q: q}
+// capability.UsageStore interface. pool is optional — when nil, the
+// charges-ledger row insert is skipped (useful for tests that want
+// to exercise the in-memory bookkeeping without a real DB). In
+// production it must be non-nil so the BillingService surface has
+// a time-series source of truth.
+func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool) *UsageStore {
+	return &UsageStore{q: q, pool: pool}
 }
 
 // BumpRequest implements capability.UsageStore.
@@ -88,6 +94,8 @@ func (s *UsageStore) Charge(
 	amount, maxBudget float64,
 	unitCode string,
 	tenantID uuid.UUID,
+	op string,
+	actor string,
 ) (float64, error) {
 	if amount < 0 {
 		return 0, errors.New("capability/postgres: charge amount must be >= 0")
@@ -119,6 +127,9 @@ func (s *UsageStore) Charge(
 	}
 
 	if tenantID == uuid.Nil {
+		// No tenant aggregate path → no ledger row (the charges
+		// table requires a tenant_id; charges without one wouldn't
+		// surface in the per-tenant billing UI anyway).
 		return floatFromNumeric(spent), nil
 	}
 
@@ -141,6 +152,22 @@ func (s *UsageStore) Charge(
 			return 0, capability.ErrTenantBudgetExceeded
 		}
 		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
+	}
+
+	// Ledger row — best-effort. Both running totals already
+	// committed; a ledger-write failure is logged but does NOT
+	// reverse the spend (the running totals are the enforcement
+	// surface, the ledger is the time-series surface). If pool is
+	// nil the writer is disabled (test path).
+	if s.pool != nil {
+		ledgerID := uuid.New()
+		if _, lErr := s.pool.Exec(ctx,
+			`INSERT INTO charges (id, tenant_id, capability_id, amount, unit_code, op, actor_subject)
+			 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7)`,
+			ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
+		); lErr != nil {
+			return 0, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+		}
 	}
 	return floatFromNumeric(spent), nil
 }

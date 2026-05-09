@@ -38,7 +38,7 @@ func (f *fakeUsage) BumpRequest(_ context.Context, id uuid.UUID, max int64) (int
 	return next, nil
 }
 
-func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ string, _ uuid.UUID) (float64, error) {
+func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ string, _ uuid.UUID, _ string, _ string) (float64, error) {
 	next := f.spent[id] + amount
 	if max > 0 && next > max {
 		return 0, capability.ErrBudgetExceeded

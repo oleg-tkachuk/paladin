@@ -53,12 +53,21 @@ type UsageStore interface {
 	// the handler layer before reaching the store.
 	//
 	// tenantID == uuid.Nil disables the tenant-aggregate path.
+	//
+	// op + actor are stamped onto the charges-ledger row (migration
+	// 027). Both are best-effort — empty strings are accepted when
+	// the caller cannot derive them (e.g. ChargeRequest at the
+	// interceptor layer doesn't know the per-handler op). They are
+	// NOT used for any enforcement decision; they only enrich the
+	// time-series surface that BillingService renders.
 	Charge(
 		ctx context.Context,
 		capID uuid.UUID,
 		amount, maxBudget float64,
 		unitCode string,
 		tenantID uuid.UUID,
+		op string,
+		actor string,
 	) (newSpent float64, err error)
 
 	// RefundCapability subtracts amount from the per-capability

@@ -398,7 +398,14 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		resolvedUnit = capability.DefaultUnitCode
 	}
 	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
-	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID)
+	// op + actor populate the charges ledger row (migration 027).
+	// op is left empty here — handler-side hooks know the op and
+	// could pass it via a future ChargeCapabilityWithOp variant; for
+	// now the per-request auto-charge can't fabricate one.
+	// TODO(billing): plumb the per-handler op into ChargeCapability.
+	op := ""
+	actor := cap.Subject.Subject
+	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor)
 	if err != nil {
 		if errors.Is(err, capability.ErrBudgetExceeded) ||
 			errors.Is(err, capability.ErrTenantBudgetExceeded) {

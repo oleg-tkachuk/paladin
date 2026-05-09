@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// BillingService surfaces per-tenant capability spend over the
+// charges ledger (migration 027). Distinct from TenantBudgetService —
+// that one manages the cap; this one renders the spend.
+//
+// Authorization: platform-admin / tenant-admin only. Cedar action
+// `ReadBilling` on the tenant resource gates every RPC.
+service BillingService {
+  // GetTenantSummary returns aggregate spend + top-N breakdowns for
+  // the supplied period. Defaults to last 30 days when period_start
+  // / period_end are unset.
+  rpc GetTenantSummary(GetTenantSummaryRequest) returns (GetTenantSummaryResponse);
+
+  // GetTenantTimeSeries returns time-bucketed spend for a chart.
+  // granularity ∈ {hour, day, week} — server validates.
+  rpc GetTenantTimeSeries(GetTenantTimeSeriesRequest) returns (GetTenantTimeSeriesResponse);
+}
+
+message GetTenantSummaryRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+}
+
+message GetTenantSummaryResponse {
+  // total_amount is the sum of charges.amount over the period.
+  double total_amount = 1;
+  // unit_code mirrors the tenant's pinned unit_code (or USD default).
+  // Mixed-unit periods collapse to whichever unit dominates the row
+  // count — non-issue today (no FX), audit-exposed for the future.
+  string unit_code = 2;
+  // max_budget_amount is the tenant_budgets cap, copied for UI
+  // convenience so the frontend doesn't need a second RPC.
+  double max_budget_amount = 3;
+  repeated TopEntry top_capabilities = 4;
+  repeated TopEntry top_actors = 5;
+  repeated TopEntry top_ops = 6;
+  int64 charge_count = 7;
+}
+
+message TopEntry {
+  // label is the capability_id / actor_subject / op string,
+  // depending on which list this entry belongs to.
+  string label = 1;
+  double amount = 2;
+  int64 charge_count = 3;
+}
+
+message GetTenantTimeSeriesRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  // granularity ∈ {hour, day, week}. Server rejects others with
+  // InvalidArgument.
+  string granularity = 4;
+}
+
+message GetTenantTimeSeriesResponse {
+  repeated TimeBucket buckets = 1;
+  string unit_code = 2;
+}
+
+message TimeBucket {
+  google.protobuf.Timestamp start = 1;
+  double amount = 2;
+  int64 charge_count = 3;
+}

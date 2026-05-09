@@ -104,6 +104,7 @@ const navigationGroups: Array<{
       },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
       { name: "Tenant Budgets", path: "/tenant-budgets", icon: BanknotesIcon },
+      { name: "Billing", path: "/billing", icon: BoltIcon },
     ],
   },
   {

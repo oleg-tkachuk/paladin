@@ -60,8 +60,10 @@ func (s *MeteringStore) Charge(
 	amount, maxBudget float64,
 	unitCode string,
 	tenantID uuid.UUID,
+	op string,
+	actor string,
 ) (float64, error) {
-	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID)
+	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID, op, actor)
 	switch {
 	case err == nil:
 		recordChargeAttempt(ctx, tenantID, amount, spent, "allowed")

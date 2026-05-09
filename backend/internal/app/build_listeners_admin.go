@@ -9,6 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
@@ -137,6 +138,16 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		}
 		mux.Handle(paladinadminv1connect.NewTenantBudgetServiceHandler(
 			admin.NewTenantBudgetServer(usageStore), adminOpts,
+		))
+		// BillingService — read-only aggregation over the charges
+		// ledger (migration 027). Only mounted with a real handler
+		// when the capability subsystem is wired (pool + usage).
+		var billingHandler *billingh.Handler
+		if deps.Capability != nil {
+			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine)
+		}
+		mux.Handle(paladinadminv1connect.NewBillingServiceHandler(
+			admin.NewBillingServer(billingHandler), adminOpts,
 		))
 	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
