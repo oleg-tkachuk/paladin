@@ -437,14 +437,29 @@ export function ObjectDetailView({
               <p className={T.hint}>No tags assigned.</p>
             )}
           </Card>
+        </div>
 
-          {/* Identifiers */}
+        {/* ─── Sidebar ─────────────────────────────────────────────
+            Single facts card. Was previously split into "Identifiers"
+            (main column) + "Specs" (sidebar) but the two cards
+            duplicated three rows: Object Key appeared in both
+            (once as "Object Key" plain mono, once as "Storage
+            ObjectKey" link), Storage Path lived only in Identifiers,
+            Object UUID lived only in Identifiers. Folded them all
+            into the sidebar in canonical order — identifiers first
+            (UUID, path, key-link), then physical attributes (size,
+            type, state, tag), then lifecycle (expires, external
+            ref). Picks the more useful presentation per duplicate:
+            object.objectKey renders as a link to /object-keys/<n>
+            rather than plain mono. Drops the plain "Object Key" row
+            and the standalone Identifiers card. ──────────────── */}
+        <aside className="space-y-4">
           <Card className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold">Identifiers</h2>
+            <h2 className="text-sm font-semibold">Specs</h2>
             <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
               <dt className="text-muted-foreground">Object UUID</dt>
-              <dd className="flex items-center gap-2">
-                <span className="break-all font-mono text-xs">
+              <dd className="flex items-center gap-2 min-w-0">
+                <span className="truncate font-mono text-xs">
                   {object.objectId || objectKey}
                 </span>
                 <IdentifierCopy
@@ -455,8 +470,8 @@ export function ObjectDetailView({
               </dd>
 
               <dt className="text-muted-foreground">Storage Path</dt>
-              <dd className="flex items-center gap-2">
-                <span className="break-all font-mono text-xs">
+              <dd className="flex items-center gap-2 min-w-0">
+                <span className="truncate font-mono text-xs" title={object.key}>
                   {object.key}
                 </span>
                 <Button
@@ -470,19 +485,6 @@ export function ObjectDetailView({
               </dd>
 
               <dt className="text-muted-foreground">Object Key</dt>
-              <dd className="break-all font-mono text-xs">
-                {object.objectKey}
-              </dd>
-            </dl>
-          </Card>
-        </div>
-
-        {/* ─── Sidebar ───────────────────────────────────────────── */}
-        <aside className="space-y-4">
-          <Card className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold">Specs</h2>
-            <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
-              <dt className="text-muted-foreground">Storage ObjectKey</dt>
               <dd>
                 <Link
                   href={`/object-keys/${object.objectKey}`}
