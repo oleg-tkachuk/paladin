@@ -431,13 +431,20 @@ export default function CapabilitiesPage() {
         token: res.token,
         capabilityId: res.capability?.id ?? "",
       });
-      // Optimistically prepend if the current browse filter matches.
-      if (
-        res.capability &&
-        Number(principalKind) === Number(issuePrincipalKind) &&
-        subject.trim() === issueSubject.trim()
-      ) {
-        setItems((prev) => [res.capability!, ...prev]);
+      // Sync the browse filter to the just-issued (kind, subject) so
+      // the list the user lands on after closing the reveal panel
+      // shows the capability they just minted. Without this, the
+      // page typically shows an empty list because List is
+      // principal-scoped — the user has to manually retype the
+      // subject they just typed in the Issue form to see anything.
+      // We also seed `items` with the freshly returned capability so
+      // the list is non-empty during the moment between dialog close
+      // and the post-close fetchList completing.
+      if (res.capability) {
+        setPrincipalKind(issuePrincipalKind);
+        setSubject(issueSubject.trim());
+        setItems([res.capability]);
+        setHasFetched(true);
       }
       showNotification({
         type: "success",
