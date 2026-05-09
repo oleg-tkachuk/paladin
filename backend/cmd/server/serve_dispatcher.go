@@ -58,7 +58,23 @@ var serveDispatcherCmd = &cobra.Command{
 
 		dispatcherPool := deps.Pool
 		if cfg.Datastores.Postgres.MigrateDSN != "" {
-			pool, err := newDispatcherPool(ctx, cfg.Datastores.Postgres.MigrateDSN, l)
+			// Pass MigratePassword explicitly — the runtime path
+			// (postgres.New for the deps.Pool) injects cfg.Password
+			// into pgxpool.ConnConfig.Password after parse, since the
+			// resolver populates the field from migrate_password_secret
+			// at boot. The dispatcher's pool needs the same treatment
+			// or pgx falls back to no-password and SASL fails with
+			// 28P01. Symptom before this fix: outbox loop spammed
+			// "failed SASL auth: FATAL: password authentication
+			// failed for user paladin_migrate" every poll_interval, and
+			// /readyz flipped to 503 because the outbox health check
+			// also can't acquire a connection.
+			pool, err := newDispatcherPool(
+				ctx,
+				cfg.Datastores.Postgres.MigrateDSN,
+				cfg.Datastores.Postgres.MigratePassword,
+				l,
+			)
 			if err != nil {
 				l.Fatal("failed to open dispatcher pool", zap.Error(err))
 			}
@@ -131,10 +147,19 @@ var serveDispatcherCmd = &cobra.Command{
 // newDispatcherPool opens a minimal pgxpool aimed at the dispatcher's
 // outbox loop. Skips the RLS BeforeAcquire / AfterRelease hooks — the
 // loop legitimately spans tenants and the MigrateDSN role is BYPASSRLS.
-func newDispatcherPool(ctx context.Context, dsn string, l *zap.Logger) (*pgxpool.Pool, error) {
+//
+// `password` is the secret-resolved migrate password (populated at
+// config-load time from migrate_password_secret). When non-empty it
+// overrides whatever the DSN string carries — production deploys
+// keep the DDL credential out of the YAML in a Kubernetes Secret,
+// so the DSN never has the password embedded.
+func newDispatcherPool(ctx context.Context, dsn, password string, l *zap.Logger) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse migrate_dsn: %w", err)
+	}
+	if password != "" {
+		cfg.ConnConfig.Password = password
 	}
 	if cfg.ConnConfig.RuntimeParams == nil {
 		cfg.ConnConfig.RuntimeParams = map[string]string{}

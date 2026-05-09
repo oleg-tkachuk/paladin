@@ -563,17 +563,113 @@ the same commit. Treat this file like a runtime invariant.
     mid-iteration cleanly (partial progress recorded).
 - **Blockers:** none. Per-executor work; can land independently.
 
-### Event dispatcher: Kafka / SQS sinks
+### Event dispatcher: NATS sink (recommended first non-HTTP sink)
+
+- **Status:** Aspirational
+- **Reason:** Cloud-native customers and most agentic-platform stacks
+  (Letta / AutoGen / similar) already run NATS. Of the four broker
+  options, NATS has the smallest dependency footprint
+  (`nats-io/nats.go`, ~1MB), no SASL/SSL configuration ceremony, and
+  CloudEvents-friendly subject conventions. Wiring NATS first
+  validates that the outbox + dispatcher pattern handles non-HTTP
+  sinks cleanly before we touch heavier brokers.
+- **Definition of Done:**
+  - Proto: extend `EventSink.oneof` with a `NatsSink` (URL, subject
+    pattern, optional credentials reference).
+  - `internal/worker/sink_nats.go` — connection-pooled client with
+    reconnect / publish / health-ping.
+  - `Dispatcher.deliverNATS` publishes a CloudEvents 1.0 envelope
+    (`specversion=1.0`, `type=paladin.<resource>.<action>`,
+    `source=paladin.local/...`, `data=<payload>`) to the configured
+    subject. JSON encoding for the MVP.
+  - Auth options: token, nkey, JWT/seed (all via SecretRef pattern;
+    no inline credentials in YAML).
+  - `cfg.Dispatcher.NATS.URL` (default empty = disabled), `MaxReconnect`,
+    `ReconnectWait` knobs.
+  - Health probe: dispatcher's `/system/health.json` gains a
+    "nats:<server>" subsystem check that reports broker connectivity
+    when at least one NATS sink is configured.
+  - Frontend `/events` connector template: prefilled subject pattern
+    + auth-field group for NATS sinks.
+  - Tests: outbox row → NATS publish round-trip via embedded server,
+    reconnect handling, envelope structure conformance.
+- **Trigger to do:** real customer ask, OR launch of an
+  agentic-platform integration that depends on NATS as its event
+  bus. Don't pre-build before either signal.
+
+### Event dispatcher: Kafka sink
 
 - **Status:** Deferred
 - **Reason:** [event_dispatcher.go:120](internal/worker/event_dispatcher.go)
-  returns `"sink %q delivery not yet wired (slice 8)"` for `kafka` /
-  `sqs`. Only `http` works today.
+  returns `"sink %q delivery not yet wired (slice 8)"` for `kafka`.
+  Heavier dependency than NATS (~5MB for `franz-go` or
+  `segmentio/kafka-go`) and brings configuration complexity
+  (partition assignment, consumer groups, optional Schema Registry,
+  SASL/SCRAM/mTLS auth). Worth doing only when a customer commits
+  on Kafka — pre-built adapters tend to bake in choices the eventual
+  customer will want changed.
 - **Definition of Done:**
-  - SQS sink with batch `SendMessageBatch`.
-  - Kafka sink with `franz-go` and per-tenant topic prefix.
+  - Kafka client library decision (`franz-go` preferred — pure-Go,
+    actively maintained, no CGO).
+  - Proto extension matches the existing `KafkaSink` stub
+    (brokers, topic) plus credentials reference.
+  - Per-tenant topic prefix (e.g. `paladin.{tenant_id}.{event_type}`)
+    or operator-defined topic — pick after customer feedback.
+  - CloudEvents envelope, same as NATS.
   - Sink-config schema validation at `Create`/`Update` time.
-- **Blockers:** Kafka client library decision (sarama vs franz-go).
+  - Tests: outbox row → Kafka publish round-trip via testcontainers
+    or embedded redpanda.
+- **Blockers:** customer ask + Kafka client library decision.
+
+### Event dispatcher: SQS sink
+
+- **Status:** Deferred
+- **Reason:** Same proto stub returns `"not yet wired"` for `sqs`.
+  Only matters for AWS-native customers. AWS SDK v2 already in tree
+  (used by `internal/storage/s3.go`); adding `aws-sdk-go-v2/service/sqs`
+  is light. Lower priority than NATS / Kafka because the customer
+  base wanting SQS specifically is small (most AWS customers can use
+  EventBridge or HTTP webhooks).
+- **Definition of Done:**
+  - `SqsSink` populated (queue_url, region, optional role_arn for
+    cross-account delivery).
+  - `deliverSQS` uses `SendMessageBatch` for throughput when the
+    outbox poll returns multiple rows targeting the same queue.
+  - IAM role wiring documented (when running outside EKS / not on
+    AWS, expect explicit access keys via SecretRef).
+  - CloudEvents envelope (encoded as the SQS message body string).
+- **Trigger to do:** AWS-native customer with SQS as their bus.
+
+### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
+
+- **Status:** Aspirational
+- **Reason:** Outbound payload format is currently the raw `Event`
+  struct. CloudEvents 1.0 is the CNCF-graduated standard for
+  event-driven systems; consumers route / filter / dead-letter on
+  attributes (`type`, `source`, `subject`) without parsing the
+  body. The inbound ingest path
+  (`internal/eventingest/source_cloudevents.go`) already speaks
+  CloudEvents — outbound symmetry simplifies operator mental model.
+- **Definition of Done:**
+  - Decision: pick **JSON event format** (RFC 7159) for the wire,
+    not Protobuf — broader consumer compatibility, easier debugging.
+  - Outbound HTTP sink switches to `Content-Type:
+    application/cloudevents+json`, body is the envelope.
+  - NATS / Kafka / SQS sinks use the same envelope as the message
+    body.
+  - `type` follows `paladin.<resource>.<action>` convention
+    (e.g. `paladin.object.uploaded`, `paladin.tenant.created`,
+    `paladin.capability.revoked`).
+  - `source` is the PALADIN deployment URL.
+  - `subject` is the resource name when applicable.
+  - `data` carries the existing `Event.Payload` map.
+  - Existing webhook subscribers may break if they parsed the raw
+    JSON shape — coordinate with operators or version the sink
+    config (`v1` raw, `v2` cloudevents) for backward compat.
+- **Trigger to do:** when the first non-HTTP sink lands (NATS most
+  likely). Sink-side broker consumers expect CloudEvents — the
+  format dichotomy "HTTP gets raw, NATS gets envelope" is the wrong
+  thing to ship.
 
 ---
 
