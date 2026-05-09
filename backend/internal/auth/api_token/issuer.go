@@ -91,14 +91,33 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		return nil, errors.New("api_token: RateLimitRPM must be >= 0")
 	}
 
+	// Normalise nil → empty slice. The api_tokens.scopes / .audience
+	// columns are `text[] NOT NULL`. pgx serialises a nil []string as
+	// SQL NULL (not '{}'), which trips the NOT NULL constraint even
+	// though `scopes` carries a `DEFAULT '{}'::text[]` — DEFAULT only
+	// applies when the column is omitted from the INSERT, not when an
+	// explicit NULL is supplied. Callers that send an empty `repeated
+	// string scopes = N` over Connect end up here with a nil slice
+	// because protobuf reflection materialises an unset repeated field
+	// as nil, and we'd rather fix it once at the persistence boundary
+	// than push the contract onto every Connect handler.
+	scopes := req.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+	audience := req.Audience
+	if audience == nil {
+		audience = []string{}
+	}
+
 	now := i.clock().UTC()
 	tok := Token{
 		ID:           uuid.New(),
 		TenantID:     req.TenantID,
 		Name:         req.Name,
 		Prefix:       prefix,
-		Scopes:       req.Scopes,
-		Audience:     req.Audience,
+		Scopes:       scopes,
+		Audience:     audience,
 		ExpiresAt:    now.Add(ttl),
 		RateLimitRPM: req.RateLimitRPM,
 		CreatedBy:    req.CreatedBy,
