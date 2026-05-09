@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
   ShieldCheckIcon,
@@ -103,13 +104,13 @@ function StatusPill({ status }: { status: StateKey }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 text-sm font-medium",
         m.color,
       )}
     >
       <span
         className={cn(
-          "size-1.5 rounded-full",
+          "size-2 rounded-full",
           m.dot,
           status !== "healthy" && "animate-pulse",
         )}
@@ -119,47 +120,100 @@ function StatusPill({ status }: { status: StateKey }) {
   );
 }
 
-// ─── Component row — one per dependency, single line on wide screens ────────
+// ─── Component row — one per dependency ─────────────────────────────────────
 //
-// Compact by design: name on the left, badges + latency + status dot on
-// the right. The full message is in the title attribute; we truncate to
-// avoid the row-height jumping when one error is verbose.
+// Two-line shape:
+//   line 1: dot • name • req-badge • status pill • latency
+//   line 2: message — truncated to 1 line, click chevron to expand
+//
+// The expand toggle solves the original "timeout error doesn't fit" bug:
+// instead of cramming long errors into a 10px sliver next to the latency,
+// we show the first line truncated by default and let the operator click
+// the chevron (or anywhere on the row) to reveal the full text in a
+// pre-formatted block. Healthy components with a `note` (e.g. "disabled")
+// render the same way but in muted italics.
 
 function ComponentRow({ c }: { c: Component }) {
+  const [open, setOpen] = useState(false);
   const m = META[c.status];
+  const hasMessage = !!c.message;
+  const noteLike = c.status === "healthy" && hasMessage;
+
   return (
-    <div
-      className="flex items-center justify-between gap-2 border-b border-border/40 py-1.5 last:border-b-0"
-      title={c.message || undefined}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <span className={cn("size-1.5 shrink-0 rounded-full", m.dot)} />
-        <span className="truncate font-mono text-xs">{c.name}</span>
-        {c.critical && (
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[9px] font-normal leading-tight"
+    <div className="border-b border-border/40 py-2 last:border-b-0">
+      <button
+        type="button"
+        onClick={() => hasMessage && setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 text-left",
+          hasMessage && "cursor-pointer hover:opacity-80",
+          !hasMessage && "cursor-default",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn("size-2 shrink-0 rounded-full", m.dot)} />
+          <span className="truncate font-mono text-sm">{c.name}</span>
+          {c.critical && (
+            <Badge
+              variant="outline"
+              className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+            >
+              required
+            </Badge>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={cn("text-xs font-medium", m.color)}
+            aria-label={`status: ${c.status}`}
           >
-            req
-          </Badge>
-        )}
-        {c.message && c.status === "healthy" && (
-          // Healthy + non-empty message = informational note (e.g.
-          // "disabled" for off-by-config subsystems). Render as a low-
-          // contrast tag so the row doesn't read as broken.
-          <span className="truncate text-[10px] italic text-muted-foreground">
-            {c.message}
+            {m.label}
           </span>
-        )}
-        {c.message && c.status !== "healthy" && (
-          <span className="truncate text-[10px] text-muted-foreground">
-            {c.message}
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {c.latency_ms}ms
           </span>
-        )}
-      </div>
-      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
-        {c.latency_ms}ms
-      </span>
+          {hasMessage && (
+            <ChevronDownIcon
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-180",
+              )}
+            />
+          )}
+        </div>
+      </button>
+
+      {hasMessage && !open && (
+        // Collapsed preview: single line, truncated. Click anywhere on
+        // the row to expand. The full text is also discoverable via the
+        // expanded view below — we keep the title attribute as a fast
+        // tooltip path for desktop hover users.
+        <p
+          className={cn(
+            "mt-1 truncate text-xs",
+            noteLike ? "italic text-muted-foreground" : "text-muted-foreground",
+          )}
+          title={c.message}
+        >
+          {c.message}
+        </p>
+      )}
+
+      {hasMessage && open && (
+        // Expanded view: pre-formatted code block so timeouts /
+        // multi-line stack traces wrap and stay readable. `whitespace-
+        // pre-wrap` preserves newlines; `break-all` catches long
+        // tokenless strings (DSNs, JWTs).
+        <pre
+          className={cn(
+            "mt-2 overflow-x-auto rounded-md bg-muted/60 px-3 py-2 text-xs",
+            "whitespace-pre-wrap break-all font-mono leading-relaxed",
+            noteLike && "italic text-muted-foreground",
+          )}
+        >
+          {c.message}
+        </pre>
+      )}
     </div>
   );
 }
@@ -175,11 +229,11 @@ function RoleCard({ snap }: { snap: Snapshot }) {
     <Card className="flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon className={cn("size-4 shrink-0", m.color)} />
-          <CardTitle className="font-mono text-sm">{snap.role}</CardTitle>
+          <Icon className={cn("size-5 shrink-0", m.color)} />
+          <CardTitle className="font-mono text-base">{snap.role}</CardTitle>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
             {ok}/{total}
           </span>
           <StatusPill status={snap.status} />
@@ -188,7 +242,7 @@ function RoleCard({ snap }: { snap: Snapshot }) {
       <Separator />
       <CardContent className="flex-1 px-4 py-2">
         {snap.components.length === 0 ? (
-          <p className="py-2 text-xs text-muted-foreground">
+          <p className="py-3 text-sm text-muted-foreground">
             No checks registered.
           </p>
         ) : (
@@ -294,10 +348,10 @@ export default function HealthPage() {
               waste. Replaces the previous grid of 6 cards. ─────────────── */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
-          <div className="flex items-center gap-2">
-            <RollupIcon className={cn("size-5", META[rollup].color)} />
+          <div className="flex items-center gap-2.5">
+            <RollupIcon className={cn("size-6", META[rollup].color)} />
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">
                 Rollup
               </div>
               <StatusPill status={rollup} />
@@ -305,41 +359,41 @@ export default function HealthPage() {
           </div>
           <Separator orientation="vertical" className="h-8" />
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Components
             </div>
-            <div className="font-mono text-sm tabular-nums">
+            <div className="font-mono text-base tabular-nums">
               {totalComponents === 0
                 ? "—"
                 : `${healthyComponents}/${totalComponents}`}
             </div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Roles
             </div>
-            <div className="font-mono text-sm tabular-nums">
+            <div className="font-mono text-base tabular-nums">
               {orderedRoles.length}
             </div>
           </div>
           <Separator orientation="vertical" className="h-8" />
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Version
             </div>
-            <div className="font-mono text-sm">{version}</div>
+            <div className="font-mono text-base">{version}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Commit
             </div>
-            <div className="font-mono text-sm">{commit}</div>
+            <div className="font-mono text-base">{commit}</div>
           </div>
           <div className="ml-auto text-right">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Last sync
             </div>
-            <div className="font-mono text-sm">{lastSyncLabel}</div>
+            <div className="font-mono text-base">{lastSyncLabel}</div>
           </div>
         </CardContent>
       </Card>

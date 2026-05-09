@@ -37,7 +37,9 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
   {
     name: "worker",
     envKey: "PALADIN_WORKER_URL",
-    defaultUrl: "http://paladin-worker:8090",
+    // 8099 is the Service port (containerPort is 8090). See chart's
+    // backend values.yaml `deployments.worker.service.ports`.
+    defaultUrl: "http://paladin-worker:8099",
   },
   {
     name: "mcp",
