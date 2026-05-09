@@ -95,17 +95,20 @@ forbid (
 );`,
   },
   {
-    id: "deny-after-hours",
-    label: "Deny destructive ops outside business hours",
+    id: "forbid-destructive-non-admin",
+    label: "Forbid destructive ops to non-admin principals",
     description:
-      "Forbid blocks DeleteObject / DeleteBucket between 22:00–06:00 UTC. Pair with permits.",
-    cedar: `forbid (
+      "A forbid rule that vetoes DeleteObject / DeleteBucket / PurgeObject for any principal not in the platform.admin role. Pair with one or more permit rules that grant the rest of the surface to lower-privileged roles — Cedar evaluates forbid first, so this acts as a hard ceiling regardless of what permits allow.",
+    cedar: `// Forbid destructive ops unless the caller is platform.admin.
+// Cedar evaluates forbid before permit, so this acts as a hard
+// ceiling — pair with permits for the rest of the action surface.
+forbid (
   principal,
   action in [Action::"DeleteObject", Action::"DeleteBucket", Action::"PurgeObject"],
   resource
 )
-when {
-  context.now.getHours() < 6 || context.now.getHours() >= 22
+unless {
+  principal in Role::"platform.admin"
 };`,
   },
 ];
