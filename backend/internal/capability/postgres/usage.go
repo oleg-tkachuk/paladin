@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
@@ -37,6 +38,7 @@ import (
 type UsageStore struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool // optional; nil disables charges-ledger writes
+	log  *zap.Logger   // never nil — defaults to zap.NewNop in NewUsageStore
 }
 
 // NewUsageStore wires the sqlc-generated queries to the
@@ -44,9 +46,15 @@ type UsageStore struct {
 // charges-ledger row insert is skipped (useful for tests that want
 // to exercise the in-memory bookkeeping without a real DB). In
 // production it must be non-nil so the BillingService surface has
-// a time-series source of truth.
-func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool) *UsageStore {
-	return &UsageStore{q: q, pool: pool}
+// a time-series source of truth. log is optional — when nil, a
+// no-op logger is installed so the store never crashes on a missing
+// dependency. Production wires the named logger so ledger-write
+// failures surface in operator log streams.
+func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger) *UsageStore {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	return &UsageStore{q: q, pool: pool, log: log}
 }
 
 // BumpRequest implements capability.UsageStore.
@@ -154,11 +162,24 @@ func (s *UsageStore) Charge(
 		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
 	}
 
-	// Ledger row — best-effort. Both running totals already
-	// committed; a ledger-write failure is logged but does NOT
-	// reverse the spend (the running totals are the enforcement
-	// surface, the ledger is the time-series surface). If pool is
-	// nil the writer is disabled (test path).
+	// Ledger row — best-effort by design. Both running totals already
+	// committed (capability_usage and tenant_budgets); a ledger-write
+	// failure is LOGGED + swallowed so the customer's charge call
+	// returns success. The running totals are the enforcement surface
+	// — they gate further spending. The ledger is the time-series
+	// surface — it powers /billing dashboards and per-charge audit
+	// trails. A missing ledger row leaves a small gap in the dashboard
+	// but does NOT undo the spend; the alternative (returning the
+	// error to the caller after totals committed) actively misleads:
+	// the customer thinks the charge failed and may retry, double-
+	// spending against the now-bumped running totals.
+	//
+	// Drift recovery is operator-driven: scrape logs for these
+	// warnings, replay missing rows from the running-total deltas.
+	// A reaper that backfills automatically is BACKLOG.
+	//
+	// Pool nil ⇒ test stub path; ledger writer disabled silently
+	// (charge_test fakes don't need to assert ledger state).
 	if s.pool != nil {
 		ledgerID := uuid.New()
 		if _, lErr := s.pool.Exec(ctx,
@@ -166,7 +187,16 @@ func (s *UsageStore) Charge(
 			 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7)`,
 			ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
 		); lErr != nil {
-			return 0, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+			s.log.Warn("capability/postgres: charge ledger insert failed; running totals already committed",
+				zap.String("capability_id", capID.String()),
+				zap.String("tenant_id", tenantID.String()),
+				zap.Float64("amount", amount),
+				zap.String("unit_code", resolvedUnit),
+				zap.String("op", op),
+				zap.String("actor", actor),
+				zap.Error(lErr),
+			)
+			// fall through — return success below.
 		}
 	}
 	return floatFromNumeric(spent), nil

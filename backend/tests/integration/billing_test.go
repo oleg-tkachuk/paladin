@@ -52,7 +52,7 @@ func setupBilling(t *testing.T) *billingFixture {
 	t.Helper()
 	h := pgharness.Setup(t)
 	q := sqlc.New(h.PoolMigrate)
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate)
+	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
 	handler := billingh.NewHandler(h.PoolMigrate, store, allowAuth{})
 	return &billingFixture{h: h, store: store, handler: handler}
 }

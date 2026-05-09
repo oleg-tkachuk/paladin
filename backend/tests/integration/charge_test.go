@@ -34,7 +34,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	q := sqlc.New(h.PoolMigrate)
 	// nil pool → ledger insert disabled; this test exercises the
 	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil)
+	store := capabilitypg.NewUsageStore(q, nil, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
@@ -94,7 +94,7 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 	q := sqlc.New(h.PoolMigrate)
 	// nil pool → ledger insert disabled; this test exercises the
 	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil)
+	store := capabilitypg.NewUsageStore(q, nil, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
@@ -134,7 +134,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	q := sqlc.New(h.PoolMigrate)
 	// nil pool → ledger insert disabled; this test exercises the
 	// running-total compensation path, not the ledger surface.
-	store := capabilitypg.NewUsageStore(q, nil)
+	store := capabilitypg.NewUsageStore(q, nil, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 
@@ -179,7 +179,7 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	ctx := context.Background()
 	q := sqlc.New(h.PoolMigrate)
 	// Pool wired so the ledger insert fires.
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate)
+	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-ledger")
 	capID := uuid.New()

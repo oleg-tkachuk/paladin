@@ -137,6 +137,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = withLastOpHolder(ctx)
 		return next(ctx, req)
 	}
 }
@@ -161,6 +162,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = withLastOpHolder(ctx)
 		return next(ctx, conn)
 	}
 }
@@ -283,6 +285,48 @@ func extractCapabilityToken(xocp, authz string) string {
 // subsystem is wired so handlers don't need a global reference.
 type chargeKey struct{}
 
+// lastOpKey carries a per-request *string that AssertCapabilityOp
+// writes the most-recently-asserted capability op into, so a later
+// ChargeRequest / ChargeCapability call in the same handler can
+// stamp it onto the charges-ledger row without the caller threading
+// the op as an extra arg.
+//
+// Using a pointer-to-string holder rather than a context.WithValue
+// rebind keeps existing handler code shape: handlers call
+// AssertCapabilityOp(ctx, op, uri) without re-binding ctx (return
+// signature stays `error`, not `(context.Context, error)`). The
+// interceptor allocates one holder per request and pins it in ctx
+// before the handler runs; AssertCapabilityOp mutates the target.
+type lastOpKey struct{}
+
+// withLastOpHolder allocates a fresh holder and stamps it. Called
+// once per request from the interceptor, before the handler runs.
+// Handler-side: AssertCapabilityOp writes via stampLastOp,
+// ChargeCapability reads via readLastOp.
+func withLastOpHolder(ctx context.Context) context.Context {
+	holder := new(string)
+	return context.WithValue(ctx, lastOpKey{}, holder)
+}
+
+// stampLastOp writes the supplied op into the per-request holder.
+// No-op when no holder is installed (unit-test contexts that bypass
+// the interceptor; the read side falls back to "").
+func stampLastOp(ctx context.Context, op capability.Op) {
+	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok {
+		*holder = string(op)
+	}
+}
+
+// readLastOp returns the most-recently-asserted op for this request,
+// or "" if AssertCapabilityOp hasn't been called yet (or the holder
+// isn't installed).
+func readLastOp(ctx context.Context) string {
+	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok && holder != nil {
+		return *holder
+	}
+	return ""
+}
+
 // chargeAmountKey carries the per-request default charge amount +
 // unit code (cfg.Capability.ChargePerRequestAmount /
 // ChargePerRequestUnit) so handlers don't need to read config —
@@ -399,11 +443,13 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	}
 	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
 	// op + actor populate the charges ledger row (migration 027).
-	// op is left empty here — handler-side hooks know the op and
-	// could pass it via a future ChargeCapabilityWithOp variant; for
-	// now the per-request auto-charge can't fabricate one.
-	// TODO(billing): plumb the per-handler op into ChargeCapability.
-	op := ""
+	// op is read from the per-request holder that AssertCapabilityOp
+	// writes into. If the handler hasn't called AssertCapabilityOp
+	// (legacy paths, JWT-only flows) op stays "" and the ledger row
+	// has no op attribution — operator's "Top ops" /billing breakdown
+	// will collect those into the empty-string row, which is the
+	// honest answer.
+	op := readLastOp(ctx)
 	actor := cap.Subject.Subject
 	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor)
 	if err != nil {
@@ -516,6 +562,13 @@ func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 		return connect.NewError(connect.CodePermissionDenied,
 			capabilityResourceNotAllowed{uri: resourceURI})
 	}
+	// Stamp the op into the per-request holder so a later
+	// ChargeRequest / ChargeCapability call attributes the charges-
+	// ledger row to the correct op without an extra signature thread.
+	// Last call wins when a handler asserts multiple ops in the same
+	// request — convention is to call AssertCapabilityOp once for the
+	// dominant action.
+	stampLastOp(ctx, op)
 	return nil
 }
 

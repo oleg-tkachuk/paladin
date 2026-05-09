@@ -15,6 +15,8 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
+import { ConnectError } from "@connectrpc/connect";
+
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useTenants } from "@/hooks/useTenants";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
@@ -207,10 +209,23 @@ export default function TenantsPage() {
       setCreateOpen(false);
     } catch (err) {
       console.error(err);
+      // Surface the actual backend error rather than guessing at
+      // "ID must be unique and a valid UUID v4". The previous copy
+      // misread network failures (transport errors, BFF cold start)
+      // as a UUID validation error and confused operators. Connect
+      // errors carry rawMessage with the server's typed reason
+      // (already-exists, invalid-argument, etc.); plain Error
+      // instances fall back to .message; everything else stringifies.
+      const message =
+        err instanceof ConnectError
+          ? err.rawMessage
+          : err instanceof Error
+            ? err.message
+            : String(err);
       showNotification({
         type: "error",
         title: "Creation failed",
-        message: "ID must be unique and a valid UUID v4.",
+        message,
       });
     } finally {
       setSubmitting(false);

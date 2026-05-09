@@ -103,7 +103,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
-	usage := capability.WithMetering(capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool))
+	usage := capability.WithMetering(capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
 
 	return &CapabilityBundle{
 		Store:        store,
