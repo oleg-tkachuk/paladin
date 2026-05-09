@@ -250,6 +250,12 @@ function LimitInput({
   step?: string;
 }) {
   return (
+    // flex-1 + min-w-0 on the Input is the fix for the previous
+    // collapsed-input bug — type=number renders as a spinner-only
+    // ~30px stub by default in flex containers because the input's
+    // natural width is content-based and there's no flex hint. The
+    // pair pushes it to fill the row, with the Unlimited button
+    // sitting at its content width on the right.
     <div className="flex items-center gap-1.5">
       <Input
         id={id}
@@ -260,14 +266,14 @@ function LimitInput({
         onChange={(e) => onChange(e.target.value)}
         disabled={unlimited}
         placeholder={unlimited ? "Unlimited" : placeholder}
-        className={cn(unlimited && "italic")}
+        className={cn("min-w-0 flex-1", unlimited && "italic")}
       />
       <button
         type="button"
         onClick={() => onUnlimitedChange(!unlimited)}
         aria-pressed={unlimited}
         className={cn(
-          "shrink-0 rounded-md border px-2.5 py-1 text-xs transition-colors",
+          "h-9 shrink-0 rounded-md border px-3 text-xs font-medium transition-colors",
           unlimited
             ? "border-primary bg-primary/10 text-primary"
             : "border-input bg-background hover:bg-muted",
@@ -1212,7 +1218,15 @@ export default function CapabilitiesPage() {
 
       {/* ─── Issue dialog ────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={handleCloseIssueDialog}>
-        <DialogContent className="max-w-4xl">
+        {/* Width override pitfall: shadcn DialogContent's base classes
+            include `sm:max-w-sm` (384px), which tailwind-merge keeps
+            at the sm breakpoint alongside our `max-w-4xl` because the
+            two are at different responsive specificities. Spelling
+            the override with a responsive prefix (`sm:max-w-5xl`)
+            makes the wide value win on every viewport ≥ sm. Result:
+            ~1024px instead of 384px on tablet+, room for Allowed ops
+            in a single row and the LimitInput trio without crushing. */}
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl">
           {reveal ? (
             <div>
               <DialogHeader>
