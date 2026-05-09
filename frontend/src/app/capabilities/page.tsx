@@ -5,7 +5,9 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   ClipboardDocumentIcon,
+  EllipsisVerticalIcon,
   ExclamationTriangleIcon,
+  EyeIcon,
   KeyIcon,
   PlusIcon,
   TrashIcon,
@@ -19,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ChipInput } from "@/components/ui/ChipInput";
-import { Separator } from "@/components/ui/separator";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
@@ -218,6 +220,263 @@ function ToggleRow({
         );
       })}
     </div>
+  );
+}
+
+// DetailsBody renders every field of a Capability in a stacked
+// label/value layout. Long mono strings (id, parent_id, prefixes)
+// `break-all` so the dialog doesn't blow out horizontally on UUIDs.
+function DetailsBody({
+  cap,
+  usageEntry,
+}: {
+  cap: Capability;
+  usageEntry: { requestCount: bigint; spentUsd: number } | "never" | undefined;
+}) {
+  const principalKindLabel =
+    PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
+      ?.label ?? `kind:${cap.subject?.kind}`;
+  const expired = isExpired(cap);
+
+  return (
+    <div className="space-y-4 py-2">
+      {/* ─── Identity ────────────────────────────────────────── */}
+      <DetailsSection title="Identity">
+        <DetailRow label="Capability ID" value={cap.id} mono breakAll />
+        <DetailRow label="Issuer" value={cap.issuer || "—"} mono />
+        <DetailRow
+          label="Parent ID"
+          value={cap.parentId || "—"}
+          mono
+          breakAll
+        />
+        <DetailRow label="Generation" value={cap.generation.toString()} mono />
+      </DetailsSection>
+
+      {/* ─── Principal ───────────────────────────────────────── */}
+      <DetailsSection title="Principal">
+        <DetailRow label="Kind" value={principalKindLabel} />
+        <DetailRow
+          label="Subject"
+          value={cap.subject?.subject || "—"}
+          mono
+          breakAll
+        />
+        <DetailRow
+          label="Tenant ID"
+          value={cap.subject?.tenantId || "—"}
+          mono
+          breakAll
+        />
+      </DetailsSection>
+
+      {/* ─── Authorization ───────────────────────────────────── */}
+      <DetailsSection title="Authorization">
+        <DetailRow
+          label="Audience"
+          value={
+            cap.audience.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {cap.audience.map((a) => (
+                  <Badge key={a} variant="secondary" className={T.code}>
+                    {a}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              "—"
+            )
+          }
+        />
+        <DetailRow
+          label="Allowed ops"
+          value={
+            (cap.caveats?.ops ?? []).length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {cap.caveats!.ops.map((op) => (
+                  <Badge key={op} variant="outline" className={T.code}>
+                    {op}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              "—"
+            )
+          }
+        />
+      </DetailsSection>
+
+      {/* ─── Caveats ─────────────────────────────────────────── */}
+      <DetailsSection title="Caveats">
+        <DetailRow
+          label="Resource prefixes"
+          value={
+            (cap.caveats?.resourcePrefixes ?? []).length > 0 ? (
+              <ul className="space-y-0.5 font-mono text-xs">
+                {cap.caveats!.resourcePrefixes.map((p) => (
+                  <li key={p} className="break-all">
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              "no restriction"
+            )
+          }
+        />
+        <DetailRow
+          label="Resource URIs"
+          value={
+            (cap.caveats?.resourceUris ?? []).length > 0 ? (
+              <ul className="space-y-0.5 font-mono text-xs">
+                {cap.caveats!.resourceUris.map((u) => (
+                  <li key={u} className="break-all">
+                    {u}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              "no restriction"
+            )
+          }
+        />
+        <DetailRow
+          label="Source IP CIDR"
+          value={
+            (cap.caveats?.sourceIpCidr ?? []).length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {cap.caveats!.sourceIpCidr.map((c) => (
+                  <Badge key={c} variant="outline" className={T.code}>
+                    {c}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              "any IP"
+            )
+          }
+        />
+        <DetailRow
+          label="Allow tainted read"
+          value={cap.caveats?.allowTaintedRead ? "yes" : "no"}
+        />
+        <DetailRow
+          label="Idempotency key required"
+          value={cap.caveats?.idempotencyKeyRequired ? "yes" : "no"}
+        />
+      </DetailsSection>
+
+      {/* ─── Limits & Usage ──────────────────────────────────── */}
+      <DetailsSection title="Limits & usage">
+        <DetailRow
+          label="Max requests"
+          value={
+            (cap.caveats?.maxRequests ?? 0) > 0
+              ? cap.caveats!.maxRequests.toString()
+              : "unlimited"
+          }
+          mono
+        />
+        <DetailRow
+          label="Requests used"
+          value={
+            usageEntry === undefined
+              ? "loading…"
+              : usageEntry === "never"
+                ? "never used"
+                : usageEntry.requestCount.toString()
+          }
+          mono
+        />
+        <DetailRow
+          label="Max budget USD"
+          value={
+            (cap.caveats?.maxBudgetUsd ?? 0) > 0
+              ? `$${cap.caveats!.maxBudgetUsd.toFixed(2)}`
+              : "unlimited"
+          }
+          mono
+        />
+        <DetailRow
+          label="Spent USD"
+          value={
+            usageEntry === undefined
+              ? "loading…"
+              : usageEntry === "never"
+                ? "$0.0000"
+                : `$${usageEntry.spentUsd.toFixed(4)}`
+          }
+          mono
+        />
+      </DetailsSection>
+
+      {/* ─── Lifetime ────────────────────────────────────────── */}
+      <DetailsSection title="Lifetime">
+        <DetailRow
+          label="Status"
+          value={
+            <Badge variant={expired ? "outline" : "success"} className={T.code}>
+              {expired ? "expired" : "active"}
+            </Badge>
+          }
+        />
+        <DetailRow label="Issued" value={formatTimestamp(cap.issuedAt)} mono />
+        <DetailRow
+          label="Not before"
+          value={formatTimestamp(cap.notBefore)}
+          mono
+        />
+        <DetailRow
+          label="Expires"
+          value={formatTimestamp(cap.expiresAt)}
+          mono
+        />
+      </DetailsSection>
+    </div>
+  );
+}
+
+function DetailsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className={T.label}>{title}</h3>
+      <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
+        {children}
+      </dl>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono,
+  breakAll,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  breakAll?: boolean;
+}) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          mono && "font-mono text-xs",
+          breakAll && "break-all",
+          "min-w-0",
+        )}
+      >
+        {value}
+      </dd>
+    </>
   );
 }
 
@@ -485,6 +744,14 @@ export default function CapabilitiesPage() {
         : "Clipboard unavailable.",
     });
   }, [reveal, showNotification]);
+
+  // ── details ─────────────────────────────────────────────────────────
+  // Read-only "everything we know about this capability" dialog,
+  // opened from the row's kebab menu. Mirrors what the List response
+  // already carries plus the usage snapshot we've already fetched —
+  // no extra RPC. Token plaintext is NOT shown (the issuer keeps no
+  // copy by design; only the freshly-issued reveal panel sees it).
+  const [detailsTarget, setDetailsTarget] = useState<Capability | null>(null);
 
   // ── revoke ──────────────────────────────────────────────────────────
   const [revokeTarget, setRevokeTarget] = useState<Capability | null>(null);
@@ -799,15 +1066,43 @@ export default function CapabilitiesPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 opacity-60 group-hover:opacity-100"
-                        aria-label={`Revoke ${c.id}`}
-                        onClick={() => setRevokeTarget(c)}
-                      >
-                        <TrashIcon className="size-4" />
-                      </Button>
+                      {/* Kebab menu — View details + Revoke. Click on
+                          the row's ID won't open details (the row is
+                          large and we don't want accidental dialogs);
+                          the explicit View action keeps the affordance
+                          clear. */}
+                      <Dropdown align="right" width="w-44">
+                        <Dropdown.Trigger
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          activeClassName="bg-accent text-foreground"
+                        >
+                          <span className="sr-only">
+                            Actions for capability {c.id}
+                          </span>
+                          <EllipsisVerticalIcon className="size-4" />
+                        </Dropdown.Trigger>
+                        <Dropdown.Menu className="py-1">
+                          <Dropdown.Item
+                            className="p-0"
+                            onClick={() => setDetailsTarget(c)}
+                          >
+                            <div className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent">
+                              <EyeIcon className="size-4 text-muted-foreground" />
+                              View details
+                            </div>
+                          </Dropdown.Item>
+                          <div className="my-1 h-px bg-border" />
+                          <Dropdown.Item
+                            className="p-0"
+                            onClick={() => setRevokeTarget(c)}
+                          >
+                            <div className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10">
+                              <TrashIcon className="size-4" />
+                              Revoke
+                            </div>
+                          </Dropdown.Item>
+                        </Dropdown.Menu>
+                      </Dropdown>
                     </TableCell>
                   </TableRow>
                 );
@@ -819,7 +1114,7 @@ export default function CapabilitiesPage() {
 
       {/* ─── Issue dialog ────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={handleCloseIssueDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           {reveal ? (
             <div>
               <DialogHeader>
@@ -886,7 +1181,7 @@ export default function CapabilitiesPage() {
                   enforced server-side on every RPC.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-5 py-4">
+              <div className="space-y-4 py-2">
                 {/* ─── Principal ─────────────────────────────────────
                     Who the capability is issued to. Subject is the
                     stable identity string the verifier sees in the
@@ -913,73 +1208,80 @@ export default function CapabilitiesPage() {
                   </div>
                 </FormSection>
 
-                <Separator />
-
-                {/* ─── Authorization ─────────────────────────────────
+                {/* ───Authorization ─────────────────────────────────
                     What the capability is allowed to do, on which
                     planes. Both lists are required (verifier rejects
                     capabilities with empty `ops` or `aud`). */}
                 <FormSection title="Authorization">
-                  <Field label="Allowed ops" hint="At least one required.">
-                    <ToggleRow
-                      options={OP_CHOICES}
-                      selected={issueOps}
-                      onToggle={(v) => toggleSetEntry(setIssueOps, issueOps, v)}
-                    />
-                  </Field>
-                  <Field
-                    label="Audience (planes)"
-                    hint="Which PALADIN planes accept this token."
-                  >
-                    <ToggleRow
-                      options={AUDIENCE_CHOICES}
-                      selected={issueAudience}
-                      onToggle={(v) =>
-                        toggleSetEntry(setIssueAudience, issueAudience, v)
-                      }
-                    />
-                  </Field>
+                  {/* Two-column at md+ — Ops takes the wider column
+                      because the list is longer; Audience fits in the
+                      narrower one. Stacking pushed the dialog past the
+                      viewport on shorter screens. */}
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[3fr_2fr]">
+                    <Field label="Allowed ops" hint="At least one required.">
+                      <ToggleRow
+                        options={OP_CHOICES}
+                        selected={issueOps}
+                        onToggle={(v) =>
+                          toggleSetEntry(setIssueOps, issueOps, v)
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label="Audience (planes)"
+                      hint="Which PALADIN planes accept this token."
+                    >
+                      <ToggleRow
+                        options={AUDIENCE_CHOICES}
+                        selected={issueAudience}
+                        onToggle={(v) =>
+                          toggleSetEntry(setIssueAudience, issueAudience, v)
+                        }
+                      />
+                    </Field>
+                  </div>
                 </FormSection>
 
-                <Separator />
-
-                {/* ─── Restrictions ──────────────────────────────────
+                {/* ───Restrictions ──────────────────────────────────
                     Optional caveats narrowing where the capability
                     can be used. Empty = unrestricted on that axis.
                     Both fields use ChipInput so the parsed token list
                     is always visible — no surprise comma parsing. */}
                 <FormSection title="Restrictions">
-                  <Field
-                    label="Resource prefixes"
-                    optional
-                    htmlFor="cap-prefix"
-                    hint="Press Enter, comma, or space to add. Empty = no prefix restriction."
-                  >
-                    <ChipInput
-                      id="cap-prefix"
-                      values={issueResourcePrefixes}
-                      onChange={setIssueResourcePrefixes}
-                      placeholder="objects/contracts/2026/  buckets/acme-prod"
-                    />
-                  </Field>
-                  <Field
-                    label="Source IP CIDR"
-                    optional
-                    htmlFor="cap-cidr"
-                    hint="Restrict to clients whose observed IP is in one of these ranges."
-                  >
-                    <ChipInput
-                      id="cap-cidr"
-                      values={issueSourceCidr}
-                      onChange={setIssueSourceCidr}
-                      placeholder="10.0.0.0/8  192.168.1.0/24"
-                    />
-                  </Field>
+                  {/* Side-by-side — both fields are typically empty,
+                      so two narrow chip inputs read better than one
+                      wide stack with three lines of dead space. */}
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <Field
+                      label="Resource prefixes"
+                      optional
+                      htmlFor="cap-prefix"
+                      hint="Enter / comma / space to add. Empty = no restriction."
+                    >
+                      <ChipInput
+                        id="cap-prefix"
+                        values={issueResourcePrefixes}
+                        onChange={setIssueResourcePrefixes}
+                        placeholder="objects/contracts/2026/"
+                      />
+                    </Field>
+                    <Field
+                      label="Source IP CIDR"
+                      optional
+                      htmlFor="cap-cidr"
+                      hint="Restrict to clients whose IP is in one of these ranges."
+                    >
+                      <ChipInput
+                        id="cap-cidr"
+                        values={issueSourceCidr}
+                        onChange={setIssueSourceCidr}
+                        placeholder="10.0.0.0/8"
+                      />
+                    </Field>
+                  </div>
                 </FormSection>
 
-                <Separator />
-
-                {/* ─── Limits ────────────────────────────────────────
+                {/* ───Limits ────────────────────────────────────────
                     Per-capability quotas + lifetime. 0 = unlimited
                     where applicable. TTL is selected from a curated
                     list to discourage long-lived agent tokens. */}
@@ -1042,6 +1344,51 @@ export default function CapabilitiesPage() {
                 </Button>
               </DialogFooter>
             </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Details dialog ────────────────────────────────────────── */}
+      {/* Read-only display of every field the capability carries.
+          Opens from the row kebab menu. No RPC — purely renders the
+          row data + the usage entry already in the page's `usage`
+          map, so the dialog is instant. Token plaintext is NOT
+          shown; the issuer keeps no copy after Issue. */}
+      <Dialog
+        open={!!detailsTarget}
+        onOpenChange={(o) => !o && setDetailsTarget(null)}
+      >
+        <DialogContent className="max-w-3xl">
+          {detailsTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Capability details</DialogTitle>
+                <DialogDescription>
+                  Full record as stored on the admin plane.
+                </DialogDescription>
+              </DialogHeader>
+              <DetailsBody
+                cap={detailsTarget}
+                usageEntry={usage.get(detailsTarget.id)}
+              />
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    void copyToClipboard(detailsTarget.id);
+                    showNotification({
+                      type: "success",
+                      title: "Copied",
+                      message: "Capability ID copied.",
+                    });
+                  }}
+                >
+                  <ClipboardDocumentIcon className="size-4" />
+                  Copy ID
+                </Button>
+                <Button onClick={() => setDetailsTarget(null)}>Close</Button>
+              </DialogFooter>
+            </>
           )}
         </DialogContent>
       </Dialog>
