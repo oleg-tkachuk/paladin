@@ -24,6 +24,8 @@ import {
   BanknotesIcon,
   CommandLineIcon,
   BoltIcon,
+  CurrencyDollarIcon,
+  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -103,8 +105,21 @@ const navigationGroups: Array<{
         countKey: "trash" as keyof SidebarCounts,
       },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
+    ],
+  },
+  {
+    // Agents — agent-runtime primitives. Capabilities + M2M tokens are
+    // what agents use to authenticate; their use generates charges that
+    // accumulate against tenant budgets, summarised on the billing
+    // dashboard. Grouping them keeps the full issue → restrict → spend
+    // → observe loop one click apart.
+    title: "Agents",
+    accent: "text-chart-4/85",
+    items: [
+      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
+      { name: "M2M Tokens", path: "/m2m-tokens", icon: CpuChipIcon },
       { name: "Tenant Budgets", path: "/tenant-budgets", icon: BanknotesIcon },
-      { name: "Billing", path: "/billing", icon: BoltIcon },
+      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
     ],
   },
   {
@@ -123,8 +138,6 @@ const navigationGroups: Array<{
     items: [
       { name: "Profile", path: "/profile", icon: UserCircleIcon },
       { name: "Personal Tokens", path: "/api-tokens", icon: KeyIcon },
-      { name: "M2M Tokens", path: "/m2m-tokens", icon: KeyIcon },
-      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
   },
