@@ -621,6 +621,43 @@ the same commit. Treat this file like a runtime invariant.
     or embedded redpanda.
 - **Blockers:** customer ask + Kafka client library decision.
 
+### Event dispatcher: RabbitMQ sink
+
+- **Status:** Deferred
+- **Reason:** Same proto stub returns `"not yet wired"` shape — but
+  RabbitMQ isn't even in the proto today (no `RabbitMQSink` field in
+  `EventSink.oneof`). Library footprint is moderate (~2MB for
+  `rabbitmq/amqp091-go`), middling enterprise prevalence (legacy
+  banking / fintech, slowly migrating off). Lower priority than NATS
+  (cloud-native fit) and Kafka (enterprise standard); only worth
+  building when a customer specifically runs it.
+- **Definition of Done:**
+  - Proto extension: add `RabbitMQSink` to `EventSink.oneof`
+    (URL, exchange, routing_key, optional virtual_host, optional
+    credentials reference).
+  - `internal/worker/sink_rabbitmq.go` — connection-pooled client
+    with `amqp091-go`, channel-per-publisher, reconnect on socket
+    drop, publisher-confirms enabled (so `deliverRabbitMQ` only
+    returns success after the broker ACKs the publish).
+  - `Dispatcher.deliverRabbitMQ` publishes a CloudEvents 1.0
+    envelope to the configured exchange + routing key. JSON body,
+    `content_type: application/cloudevents+json`.
+  - Auth: AMQP URL with embedded user:pass (resolved from SecretRef)
+    or AMQPS with TLS client certs.
+  - `cfg.Dispatcher.RabbitMQ.URL` (default empty = disabled),
+    `MaxReconnect`, `Heartbeat` knobs.
+  - Health probe: dispatcher's `/system/health.json` gains a
+    "rabbitmq:<host>" subsystem check that reports broker
+    connectivity when at least one RabbitMQ sink is configured.
+  - Frontend `/events` connector template: prefilled exchange +
+    routing-key fields + auth-field group for RabbitMQ sinks.
+  - Tests: outbox row → RabbitMQ publish round-trip via
+    testcontainers, reconnect handling, publisher-confirms behaviour
+    when broker drops the channel mid-publish.
+- **Trigger to do:** customer ask — typically banking / fintech
+  enterprise that already has a RabbitMQ cluster as their event bus
+  and won't migrate to NATS / Kafka for one new producer.
+
 ### Event dispatcher: SQS sink
 
 - **Status:** Deferred
