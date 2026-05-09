@@ -117,6 +117,145 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
+### Role split: `event-dispatcher` (extract webhook delivery from admin)
+
+- **Status:** Deferred
+- **Reason:** `worker.Dispatcher` lives in-process inside the admin
+  pod today (mounted in `build_listeners_admin.go`). Webhook delivery
+  is egress-heavy work with a fundamentally different failure mode
+  from inbound admin RPC: a slow / flaky customer endpoint can hold
+  HTTP connections open and starve the admin pod's connection pool.
+  NetworkPolicy posture is also opposite — admin should have closed
+  egress (Postgres + storage only), dispatcher needs egress=any:443.
+  Splitting also lets you scale dispatchers independently when one
+  tenant has 1000 webhook subscriptions to flaky endpoints without
+  scaling admin.
+- **Definition of Done:**
+  - `cmd/server/serve_dispatcher.go` — new subcommand. Reads
+    EventSubscription store, consumes undelivered events from an
+    outbox table (or the existing in-memory dispatcher loop made
+    durable), POSTs to sink, retries with exponential backoff,
+    updates delivery status. Same role-port shape as worker (ops
+    listener with /healthz + /readyz + /system/health.json).
+  - Helm: `deployments.dispatcher.enabled: true` (default), single
+    replica baseline, HPA-friendly (CPU + queue-depth metric when
+    available).
+  - NetworkPolicy: egress 0.0.0.0/0:443 + Postgres + storage; ingress
+    only kube-proxy on /healthz.
+  - admin pod stops mounting `worker.Dispatcher`; the existing
+    `EventSubscriptionService.TestSubscription` RPC stays where it
+    is (it's a synchronous one-shot that's fine on admin).
+  - MCPInspectService gains a "dispatcher" component view (delivery
+    queue depth, last error per subscription).
+- **Trigger to do:** when webhook delivery latency starts impacting
+  admin RPC p99, OR when one tenant's subscription failures begin
+  starving the dispatcher loop in admin. Also worth doing
+  pre-emptively before the first paying customer's webhooks land —
+  avoid the on-call regret of "one subscription took down admin".
+
+### Role split: `scheduler` (extract cron-like triggers from worker)
+
+- **Status:** Aspirational
+- **Reason:** `worker` runs ALL background jobs today — lifecycle
+  reaper (30m), refresh-token reaper (1h), capability/api_token
+  reaper (1h), housekeeping (1h), replication (5m), lifecycle
+  enforcement (30m). All compete for the same lease pool. As the
+  job set grows, lease contention starts to dominate.
+- **Definition of Done:**
+  - New `serve scheduler` role: a single-replica process holding
+    cron-style schedule definitions (interval-based) that emits
+    "tick events" the worker pool picks up. Decouples "when to run"
+    from "who runs it" — multiple worker replicas can race for the
+    tick.
+  - OR alternative: stay in-worker but split into multiple
+    component-typed Deployments (e.g. `worker-reapers`,
+    `worker-replication`) so resource limits don't spill across
+    job classes.
+- **Trigger to do:** when the job set grows past ~10 concurrent
+  tasks, OR when one heavy job (replication) starts dominating
+  shared CPU / DB connection budget, OR when an operator reports
+  a reaper missing its window because replication held the lease.
+
+### Role split: `indexer` / `embedder` (semantic search)
+
+- **Status:** Aspirational
+- **Reason:** No semantic-search feature today. When it lands
+  (BACKLOG-aspirational), the embedder is fundamentally different
+  from any existing role: heavy CPU/memory profile (LLM client
+  calls + vector math), batched throughput pattern, separate
+  egress to embedding API providers (Voyage / OpenAI / Cohere) or
+  GPU access for local models.
+- **Definition of Done:**
+  - New `serve indexer` role: long-running consumer of object
+    upload events, generates embeddings, writes to vector store
+    (pgvector or external — Pinecone / Weaviate). Same observability
+    contract as workers.
+  - `cfg.Indexer` block: provider selector + per-provider options.
+  - HPA tied to backlog-depth metric, not CPU.
+- **Trigger to do:** when semantic search becomes a committed
+  feature on the roadmap.
+
+### Role split: `billing-aggregator`
+
+- **Status:** Aspirational
+- **Reason:** When per-tenant billing dashboard (BACKLOG step 5)
+  lands, real-time aggregation queries (group by day × op × tenant
+  across audit_log + capability_usage) become expensive on large
+  tenants. A dedicated job that pre-computes daily snapshots into
+  a `billing_snapshots` table makes the dashboard render fast and
+  isolates analytical-query load from OLTP.
+- **Definition of Done:**
+  - New `serve billing` role (or fold into `worker` as one more job
+    if scheduler split happens first): periodic aggregation pass
+    over `audit_log` + `capability_usage` → daily snapshot rows.
+  - `BillingService.GetTenantSnapshot(tenant, period)` → fast read
+    of pre-computed totals.
+  - Snapshot retention policy + reaper.
+- **Trigger to do:** when the billing dashboard is built and a
+  real tenant exceeds ~1M audit log rows per period, making
+  on-the-fly aggregation slower than the SLA.
+
+### Role split: `auth-server` (OAuth / OIDC isolation)
+
+- **Status:** Aspirational
+- **Reason:** When OAuth 2.0 authorization-code flow lands (per the
+  OAuth BACKLOG entry below), the authorization server has its own
+  attack surface (browser-facing /authorize, code storage, refresh
+  rotation, JWKS rotation, client registration). Isolating from the
+  iam plane lets you rotate signing keys without rolling api pods,
+  apply a tighter NetworkPolicy on the OAuth endpoints, and run
+  separate replicas for auth traffic vs request traffic.
+- **Definition of Done:**
+  - `serve auth-server` role hosting `/oauth/authorize`, `/token`,
+    `/register`, `/.well-known/oauth-authorization-server`,
+    `/.well-known/jwks.json`.
+  - Independent JWKS rotation runbook.
+  - api / admin verify tokens against the auth-server's JWKS — same
+    code path that already exists for the federated-IdP case.
+- **Trigger to do:** when OAuth lands (separate BACKLOG entry) and
+  becomes the primary auth path for at least one customer. Until
+  then, fold OAuth endpoints into the existing iam plane.
+
+### Role split: `realtime` (SSE / WebSocket subscriptions)
+
+- **Status:** Aspirational
+- **Reason:** No realtime subscription feature today. When live
+  audit-log streaming, capability-budget alerts, or tool-call
+  spectator views land, they're long-lived connections with a
+  totally different memory profile (one connection holds for
+  minutes/hours vs ms-scale RPC). They don't belong on api pods
+  that scale on request rate — pod restart latency would drop
+  every active connection.
+- **Definition of Done:**
+  - `serve realtime` role with SSE / WebSocket handlers backed by a
+    Postgres LISTEN/NOTIFY pump (or NATS / Redis pub/sub once
+    that's around).
+  - Per-tenant connection limits.
+  - Graceful shutdown that drains existing connections instead of
+    SIGKILLing them.
+- **Trigger to do:** when the first real subscription feature
+  ships. Skip until then.
+
 ### Phase 5b.1 — Drop user-authn IAM, accept OIDC
 
 - **Status:** Blocked
