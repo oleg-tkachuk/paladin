@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
@@ -121,6 +122,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
+	// CELService — stateless validator for CEL filter / match expressions
+	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,
+	// list-RPC query strings). Same trust posture as PolicyService.Validate:
+	// admin-audience JWT only, no DB, no audit, no Cedar gate.
+	mux.Handle(paladinadminv1connect.NewCELServiceHandler(celh.NewHandler(), adminOpts))
 	mux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	{

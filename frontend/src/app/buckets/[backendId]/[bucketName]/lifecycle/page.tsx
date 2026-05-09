@@ -83,6 +83,8 @@ import {
 } from "@/gen/paladin/admin/v1/types_pb";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
+import { useCELValidation } from "@/hooks/useCELValidation";
+import { CELIndicator } from "@/components/ui/CELIndicator";
 
 // ─── duration helpers ────────────────────────────────────────────────────────
 //
@@ -684,6 +686,14 @@ function RuleEditor({
     value: RuleFormState[K],
   ) => onChange({ ...form, [key]: value });
 
+  // Live CEL validation against the Object schema. Keeps submit disabled
+  // when the expression is in flight or compiles to an error — the
+  // backend rejects bad CEL at apply-time anyway, but failing fast at
+  // edit-time avoids a round-trip + a confusing notification.
+  const celState = useCELValidation(form.match, "Object");
+  const celBlocksSubmit =
+    celState.status === "invalid" || celState.status === "validating";
+
   return (
     <Dialog
       open={open}
@@ -754,6 +764,7 @@ function RuleEditor({
                 {errors.match ??
                   "Evaluated against object fields. See the CEL reference for the available identifiers."}
               </p>
+              <CELIndicator state={celState} />
             </div>
 
             {/* Action picker */}
@@ -838,7 +849,7 @@ function RuleEditor({
             <Button type="button" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || celBlocksSubmit}>
               {saving
                 ? "Saving…"
                 : mode === "create"

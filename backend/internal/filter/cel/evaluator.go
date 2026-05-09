@@ -58,6 +58,42 @@ var BucketSchema = &Schema{
 	},
 }
 
+// EventEnvelopeSchema is exposed to filters on EventSubscription rows.
+//
+// The runtime envelope delivered by worker.Dispatcher (see
+// internal/worker/event_dispatcher.go `Event` struct) carries a fixed
+// JSON shape: type, at, tenant_id, resource_name, actor_subject. The
+// CloudEvents passthrough adds id / source / specversion / time /
+// datacontenttype / subject when the publisher emits a CE 1.0 envelope
+// (see internal/eventingest/source_cloudevents.go).
+//
+// Only fields actually present at evaluation time are declared. The
+// admin UI references richer attributes (`kind`, `severity`,
+// `size_bytes`, `etag`, `bucket_name`, `object_key`) in placeholder
+// hints — those are aspirational; declaring them here would let users
+// write filters that compile but always evaluate to undefined / false.
+// Add them to the schema only when the dispatcher actually populates
+// them (slice-N follow-up).
+var EventEnvelopeSchema = &Schema{
+	Name: "EventEnvelope",
+	vars: map[string]*cel.Type{
+		// Dispatched runtime fields (worker.Event → JSON).
+		"type":          cel.StringType, // "paladin.object.uploaded", ...
+		"at":            cel.TimestampType,
+		"tenant_id":     cel.StringType,
+		"resource_name": cel.StringType,
+		"actor_subject": cel.StringType,
+		// CloudEvents 1.0 envelope attributes — populated when the
+		// publisher uses the CE source adapter.
+		"id":              cel.StringType,
+		"source":          cel.StringType,
+		"specversion":     cel.StringType,
+		"time":            cel.StringType, // RFC3339 string per CE spec
+		"datacontenttype": cel.StringType,
+		"subject":         cel.StringType,
+	},
+}
+
 // AuditLogSchema is exposed to filters against AuditLogEntry rows
 // (ListAuditLog, ExportAuditLog). `is_error` is a derived bool — true
 // when the entry has a non-empty error_message — exposed because it's
@@ -75,6 +111,74 @@ var AuditLogSchema = &Schema{
 		"at":              cel.TimestampType,
 		"is_error":        cel.BoolType,
 	},
+}
+
+// SchemaByName resolves a registered schema by its public name. Used by
+// the admin CEL validation RPC to pick the right schema for the caller's
+// context (Object | ObjectKey | AuditLogEntry | EventEnvelope). Returns
+// nil for unknown names so callers can map to InvalidArgument.
+func SchemaByName(name string) *Schema {
+	switch name {
+	case ObjectSchema.Name:
+		return ObjectSchema
+	case BucketSchema.Name:
+		return BucketSchema
+	case AuditLogSchema.Name:
+		return AuditLogSchema
+	case EventEnvelopeSchema.Name:
+		return EventEnvelopeSchema
+	default:
+		return nil
+	}
+}
+
+// CompileError carries the first compile diagnostic with 1-indexed source
+// position (line, column). Returned from CompileWithPosition for callers
+// that want to surface line / column to the user (admin CEL validation).
+//
+// cel-go's Issues.Errors() yields []*cel.Error with Location.Line() /
+// .Column() — Line is 1-indexed, Column is 0-indexed in cel-go itself
+// but display strings add 1. We normalise to 1-indexed for both.
+type CompileError struct {
+	Message string
+	Line    int
+	Column  int
+}
+
+func (e *CompileError) Error() string { return e.Message }
+
+// CompileFirstError compiles `expr` against `schema` and, on failure,
+// returns a *CompileError carrying the first diagnostic's position.
+// Used by admin CELService.Validate to populate line/column in the
+// response without leaking the cel-go error formatting.
+//
+// An empty expression is valid (returns nil) — same sentinel as
+// Validate.
+func CompileFirstError(schema *Schema, expr string) error {
+	if expr == "" {
+		return nil
+	}
+	env, err := buildEnv(schema)
+	if err != nil {
+		return &CompileError{Message: fmt.Sprintf("build env: %v", err)}
+	}
+	ast, iss := env.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		errs := iss.Errors()
+		if len(errs) == 0 {
+			return &CompileError{Message: iss.Err().Error()}
+		}
+		first := errs[0]
+		return &CompileError{
+			Message: first.Message,
+			Line:    first.Location.Line(),
+			Column:  first.Location.Column() + 1, // 0→1-indexed
+		}
+	}
+	if ast.OutputType() != cel.BoolType {
+		return &CompileError{Message: fmt.Sprintf("expression must return bool, got %s", ast.OutputType())}
+	}
+	return nil
 }
 
 // Evaluator compiles and caches CEL programs per schema+expression.

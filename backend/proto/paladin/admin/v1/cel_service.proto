@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+
+// CELService validates CEL filter expressions against named schemas.
+//
+// Lightweight and stateless — no DB, no audit, no Cedar gate. Same trust
+// posture as PolicyService.Validate (Cedar): non-mutating, no tenant data
+// exposed; the schema set is hard-coded server-side.
+//
+// Used by the admin UI to give operators inline feedback while they type
+// filter / match expressions for lifecycle rules, event subscriptions,
+// and list-RPC query strings — surfacing failures at edit-time instead
+// of at apply-time-from-a-background-worker.
+service CELService {
+  rpc Validate(ValidateCELRequest) returns (ValidateCELResponse);
+}
+
+message ValidateCELRequest {
+  // Schema the expression is validated against. One of:
+  //   "Object" | "ObjectKey" | "AuditLogEntry" | "EventEnvelope"
+  // Unknown names return InvalidArgument.
+  string schema = 1 [(buf.validate.field).string.min_len = 1];
+
+  // CEL source. Empty is treated as valid (the match-all sentinel — same
+  // semantics as cel.Validate / cel.Compile in internal/filter/cel).
+  string expression = 2;
+}
+
+message ValidateCELResponse {
+  bool valid = 1;
+
+  // Empty when valid; first compile diagnostic message when invalid.
+  string message = 2;
+
+  // 1-indexed source position of the first diagnostic. Zero when not
+  // available (e.g. non-positional errors like "expression must return
+  // bool"). Callers should treat 0 / 0 as "no position info".
+  int32 line = 3;
+  int32 column = 4;
+}

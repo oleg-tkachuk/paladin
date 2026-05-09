@@ -51,6 +51,8 @@ import { useScope } from "@/context/ScopeContext";
 import { eventSubscriptionClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { useCELValidation } from "@/hooks/useCELValidation";
+import { CELIndicator } from "@/components/ui/CELIndicator";
 import type {
   EventSubscription,
   EventSink,
@@ -711,6 +713,15 @@ export default function EventsPage() {
     return Object.keys(validateForm(form)).length === 0;
   }, [editing, form]);
 
+  // Live CEL validation against the EventEnvelope schema. Mirrors the
+  // lifecycle editor: keep submit + Test disabled while in flight or on
+  // a compile error so operators learn about bad filters at edit-time
+  // rather than at first event delivery.
+  const filterCELState = useCELValidation(form.filter, "EventEnvelope");
+  const filterCELBlocksSubmit =
+    filterCELState.status === "invalid" ||
+    filterCELState.status === "validating";
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1095,6 +1106,7 @@ export default function EventsPage() {
                   }
                   placeholder=""
                 />
+                <CELIndicator state={filterCELState} />
               </Field>
             </FormSection>
 
@@ -1151,7 +1163,7 @@ export default function EventsPage() {
             <Button
               type="button"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || filterCELBlocksSubmit}
             >
               {saving ? "Saving…" : editing ? "Save changes" : "Create"}
             </Button>
