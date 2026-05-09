@@ -32,8 +32,30 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { T } from "@/lib/ui/typography";
+
+// SpecRow renders one fact in the Specs sidebar — label above value,
+// value gets full sidebar width to wrap into. Children are usually
+// `<span>value</span>` and optionally a copy button; the row's flex
+// layout keeps the value and the trailing action on the same baseline
+// while letting the value `break-all` wrap when it's a long mono
+// string (UUID, path).
+function SpecRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <dt className={T.label}>{label}</dt>
+      <dd className="flex min-w-0 items-start gap-2">{children}</dd>
+    </div>
+  );
+}
 
 interface ObjectDetailViewProps {
   objectKey: string;
@@ -454,12 +476,24 @@ export function ObjectDetailView({
             rather than plain mono. Drops the plain "Object Key" row
             and the standalone Identifiers card. ──────────────── */}
         <aside className="space-y-4">
+          {/* Stacked-row layout (label above value) instead of the
+              side-by-side `[140px_1fr]` dl that worked in the wide
+              object-keys/[name] page but cramped the sidebar here.
+              Sidebar takes 1/3 of the page width on lg+, so a 36-char
+              UUID or a long Storage Path needs the full column to
+              wrap into. Stacked rows give each value full width and
+              `break-all` lets long mono strings wrap mid-token without
+              spilling out of the card.
+              A Separator between the identity group (UUID, path,
+              key-link) and the attributes group (size, type, state,
+              tag, expires, ref) keeps the card scannable in two
+              passes — one for "what is this thing" and one for "what
+              are its properties". */}
           <Card className="space-y-3 p-4">
             <h2 className="text-sm font-semibold">Specs</h2>
-            <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
-              <dt className="text-muted-foreground">Object UUID</dt>
-              <dd className="flex items-center gap-2 min-w-0">
-                <span className="truncate font-mono text-xs">
+            <dl className="space-y-3">
+              <SpecRow label="Object UUID">
+                <span className="break-all font-mono text-xs">
                   {object.objectId || objectKey}
                 </span>
                 <IdentifierCopy
@@ -467,11 +501,13 @@ export function ObjectDetailView({
                   label="Object UUID"
                   iconOnly
                 />
-              </dd>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">Storage Path</dt>
-              <dd className="flex items-center gap-2 min-w-0">
-                <span className="truncate font-mono text-xs" title={object.key}>
+              <SpecRow label="Storage Path">
+                <span
+                  className="break-all font-mono text-xs"
+                  title={object.key}
+                >
                   {object.key}
                 </span>
                 <Button
@@ -482,50 +518,55 @@ export function ObjectDetailView({
                 >
                   <ClipboardIcon className="size-3.5" />
                 </Button>
-              </dd>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">Object Key</dt>
-              <dd>
+              <SpecRow label="Object Key">
                 <Link
                   href={`/object-keys/${object.objectKey}`}
-                  className="font-mono text-xs text-primary hover:underline"
+                  className="break-all font-mono text-xs text-primary hover:underline"
                 >
                   {object.objectKey}
                 </Link>
-              </dd>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">Size</dt>
-              <dd className="font-mono text-xs">
-                {formatBytes(object.sizeBytes)}
-              </dd>
+              <Separator />
 
-              <dt className="text-muted-foreground">Type</dt>
-              <dd className="break-all font-mono text-xs">
-                {object.contentType || "—"}
-              </dd>
+              <SpecRow label="Size">
+                <span className="font-mono text-xs">
+                  {formatBytes(object.sizeBytes)}
+                </span>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">State</dt>
-              <dd>
+              <SpecRow label="Type">
+                <span className="break-all font-mono text-xs">
+                  {object.contentType || "—"}
+                </span>
+              </SpecRow>
+
+              <SpecRow label="State">
                 <span className={cn(T.pill, stateColors.text)}>
                   <span className={cn(T.pillDot, stateColors.dot)} />
                   {ObjectState[object.state]}
                 </span>
-              </dd>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">Object Tag</dt>
-              <dd className="font-mono text-xs">
-                {object.tags?.object_tag || "—"}
-              </dd>
+              <SpecRow label="Object Tag">
+                <span className="font-mono text-xs">
+                  {object.tags?.object_tag || "—"}
+                </span>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">Expires</dt>
-              <dd className="font-mono text-xs">
-                {formatExpiresAt(object.presignExpiresAt?.seconds)}
-              </dd>
+              <SpecRow label="Expires">
+                <span className="font-mono text-xs">
+                  {formatExpiresAt(object.presignExpiresAt?.seconds)}
+                </span>
+              </SpecRow>
 
-              <dt className="text-muted-foreground">External Ref</dt>
-              <dd className="break-all font-mono text-xs">
-                {object.externalRef || "—"}
-              </dd>
+              <SpecRow label="External Ref">
+                <span className="break-all font-mono text-xs">
+                  {object.externalRef || "—"}
+                </span>
+              </SpecRow>
             </dl>
           </Card>
         </aside>
