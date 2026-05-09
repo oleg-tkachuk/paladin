@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -316,6 +317,24 @@ export default function PoliciesPage() {
     }
   }, [policyText, showNotification]);
 
+  // Pending template confirmation: when the editor buffer diverges
+  // from the server snapshot, applying a template would clobber unsaved
+  // work. Stash the candidate id and open <ConfirmModal> instead of
+  // the native window.confirm() — same warning UX as the rest of the
+  // app (Move to Trash / Restore / Revoke). Clean buffer applies
+  // immediately with no dialog.
+  const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(
+    null,
+  );
+
+  const applyTemplate = useCallback((id: string) => {
+    const tpl = POLICY_TEMPLATES.find((t) => t.id === id);
+    if (!tpl) return;
+    setPolicyText(tpl.cedar);
+    setTemplateId(tpl.id);
+    setDiagnostics(null);
+  }, []);
+
   const handleLoadTemplate = useCallback(
     (id: string) => {
       const tpl = POLICY_TEMPLATES.find((t) => t.id === id);
@@ -323,19 +342,20 @@ export default function PoliciesPage() {
       const dirty =
         policyText.trim().length > 0 && policyText !== serverSnapshot;
       if (dirty) {
-        const ok =
-          typeof window !== "undefined"
-            ? window.confirm(
-                "Loading a template will replace the current editor contents. Continue?",
-              )
-            : true;
-        if (!ok) return;
+        setPendingTemplateId(id);
+        return;
       }
-      setPolicyText(tpl.cedar);
-      setTemplateId(tpl.id);
-      setDiagnostics(null);
+      applyTemplate(id);
     },
-    [policyText, serverSnapshot],
+    [policyText, serverSnapshot, applyTemplate],
+  );
+
+  const pendingTemplate = useMemo(
+    () =>
+      pendingTemplateId
+        ? POLICY_TEMPLATES.find((t) => t.id === pendingTemplateId)
+        : null,
+    [pendingTemplateId],
   );
 
   const handleSave = useCallback(async () => {
@@ -627,6 +647,29 @@ export default function PoliciesPage() {
           <TestSuite defaultResource={target} />
         </TabsContent>
       </Tabs>
+
+      {/* ─── Load-template confirmation ───────────────────────────────
+          Mirrors the warn-before-clobber pattern used by the object
+          inspector / capability revoke flows. Type=warning because
+          dropping unsaved edits is recoverable from git / muscle
+          memory but not from the editor itself. */}
+      <ConfirmModal
+        isOpen={pendingTemplate !== null}
+        onClose={() => setPendingTemplateId(null)}
+        onConfirm={() => {
+          if (pendingTemplateId) applyTemplate(pendingTemplateId);
+          setPendingTemplateId(null);
+        }}
+        title="Replace editor contents?"
+        message={
+          pendingTemplate
+            ? `Loading the "${pendingTemplate.label}" template will replace your unsaved Cedar edits. This cannot be undone from the UI.`
+            : ""
+        }
+        type="warning"
+        confirmText="Load template"
+        cancelText="Keep editing"
+      />
     </div>
   );
 }
