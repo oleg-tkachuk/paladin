@@ -37,6 +37,11 @@ backend:
     # endpoint on whichever Service happens to listen there.
     worker: "http://paladin-paladin-worker.paladin.svc.cluster.local:8099"
     mcp:    "http://paladin-paladin-mcp.paladin.svc.cluster.local:8095"
+    # dispatcher exposes /system/health.json on the same ops port shape
+    # as worker. Service port 8099 (matches the backend chart's
+    # deployments.dispatcher.service.ports). Surfaces in the BFF
+    # /api/health/all aggregator alongside api/admin/worker/mcp.
+    dispatcher: "http://paladin-paladin-dispatcher.paladin.svc.cluster.local:8099"
 
 image:
   repository: registry.local/paladin/paladin-ui

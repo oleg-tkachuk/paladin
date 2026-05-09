@@ -46,6 +46,14 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
     envKey: "PALADIN_MCP_URL",
     defaultUrl: "http://paladin-mcp:8095",
   },
+  // Dispatcher pod — durable webhook fan-out (event_deliveries outbox,
+  // migration 028). Same ops shape as worker; the BFF aggregator just
+  // needs a /system/health.json endpoint.
+  {
+    name: "dispatcher",
+    envKey: "PALADIN_DISPATCHER_URL",
+    defaultUrl: "http://paladin-dispatcher:8099",
+  },
 ];
 
 // Per-role timeout. The kubelet probe timeout is 3s; fetching the

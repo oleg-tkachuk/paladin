@@ -292,6 +292,26 @@ worker: {
   } // close worker.jobs
 } // close worker
 
+// Dispatcher role — `serve dispatcher`. The durable webhook fan-out
+// loop. Producer (admin pod) writes event_deliveries rows; this pod
+// consumes them via FOR UPDATE SKIP LOCKED. Multiple replicas safe.
+// Default port 8099 matches the chart's dispatcher containerPort.
+dispatcher: {
+  ops: #HTTPServer & {addr: string | *"0.0.0.0:8099"}
+  // PollInterval — idle-loop sleep when no rows are ready.
+  poll_interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1s"
+  // BatchSize — rows pulled per FOR UPDATE SKIP LOCKED scan.
+  batch_size:           int & >= 1 | *50
+  // BaseBackoff / MaxBackoff — per-row retry curve, doubles per
+  // attempt up to MaxBackoff.
+  base_backoff:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+  max_backoff:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+  // DefaultMaxAttempts — retry budget when the sub's
+  // HttpSink.MaxAttempts is unset. Beyond this, the row flips to
+  // status='failed' and the queue stops touching it.
+  default_max_attempts: int & >= 1 | *5
+}
+
 // Storage is the registry of physical object-storage backends. Each
 // logical object_key picks one by name; when its `storage_backend`
 // column is empty the service falls back to `default_backend`.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
@@ -45,8 +46,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine)
+	// Admin pod owns the producer side of the outbox — Dispatch writes
+	// rows; the dispatcher pod (a separate Deployment, see
+	// cmd/server/serve_dispatcher.go) consumes them. The same struct
+	// retains DeliverOne for the synchronous TestSubscription RPC,
+	// which intentionally bypasses the outbox: operator clicked
+	// "Test Webhook", they want the result now.
 	dispatcher := &worker.Dispatcher{
 		Store:       eventSubStoreAdapter{r: repos.EventSub},
+		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}
@@ -230,12 +238,18 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	return listener, healthH, nil
 }
 
-// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository under
-// the worker.SubscriptionStore interface (List-only).
+// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository
+// under the worker.SubscriptionStore interface (List + Get). List feeds
+// the producer-side fan-out; Get is the dispatcher pod's per-row sink
+// lookup at delivery time.
 type eventSubStoreAdapter struct {
 	r admindomain.EventSubscriptionRepository
 }
 
 func (a eventSubStoreAdapter) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	return a.r.List(ctx, args)
+}
+
+func (a eventSubStoreAdapter) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	return a.r.Get(ctx, id)
 }

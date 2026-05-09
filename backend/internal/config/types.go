@@ -37,6 +37,7 @@ type Config struct {
 	Admin      Admin      `yaml:"admin" json:"admin"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
+	Dispatcher Dispatcher `yaml:"dispatcher" json:"dispatcher"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -363,6 +364,39 @@ type WorkerJobs struct {
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
+}
+
+// Dispatcher is the per-role config block for the `serve dispatcher`
+// binary — the durable webhook fan-out loop introduced by migration
+// 028 (event_deliveries outbox). Producer (admin pod) writes rows;
+// this loop consumes them.
+//
+// Per-knob notes:
+//
+//   - PollInterval — idle-loop sleep when no rows are ready. Hot
+//     spikes burn down without polling pressure (the loop reschedules
+//     immediately when a batch returns rows); a 1s tick is the cost of
+//     a cold queue.
+//   - BatchSize — rows pulled per FOR UPDATE SKIP LOCKED scan. Larger
+//     batches amortise the tx round-trip but hold row locks longer
+//     while the loop processes them serially. 50 is a safe default
+//     for the HTTP-bound delivery profile.
+//   - BaseBackoff / MaxBackoff — per-row retry curve. Doubles per
+//     attempt up to MaxBackoff. Lifted from the prior in-process
+//     defaults; tuned at runtime if a noisy customer dominates.
+//   - DefaultMaxAttempts — retry budget when the sub's
+//     HttpSink.MaxAttempts is unset. Beyond this, the row flips to
+//     status='failed' and the queue stops touching it.
+type Dispatcher struct {
+	// Ops is the dispatcher pod's HTTP listener for /healthz +
+	// /readyz + /system/health.json. Defaults to :8099 — same shape
+	// as the worker's ops listener but a different role tag.
+	Ops                HTTPServer    `yaml:"ops" json:"ops"`
+	PollInterval       time.Duration `yaml:"poll_interval" json:"poll_interval"`
+	BatchSize          int           `yaml:"batch_size" json:"batch_size"`
+	BaseBackoff        time.Duration `yaml:"base_backoff" json:"base_backoff"`
+	MaxBackoff         time.Duration `yaml:"max_backoff" json:"max_backoff"`
+	DefaultMaxAttempts int           `yaml:"default_max_attempts" json:"default_max_attempts"`
 }
 
 // OperationsWorker drives the long-running operation queue

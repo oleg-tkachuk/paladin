@@ -9,6 +9,7 @@
 //	paladin serve api         Run data + iam Connect listeners. No workers.
 //	paladin serve admin       Run the admin Connect listener.
 //	paladin serve worker      Run all background jobs, lease-coordinated.
+//	paladin serve dispatcher  Run the durable webhook fan-out loop (outbox).
 //	paladin serve mcp         Run the MCP server (stdio or streamable-HTTP).
 //
 // Each subcommand exits non-zero on a fatal error. The legacy collapsed

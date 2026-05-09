@@ -74,6 +74,8 @@ spec:
               value: {{ .Values.backend.urls.worker | quote }}
             - name: PALADIN_MCP_URL
               value: {{ .Values.backend.urls.mcp | quote }}
+            - name: PALADIN_DISPATCHER_URL
+              value: {{ .Values.backend.urls.dispatcher | quote }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
