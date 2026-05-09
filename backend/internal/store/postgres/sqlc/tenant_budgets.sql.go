@@ -12,8 +12,8 @@ import (
 )
 
 const chargeTenantBudget = `-- name: ChargeTenantBudget :one
-INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, period_start, updated_at)
-VALUES ($1, 0, $2::numeric, now(), now())
+INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
+VALUES ($1, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), now(), now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
     updated_at = now()
@@ -25,28 +25,40 @@ RETURNING spent_usd
 
 // Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 // row is missing, treats max as 0 (no cap enforced) and inserts a
-// fresh accumulator row. Returns the new spent_usd; pgx.ErrNoRows
+// fresh accumulator row with the supplied unit_code (defaults to
+// 'USD' when empty). Returns the new spent_usd; pgx.ErrNoRows
 // means "would exceed cap" — caller maps to ErrTenantBudgetExceeded.
-func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) (pgtype.Numeric, error) {
-	row := q.db.QueryRow(ctx, chargeTenantBudget, tenantID, amountUsd)
+func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, chargeTenantBudget, tenantID, amountUsd, unitCode)
 	var spent_usd pgtype.Numeric
 	err := row.Scan(&spent_usd)
 	return spent_usd, err
 }
 
 const getTenantBudget = `-- name: GetTenantBudget :one
-SELECT tenant_id, max_budget_usd, spent_usd, period_start, period_end, updated_at
+SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at
 FROM tenant_budgets
 WHERE tenant_id = $1
 `
 
-func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (TenantBudget, error) {
+type GetTenantBudgetRow struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UnitCode     string             `json:"unit_code"`
+	PeriodStart  pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error) {
 	row := q.db.QueryRow(ctx, getTenantBudget, tenantID)
-	var i TenantBudget
+	var i GetTenantBudgetRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.MaxBudgetUsd,
 		&i.SpentUsd,
+		&i.UnitCode,
 		&i.PeriodStart,
 		&i.PeriodEnd,
 		&i.UpdatedAt,
@@ -84,34 +96,56 @@ func (q *Queries) RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, 
 
 const setTenantBudget = `-- name: SetTenantBudget :one
 
-INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, period_start, period_end, updated_at)
-VALUES ($1, $2::numeric, 0, now(), $3::timestamptz, now())
+INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at)
+VALUES ($1, $2::numeric, 0, COALESCE(NULLIF($3::text, ''), 'USD'), now(), $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET max_budget_usd = EXCLUDED.max_budget_usd,
-    spent_usd      = CASE WHEN $4::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
-    period_start   = CASE WHEN $4::boolean THEN now() ELSE tenant_budgets.period_start END,
-    period_end     = COALESCE($3::timestamptz, tenant_budgets.period_end),
+    spent_usd      = CASE WHEN $5::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
+    period_start   = CASE WHEN $5::boolean THEN now() ELSE tenant_budgets.period_start END,
+    period_end     = COALESCE($4::timestamptz, tenant_budgets.period_end),
+    unit_code      = COALESCE(NULLIF($3::text, ''), tenant_budgets.unit_code),
     updated_at     = now()
-RETURNING tenant_id, max_budget_usd, spent_usd, period_start, period_end, updated_at
+RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at
 `
 
+type SetTenantBudgetRow struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UnitCode     string             `json:"unit_code"`
+	PeriodStart  pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 // Tenant aggregate budget queries.
+//
+// Naming dichotomy: SQL columns retain `_usd` suffixes for historical
+// reasons; unit_code (migration 026) is the source of truth for the
+// currency interpretation. Go domain types use Amount + UnitCode.
 // Upserts the cap and rolls the period. Operators call this from
 // admin tooling on every billing cycle; spent_usd is reset to 0
 // when reset_spend = true (idiomatic monthly close), preserved
 // otherwise (mid-cycle adjustment that just changes the cap).
-func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, periodEnd pgtype.Timestamptz, resetSpend bool) (TenantBudget, error) {
+//
+// unit_code is written verbatim on insert; on conflict, it's
+// updated only when the caller passes a non-empty value (an empty
+// arg keeps the existing currency unchanged — operators editing
+// the cap shouldn't accidentally reinterpret an EUR budget as USD).
+func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool) (SetTenantBudgetRow, error) {
 	row := q.db.QueryRow(ctx, setTenantBudget,
 		tenantID,
 		maxBudgetUsd,
+		unitCode,
 		periodEnd,
 		resetSpend,
 	)
-	var i TenantBudget
+	var i SetTenantBudgetRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.MaxBudgetUsd,
 		&i.SpentUsd,
+		&i.UnitCode,
 		&i.PeriodStart,
 		&i.PeriodEnd,
 		&i.UpdatedAt,

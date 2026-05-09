@@ -391,14 +391,21 @@ vector: {
 }
 
 capability: {
-  enabled:               bool   | *false
-  issuer_name:           string | *""
-  trusted_issuers:       [...string] | *[]
-  signing_key_path:      string | *""
-  signing_key_kid:       string | *""
-  default_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-  verifier_leeway:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-  revocation_cache_ttl:  =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  enabled:                  bool   | *false
+  issuer_name:              string | *""
+  trusted_issuers:          [...string] | *[]
+  signing_key_path:         string | *""
+  signing_key_kid:          string | *""
+  default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  revocation_cache_ttl:     =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  // Auto-charge knob: amount + unit consumed by the capability
+  // interceptor on each billable handler call. Unit values are
+  // ISO 4217 fiat (USD/EUR/UAH/GBP) or the abstract sentinel UNIT
+  // for non-currency metering; empty defers to the capability's own
+  // declared unit (which defaults to USD).
+  charge_per_request_amount: number | *0
+  charge_per_request_unit:   "USD" | "EUR" | "UAH" | "GBP" | "UNIT" | *""
 }
 
 api_token: {

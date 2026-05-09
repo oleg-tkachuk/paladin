@@ -38,7 +38,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	capID := uuid.New()
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
-	spent, err := store.Charge(ctx, capID, 4.0, 10.0, tenantID)
+	spent, err := store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID)
 	if err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
@@ -49,16 +49,16 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	// Configure a tenant cap of 5 (default = 0 = unlimited; we want
 	// the rejection path).
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
-		TenantID:     tenantID,
-		MaxBudgetUSD: 5.0,
-		ResetSpend:   false, // keep the 4 we already charged
+		TenantID:        tenantID,
+		MaxBudgetAmount: 5.0,
+		ResetSpend:      false, // keep the 4 we already charged
 	}); err != nil {
 		t.Fatalf("set tenant budget: %v", err)
 	}
 
 	// Second charge: 4. Cap accepts (8 ≤ 10). Tenant rejects (8 > 5).
 	// Inner store should compensate the per-cap counter.
-	_, err = store.Charge(ctx, capID, 4.0, 10.0, tenantID)
+	_, err = store.Charge(ctx, capID, 4.0, 10.0, "USD", tenantID)
 	if !errors.Is(err, capability.ErrTenantBudgetExceeded) {
 		t.Fatalf("second charge: want ErrTenantBudgetExceeded, got %v", err)
 	}
@@ -68,8 +68,8 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if usage.SpentUSD < 3.99 || usage.SpentUSD > 4.01 {
-		t.Errorf("post-rejection cap spent = %v, want ~4.00 (compensation didn't fire)", usage.SpentUSD)
+	if usage.SpentAmount < 3.99 || usage.SpentAmount > 4.01 {
+		t.Errorf("post-rejection cap spent = %v, want ~4.00 (compensation didn't fire)", usage.SpentAmount)
 	}
 
 	// Verify the tenant counter is at 4 too — the rejected charge
@@ -78,8 +78,8 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get tenant budget: %v", err)
 	}
-	if tb.SpentUSD < 3.99 || tb.SpentUSD > 4.01 {
-		t.Errorf("tenant spent = %v, want ~4.00", tb.SpentUSD)
+	if tb.SpentAmount < 3.99 || tb.SpentAmount > 4.01 {
+		t.Errorf("tenant spent = %v, want ~4.00", tb.SpentAmount)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
 
-	if _, err := store.Charge(ctx, capID, 1.0, 0, tenantID); err != nil {
+	if _, err := store.Charge(ctx, capID, 1.0, 0, "USD", tenantID); err != nil {
 		t.Fatalf("seed charge: %v", err)
 	}
 	// Refund 5 — flooring at 0 means the row reads 0 after.
@@ -110,15 +110,15 @@ func TestCharge_RefundFloorsAtZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if u.SpentUSD != 0 {
-		t.Errorf("cap spent after over-refund = %v, want 0", u.SpentUSD)
+	if u.SpentAmount != 0 {
+		t.Errorf("cap spent after over-refund = %v, want 0", u.SpentAmount)
 	}
 	tb, err := store.GetTenantBudget(ctx, tenantID)
 	if err != nil {
 		t.Fatalf("get tenant: %v", err)
 	}
-	if tb.SpentUSD != 0 {
-		t.Errorf("tenant spent after over-refund = %v, want 0", tb.SpentUSD)
+	if tb.SpentAmount != 0 {
+		t.Errorf("tenant spent after over-refund = %v, want 0", tb.SpentAmount)
 	}
 }
 
@@ -134,32 +134,32 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 
 	// Initial cap 10, charge 7 against an unrelated capability.
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
-		TenantID:     tenantID,
-		MaxBudgetUSD: 10.0,
-		ResetSpend:   true,
+		TenantID:        tenantID,
+		MaxBudgetAmount: 10.0,
+		ResetSpend:      true,
 	}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	capID := uuid.New()
-	if _, err := store.Charge(ctx, capID, 7.0, 0, tenantID); err != nil {
+	if _, err := store.Charge(ctx, capID, 7.0, 0, "USD", tenantID); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
 	tb, _ := store.GetTenantBudget(ctx, tenantID)
-	if tb.SpentUSD < 6.99 || tb.SpentUSD > 7.01 {
-		t.Fatalf("pre-roll spent = %v, want 7", tb.SpentUSD)
+	if tb.SpentAmount < 6.99 || tb.SpentAmount > 7.01 {
+		t.Fatalf("pre-roll spent = %v, want 7", tb.SpentAmount)
 	}
 
 	// Roll the period: same cap (10), reset_spend=true.
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
-		TenantID:     tenantID,
-		MaxBudgetUSD: 10.0,
-		ResetSpend:   true,
+		TenantID:        tenantID,
+		MaxBudgetAmount: 10.0,
+		ResetSpend:      true,
 	}); err != nil {
 		t.Fatalf("roll: %v", err)
 	}
 	tb, _ = store.GetTenantBudget(ctx, tenantID)
-	if tb.SpentUSD != 0 {
-		t.Errorf("post-roll spent = %v, want 0", tb.SpentUSD)
+	if tb.SpentAmount != 0 {
+		t.Errorf("post-roll spent = %v, want 0", tb.SpentAmount)
 	}
 }

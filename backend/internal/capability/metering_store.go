@@ -43,8 +43,8 @@ func (s *MeteringStore) BumpRequest(ctx context.Context, capID uuid.UUID, maxReq
 	return count, err
 }
 
-// Charge emits paladin.capability.charge.{amount_usd,decisions,
-// current_spend_usd}.
+// Charge emits paladin.capability.charge.{amount,decisions,
+// current_spend}.
 //
 // Outcome accounting:
 //
@@ -57,34 +57,35 @@ func (s *MeteringStore) BumpRequest(ctx context.Context, capID uuid.UUID, maxReq
 func (s *MeteringStore) Charge(
 	ctx context.Context,
 	capID uuid.UUID,
-	amountUSD, maxBudgetUSD float64,
+	amount, maxBudget float64,
+	unitCode string,
 	tenantID uuid.UUID,
 ) (float64, error) {
-	spent, err := s.Inner.Charge(ctx, capID, amountUSD, maxBudgetUSD, tenantID)
+	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID)
 	switch {
 	case err == nil:
-		recordChargeAttempt(ctx, tenantID, amountUSD, spent, "allowed")
+		recordChargeAttempt(ctx, tenantID, amount, spent, "allowed")
 	case errors.Is(err, ErrBudgetExceeded):
-		recordChargeAttempt(ctx, tenantID, amountUSD, 0, "cap_exceeded")
+		recordChargeAttempt(ctx, tenantID, amount, 0, "cap_exceeded")
 	case errors.Is(err, ErrTenantBudgetExceeded):
-		recordChargeAttempt(ctx, tenantID, amountUSD, 0, "tenant_exceeded")
+		recordChargeAttempt(ctx, tenantID, amount, 0, "tenant_exceeded")
 	}
 	return spent, err
 }
 
-func (s *MeteringStore) RefundCapability(ctx context.Context, capID uuid.UUID, amountUSD float64) error {
-	if err := s.Inner.RefundCapability(ctx, capID, amountUSD); err != nil {
+func (s *MeteringStore) RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error {
+	if err := s.Inner.RefundCapability(ctx, capID, amount); err != nil {
 		return err
 	}
-	recordRefund(ctx, uuid.Nil, amountUSD, "capability")
+	recordRefund(ctx, uuid.Nil, amount, "capability")
 	return nil
 }
 
-func (s *MeteringStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amountUSD float64) error {
-	if err := s.Inner.RefundTenant(ctx, tenantID, amountUSD); err != nil {
+func (s *MeteringStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error {
+	if err := s.Inner.RefundTenant(ctx, tenantID, amount); err != nil {
 		return err
 	}
-	recordRefund(ctx, tenantID, amountUSD, "tenant")
+	recordRefund(ctx, tenantID, amount, "tenant")
 	return nil
 }
 

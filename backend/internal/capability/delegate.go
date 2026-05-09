@@ -113,11 +113,32 @@ func narrowsCaveats(parent, child Caveats) error {
 		}
 	}
 
-	// Budget: same rule.
-	if parent.MaxBudgetUSD > 0 {
-		if child.MaxBudgetUSD == 0 || child.MaxBudgetUSD > parent.MaxBudgetUSD {
+	// Unit code: child must declare the same unit as the parent.
+	// We don't auto-convert between currencies — a delegated child
+	// in EUR off a USD parent is a configuration mistake (which
+	// budget does the eventual charge land on?) and is rejected at
+	// issuance. Empty values are normalised to DefaultUnitCode for
+	// the comparison so legacy parents without an explicit unit
+	// don't reject every new child.
+	parentUnit := parent.UnitCode
+	if parentUnit == "" {
+		parentUnit = DefaultUnitCode
+	}
+	childUnit := child.UnitCode
+	if childUnit == "" {
+		childUnit = DefaultUnitCode
+	}
+	if parentUnit != childUnit {
+		return fmt.Errorf("%w: parent unit_code %q vs child %q",
+			ErrUnitCodeMismatch, parentUnit, childUnit)
+	}
+
+	// Budget: same rule. Compared in the shared unit_code (validated
+	// just above) so we don't need an FX rate.
+	if parent.MaxBudgetAmount > 0 {
+		if child.MaxBudgetAmount == 0 || child.MaxBudgetAmount > parent.MaxBudgetAmount {
 			return fmt.Errorf("%w: child budget %.4f exceeds parent %.4f",
-				ErrDelegationTooWide, child.MaxBudgetUSD, parent.MaxBudgetUSD)
+				ErrDelegationTooWide, child.MaxBudgetAmount, parent.MaxBudgetAmount)
 		}
 	}
 

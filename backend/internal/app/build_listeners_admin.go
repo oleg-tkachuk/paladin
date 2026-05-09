@@ -72,10 +72,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Admin.Server.RealIPHeader,
-			cfg.Capability.ChargePerRequest,
+			cfg.Capability.ChargePerRequestAmount,
+			cfg.Capability.ChargePerRequestUnit,
 		)
 	} else {
-		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0)
+		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
 	}
 	if deps.APIToken != nil {
 		apiTokAdmin = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")

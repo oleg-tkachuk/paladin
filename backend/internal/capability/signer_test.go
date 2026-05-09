@@ -47,7 +47,7 @@ func TestSign_RoundTrip(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetUSD:     0.50,
+			MaxBudgetAmount:  0.50,
 			MaxRequests:      100,
 		},
 	}
@@ -76,8 +76,8 @@ func TestSign_RoundTrip(t *testing.T) {
 	if got.Subject.Agent == nil || got.Subject.Agent.AgentType != "research-orchestrator" {
 		t.Errorf("AgentPrincipal round-trip lost")
 	}
-	if got.Caveats.MaxBudgetUSD != 0.50 {
-		t.Errorf("MaxBudgetUSD: got %v, want 0.50", got.Caveats.MaxBudgetUSD)
+	if got.Caveats.MaxBudgetAmount != 0.50 {
+		t.Errorf("MaxBudgetAmount: got %v, want 0.50", got.Caveats.MaxBudgetAmount)
 	}
 	if got.Generation != 1 {
 		t.Errorf("Generation: got %d, want 1", got.Generation)
@@ -179,7 +179,7 @@ func TestNarrows_RejectsWidening(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetUSD:     1.00,
+			MaxBudgetAmount:  1.00,
 			MaxRequests:      50,
 		},
 		IssuedAt:  now,
@@ -197,7 +197,7 @@ func TestNarrows_RejectsWidening(t *testing.T) {
 			c.ExpiresAt = now.Add(time.Hour)
 		},
 		"wider budget": func(c *Capability) {
-			c.Caveats.MaxBudgetUSD = 10.00
+			c.Caveats.MaxBudgetAmount = 10.00
 		},
 		"unrestricted prefix": func(c *Capability) {
 			c.Caveats.ResourcePrefixes = nil
@@ -232,6 +232,42 @@ func TestNarrows_RejectsWidening(t *testing.T) {
 	}
 }
 
+// TestNarrows_RejectsCrossCurrency confirms a child capability whose
+// UnitCode disagrees with the parent's is rejected at delegation
+// time. We don't auto-convert between currencies — a child in EUR
+// off a USD parent has no defined budget semantics, so the issuer
+// fails closed.
+func TestNarrows_RejectsCrossCurrency(t *testing.T) {
+	t.Parallel()
+	tenantID := uuid.New()
+	now := time.Now().UTC()
+	parent := Capability{
+		ID:       uuid.New(),
+		Issuer:   "i",
+		Subject:  Principal{TenantID: tenantID, Type: PrincipalAgent},
+		Audience: []string{AudiencePlaneData},
+		Caveats: Caveats{
+			Ops:             []Op{OpGet},
+			MaxBudgetAmount: 10.0,
+			UnitCode:        "USD",
+		},
+		IssuedAt:  now,
+		ExpiresAt: now.Add(15 * time.Minute),
+	}
+	child := parent
+	child.ID = uuid.New()
+	child.ParentID = parent.ID
+	child.Caveats = Caveats{
+		Ops:             []Op{OpGet},
+		MaxBudgetAmount: 5.0,
+		UnitCode:        "EUR", // ← mismatch
+	}
+	err := Narrows(parent, child)
+	if !errors.Is(err, ErrUnitCodeMismatch) {
+		t.Fatalf("expected ErrUnitCodeMismatch, got %v", err)
+	}
+}
+
 // TestNarrows_AcceptsValidNarrowing covers the happy path: narrowing on
 // every axis produces a valid child.
 func TestNarrows_AcceptsValidNarrowing(t *testing.T) {
@@ -247,7 +283,7 @@ func TestNarrows_AcceptsValidNarrowing(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetUSD:     1.00,
+			MaxBudgetAmount:  1.00,
 			MaxRequests:      100,
 		},
 		IssuedAt:  now,
@@ -261,7 +297,7 @@ func TestNarrows_AcceptsValidNarrowing(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetUSD:     0.10,
+			MaxBudgetAmount:  0.10,
 			MaxRequests:      10,
 		},
 		IssuedAt:  now,

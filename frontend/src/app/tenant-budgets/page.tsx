@@ -22,6 +22,8 @@ import { tenantBudgetClient } from "@/lib/connect/client";
 import type { TenantBudget } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
+import { Select } from "@/components/ui/Select";
 
 // /tenant-budgets — admin surface for the per-tenant aggregate USD
 // spend cap that backs the capability subsystem's two-phase Charge.
@@ -56,9 +58,12 @@ function formatTimestamp(ts: { seconds: bigint } | undefined): string {
   }
 }
 
-function formatUSD(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+// formatAmount renders a budget amount with its unit_code via the
+// shared formatter. ISO currencies use Intl.NumberFormat's currency
+// style; UNIT renders as "X.XX units"; unknown codes fall through to
+// "X.XX <code>".
+function formatAmount(n: number, unit: string): string {
+  return formatMoney(n, unit);
 }
 
 // progressColour clamps to three buckets: < 70 % green, 70-90 amber,
@@ -114,6 +119,7 @@ export default function TenantBudgetsPage() {
 
   // ── set form state ──────────────────────────────────────────────────
   const [maxBudget, setMaxBudget] = useState<string>("");
+  const [unitCode, setUnitCode] = useState<string>("USD");
   const [resetSpend, setResetSpend] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -121,9 +127,11 @@ export default function TenantBudgetsPage() {
   // cap so editing is "tweak this" rather than "type from scratch".
   useEffect(() => {
     if (budget) {
-      setMaxBudget(String(budget.maxBudgetUsd));
+      setMaxBudget(String(budget.maxBudgetAmount));
+      if (budget.unitCode) setUnitCode(budget.unitCode);
     } else {
       setMaxBudget("");
+      setUnitCode("USD");
     }
     setResetSpend(false);
   }, [budget]);
@@ -144,7 +152,8 @@ export default function TenantBudgetsPage() {
     try {
       const res = await tenantBudgetClient.set({
         tenantId,
-        maxBudgetUsd: cap,
+        maxBudgetAmount: cap,
+        unitCode,
         resetSpend,
       });
       setBudget(res.budget ?? null);
@@ -153,8 +162,8 @@ export default function TenantBudgetsPage() {
         type: "success",
         title: "Budget updated",
         message: resetSpend
-          ? `Cap set to ${formatUSD(cap)} and period rolled.`
-          : `Cap set to ${formatUSD(cap)}.`,
+          ? `Cap set to ${formatAmount(cap, unitCode)} and period rolled.`
+          : `Cap set to ${formatAmount(cap, unitCode)}.`,
       });
     } catch (err) {
       const msg =
@@ -169,8 +178,9 @@ export default function TenantBudgetsPage() {
     }
   };
 
-  const spent = Number(budget?.spentUsd ?? 0);
-  const cap = Number(budget?.maxBudgetUsd ?? 0);
+  const spent = Number(budget?.spentAmount ?? 0);
+  const cap = Number(budget?.maxBudgetAmount ?? 0);
+  const budgetUnit = budget?.unitCode || "USD";
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
   const overCap = cap > 0 && spent >= cap;
 
@@ -228,13 +238,21 @@ export default function TenantBudgetsPage() {
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <div>
                 <Label className="text-xs text-muted-foreground">Spent</Label>
-                <div className="font-mono text-2xl">{formatUSD(spent)}</div>
+                <div className="font-mono text-2xl">
+                  {formatAmount(spent, budgetUnit)}
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Cap</Label>
                 <div className="font-mono text-2xl">
-                  {cap > 0 ? formatUSD(cap) : "∞ unlimited"}
+                  {cap > 0 ? formatAmount(cap, budgetUnit) : "∞ unlimited"}
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Currency / Unit
+                </Label>
+                <div className="font-mono text-sm">{budgetUnit}</div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">
@@ -294,9 +312,9 @@ export default function TenantBudgetsPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="max-budget">Max budget (USD)</Label>
+                <Label htmlFor="max-budget">Max budget</Label>
                 <Input
                   id="max-budget"
                   type="number"
@@ -308,6 +326,22 @@ export default function TenantBudgetsPage() {
                 />
                 <p className={T.hint}>
                   0 keeps the counter accumulating without rejecting.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="unit-code">Currency / Unit</Label>
+                <Select
+                  options={ALLOWED_UNIT_CODES.map((u) => ({
+                    value: u,
+                    label: u,
+                  }))}
+                  value={unitCode}
+                  onChange={setUnitCode}
+                  className="w-full"
+                />
+                <p className={T.hint}>
+                  ISO 4217 fiat or UNIT for non-currency metering.
                 </p>
               </div>
 

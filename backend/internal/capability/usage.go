@@ -9,9 +9,9 @@ import (
 )
 
 // UsageStore tracks per-capability runtime counters used to enforce
-// the MaxRequests and MaxBudgetUSD caveats. Separated from Store so
-// the issuance / revocation surface stays focused on identity, not
-// runtime state.
+// the MaxRequests and MaxBudgetAmount caveats. Separated from Store
+// so the issuance / revocation surface stays focused on identity,
+// not runtime state.
 //
 // All methods are concurrency-safe — implementations atomic-UPSERT
 // per capability row in a single round-trip. Two callers may race
@@ -24,15 +24,17 @@ type UsageStore interface {
 	// the row.
 	BumpRequest(ctx context.Context, capID uuid.UUID, maxRequests int64) (newCount int64, err error)
 
-	// Charge adds amountUSD to the per-capability spend counter AND
+	// Charge adds amount to the per-capability spend counter AND
 	// to the tenant aggregate (when tenantID is non-zero). The two
 	// counters are atomic individually; cross-counter consistency is
 	// best-effort: if the tenant charge fails after the capability
 	// charge succeeded, the capability spend remains incremented and
 	// the caller is expected to refund. Order of checks:
 	//
-	//   1. Capability cap (cap.Caveats.MaxBudgetUSD)
-	//   2. Tenant aggregate cap (tenant_budgets.max_budget_usd)
+	//   1. Capability cap (cap.Caveats.MaxBudgetAmount)
+	//   2. Tenant aggregate cap (tenant_budgets.max_budget_usd; the
+	//      column name retains the historical _usd suffix but is
+	//      currency-tagged via tenant_budgets.unit_code).
 	//
 	// If either rejects, returns the matching sentinel
 	// (ErrBudgetExceeded for the capability, ErrTenantBudgetExceeded
@@ -40,30 +42,35 @@ type UsageStore interface {
 	// On capability-side rejection the tenant counter is not bumped
 	// (the call short-circuits). On tenant-side rejection the
 	// capability counter has already been bumped — a refund is
-	// queued via RefundCapability(amountUSD) so the operator's
+	// queued via RefundCapability(amount) so the operator's
 	// audit reflects "attempted but rejected".
 	//
+	// unitCode pins the currency for the new row when the row is
+	// missing (capability_usage / tenant_budgets DEFAULT 'USD').
+	// Empty value is treated as DefaultUnitCode. There is no FX
+	// rate handling: a charge in EUR against a USD-denominated
+	// tenant budget is a configuration error and should fail at
+	// the handler layer before reaching the store.
+	//
 	// tenantID == uuid.Nil disables the tenant-aggregate path.
-	// Existing callers that don't yet pass a tenant ID get the
-	// per-capability semantics from before this method's signature
-	// change.
 	Charge(
 		ctx context.Context,
 		capID uuid.UUID,
-		amountUSD, maxBudgetUSD float64,
+		amount, maxBudget float64,
+		unitCode string,
 		tenantID uuid.UUID,
 	) (newSpent float64, err error)
 
-	// RefundCapability subtracts amountUSD from the per-capability
-	// spend counter (floored at 0). Idempotent: a refund applied to a
-	// row that doesn't exist is a no-op.
-	RefundCapability(ctx context.Context, capID uuid.UUID, amountUSD float64) error
+	// RefundCapability subtracts amount from the per-capability
+	// spend counter (floored at 0). Idempotent: a refund applied to
+	// a row that doesn't exist is a no-op.
+	RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error
 
-	// RefundTenant subtracts amountUSD from the tenant aggregate
+	// RefundTenant subtracts amount from the tenant aggregate
 	// counter (floored at 0). Used when a charge succeeded against
 	// the capability but failed on the tenant cap, or when a handler
 	// detects a partial-failure post-charge.
-	RefundTenant(ctx context.Context, tenantID uuid.UUID, amountUSD float64) error
+	RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error
 
 	// Get returns the current snapshot. Returns ErrUsageNotFound when
 	// no row exists for the capability — typically means it's never
@@ -93,24 +100,29 @@ type UsageStore interface {
 
 // TenantBudget is the snapshot view of the tenant aggregate cap.
 type TenantBudget struct {
-	TenantID     uuid.UUID
-	MaxBudgetUSD float64
-	SpentUSD     float64
-	PeriodStart  time.Time
-	PeriodEnd    *time.Time
-	UpdatedAt    time.Time
+	TenantID        uuid.UUID
+	MaxBudgetAmount float64
+	SpentAmount     float64
+	UnitCode        string
+	PeriodStart     time.Time
+	PeriodEnd       *time.Time
+	UpdatedAt       time.Time
 }
 
 // SetTenantBudgetArgs is the input for UsageStore.SetTenantBudget.
 type SetTenantBudgetArgs struct {
-	TenantID     uuid.UUID
-	MaxBudgetUSD float64
+	TenantID        uuid.UUID
+	MaxBudgetAmount float64
+	// UnitCode pins the currency. Empty = keep existing or default
+	// to DefaultUnitCode on first insert.
+	UnitCode string
 	// PeriodEnd, if non-nil, pins a closing time for the accounting
 	// window. Nil = open-ended (typical for "just set the cap, I'll
 	// roll later").
 	PeriodEnd *time.Time
-	// ResetSpend=true zeroes spent_usd and rolls period_start to now.
-	// false leaves the counter alone — the cap changes mid-window.
+	// ResetSpend=true zeroes spent_amount and rolls period_start to
+	// now. false leaves the counter alone — the cap changes mid-
+	// window.
 	ResetSpend bool
 }
 
@@ -118,7 +130,8 @@ type SetTenantBudgetArgs struct {
 type Usage struct {
 	CapabilityID uuid.UUID
 	RequestCount int64
-	SpentUSD     float64
+	SpentAmount  float64
+	UnitCode     string
 }
 
 // Usage-related sentinels. ErrBudgetExceeded already lives in types.go

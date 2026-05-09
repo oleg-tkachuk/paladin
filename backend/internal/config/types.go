@@ -722,18 +722,30 @@ type Capability struct {
 	// Default 30s; matches existing internal/auth.Auth.Leeway.
 	VerifierLeeway time.Duration `yaml:"verifier_leeway" json:"verifier_leeway"`
 
-	// ChargePerRequest is the USD amount automatically charged
+	// ChargePerRequestAmount is the amount automatically charged
 	// against the capability + tenant budgets for each "billable"
 	// handler call (presign, complete object, batch op kick-off).
 	// 0 = no automatic charge (default) — handlers still emit the
-	// request-count bump, but spent_usd never moves.
+	// request-count bump, but the spend counter never moves.
 	//
 	// One uniform knob covers the typical "track per-call cost"
 	// model. Operators who want per-handler differentiation extend
-	// the call sites with explicit ChargeCapability(ctx, custom)
+	// the call sites with explicit ChargeCapability(ctx, amt, unit)
 	// invocations; this default is the "bare minimum so caveats
 	// matter".
-	ChargePerRequest float64 `yaml:"charge_per_request" json:"charge_per_request"`
+	//
+	// Renamed from ChargePerRequest — same semantic, just no longer
+	// USD-pinned in name.
+	ChargePerRequestAmount float64 `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
+
+	// ChargePerRequestUnit pins the currency / unit for the auto-
+	// charge amount. Empty falls back to the capability's own
+	// UnitCode (which itself defaults to "USD"). Set this when the
+	// platform wants every billable call denominated in a specific
+	// currency regardless of the capability's declared unit — e.g.
+	// EUR-denominated metering on a tenant whose capabilities are
+	// minted with the empty default.
+	ChargePerRequestUnit string `yaml:"charge_per_request_unit" json:"charge_per_request_unit"`
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers. Default 2s; the SLO for revocation propagation. Set <0

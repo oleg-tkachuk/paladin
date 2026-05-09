@@ -7,13 +7,14 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -28,15 +29,21 @@ const (
 type TenantBudget struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// max_budget_usd is the cap. 0 = unlimited (counter still
-	// accumulates so admin tooling can show "current spend").
-	MaxBudgetUsd float64 `protobuf:"fixed64,2,opt,name=max_budget_usd,json=maxBudgetUsd,proto3" json:"max_budget_usd,omitempty"`
-	// spent_usd is the accumulated spend within the current period.
-	SpentUsd    float64                `protobuf:"fixed64,3,opt,name=spent_usd,json=spentUsd,proto3" json:"spent_usd,omitempty"`
+	// max_budget_amount is the cap. 0 = unlimited (counter still
+	// accumulates so admin tooling can show "current spend"). Field
+	// number unchanged (wire-compatible with the previous
+	// max_budget_usd name). Currency given by unit_code.
+	MaxBudgetAmount float64 `protobuf:"fixed64,2,opt,name=max_budget_amount,json=maxBudgetAmount,proto3" json:"max_budget_amount,omitempty"`
+	// spent_amount is the accumulated spend within the current period.
+	// Field number unchanged (wire-compatible with previous spent_usd).
+	SpentAmount float64                `protobuf:"fixed64,3,opt,name=spent_amount,json=spentAmount,proto3" json:"spent_amount,omitempty"`
 	PeriodStart *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
 	// period_end is optional — NULL means open-ended.
-	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PeriodEnd *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
+	// (non-currency metering). One per TenantBudget message.
+	UnitCode      string `protobuf:"bytes,7,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -78,16 +85,16 @@ func (x *TenantBudget) GetTenantId() string {
 	return ""
 }
 
-func (x *TenantBudget) GetMaxBudgetUsd() float64 {
+func (x *TenantBudget) GetMaxBudgetAmount() float64 {
 	if x != nil {
-		return x.MaxBudgetUsd
+		return x.MaxBudgetAmount
 	}
 	return 0
 }
 
-func (x *TenantBudget) GetSpentUsd() float64 {
+func (x *TenantBudget) GetSpentAmount() float64 {
 	if x != nil {
-		return x.SpentUsd
+		return x.SpentAmount
 	}
 	return 0
 }
@@ -111,6 +118,13 @@ func (x *TenantBudget) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *TenantBudget) GetUnitCode() string {
+	if x != nil {
+		return x.UnitCode
+	}
+	return ""
 }
 
 type TenantBudgetServiceGetRequest struct {
@@ -204,15 +218,19 @@ func (x *TenantBudgetServiceGetResponse) GetBudget() *TenantBudget {
 type TenantBudgetServiceSetRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// max_budget_usd is the new cap. 0 = unlimited.
-	MaxBudgetUsd float64 `protobuf:"fixed64,2,opt,name=max_budget_usd,json=maxBudgetUsd,proto3" json:"max_budget_usd,omitempty"`
-	// reset_spend rolls the period: zeros spent_usd, moves
+	// max_budget_amount is the new cap. 0 = unlimited. Field number
+	// unchanged (wire-compatible with previous max_budget_usd).
+	MaxBudgetAmount float64 `protobuf:"fixed64,2,opt,name=max_budget_amount,json=maxBudgetAmount,proto3" json:"max_budget_amount,omitempty"`
+	// reset_spend rolls the period: zeros spent_amount, moves
 	// period_start to now. false leaves the counter alone — the cap
 	// changes mid-window.
 	ResetSpend bool `protobuf:"varint,3,opt,name=reset_spend,json=resetSpend,proto3" json:"reset_spend,omitempty"`
 	// period_end pins a closing time for the new accounting window.
 	// Optional; nil = open-ended.
-	PeriodEnd     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	PeriodEnd *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
+	// GBP or UNIT). Empty = keep existing or default to "USD".
+	UnitCode      string `protobuf:"bytes,5,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -254,9 +272,9 @@ func (x *TenantBudgetServiceSetRequest) GetTenantId() string {
 	return ""
 }
 
-func (x *TenantBudgetServiceSetRequest) GetMaxBudgetUsd() float64 {
+func (x *TenantBudgetServiceSetRequest) GetMaxBudgetAmount() float64 {
 	if x != nil {
-		return x.MaxBudgetUsd
+		return x.MaxBudgetAmount
 	}
 	return 0
 }
@@ -273,6 +291,13 @@ func (x *TenantBudgetServiceSetRequest) GetPeriodEnd() *timestamppb.Timestamp {
 		return x.PeriodEnd
 	}
 	return nil
+}
+
+func (x *TenantBudgetServiceSetRequest) GetUnitCode() string {
+	if x != nil {
+		return x.UnitCode
+	}
+	return ""
 }
 
 type TenantBudgetServiceSetResponse struct {
@@ -323,27 +348,29 @@ var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescripto
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/tenant_budget_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x02\n" +
+	"(paladin/admin/v1/tenant_budget_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
 	"\fTenantBudget\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x124\n" +
-	"\x0emax_budget_usd\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\fmaxBudgetUsd\x12\x1b\n" +
-	"\tspent_usd\x18\x03 \x01(\x01R\bspentUsd\x12=\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12:\n" +
+	"\x11max_budget_amount\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\x0fmaxBudgetAmount\x12!\n" +
+	"\fspent_amount\x18\x03 \x01(\x01R\vspentAmount\x12=\n" +
 	"\fperiod_start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
 	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"F\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1b\n" +
+	"\tunit_code\x18\a \x01(\tR\bunitCode\"F\n" +
 	"\x1dTenantBudgetServiceGetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"T\n" +
 	"\x1eTenantBudgetServiceGetResponse\x122\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget\"\xd8\x01\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget\"\xfb\x01\n" +
 	"\x1dTenantBudgetServiceSetRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x124\n" +
-	"\x0emax_budget_usd\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\fmaxBudgetUsd\x12\x1f\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12:\n" +
+	"\x11max_budget_amount\x18\x02 \x01(\x01B\x0e\xbaH\v\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00R\x0fmaxBudgetAmount\x12\x1f\n" +
 	"\vreset_spend\x18\x03 \x01(\bR\n" +
 	"resetSpend\x129\n" +
 	"\n" +
-	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"T\n" +
+	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\x1b\n" +
+	"\tunit_code\x18\x05 \x01(\tR\bunitCode\"T\n" +
 	"\x1eTenantBudgetServiceSetResponse\x122\n" +
 	"\x06budget\x18\x01 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget2\xd9\x01\n" +
 	"\x13TenantBudgetService\x12`\n" +

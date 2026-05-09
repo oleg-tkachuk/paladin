@@ -2,8 +2,18 @@
 // @generated from file paladin/admin/v1/capability_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  enumDesc,
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -12,8 +22,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/capability_service.proto.
  */
-export const file_paladin_admin_v1_capability_service: GenFile = /*@__PURE__*/
-  fileDesc("CiVvY3AvYWRtaW4vdjEvY2FwYWJpbGl0eV9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEi+gEKE0NhcGFiaWxpdHlQcmluY2lwYWwSNQoEa2luZBgBIAEoDjIbLm9jcC5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhsKCXRlbmFudF9pZBgCIAEoCUIIukgFcgOwAQESGAoHc3ViamVjdBgDIAEoCUIHukgEcgIQARISCgphZ2VudF90eXBlGAogASgJEhUKDWFnZW50X3ZlcnNpb24YCyABKAkSDgoGcnVuX2lkGAwgASgJEhcKD3BhcmVudF9hZ2VudF9pZBgNIAEoCRINCgVtb2RlbBgOIAEoCRISCgptY3BfY2xpZW50GA8gASgJIuABChFDYXBhYmlsaXR5Q2F2ZWF0cxIVCgNvcHMYASADKAlCCLpIBZIBAggBEhkKEXJlc291cmNlX3ByZWZpeGVzGAIgAygJEhUKDXJlc291cmNlX3VyaXMYAyADKAkSFAoMbWF4X3JlcXVlc3RzGAQgASgFEhYKDm1heF9idWRnZXRfdXNkGAUgASgBEhoKEmFsbG93X3RhaW50ZWRfcmVhZBgGIAEoCBIgChhpZGVtcG90ZW5jeV9rZXlfcmVxdWlyZWQYByABKAgSFgoOc291cmNlX2lwX2NpZHIYCCADKAki1gIKCkNhcGFiaWxpdHkSCgoCaWQYASABKAkSDgoGaXNzdWVyGAIgASgJEjIKB3N1YmplY3QYAyABKAsyIS5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVByaW5jaXBhbBIQCghhdWRpZW5jZRgEIAMoCRIwCgdjYXZlYXRzGAUgASgLMh8ub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlDYXZlYXRzEi0KCWlzc3VlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKbm90X2JlZm9yZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJcGFyZW50X2lkGAkgASgJEhIKCmdlbmVyYXRpb24YCiABKAMi/wEKHUNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXF1ZXN0EjoKB3N1YmplY3QYASABKAsyIS5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVByaW5jaXBhbEIGukgDyAEBEhoKCGF1ZGllbmNlGAIgAygJQgi6SAWSAQIIARI4CgdjYXZlYXRzGAMgASgLMh8ub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlDYXZlYXRzQga6SAPIAQESHAoLdHRsX3NlY29uZHMYBCABKANCB7pIBCICKAASLgoKbm90X2JlZm9yZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXQoeQ2FwYWJpbGl0eVNlcnZpY2VJc3N1ZVJlc3BvbnNlEiwKCmNhcGFiaWxpdHkYASABKAsyGC5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eRINCgV0b2tlbhgCIAEoCSKFAgogQ2FwYWJpbGl0eVNlcnZpY2VEZWxlZ2F0ZVJlcXVlc3QSGwoJcGFyZW50X2lkGAEgASgJQgi6SAVyA7ABARIyCgdzdWJqZWN0GAIgASgLMiEub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlQcmluY2lwYWwSEAoIYXVkaWVuY2UYAyADKAkSMAoHY2F2ZWF0cxgEIAEoCzIfLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5Q2F2ZWF0cxIcCgt0dGxfc2Vjb25kcxgFIAEoA0IHukgEIgIoABIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJgCh5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBEg4KBnJlYXNvbhgCIAEoCRIYChBjYXNjYWRlX2NoaWxkcmVuGAMgASgIIiEKH0NhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVzcG9uc2Ui+AEKHENhcGFiaWxpdHlTZXJ2aWNlTGlzdFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARI/Cg5wcmluY2lwYWxfa2luZBgCIAEoDjIbLm9jcC5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhgKB3N1YmplY3QYAyABKAlCB7pIBHICEAESFwoPaW5jbHVkZV9leHBpcmVkGAQgASgIEhcKD2luY2x1ZGVfcmV2b2tlZBgFIAEoCBIaCglwYWdlX3NpemUYBiABKAVCB7pIBBoCKAASEgoKcGFnZV90b2tlbhgHIAEoCSJoCh1DYXBhYmlsaXR5U2VydmljZUxpc3RSZXNwb25zZRIuCgxjYXBhYmlsaXRpZXMYASADKAsyGC5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiOAogQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBIpQBCiFDYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVzcG9uc2USFQoNY2FwYWJpbGl0eV9pZBgBIAEoCRIVCg1yZXF1ZXN0X2NvdW50GAIgASgDEhEKCXNwZW50X3VzZBgDIAEoARIuCgp1cGRhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCp+Cg1QcmluY2lwYWxLaW5kEh4KGlBSSU5DSVBBTF9LSU5EX1VOU1BFQ0lGSUVEEAASFwoTUFJJTkNJUEFMX0tJTkRfVVNFUhABEhgKFFBSSU5DSVBBTF9LSU5EX0FHRU5UEAISGgoWUFJJTkNJUEFMX0tJTkRfU0VSVklDRRADMpYEChFDYXBhYmlsaXR5U2VydmljZRJiCgVJc3N1ZRIrLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVxdWVzdBosLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVzcG9uc2USaAoIRGVsZWdhdGUSLi5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VEZWxlZ2F0ZVJlcXVlc3QaLC5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VJc3N1ZVJlc3BvbnNlEmUKBlJldm9rZRIsLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlcXVlc3QaLS5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VSZXNwb25zZRJfCgRMaXN0Eioub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlTGlzdFJlcXVlc3QaKy5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VMaXN0UmVzcG9uc2USawoIR2V0VXNhZ2USLi5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlcXVlc3QaLy5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+export const file_paladin_admin_v1_capability_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiVvY3AvYWRtaW4vdjEvY2FwYWJpbGl0eV9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEi+gEKE0NhcGFiaWxpdHlQcmluY2lwYWwSNQoEa2luZBgBIAEoDjIbLm9jcC5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhsKCXRlbmFudF9pZBgCIAEoCUIIukgFcgOwAQESGAoHc3ViamVjdBgDIAEoCUIHukgEcgIQARISCgphZ2VudF90eXBlGAogASgJEhUKDWFnZW50X3ZlcnNpb24YCyABKAkSDgoGcnVuX2lkGAwgASgJEhcKD3BhcmVudF9hZ2VudF9pZBgNIAEoCRINCgVtb2RlbBgOIAEoCRISCgptY3BfY2xpZW50GA8gASgJIvYBChFDYXBhYmlsaXR5Q2F2ZWF0cxIVCgNvcHMYASADKAlCCLpIBZIBAggBEhkKEXJlc291cmNlX3ByZWZpeGVzGAIgAygJEhUKDXJlc291cmNlX3VyaXMYAyADKAkSFAoMbWF4X3JlcXVlc3RzGAQgASgFEhkKEW1heF9idWRnZXRfYW1vdW50GAUgASgBEhoKEmFsbG93X3RhaW50ZWRfcmVhZBgGIAEoCBIgChhpZGVtcG90ZW5jeV9rZXlfcmVxdWlyZWQYByABKAgSFgoOc291cmNlX2lwX2NpZHIYCCADKAkSEQoJdW5pdF9jb2RlGAkgASgJItYCCgpDYXBhYmlsaXR5EgoKAmlkGAEgASgJEg4KBmlzc3VlchgCIAEoCRIyCgdzdWJqZWN0GAMgASgLMiEub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlQcmluY2lwYWwSEAoIYXVkaWVuY2UYBCADKAkSMAoHY2F2ZWF0cxgFIAEoCzIfLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5Q2F2ZWF0cxItCglpc3N1ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCm5vdF9iZWZvcmUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXBhcmVudF9pZBgJIAEoCRISCgpnZW5lcmF0aW9uGAogASgDIv8BCh1DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVxdWVzdBI6CgdzdWJqZWN0GAEgASgLMiEub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlQcmluY2lwYWxCBrpIA8gBARIaCghhdWRpZW5jZRgCIAMoCUIIukgFkgECCAESOAoHY2F2ZWF0cxgDIAEoCzIfLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5Q2F2ZWF0c0IGukgDyAEBEhwKC3R0bF9zZWNvbmRzGAQgASgDQge6SAQiAigAEi4KCm5vdF9iZWZvcmUYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIl0KHkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXNwb25zZRIsCgpjYXBhYmlsaXR5GAEgASgLMhgub2NwLmFkbWluLnYxLkNhcGFiaWxpdHkSDQoFdG9rZW4YAiABKAkihQIKIENhcGFiaWxpdHlTZXJ2aWNlRGVsZWdhdGVSZXF1ZXN0EhsKCXBhcmVudF9pZBgBIAEoCUIIukgFcgOwAQESMgoHc3ViamVjdBgCIAEoCzIhLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5UHJpbmNpcGFsEhAKCGF1ZGllbmNlGAMgAygJEjAKB2NhdmVhdHMYBCABKAsyHy5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eUNhdmVhdHMSHAoLdHRsX3NlY29uZHMYBSABKANCB7pIBCICKAASLgoKbm90X2JlZm9yZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiYAoeQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABARIOCgZyZWFzb24YAiABKAkSGAoQY2FzY2FkZV9jaGlsZHJlbhgDIAEoCCIhCh9DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlc3BvbnNlIvgBChxDYXBhYmlsaXR5U2VydmljZUxpc3RSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESPwoOcHJpbmNpcGFsX2tpbmQYAiABKA4yGy5vY3AuYWRtaW4udjEuUHJpbmNpcGFsS2luZEIKukgHggEEEAEgABIYCgdzdWJqZWN0GAMgASgJQge6SARyAhABEhcKD2luY2x1ZGVfZXhwaXJlZBgEIAEoCBIXCg9pbmNsdWRlX3Jldm9rZWQYBSABKAgSGgoJcGFnZV9zaXplGAYgASgFQge6SAQaAigAEhIKCnBhZ2VfdG9rZW4YByABKAkiaAodQ2FwYWJpbGl0eVNlcnZpY2VMaXN0UmVzcG9uc2USLgoMY2FwYWJpbGl0aWVzGAEgAygLMhgub2NwLmFkbWluLnYxLkNhcGFiaWxpdHkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjgKIENhcGFiaWxpdHlTZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABASKqAQohQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlEhUKDWNhcGFiaWxpdHlfaWQYASABKAkSFQoNcmVxdWVzdF9jb3VudBgCIAEoAxIUCgxzcGVudF9hbW91bnQYAyABKAESLgoKdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJdW5pdF9jb2RlGAUgASgJKn4KDVByaW5jaXBhbEtpbmQSHgoaUFJJTkNJUEFMX0tJTkRfVU5TUEVDSUZJRUQQABIXChNQUklOQ0lQQUxfS0lORF9VU0VSEAESGAoUUFJJTkNJUEFMX0tJTkRfQUdFTlQQAhIaChZQUklOQ0lQQUxfS0lORF9TRVJWSUNFEAMylgQKEUNhcGFiaWxpdHlTZXJ2aWNlEmIKBUlzc3VlEisub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXF1ZXN0Giwub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXNwb25zZRJoCghEZWxlZ2F0ZRIuLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZURlbGVnYXRlUmVxdWVzdBosLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVzcG9uc2USZQoGUmV2b2tlEiwub2NwLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVxdWVzdBotLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlc3BvbnNlEl8KBExpc3QSKi5vY3AuYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VMaXN0UmVxdWVzdBorLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUxpc3RSZXNwb25zZRJrCghHZXRVc2FnZRIuLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVxdWVzdBovLm9jcC5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [file_buf_validate_validate, file_google_protobuf_timestamp],
+  );
 
 /**
  * CapabilityPrincipal is the subject the capability is issued to.
@@ -21,60 +35,62 @@ export const file_paladin_admin_v1_capability_service: GenFile = /*@__PURE__*/
  *
  * @generated from message paladin.admin.v1.CapabilityPrincipal
  */
-export type CapabilityPrincipal = Message<"paladin.admin.v1.CapabilityPrincipal"> & {
-  /**
-   * @generated from field: paladin.admin.v1.PrincipalKind kind = 1;
-   */
-  kind: PrincipalKind;
+export type CapabilityPrincipal =
+  Message<"paladin.admin.v1.CapabilityPrincipal"> & {
+    /**
+     * @generated from field: paladin.admin.v1.PrincipalKind kind = 1;
+     */
+    kind: PrincipalKind;
 
-  /**
-   * @generated from field: string tenant_id = 2;
-   */
-  tenantId: string;
+    /**
+     * @generated from field: string tenant_id = 2;
+     */
+    tenantId: string;
 
-  /**
-   * @generated from field: string subject = 3;
-   */
-  subject: string;
+    /**
+     * @generated from field: string subject = 3;
+     */
+    subject: string;
 
-  /**
-   * Optional agent context — populated for kind=PRINCIPAL_KIND_AGENT.
-   *
-   * @generated from field: string agent_type = 10;
-   */
-  agentType: string;
+    /**
+     * Optional agent context — populated for kind=PRINCIPAL_KIND_AGENT.
+     *
+     * @generated from field: string agent_type = 10;
+     */
+    agentType: string;
 
-  /**
-   * @generated from field: string agent_version = 11;
-   */
-  agentVersion: string;
+    /**
+     * @generated from field: string agent_version = 11;
+     */
+    agentVersion: string;
 
-  /**
-   * @generated from field: string run_id = 12;
-   */
-  runId: string;
+    /**
+     * @generated from field: string run_id = 12;
+     */
+    runId: string;
 
-  /**
-   * @generated from field: string parent_agent_id = 13;
-   */
-  parentAgentId: string;
+    /**
+     * @generated from field: string parent_agent_id = 13;
+     */
+    parentAgentId: string;
 
-  /**
-   * @generated from field: string model = 14;
-   */
-  model: string;
+    /**
+     * @generated from field: string model = 14;
+     */
+    model: string;
 
-  /**
-   * @generated from field: string mcp_client = 15;
-   */
-  mcpClient: string;
-};
+    /**
+     * @generated from field: string mcp_client = 15;
+     */
+    mcpClient: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityPrincipal.
  * Use `create(CapabilityPrincipalSchema)` to create a new message.
  */
-export const CapabilityPrincipalSchema: GenMessage<CapabilityPrincipal> = /*@__PURE__*/
+export const CapabilityPrincipalSchema: GenMessage<CapabilityPrincipal> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 0);
 
 /**
@@ -108,9 +124,13 @@ export type CapabilityCaveats = Message<"paladin.admin.v1.CapabilityCaveats"> & 
   maxRequests: number;
 
   /**
-   * @generated from field: double max_budget_usd = 5;
+   * max_budget_amount is the cost budget. Field number unchanged
+   * (wire-compatible with the previous max_budget_usd field name).
+   * Currency is given by unit_code; default "USD" when empty.
+   *
+   * @generated from field: double max_budget_amount = 5;
    */
-  maxBudgetUsd: number;
+  maxBudgetAmount: number;
 
   /**
    * @generated from field: bool allow_tainted_read = 6;
@@ -126,13 +146,24 @@ export type CapabilityCaveats = Message<"paladin.admin.v1.CapabilityCaveats"> & 
    * @generated from field: repeated string source_ip_cidr = 8;
    */
   sourceIpCidr: string[];
+
+  /**
+   * unit_code is the currency code (USD/EUR/UAH/GBP) or the
+   * abstract sentinel UNIT for non-currency metering. Empty in
+   * the request defaults to "USD" server-side; the validator
+   * rejects any other unrecognised value.
+   *
+   * @generated from field: string unit_code = 9;
+   */
+  unitCode: string;
 };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityCaveats.
  * Use `create(CapabilityCaveatsSchema)` to create a new message.
  */
-export const CapabilityCaveatsSchema: GenMessage<CapabilityCaveats> = /*@__PURE__*/
+export const CapabilityCaveatsSchema: GenMessage<CapabilityCaveats> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 1);
 
 /**
@@ -198,143 +229,152 @@ export type Capability = Message<"paladin.admin.v1.Capability"> & {
  * Describes the message paladin.admin.v1.Capability.
  * Use `create(CapabilitySchema)` to create a new message.
  */
-export const CapabilitySchema: GenMessage<Capability> = /*@__PURE__*/
+export const CapabilitySchema: GenMessage<Capability> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceIssueRequest
  */
-export type CapabilityServiceIssueRequest = Message<"paladin.admin.v1.CapabilityServiceIssueRequest"> & {
-  /**
-   * @generated from field: paladin.admin.v1.CapabilityPrincipal subject = 1;
-   */
-  subject?: CapabilityPrincipal | undefined;
+export type CapabilityServiceIssueRequest =
+  Message<"paladin.admin.v1.CapabilityServiceIssueRequest"> & {
+    /**
+     * @generated from field: paladin.admin.v1.CapabilityPrincipal subject = 1;
+     */
+    subject?: CapabilityPrincipal | undefined;
 
-  /**
-   * @generated from field: repeated string audience = 2;
-   */
-  audience: string[];
+    /**
+     * @generated from field: repeated string audience = 2;
+     */
+    audience: string[];
 
-  /**
-   * @generated from field: paladin.admin.v1.CapabilityCaveats caveats = 3;
-   */
-  caveats?: CapabilityCaveats | undefined;
+    /**
+     * @generated from field: paladin.admin.v1.CapabilityCaveats caveats = 3;
+     */
+    caveats?: CapabilityCaveats | undefined;
 
-  /**
-   * ttl_seconds caps the capability lifetime. 0 → server default.
-   *
-   * @generated from field: int64 ttl_seconds = 4;
-   */
-  ttlSeconds: bigint;
+    /**
+     * ttl_seconds caps the capability lifetime. 0 → server default.
+     *
+     * @generated from field: int64 ttl_seconds = 4;
+     */
+    ttlSeconds: bigint;
 
-  /**
-   * @generated from field: google.protobuf.Timestamp not_before = 5;
-   */
-  notBefore?: Timestamp | undefined;
-};
+    /**
+     * @generated from field: google.protobuf.Timestamp not_before = 5;
+     */
+    notBefore?: Timestamp | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceIssueRequest.
  * Use `create(CapabilityServiceIssueRequestSchema)` to create a new message.
  */
-export const CapabilityServiceIssueRequestSchema: GenMessage<CapabilityServiceIssueRequest> = /*@__PURE__*/
+export const CapabilityServiceIssueRequestSchema: GenMessage<CapabilityServiceIssueRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceIssueResponse
  */
-export type CapabilityServiceIssueResponse = Message<"paladin.admin.v1.CapabilityServiceIssueResponse"> & {
-  /**
-   * @generated from field: paladin.admin.v1.Capability capability = 1;
-   */
-  capability?: Capability | undefined;
+export type CapabilityServiceIssueResponse =
+  Message<"paladin.admin.v1.CapabilityServiceIssueResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.Capability capability = 1;
+     */
+    capability?: Capability | undefined;
 
-  /**
-   * Compact JWT — return to the caller exactly once; never persisted.
-   *
-   * @generated from field: string token = 2;
-   */
-  token: string;
-};
+    /**
+     * Compact JWT — return to the caller exactly once; never persisted.
+     *
+     * @generated from field: string token = 2;
+     */
+    token: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceIssueResponse.
  * Use `create(CapabilityServiceIssueResponseSchema)` to create a new message.
  */
-export const CapabilityServiceIssueResponseSchema: GenMessage<CapabilityServiceIssueResponse> = /*@__PURE__*/
+export const CapabilityServiceIssueResponseSchema: GenMessage<CapabilityServiceIssueResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceDelegateRequest
  */
-export type CapabilityServiceDelegateRequest = Message<"paladin.admin.v1.CapabilityServiceDelegateRequest"> & {
-  /**
-   * parent_id is the capability the caller is narrowing under. The
-   * server fetches it from the store; the caller need not keep the
-   * full token around to delegate.
-   *
-   * @generated from field: string parent_id = 1;
-   */
-  parentId: string;
+export type CapabilityServiceDelegateRequest =
+  Message<"paladin.admin.v1.CapabilityServiceDelegateRequest"> & {
+    /**
+     * parent_id is the capability the caller is narrowing under. The
+     * server fetches it from the store; the caller need not keep the
+     * full token around to delegate.
+     *
+     * @generated from field: string parent_id = 1;
+     */
+    parentId: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.CapabilityPrincipal subject = 2;
-   */
-  subject?: CapabilityPrincipal | undefined;
+    /**
+     * @generated from field: paladin.admin.v1.CapabilityPrincipal subject = 2;
+     */
+    subject?: CapabilityPrincipal | undefined;
 
-  /**
-   * @generated from field: repeated string audience = 3;
-   */
-  audience: string[];
+    /**
+     * @generated from field: repeated string audience = 3;
+     */
+    audience: string[];
 
-  /**
-   * @generated from field: paladin.admin.v1.CapabilityCaveats caveats = 4;
-   */
-  caveats?: CapabilityCaveats | undefined;
+    /**
+     * @generated from field: paladin.admin.v1.CapabilityCaveats caveats = 4;
+     */
+    caveats?: CapabilityCaveats | undefined;
 
-  /**
-   * @generated from field: int64 ttl_seconds = 5;
-   */
-  ttlSeconds: bigint;
+    /**
+     * @generated from field: int64 ttl_seconds = 5;
+     */
+    ttlSeconds: bigint;
 
-  /**
-   * @generated from field: google.protobuf.Timestamp not_before = 6;
-   */
-  notBefore?: Timestamp | undefined;
-};
+    /**
+     * @generated from field: google.protobuf.Timestamp not_before = 6;
+     */
+    notBefore?: Timestamp | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceDelegateRequest.
  * Use `create(CapabilityServiceDelegateRequestSchema)` to create a new message.
  */
-export const CapabilityServiceDelegateRequestSchema: GenMessage<CapabilityServiceDelegateRequest> = /*@__PURE__*/
+export const CapabilityServiceDelegateRequestSchema: GenMessage<CapabilityServiceDelegateRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceRevokeRequest
  */
-export type CapabilityServiceRevokeRequest = Message<"paladin.admin.v1.CapabilityServiceRevokeRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
+export type CapabilityServiceRevokeRequest =
+  Message<"paladin.admin.v1.CapabilityServiceRevokeRequest"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
 
-  /**
-   * @generated from field: string reason = 2;
-   */
-  reason: string;
+    /**
+     * @generated from field: string reason = 2;
+     */
+    reason: string;
 
-  /**
-   * @generated from field: bool cascade_children = 3;
-   */
-  cascadeChildren: boolean;
-};
+    /**
+     * @generated from field: bool cascade_children = 3;
+     */
+    cascadeChildren: boolean;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceRevokeRequest.
  * Use `create(CapabilityServiceRevokeRequestSchema)` to create a new message.
  */
-export const CapabilityServiceRevokeRequestSchema: GenMessage<CapabilityServiceRevokeRequest> = /*@__PURE__*/
+export const CapabilityServiceRevokeRequestSchema: GenMessage<CapabilityServiceRevokeRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 6);
 
 /**
@@ -343,132 +383,152 @@ export const CapabilityServiceRevokeRequestSchema: GenMessage<CapabilityServiceR
  *
  * @generated from message paladin.admin.v1.CapabilityServiceRevokeResponse
  */
-export type CapabilityServiceRevokeResponse = Message<"paladin.admin.v1.CapabilityServiceRevokeResponse"> & {
-};
+export type CapabilityServiceRevokeResponse =
+  Message<"paladin.admin.v1.CapabilityServiceRevokeResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceRevokeResponse.
  * Use `create(CapabilityServiceRevokeResponseSchema)` to create a new message.
  */
-export const CapabilityServiceRevokeResponseSchema: GenMessage<CapabilityServiceRevokeResponse> = /*@__PURE__*/
+export const CapabilityServiceRevokeResponseSchema: GenMessage<CapabilityServiceRevokeResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceListRequest
  */
-export type CapabilityServiceListRequest = Message<"paladin.admin.v1.CapabilityServiceListRequest"> & {
-  /**
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
+export type CapabilityServiceListRequest =
+  Message<"paladin.admin.v1.CapabilityServiceListRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.PrincipalKind principal_kind = 2;
-   */
-  principalKind: PrincipalKind;
+    /**
+     * @generated from field: paladin.admin.v1.PrincipalKind principal_kind = 2;
+     */
+    principalKind: PrincipalKind;
 
-  /**
-   * @generated from field: string subject = 3;
-   */
-  subject: string;
+    /**
+     * @generated from field: string subject = 3;
+     */
+    subject: string;
 
-  /**
-   * @generated from field: bool include_expired = 4;
-   */
-  includeExpired: boolean;
+    /**
+     * @generated from field: bool include_expired = 4;
+     */
+    includeExpired: boolean;
 
-  /**
-   * @generated from field: bool include_revoked = 5;
-   */
-  includeRevoked: boolean;
+    /**
+     * @generated from field: bool include_revoked = 5;
+     */
+    includeRevoked: boolean;
 
-  /**
-   * @generated from field: int32 page_size = 6;
-   */
-  pageSize: number;
+    /**
+     * @generated from field: int32 page_size = 6;
+     */
+    pageSize: number;
 
-  /**
-   * @generated from field: string page_token = 7;
-   */
-  pageToken: string;
-};
+    /**
+     * @generated from field: string page_token = 7;
+     */
+    pageToken: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceListRequest.
  * Use `create(CapabilityServiceListRequestSchema)` to create a new message.
  */
-export const CapabilityServiceListRequestSchema: GenMessage<CapabilityServiceListRequest> = /*@__PURE__*/
+export const CapabilityServiceListRequestSchema: GenMessage<CapabilityServiceListRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceListResponse
  */
-export type CapabilityServiceListResponse = Message<"paladin.admin.v1.CapabilityServiceListResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.Capability capabilities = 1;
-   */
-  capabilities: Capability[];
+export type CapabilityServiceListResponse =
+  Message<"paladin.admin.v1.CapabilityServiceListResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.Capability capabilities = 1;
+     */
+    capabilities: Capability[];
 
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-};
+    /**
+     * @generated from field: string next_page_token = 2;
+     */
+    nextPageToken: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceListResponse.
  * Use `create(CapabilityServiceListResponseSchema)` to create a new message.
  */
-export const CapabilityServiceListResponseSchema: GenMessage<CapabilityServiceListResponse> = /*@__PURE__*/
+export const CapabilityServiceListResponseSchema: GenMessage<CapabilityServiceListResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceGetUsageRequest
  */
-export type CapabilityServiceGetUsageRequest = Message<"paladin.admin.v1.CapabilityServiceGetUsageRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
+export type CapabilityServiceGetUsageRequest =
+  Message<"paladin.admin.v1.CapabilityServiceGetUsageRequest"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceGetUsageRequest.
  * Use `create(CapabilityServiceGetUsageRequestSchema)` to create a new message.
  */
-export const CapabilityServiceGetUsageRequestSchema: GenMessage<CapabilityServiceGetUsageRequest> = /*@__PURE__*/
+export const CapabilityServiceGetUsageRequestSchema: GenMessage<CapabilityServiceGetUsageRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 10);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceGetUsageResponse
  */
-export type CapabilityServiceGetUsageResponse = Message<"paladin.admin.v1.CapabilityServiceGetUsageResponse"> & {
-  /**
-   * @generated from field: string capability_id = 1;
-   */
-  capabilityId: string;
+export type CapabilityServiceGetUsageResponse =
+  Message<"paladin.admin.v1.CapabilityServiceGetUsageResponse"> & {
+    /**
+     * @generated from field: string capability_id = 1;
+     */
+    capabilityId: string;
 
-  /**
-   * @generated from field: int64 request_count = 2;
-   */
-  requestCount: bigint;
+    /**
+     * @generated from field: int64 request_count = 2;
+     */
+    requestCount: bigint;
 
-  /**
-   * @generated from field: double spent_usd = 3;
-   */
-  spentUsd: number;
+    /**
+     * spent_amount is the accumulated spend. Field number unchanged
+     * (wire-compatible with the previous spent_usd field name).
+     * Currency is given by unit_code.
+     *
+     * @generated from field: double spent_amount = 3;
+     */
+    spentAmount: number;
 
-  /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 4;
-   */
-  updatedAt?: Timestamp | undefined;
-};
+    /**
+     * @generated from field: google.protobuf.Timestamp updated_at = 4;
+     */
+    updatedAt?: Timestamp | undefined;
+
+    /**
+     * unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
+     *
+     * @generated from field: string unit_code = 5;
+     */
+    unitCode: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CapabilityServiceGetUsageResponse.
  * Use `create(CapabilityServiceGetUsageResponseSchema)` to create a new message.
  */
-export const CapabilityServiceGetUsageResponseSchema: GenMessage<CapabilityServiceGetUsageResponse> = /*@__PURE__*/
+export const CapabilityServiceGetUsageResponseSchema: GenMessage<CapabilityServiceGetUsageResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_capability_service, 11);
 
 /**
@@ -502,7 +562,8 @@ export enum PrincipalKind {
 /**
  * Describes the enum paladin.admin.v1.PrincipalKind.
  */
-export const PrincipalKindSchema: GenEnum<PrincipalKind> = /*@__PURE__*/
+export const PrincipalKindSchema: GenEnum<PrincipalKind> =
+  /*@__PURE__*/
   enumDesc(file_paladin_admin_v1_capability_service, 0);
 
 /**
@@ -536,7 +597,7 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceIssueRequestSchema;
     output: typeof CapabilityServiceIssueResponseSchema;
-  },
+  };
   /**
    * Delegate issues a strictly-narrower child capability under a
    * parent the caller already holds. Narrowing is enforced at issuance:
@@ -548,7 +609,7 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceDelegateRequestSchema;
     output: typeof CapabilityServiceIssueResponseSchema;
-  },
+  };
   /**
    * Revoke adds the supplied capability ID to the revocation list.
    * CascadeChildren=true revokes every descendant in the delegation
@@ -560,7 +621,7 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceRevokeRequestSchema;
     output: typeof CapabilityServiceRevokeResponseSchema;
-  },
+  };
   /**
    * List enumerates capabilities issued to a principal. Cursor-paginated.
    *
@@ -570,11 +631,11 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceListRequestSchema;
     output: typeof CapabilityServiceListResponseSchema;
-  },
+  };
   /**
    * GetUsage returns the runtime counters for a capability:
-   * request_count (vs Caveats.max_requests) and spent_usd
-   * (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+   * request_count (vs Caveats.max_requests) and spent_amount
+   * (vs Caveats.max_budget_amount). Returns NOT_FOUND when the
    * capability has never been used (no requests, no charges).
    *
    * @generated from rpc paladin.admin.v1.CapabilityService.GetUsage
@@ -583,7 +644,5 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceGetUsageRequestSchema;
     output: typeof CapabilityServiceGetUsageResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_capability_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_capability_service, 0);

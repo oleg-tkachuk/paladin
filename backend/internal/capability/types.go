@@ -35,6 +35,7 @@ package capability
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,7 +52,50 @@ var (
 	ErrAudienceMismatch  = errors.New("capability: audience mismatch")
 	ErrBudgetExceeded    = errors.New("capability: budget exceeded")
 	ErrDelegationTooWide = errors.New("capability: child wider than parent")
+	// ErrUnitCodeMismatch — a delegated child capability declared a
+	// different unit_code than its parent. We don't auto-convert
+	// between currencies; charges flow through the system in their
+	// declared unit and cross-currency delegation is rejected at
+	// issuance.
+	ErrUnitCodeMismatch = errors.New("capability: unit_code mismatch between parent and child")
 )
+
+// DefaultUnitCode is the fallback when a request / row omits the
+// unit. Keeps existing payloads / DB rows working without an explicit
+// migration on the domain side.
+const DefaultUnitCode = "USD"
+
+// AllowedUnitCodes is the canonical set the backend accepts for
+// caveat / charge / tenant-budget unit_code fields. ISO 4217 fiat
+// codes plus the abstract sentinel UNIT for non-currency metering.
+// Mirrored on the frontend (frontend/src/lib/format/money.ts).
+var AllowedUnitCodes = []string{"USD", "EUR", "UAH", "GBP", "UNIT"}
+
+// IsAllowedUnitCode reports whether u is in AllowedUnitCodes. Empty
+// string is NOT treated as valid here — callers that want the empty-
+// means-default semantics should resolve through NormaliseUnitCode
+// first.
+func IsAllowedUnitCode(u string) bool {
+	for _, allowed := range AllowedUnitCodes {
+		if allowed == u {
+			return true
+		}
+	}
+	return false
+}
+
+// NormaliseUnitCode applies the empty-means-default policy and
+// validates the result. Returns the canonical unit string and an
+// error when the supplied non-empty value is unknown.
+func NormaliseUnitCode(u string) (string, error) {
+	if u == "" {
+		return DefaultUnitCode, nil
+	}
+	if !IsAllowedUnitCode(u) {
+		return "", fmt.Errorf("capability: unknown unit_code %q (allowed: %v)", u, AllowedUnitCodes)
+	}
+	return u, nil
+}
 
 // Op is a coarse-grained operation an agent may perform. The set is
 // intentionally small — fine-grained method gating goes through Cedar
@@ -193,10 +237,19 @@ type Caveats struct {
 	// be used. 0 = unlimited within the TTL.
 	MaxRequests int
 
-	// MaxBudgetUSD is the cost budget the capability authorises. The
-	// budget tracker decrements as LLM / storage operations bill; once
+	// MaxBudgetAmount is the cost budget the capability authorises,
+	// expressed in the currency identified by UnitCode. The budget
+	// tracker decrements as LLM / storage operations bill; once
 	// exhausted, the verifier returns ErrBudgetExceeded.
-	MaxBudgetUSD float64
+	//
+	// Renamed from MaxBudgetUSD — same field, no longer USD-pinned.
+	MaxBudgetAmount float64
+
+	// UnitCode pins the currency or unit (USD/EUR/UAH/GBP or the
+	// abstract sentinel UNIT). Empty value is interpreted as the
+	// default ("USD") at the application boundary; the in-memory
+	// shape is happy to carry either form.
+	UnitCode string
 
 	// AllowTaintedRead permits read of objects flagged with prompt-
 	// injection / PII / secrets signals. Off by default — a deliberate

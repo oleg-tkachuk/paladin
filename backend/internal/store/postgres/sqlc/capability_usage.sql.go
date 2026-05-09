@@ -13,8 +13,8 @@ import (
 
 const bumpCapabilityRequestCount = `-- name: BumpCapabilityRequestCount :one
 
-INSERT INTO capability_usage (capability_id, request_count, spent_usd, updated_at)
-VALUES ($1, 1, 0, now())
+INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
+VALUES ($1, 1, 0, 'USD', now())
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,
     updated_at    = now()
@@ -26,6 +26,11 @@ RETURNING request_count
 
 // Per-capability runtime counters. Atomic UPSERT-and-check shape so
 // the hot path is a single round-trip with concurrency-safe semantics.
+//
+// Naming dichotomy: the SQL columns retain their `_usd` suffixes for
+// historical reasons (avoiding sqlc regen + every-query churn). The
+// unit_code column added in migration 026 is the source of truth for
+// currency interpretation; the Go domain types use Amount + UnitCode.
 // Increments request_count by 1 and rejects when over the supplied cap.
 // max=0 means unlimited; we still write the row for spend tracking + UI.
 func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests int64) (int64, error) {
@@ -36,21 +41,27 @@ func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID p
 }
 
 const chargeCapability = `-- name: ChargeCapability :one
-INSERT INTO capability_usage (capability_id, request_count, spent_usd, updated_at)
-VALUES ($1, 0, $2::numeric, now())
+INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
+VALUES ($1, 0, $2::numeric, $3::text, now())
 ON CONFLICT (capability_id) DO UPDATE
 SET spent_usd  = capability_usage.spent_usd + $2::numeric,
     updated_at = now()
 WHERE
-    $3::numeric = 0
-    OR capability_usage.spent_usd + $2::numeric <= $3::numeric
+    $4::numeric = 0
+    OR capability_usage.spent_usd + $2::numeric <= $4::numeric
 RETURNING spent_usd
 `
 
 // Adds amount to spent_usd and rejects when over the supplied cap.
-// max_budget=0 means unlimited.
-func (q *Queries) ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error) {
-	row := q.db.QueryRow(ctx, chargeCapability, capabilityID, amountUsd, maxBudgetUsd)
+// max_budget=0 means unlimited. unit_code is set on insert and
+// preserved on conflict (an existing row owns its currency).
+func (q *Queries) ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, chargeCapability,
+		capabilityID,
+		amountUsd,
+		unitCode,
+		maxBudgetUsd,
+	)
 	var spent_usd pgtype.Numeric
 	err := row.Scan(&spent_usd)
 	return spent_usd, err
@@ -70,18 +81,27 @@ func (q *Queries) DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype
 }
 
 const getCapabilityUsage = `-- name: GetCapabilityUsage :one
-SELECT capability_id, request_count, spent_usd, updated_at
+SELECT capability_id, request_count, spent_usd, unit_code, updated_at
 FROM capability_usage
 WHERE capability_id = $1
 `
 
-func (q *Queries) GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (CapabilityUsage, error) {
+type GetCapabilityUsageRow struct {
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	RequestCount int64              `json:"request_count"`
+	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	UnitCode     string             `json:"unit_code"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error) {
 	row := q.db.QueryRow(ctx, getCapabilityUsage, capabilityID)
-	var i CapabilityUsage
+	var i GetCapabilityUsageRow
 	err := row.Scan(
 		&i.CapabilityID,
 		&i.RequestCount,
 		&i.SpentUsd,
+		&i.UnitCode,
 		&i.UpdatedAt,
 	)
 	return i, err

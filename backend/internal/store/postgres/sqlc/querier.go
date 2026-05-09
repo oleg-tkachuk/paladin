@@ -17,18 +17,25 @@ type Querier interface {
 	BindObjectKeyToBucket(ctx context.Context, tenantID pgtype.UUID, objectKey string, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	// Per-capability runtime counters. Atomic UPSERT-and-check shape so
 	// the hot path is a single round-trip with concurrency-safe semantics.
+	//
+	// Naming dichotomy: the SQL columns retain their `_usd` suffixes for
+	// historical reasons (avoiding sqlc regen + every-query churn). The
+	// unit_code column added in migration 026 is the source of truth for
+	// currency interpretation; the Go domain types use Amount + UnitCode.
 	// Increments request_count by 1 and rejects when over the supplied cap.
 	// max=0 means unlimited; we still write the row for spend tracking + UI.
 	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests int64) (int64, error)
 	CancelOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (int64, error)
 	// Adds amount to spent_usd and rejects when over the supplied cap.
-	// max_budget=0 means unlimited.
-	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
+	// max_budget=0 means unlimited. unit_code is set on insert and
+	// preserved on conflict (an existing row owns its currency).
+	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
 	// Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 	// row is missing, treats max as 0 (no cap enforced) and inserts a
-	// fresh accumulator row. Returns the new spent_usd; pgx.ErrNoRows
+	// fresh accumulator row with the supplied unit_code (defaults to
+	// 'USD' when empty). Returns the new spent_usd; pgx.ErrNoRows
 	// means "would exceed cap" — caller maps to ErrTenantBudgetExceeded.
-	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) (pgtype.Numeric, error)
+	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string) (pgtype.Numeric, error)
 	// True when a non-DELETED row already exists at (tenant, object_key, key).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, objectKey string, key string) (bool, error)
@@ -91,7 +98,7 @@ type Querier interface {
 	GetBucketQuota(ctx context.Context, backendID *string, bucketName *string) (Quota, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, backendID string, bucketName string) (GetBucketV2Row, error)
-	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (CapabilityUsage, error)
+	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
 	// Reads the pointer the `objects` row carries.
 	GetCurrentVersionID(ctx context.Context, objectID pgtype.UUID) (pgtype.UUID, error)
 	// Returns tenant-inherited policy concatenated with the object_key-specific policy.
@@ -112,7 +119,7 @@ type Querier interface {
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
-	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (TenantBudget, error)
+	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
@@ -298,11 +305,20 @@ type Querier interface {
 	SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error
 	// Tenant aggregate budget queries.
+	//
+	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical
+	// reasons; unit_code (migration 026) is the source of truth for the
+	// currency interpretation. Go domain types use Amount + UnitCode.
 	// Upserts the cap and rolls the period. Operators call this from
 	// admin tooling on every billing cycle; spent_usd is reset to 0
 	// when reset_spend = true (idiomatic monthly close), preserved
 	// otherwise (mid-cycle adjustment that just changes the cap).
-	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, periodEnd pgtype.Timestamptz, resetSpend bool) (TenantBudget, error)
+	//
+	// unit_code is written verbatim on insert; on conflict, it's
+	// updated only when the caller passes a non-empty value (an empty
+	// arg keeps the existing currency unchanged — operators editing
+	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
+	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool) (SetTenantBudgetRow, error)
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error

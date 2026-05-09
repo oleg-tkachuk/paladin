@@ -7,13 +7,14 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -194,16 +195,24 @@ type CapabilityCaveats struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// ops is the set of authorised operations (get / put / list / delete /
 	// presign / tag / search / embed / share / manage). Required.
-	Ops                    []string `protobuf:"bytes,1,rep,name=ops,proto3" json:"ops,omitempty"`
-	ResourcePrefixes       []string `protobuf:"bytes,2,rep,name=resource_prefixes,json=resourcePrefixes,proto3" json:"resource_prefixes,omitempty"`
-	ResourceUris           []string `protobuf:"bytes,3,rep,name=resource_uris,json=resourceUris,proto3" json:"resource_uris,omitempty"`
-	MaxRequests            int32    `protobuf:"varint,4,opt,name=max_requests,json=maxRequests,proto3" json:"max_requests,omitempty"`
-	MaxBudgetUsd           float64  `protobuf:"fixed64,5,opt,name=max_budget_usd,json=maxBudgetUsd,proto3" json:"max_budget_usd,omitempty"`
+	Ops              []string `protobuf:"bytes,1,rep,name=ops,proto3" json:"ops,omitempty"`
+	ResourcePrefixes []string `protobuf:"bytes,2,rep,name=resource_prefixes,json=resourcePrefixes,proto3" json:"resource_prefixes,omitempty"`
+	ResourceUris     []string `protobuf:"bytes,3,rep,name=resource_uris,json=resourceUris,proto3" json:"resource_uris,omitempty"`
+	MaxRequests      int32    `protobuf:"varint,4,opt,name=max_requests,json=maxRequests,proto3" json:"max_requests,omitempty"`
+	// max_budget_amount is the cost budget. Field number unchanged
+	// (wire-compatible with the previous max_budget_usd field name).
+	// Currency is given by unit_code; default "USD" when empty.
+	MaxBudgetAmount        float64  `protobuf:"fixed64,5,opt,name=max_budget_amount,json=maxBudgetAmount,proto3" json:"max_budget_amount,omitempty"`
 	AllowTaintedRead       bool     `protobuf:"varint,6,opt,name=allow_tainted_read,json=allowTaintedRead,proto3" json:"allow_tainted_read,omitempty"`
 	IdempotencyKeyRequired bool     `protobuf:"varint,7,opt,name=idempotency_key_required,json=idempotencyKeyRequired,proto3" json:"idempotency_key_required,omitempty"`
 	SourceIpCidr           []string `protobuf:"bytes,8,rep,name=source_ip_cidr,json=sourceIpCidr,proto3" json:"source_ip_cidr,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// unit_code is the currency code (USD/EUR/UAH/GBP) or the
+	// abstract sentinel UNIT for non-currency metering. Empty in
+	// the request defaults to "USD" server-side; the validator
+	// rejects any other unrecognised value.
+	UnitCode      string `protobuf:"bytes,9,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CapabilityCaveats) Reset() {
@@ -264,9 +273,9 @@ func (x *CapabilityCaveats) GetMaxRequests() int32 {
 	return 0
 }
 
-func (x *CapabilityCaveats) GetMaxBudgetUsd() float64 {
+func (x *CapabilityCaveats) GetMaxBudgetAmount() float64 {
 	if x != nil {
-		return x.MaxBudgetUsd
+		return x.MaxBudgetAmount
 	}
 	return 0
 }
@@ -290,6 +299,13 @@ func (x *CapabilityCaveats) GetSourceIpCidr() []string {
 		return x.SourceIpCidr
 	}
 	return nil
+}
+
+func (x *CapabilityCaveats) GetUnitCode() string {
+	if x != nil {
+		return x.UnitCode
+	}
+	return ""
 }
 
 // Capability is the typed metadata view of an issued or stored
@@ -913,11 +929,16 @@ func (x *CapabilityServiceGetUsageRequest) GetId() string {
 }
 
 type CapabilityServiceGetUsageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CapabilityId  string                 `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	RequestCount  int64                  `protobuf:"varint,2,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
-	SpentUsd      float64                `protobuf:"fixed64,3,opt,name=spent_usd,json=spentUsd,proto3" json:"spent_usd,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	CapabilityId string                 `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	RequestCount int64                  `protobuf:"varint,2,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	// spent_amount is the accumulated spend. Field number unchanged
+	// (wire-compatible with the previous spent_usd field name).
+	// Currency is given by unit_code.
+	SpentAmount float64                `protobuf:"fixed64,3,opt,name=spent_amount,json=spentAmount,proto3" json:"spent_amount,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
+	UnitCode      string `protobuf:"bytes,5,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -966,9 +987,9 @@ func (x *CapabilityServiceGetUsageResponse) GetRequestCount() int64 {
 	return 0
 }
 
-func (x *CapabilityServiceGetUsageResponse) GetSpentUsd() float64 {
+func (x *CapabilityServiceGetUsageResponse) GetSpentAmount() float64 {
 	if x != nil {
-		return x.SpentUsd
+		return x.SpentAmount
 	}
 	return 0
 }
@@ -978,6 +999,13 @@ func (x *CapabilityServiceGetUsageResponse) GetUpdatedAt() *timestamppb.Timestam
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *CapabilityServiceGetUsageResponse) GetUnitCode() string {
+	if x != nil {
+		return x.UnitCode
+	}
+	return ""
 }
 
 var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
@@ -998,16 +1026,17 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x0fparent_agent_id\x18\r \x01(\tR\rparentAgentId\x12\x14\n" +
 	"\x05model\x18\x0e \x01(\tR\x05model\x12\x1d\n" +
 	"\n" +
-	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\xd8\x02\n" +
+	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\xfb\x02\n" +
 	"\x11CapabilityCaveats\x12\x1a\n" +
 	"\x03ops\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\x03ops\x12+\n" +
 	"\x11resource_prefixes\x18\x02 \x03(\tR\x10resourcePrefixes\x12#\n" +
 	"\rresource_uris\x18\x03 \x03(\tR\fresourceUris\x12!\n" +
-	"\fmax_requests\x18\x04 \x01(\x05R\vmaxRequests\x12$\n" +
-	"\x0emax_budget_usd\x18\x05 \x01(\x01R\fmaxBudgetUsd\x12,\n" +
+	"\fmax_requests\x18\x04 \x01(\x05R\vmaxRequests\x12*\n" +
+	"\x11max_budget_amount\x18\x05 \x01(\x01R\x0fmaxBudgetAmount\x12,\n" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
-	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\"\xb4\x03\n" +
+	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\x1b\n" +
+	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xb4\x03\n" +
 	"\n" +
 	"Capability\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
@@ -1066,13 +1095,14 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\fcapabilities\x18\x01 \x03(\v2\x18.paladin.admin.v1.CapabilityR\fcapabilities\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
 	" CapabilityServiceGetUsageRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xc5\x01\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xe8\x01\n" +
 	"!CapabilityServiceGetUsageResponse\x12#\n" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12#\n" +
-	"\rrequest_count\x18\x02 \x01(\x03R\frequestCount\x12\x1b\n" +
-	"\tspent_usd\x18\x03 \x01(\x01R\bspentUsd\x129\n" +
+	"\rrequest_count\x18\x02 \x01(\x03R\frequestCount\x12!\n" +
+	"\fspent_amount\x18\x03 \x01(\x01R\vspentAmount\x129\n" +
 	"\n" +
-	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*~\n" +
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1b\n" +
+	"\tunit_code\x18\x05 \x01(\tR\bunitCode*~\n" +
 	"\rPrincipalKind\x12\x1e\n" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +

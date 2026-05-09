@@ -304,10 +304,15 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	unit := u.UnitCode
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
 	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
-		SpentUsd:     u.SpentUSD,
+		SpentAmount:  u.SpentAmount,
+		UnitCode:     unit,
 		// updated_at not surfaced today — the UsageStore.Get value
 		// doesn't carry it consistently across the postgres /
 		// metering decorators. Add when telemetry needs it.
@@ -371,11 +376,19 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) capability.Caveats {
 	if c == nil {
 		return capability.Caveats{}
 	}
+	// Empty unit_code on the wire ⇒ default to USD server-side.
+	// Old clients (pre-currency rename) never set the field; new
+	// clients may pin EUR/UAH/GBP/UNIT explicitly.
+	unit := c.GetUnitCode()
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
 	out := capability.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
 		MaxRequests:            int(c.GetMaxRequests()),
-		MaxBudgetUSD:           c.GetMaxBudgetUsd(),
+		MaxBudgetAmount:        c.GetMaxBudgetAmount(),
+		UnitCode:               unit,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
 		SourceIPCIDR:           c.GetSourceIpCidr(),
@@ -421,11 +434,16 @@ func principalKindToProto(t capability.PrincipalType) adminv1.PrincipalKind {
 }
 
 func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
+	unit := c.UnitCode
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
 		MaxRequests:            int32(c.MaxRequests),
-		MaxBudgetUsd:           c.MaxBudgetUSD,
+		MaxBudgetAmount:        c.MaxBudgetAmount,
+		UnitCode:               unit,
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,
 		SourceIpCidr:           c.SourceIPCIDR,

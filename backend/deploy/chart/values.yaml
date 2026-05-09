@@ -591,7 +591,8 @@ config:
     signing_key_kid: ""                 # JWT header kid; "" → derived from public key bytes
     default_ttl: 15m                    # cap when Issue.TTL omitted
     verifier_leeway: 30s                # clock-skew window for nbf / exp
-    charge_per_request: 0               # USD auto-charged on billable handler calls; 0 = no auto-charge
+    charge_per_request_amount: 0        # amount auto-charged on billable handler calls; 0 = no auto-charge
+    charge_per_request_unit: ""         # unit code (USD/EUR/UAH/GBP/UNIT); empty = use capability's own unit
     revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
 
   # ─── API tokens (hashed-bearer M2M, long-lived) ──────────────────────

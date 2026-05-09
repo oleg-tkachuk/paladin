@@ -28,11 +28,11 @@ import (
 //     callers can branch on it.
 //
 //  2. Limit values come in via the SQL args, not the row. This means
-//     a capability whose MaxRequests / MaxBudgetUSD changes mid-life
-//     (delegation narrowing) is enforced against the *current* value
-//     the caller passes — no stale row-stored limit to invalidate.
-//     The caveats themselves live in the JWT claim set; the row
-//     just tracks accumulated usage.
+//     a capability whose MaxRequests / MaxBudgetAmount changes mid-
+//     life (delegation narrowing) is enforced against the *current*
+//     value the caller passes — no stale row-stored limit to
+//     invalidate. The caveats themselves live in the JWT claim set;
+//     the row just tracks accumulated usage.
 type UsageStore struct {
 	q *sqlc.Queries
 }
@@ -63,9 +63,15 @@ func (s *UsageStore) BumpRequest(
 	return count, nil
 }
 
-// Charge implements capability.UsageStore. amountUSD must be ≥ 0;
+// Charge implements capability.UsageStore. amount must be ≥ 0;
 // negative input rejected — refunds are explicit via RefundCapability
 // / RefundTenant.
+//
+// unitCode pins the currency for newly-inserted rows. Empty value
+// resolves to capability.DefaultUnitCode. The existing row's
+// unit_code is preserved on conflict (the SQL uses the arg only on
+// INSERT) so callers cannot accidentally re-denominate an existing
+// counter.
 //
 // Two-phase charge when tenantID is non-zero:
 //
@@ -76,37 +82,34 @@ func (s *UsageStore) BumpRequest(
 //     counter doesn't drift past the tenant cap. The audit trail
 //     still shows the attempted bump if the operator inspects
 //     telemetry; the row state is consistent.
-//
-// Cross-counter consistency on a transient DB failure during step 2:
-// the capability spend has been applied; the tenant has not. We
-// surface the error to the caller; a re-attempt by the agent will
-// hit the dedup at the handler level (idempotency keys, etc) and a
-// reconciliation sweep can be run admin-side. Two-phase commit
-// across counters is overkill for the spend-tracking use case where
-// occasional drift is acceptable; bounded by manual reconciliation
-// or the next period roll.
 func (s *UsageStore) Charge(
 	ctx context.Context,
 	capID uuid.UUID,
-	amountUSD, maxBudgetUSD float64,
+	amount, maxBudget float64,
+	unitCode string,
 	tenantID uuid.UUID,
 ) (float64, error) {
-	if amountUSD < 0 {
+	if amount < 0 {
 		return 0, errors.New("capability/postgres: charge amount must be >= 0")
 	}
-	amount, err := numericFromFloat(amountUSD)
+	resolvedUnit, err := capability.NormaliseUnitCode(unitCode)
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: charge: %w", err)
+	}
+	amountNumeric, err := numericFromFloat(amount)
 	if err != nil {
 		return 0, err
 	}
-	maxBudget, err := numericFromFloat(maxBudgetUSD)
+	maxBudgetNumeric, err := numericFromFloat(maxBudget)
 	if err != nil {
 		return 0, err
 	}
 	spent, err := s.q.ChargeCapability(
 		ctx,
 		pgtype.UUID{Bytes: capID, Valid: true},
-		amount,
-		maxBudget,
+		amountNumeric,
+		resolvedUnit,
+		maxBudgetNumeric,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -122,7 +125,8 @@ func (s *UsageStore) Charge(
 	if _, tErr := s.q.ChargeTenantBudget(
 		ctx,
 		pgtype.UUID{Bytes: tenantID, Valid: true},
-		amount,
+		amountNumeric,
+		resolvedUnit,
 	); tErr != nil {
 		// Compensate the capability spend so the two counters stay
 		// in sync. RefundCapability is itself idempotent (UPDATE
@@ -131,7 +135,7 @@ func (s *UsageStore) Charge(
 		_ = s.q.RefundCapabilityUsage(
 			ctx,
 			pgtype.UUID{Bytes: capID, Valid: true},
-			amount,
+			amountNumeric,
 		)
 		if errors.Is(tErr, pgx.ErrNoRows) {
 			return 0, capability.ErrTenantBudgetExceeded
@@ -143,18 +147,18 @@ func (s *UsageStore) Charge(
 
 // RefundCapability implements capability.UsageStore. Idempotent —
 // row floored at 0; missing row is a no-op.
-func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amountUSD float64) error {
-	if amountUSD <= 0 {
+func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error {
+	if amount <= 0 {
 		return nil
 	}
-	amount, err := numericFromFloat(amountUSD)
+	amountNumeric, err := numericFromFloat(amount)
 	if err != nil {
 		return err
 	}
 	if err := s.q.RefundCapabilityUsage(
 		ctx,
 		pgtype.UUID{Bytes: capID, Valid: true},
-		amount,
+		amountNumeric,
 	); err != nil {
 		return fmt.Errorf("capability/postgres: refund cap: %w", err)
 	}
@@ -163,18 +167,18 @@ func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amou
 
 // RefundTenant implements capability.UsageStore. Same idempotency
 // shape as RefundCapability.
-func (s *UsageStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amountUSD float64) error {
-	if amountUSD <= 0 {
+func (s *UsageStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error {
+	if amount <= 0 {
 		return nil
 	}
-	amount, err := numericFromFloat(amountUSD)
+	amountNumeric, err := numericFromFloat(amount)
 	if err != nil {
 		return err
 	}
 	if err := s.q.RefundTenantBudget(
 		ctx,
 		pgtype.UUID{Bytes: tenantID, Valid: true},
-		amount,
+		amountNumeric,
 	); err != nil {
 		return fmt.Errorf("capability/postgres: refund tenant: %w", err)
 	}
@@ -190,14 +194,23 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
-	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
 }
 
 // SetTenantBudget implements capability.UsageStore.
 func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
-	maxBudget, err := numericFromFloat(args.MaxBudgetUSD)
+	maxBudget, err := numericFromFloat(args.MaxBudgetAmount)
 	if err != nil {
 		return capability.TenantBudget{}, err
+	}
+	// Empty UnitCode passed through verbatim — the SQL preserves
+	// the existing row's unit_code on conflict in that case (or
+	// inserts 'USD' on first row). A non-empty value is validated.
+	unit := args.UnitCode
+	if unit != "" {
+		if !capability.IsAllowedUnitCode(unit) {
+			return capability.TenantBudget{}, fmt.Errorf("capability/postgres: SetTenantBudget: invalid unit_code %q", unit)
+		}
 	}
 	var periodEnd pgtype.Timestamptz
 	if args.PeriodEnd != nil {
@@ -207,25 +220,28 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		ctx,
 		pgtype.UUID{Bytes: args.TenantID, Valid: true},
 		maxBudget,
+		unit,
 		periodEnd,
 		args.ResetSpend,
 	)
 	if err != nil {
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
-	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
 }
 
 // tenantBudgetFromRow normalises sqlc row types into the public shape.
 func tenantBudgetFromRow(
 	tenantID pgtype.UUID,
 	maxBudget, spent pgtype.Numeric,
+	unitCode string,
 	periodStart, periodEnd, updatedAt pgtype.Timestamptz,
 ) capability.TenantBudget {
 	out := capability.TenantBudget{
-		TenantID:     uuid.UUID(tenantID.Bytes),
-		MaxBudgetUSD: floatFromNumeric(maxBudget),
-		SpentUSD:     floatFromNumeric(spent),
+		TenantID:        uuid.UUID(tenantID.Bytes),
+		MaxBudgetAmount: floatFromNumeric(maxBudget),
+		SpentAmount:     floatFromNumeric(spent),
+		UnitCode:        unitCode,
 	}
 	if periodStart.Valid {
 		out.PeriodStart = periodStart.Time
@@ -252,7 +268,8 @@ func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage
 	return capability.Usage{
 		CapabilityID: uuid.UUID(row.CapabilityID.Bytes),
 		RequestCount: row.RequestCount,
-		SpentUSD:     floatFromNumeric(row.SpentUsd),
+		SpentAmount:  floatFromNumeric(row.SpentUsd),
+		UnitCode:     row.UnitCode,
 	}, nil
 }
 
