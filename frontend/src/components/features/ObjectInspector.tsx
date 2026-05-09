@@ -158,7 +158,7 @@ export function ObjectInspector({
                     {object.contentType || "—"}
                   </dd>
 
-                  <dt className="text-muted-foreground">Object Tag</dt>
+                  <dt className="text-muted-foreground">Classification</dt>
                   <dd className="font-mono text-xs">
                     {object.tags?.object_tag || "—"}
                   </dd>
@@ -174,25 +174,34 @@ export function ObjectInspector({
                 </dl>
               </div>
 
-              {/* Tags */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Tags</h3>
-                {Object.keys(object.tags || {}).length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {Object.entries(object.tags || {}).map(([k, v]) => (
-                      <Badge
-                        key={k}
-                        variant="outline"
-                        className="font-mono text-xs"
-                      >
-                        {k}={String(v)}
-                      </Badge>
-                    ))}
+              {/* Free-form tags only — `object_tag` is the
+                  Classification slug shown in Specs above and is
+                  edited via the admin taxonomy flow, not here. */}
+              {(() => {
+                const freeFormTags = Object.entries(object.tags || {}).filter(
+                  ([k]) => k !== "object_tag",
+                );
+                return (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">Tags</h3>
+                    {freeFormTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {freeFormTags.map(([k, v]) => (
+                          <Badge
+                            key={k}
+                            variant="outline"
+                            className="font-mono text-xs"
+                          >
+                            {k}={String(v)}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className={T.hint}>No tags assigned.</p>
+                    )}
                   </div>
-                ) : (
-                  <p className={T.hint}>No tags assigned.</p>
-                )}
-              </div>
+                );
+              })()}
             </>
           ) : (
             <p className="py-12 text-center text-sm text-muted-foreground">

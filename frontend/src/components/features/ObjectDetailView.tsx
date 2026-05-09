@@ -403,32 +403,42 @@ export function ObjectDetailView({
                   </Button>
                 </div>
 
+                {/* Free-form tags only. The reserved `object_tag` key
+                    is the classification slug — surfaced in the Specs
+                    sidebar instead, edited via the admin taxonomy
+                    flow. Hiding it here also prevents the user from
+                    accidentally clearing it via the trash button on
+                    a row whose semantics don't match the rest. */}
                 <div className="space-y-1.5">
-                  {Object.entries(editingLabels).length === 0 ? (
+                  {Object.entries(editingLabels).filter(
+                    ([k]) => k !== "object_tag",
+                  ).length === 0 ? (
                     <p className={T.hint}>No tags assigned.</p>
                   ) : (
-                    Object.entries(editingLabels).map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
-                      >
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {key}
-                        </span>
-                        <span className="text-muted-foreground">=</span>
-                        <span className="flex-1 break-all font-mono text-xs">
-                          {value}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => removeLabel(key)}
-                          aria-label="Remove tag"
+                    Object.entries(editingLabels)
+                      .filter(([k]) => k !== "object_tag")
+                      .map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
                         >
-                          <TrashIcon className="size-3.5" />
-                        </Button>
-                      </div>
-                    ))
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {key}
+                          </span>
+                          <span className="text-muted-foreground">=</span>
+                          <span className="flex-1 break-all font-mono text-xs">
+                            {value}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => removeLabel(key)}
+                            aria-label="Remove tag"
+                          >
+                            <TrashIcon className="size-3.5" />
+                          </Button>
+                        </div>
+                      ))
                   )}
                 </div>
 
@@ -443,20 +453,31 @@ export function ObjectDetailView({
                   </Button>
                 </div>
               </div>
-            ) : Object.entries(object.tags || {}).length > 0 ? (
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {Object.entries(object.tags).map(([key, value]) => (
-                  <Badge
-                    key={key}
-                    variant="outline"
-                    className="justify-start font-mono text-xs"
-                  >
-                    {key}={value}
-                  </Badge>
-                ))}
-              </div>
             ) : (
-              <p className={T.hint}>No tags assigned.</p>
+              (() => {
+                // View-mode also filters `object_tag` — its value is the
+                // classification slug rendered in the Specs sidebar.
+                // Computed once so the empty-state branch keys on the
+                // same filtered list as the rendered one.
+                const freeFormTags = Object.entries(object.tags || {}).filter(
+                  ([k]) => k !== "object_tag",
+                );
+                return freeFormTags.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {freeFormTags.map(([key, value]) => (
+                      <Badge
+                        key={key}
+                        variant="outline"
+                        className="justify-start font-mono text-xs"
+                      >
+                        {key}={value}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={T.hint}>No tags assigned.</p>
+                );
+              })()
             )}
           </Card>
         </div>
@@ -550,10 +571,23 @@ export function ObjectDetailView({
                 </span>
               </SpecRow>
 
-              <SpecRow label="Object Tag">
-                <span className="font-mono text-xs">
-                  {object.tags?.object_tag || "—"}
-                </span>
+              {/* Classification = the reserved `object_tag` key inside
+                  the same `tags` map the Tags card edits. It points at
+                  a tenant-scoped taxonomy slug (admin's ObjectTag
+                  resource) and is one-of, not bag-of, so it lives here
+                  in Specs rather than in the Tags card. The Tags card
+                  filters this key out so the same value never renders
+                  twice on the page. */}
+              <SpecRow label="Classification">
+                {object.tags?.object_tag ? (
+                  <span className="font-mono text-xs">
+                    {object.tags.object_tag}
+                  </span>
+                ) : (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    —
+                  </span>
+                )}
               </SpecRow>
 
               <SpecRow label="Expires">
