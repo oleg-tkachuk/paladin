@@ -708,6 +708,78 @@ the same commit. Treat this file like a runtime invariant.
   format dichotomy "HTTP gets raw, NATS gets envelope" is the wrong
   thing to ship.
 
+### Storage event ingest pipeline (SeaweedFS / MinIO → PALADIN ingest plane)
+
+- **Status:** Deferred
+- **Reason:** PALADIN has an `ingest` plane built (`serve ingest`,
+  drivers `webhook | nats | rabbitmq` per `cfg.Ingest`,
+  `internal/eventingest/`) but it's disabled in every overlay
+  today. Its purpose: promote object rows from PENDING → AVAILABLE
+  when storage notifies PALADIN that bytes landed. In the current
+  production flow this is unnecessary — the agent path
+  (`paladin_upload_object` → presigned PUT → `paladin_complete_object`)
+  is explicit and synchronous, and the MCP tools / data plane RPCs
+  already wire that loop end-to-end. Async ingest only matters
+  when an external pipeline writes directly to the storage bucket,
+  bypassing PALADIN, and PALADIN needs to discover those new objects via
+  storage-side notification.
+- **Why no quick wire-up via SeaweedFS today:** SeaweedFS native
+  notification targets are Kafka / AWS SQS / GCP PubSub / log.
+  Recent versions added a generic webhook target (~v3.59+) but
+  it's lightly documented and version-specific. RabbitMQ is NOT
+  supported natively. The four realistic paths if this ever
+  becomes load-bearing:
+    - **Path A (cleanest if SF version supports it):** SeaweedFS
+      `[notification.webhook]` → PALADIN ingest plane's webhook driver.
+      Single hop, reuses existing PALADIN code. Verify SeaweedFS
+      version supports webhook before relying on this.
+    - **Path B:** SeaweedFS Kafka notifications → PALADIN. Requires a
+      Kafka cluster (Redpanda would do) AND a Kafka driver on the
+      PALADIN ingest side (only `webhook | nats | rabbitmq` exist
+      today — no Kafka driver).
+    - **Path C:** SeaweedFS SQS notifications → PALADIN. Only sensible
+      on AWS where SQS is native; locally needs ElasticMQ.
+    - **Path D:** Log-tail sidecar that watches SeaweedFS filer
+      notification log and pushes to RabbitMQ → PALADIN ingest's
+      RabbitMQ driver. Operationally fragile (file rotation,
+      sidecar lifecycle, dedup) but the only path that actually
+      uses the operator-deployed RabbitMQ.
+  In all paths, the bottleneck isn't PALADIN — it's the storage
+  notification subsystem. SeaweedFS is the limiting factor; MinIO
+  has cleaner native webhook + AMQP support if that becomes the
+  storage backend.
+- **Definition of Done:**
+  - Pick a path based on storage backend in production AND
+    customer requirement (do they write directly to S3 buckets
+    bypassing PALADIN?). Document the choice in `docs/`.
+  - Enable `cfg.Ingest.Enabled = true` per-overlay; deploy the
+    `ingest` Helm role (already in chart, just `enabled: true`).
+  - Configure storage-side notifications to point at PALADIN's ingest
+    endpoint with a shared HMAC secret (matching
+    `cfg.Ingest.Webhook.SharedSecret`).
+  - Idempotency: `internal/eventingest/dedup_ttl` handles replays
+    via a sliding-window cache; verify it's tuned for the storage
+    notification retry profile (SeaweedFS retries aggressively on
+    failed delivery).
+  - Integration test: write an object directly via raw S3 API
+    (bypassing PALADIN), wait for ingest worker to promote the row,
+    assert object appears in PALADIN listing within Y seconds.
+  - Handle the BYPASS_RLS race: ingest worker writes as
+    `paladin_migrate` (cross-tenant) but the row's tenant_id has to
+    come from somewhere — either the bucket prefix
+    (`<tenant_id>/<object_key>/<key>` per current key shape) or
+    the storage event payload. Confirm the parser handles
+    malformed prefixes gracefully (orphaned objects in a
+    `dead-letter` bucket).
+- **Trigger to do:** real customer ask where their pipeline
+  writes to the bucket without going through PALADIN RPCs. Until then,
+  push them toward `paladin_upload_object`/`paladin_complete_object` —
+  it's faster, more observable, and doesn't depend on the
+  storage-notification subsystem's reliability. RabbitMQ-as-bus
+  variant (Path D) only makes sense if the operator already
+  invested in a RabbitMQ cluster AND has aversion to deploying
+  Kafka/Redpanda — small intersection.
+
 ---
 
 ## Operational
