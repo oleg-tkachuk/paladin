@@ -50,6 +50,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "@/context/TenantContext";
 import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 
@@ -184,10 +185,7 @@ export default function CapabilitiesPage() {
               { requestCount: u.requestCount, spentUsd: u.spentUsd },
             ] as const;
           } catch (err) {
-            if (
-              err instanceof ConnectError &&
-              err.code === Code.NotFound
-            ) {
+            if (err instanceof ConnectError && err.code === Code.NotFound) {
               return [c.id, "never" as const] as const;
             }
             return null;
@@ -197,8 +195,12 @@ export default function CapabilitiesPage() {
         setUsage(
           new Map(
             entries.filter(
-              (e): e is readonly [string, { requestCount: bigint; spentUsd: number } | "never"] =>
-                e !== null,
+              (
+                e,
+              ): e is readonly [
+                string,
+                { requestCount: bigint; spentUsd: number } | "never",
+              ] => e !== null,
             ),
           ),
         );
@@ -569,7 +571,10 @@ export default function CapabilitiesPage() {
                       </span>
                       {c.parentId && (
                         <span
-                          className="block max-w-[260px] truncate font-mono text-[10px] text-muted-foreground"
+                          className={cn(
+                            T.codeSmall,
+                            "block max-w-[260px] truncate text-muted-foreground",
+                          )}
                           title={`parent: ${c.parentId}`}
                         >
                           ↪ {c.parentId.slice(0, 8)}…
@@ -582,14 +587,19 @@ export default function CapabilitiesPage() {
                           <Badge
                             key={op}
                             variant="outline"
-                            className="font-mono text-[10px]"
+                            className={cn(T.labelTight, "font-mono")}
                           >
                             {op}
                           </Badge>
                         ))}
                       </div>
                       {(c.caveats?.resourcePrefixes ?? []).length > 0 && (
-                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                        <div
+                          className={cn(
+                            T.codeSmall,
+                            "mt-1 text-muted-foreground",
+                          )}
+                        >
                           {c.caveats!.resourcePrefixes.join(", ")}
                         </div>
                       )}
@@ -600,40 +610,68 @@ export default function CapabilitiesPage() {
                           <Badge
                             key={a}
                             variant="secondary"
-                            className="text-[10px]"
+                            className={T.labelTight}
                           >
                             {a}
                           </Badge>
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {formatTimestamp(c.issuedAt)}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {formatTimestamp(c.expiresAt)}
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell font-mono text-[11px]">
+                    <TableCell className={cn("hidden xl:table-cell", T.code)}>
                       {(() => {
                         const u = usage.get(c.id);
-                        if (u === undefined) return <span className="text-muted-foreground">…</span>;
-                        if (u === "never") return <span className="text-muted-foreground">never used</span>;
+                        if (u === undefined)
+                          return (
+                            <span className="text-muted-foreground">…</span>
+                          );
+                        if (u === "never")
+                          return (
+                            <span className="text-muted-foreground">
+                              never used
+                            </span>
+                          );
                         const reqCap = c.caveats?.maxRequests ?? 0;
                         const budgetCap = c.caveats?.maxBudgetUsd ?? 0;
                         return (
                           <div className="space-y-0.5">
                             <div>
-                              <span className="text-muted-foreground">req </span>
+                              <span className="text-muted-foreground">
+                                req{" "}
+                              </span>
                               {u.requestCount.toString()}
                               {reqCap > 0 && (
-                                <span className="text-muted-foreground"> / {reqCap}</span>
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  / {reqCap}
+                                </span>
                               )}
                             </div>
                             <div>
                               <span className="text-muted-foreground">$ </span>
                               {u.spentUsd.toFixed(4)}
                               {budgetCap > 0 && (
-                                <span className="text-muted-foreground"> / {budgetCap.toFixed(2)}</span>
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  / {budgetCap.toFixed(2)}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -642,11 +680,11 @@ export default function CapabilitiesPage() {
                     </TableCell>
                     <TableCell>
                       {expired ? (
-                        <Badge variant="outline" className="text-[11px]">
+                        <Badge variant="outline" className={T.code}>
                           expired
                         </Badge>
                       ) : (
-                        <Badge variant="success" className="text-[11px]">
+                        <Badge variant="success" className={T.code}>
                           active
                         </Badge>
                       )}
@@ -706,7 +744,7 @@ export default function CapabilitiesPage() {
                       Copy
                     </Button>
                   </div>
-                  <p className="font-mono text-[11px] text-muted-foreground">
+                  <p className={cn(T.code, "text-muted-foreground")}>
                     id: {reveal.capabilityId}
                   </p>
                 </div>
@@ -832,7 +870,7 @@ export default function CapabilitiesPage() {
                     value={issueResourcePrefixes}
                     onChange={(e) => setIssueResourcePrefixes(e.target.value)}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     Comma- or space-separated. Empty means &ldquo;no prefix
                     restriction&rdquo;.
                   </p>

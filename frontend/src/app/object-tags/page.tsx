@@ -30,6 +30,7 @@ import { useObjects } from "@/hooks/useObjects";
 import { useScope } from "@/context/ScopeContext";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // /object-tags is a tenant-wide tag inventory. Editing happens on the
 // per-object detail page (ObjectService.UpdateObject with the `tags`
@@ -299,7 +300,7 @@ function ObjectTagsPageInner({ initialSearch }: { initialSearch: string }) {
                             <Badge
                               key={k}
                               variant="secondary"
-                              className="font-mono text-[10px]"
+                              className={cn(T.labelTight, "font-mono")}
                             >
                               {k}={v}
                             </Badge>

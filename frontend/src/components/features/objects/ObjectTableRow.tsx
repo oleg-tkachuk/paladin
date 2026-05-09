@@ -22,6 +22,7 @@ import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 interface ObjectTableRowProps {
   obj: Object$;
@@ -168,7 +169,12 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       {/* Object Key — namespace badge */}
       {visibleColumns.has("object_key") && (
         <td className="hidden md:table-cell px-6 py-4">
-          <span className="inline-flex items-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 px-2 py-0.5 font-mono text-[11px]">
+          <span
+            className={cn(
+              T.code,
+              "inline-flex items-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 px-2 py-0.5",
+            )}
+          >
             {obj.objectKey || "—"}
           </span>
         </td>
@@ -242,7 +248,10 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                     {others.map(([k, v]) => (
                       <span
                         key={k}
-                        className="inline-flex items-center gap-1 rounded-md bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30 px-1.5 py-0.5 font-mono text-[10px]"
+                        className={cn(
+                          T.codeSmall,
+                          "inline-flex items-center gap-1 rounded-md bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30 px-1.5 py-0.5",
+                        )}
                       >
                         <span className="opacity-80">{k}</span>
                         <span className="opacity-50">:</span>

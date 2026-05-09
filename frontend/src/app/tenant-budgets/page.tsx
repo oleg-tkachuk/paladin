@@ -21,6 +21,7 @@ import { useTenant } from "@/context/TenantContext";
 import { tenantBudgetClient } from "@/lib/connect/client";
 import type { TenantBudget } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // /tenant-budgets — admin surface for the per-tenant aggregate USD
 // spend cap that backs the capability subsystem's two-phase Charge.
@@ -260,7 +261,7 @@ export default function TenantBudgetsPage() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{pct.toFixed(1)}% used</span>
                   {overCap && (
-                    <Badge variant="destructive" className="text-[10px]">
+                    <Badge variant="destructive" className={T.labelTight}>
                       <ExclamationTriangleIcon className="mr-1 size-3" />
                       cap reached
                     </Badge>
@@ -305,7 +306,7 @@ export default function TenantBudgetsPage() {
                   value={maxBudget}
                   onChange={(e) => setMaxBudget(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className={T.hint}>
                   0 keeps the counter accumulating without rejecting.
                 </p>
               </div>
@@ -323,7 +324,7 @@ export default function TenantBudgetsPage() {
                     Reset spend (roll the period — typical at billing close).
                   </span>
                 </label>
-                <p className="text-[11px] text-muted-foreground">
+                <p className={T.hint}>
                   Off: change the cap mid-cycle without affecting accumulated
                   spend.
                 </p>

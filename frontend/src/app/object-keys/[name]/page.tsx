@@ -39,6 +39,7 @@ import { ObjectKeySchema, type ObjectKey } from "@/gen/paladin/admin/v1/types_pb
 import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // Detail editor for a single ObjectKey: identity, bucket binding, and the
 // per-resource Cedar policy. Tenant scope comes from the signed-in user;
@@ -344,7 +345,7 @@ export default function ObjectKeyDetailPage() {
 
               <dt className="text-muted-foreground">Completion mode</dt>
               <dd>
-                <Badge variant="outline" className="font-mono text-[11px]">
+                <Badge variant="outline" className={T.code}>
                   {completionModeLabel(ok.completionMode)}
                 </Badge>
               </dd>

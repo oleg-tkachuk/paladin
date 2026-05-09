@@ -69,6 +69,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 interface ViewFilters {
   search?: string;
@@ -646,10 +647,7 @@ function ObjectsPageContent() {
           object_key); this dropdown is how those rows become visible. */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card/40 p-3">
         <div className="space-y-1.5">
-          <Label
-            htmlFor="objects-key-picker"
-            className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
-          >
+          <Label htmlFor="objects-key-picker" className={T.label}>
             Object Key
           </Label>
           <SelectRoot value={objectKey} onValueChange={handleObjectKeyChange}>
@@ -958,7 +956,7 @@ function ObjectsPageContent() {
                 onKeyDown={(e) => e.key === "Enter" && handleCopyMove()}
                 className="font-mono text-xs"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className={T.hint}>
                 Full path including filename, within the same ObjectKey.
               </p>
             </div>

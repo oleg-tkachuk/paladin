@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 type SortColumn = "backend" | "name" | "region";
 type SortDirection = "asc" | "desc" | null;
@@ -386,7 +387,7 @@ export default function BucketsPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <ServerStackIcon className="size-4 text-chart-5" />
-                      <Badge variant="info" className="font-mono text-[11px]">
+                      <Badge variant="info" className={T.code}>
                         {b.backendId}
                       </Badge>
                     </div>
@@ -491,9 +492,7 @@ export default function BucketsPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value.toLowerCase())}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Lowercase, S3 naming rules apply.
-                </p>
+                <p className={T.hint}>Lowercase, S3 naming rules apply.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -606,37 +605,40 @@ function ProvisionStateBadge({ state }: { state: string }) {
   switch (s) {
     case "ready":
       return (
-        <Badge variant="outline" className="text-[11px] text-muted-foreground">
+        <Badge
+          variant="outline"
+          className={cn(T.code, "text-muted-foreground")}
+        >
           ready
         </Badge>
       );
     case "pending":
       return (
-        <Badge variant="info" className="text-[11px]">
+        <Badge variant="info" className={T.code}>
           provisioning…
         </Badge>
       );
     case "deleting":
       return (
-        <Badge variant="warning" className="text-[11px]">
+        <Badge variant="warning" className={T.code}>
           deleting…
         </Badge>
       );
     case "failed":
       return (
-        <Badge variant="destructive" className="text-[11px]">
+        <Badge variant="destructive" className={T.code}>
           failed
         </Badge>
       );
     case "deletion_failed":
       return (
-        <Badge variant="destructive" className="text-[11px]">
+        <Badge variant="destructive" className={T.code}>
           delete failed
         </Badge>
       );
     default:
       return (
-        <Badge variant="outline" className="text-[11px]">
+        <Badge variant="outline" className={T.code}>
           {s}
         </Badge>
       );

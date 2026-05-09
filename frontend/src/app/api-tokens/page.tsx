@@ -54,6 +54,7 @@ import { apiKeyClient } from "@/lib/connect/client";
 import { copyToClipboard } from "@/lib/utils";
 import type { ApiKey } from "@/gen/paladin/iam/v1/types_pb";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // /api-tokens — non-interactive Personal Access Token surface backed
 // by iam/v1.ApiKeyService.
@@ -357,26 +358,38 @@ export default function ApiTokensPage() {
                         <Badge
                           key={r}
                           variant="outline"
-                          className="font-mono text-[10px]"
+                          className={cn(T.labelTight, "font-mono")}
                         >
                           {r}
                         </Badge>
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell font-mono text-[11px] text-muted-foreground">
+                  <TableCell
+                    className={cn(
+                      "hidden md:table-cell",
+                      T.code,
+                      "text-muted-foreground",
+                    )}
+                  >
                     {formatTimestamp(k.createdAt)}
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                  <TableCell
+                    className={cn(
+                      "hidden lg:table-cell",
+                      T.code,
+                      "text-muted-foreground",
+                    )}
+                  >
                     {k.expiresAt ? formatTimestamp(k.expiresAt) : "never"}
                   </TableCell>
                   <TableCell>
                     {k.revoked ? (
-                      <Badge variant="destructive" className="text-[11px]">
+                      <Badge variant="destructive" className={T.code}>
                         revoked
                       </Badge>
                     ) : (
-                      <Badge variant="success" className="text-[11px]">
+                      <Badge variant="success" className={T.code}>
                         active
                       </Badge>
                     )}
@@ -440,7 +453,7 @@ export default function ApiTokensPage() {
                       Copy
                     </Button>
                   </div>
-                  <p className="font-mono text-[11px] text-muted-foreground">
+                  <p className={cn(T.code, "text-muted-foreground")}>
                     prefix: {reveal.displayPrefix}
                   </p>
                 </div>
@@ -483,7 +496,7 @@ export default function ApiTokensPage() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     Free-form label so you can find the token later in audit
                     logs.
                   </p>

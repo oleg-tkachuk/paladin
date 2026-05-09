@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { mcpInspectClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 
 // /mcp — operator visibility for the MCP (Model Context Protocol)
@@ -146,19 +147,19 @@ export default function MCPInspectPage() {
           <TabsList>
             <TabsTrigger value="profiles">
               <ShieldCheckIcon className="size-4" /> Profiles
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <Badge variant="secondary" className={cn("ml-1.5", T.labelTight)}>
                 {profiles.length}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="deny">
               <NoSymbolIcon className="size-4" /> Always-Deny
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <Badge variant="secondary" className={cn("ml-1.5", T.labelTight)}>
                 {denyList.length}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="tools">
               <CommandLineIcon className="size-4" /> Tools
-              <Badge variant="secondary" className="ml-1.5 text-[10px]">
+              <Badge variant="secondary" className={cn("ml-1.5", T.labelTight)}>
                 {tools.length}
               </Badge>
             </TabsTrigger>
@@ -187,7 +188,10 @@ export default function MCPInspectPage() {
                   <h3 className="text-base font-semibold font-mono">
                     {p.name}
                   </h3>
-                  <Badge variant={sourceTone(p.source)} className="text-[10px]">
+                  <Badge
+                    variant={sourceTone(p.source)}
+                    className={T.labelTight}
+                  >
                     {p.source.replace("_", " ")}
                   </Badge>
                   <span className="text-xs text-muted-foreground ml-auto">
@@ -201,11 +205,7 @@ export default function MCPInspectPage() {
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {p.rawPatterns.map((pat) => (
-                      <Badge
-                        key={pat}
-                        variant="outline"
-                        className="font-mono text-[11px]"
-                      >
+                      <Badge key={pat} variant="outline" className={T.code}>
                         {pat}
                       </Badge>
                     ))}
@@ -219,11 +219,7 @@ export default function MCPInspectPage() {
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {p.deny.map((d) => (
-                        <Badge
-                          key={d}
-                          variant="destructive"
-                          className="font-mono text-[11px]"
-                        >
+                        <Badge key={d} variant="destructive" className={T.code}>
                           {d}
                         </Badge>
                       ))}
@@ -242,7 +238,7 @@ export default function MCPInspectPage() {
                         <Badge
                           key={tname}
                           variant={t ? audienceTone(t.audience) : "outline"}
-                          className="font-mono text-[11px]"
+                          className={T.code}
                           title={t?.description ?? ""}
                         >
                           {tname}
@@ -275,11 +271,7 @@ export default function MCPInspectPage() {
                   </span>
                 ) : (
                   denyList.map((d) => (
-                    <Badge
-                      key={d}
-                      variant="destructive"
-                      className="font-mono text-[11px]"
-                    >
+                    <Badge key={d} variant="destructive" className={T.code}>
                       {d}
                     </Badge>
                   ))
@@ -294,7 +286,7 @@ export default function MCPInspectPage() {
               Every tool the MCP bridge registers, with its target plane and
               (when applicable) the capability op the caller&apos;s capability
               must include. Tools marked{" "}
-              <Badge variant="warning" className="text-[10px]">
+              <Badge variant="warning" className={T.labelTight}>
                 mutates
               </Badge>{" "}
               issue state-changing RPCs and are deny-list candidates by default.
@@ -317,27 +309,31 @@ export default function MCPInspectPage() {
                 <TableBody>
                   {tools.map((t) => (
                     <TableRow key={t.name}>
-                      <TableCell className="font-mono text-[11px]">
-                        {t.name}
-                      </TableCell>
+                      <TableCell className={T.code}>{t.name}</TableCell>
                       <TableCell>
                         <Badge
                           variant={audienceTone(t.audience)}
-                          className="text-[10px]"
+                          className={T.labelTight}
                         >
                           {t.audience}
                         </Badge>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-[11px] text-muted-foreground">
+                      <TableCell
+                        className={cn(
+                          "hidden md:table-cell",
+                          T.code,
+                          "text-muted-foreground",
+                        )}
+                      >
                         {t.capabilityOp || "—"}
                       </TableCell>
                       <TableCell>
                         {t.mutates ? (
-                          <Badge variant="warning" className="text-[10px]">
+                          <Badge variant="warning" className={T.labelTight}>
                             mutates
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className={T.labelTight}>
                             read
                           </Badge>
                         )}
@@ -411,7 +407,7 @@ export default function MCPInspectPage() {
                       variant={
                         transports?.stdio?.enabled ? "success" : "outline"
                       }
-                      className="text-[10px]"
+                      className={T.labelTight}
                     >
                       {transports?.stdio?.enabled ? "enabled" : "disabled"}
                     </Badge>
@@ -430,7 +426,7 @@ export default function MCPInspectPage() {
                       variant={
                         transports?.http?.enabled ? "success" : "outline"
                       }
-                      className="text-[10px]"
+                      className={T.labelTight}
                     >
                       {transports?.http?.enabled ? "enabled" : "disabled"}
                     </Badge>
@@ -474,7 +470,7 @@ export default function MCPInspectPage() {
               <div className="flex items-center gap-2">
                 <ServerStackIcon className="size-4 text-muted-foreground" />
                 <h3 className="text-sm font-medium">Live sessions</h3>
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className={T.labelTight}>
                   deferred
                 </Badge>
               </div>
@@ -482,7 +478,7 @@ export default function MCPInspectPage() {
                 The MCP SDK currently doesn&apos;t expose a session enumeration
                 hook on its streamable-HTTP server. Building a live session
                 table needs either a fork of{" "}
-                <code className="text-[11px]">modelcontextprotocol/go-sdk</code>{" "}
+                <code className={T.codeSmall}>modelcontextprotocol/go-sdk</code>{" "}
                 or a wrapping middleware that tracks session-id headers. Tracked
                 in BACKLOG. In the meantime, MCP tool calls are visible in the
                 audit log — filter by{" "}
