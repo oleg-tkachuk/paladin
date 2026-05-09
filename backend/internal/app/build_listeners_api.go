@@ -106,7 +106,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
 			deps.Capability.Usage,
-			cfg.Server.DataHTTP.RealIPHeader,
+			cfg.API.Server.Data.RealIPHeader,
 			cfg.Capability.ChargePerRequest,
 		)
 	} else {
@@ -146,7 +146,43 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connect.UnaryInterceptorFunc(validateInterceptor),
 	)
 
-	healthH = NewHealthHandler(deps.DB, cfg.Server, l)
+	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
+
+	// Capability subsystem — when enabled, verify the issuer signer
+	// has a key loaded. Cheap: no I/O, just nil-check on the
+	// in-memory signer. Critical=true because the request path
+	// short-circuits to "no capability" if the issuer fails, which
+	// is a real privilege gap operators need to see.
+	if deps.Capability != nil && deps.Capability.Issuer != nil {
+		AddSubsystemCheck(healthH, "capability", true, func(ctx context.Context) error {
+			if deps.Capability.Issuer == nil {
+				return fmt.Errorf("capability issuer not initialised")
+			}
+			return nil
+		})
+	} else {
+		// Subsystem is off-by-config — register an informational row so
+		// the /health page surfaces "capability: disabled" instead of
+		// omitting the component entirely. Operators consistently
+		// misread an absent row as "missing/broken" rather than "off".
+		AddDisabledSubsystem(healthH, "capability")
+	}
+
+	// APIToken subsystem mirrors capability: probe when on, surface
+	// "disabled" when off so the /health page shows the row.
+	if deps.APIToken != nil {
+		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "api_token")
+	}
+
+	// Storage-backend reachability probes are tracked in BACKLOG —
+	// the existing S3 adapter doesn't expose a HEAD/ListBuckets
+	// method suited to a sub-second probe. Adding one is a separate
+	// PR; until then, storage failures surface as RPC-level errors
+	// on PutObject / Presign rather than as /readyz failures.
 
 	dataMux = http.NewServeMux()
 	healthH.Register(dataMux)
@@ -163,7 +199,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewApiKeyServiceHandler(connectiam.NewApiKeyServer(apikH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewSystemServiceHandler(
-		connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), healthH),
+		connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH),
 		iamOpts,
 	))
 	iamMux.Handle(paladiniamv1connect.NewUserSettingsServiceHandler(
@@ -176,7 +212,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 // BuildAPIListeners materialises the data and iam Connect listeners.
 // Wraps the muxes returned by AssembleAPIMuxes in h2c-enabled http.Servers
-// bound to cfg.Server.DataHTTP / IAMHTTP.
+// bound to cfg.API.Server.Data / IAMHTTP.
 func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
 	dataMux, iamMux, healthH, err := AssembleAPIMuxes(ctx, deps, meta)
 	if err != nil {
@@ -185,8 +221,8 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	cfg := deps.Cfg
 	l := deps.Logger
 	listeners := []HTTPListener{
-		{Plane: "data", Server: BuildHTTPServer(cfg.Server.DataHTTP, dataMux, l), TLS: cfg.Server.DataHTTP.TLS},
-		{Plane: "iam", Server: BuildHTTPServer(cfg.Server.IAMHTTP, iamMux, l), TLS: cfg.Server.IAMHTTP.TLS},
+		{Plane: "data", Server: BuildHTTPServer(cfg.API.Server.Data, dataMux, l), TLS: cfg.API.Server.Data.TLS},
+		{Plane: "iam", Server: BuildHTTPServer(cfg.API.Server.IAM, iamMux, l), TLS: cfg.API.Server.IAM.TLS},
 	}
 	return listeners, healthH, nil
 }

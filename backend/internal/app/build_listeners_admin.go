@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
@@ -69,7 +70,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			deps.Capability.Verifier,
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
-			cfg.Server.AdminHTTP.RealIPHeader,
+			cfg.Admin.Server.RealIPHeader,
 			cfg.Capability.ChargePerRequest,
 		)
 	} else {
@@ -90,7 +91,28 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
 	)
 
-	healthH := NewHealthHandler(deps.DB, cfg.Server, l)
+	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")
+	// Mirror the api builder's subsystem rows so the admin probe surfaces
+	// the same capability + api_token components — operators viewing the
+	// admin pod alone (e.g. via /system/health.json) shouldn't have to
+	// cross-reference the api pod to learn that capability is disabled.
+	if deps.Capability != nil && deps.Capability.Issuer != nil {
+		AddSubsystemCheck(healthH, "capability", true, func(ctx context.Context) error {
+			if deps.Capability.Issuer == nil {
+				return fmt.Errorf("capability issuer not initialised")
+			}
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "capability")
+	}
+	if deps.APIToken != nil {
+		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
+			return nil
+		})
+	} else {
+		AddDisabledSubsystem(healthH, "api_token")
+	}
 
 	mux := http.NewServeMux()
 	healthH.Register(mux)
@@ -112,6 +134,14 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH), adminOpts))
+	// MCPInspectService — read-only operator visibility into the MCP
+	// bridge configuration (profiles, deny-list, tool catalog,
+	// upstreams, transport state). Always mounted; the admin's Cedar
+	// gate keeps it platform-admin only.
+	mux.Handle(paladinadminv1connect.NewMCPInspectServiceHandler(
+		mcpinspecth.NewHandler(cfg.MCP, polEngine),
+		adminOpts,
+	))
 	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(
 		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
 		adminOpts,
@@ -131,22 +161,41 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// authentication; the handler does its own Cedar gate per RPC.
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine)
 		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
+	} else {
+		// Subsystem disabled — mount the disabled-subsystem stub so
+		// callers receive Connect CodeUnimplemented (HTTP 501) plus
+		// X-Paladin-Reason: subsystem_disabled / X-Paladin-Subsystem: capability
+		// headers and a message naming the config flag to flip. Beats
+		// the default-mux 404 ("path not found") and the bare
+		// Unimplemented from the generated stub ("not implemented")
+		// which can't distinguish "binary lacks this RPC" from "the
+		// operator turned this subsystem off". See disabled_subsystem.go
+		// for the full contract.
+		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(
+			disabledCapabilityServiceHandler{}, adminOpts,
+		))
 	}
 
-	// APITokenService — Create / Revoke / List / GetSelf. Mounted only
-	// when the api_token subsystem is wired. GetSelf is gated only by
-	// the interceptor (caller must hold a valid token); the rest are
-	// platform-admin via Cedar.
+	// APITokenService — Create / Revoke / List / GetSelf. GetSelf is
+	// gated only by the interceptor (caller must hold a valid token);
+	// the rest are platform-admin via Cedar. Mounted unconditionally —
+	// when the api_token subsystem is off we mount the Unimplemented
+	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
 		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
 		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
+	} else {
+		// See disabledCapabilityServiceHandler rationale.
+		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(
+			disabledAPITokenServiceHandler{}, adminOpts,
+		))
 	}
 
 	return mux, healthH, nil
 }
 
 // BuildAdminListener wraps AssembleAdminMux in an h2c http.Server bound to
-// cfg.Server.AdminHTTP. Sized for low replica counts (1–2) and a separate
+// cfg.Admin.Server. Sized for low replica counts (1–2) and a separate
 // ingress with mTLS / tighter NetworkPolicy than data/iam.
 func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (HTTPListener, *health.Handler, error) {
 	mux, healthH, err := AssembleAdminMux(ctx, deps, meta)
@@ -157,8 +206,8 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	l := deps.Logger
 	listener := HTTPListener{
 		Plane:  "admin",
-		Server: BuildHTTPServer(cfg.Server.AdminHTTP, mux, l),
-		TLS:    cfg.Server.AdminHTTP.TLS,
+		Server: BuildHTTPServer(cfg.Admin.Server, mux, l),
+		TLS:    cfg.Admin.Server.TLS,
 	}
 	return listener, healthH, nil
 }

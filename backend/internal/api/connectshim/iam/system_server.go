@@ -2,7 +2,6 @@ package iam
 
 import (
 	"context"
-	"errors"
 	"runtime"
 	"time"
 
@@ -30,18 +29,25 @@ type SystemServer struct {
 	// GoVersion defaults to runtime.Version() when empty.
 	GoVersion string
 
+	// Role labels the GetHealth response so the UI can attribute a
+	// degraded check to the binary that ran it ("api", "admin",
+	// "worker", "mcp"). The api binary opens both data + iam planes
+	// in one process; both record `role=api`.
+	Role string
+
 	// Health gives us the registered Ready checks. Each check carries a
 	// bounded-timeout func; we run them with their own per-call timer to
 	// surface latency to the UI.
 	Health *health.Handler
 }
 
-func NewSystemServer(version, commit string, buildTime time.Time, h *health.Handler) *SystemServer {
+func NewSystemServer(version, commit string, buildTime time.Time, role string, h *health.Handler) *SystemServer {
 	return &SystemServer{
 		Version:   version,
 		Commit:    commit,
 		BuildTime: buildTime,
 		GoVersion: runtime.Version(),
+		Role:      role,
 		Health:    h,
 	}
 }
@@ -73,47 +79,46 @@ func (s *SystemServer) GetHealth(
 		// production wiring always passes a real *health.Handler.
 		return connect.NewResponse(&pb.HealthInfo{
 			Status: pb.ComponentStatus_COMPONENT_STATUS_HEALTHY,
+			Role:   s.Role,
 		}), nil
 	}
+	snap := s.Health.Snapshot(ctx, s.Role)
+	return connect.NewResponse(snapshotToProto(snap)), nil
+}
 
-	timeout := s.Health.Timeout
-	if timeout <= 0 {
-		timeout = health.DefaultCheckTimeout
+// snapshotToProto converts the canonical health.Snapshot into the proto
+// twin SystemService publishes. Keeping this in one place ensures the
+// authenticated RPC and the unauthenticated /system/health.json endpoint
+// can never drift on aggregation semantics — both are derived from the
+// same Snapshot run.
+func snapshotToProto(s health.Snapshot) *pb.HealthInfo {
+	out := &pb.HealthInfo{
+		Status:     statusToProto(s.Status),
+		Components: make([]*pb.ComponentHealth, 0, len(s.Components)),
+		Role:       s.Role,
 	}
-
-	components := make([]*pb.ComponentHealth, 0, len(s.Health.Ready))
-	worst := pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
-	for _, c := range s.Health.Ready {
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		start := time.Now()
-		err := c.Func(cctx)
-		latency := time.Since(start)
-		cancel()
-
-		ch := &pb.ComponentHealth{
+	for _, c := range s.Components {
+		out.Components = append(out.Components, &pb.ComponentHealth{
 			Name:      c.Name,
-			LatencyMs: latency.Milliseconds(),
-		}
-		switch {
-		case err == nil:
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
-		case errors.Is(err, context.DeadlineExceeded):
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
-			ch.Message = "check timed out after " + timeout.String()
-		default:
-			ch.Status = pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
-			ch.Message = err.Error()
-		}
-
-		// Aggregate: degraded < unhealthy in the enum-int ordering.
-		if ch.Status > worst {
-			worst = ch.Status
-		}
-		components = append(components, ch)
+			Status:    statusToProto(c.Status),
+			Message:   c.Message,
+			LatencyMs: c.LatencyMs,
+			Category:  c.Category,
+			Critical:  c.Critical,
+		})
 	}
+	return out
+}
 
-	return connect.NewResponse(&pb.HealthInfo{
-		Status:     worst,
-		Components: components,
-	}), nil
+func statusToProto(s health.ComponentStatus) pb.ComponentStatus {
+	switch s {
+	case health.StatusHealthy:
+		return pb.ComponentStatus_COMPONENT_STATUS_HEALTHY
+	case health.StatusDegraded:
+		return pb.ComponentStatus_COMPONENT_STATUS_DEGRADED
+	case health.StatusUnhealthy:
+		return pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
+	default:
+		return pb.ComponentStatus_COMPONENT_STATUS_UNSPECIFIED
+	}
 }

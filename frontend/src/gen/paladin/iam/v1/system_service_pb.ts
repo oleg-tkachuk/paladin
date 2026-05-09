@@ -2,8 +2,18 @@
 // @generated from file paladin/iam/v1/system_service.proto (package paladin.iam.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  enumDesc,
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -11,20 +21,24 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/iam/v1/system_service.proto.
  */
-export const file_paladin_iam_v1_system_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch9vY3AvaWFtL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEgpvY3AuaWFtLnYxIhMKEUdldFZlcnNpb25SZXF1ZXN0InIKC1ZlcnNpb25JbmZvEg8KB3ZlcnNpb24YASABKAkSDgoGY29tbWl0GAIgASgJEi4KCmJ1aWxkX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmdvX3ZlcnNpb24YBCABKAkiEgoQR2V0SGVhbHRoUmVxdWVzdCJxCg9Db21wb25lbnRIZWFsdGgSDAoEbmFtZRgBIAEoCRIrCgZzdGF0dXMYAiABKA4yGy5vY3AuaWFtLnYxLkNvbXBvbmVudFN0YXR1cxIPCgdtZXNzYWdlGAMgASgJEhIKCmxhdGVuY3lfbXMYBCABKAMiagoKSGVhbHRoSW5mbxIrCgZzdGF0dXMYASABKA4yGy5vY3AuaWFtLnYxLkNvbXBvbmVudFN0YXR1cxIvCgpjb21wb25lbnRzGAIgAygLMhsub2NwLmlhbS52MS5Db21wb25lbnRIZWFsdGgqkAEKD0NvbXBvbmVudFN0YXR1cxIgChxDT01QT05FTlRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQ09NUE9ORU5UX1NUQVRVU19IRUFMVEhZEAESHQoZQ09NUE9ORU5UX1NUQVRVU19ERUdSQURFRBACEh4KGkNPTVBPTkVOVF9TVEFUVVNfVU5IRUFMVEhZEAMymAEKDVN5c3RlbVNlcnZpY2USRAoKR2V0VmVyc2lvbhIdLm9jcC5pYW0udjEuR2V0VmVyc2lvblJlcXVlc3QaFy5vY3AuaWFtLnYxLlZlcnNpb25JbmZvEkEKCUdldEhlYWx0aBIcLm9jcC5pYW0udjEuR2V0SGVhbHRoUmVxdWVzdBoWLm9jcC5pYW0udjEuSGVhbHRoSW5mb0JOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+export const file_paladin_iam_v1_system_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ch9vY3AvaWFtL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEgpvY3AuaWFtLnYxIhMKEUdldFZlcnNpb25SZXF1ZXN0InIKC1ZlcnNpb25JbmZvEg8KB3ZlcnNpb24YASABKAkSDgoGY29tbWl0GAIgASgJEi4KCmJ1aWxkX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmdvX3ZlcnNpb24YBCABKAkiEgoQR2V0SGVhbHRoUmVxdWVzdCKVAQoPQ29tcG9uZW50SGVhbHRoEgwKBG5hbWUYASABKAkSKwoGc3RhdHVzGAIgASgOMhsub2NwLmlhbS52MS5Db21wb25lbnRTdGF0dXMSDwoHbWVzc2FnZRgDIAEoCRISCgpsYXRlbmN5X21zGAQgASgDEhAKCGNhdGVnb3J5GAUgASgJEhAKCGNyaXRpY2FsGAYgASgIIngKCkhlYWx0aEluZm8SKwoGc3RhdHVzGAEgASgOMhsub2NwLmlhbS52MS5Db21wb25lbnRTdGF0dXMSLwoKY29tcG9uZW50cxgCIAMoCzIbLm9jcC5pYW0udjEuQ29tcG9uZW50SGVhbHRoEgwKBHJvbGUYAyABKAkqkAEKD0NvbXBvbmVudFN0YXR1cxIgChxDT01QT05FTlRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQ09NUE9ORU5UX1NUQVRVU19IRUFMVEhZEAESHQoZQ09NUE9ORU5UX1NUQVRVU19ERUdSQURFRBACEh4KGkNPTVBPTkVOVF9TVEFUVVNfVU5IRUFMVEhZEAMymAEKDVN5c3RlbVNlcnZpY2USRAoKR2V0VmVyc2lvbhIdLm9jcC5pYW0udjEuR2V0VmVyc2lvblJlcXVlc3QaFy5vY3AuaWFtLnYxLlZlcnNpb25JbmZvEkEKCUdldEhlYWx0aBIcLm9jcC5pYW0udjEuR2V0SGVhbHRoUmVxdWVzdBoWLm9jcC5pYW0udjEuSGVhbHRoSW5mb0JOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    [file_google_protobuf_timestamp],
+  );
 
 /**
  * @generated from message paladin.iam.v1.GetVersionRequest
  */
-export type GetVersionRequest = Message<"paladin.iam.v1.GetVersionRequest"> & {
-};
+export type GetVersionRequest = Message<"paladin.iam.v1.GetVersionRequest"> & {};
 
 /**
  * Describes the message paladin.iam.v1.GetVersionRequest.
  * Use `create(GetVersionRequestSchema)` to create a new message.
  */
-export const GetVersionRequestSchema: GenMessage<GetVersionRequest> = /*@__PURE__*/
+export const GetVersionRequestSchema: GenMessage<GetVersionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_system_service, 0);
 
 /**
@@ -65,20 +79,21 @@ export type VersionInfo = Message<"paladin.iam.v1.VersionInfo"> & {
  * Describes the message paladin.iam.v1.VersionInfo.
  * Use `create(VersionInfoSchema)` to create a new message.
  */
-export const VersionInfoSchema: GenMessage<VersionInfo> = /*@__PURE__*/
+export const VersionInfoSchema: GenMessage<VersionInfo> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_system_service, 1);
 
 /**
  * @generated from message paladin.iam.v1.GetHealthRequest
  */
-export type GetHealthRequest = Message<"paladin.iam.v1.GetHealthRequest"> & {
-};
+export type GetHealthRequest = Message<"paladin.iam.v1.GetHealthRequest"> & {};
 
 /**
  * Describes the message paladin.iam.v1.GetHealthRequest.
  * Use `create(GetHealthRequestSchema)` to create a new message.
  */
-export const GetHealthRequestSchema: GenMessage<GetHealthRequest> = /*@__PURE__*/
+export const GetHealthRequestSchema: GenMessage<GetHealthRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_system_service, 2);
 
 /**
@@ -86,8 +101,9 @@ export const GetHealthRequestSchema: GenMessage<GetHealthRequest> = /*@__PURE__*
  */
 export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
   /**
-   * Stable identifier ("postgres", "policy-engine", etc.). Used as the
-   * React key in the UI so don't rename casually.
+   * Stable identifier ("postgres", "policy-engine", "storage:primary",
+   * "mcp:admin"). Used as the React key in the UI so don't rename
+   * casually.
    *
    * @generated from field: string name = 1;
    */
@@ -113,13 +129,35 @@ export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
    * @generated from field: int64 latency_ms = 4;
    */
   latencyMs: bigint;
+
+  /**
+   * Category — one of "database", "storage", "subsystem", "upstream".
+   * The /health page renders one section per category so operators
+   * can scan at a glance which class of dependency is degraded.
+   *
+   * @generated from field: string category = 5;
+   */
+  category: string;
+
+  /**
+   * Critical=true means this check gates /readyz on the role that
+   * produced it. Critical=false is informational — a non-critical
+   * failure shows in the UI but doesn't take the pod out of the
+   * kubelet endpoint set. Frontend uses this to badge components
+   * ("required" vs "informational") so an operator sees the runtime
+   * impact without reading runbooks.
+   *
+   * @generated from field: bool critical = 6;
+   */
+  critical: boolean;
 };
 
 /**
  * Describes the message paladin.iam.v1.ComponentHealth.
  * Use `create(ComponentHealthSchema)` to create a new message.
  */
-export const ComponentHealthSchema: GenMessage<ComponentHealth> = /*@__PURE__*/
+export const ComponentHealthSchema: GenMessage<ComponentHealth> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_system_service, 3);
 
 /**
@@ -127,8 +165,9 @@ export const ComponentHealthSchema: GenMessage<ComponentHealth> = /*@__PURE__*/
  */
 export type HealthInfo = Message<"paladin.iam.v1.HealthInfo"> & {
   /**
-   * Aggregate status — UNHEALTHY iff any component is UNHEALTHY,
-   * DEGRADED iff any is DEGRADED and none is UNHEALTHY, else HEALTHY.
+   * Aggregate status — UNHEALTHY iff any *critical* component is
+   * UNHEALTHY, DEGRADED iff any component is UNHEALTHY without being
+   * critical OR any component is DEGRADED, else HEALTHY.
    *
    * @generated from field: paladin.iam.v1.ComponentStatus status = 1;
    */
@@ -138,13 +177,23 @@ export type HealthInfo = Message<"paladin.iam.v1.HealthInfo"> & {
    * @generated from field: repeated paladin.iam.v1.ComponentHealth components = 2;
    */
   components: ComponentHealth[];
+
+  /**
+   * Role the snapshot came from ("api", "admin", "worker", "mcp").
+   * The api / admin binaries register different check sets; the UI
+   * calls each plane's GetHealth and merges them into one tree.
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
 };
 
 /**
  * Describes the message paladin.iam.v1.HealthInfo.
  * Use `create(HealthInfoSchema)` to create a new message.
  */
-export const HealthInfoSchema: GenMessage<HealthInfo> = /*@__PURE__*/
+export const HealthInfoSchema: GenMessage<HealthInfo> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_system_service, 4);
 
 /**
@@ -179,7 +228,8 @@ export enum ComponentStatus {
 /**
  * Describes the enum paladin.iam.v1.ComponentStatus.
  */
-export const ComponentStatusSchema: GenEnum<ComponentStatus> = /*@__PURE__*/
+export const ComponentStatusSchema: GenEnum<ComponentStatus> =
+  /*@__PURE__*/
   enumDesc(file_paladin_iam_v1_system_service, 0);
 
 /**
@@ -207,7 +257,7 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetVersionRequestSchema;
     output: typeof VersionInfoSchema;
-  },
+  };
   /**
    * GetHealth runs the same per-component checks as /readyz but returns
    * them itemised so the UI can render a per-dependency table. Each
@@ -220,7 +270,5 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetHealthRequestSchema;
     output: typeof HealthInfoSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_iam_v1_system_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_system_service, 0);

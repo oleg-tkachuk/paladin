@@ -43,6 +43,7 @@ import {
   componentStatusLabel,
 } from "@/lib/connect/system";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // /  — Dashboard / nav grid.
 //
@@ -89,7 +90,7 @@ function PageTileCard({ tile }: { tile: PageTile }) {
           </div>
           <div className="min-w-0 flex-1 space-y-0.5">
             <CardTitle className="text-sm">{tile.name}</CardTitle>
-            <CardDescription className="text-[11px] leading-snug">
+            <CardDescription className={cn(T.hint, "leading-snug")}>
               {tile.description}
             </CardDescription>
           </div>
@@ -324,23 +325,21 @@ export default function DashboardPage() {
       {/* ─── Status strip ─────────────────────────────────────────── */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
-          <div className="flex items-center gap-2">
+          <div className={cn(T.pill, rollupMeta.color)}>
             <span
               className={cn(
-                "size-2 rounded-full",
+                T.pillDot,
                 rollupMeta.dot,
                 rollupMeta.label !== "Healthy" && "animate-pulse",
               )}
             />
-            <RollupIcon className={cn("size-4", rollupMeta.color)} />
-            <span className={cn("text-sm font-medium", rollupMeta.color)}>
-              {rollupMeta.label}
-            </span>
-            <Badge variant="outline" className="font-mono text-[10px]">
+            <RollupIcon className="size-4" />
+            <span>{rollupMeta.label}</span>
+            <Badge variant="outline" className={cn(T.labelTight, "font-mono")}>
               {components.length} comp
             </Badge>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className={cn(T.hint, "flex items-center gap-2")}>
             <UserCircleIcon className="size-4" />
             <span>
               Signed in as{" "}
@@ -352,7 +351,10 @@ export default function DashboardPage() {
                   {" · "}
                   <Link
                     href="/tenants"
-                    className="font-mono text-foreground hover:text-primary hover:underline"
+                    className={cn(
+                      T.code,
+                      "text-foreground hover:text-primary hover:underline",
+                    )}
                   >
                     {user.tenantId.slice(0, 8)}…{user.tenantId.slice(-4)}
                   </Link>
@@ -361,17 +363,17 @@ export default function DashboardPage() {
             </span>
           </div>
           {stats?.version?.version && (
-            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <div className={cn(T.hint, "ml-auto flex items-center gap-2")}>
               <AdjustmentsVerticalIcon className="size-4" />
               <span>
                 build{" "}
-                <span className="font-mono text-foreground">
+                <span className={cn(T.code, "text-foreground")}>
                   {stats.version.version}
                 </span>
                 {stats.version.commit && (
                   <>
                     {" · "}
-                    <span className="font-mono text-foreground">
+                    <span className={cn(T.code, "text-foreground")}>
                       {stats.version.commit.slice(0, 7)}
                     </span>
                   </>
@@ -385,12 +387,7 @@ export default function DashboardPage() {
       {/* ─── Grouped page tiles ───────────────────────────────────── */}
       {groups.map((group) => (
         <section key={group.title} className="space-y-3">
-          <h2
-            className={cn(
-              "text-[11px] font-semibold uppercase tracking-wider",
-              group.accent,
-            )}
-          >
+          <h2 className={cn(T.label, "font-semibold", group.accent)}>
             {group.title}
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

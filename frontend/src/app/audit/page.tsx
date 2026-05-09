@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowPathIcon,
   ClipboardDocumentListIcon,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 // /audit — read-only view of admin/v1.AuditLogService.ListAuditLog.
 //
@@ -66,7 +68,12 @@ export default function AuditPage() {
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(100, "");
 
-  const [search, setSearch] = useState("");
+  // Optional ?audience=… deep-link (used by /mcp → audit) — preset
+  // the search box on first mount via the lazy useState initialiser.
+  // Chip stays editable; clearing the search input clears the
+  // filter.
+  const params = useSearchParams();
+  const [search, setSearch] = useState(() => params?.get("audience") ?? "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -119,7 +126,7 @@ export default function AuditPage() {
             className="pl-9"
           />
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className={T.hint}>
           {entries.length} loaded
           {nextCursor ? " · more available" : ""}
         </span>
@@ -178,19 +185,21 @@ export default function AuditPage() {
                     key={e.entryId}
                     className={cn(hasError && "bg-destructive/5")}
                   >
-                    <TableCell className="font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(T.codeSmall, "text-muted-foreground")}
+                    >
                       {formatTimestamp(e.at)}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <Badge
                           variant={actionPalette(e.action, hasError)}
-                          className="font-mono text-[11px]"
+                          className={T.code}
                         >
                           {e.action || "(unknown)"}
                         </Badge>
                         {hasError && (
-                          <div className="flex items-start gap-1.5 text-[11px] text-destructive">
+                          <div className="flex items-start gap-1.5 text-xs text-destructive">
                             <ExclamationTriangleIcon className="mt-0.5 size-3 shrink-0" />
                             <span className="line-clamp-2">
                               {e.errorMessage}
@@ -201,7 +210,7 @@ export default function AuditPage() {
                     </TableCell>
                     <TableCell>
                       <div className="space-y-0.5">
-                        <span className="text-sm">
+                        <span className={T.body}>
                           {e.actorSubject || (
                             <span className="italic text-muted-foreground">
                               system
@@ -209,19 +218,27 @@ export default function AuditPage() {
                           )}
                         </span>
                         {e.actorAudience && (
-                          <div className="font-mono text-[10px] text-muted-foreground">
+                          <div
+                            className={cn(T.codeSmall, "text-muted-foreground")}
+                          >
                             aud {e.actorAudience}
                           </div>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {e.resourceName || "—"}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       {e.requestId ? (
                         <span
-                          className="font-mono text-[11px] text-muted-foreground"
+                          className={cn(T.code, "text-muted-foreground")}
                           title={e.requestId}
                         >
                           {e.requestId.slice(0, 12)}
@@ -231,7 +248,9 @@ export default function AuditPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                       {e.sourceIp && (
-                        <div className="font-mono text-[10px] text-muted-foreground">
+                        <div
+                          className={cn(T.codeSmall, "text-muted-foreground")}
+                        >
                           {e.sourceIp}
                         </div>
                       )}
@@ -245,7 +264,7 @@ export default function AuditPage() {
                         // narrow; full id in title for hover.
                         <Link
                           href={`/capabilities?id=${e.capabilityId}`}
-                          className="font-mono text-[11px] text-primary hover:underline"
+                          className={cn(T.code, "text-primary hover:underline")}
                           title={e.capabilityId}
                         >
                           {e.capabilityId.slice(0, 8)}…

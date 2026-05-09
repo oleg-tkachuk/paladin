@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 type SortColumn = "name" | "displayName" | "backendId";
 type SortDirection = "asc" | "desc" | null;
@@ -376,7 +377,7 @@ export default function ObjectKeysPage() {
                   <TableCell className="hidden md:table-cell">
                     {/* backendId removed from ObjectKey schema — show bucket binding instead */}
                     {ok.bucket ? (
-                      <Badge variant="info" className="font-mono text-[11px]">
+                      <Badge variant="info" className={T.code}>
                         {ok.bucket}
                       </Badge>
                     ) : (
@@ -447,7 +448,7 @@ export default function ObjectKeysPage() {
                       </span>
                     )}
                   </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  <span className={cn(T.code, "text-muted-foreground")}>
                     {tenantId || "no tenant"}
                   </span>
                 </div>
@@ -533,7 +534,7 @@ export default function ObjectKeysPage() {
                   value={newName}
                   onChange={(e) => setNewName(e.target.value.toLowerCase())}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className={T.hint}>
                   3–63 lowercase alphanumerics or hyphens.
                 </p>
               </div>

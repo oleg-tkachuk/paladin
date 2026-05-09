@@ -23,9 +23,20 @@ metadata:
 # resolves to the actual Service names in your cluster.
 backend:
   urls:
-    data:  "http://paladin-paladin-api.paladin.svc.cluster.local:8080"
-    iam:   "http://paladin-paladin-api.paladin.svc.cluster.local:8085"
-    admin: "http://paladin-paladin-admin.paladin.svc.cluster.local:8090"
+    data:   "http://paladin-paladin-api.paladin.svc.cluster.local:8080"
+    iam:    "http://paladin-paladin-api.paladin.svc.cluster.local:8085"
+    admin:  "http://paladin-paladin-admin.paladin.svc.cluster.local:8090"
+    # worker + mcp expose /system/health.json on these ports for the
+    # BFF /api/health/all aggregator. They do NOT serve Connect; the
+    # browser never hits them.
+    #
+    # Port mapping pitfall: the worker Deployment's containerPort is
+    # 8090 but the chart's worker Service exposes it as :8099 (see
+    # backend chart values, deployments.worker.service.ports). The BFF
+    # must hit the Service port — `8090` would route to a non-existent
+    # endpoint on whichever Service happens to listen there.
+    worker: "http://paladin-paladin-worker.paladin.svc.cluster.local:8099"
+    mcp:    "http://paladin-paladin-mcp.paladin.svc.cluster.local:8095"
 
 image:
   repository: registry.local/paladin/paladin-ui

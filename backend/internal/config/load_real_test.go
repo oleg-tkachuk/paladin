@@ -33,7 +33,7 @@ func TestHelmValuesConfigBlock(t *testing.T) {
 	if err := os.WriteFile(path, out, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := Load(path, zap.NewNop()); err != nil {
+	if _, err := Load([]string{path}, zap.NewNop()); err != nil {
 		t.Fatalf("Load chart values.yaml -> .config: %v", err)
 	}
 }
@@ -61,16 +61,16 @@ storage:
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	cfg, err := Load(path, zap.NewNop())
+	cfg, err := Load([]string{path}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load minimal yaml: %v", err)
 	}
 	// Defaults must have populated every three-plane addr.
-	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
-		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Server)
+	if cfg.API.Server.Data.Addr == "" || cfg.Admin.Server.Addr == "" || cfg.API.Server.IAM.Addr == "" {
+		t.Errorf("three-plane addrs not defaulted: %+v", cfg.Runtime)
 	}
-	if cfg.Server.DataHTTP.Addr == cfg.Server.AdminHTTP.Addr {
-		t.Errorf("data and admin defaulted to the same addr: %q", cfg.Server.DataHTTP.Addr)
+	if cfg.API.Server.Data.Addr == cfg.Admin.Server.Addr {
+		t.Errorf("data and admin defaulted to the same addr: %q", cfg.API.Server.Data.Addr)
 	}
 	// Storage backend disjunctions must default — no static-keys credentials
 	// supplied, so default_chain is the only auth.mode that won't be rejected
@@ -94,12 +94,12 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	} {
 		path := path
 		t.Run(path, func(t *testing.T) {
-			if _, err := Load(path, zap.NewNop()); err != nil {
+			if _, err := Load([]string{path}, zap.NewNop()); err != nil {
 				t.Fatalf("Load %s: %v", path, err)
 			}
 		})
 	}
-	cfg, err := Load("../../configs/config.yaml", zap.NewNop())
+	cfg, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load configs/config.yaml: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if _, ok := cfg.Storage.Backends["primary"]; !ok {
 		t.Error("Storage.Backends[primary] missing")
 	}
-	if cfg.Server.DataHTTP.Addr == "" || cfg.Server.AdminHTTP.Addr == "" || cfg.Server.IAMHTTP.Addr == "" {
+	if cfg.API.Server.Data.Addr == "" || cfg.Admin.Server.Addr == "" || cfg.API.Server.IAM.Addr == "" {
 		t.Error("three-plane HTTP addrs incomplete")
 	}
 	// service / env identity must propagate from app.* to logger.fields and
@@ -144,16 +144,16 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	}
 	// Every worker subsystem must have a non-zero interval after CUE
 	// applies its defaults — silent-zero would hot-loop the goroutine.
-	if cfg.Workers.RefreshTokenReap.Interval == 0 {
+	if cfg.Worker.Jobs.RefreshTokenReap.Interval == 0 {
 		t.Error("workers.refresh_token_reap.interval defaulted to zero")
 	}
-	if cfg.Workers.ApiKeyReap.Interval == 0 {
+	if cfg.Worker.Jobs.ApiKeyReap.Interval == 0 {
 		t.Error("workers.api_key_reap.interval defaulted to zero")
 	}
-	if cfg.Workers.Lifecycle.Interval == 0 {
+	if cfg.Worker.Jobs.Lifecycle.Interval == 0 {
 		t.Error("workers.lifecycle.interval defaulted to zero")
 	}
-	if cfg.Workers.Replication.Interval == 0 || cfg.Workers.Replication.LookbackWindow == 0 {
+	if cfg.Worker.Jobs.Replication.Interval == 0 || cfg.Worker.Jobs.Replication.LookbackWindow == 0 {
 		t.Error("workers.replication interval/lookback_window defaulted to zero")
 	}
 }

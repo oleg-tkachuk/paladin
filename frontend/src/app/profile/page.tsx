@@ -36,6 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
+import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
 import type { UserSettings } from "@/gen/paladin/iam/v1/user_settings_service_pb";
@@ -227,7 +229,7 @@ export default function ProfilePage() {
             <CardTitle className="text-base">
               {user?.displayName || user?.subject || "—"}
             </CardTitle>
-            <CardDescription className="font-mono text-[11px]">
+            <CardDescription className={T.code}>
               {user?.subject ? `subject ${user.subject}` : "no session"}
               {user?.tenantId
                 ? ` · tenant ${user.tenantId.slice(0, 8)}…${user.tenantId.slice(-4)}`
@@ -240,7 +242,7 @@ export default function ProfilePage() {
                 <Badge
                   key={r}
                   variant="outline"
-                  className="font-mono text-[10px]"
+                  className={cn(T.labelTight, "font-mono")}
                 >
                   {r}
                 </Badge>
@@ -326,7 +328,7 @@ export default function ProfilePage() {
                       className="font-mono text-xs"
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     IANA name. Empty = server default. Detected from this
                     browser:{" "}
                     <button
@@ -369,7 +371,7 @@ export default function ProfilePage() {
                       className="font-mono text-xs"
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     BCP-47 tag. Detected from this browser:{" "}
                     <button
                       type="button"
@@ -386,7 +388,7 @@ export default function ProfilePage() {
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t pt-4">
-                <div className="text-[11px] text-muted-foreground">
+                <div className={T.hint}>
                   {settings ? (
                     <>
                       <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-emerald-500" />

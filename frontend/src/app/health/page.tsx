@@ -1,22 +1,18 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
   ExclamationTriangleIcon,
-  InboxIcon,
-  ServerIcon,
-  ShieldCheckIcon,
   XCircleIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useStats } from "@/context/StatsContext";
 import { cn } from "@/lib/utils";
-import {
-  type ComponentHealth,
-  componentStatusLabel,
-} from "@/lib/connect/system";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -24,18 +20,44 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-type HealthState = "healthy" | "degraded" | "unhealthy" | "unknown";
+// ─── Types — mirror backend/internal/health.Snapshot wire format ────────────
+//
+// The BFF /api/health/all aggregates one Snapshot per role and returns
+// { roles: Snapshot[] }. We keep the type local to this file because the
+// shape is a UI concern; if the protocol grows a third surface (e.g. a
+// CLI), promote into src/lib/health.ts.
 
-const stateFor = (status: string): HealthState => {
-  const s = (status || "").toUpperCase();
-  if (s === "OK" || s === "HEALTHY") return "healthy";
-  if (s === "DEGRADED") return "degraded";
-  if (s === "UNHEALTHY" || s === "ERROR" || s === "DOWN") return "unhealthy";
-  return "unknown";
+type ComponentStatus = "healthy" | "degraded" | "unhealthy";
+
+type Component = {
+  name: string;
+  status: ComponentStatus;
+  message?: string;
+  latency_ms: number;
+  category: string;
+  critical: boolean;
 };
 
-const stateMeta: Record<
-  HealthState,
+type Snapshot = {
+  role: string;
+  status: ComponentStatus;
+  components: Component[];
+  checked_at: string;
+};
+
+type HealthAll = { roles: Snapshot[] };
+
+// Role render order. Operators read top-down; api/admin first because
+// they're the request paths. worker/mcp are background/auxiliary and
+// land below the fold on narrow viewports.
+const ROLE_ORDER = ["api", "admin", "worker", "mcp"] as const;
+
+// ─── Status meta ────────────────────────────────────────────────────────────
+
+type StateKey = ComponentStatus | "unknown";
+
+const META: Record<
+  StateKey,
   { label: string; icon: React.ElementType; color: string; dot: string }
 > = {
   healthy: {
@@ -64,89 +86,235 @@ const stateMeta: Record<
   },
 };
 
-function DependencyCard({ dep }: { dep: ComponentHealth }) {
-  const meta = stateMeta[stateFor(componentStatusLabel(dep.status))];
-  const Icon = meta.icon;
+// rollupOf collapses a list of statuses with the same asymmetric rule
+// the backend applies on /readyz: any *critical* unhealthy → unhealthy;
+// any non-critical unhealthy or any degraded → degraded; else healthy.
+function rollupOf(snaps: Snapshot[]): StateKey {
+  if (snaps.length === 0) return "unknown";
+  let worst: ComponentStatus = "healthy";
+  for (const s of snaps) {
+    if (s.status === "unhealthy") return "unhealthy";
+    if (s.status === "degraded") worst = "degraded";
+  }
+  return worst;
+}
+
+function StatusPill({ status }: { status: StateKey }) {
+  const m = META[status];
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 px-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary">
-          <Icon className={cn("size-5", meta.color)} />
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-sm font-medium",
+        m.color,
+      )}
+    >
+      <span
+        className={cn(
+          "size-2 rounded-full",
+          m.dot,
+          status !== "healthy" && "animate-pulse",
+        )}
+      />
+      {m.label}
+    </span>
+  );
+}
+
+// ─── Component row — one per dependency ─────────────────────────────────────
+//
+// Two-line shape:
+//   line 1: dot • name • req-badge • status pill • latency
+//   line 2: message — truncated to 1 line, click chevron to expand
+//
+// The expand toggle solves the original "timeout error doesn't fit" bug:
+// instead of cramming long errors into a 10px sliver next to the latency,
+// we show the first line truncated by default and let the operator click
+// the chevron (or anywhere on the row) to reveal the full text in a
+// pre-formatted block. Healthy components with a `note` (e.g. "disabled")
+// render the same way but in muted italics.
+
+function ComponentRow({ c }: { c: Component }) {
+  const [open, setOpen] = useState(false);
+  const m = META[c.status];
+  const hasMessage = !!c.message;
+  const noteLike = c.status === "healthy" && hasMessage;
+
+  return (
+    <div className="border-b border-border/40 py-2 last:border-b-0">
+      <button
+        type="button"
+        onClick={() => hasMessage && setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 text-left",
+          hasMessage && "cursor-pointer hover:opacity-80",
+          !hasMessage && "cursor-default",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn("size-2 shrink-0 rounded-full", m.dot)} />
+          <span className="truncate font-mono text-sm">{c.name}</span>
+          {c.critical && (
+            <Badge
+              variant="outline"
+              className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+            >
+              required
+            </Badge>
+          )}
         </div>
-        <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
-          {Number(dep.latencyMs)}ms
-        </Badge>
-      </CardHeader>
-      <CardContent className="px-4">
-        <CardTitle className="text-sm">{dep.name}</CardTitle>
-        <div className="mt-1.5 flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-2">
           <span
-            className={cn(
-              "size-1.5 rounded-full",
-              meta.dot,
-              meta.label !== "Healthy" && "animate-pulse",
-            )}
-          />
-          <span className={cn("text-xs font-medium", meta.color)}>
-            {meta.label}
-          </span>
-        </div>
-        {dep.message && (
-          <p
-            className="mt-2 truncate text-xs text-muted-foreground"
-            title={dep.message}
+            className={cn("text-xs font-medium", m.color)}
+            aria-label={`status: ${c.status}`}
           >
-            {dep.message}
+            {m.label}
+          </span>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {c.latency_ms}ms
+          </span>
+          {hasMessage && (
+            <ChevronDownIcon
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-180",
+              )}
+            />
+          )}
+        </div>
+      </button>
+
+      {hasMessage && !open && (
+        // Collapsed preview: single line, truncated. Click anywhere on
+        // the row to expand. The full text is also discoverable via the
+        // expanded view below — we keep the title attribute as a fast
+        // tooltip path for desktop hover users.
+        <p
+          className={cn(
+            "mt-1 truncate text-xs",
+            noteLike ? "italic text-muted-foreground" : "text-muted-foreground",
+          )}
+          title={c.message}
+        >
+          {c.message}
+        </p>
+      )}
+
+      {hasMessage && open && (
+        // Expanded view: pre-formatted code block so timeouts /
+        // multi-line stack traces wrap and stay readable. `whitespace-
+        // pre-wrap` preserves newlines; `break-all` catches long
+        // tokenless strings (DSNs, JWTs).
+        <pre
+          className={cn(
+            "mt-2 overflow-x-auto rounded-md bg-muted/60 px-3 py-2 text-xs",
+            "whitespace-pre-wrap break-all font-mono leading-relaxed",
+            noteLike && "italic text-muted-foreground",
+          )}
+        >
+          {c.message}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+// ─── Role card — one per backend role ───────────────────────────────────────
+
+function RoleCard({ snap }: { snap: Snapshot }) {
+  const m = META[snap.status];
+  const Icon = m.icon;
+  const ok = snap.components.filter((c) => c.status === "healthy").length;
+  const total = snap.components.length;
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className={cn("size-5 shrink-0", m.color)} />
+          <CardTitle className="font-mono text-base">{snap.role}</CardTitle>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {ok}/{total}
+          </span>
+          <StatusPill status={snap.status} />
+        </div>
+      </CardHeader>
+      <Separator />
+      <CardContent className="flex-1 px-4 py-2">
+        {snap.components.length === 0 ? (
+          <p className="py-3 text-sm text-muted-foreground">
+            No checks registered.
           </p>
+        ) : (
+          <div className="space-y-0">
+            {snap.components.map((c) => (
+              <ComponentRow key={c.name} c={c} />
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// Tight definition-list cell — used by the Overview card so version /
-// commit / Go-runtime / latency / sync-time all share the same clean
-// label-on-top, value-on-bottom shape instead of the heavier StatCard
-// boxes the previous design used (which duplicated the Service-
-// components data and made the page feel sparse + overfull at once).
-function OverviewItem({
-  label,
-  value,
-  className,
-  hint,
-}: {
-  label: string;
-  value: React.ReactNode;
-  className?: string;
-  hint?: string;
-}) {
-  return (
-    <div className={cn("space-y-0.5", className)}>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="font-mono text-sm tabular-nums">{value}</div>
-      {hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}
-    </div>
-  );
-}
+// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function HealthPage() {
-  const { stats, loading, lastUpdated, refresh } = useStats();
-  const components: ComponentHealth[] = stats?.health?.components ?? [];
+  const { stats } = useStats(); // version info from api role's GetVersion
+  const [data, setData] = useState<HealthAll | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  const rollupKey =
-    stats?.health?.status !== undefined
-      ? stateFor(componentStatusLabel(stats.health.status))
-      : "unknown";
-  const rollup = stateMeta[rollupKey];
-  const RollupIcon = rollup.icon;
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/health/all", { cache: "no-store" });
+      const body = (await res.json()) as HealthAll;
+      setData(body);
+      setLastSync(new Date());
+    } catch {
+      // Leave previous data on screen so a transient BFF blip doesn't
+      // wipe the dashboard. The next interval tick retries.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const healthyCount = components.filter(
-    (c) => stateFor(componentStatusLabel(c.status)) === "healthy",
-  ).length;
-  const maxLatency = components.reduce(
-    (max, c) => (Number(c.latencyMs) > max ? Number(c.latencyMs) : max),
+  useEffect(() => {
+    refresh();
+    // Auto-refresh every 15s — short enough that a degrading dep
+    // shows up quickly, long enough that the page isn't a hot loop.
+    const id = setInterval(refresh, 15_000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  const orderedRoles = useMemo(() => {
+    if (!data) return [];
+    const byName = new Map(data.roles.map((r) => [r.role, r] as const));
+    const out: Snapshot[] = [];
+    for (const r of ROLE_ORDER) {
+      const s = byName.get(r);
+      if (s) {
+        out.push(s);
+        byName.delete(r);
+      }
+    }
+    // Surface any unknown roles after the canonical four — the backend
+    // may have grown a new role and we want to see it.
+    for (const k of Array.from(byName.keys()).sort()) {
+      out.push(byName.get(k)!);
+    }
+    return out;
+  }, [data]);
+
+  const rollup = rollupOf(orderedRoles);
+  const RollupIcon = META[rollup].icon;
+  const totalComponents = orderedRoles.reduce(
+    (n, s) => n + s.components.length,
+    0,
+  );
+  const healthyComponents = orderedRoles.reduce(
+    (n, s) => n + s.components.filter((c) => c.status === "healthy").length,
     0,
   );
 
@@ -154,21 +322,20 @@ export default function HealthPage() {
   const commit = stats?.version?.commit
     ? stats.version.commit.slice(0, 10)
     : "—";
-  const goVersion = stats?.version?.goVersion || "—";
-  const lastSync = lastUpdated ? lastUpdated.toLocaleTimeString() : "—";
+  const lastSyncLabel = lastSync ? lastSync.toLocaleTimeString() : "—";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Health & Diagnostics"
-        description="Component status and rollup view of the control plane."
+        description="Per-role component status across the control plane."
         showDefaultActions={false}
         actions={
           <Button
             variant="outline"
             size="icon"
-            onClick={() => refresh()}
-            aria-label="Refresh health data"
+            onClick={refresh}
+            aria-label="Refresh"
           >
             <ArrowPathIcon
               className={cn("size-4", loading && "animate-spin")}
@@ -177,124 +344,82 @@ export default function HealthPage() {
         }
       />
 
-      {/* ─── Single overview card (replaces the previous 4-up
-            AnalyticsDashboard + duplicate side card). Header carries
-            the rollup; the content row holds everything else as
-            tight definition-list cells. ─────────────────────────── */}
+      {/* ─── Top strip: rollup + counts + version. Single row, no padding
+              waste. Replaces the previous grid of 6 cards. ─────────────── */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 px-5">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary",
-                rollup.color,
-              )}
-            >
-              <RollupIcon className="size-5" />
-            </div>
+        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
+          <div className="flex items-center gap-2.5">
+            <RollupIcon className={cn("size-6", META[rollup].color)} />
             <div>
-              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Rollup status
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                Rollup
               </div>
-              <div
-                className={cn(
-                  "flex items-center gap-2 text-lg font-semibold tracking-tight",
-                  rollup.color,
-                )}
-              >
-                {rollup.label}
-                <span
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    rollup.dot,
-                    rollup.label !== "Healthy" && "animate-pulse",
-                  )}
-                />
-              </div>
+              <StatusPill status={rollup} />
             </div>
           </div>
-          <div className="text-right text-[11px] text-muted-foreground">
-            <div className="font-medium uppercase tracking-wider">
+          <Separator orientation="vertical" className="h-8" />
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Components
+            </div>
+            <div className="font-mono text-base tabular-nums">
+              {totalComponents === 0
+                ? "—"
+                : `${healthyComponents}/${totalComponents}`}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Roles
+            </div>
+            <div className="font-mono text-base tabular-nums">
+              {orderedRoles.length}
+            </div>
+          </div>
+          <Separator orientation="vertical" className="h-8" />
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Version
+            </div>
+            <div className="font-mono text-base">{version}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Commit
+            </div>
+            <div className="font-mono text-base">{commit}</div>
+          </div>
+          <div className="ml-auto text-right">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Last sync
             </div>
-            <div className="font-mono">{lastSync}</div>
+            <div className="font-mono text-base">{lastSyncLabel}</div>
           </div>
-        </CardHeader>
-        <Separator />
-        <CardContent className="grid grid-cols-2 gap-4 px-5 py-4 sm:grid-cols-3 lg:grid-cols-6">
-          {loading && !stats ? (
-            [...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-12 rounded" />
-            ))
-          ) : (
-            <>
-              <OverviewItem
-                label="Components"
-                value={
-                  components.length === 0
-                    ? "—"
-                    : `${healthyCount}/${components.length}`
-                }
-                hint="healthy"
-              />
-              <OverviewItem
-                label="Max latency"
-                value={components.length === 0 ? "—" : `${maxLatency} ms`}
-                hint="across components"
-              />
-              <OverviewItem label="Version" value={version} />
-              <OverviewItem label="Commit" value={commit} />
-              <OverviewItem label="Go runtime" value={goVersion} />
-              <OverviewItem
-                label="Build"
-                value={
-                  stats?.version?.buildTime
-                    ? new Date(
-                        Number(stats.version.buildTime.seconds) * 1000,
-                      ).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : "dev"
-                }
-              />
-            </>
-          )}
         </CardContent>
       </Card>
 
-      {/* ─── Service components ─────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-2 px-6">
-          <ServerIcon className="size-4 text-muted-foreground" />
-          <CardTitle className="text-sm">Service components</CardTitle>
-        </CardHeader>
-        <Separator />
-        <CardContent className="px-6 pb-4 pt-2">
-          {loading && components.length === 0 ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-[124px] rounded-xl" />
-              ))}
-            </div>
-          ) : components.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
-              <InboxIcon className="size-8 opacity-50" />
-              <p className="text-sm">No components reported.</p>
-              <p className="text-xs">
-                Infrastructure components will appear here when the backend
-                reports them.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {components.map((dep, i) => (
-                <DependencyCard key={dep.name || i} dep={dep} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* ─── Per-role cards. 1-up on mobile, 2-up on tablet, 4-up on
+              desktop so the 4 backend roles fit on one row of a 1080p
+              monitor without wasting horizontal space. ───────────────── */}
+      {!data && loading ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {ROLE_ORDER.map((r) => (
+            <Skeleton key={r} className="h-[180px] rounded-xl" />
+          ))}
+        </div>
+      ) : orderedRoles.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            No roles reported. Check PALADIN_*_URL env vars on the BFF.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {orderedRoles.map((s) => (
+            <RoleCard key={s.role} snap={s} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

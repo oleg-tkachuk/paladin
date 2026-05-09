@@ -165,7 +165,7 @@ func (a *App) WithHealth(h *health.Handler) *App {
 //     within ShutdownTimeout.
 //  5. Close DB pool + flush observability.
 func (a *App) Shutdown() {
-	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Server.ShutdownTimeout+readyDrainPause)
+	ctx, cancel := context.WithTimeout(context.Background(), a.Cfg.Runtime.ShutdownTimeout+readyDrainPause)
 	defer cancel()
 
 	a.Logger.Info("shutting down")

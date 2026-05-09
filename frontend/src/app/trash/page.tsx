@@ -15,7 +15,8 @@ import { useObjects } from "@/hooks/useObjects";
 import { useObjectKeys } from "@/hooks/useObjectKeys";
 import { useScope } from "@/context/ScopeContext";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
-import { formatBytes, formatDate, timestampToDate } from "@/lib/utils";
+import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 
 import { Button } from "@/components/ui/button";
@@ -178,10 +179,7 @@ export default function TrashPage() {
           other than `default` would appear empty. */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card/40 p-3">
         <div className="space-y-1.5">
-          <Label
-            htmlFor="trash-key-picker"
-            className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
-          >
+          <Label htmlFor="trash-key-picker" className={T.label}>
             Object Key
           </Label>
           <SelectRoot value={objectKey} onValueChange={setObjectKey}>
@@ -318,14 +316,24 @@ export default function TrashPage() {
                         <div className="truncate font-medium">
                           {obj.key.split("/").pop()}
                         </div>
-                        <div className="truncate font-mono text-[10px] text-muted-foreground">
+                        <div
+                          className={cn(
+                            T.codeSmall,
+                            "truncate text-muted-foreground",
+                          )}
+                        >
                           {obj.objectId}
                         </div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    <span className="inline-flex items-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 px-2 py-0.5 font-mono text-[11px]">
+                    <span
+                      className={cn(
+                        T.code,
+                        "inline-flex items-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 px-2 py-0.5",
+                      )}
+                    >
                       {obj.objectKey || "—"}
                     </span>
                   </TableCell>

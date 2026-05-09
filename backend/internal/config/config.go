@@ -23,7 +23,27 @@ import (
 //go:embed schema.cue
 var cueSchema string
 
-func Load(path string, log *zap.Logger) (Config, error) {
+// Load reads one or more YAML files in order and merges them — later
+// files override earlier ones, key-by-key, deep-merge style. The
+// minimum is a single fully-populated config (the legacy shape);
+// the overlay mode lets a base.yaml carry the full schema and a
+// per-environment overlay file carry just the deltas.
+//
+// Loading order:
+//
+//  1. paths[0] (base, must contain every required field).
+//  2. paths[1..] (overlays, may contain partial trees that override).
+//  3. Environment variables prefixed with PALADIN_ override everything.
+//  4. CUE schema unification injects defaults for unset fields.
+//
+// Strict-key validation runs against the merged result so an overlay
+// file that intentionally omits big swaths of the schema isn't
+// rejected for missing keys it never tried to set.
+func Load(paths []string, log *zap.Logger) (Config, error) {
+	if len(paths) == 0 {
+		return Config{}, fmt.Errorf("config: at least one path required")
+	}
+
 	ctx := cuecontext.New()
 
 	schemaVal := ctx.CompileString(cueSchema)
@@ -31,21 +51,24 @@ func Load(path string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("CUE schema invalid: %w", schemaVal.Err())
 	}
 
-	// Strict-key check on the YAML file BEFORE merging env / CUE defaults.
-	// Catches typos like `auth.singing_key:` that would otherwise be
-	// silently ignored — env vars layer on top, CUE injects defaults, and
-	// the final Config struct never sees the bad key. Fail fast with the
-	// full list of offending paths.
-	if err := validateNoUnknownKeys(path); err != nil {
-		return Config{}, err
-	}
-
 	// Initialize koanf
 	k := koanf.New(".")
 
-	// Load configuration from YAML file
-	if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
-		return Config{}, fmt.Errorf("YAML read error (%s): %w", path, err)
+	// Load every path in order. Later files merge over earlier ones
+	// at the koanf-key level (deep-merge), so an overlay setting
+	// `app.env: prod` overrides only that key.
+	for _, path := range paths {
+		if err := k.Load(file.Provider(path), yaml.Parser()); err != nil {
+			return Config{}, fmt.Errorf("YAML read error (%s): %w", path, err)
+		}
+	}
+
+	// Strict-key check after the merge so an overlay carrying only
+	// deltas isn't rejected for fields it didn't touch. The base
+	// file's full key set still gets validated; the overlay's keys
+	// are validated against the merged set.
+	if err := validateNoUnknownKeysInMap(k.Raw()); err != nil {
+		return Config{}, err
 	}
 
 	// Load environment variables prefixed with PALADIN_ and replace _ with .
@@ -64,7 +87,7 @@ func Load(path string, log *zap.Logger) (Config, error) {
 	configVal := ctx.CompileBytes(configBytes)
 	combined := schemaVal.Unify(configVal)
 	if err := combined.Validate(); err != nil {
-		return Config{}, fmt.Errorf("config validation failed (%s): %w", path, err)
+		return Config{}, fmt.Errorf("config validation failed (%s): %w", strings.Join(paths, ", "), err)
 	}
 
 	var cfg Config
@@ -142,9 +165,25 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("app name is required")
 	}
 
-	// Validate secret mutual exclusivity
+	// ── Secret mutual-exclusivity sweep ─────────────────────────────
+	// For every field with a `<field>_secret` sibling, accepting both
+	// inline + SecretRef is ambiguous: which one wins? We reject at
+	// load time so the operator's mental model can't drift from
+	// what the runtime actually uses. SecretRef is the production
+	// path; inline is for dev convenience.
 	if c.Datastores.Postgres.Password != "" && c.Datastores.Postgres.PasswordSecret != nil {
 		return fmt.Errorf("postgres: cannot specify both password and password_secret")
+	}
+	if c.Datastores.Postgres.MigratePassword != "" && c.Datastores.Postgres.MigratePasswordSecret != nil {
+		return fmt.Errorf("postgres: cannot specify both migrate_password and migrate_password_secret")
+	}
+	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
+		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
+	}
+	if c.Bootstrap.Admin.Enabled {
+		if c.Bootstrap.Admin.Password != "" && c.Bootstrap.Admin.PasswordSecret != nil {
+			return fmt.Errorf("bootstrap.admin: cannot specify both password and password_secret")
+		}
 	}
 
 	if c.Storage.DefaultBackend != "" {
@@ -158,6 +197,9 @@ func (c *Config) Validate() error {
 		}
 		if b.Auth.SecretKey != "" && b.Auth.SecretKeySecret != nil {
 			return fmt.Errorf("storage.backends.%s.auth: cannot specify both secret_key and secret_key_secret", name)
+		}
+		if b.Auth.SessionToken != "" && b.Auth.SessionTokenSecret != nil {
+			return fmt.Errorf("storage.backends.%s.auth: cannot specify both session_token and session_token_secret", name)
 		}
 		if b.SSE.Type == "aws:kms" && b.SSE.KeyID == "" {
 			return fmt.Errorf("storage.backends.%s: sse.key_id required when sse.type=aws:kms", name)

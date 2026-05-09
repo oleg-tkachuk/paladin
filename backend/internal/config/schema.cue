@@ -42,17 +42,28 @@ otel: {
   }
 }
 
-server: {
-  mode: "debug" | "test" | *"release"
-  // Three-plane HTTP listeners. v2 splits the API into paladin-data, paladin-admin
-  // and paladin-iam audiences, each on its own port so the operator can expose
-  // them on different network profiles. Each plane has a sensible default
-  // address so an operator running PALADIN locally can omit them entirely.
-  data_http:  #HTTPServer & {addr: string | *"0.0.0.0:8080"}
-  admin_http: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
-  iam_http:   #HTTPServer & {addr: string | *"0.0.0.0:8085"}
+// Runtime holds process-wide HTTP-server settings shared across every
+// role's listener. Per-listener address / timeouts / TLS live under
+// the per-service blocks (api / admin / worker). Renamed from
+// `server` to disambiguate from `api.server` / `admin.server`.
+runtime: {
+  mode:             "debug" | "test" | *"release"
   shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
   log_probes:       bool | *false
+}
+
+// API role — the binary started by `serve api`. Hosts the data and
+// iam Connect listeners.
+api: {
+  server: {
+    data: #HTTPServer & {addr: string | *"0.0.0.0:8080"}
+    iam:  #HTTPServer & {addr: string | *"0.0.0.0:8085"}
+  }
+}
+
+// Admin role — `serve admin`. Single listener.
+admin: {
+  server: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
 }
 
 #HTTPServer: {
@@ -153,6 +164,9 @@ security: {
   trust_tenant_id_from_request: bool | *true
   reject_tenant_mismatch:       bool | *true
   log_sensitive:                bool | *false
+  // RLS is not configurable — see types.go.Security. The runtime
+  // always installs the BeforeAcquire hook because migration 023
+  // makes RLS unavoidable at the DB layer.
 }
 
 // Bootstrap groups one-shot startup steps. Each step is opt-in (default
@@ -212,8 +226,13 @@ middleware: {
   }
 }
 
-// Workers groups every background-loop subsystem.
-workers: {
+// Worker role — `serve worker`. Hosts a single ops HTTP listener
+// (probes / metrics) and the background-job catalog. The ops port
+// defaults to :8090 so the chart's containerPort can match a single
+// hard-coded value across the admin and worker roles.
+worker: {
+  ops: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
+  jobs: {
   // Reconciler: closes gaps when S3 events are unavailable / lost.
   reconciler: {
     interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
@@ -270,7 +289,8 @@ workers: {
   operations: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
   }
-}
+  } // close worker.jobs
+} // close worker
 
 // Storage is the registry of physical object-storage backends. Each
 // logical object_key picks one by name; when its `storage_backend`

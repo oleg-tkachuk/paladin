@@ -31,6 +31,35 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## MCP bridge
+
+### Live session enumeration on the streamable-HTTP transport
+
+- **Status:** Deferred
+- **Reason:** The new admin/v1.MCPInspectService surfaces profiles,
+  always-deny, the tool catalog and upstream URLs (everything that's
+  config-derived). Live session state — who is connected over
+  streamable-HTTP right now, what session-id, last activity, total
+  tool calls — lives inside `mcpsdk.Server` from
+  `github.com/modelcontextprotocol/go-sdk` which doesn't expose an
+  enumeration hook today.
+- **Definition of Done:**
+  - A new `MCPInspectService.ListSessions` RPC returns
+    `[]Session{id, agent_subject, started_at, last_seen,
+    tool_call_count, agent_type, model}` for the streamable-HTTP
+    transport.
+  - Implementation either upstreams a session-iterator hook to the
+    SDK (cleanest) or wraps the SDK's `http.Handler` with a
+    middleware that tracks session-id from the `X-Session-Id`
+    header into a local in-memory map (simpler; no SDK fork).
+  - `/mcp` UI swaps the placeholder card for a live table.
+  - In the meantime, MCP tool calls remain visible via
+    `/audit?audience=paladin-mcp` (deep-linked from the placeholder).
+- **Blockers:** decide between SDK fork (clean but adds a maintenance
+  burden) vs middleware wrapper (simpler, uses public SDK surface).
+
+---
+
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

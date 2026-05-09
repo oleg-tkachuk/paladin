@@ -50,6 +50,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "@/context/TenantContext";
 import { apiTokenClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 
 // /m2m-tokens — service-to-service hashed-bearer tokens.
@@ -444,7 +445,7 @@ export default function M2MTokensPage() {
                             <Badge
                               key={s}
                               variant="outline"
-                              className="font-mono text-[10px]"
+                              className={cn(T.labelTight, "font-mono")}
                             >
                               {s}
                             </Badge>
@@ -458,17 +459,23 @@ export default function M2MTokensPage() {
                           <Badge
                             key={a}
                             variant="secondary"
-                            className="text-[10px]"
+                            className={T.labelTight}
                           >
                             {a}
                           </Badge>
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {t.rateLimitRpm > 0 ? t.rateLimitRpm : "∞"}
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell font-mono text-[11px]">
+                    <TableCell className={cn("hidden xl:table-cell", T.code)}>
                       {(() => {
                         if (revoked) {
                           return (
@@ -494,8 +501,7 @@ export default function M2MTokensPage() {
                         );
                         const limit = u.limitRpm > 0 ? u.limitRpm : 0;
                         const weighted = u.weighted.toFixed(1);
-                        const overCap =
-                          limit > 0 && u.weighted >= limit * 0.9;
+                        const overCap = limit > 0 && u.weighted >= limit * 0.9;
                         return (
                           <div className="space-y-0.5">
                             <div className={overCap ? "text-warning" : ""}>
@@ -511,30 +517,40 @@ export default function M2MTokensPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              resets in {resetsInS}s
-                            </div>
+                            <div className={T.hint}>resets in {resetsInS}s</div>
                           </div>
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {t.lastUsedAt ? formatTimestamp(t.lastUsedAt) : "never"}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell font-mono text-[11px] text-muted-foreground">
+                    <TableCell
+                      className={cn(
+                        "hidden lg:table-cell",
+                        T.code,
+                        "text-muted-foreground",
+                      )}
+                    >
                       {t.expiresAt ? formatTimestamp(t.expiresAt) : "never"}
                     </TableCell>
                     <TableCell>
                       {revoked ? (
-                        <Badge variant="destructive" className="text-[11px]">
+                        <Badge variant="destructive" className={T.code}>
                           revoked
                         </Badge>
                       ) : expired ? (
-                        <Badge variant="outline" className="text-[11px]">
+                        <Badge variant="outline" className={T.code}>
                           expired
                         </Badge>
                       ) : (
-                        <Badge variant="success" className="text-[11px]">
+                        <Badge variant="success" className={T.code}>
                           active
                         </Badge>
                       )}
@@ -595,7 +611,7 @@ export default function M2MTokensPage() {
                       Copy
                     </Button>
                   </div>
-                  <p className="font-mono text-[11px] text-muted-foreground">
+                  <p className={cn(T.code, "text-muted-foreground")}>
                     prefix: paladin_pat_{reveal.prefix}…
                   </p>
                 </div>
@@ -638,7 +654,7 @@ export default function M2MTokensPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     Operator-facing label. Shown in audit logs.
                   </p>
                 </div>
@@ -676,7 +692,7 @@ export default function M2MTokensPage() {
                     value={scopes}
                     onChange={(e) => setScopes(e.target.value)}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className={T.hint}>
                     Comma- or space-separated. Backend interprets per its Cedar
                     policy mapping.
                   </p>

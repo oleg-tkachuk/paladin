@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 import {
   bucketClient,
@@ -454,7 +455,12 @@ export default function PoliciesPage() {
                         {layer.source || "(unknown)"}
                       </Badge>
                     </div>
-                    <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
+                    <pre
+                      className={cn(
+                        T.codeSmall,
+                        "overflow-x-auto whitespace-pre-wrap leading-relaxed text-muted-foreground",
+                      )}
+                    >
                       {layer.cedarPolicy || "(empty)"}
                     </pre>
                   </div>
@@ -464,7 +470,12 @@ export default function PoliciesPage() {
             {merged && (
               <div>
                 <Label className="text-xs">Merged</Label>
-                <pre className="mt-1 max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-[11px] leading-relaxed">
+                <pre
+                  className={cn(
+                    T.codeSmall,
+                    "mt-1 max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 leading-relaxed",
+                  )}
+                >
                   {merged}
                 </pre>
               </div>

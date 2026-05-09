@@ -66,6 +66,14 @@ spec:
               value: {{ .Values.backend.urls.iam | quote }}
             - name: PALADIN_ADMIN_URL
               value: {{ .Values.backend.urls.admin | quote }}
+            # Worker + MCP have no Connect surface; they expose
+            # /system/health.json on their ops ports for the BFF
+            # /api/health/all aggregator. The browser never hits them
+            # directly — Service DNS isn't browser-resolvable.
+            - name: PALADIN_WORKER_URL
+              value: {{ .Values.backend.urls.worker | quote }}
+            - name: PALADIN_MCP_URL
+              value: {{ .Values.backend.urls.mcp | quote }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

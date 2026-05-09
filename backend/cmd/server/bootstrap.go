@@ -35,7 +35,7 @@ var bootstrapCmd = &cobra.Command{
 			Users:   adapters.NewUserRepo(db.Queries),
 			Audit:   adapters.NewAuditRepoV2(db.Queries),
 			Logger:  l.Named("bootstrap"),
-			Mode:    cfg.Server.Mode,
+			Mode:    cfg.Runtime.Mode,
 		}); err != nil {
 			l.Fatal("bootstrap admin failed", zap.Error(err))
 		}

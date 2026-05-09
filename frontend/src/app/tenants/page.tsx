@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 type SortColumn = "tenantId" | "displayName";
 type SortDirection = "asc" | "desc" | null;
@@ -392,13 +393,13 @@ export default function TenantsPage() {
                             <Badge
                               key={k}
                               variant="outline"
-                              className="font-mono text-[10px]"
+                              className={cn(T.labelTight, "font-mono")}
                             >
                               {k}={String(v)}
                             </Badge>
                           ))}
                           {labelEntries.length > 3 && (
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className={T.labelTight}>
                               +{labelEntries.length - 3}
                             </Badge>
                           )}

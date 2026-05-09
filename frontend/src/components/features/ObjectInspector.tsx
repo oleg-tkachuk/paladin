@@ -3,20 +3,20 @@
 import { useObject } from "@/hooks/useObject";
 import { useScope } from "@/context/ScopeContext";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
-import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { useRouter } from "next/navigation";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import {
   XMarkIcon,
-  ArrowTopRightOnSquareIcon,
   TrashIcon,
   ArrowPathIcon,
   DocumentIcon,
   EyeIcon,
-  TagIcon,
-  ServerStackIcon,
 } from "@heroicons/react/24/outline";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cn, formatBytes } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 interface ObjectInspectorProps {
   objectKey: string | null;
@@ -42,271 +42,213 @@ export function ObjectInspector({
 
   if (!objectKey) return null;
 
+  const isImage = object?.contentType?.startsWith("image/");
+
   return (
     <>
       {/* Backdrop for mobile */}
       <div
-        className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden transition-opacity",
-          objectKey ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
+        className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm transition-opacity lg:hidden"
         onClick={onClose}
       />
 
       {/* Inspector Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 w-full sm:w-[500px] h-full bg-card/95 text-card-foreground backdrop-blur-3xl border-l border-border z-[60] shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transition-transform duration-500 ease-out flex flex-col overflow-hidden animate-slide-in-right",
-          !objectKey && "translate-x-full",
+          "fixed top-0 right-0 z-[60] flex h-full w-full flex-col overflow-hidden border-l border-border bg-card text-card-foreground shadow-lg sm:w-[500px]",
+          "animate-slide-in-right",
         )}
       >
         {/* Header */}
-        <div className="p-8 border-b border-border space-y-6 relative overflow-hidden shrink-0">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[80px] pointer-events-none -z-10" />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(99,102,241,0.15)]">
-                <DocumentIcon className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-foreground tracking-tight">
-                  Quick Inspect
-                </h2>
-                <p className="text-xs text-primary/80 font-semibold tracking-wider uppercase mt-0.5">
-                  Object Metadata
-                </p>
+        <div className="shrink-0 space-y-3 border-b border-border p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <DocumentIcon className="size-5 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">Quick Inspect</h2>
+                {object && (
+                  <p
+                    className={cn(
+                      T.codeSmall,
+                      "truncate text-muted-foreground",
+                    )}
+                    title={object.key}
+                  >
+                    {object.key}
+                  </p>
+                )}
               </div>
             </div>
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={onClose}
-              className="p-2.5 rounded-xl bg-accent border border-border text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-all active:scale-95"
+              aria-label="Close"
             >
-              <XMarkIcon className="w-5 h-5" />
-            </button>
+              <XMarkIcon className="size-4" />
+            </Button>
           </div>
 
           {object && (
-            <div className="space-y-4">
-              <div className="flex flex-col gap-1">
-                <div
-                  className="font-mono text-sm text-foreground truncate max-w-[400px]"
-                  title={object.key}
-                >
-                  {object.key}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 shadow-inner">
-                  <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(129,140,248,0.8)] animate-pulse" />
-                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">
-                    {ObjectState[object.state]}
-                  </span>
-                </div>
-                <div className="px-3 py-1.5 rounded-lg bg-accent border border-border">
-                  <span className="text-xs font-medium text-foreground tracking-wide">
-                    {formatBytes(object.sizeBytes)}
-                  </span>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn(T.pill, "text-chart-2")}>
+                <span className={cn(T.pillDot, "bg-chart-2")} />
+                {ObjectState[object.state]}
+              </span>
+              <Badge variant="outline" className={T.codeSmall}>
+                {formatBytes(object.sizeBytes)}
+              </Badge>
             </div>
           )}
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8">
+        {/* Content */}
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {loading ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-70">
-              <ArrowPathIcon className="w-8 h-8 text-primary animate-spin" />
-              <span className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">
-                Loading object data...
-              </span>
+            <div className="space-y-3">
+              <Skeleton className="aspect-video w-full" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-20 w-full" />
             </div>
           ) : object ? (
-            <div className="space-y-8 animate-fade-in">
-              {/* Preview Box */}
-              <div className="group relative aspect-video rounded-2xl bg-background border border-border flex flex-col items-center justify-center overflow-hidden transition-all hover:border-primary/30 hover:shadow-[0_0_30px_rgba(99,102,241,0.05)]">
-                <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                {object.contentType?.startsWith("image/") ? (
+            <>
+              {/* Preview */}
+              <div className="flex aspect-video items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
+                {isImage && downloadUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={downloadUrl?.url || ""}
+                    src={downloadUrl.url}
                     alt="Preview"
-                    className="w-full h-full object-contain p-4 transition-transform duration-700 group-hover:scale-105"
+                    className="h-full w-full object-contain"
                   />
                 ) : (
-                  <div className="flex flex-col items-center opacity-80 group-hover:opacity-100 transition-opacity">
-                    <DocumentIcon className="w-12 h-12 text-muted-foreground group-hover:text-primary/80 transition-colors" />
-                    <span className="mt-4 text-xs font-medium text-muted-foreground tracking-wide">
-                      {object.contentType}
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <DocumentIcon className="size-10" />
+                    <span className={T.hint}>
+                      {object.contentType || "binary"}
                     </span>
                   </div>
                 )}
-                <button
-                  onClick={() =>
-                    downloadUrl && window.open(downloadUrl.url, "_blank")
-                  }
-                  className="absolute bottom-4 right-4 p-3 rounded-xl bg-card/90 text-foreground opacity-0 translate-y-2 group-hover:translate-y-0 group-hover:opacity-100 transition-all hover:scale-105 shadow-xl border border-border backdrop-blur-md"
-                  title="Open externally"
-                >
-                  <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                </button>
               </div>
 
-              {/* Technical Specifications */}
+              {/* Specs */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 px-1 text-primary">
-                  <ServerStackIcon className="w-4 h-4" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider">
-                    Technical Specs
-                  </h3>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1 hover:bg-muted/50 transition-colors">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Storage Key
-                    </span>
-                    <div
-                      className="text-xs font-medium text-foreground truncate"
-                      title={object.key}
-                    >
-                      {object.key}
-                    </div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1 hover:bg-muted/50 transition-colors">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Object ID
-                    </span>
+                <h3 className="text-sm font-semibold">Specs</h3>
+                <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Storage Key</dt>
+                  <dd
+                    className="break-all font-mono text-xs"
+                    title={object.key}
+                  >
+                    {object.key}
+                  </dd>
+
+                  <dt className="text-muted-foreground">Object ID</dt>
+                  <dd>
                     <IdentifierCopy
                       value={object.objectId}
-                      label=""
-                      className="text-xs font-medium text-foreground p-0"
+                      label="Object ID"
+                      iconOnly
                     />
-                  </div>
+                    <span className="sr-only">{object.objectId}</span>
+                  </dd>
 
-                  <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1 hover:bg-muted/50 transition-colors">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      MIME Type
-                    </span>
-                    <div className="text-xs font-medium text-foreground truncate">
-                      {object.contentType}
-                    </div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-1 hover:bg-muted/50 transition-colors flex flex-col justify-center">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      ObjectTag
-                    </span>
-                    <div>
-                      <ObjectTagBadge
-                        objectTag={object.tags?.object_tag || "Untagged"}
-                      />
-                    </div>
-                  </div>
+                  <dt className="text-muted-foreground">MIME Type</dt>
+                  <dd className="font-mono text-xs">
+                    {object.contentType || "—"}
+                  </dd>
 
-                  <div className="col-span-2 p-4 rounded-xl bg-muted/30 border border-border space-y-1 hover:bg-muted/50 transition-colors">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Expiration
-                    </span>
-                    <div className="text-xs font-medium text-foreground">
-                      {object.presignExpiresAt?.seconds
-                        ? new Date(
-                            Number(object.presignExpiresAt.seconds) * 1000,
-                          ).toLocaleString()
-                        : "Never"}
-                    </div>
-                  </div>
-                </div>
+                  <dt className="text-muted-foreground">Classification</dt>
+                  <dd className="font-mono text-xs">
+                    {object.tags?.object_tag || "—"}
+                  </dd>
+
+                  <dt className="text-muted-foreground">Expiration</dt>
+                  <dd className="font-mono text-xs">
+                    {object.presignExpiresAt?.seconds
+                      ? new Date(
+                          Number(object.presignExpiresAt.seconds) * 1000,
+                        ).toLocaleString()
+                      : "Never"}
+                  </dd>
+                </dl>
               </div>
 
-              {/* Tags & Metadata */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center gap-2 text-indigo-400">
-                    <TagIcon className="w-4 h-4" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider">
-                      Metadata Tags
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-xl bg-muted/30 border border-border">
-                  {Object.keys(object.tags || {}).length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(object.tags || {}).map(([k, v]) => (
-                        <div
-                          key={k}
-                          className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2 transition-all hover:bg-primary/20"
-                        >
-                          <span className="text-xs font-semibold text-primary/80">
-                            {k}
-                          </span>
-                          <div className="w-1 h-1 rounded-full bg-border" />
-                          <span
-                            className="text-xs font-medium text-foreground truncate max-w-[150px]"
-                            title={String(v)}
+              {/* Free-form tags only — `object_tag` is the
+                  Classification slug shown in Specs above and is
+                  edited via the admin taxonomy flow, not here. */}
+              {(() => {
+                const freeFormTags = Object.entries(object.tags || {}).filter(
+                  ([k]) => k !== "object_tag",
+                );
+                return (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">Tags</h3>
+                    {freeFormTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {freeFormTags.map(([k, v]) => (
+                          <Badge
+                            key={k}
+                            variant="outline"
+                            className="font-mono text-xs"
                           >
-                            {String(v)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center p-4">
-                      <span className="text-xs font-medium text-muted-foreground italic">
-                        No tags found for this object.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+                            {k}={String(v)}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className={T.hint}>No tags assigned.</p>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
           ) : (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-muted-foreground text-sm font-medium">
-                Object unavailable
-              </div>
-            </div>
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Object unavailable.
+            </p>
           )}
         </div>
 
         {/* Actions Footer */}
         {object && (
-          <div className="p-6 border-t border-border bg-card/80 backdrop-blur-md shrink-0">
-            <div className="grid grid-cols-2 gap-3">
-              {object.state === ObjectState.DELETED ? (
-                <button
-                  onClick={() => restoreObject()}
-                  className="col-span-2 py-3.5 rounded-xl bg-success text-primary-foreground text-sm font-bold hover:bg-success/90 transition-all shadow-[0_4px_14px_rgba(5,150,105,0.3)] active:scale-95 flex items-center justify-center gap-2"
+          <div className="shrink-0 border-t border-border bg-card p-3">
+            {object.state === ObjectState.DELETED ? (
+              <Button
+                variant="success"
+                size="sm"
+                className="w-full"
+                onClick={() => restoreObject()}
+              >
+                <ArrowPathIcon className="size-4" />
+                Restore Object
+              </Button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    router.push(
+                      `/objects/${encodeURIComponent(object.key)}?objectKey=${encodeURIComponent(object.objectKey)}`,
+                    )
+                  }
                 >
-                  <ArrowPathIcon className="w-4 h-4" />
-                  Restore Object
-                </button>
-              ) : (
-                <>
-                  <button
-                    className="col-span-1 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-all shadow-[0_4px_14px_rgba(79,70,229,0.3)] active:scale-95 flex items-center justify-center gap-2"
-                    onClick={() =>
-                      router.push(
-                        `/objects/${encodeURIComponent(object.key)}?objectKey=${encodeURIComponent(object.objectKey)}`,
-                      )
-                    }
-                  >
-                    <EyeIcon className="w-4 h-4" />
-                    Full Details
-                  </button>
-                  <button
-                    onClick={() => {
-                      softDeleteObject();
-                      onClose();
-                    }}
-                    className="col-span-1 py-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-bold hover:bg-destructive hover:text-primary-foreground transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    Trash
-                  </button>
-                </>
-              )}
-            </div>
+                  <EyeIcon className="size-4" />
+                  Full Details
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    softDeleteObject();
+                    onClose();
+                  }}
+                >
+                  <TrashIcon className="size-4" />
+                  Trash
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

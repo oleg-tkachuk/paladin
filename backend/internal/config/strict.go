@@ -36,6 +36,17 @@ func validateNoUnknownKeys(path string) error {
 		// Malformed YAML — let the main loader's parse error fire.
 		return nil
 	}
+	if err := validateNoUnknownKeysInMap(raw); err != nil {
+		return fmt.Errorf("unknown config key(s) in %s — %w", path, err)
+	}
+	return nil
+}
+
+// validateNoUnknownKeysInMap is the post-merge variant used by the
+// multi-file Load path. It accepts the already-merged koanf raw map
+// so an overlay file that legally drops most of the schema isn't
+// rejected for keys it never tried to set.
+func validateNoUnknownKeysInMap(raw map[string]any) error {
 	known := collectKnownPaths(reflect.TypeOf(Config{}), "")
 
 	var unknown []string
@@ -46,8 +57,8 @@ func validateNoUnknownKeys(path string) error {
 	}
 	sort.Strings(unknown)
 	return fmt.Errorf(
-		"unknown config key(s) in %s — typo or unsupported field?\n  %s",
-		path, strings.Join(unknown, "\n  "),
+		"unknown config key(s) — typo or unsupported field?\n  %s",
+		strings.Join(unknown, "\n  "),
 	)
 }
 

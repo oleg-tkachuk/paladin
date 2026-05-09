@@ -8,21 +8,33 @@ import (
 )
 
 type Config struct {
-	App        App        `yaml:"app" json:"app"`
-	Logger     Logger     `yaml:"logger" json:"logger"`
-	Server     Server     `yaml:"server" json:"server"`
+	App    App    `yaml:"app" json:"app"`
+	Logger Logger `yaml:"logger" json:"logger"`
+	// Runtime holds process-wide HTTP-server flags shared by every
+	// role (mode / shutdown_timeout / log_probes). Per-listener
+	// addresses + timeouts + TLS live under api.server / admin.server
+	// / worker.ops. Renamed from `server` to avoid collision with
+	// the per-role server blocks.
+	Runtime    Runtime    `yaml:"runtime" json:"runtime"`
 	Datastores Datastores `yaml:"datastores" json:"datastores"`
 	Limits     Limits     `yaml:"limits" json:"limits"`
 	Auth       Auth       `yaml:"auth" json:"auth"`
 	Security   Security   `yaml:"security" json:"security"`
 	Bootstrap  Bootstrap  `yaml:"bootstrap" json:"bootstrap"`
 	Middleware Middleware `yaml:"middleware" json:"middleware"`
-	Workers    Workers    `yaml:"workers" json:"workers"`
+	Worker     Worker     `yaml:"worker" json:"worker"`
 	OTel       OTel       `yaml:"otel" json:"otel"`
 	Storage    Storage    `yaml:"storage" json:"storage"`
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
 	Ingest     Ingest     `yaml:"ingest" json:"ingest"`
+
+	// Per-role blocks — own role-exclusive knobs (per-listener
+	// addresses for now; future per-role middleware / limits hang
+	// here too). Cross-cutting config (auth, security, datastores,
+	// middleware defaults) stays at root.
+	API        API        `yaml:"api" json:"api"`
+	Admin      Admin      `yaml:"admin" json:"admin"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
 
@@ -104,14 +116,21 @@ type LoggerFields struct {
 	Env     string `yaml:"env" json:"env"`
 }
 
-type Server struct {
-	Mode string `yaml:"mode" json:"mode"`
-	// DataHTTP, AdminHTTP, IAMHTTP — v2 three-plane listener configuration.
-	// All three must be set; each plane gets its own audience and interceptor
-	// stack.
-	DataHTTP        HTTPServer    `yaml:"data_http" json:"data_http"`
-	AdminHTTP       HTTPServer    `yaml:"admin_http" json:"admin_http"`
-	IAMHTTP         HTTPServer    `yaml:"iam_http" json:"iam_http"`
+// Runtime holds process-wide HTTP-server settings shared across every
+// role's listener. Per-listener address / timeouts / TLS live under
+// the per-service blocks:
+//
+//	api.server.data   — was server.data_http
+//	api.server.iam    — was server.iam_http
+//	admin.server      — was server.admin_http
+//	worker.ops        — separate ops listener for the worker role
+//
+// Renamed from `Server` to disambiguate from `api.Server`,
+// `admin.Server`, etc. — operators reading the YAML used to see
+// two `server:` blocks at different nesting levels and miss the
+// connection.
+type Runtime struct {
+	Mode            string        `yaml:"mode" json:"mode"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 }
@@ -227,24 +246,13 @@ type Security struct {
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
 
-	// EnableRLS turns on Postgres row-level security as defence in
-	// depth. When true, the connection-acquire path stamps the
-	// `paladin.tenant_id` GUC from the auth context, and per-table
-	// policies (added in migrations/023_rls.sql) restrict reads/
-	// writes to rows whose tenant_id matches the GUC. Cross-tenant
-	// queries that the app layer would also reject get rejected at
-	// the DB.
-	//
-	// Disabled by default — the application-layer Cedar + handler
-	// guards already enforce isolation. RLS is for the case where a
-	// future bug in the app layer leaks tenant context; the DB
-	// catches it instead of returning the wrong tenant's rows.
-	//
-	// Worker / migrate / bootstrap paths bypass RLS via the
-	// `BYPASSRLS` role attribute on the migrate / runtime user
-	// (granted explicitly in migrations/023_rls.sql). See that file
-	// for the full role / policy matrix.
-	EnableRLS bool `yaml:"enable_rls" json:"enable_rls"`
+	// RLS is intentionally not configurable here. Migration 023
+	// enables per-table policies unconditionally; the runtime always
+	// installs the BeforeAcquire hook that stamps paladin.tenant_id GUC
+	// (cmd/server/common.go). Operator-visible knob would only
+	// surface a footgun (every "off" position breaks writes since
+	// paladin_app is NOBYPASSRLS by design). See migrations/023_rls.sql
+	// for the full role + policy matrix.
 }
 
 // Bootstrap groups one-shot startup steps that prepare the cluster for
@@ -306,7 +314,46 @@ type BootstrapAdmin struct {
 // Workers groups every background-loop subsystem under a single section
 // so an operator looking for "what runs in the background?" finds them
 // in one place.
-type Workers struct {
+// API is the per-role config block for the api binary (`serve api`).
+// Owns the data + iam listener configs that used to live as
+// server.data_http / server.iam_http; future role-exclusive limits
+// and per-listener middleware hang here too.
+type API struct {
+	Server APIServer `yaml:"server" json:"server"`
+}
+
+// APIServer holds the api role's two listeners. Same HTTPServer shape
+// as the rest; just two named entries because the api binary opens
+// data + iam on different ports under one process.
+type APIServer struct {
+	Data HTTPServer `yaml:"data" json:"data"`
+	IAM  HTTPServer `yaml:"iam" json:"iam"`
+}
+
+// Admin is the per-role config block for the admin binary
+// (`serve admin`). Currently a single listener; the block exists so
+// future admin-only knobs (audit-log rate limits, stricter timeouts,
+// dedicated trusted-proxy list) hang here without further nesting.
+type Admin struct {
+	Server HTTPServer `yaml:"server" json:"server"`
+}
+
+// Worker is the per-role config block for the worker binary. Carries
+// the ops listener (probes / observability) and the background-job
+// catalog under `jobs:`.
+type Worker struct {
+	// Ops is the worker's HTTP listener for /healthz + /readyz +
+	// future ops endpoints. Defaults to :8090 to match the chart's
+	// containerPort. Was server.admin_http re-read in the legacy
+	// flat config.
+	Ops  HTTPServer `yaml:"ops" json:"ops"`
+	Jobs WorkerJobs `yaml:"jobs" json:"jobs"`
+}
+
+// WorkerJobs is the catalog of background-job configs the worker
+// binary consumes. Renamed from `Workers` (top-level) when the config
+// migrated to per-service blocks; struct field-set is unchanged.
+type WorkerJobs struct {
 	Reconciler       Reconciler       `yaml:"reconciler" json:"reconciler"`
 	Housekeeping     Housekeeping     `yaml:"housekeeping" json:"housekeeping"`
 	RefreshTokenReap RefreshTokenReap `yaml:"refresh_token_reap" json:"refresh_token_reap"`

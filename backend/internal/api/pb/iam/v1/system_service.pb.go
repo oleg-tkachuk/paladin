@@ -7,12 +7,13 @@
 package paladiniamv1
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -224,8 +225,9 @@ func (*GetHealthRequest) Descriptor() ([]byte, []int) {
 
 type ComponentHealth struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Stable identifier ("postgres", "policy-engine", etc.). Used as the
-	// React key in the UI so don't rename casually.
+	// Stable identifier ("postgres", "policy-engine", "storage:primary",
+	// "mcp:admin"). Used as the React key in the UI so don't rename
+	// casually.
 	Name   string          `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Status ComponentStatus `protobuf:"varint,2,opt,name=status,proto3,enum=paladin.iam.v1.ComponentStatus" json:"status,omitempty"`
 	// Free-form context shown next to the status pill. Error message on
@@ -233,7 +235,18 @@ type ComponentHealth struct {
 	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
 	// How long the check took. Useful for spotting a degrading dep before
 	// it tips over into unhealthy.
-	LatencyMs     int64 `protobuf:"varint,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	LatencyMs int64 `protobuf:"varint,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	// Category — one of "database", "storage", "subsystem", "upstream".
+	// The /health page renders one section per category so operators
+	// can scan at a glance which class of dependency is degraded.
+	Category string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	// Critical=true means this check gates /readyz on the role that
+	// produced it. Critical=false is informational — a non-critical
+	// failure shows in the UI but doesn't take the pod out of the
+	// kubelet endpoint set. Frontend uses this to badge components
+	// ("required" vs "informational") so an operator sees the runtime
+	// impact without reading runbooks.
+	Critical      bool `protobuf:"varint,6,opt,name=critical,proto3" json:"critical,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -296,12 +309,31 @@ func (x *ComponentHealth) GetLatencyMs() int64 {
 	return 0
 }
 
+func (x *ComponentHealth) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ComponentHealth) GetCritical() bool {
+	if x != nil {
+		return x.Critical
+	}
+	return false
+}
+
 type HealthInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Aggregate status — UNHEALTHY iff any component is UNHEALTHY,
-	// DEGRADED iff any is DEGRADED and none is UNHEALTHY, else HEALTHY.
-	Status        ComponentStatus    `protobuf:"varint,1,opt,name=status,proto3,enum=paladin.iam.v1.ComponentStatus" json:"status,omitempty"`
-	Components    []*ComponentHealth `protobuf:"bytes,2,rep,name=components,proto3" json:"components,omitempty"`
+	// Aggregate status — UNHEALTHY iff any *critical* component is
+	// UNHEALTHY, DEGRADED iff any component is UNHEALTHY without being
+	// critical OR any component is DEGRADED, else HEALTHY.
+	Status     ComponentStatus    `protobuf:"varint,1,opt,name=status,proto3,enum=paladin.iam.v1.ComponentStatus" json:"status,omitempty"`
+	Components []*ComponentHealth `protobuf:"bytes,2,rep,name=components,proto3" json:"components,omitempty"`
+	// Role the snapshot came from ("api", "admin", "worker", "mcp").
+	// The api / admin binaries register different check sets; the UI
+	// calls each plane's GetHealth and merges them into one tree.
+	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,6 +382,13 @@ func (x *HealthInfo) GetComponents() []*ComponentHealth {
 	return nil
 }
 
+func (x *HealthInfo) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
 var File_paladin_iam_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_system_service_proto_rawDesc = "" +
@@ -364,19 +403,22 @@ const file_paladin_iam_v1_system_service_proto_rawDesc = "" +
 	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tbuildTime\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x04 \x01(\tR\tgoVersion\"\x12\n" +
-	"\x10GetHealthRequest\"\x93\x01\n" +
+	"\x10GetHealthRequest\"\xcb\x01\n" +
 	"\x0fComponentHealth\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x123\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1b.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\"~\n" +
+	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\x12\x1a\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1a\n" +
+	"\bcritical\x18\x06 \x01(\bR\bcritical\"\x92\x01\n" +
 	"\n" +
 	"HealthInfo\x123\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1b.paladin.iam.v1.ComponentStatusR\x06status\x12;\n" +
 	"\n" +
 	"components\x18\x02 \x03(\v2\x1b.paladin.iam.v1.ComponentHealthR\n" +
-	"components*\x90\x01\n" +
+	"components\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role*\x90\x01\n" +
 	"\x0fComponentStatus\x12 \n" +
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +

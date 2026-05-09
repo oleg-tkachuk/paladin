@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -28,11 +29,33 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 		os.Exit(1)
 	}
 
+	// Config path resolves to absolute so log lines + error messages
+	// quote the canonical location regardless of cwd.
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
 
-	cfg, err := config.Load(configPath, bootstrap)
+	// Optional overlay chain via PALADIN_CONFIG_OVERLAYS env var (colon-
+	// separated paths). Operators stack environment-specific deltas
+	// over a shared base.yaml without touching the binary's CLI.
+	// Files merge in order; later wins. Common pattern in K8s:
+	//   PALADIN_CONFIG_PATH=/etc/paladin/base.yaml
+	//   PALADIN_CONFIG_OVERLAYS=/etc/paladin/local.yaml:/etc/paladin/secrets.yaml
+	paths := []string{configPath}
+	if overlays := os.Getenv("PALADIN_CONFIG_OVERLAYS"); overlays != "" {
+		for _, p := range strings.Split(overlays, ":") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if abs, err := filepath.Abs(p); err == nil {
+				p = abs
+			}
+			paths = append(paths, p)
+		}
+	}
+
+	cfg, err := config.Load(paths, bootstrap)
 	if err != nil {
 		bootstrap.Fatal("failed to load config", zap.Error(err))
 	}
@@ -43,12 +66,17 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 	}
 	logger.ReplaceGlobals(l)
 
-	var pgOpts []postgres.Option
-	if cfg.Security.EnableRLS {
-		pgOpts = append(pgOpts, postgres.WithRLS())
-		l.Info("postgres: RLS enabled (defence-in-depth tenant isolation)")
-	}
-	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"), pgOpts...)
+	// RLS is non-optional. Migration 023 enables per-table policies
+	// unconditionally and the runtime DSN connects as paladin_app
+	// (NOBYPASSRLS), so the BeforeAcquire hook that stamps
+	// paladin.tenant_id is the only place tenant context reaches the
+	// session GUC. Without it, every INSERT fails 'new row violates
+	// row-level security policy'. The hook is microseconds per
+	// connection acquire — there is no operator-meaningful reason
+	// to ever disable it. Worker / migrate paths that legitimately
+	// span tenants run as paladin_migrate (BYPASSRLS), so the hook is
+	// a no-op for them at the policy level.
+	db, err := postgres.New(ctx, cfg.Datastores.Postgres, l.Named("postgres"), postgres.WithRLS())
 	if err != nil {
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}

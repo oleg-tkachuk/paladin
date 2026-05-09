@@ -20,7 +20,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useBackends } from "@/hooks/useBackends";
 import { useConfig } from "@/hooks/useConfig";
 import { useTenants } from "@/hooks/useTenants";
-import { copyToClipboard } from "@/lib/utils";
+import { copyToClipboard, cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 import { STORAGE_KEYS } from "@/constants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -184,7 +185,7 @@ export default function ConfigPage() {
                     <Badge
                       key={r}
                       variant="outline"
-                      className="font-mono text-[10px]"
+                      className={cn(T.labelTight, "font-mono")}
                     >
                       {r}
                     </Badge>
@@ -294,7 +295,7 @@ export default function ConfigPage() {
             <CardTitle className="text-base">
               Raw system configuration
             </CardTitle>
-            <CardDescription className="font-mono text-[11px]">
+            <CardDescription className={T.code}>
               {configPath || "—"}
             </CardDescription>
           </div>
@@ -391,7 +392,7 @@ function SnapshotItem({
 }: SnapshotItemProps) {
   const inner = (
     <div className="space-y-1">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className={cn(T.label, "flex items-center gap-1.5")}>
         <Icon className="size-3.5" />
         {label}
         {href ? (
@@ -399,9 +400,7 @@ function SnapshotItem({
         ) : null}
       </div>
       <div className="text-base font-semibold leading-tight">{primary}</div>
-      <div className="font-mono text-[11px] text-muted-foreground">
-        {secondary}
-      </div>
+      <div className={cn(T.code, "text-muted-foreground")}>{secondary}</div>
       {footer ? <div className="pt-0.5">{footer}</div> : null}
     </div>
   );
