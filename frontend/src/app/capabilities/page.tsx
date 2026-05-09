@@ -301,8 +301,18 @@ function DetailsBody({
   const expired = isExpired(cap);
 
   return (
-    <div className="space-y-4 py-2">
-      {/* ─── Identity ────────────────────────────────────────── */}
+    // CSS multi-column layout (columns-2 on md+) with
+    // `break-inside-avoid` on each section. Browser balances the
+    // column heights automatically and never splits a section
+    // mid-row, so the dialog ends ~half as tall as the previous
+    // single-column stack. Document order is the read order an
+    // operator wants: Identity → Principal → Authorization (who/
+    // what), then Caveats → Limits & usage → Lifetime (policy/
+    // accounting).
+    //
+    // Sections are wrapped in a div with `mb-4 break-inside-avoid`
+    // (applied on DetailsSection root) so they flow as units.
+    <div className="md:columns-2 md:gap-x-8 py-1">
       <DetailsSection title="Identity">
         <DetailRow label="Capability ID" value={cap.id} mono breakAll />
         <DetailRow label="Issuer" value={cap.issuer || "—"} mono />
@@ -315,7 +325,6 @@ function DetailsBody({
         <DetailRow label="Generation" value={cap.generation.toString()} mono />
       </DetailsSection>
 
-      {/* ─── Principal ───────────────────────────────────────── */}
       <DetailsSection title="Principal">
         <DetailRow label="Kind" value={principalKindLabel} />
         <DetailRow
@@ -332,7 +341,6 @@ function DetailsBody({
         />
       </DetailsSection>
 
-      {/* ─── Authorization ───────────────────────────────────── */}
       <DetailsSection title="Authorization">
         <DetailRow
           label="Audience"
@@ -368,7 +376,6 @@ function DetailsBody({
         />
       </DetailsSection>
 
-      {/* ─── Caveats ─────────────────────────────────────────── */}
       <DetailsSection title="Caveats">
         <DetailRow
           label="Resource prefixes"
@@ -428,7 +435,6 @@ function DetailsBody({
         />
       </DetailsSection>
 
-      {/* ─── Limits & Usage ──────────────────────────────────── */}
       <DetailsSection title="Limits & usage">
         <DetailRow
           label="Max requests"
@@ -472,7 +478,6 @@ function DetailsBody({
         />
       </DetailsSection>
 
-      {/* ─── Lifetime ────────────────────────────────────────── */}
       <DetailsSection title="Lifetime">
         <DetailRow
           label="Status"
@@ -506,7 +511,13 @@ function DetailsSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    // `break-inside-avoid` keeps the section as one block when the
+    // parent uses CSS multi-column (DetailsBody on md+). Without it
+    // the browser is free to split a section mid-dl, leaving the
+    // heading at the bottom of column 1 and the rows orphaned at
+    // the top of column 2. `mb-4` provides the inter-section
+    // breathing room that the previous `space-y-4` parent gave us.
+    <div className="mb-4 break-inside-avoid space-y-2 last:mb-0">
       <h3 className={T.label}>{title}</h3>
       <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
         {children}
@@ -1478,7 +1489,11 @@ export default function CapabilitiesPage() {
         open={!!detailsTarget}
         onOpenChange={(o) => !o && setDetailsTarget(null)}
       >
-        <DialogContent className="max-w-3xl">
+        {/* Same Tailwind-merge pitfall as the Issue dialog — shadcn's
+            base classes ship `sm:max-w-sm`, so the override must be at
+            the same responsive breakpoint to win. 5xl ≈ 1024px, wide
+            enough for the two-column section layout below. */}
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl">
           {detailsTarget && (
             <>
               <DialogHeader>
