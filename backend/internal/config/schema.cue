@@ -164,6 +164,10 @@ security: {
   trust_tenant_id_from_request: bool | *true
   reject_tenant_mismatch:       bool | *true
   log_sensitive:                bool | *false
+  // Must track migration 023 having run — see types.go.EnableRLS.
+  // Default true: every fresh deploy via this chart runs migration
+  // 023, which makes RLS unavoidable at the DB layer.
+  enable_rls:                   bool | *true
 }
 
 // Bootstrap groups one-shot startup steps. Each step is opt-in (default

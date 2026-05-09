@@ -246,23 +246,30 @@ type Security struct {
 	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
 	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
 
-	// EnableRLS turns on Postgres row-level security as defence in
-	// depth. When true, the connection-acquire path stamps the
-	// `paladin.tenant_id` GUC from the auth context, and per-table
-	// policies (added in migrations/023_rls.sql) restrict reads/
-	// writes to rows whose tenant_id matches the GUC. Cross-tenant
-	// queries that the app layer would also reject get rejected at
-	// the DB.
+	// EnableRLS installs the pgx BeforeAcquire / AfterRelease hooks
+	// (internal/store/postgres/rls.go) that stamp / wipe the
+	// `paladin.tenant_id` GUC per connection. Per-table RLS policies
+	// (migrations/023_rls.sql) key on this GUC; together they give
+	// us closed-by-default tenant isolation at the DB layer.
 	//
-	// Disabled by default — the application-layer Cedar + handler
-	// guards already enforce isolation. RLS is for the case where a
-	// future bug in the app layer leaks tenant context; the DB
-	// catches it instead of returning the wrong tenant's rows.
+	// MUST be true on any deploy where migration 023 has run. The
+	// migration enables RLS on `objects`, `object_tags`, `quotas`,
+	// etc. unconditionally — there is no DB-side toggle. The runtime
+	// DSN connects as `paladin_app`, which is NOBYPASSRLS by design (the
+	// security primitive is "app-layer Cedar + DB-layer RLS"). With
+	// EnableRLS=false, paladin.tenant_id is never set, every policy
+	// returns false on WITH CHECK, and every INSERT fails with
+	// 'new row violates row-level security policy' (SQLSTATE 42501).
+	//
+	// The historical "disabled by default" stance was a footgun: it
+	// only worked when the runtime role had BYPASSRLS, which defeats
+	// the whole point. Default is now true; flipping it false is
+	// only correct if migration 023 has been rolled back.
 	//
 	// Worker / migrate / bootstrap paths bypass RLS via the
-	// `BYPASSRLS` role attribute on the migrate / runtime user
-	// (granted explicitly in migrations/023_rls.sql). See that file
-	// for the full role / policy matrix.
+	// BYPASSRLS attribute on `paladin_migrate` (granted in
+	// migrations/023_rls.sql). They run cross-tenant by design and
+	// don't need the GUC.
 	EnableRLS bool `yaml:"enable_rls" json:"enable_rls"`
 }
 
