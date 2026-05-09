@@ -382,6 +382,15 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 	}
 }
 
+// Tick is a single batch claim+process pass. Public surface for
+// integration tests that need deterministic stepping (no goroutine
+// timing). Production callers use Run; the loop and the sleep
+// scheduling live there. Returns the same (processed, err) tuple
+// the internal tick produces.
+func (r *OutboxRunner) Tick(ctx context.Context) (int, error) {
+	return r.tick(ctx)
+}
+
 // tick claims and processes one batch. Returns the number of rows
 // processed (delivered or marked-failed) so the caller can skip the
 // idle-sleep when there's still backlog.
