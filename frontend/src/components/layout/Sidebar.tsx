@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   HomeIcon,
-  CubeIcon,
   CloudArrowUpIcon,
   UsersIcon,
   ClipboardDocumentListIcon,
@@ -54,16 +53,15 @@ const navigationGroups: Array<{
   }>;
 }> = [
   {
+    // The flat Objects entry was removed in Phase 5 — object
+    // listing now requires a tenant + ObjectKey scope (lives at
+    // /tenants/<id>/object-keys/<name>/objects, reached via
+    // Resources). Upload stays in Core because it doesn't need a
+    // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
     accent: "text-primary/80",
     items: [
       { name: "Dashboard", path: "/", icon: HomeIcon },
-      {
-        name: "Objects",
-        path: "/objects",
-        icon: CubeIcon,
-        countKey: "objects" as keyof SidebarCounts,
-      },
       { name: "Upload", path: "/upload", icon: CloudArrowUpIcon },
     ],
   },

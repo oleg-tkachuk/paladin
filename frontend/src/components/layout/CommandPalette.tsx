@@ -12,13 +12,11 @@ import {
   MagnifyingGlassIcon,
   DocumentIcon,
   ChartBarIcon,
-  TrashIcon,
   HeartIcon,
   Cog6ToothIcon,
   CommandLineIcon,
   ArrowRightIcon,
   ServerStackIcon,
-  TagIcon,
   BuildingOfficeIcon,
   ClockIcon,
 } from "@heroicons/react/24/outline";
@@ -126,15 +124,11 @@ export function CommandPalette() {
         shortcut: "G P",
         onSelect: () => router.push("/policies"),
       },
-      {
-        id: "nav-objects",
-        type: "nav",
-        title: "Object Explorer (cross-tenant)",
-        subtitle: "Platform-admin view of all stored objects",
-        icon: DocumentIcon,
-        shortcut: "G O",
-        onSelect: () => router.push("/objects"),
-      },
+      // Cross-tenant Object Explorer is gone — flat /objects page
+      // was deleted in Phase 5. Object listing now requires an
+      // ObjectKey scope (lives under /tenants/<id>/object-keys/
+      // <name>/objects). The cross-tenant /buckets and /object-keys
+      // entries below stay because their RPCs accept empty parents.
       {
         id: "nav-buckets",
         type: "nav",
@@ -160,22 +154,11 @@ export function CommandPalette() {
         shortcut: "G U",
         onSelect: () => router.push("/upload"),
       },
-      {
-        id: "nav-trash",
-        type: "nav",
-        title: "Trash Bin",
-        subtitle: "Recover or purge soft-deleted items",
-        icon: TrashIcon,
-        onSelect: () => router.push("/trash"),
-      },
-      {
-        id: "nav-object-tags",
-        type: "nav",
-        title: "Object Tags",
-        subtitle: "Manage object classification and taxonomies",
-        icon: TagIcon,
-        onSelect: () => router.push("/object-tags"),
-      },
+      // /trash and /object-tags removed in Phase 5. Trash is now
+      // a per-ObjectKey tab (/tenants/.../object-keys/<name>/trash).
+      // Object Tags drop entirely — they were a holdover taxonomy
+      // surface; per the BACKLOG they'll come back as a label
+      // filter on the Objects tab once the cross-bucket index lands.
       {
         id: "nav-stats",
         type: "nav",

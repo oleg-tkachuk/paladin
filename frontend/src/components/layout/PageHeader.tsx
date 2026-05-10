@@ -90,8 +90,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                   Upload
                 </Link>
               </Button>
+              {/* Default "Explore" CTA targets the resource gateway —
+                  /tenants — now that /objects (cross-tenant flat list)
+                  no longer exists. From there the operator picks a
+                  tenant → ObjectKey → Objects tab. Pages that want a
+                  scoped explore link still pass their own actions
+                  prop. */}
               <Button size="sm" asChild>
-                <Link href="/objects">
+                <Link href="/tenants">
                   <CubeIcon className="size-4" />
                   Explore
                 </Link>

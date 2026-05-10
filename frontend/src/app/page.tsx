@@ -12,12 +12,9 @@ import {
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
   CommandLineIcon,
-  CubeIcon,
   ExclamationTriangleIcon,
   KeyIcon,
   ShieldCheckIcon,
-  TagIcon,
-  TrashIcon,
   UserCircleIcon,
   UsersIcon,
   XCircleIcon,
@@ -221,16 +218,14 @@ export default function DashboardPage() {
   const groups: PageGroup[] = useMemo(
     () => [
       {
+        // The flat /objects explorer was deleted in Phase 5 (objects
+        // are now tenant + ObjectKey scoped via /tenants/<id>/
+        // object-keys/<name>/objects). Operators land on Resources
+        // and pick a tenant; Upload still has its own dedicated entry
+        // because the upload flow doesn't depend on a pre-selected OK.
         title: "Core",
         accent: "text-primary/80",
         tiles: [
-          {
-            name: "Objects",
-            href: "/objects",
-            description: "Browse stored assets across keys.",
-            icon: CubeIcon,
-            accent: "text-primary/80",
-          },
           {
             name: "Upload",
             href: "/upload",
@@ -268,20 +263,11 @@ export default function DashboardPage() {
             accent: "text-chart-2/85",
             count: objectKeysLoading ? null : objectKeys.length,
           },
-          {
-            name: "Object Tags",
-            href: "/object-tags",
-            description: "Tenant-wide tag inventory and per-object editor.",
-            icon: TagIcon,
-            accent: "text-chart-2/85",
-          },
-          {
-            name: "Trash",
-            href: "/trash",
-            description: "Soft-deleted objects awaiting purge.",
-            icon: TrashIcon,
-            accent: "text-chart-2/85",
-          },
+          // Object Tags + Trash dropped from the dashboard in Phase 5.
+          // Trash is now a per-ObjectKey tab (/tenants/.../object-keys/
+          // <name>/trash); Object Tags drop entirely (BACKLOG: comes
+          // back as a label filter on the Objects tab once a
+          // cross-bucket label index lands).
           {
             name: "Policies",
             href: "/policies",

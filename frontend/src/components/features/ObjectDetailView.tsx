@@ -2,7 +2,7 @@
 
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -89,7 +89,23 @@ export function ObjectDetailView({
   parentObjectKey = DEFAULT_OBJECT_KEY,
 }: ObjectDetailViewProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { showNotification } = useNotification();
+
+  // Back-link target. The ObjectDetailView is now mounted under
+  // /tenants/<id>/object-keys/<name>/objects/<objectId>; "back" should
+  // land on the Objects tab one level up. Derive from the current
+  // pathname rather than threading a prop through (the parent route is
+  // implicit in the URL — propagating it would just duplicate it).
+  // Falls back to /tenants if the pathname doesn't fit the expected
+  // shape, which only happens if the component is mounted outside the
+  // OK subtree (no current callsite, but safe default).
+  const backHref = (() => {
+    const m = pathname?.match(
+      /^(\/tenants\/[^/]+\/object-keys\/[^/]+\/objects)(\/|$)/,
+    );
+    return m ? m[1] : "/tenants";
+  })();
   const {
     object,
     downloadUrl,
@@ -205,10 +221,10 @@ export function ObjectDetailView({
     try {
       if (confirmAction === "trash") {
         await softDeleteObject();
-        router.push("/objects");
+        router.push(backHref);
       } else if (confirmAction === "purge") {
         await purgeObject();
-        router.push("/objects");
+        router.push(backHref);
       } else if (confirmAction === "restore") {
         await restoreObject();
       }
@@ -255,7 +271,7 @@ export function ObjectDetailView({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => router.push("/objects")}
+                onClick={() => router.push(backHref)}
                 aria-label="Back to Objects"
               >
                 <ArrowLeftIcon className="size-5" />
@@ -275,7 +291,7 @@ export function ObjectDetailView({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push("/objects")}
+            onClick={() => router.push(backHref)}
           >
             Back to Objects
           </Button>
@@ -298,7 +314,7 @@ export function ObjectDetailView({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => router.push("/objects")}
+              onClick={() => router.push(backHref)}
               aria-label="Back to Objects"
             >
               <ArrowLeftIcon className="size-5" />
