@@ -328,10 +328,20 @@ export default function HealthPage() {
     0,
   );
 
-  const version = stats?.version?.version || "—";
-  const commit = stats?.version?.commit
+  const backendVersion = stats?.version?.version || "—";
+  const backendCommit = stats?.version?.commit
     ? stats.version.commit.slice(0, 10)
     : "—";
+  // UI bundle's own version + commit, baked at build time via the
+  // NEXT_PUBLIC_UI_* env vars next.config.ts plumbs in. Operators
+  // care about both halves on /health: a stale browser tab against
+  // a newer backend (or the inverse during a half-rolled deploy)
+  // is the most common "why does the UI look weird" surface, and
+  // the two values side-by-side answer it without checking
+  // image tags in the cluster.
+  const uiVersion = process.env.NEXT_PUBLIC_UI_VERSION || "local";
+  const uiCommit =
+    (process.env.NEXT_PUBLIC_UI_COMMIT || "").slice(0, 10) || "—";
   const lastSyncLabel = lastSync ? lastSync.toLocaleTimeString() : "—";
 
   return (
@@ -387,17 +397,31 @@ export default function HealthPage() {
             </div>
           </div>
           <Separator orientation="vertical" className="h-8" />
-          <div>
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              Version
+          {/* Backend + UI build-info as two stacked label/value pairs.
+              Stacked rather than four side-by-side cells so the
+              relationship "this is the backend" / "this is the UI"
+              reads vertically and a skew jumps out at a glance. */}
+          <div className="flex flex-col gap-0.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-14 uppercase tracking-wider text-muted-foreground">
+                backend
+              </span>
+              <span className="font-mono">{backendVersion}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-mono text-muted-foreground">
+                {backendCommit}
+              </span>
             </div>
-            <div className="font-mono text-base">{version}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              Commit
+            <div className="flex items-center gap-2">
+              <span className="w-14 uppercase tracking-wider text-muted-foreground">
+                ui
+              </span>
+              <span className="font-mono">{uiVersion}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-mono text-muted-foreground">
+                {uiCommit}
+              </span>
             </div>
-            <div className="font-mono text-base">{commit}</div>
           </div>
           <div className="ml-auto text-right">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">

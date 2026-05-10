@@ -46,6 +46,7 @@ import {
 } from "@/lib/connect/system";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
 
 // /  — Dashboard / nav grid.
 //
@@ -114,6 +115,47 @@ function PageTileCard({ tile }: { tile: PageTile }) {
   );
 }
 
+// BuildBadge renders one labelled "label v · sha" pill. Used for the
+// stacked backend / ui pair in the status strip footer; see the
+// JSX below for the side-by-side comparison rationale.
+function BuildBadge({ label, build }: { label: string; build: BuildInfo }) {
+  if (!build.version) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <AdjustmentsVerticalIcon className="size-4 shrink-0" />
+      <span>
+        <span className="text-muted-foreground">{label}</span>{" "}
+        <span className={cn(T.code, "text-foreground")}>{build.version}</span>
+        {build.commit && (
+          <>
+            {" · "}
+            <span
+              className={cn(T.code, "text-foreground")}
+              title={build.buildTime || undefined}
+            >
+              {build.commit}
+            </span>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// backendBuild lifts the *VersionInfo shape the SystemService returns
+// onto the BuildInfo shape BuildBadge consumes. Returns an empty
+// shell when stats haven't landed yet — BuildBadge renders nothing
+// for an empty version.
+function backendBuild(
+  stats: { version?: { version: string; commit: string } } | null | undefined,
+): BuildInfo {
+  return {
+    version: stats?.version?.version ?? "",
+    commit: (stats?.version?.commit ?? "").slice(0, 7),
+    buildTime: "",
+  };
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { tenants, fetchTenants, loading: tenantsLoading } = useTenants();
@@ -125,6 +167,11 @@ export default function DashboardPage() {
     loading: objectKeysLoading,
   } = useObjectKeys();
   const { stats, loading: statsLoading } = useStats();
+  // UI build-info is bundle-time static — three string lookups against
+  // baked-in env vars. No useMemo: react-hooks/use-memo flags the
+  // literal-arg form, and the per-render cost (one object alloc with
+  // three string properties) is below noise.
+  const ui = uiBuildInfo();
 
   useEffect(() => {
     void fetchTenants();
@@ -386,25 +433,16 @@ export default function DashboardPage() {
               )}
             </span>
           </div>
-          {stats?.version?.version && (
-            <div className={cn(T.hint, "ml-auto flex items-center gap-2")}>
-              <AdjustmentsVerticalIcon className="size-4" />
-              <span>
-                build{" "}
-                <span className={cn(T.code, "text-foreground")}>
-                  {stats.version.version}
-                </span>
-                {stats.version.commit && (
-                  <>
-                    {" · "}
-                    <span className={cn(T.code, "text-foreground")}>
-                      {stats.version.commit.slice(0, 7)}
-                    </span>
-                  </>
-                )}
-              </span>
-            </div>
-          )}
+          <div
+            className={cn(T.hint, "ml-auto flex flex-col items-end gap-0.5")}
+          >
+            {/* Two rows — backend (from SystemService.GetVersion) and
+                UI (from NEXT_PUBLIC_UI_* baked at build time). Stacked
+                so a UI / backend skew (stale browser tab vs redeployed
+                backend, or vice versa) is obvious at a glance. */}
+            <BuildBadge label="backend" build={backendBuild(stats)} />
+            <BuildBadge label="ui" build={ui} />
+          </div>
         </CardContent>
       </Card>
 
