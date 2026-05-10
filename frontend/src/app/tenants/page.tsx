@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowPathIcon,
+  ArrowRightIcon,
   ArrowsUpDownIcon,
   ArrowDownIcon,
   ArrowUpIcon,
@@ -380,24 +382,39 @@ export default function TenantsPage() {
             ) : (
               filtered.map((tenant) => {
                 const labelEntries = Object.entries(tenant.labels);
+                // Prefer slug for the URL — Tenant proto carries it
+                // since the slug-field commit. UUID is the safety net
+                // when the field is empty (legacy rows pre-backfill);
+                // TenantLayout's resolver canonicalises UUID→slug on
+                // landing in either case.
+                const handle = tenant.slug || tenant.tenantId;
+                const detailHref = `/tenants/${encodeURIComponent(handle)}`;
                 return (
                   <TableRow key={tenant.tenantId} className="group">
                     <TableCell>
-                      <div className="flex items-center gap-3">
+                      <Link
+                        href={detailHref}
+                        className="flex items-center gap-3 hover:text-primary"
+                      >
                         <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
                           <BuildingOfficeIcon className="size-4" />
                         </div>
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <span className="font-mono text-xs text-muted-foreground group-hover:text-foreground">
                           {tenant.tenantId}
                         </span>
-                      </div>
+                      </Link>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {tenant.displayName || (
-                        <span className="text-muted-foreground italic">
-                          (unnamed)
-                        </span>
-                      )}
+                      <Link
+                        href={detailHref}
+                        className="hover:text-primary hover:underline"
+                      >
+                        {tenant.displayName || (
+                          <span className="text-muted-foreground italic">
+                            (unnamed)
+                          </span>
+                        )}
+                      </Link>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {labelEntries.length === 0 ? (
@@ -434,6 +451,12 @@ export default function TenantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={detailHref}>
+                              <ArrowRightIcon className="size-4" />
+                              Open tenant
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {
                               setEditing(tenant);
