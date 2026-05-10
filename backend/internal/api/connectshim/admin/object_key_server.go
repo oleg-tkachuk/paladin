@@ -158,17 +158,31 @@ func (s *ObjectKeyServer) BindObjectKeyToBucket(ctx context.Context, req *connec
 
 var _ paladinadminv1connect.ObjectKeyServiceHandler = (*ObjectKeyServer)(nil)
 
-// objectKeyParts decodes "tenants/{t}/objectKeys/{ok}".
+// objectKeyParts decodes "tenants/{t}/objectKeys/{ok}". `ok` may be
+// a multi-segment slash-separated path (e.g. "invoices/2026/q1"); we
+// anchor on the literal `tenants/<id>/objectKeys/` prefix and treat
+// everything after as the object_key body, so the slashes inside it
+// don't get mistaken for additional resource-name segments.
 func objectKeyParts(name string) (uuid.UUID, string, error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "tenants" || parts[2] != "objectKeys" {
+	const prefix = "tenants/"
+	const okSep = "/objectKeys/"
+	if !strings.HasPrefix(name, prefix) {
 		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
 	}
-	id, err := uuid.Parse(parts[1])
+	rest := name[len(prefix):]
+	tIDEnd := strings.Index(rest, okSep)
+	if tIDEnd <= 0 {
+		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
+	}
+	id, err := uuid.Parse(rest[:tIDEnd])
 	if err != nil {
 		return uuid.Nil, "", err
 	}
-	return id, parts[3], nil
+	ok := rest[tIDEnd+len(okSep):]
+	if ok == "" {
+		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
+	}
+	return id, ok, nil
 }
 
 func tenantUUIDFromParent(parent string) (uuid.UUID, error) {

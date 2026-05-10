@@ -888,9 +888,30 @@ the same commit. Treat this file like a runtime invariant.
     `ListObjects`.
 - **Blockers:** data-plane tag index.
 
----
+### Multi-segment ObjectKey: event-ingest path disambiguation
 
-## Operational
+- **Status:** Aspirational
+- **Reason:** Migration 030 relaxed `object_key_format` so paths
+  like `invoices/2026/q1` are valid alongside the old
+  single-segment `assets-prod`. Read-side parsers in
+  `internal/eventingest/source_*.go` still split incoming S3 keys
+  as `<bucket>/<tenant_uuid>/<object_key>/<key>` with the third
+  segment treated as the OK and the rest as the user-key. With
+  multi-segment OK that's ambiguous: an event for path
+  `<tenant>/invoices/2026/q1/report.pdf` could resolve as OK
+  `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1`
+  + key `report.pdf`. Existing single-segment OKs are unaffected
+  (split-on-`/` happens to land on the right segment); the
+  ambiguity surfaces only once an operator creates a multi-segment
+  OK and writes objects to it.
+- **Definition of Done:**
+  - Longest-prefix-match against `object_keys` rows for the tenant
+    (cached per-tenant, invalidated on OK create/delete).
+  - All four ingest sources (seaweedfs, seaweedfs-nats, minio,
+    cloudevents) use the shared resolver.
+  - Integration test covering OK precedence ordering when nested
+    paths collide (e.g. `invoices` + `invoices/2026`).
+- **Blockers:** none — pure backend refactor, no proto change.
 
 ### `pg_cron` integration as alternative to in-process reapers
 

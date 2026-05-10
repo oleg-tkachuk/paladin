@@ -72,12 +72,37 @@ func pageResponseProto(next string) *commonpb.PageResponse {
 // objectNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}/objects/{object_id}".
 // It also asserts the parsed tenant matches the JWT-bound tenant (when the
 // caller has one). Cross-tenant access on the data plane is rejected.
+//
+// `object_key` can be a multi-segment slash-separated path
+// (`invoices/2026/q1`); rather than splitting by `/` and counting
+// fixed positions we anchor on the literal `tenants/<id>/objectKeys/`
+// prefix and the `/objects/<uuid>` suffix, treating everything in
+// between as the object_key body.
 func objectNameParts(ctx context.Context, name string) (objectKey, objectID string, err error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 6 || parts[0] != "tenants" || parts[2] != "objectKeys" || parts[4] != "objects" {
+	const prefix = "tenants/"
+	const okSep = "/objectKeys/"
+	const objSep = "/objects/"
+	if !strings.HasPrefix(name, prefix) {
 		return "", "", fmt.Errorf("invalid object name %q", name)
 	}
-	tIDStr, ok, oIDStr := parts[1], parts[3], parts[5]
+	rest := name[len(prefix):]
+	tIDEnd := strings.Index(rest, okSep)
+	if tIDEnd <= 0 {
+		return "", "", fmt.Errorf("invalid object name %q", name)
+	}
+	tIDStr := rest[:tIDEnd]
+	afterOK := rest[tIDEnd+len(okSep):]
+	// Find the LAST "/objects/" so any "/objects/" substring inside
+	// the object_key (unusual but legal) can't shadow the suffix.
+	objIdx := strings.LastIndex(afterOK, objSep)
+	if objIdx <= 0 {
+		return "", "", fmt.Errorf("invalid object name %q", name)
+	}
+	ok := afterOK[:objIdx]
+	oIDStr := afterOK[objIdx+len(objSep):]
+	if ok == "" || strings.Contains(oIDStr, "/") {
+		return "", "", fmt.Errorf("invalid object name %q", name)
+	}
 	if _, err := uuid.Parse(tIDStr); err != nil {
 		return "", "", fmt.Errorf("invalid tenant_id in name: %w", err)
 	}
@@ -91,18 +116,31 @@ func objectNameParts(ctx context.Context, name string) (objectKey, objectID stri
 }
 
 // objectKeyNameParts decodes "tenants/{tenant_id}/objectKeys/{object_key}".
+// object_key can be a multi-segment slash-separated path; everything
+// after `objectKeys/` is the body.
 func objectKeyNameParts(ctx context.Context, name string) (objectKey string, err error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "tenants" || parts[2] != "objectKeys" {
+	const prefix = "tenants/"
+	const okSep = "/objectKeys/"
+	if !strings.HasPrefix(name, prefix) {
 		return "", fmt.Errorf("invalid object_key name %q", name)
 	}
-	if _, err := uuid.Parse(parts[1]); err != nil {
+	rest := name[len(prefix):]
+	tIDEnd := strings.Index(rest, okSep)
+	if tIDEnd <= 0 {
+		return "", fmt.Errorf("invalid object_key name %q", name)
+	}
+	tIDStr := rest[:tIDEnd]
+	ok := rest[tIDEnd+len(okSep):]
+	if ok == "" {
+		return "", fmt.Errorf("invalid object_key name %q", name)
+	}
+	if _, err := uuid.Parse(tIDStr); err != nil {
 		return "", fmt.Errorf("invalid tenant_id in name: %w", err)
 	}
-	if err := assertJWTTenant(ctx, parts[1]); err != nil {
+	if err := assertJWTTenant(ctx, tIDStr); err != nil {
 		return "", err
 	}
-	return parts[3], nil
+	return ok, nil
 }
 
 // assertJWTTenant returns an error when the URL tenant does not match the

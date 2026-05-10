@@ -454,7 +454,7 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 type createObjectKeyArgs struct {
 	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
-	ObjectKey   string `json:"object_key" jsonschema:"kebab-case namespace name"`
+	ObjectKey   string `json:"object_key" jsonschema:"object key path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
 	Bucket      string `json:"bucket" jsonschema:"bucket resource name (storageBackends/{b}/buckets/{n})"`
 	DisplayName string `json:"display_name,omitempty" jsonschema:"optional display label"`
 	CedarPolicy string `json:"cedar_policy,omitempty" jsonschema:"optional Cedar policy"`
