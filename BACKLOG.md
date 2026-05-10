@@ -985,6 +985,52 @@ the same commit. Treat this file like a runtime invariant.
   time-series, `/events` pagination + Last-test column,
   `/objects` listings.
 
+### Ingest pod on the `/health` page
+
+- **Status:** Deferred
+- **Reason:** The `/health` UI fans out to `/system/health.json`
+  on api / admin / worker / mcp / dispatcher (see
+  `frontend/src/app/api/health/all/route.ts`). The ingest pod
+  lit up in 0.2.58 but the BFF aggregator doesn't include it,
+  so operators viewing the page have no signal on whether the
+  NATS subscriber is connected — they have to `kubectl logs`.
+  The ingest pod's current healthz is the throwaway 200-OK mux
+  added in `serve_ingest.go::runIngestHealthServer`, which
+  doesn't speak the rich Snapshot shape `/system/health.json`
+  uses.
+- **Definition of Done:**
+  - Replace the mini-mux in `serve_ingest.go` with the real
+    `app.NewHealthHandler(...).WithRole("ingest")` pattern the
+    other workers use (see `serve_dispatcher.go::dispatcherOpsMux`
+    for the template).
+  - Register subsystem checks:
+    - **subscriber** (required): the configured driver's
+      connection state. NATS pool: at least one server in the
+      pool reports `nats.CONNECTED`. RabbitMQ: connection is
+      not closed. Webhook: HTTP listener bound.
+    - **postgres** (required): pool ping. Already covered by
+      the shared health handler's default check — verify it
+      doesn't get omitted in the ingest path.
+  - Add an `ingest` entry to `ROLES` in
+    `frontend/src/app/api/health/all/route.ts`:
+      ```
+      {
+        name: "ingest",
+        envKey: "PALADIN_INGEST_URL",
+        defaultUrl: "http://paladin-ingest:8100",
+      }
+      ```
+    The container port is `:8100` (Webhook.Addr) regardless of
+    driver — same chart deployment definition, the
+    healthz mux now binds it for non-webhook drivers too.
+  - Add `ingest:` URL under `backend.urls` in
+    `gitops/.../paladin-values.yaml` so the BFF env (`PALADIN_INGEST_URL`)
+    is set at chart-render time.
+- **Trigger to do:** the next time someone needs to know
+  whether the SF→NATS→ingest path is alive without tailing pod
+  logs. Until then, kubelet's existing liveness probe restarts
+  a wedged pod automatically.
+
 ### Per-worker observability runbooks
 
 - **Status:** Deferred
