@@ -1,9 +1,11 @@
 version: "3"
 
-# Image + Helm chart deploy flow. Two entry points — `deploy` (push to
-# OCI registry) and `deploy-local` (load straight into Minikube without
-# a push) — share one internal builder so the docker-build invocation
-# isn't duplicated.
+# Image + Helm chart deploy flow. The single `deploy` entry point
+# builds, pushes to the OCI registry, and packages + pushes the Helm
+# chart. The previous `deploy-local` flow (load straight into the
+# Minikube Docker daemon, skip chart packaging) was removed — every
+# cluster install goes through the registry now, so there's only one
+# code path to maintain.
 
 vars:
   TAG: latest
@@ -14,7 +16,7 @@ tasks:
   deploy:
     desc: "Build, push image (TAG + :latest), package and push the Helm chart"
     deps: [":core:tools:build"]
-    vars: &build-vars
+    vars:
       IMAGE: "{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}"
       _TAG_AUTO: { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
       _TAG: '{{.TAG | default ._TAG_AUTO}}'
@@ -52,33 +54,6 @@ tasks:
       - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
       - task: ":core:banner"
         vars: { MESSAGE: "[OCI] pushed image + chart {{._APP_VER}}" }
-
-  deploy-local:
-    desc: "Build the image directly into the Minikube Docker daemon (no push)"
-    deps: [":core:tools:build"]
-    vars: *build-vars
-    cmds:
-      - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] building {{.PROJECT_NAME}} {{._APP_VER}} into Minikube" }
-      # Wrap the shared builder in a subshell that targets Minikube's
-      # Docker daemon. `eval` mutates the shell's env only for the
-      # duration of this cmd block. Tag with both the numeric version
-      # AND :latest so the Helm chart (which defaults image.tag to
-      # .Chart.AppVersion = numeric) and any local manifest pinning
-      # :latest both find the just-built image.
-      - cmd: |-
-          eval "$(minikube docker-env)"
-          docker build \
-            --network=host \
-            --tag {{.IMAGE}}:{{._APP_VER}} \
-            --tag {{.IMAGE}}:latest \
-            --file {{.DOCKERFILE}} \
-            --build-arg APP_VERSION={{._APP_VER}} \
-            --build-arg GIT_COMMIT_HASH={{._COMMIT}} \
-            --build-arg BUILD_TIME="{{._TIME}}" \
-            .
-      - task: ":core:banner"
-        vars: { MESSAGE: "[LOCAL] built {{._APP_VER}} into Minikube" }
 
   # ─── Local stack (Docker Compose) ────────────────────────────────────────
 

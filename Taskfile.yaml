@@ -58,15 +58,6 @@ tasks:
       - task: backend:deploy
       - task: frontend:deploy
 
-  deploy-all-local:
-    desc: |
-      Build both images directly into the Minikube Docker daemon (no
-      push). Useful for in-cluster smoke tests without round-tripping
-      the registry.
-    cmds:
-      - task: backend:deploy-local
-      - task: frontend:deploy-local
-
   e2e-up:
     desc: Bring the whole compose stack up (backend planes + UI).
     cmds:
