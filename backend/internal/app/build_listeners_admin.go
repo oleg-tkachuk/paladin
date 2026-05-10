@@ -69,6 +69,17 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	eventSubH.SetDispatcher(dispatcher)
 
+	// Producer wiring — handler-level lifecycle events fan out into
+	// event_deliveries on commit. Without this attach the outbox
+	// stays empty in production traffic and only TestSubscription's
+	// DeliverOne path lights up NATS / HTTP. Scope today: tenant
+	// lifecycle (created / updated / deleted). Bucket / object_key /
+	// quota lifecycle and data-plane object events follow the same
+	// pattern; tracked under the BACKLOG entry "Event dispatcher:
+	// producer wiring".
+	tenantH.SetEventProducer(dispatcher)
+	tenantH.SetLogger(l.Named("tenant-events"))
+
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
