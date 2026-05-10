@@ -361,7 +361,7 @@ export default function ObjectKeysPage() {
                         <ServerStackIcon className="size-4" />
                       </div>
                       <Link
-                        href={`/object-keys/${ok.objectKey}`}
+                        href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/object-keys/${encodeURIComponent(ok.objectKey)}`}
                         className="font-mono text-xs hover:text-primary hover:underline"
                         title={ok.objectKey}
                       >
@@ -398,7 +398,9 @@ export default function ObjectKeysPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
-                          <Link href={`/object-keys/${ok.objectKey}`}>
+                          <Link
+                            href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/object-keys/${encodeURIComponent(ok.objectKey)}`}
+                          >
                             View details
                           </Link>
                         </DropdownMenuItem>
