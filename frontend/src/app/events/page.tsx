@@ -824,14 +824,13 @@ export default function EventsPage() {
                     <div className="flex size-12 items-center justify-center rounded-2xl bg-muted">
                       <BoltIcon className="size-6 text-muted-foreground" />
                     </div>
-                    <div>
+                    <div className="max-w-md px-4">
                       <p className="text-sm font-medium">
                         No event subscriptions
                       </p>
-                      <p className={cn(T.helper, "mt-1 max-w-md")}>
+                      <p className={cn(T.helper, "mt-1 text-balance")}>
                         Forward PALADIN events to a webhook (HTTP) or NATS subject.
-                        Create one to start receiving deliveries — Kafka and SQS
-                        sinks are roadmap stubs.
+                        Kafka / SQS sinks are roadmap stubs.
                       </p>
                     </div>
                     <Button onClick={openCreate} size="sm">
