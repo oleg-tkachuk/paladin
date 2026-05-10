@@ -1,21 +1,52 @@
 "use client";
 
-// Tenant Overview — landing page for /tenants/<id>. Summary tiles +
-// quick-jump links to the tabs that already have real content.
-// Placeholder until Phase 1+ fills out per-resource counts; the
-// shape stays the same.
+// Tenant Overview — landing page for /tenants/<id>.
+//
+// Composition:
+//   - Identity (slug + tenant_id + display).
+//   - Counts row: buckets owned, object-keys provisioned. Each tile
+//     links into the matching tab so the number doubles as a CTA.
+//   - Budget tile: cap + current-period spend (or "no budget set").
+//   - Recent audit: top 5 entries scoped to this tenant, link out to
+//     the full Audit tab.
+//
+// Each block fetches independently and renders best-effort — a budget
+// RPC failure shouldn't blank the audit feed and vice versa. Counts
+// and audit reuse cross-tenant List RPCs with a tenant filter applied
+// client-side (buckets) or server-side (object-keys via parent,
+// audit via filter expression).
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ConnectError, Code } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
   ArrowRightIcon,
+  BanknotesIcon,
+  ClipboardDocumentListIcon,
+  ServerStackIcon,
   ShieldCheckIcon,
   TagIcon,
 } from "@heroicons/react/24/outline";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Badge } from "@/components/ui/badge";
+import { cn, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+
+import {
+  bucketClient,
+  objectKeyClient,
+  auditClient,
+  tenantBudgetClient,
+} from "@/lib/connect/client";
+import type {
+  TenantBudget,
+  TenantBudgetServiceGetResponse,
+} from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
+import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { useTenant } from "./tenant-context";
 
@@ -45,10 +76,155 @@ const QUICK_LINKS: Array<{
   },
 ];
 
+function formatMoney(amount: number, unit: string): string {
+  // ISO codes get currency formatting; "UNIT" or empty falls back to
+  // a plain number with thousands separators (the metering case).
+  const isCurrency = /^[A-Z]{3}$/.test(unit) && unit !== "UNI" && unit !== "";
+  if (isCurrency) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: unit,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      // Fall through to plain number.
+    }
+  }
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export default function TenantOverviewPage() {
   const tenant = useTenant();
+
+  // ── counts (buckets, object-keys) ──────────────────────────────
+  const [bucketCount, setBucketCount] = useState<number | null>(null);
+  const [okCount, setOkCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Buckets list takes a backend `parent` — to count tenant
+        // ownership we list everything (empty parent = all backends)
+        // and filter client-side. Same approach the tenant Buckets
+        // tab uses; tracked in BACKLOG to push to a server-side
+        // owner_tenant_id index.
+        const res = await bucketClient.listBuckets({
+          parent: "",
+          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+          filter: "",
+        });
+        if (cancelled) return;
+        setBucketCount(
+          res.buckets.filter((b) => b.ownerTenantId === tenant.tenantId).length,
+        );
+      } catch {
+        if (!cancelled) setBucketCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.tenantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await objectKeyClient.listObjectKeys({
+          parent: `tenants/${tenant.tenantId}`,
+          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+          filter: "",
+        });
+        if (cancelled) return;
+        setOkCount(res.objectKeys.length);
+      } catch {
+        if (!cancelled) setOkCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.tenantId]);
+
+  // ── budget ────────────────────────────────────────────────────
+  const [budget, setBudget] = useState<TenantBudget | null>(null);
+  const [budgetLoaded, setBudgetLoaded] = useState(false);
+  const [budgetMissing, setBudgetMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: TenantBudgetServiceGetResponse =
+          await tenantBudgetClient.get({ tenantId: tenant.tenantId });
+        if (cancelled) return;
+        setBudget(res.budget ?? null);
+        setBudgetMissing(!res.budget);
+      } catch (err) {
+        if (cancelled) return;
+        // NotFound = no budget configured (a state, not an error);
+        // anything else we still surface as "missing" so the tile
+        // fails gracefully — the dedicated /tenant-budgets page
+        // shows the real diagnostic.
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          setBudgetMissing(true);
+        } else {
+          setBudgetMissing(true);
+        }
+      } finally {
+        if (!cancelled) setBudgetLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.tenantId]);
+
+  // ── recent audit (top 5) ──────────────────────────────────────
+  const [auditEntries, setAuditEntries] = useState<AuditLogEntry[] | null>(
+    null,
+  );
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // CEL filter — match either the actor tenant OR a resource
+        // name owned by the tenant. The `||` is required: actions
+        // initiated by platform-admin against a tenant resource
+        // would otherwise miss the tenant feed.
+        const filter =
+          `actor_tenant_id == "${tenant.tenantId}" || ` +
+          `resource_name.startsWith("tenants/${tenant.tenantId}/")`;
+        const res = await auditClient.listAuditLog({
+          page: { pageSize: 5, pageToken: "" },
+          filter,
+        });
+        if (cancelled) return;
+        setAuditEntries(res.entries);
+      } catch (err) {
+        if (cancelled) return;
+        setAuditError(
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Failed to load audit log",
+        );
+        setAuditEntries([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant.tenantId]);
+
   return (
     <div className="space-y-4">
+      {/* ─── Identity ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Identity</CardTitle>
@@ -75,6 +251,33 @@ export default function TenantOverviewPage() {
         </CardContent>
       </Card>
 
+      {/* ─── Counts row ────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <CountTile
+          href={`/tenants/${tenant.slug}/buckets`}
+          label="Buckets"
+          value={bucketCount}
+          icon={ArchiveBoxIcon}
+          accent="text-chart-2/85"
+          subtitle="owned by this tenant"
+        />
+        <CountTile
+          href={`/tenants/${tenant.slug}/object-keys`}
+          label="Object Keys"
+          value={okCount}
+          icon={ServerStackIcon}
+          accent="text-chart-4/85"
+          subtitle="provisioned namespaces"
+        />
+        <BudgetTile
+          href={`/tenants/${tenant.slug}/budget`}
+          loaded={budgetLoaded}
+          budget={budget}
+          missing={budgetMissing}
+        />
+      </div>
+
+      {/* ─── Quick links ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {QUICK_LINKS.map(({ label, href, description, icon: Icon }) => (
           <Link
@@ -98,9 +301,242 @@ export default function TenantOverviewPage() {
         ))}
       </div>
 
-      {/* Phase 1 minimal slice — counts + recent activity tiles
-          land in a follow-up. Today the Overview is the
-          identity card + the three quick-jump cards above. */}
+      {/* ─── Recent activity ───────────────────────────────────── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ClipboardDocumentListIcon className="size-4 text-chart-3" />
+            Recent activity
+          </CardTitle>
+          <Link
+            href={`/tenants/${tenant.slug}/audit-log`}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            View full audit →
+          </Link>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {auditEntries === null ? (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-9 w-full" />
+              ))}
+            </div>
+          ) : auditError ? (
+            <p className={cn(T.helper, "text-destructive")}>{auditError}</p>
+          ) : auditEntries.length === 0 ? (
+            <p className={cn(T.helper, "italic")}>
+              No audit entries for this tenant yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60 -mx-2">
+              {auditEntries.map((e) => (
+                <AuditRow key={e.entryId} entry={e} />
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+// ─── tiles ──────────────────────────────────────────────────────
+
+function CountTile({
+  href,
+  label,
+  value,
+  icon: Icon,
+  accent,
+  subtitle,
+}: {
+  href: string;
+  label: string;
+  value: number | null;
+  icon: React.ElementType;
+  accent: string;
+  subtitle: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
+        <CardContent className="flex items-center gap-3 p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <Icon className={cn("size-5", accent)} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-2xl font-semibold tabular-nums leading-none">
+              {value === null ? (
+                <Skeleton className="h-7 w-12" />
+              ) : (
+                value.toLocaleString()
+              )}
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-sm font-medium">{label}</span>
+              <span className={cn(T.hint, "leading-none")}>{subtitle}</span>
+            </div>
+          </div>
+          <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function BudgetTile({
+  href,
+  loaded,
+  budget,
+  missing,
+}: {
+  href: string;
+  loaded: boolean;
+  budget: TenantBudget | null;
+  missing: boolean;
+}) {
+  const cap = budget?.maxBudgetAmount ?? 0;
+  const spent = budget?.spentAmount ?? 0;
+  const unit = budget?.unitCode || "USD";
+  // Cap of 0 means unlimited per the proto comment; pct only
+  // makes sense when there's a finite cap.
+  const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : null;
+  const overCap = cap > 0 && spent > cap;
+
+  return (
+    <Link
+      href={href}
+      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
+        <CardContent className="flex items-start gap-3 p-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <BanknotesIcon className="size-5 text-chart-5/85" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-medium">Budget</span>
+              {overCap && (
+                <Badge variant="destructive" className={T.labelTight}>
+                  over cap
+                </Badge>
+              )}
+              {!overCap && cap === 0 && budget && (
+                <Badge variant="outline" className={T.labelTight}>
+                  unlimited
+                </Badge>
+              )}
+            </div>
+
+            {!loaded ? (
+              <Skeleton className="h-5 w-32" />
+            ) : missing ? (
+              <p className={cn(T.hint, "italic")}>No budget set</p>
+            ) : (
+              <>
+                <div className="text-sm font-mono tabular-nums">
+                  {formatMoney(spent, unit)}
+                  {cap > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      / {formatMoney(cap, unit)}
+                    </span>
+                  )}
+                </div>
+                {pct !== null && (
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full transition-all",
+                        overCap
+                          ? "bg-destructive"
+                          : pct > 80
+                            ? "bg-amber-500"
+                            : "bg-chart-2",
+                      )}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+// ─── audit row ──────────────────────────────────────────────────
+
+function AuditRow({ entry }: { entry: AuditLogEntry }) {
+  // Action format is "<service>.<Method>" — e.g.
+  // "admin.BucketService.CreateBucket". Show the trailing
+  // method in bold + the prefix as muted context so it's
+  // skim-friendly.
+  const lastDot = entry.action.lastIndexOf(".");
+  const method = lastDot >= 0 ? entry.action.slice(lastDot + 1) : entry.action;
+  const prefix = lastDot >= 0 ? entry.action.slice(0, lastDot) : "";
+
+  const when = entry.at ? formatDate(timestampToDate(entry.at)) : "—";
+  const failed = !!entry.errorMessage;
+
+  return (
+    <li className="flex items-start gap-3 px-2 py-2 text-sm">
+      <span
+        className={cn(
+          "mt-1.5 size-1.5 shrink-0 rounded-full",
+          failed ? "bg-destructive" : "bg-chart-2",
+        )}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-xs font-medium truncate">
+            {method}
+          </span>
+          {prefix && (
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">
+              {prefix}
+            </span>
+          )}
+          {failed && (
+            <Badge variant="destructive" className={T.labelTight}>
+              failed
+            </Badge>
+          )}
+        </div>
+        <div
+          className={cn(
+            T.hint,
+            "flex flex-wrap items-baseline gap-x-2 truncate",
+          )}
+        >
+          <span className="text-muted-foreground">by</span>
+          <span className="font-mono text-xs truncate">
+            {entry.actorSubject || "—"}
+          </span>
+          {entry.resourceName && (
+            <>
+              <span className="text-muted-foreground">on</span>
+              <span className="font-mono text-xs truncate">
+                {entry.resourceName}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+      <span
+        className={cn(T.hint, "shrink-0 whitespace-nowrap")}
+        title={entry.at ? timestampToDate(entry.at).toISOString() : undefined}
+      >
+        {when}
+      </span>
+    </li>
   );
 }
