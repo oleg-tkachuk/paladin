@@ -48,9 +48,19 @@ type Snapshot = {
 type HealthAll = { roles: Snapshot[] };
 
 // Role render order. Operators read top-down; api/admin first because
-// they're the request paths. worker/mcp are background/auxiliary and
-// land below the fold on narrow viewports.
-const ROLE_ORDER = ["api", "admin", "worker", "mcp"] as const;
+// they're the request paths. worker/mcp/dispatcher/ingest are
+// background/auxiliary and land below the fold on narrow viewports.
+// New roles default to alphabetical order at the bottom; pinning
+// them here puts dispatcher and ingest near worker so the
+// outbox/storage event-pipeline trio reads as a group.
+const ROLE_ORDER = [
+  "api",
+  "admin",
+  "worker",
+  "dispatcher",
+  "ingest",
+  "mcp",
+] as const;
 
 // ─── Status meta ────────────────────────────────────────────────────────────
 

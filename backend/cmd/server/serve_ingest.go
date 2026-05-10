@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -86,12 +87,18 @@ var serveIngestCmd = &cobra.Command{
 		// Health server. The webhook driver binds its own listener on
 		// cfg.Ingest.Webhook.Addr (which serves /healthz alongside the
 		// receiver routes), but nats / rabbitmq drivers have nothing
-		// HTTP-shaped — without a tiny health endpoint kubelet's
-		// liveness probe sees ECONNREFUSED on :8100 and crash-loops the
-		// pod every 60s. Bind a minimal /healthz + /readyz on the same
-		// addr so the chart's probes work uniformly across drivers.
+		// HTTP-shaped — without an ops endpoint kubelet's liveness
+		// probe sees ECONNREFUSED on :8100 and crash-loops the pod
+		// every 60s, AND the BFF /api/health/all aggregator gets no
+		// /system/health.json snapshot to render on the operator
+		// /health page.
+		//
+		// Wire the same `app.NewHealthHandler` mux the worker /
+		// dispatcher / api / admin pods serve, with one
+		// driver-specific subsystem check (subscriber connectivity).
+		// Same pattern as serve_dispatcher.go::dispatcherOpsMux.
 		if cfg.Ingest.Driver != "webhook" && cfg.Ingest.Webhook.Addr != "" {
-			go runIngestHealthServer(ctx, cfg.Ingest.Webhook.Addr, l)
+			go runIngestOpsServer(ctx, cfg.Ingest.Webhook.Addr, deps, driver, l)
 		}
 
 		l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
@@ -101,19 +108,34 @@ var serveIngestCmd = &cobra.Command{
 	},
 }
 
-// runIngestHealthServer is the lightweight `/healthz` + `/readyz`
-// endpoint nats / rabbitmq drivers expose so kubelet's probes don't
-// crash-loop the pod. It always returns 200 — once the worker is up
-// the broker subscription is the source of truth, and broker
-// disconnects show up in the worker's own log + reconnect loop.
-func runIngestHealthServer(ctx context.Context, addr string, l *zap.Logger) {
-	mux := http.NewServeMux()
-	for _, path := range []string{"/healthz", "/readyz"} {
-		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok\n"))
+// runIngestOpsServer mounts the same kind of ops mux the other worker
+// pods serve: health.Handler.Register adds /healthz + /readyz +
+// /startupz + /system/health.json, plus our subscriber subsystem
+// check. The check is driver-aware:
+//
+//   - NATS driver: the underlying *nats.Conn must be CONNECTED.
+//     Required, so a wedged broker fails /readyz and ArgoCD / kubelet
+//     react instead of silently dropping events.
+//
+//   - Other drivers (rabbitmq today, possibly others later): we
+//     can't introspect them with the same shape, so we skip the
+//     subscriber check rather than ship a placeholder that's
+//     always healthy. Postgres + the shared default checks still
+//     run.
+func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, drv eventingest.Driver, l *zap.Logger) {
+	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("ingest")
+
+	if natsDrv, ok := drv.(*eventingest.NATSDriver); ok {
+		app.AddSubsystemCheck(healthH, "subscriber", true, func(ctx context.Context) error {
+			if st := natsDrv.Status(); st != nats.CONNECTED {
+				return fmt.Errorf("nats subscriber: status=%s", st)
+			}
+			return nil
 		})
 	}
+
+	mux := http.NewServeMux()
+	healthH.Register(mux)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -125,9 +147,9 @@ func runIngestHealthServer(ctx context.Context, addr string, l *zap.Logger) {
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 	}()
-	l.Info("ingest health server starting", zap.String("addr", addr))
+	l.Info("ingest ops listener", zap.String("addr", addr))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		l.Warn("ingest health server exited", zap.Error(err))
+		l.Warn("ingest ops listener exited", zap.Error(err))
 	}
 }
 

@@ -54,6 +54,18 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
     envKey: "PALADIN_DISPATCHER_URL",
     defaultUrl: "http://paladin-dispatcher:8099",
   },
+  // Ingest pod — storage-event consumer (SeaweedFS / MinIO bucket
+  // notifications → outbox state-promote pipeline). Container port
+  // is 8100 (cfg.Ingest.Webhook.Addr) regardless of driver — the
+  // webhook driver binds it for receiver routes; nats / rabbitmq
+  // drivers bind the same addr for ops-only via
+  // serve_ingest.go::runIngestOpsServer. `subscriber` subsystem
+  // check on the snapshot reports broker connectivity.
+  {
+    name: "ingest",
+    envKey: "PALADIN_INGEST_URL",
+    defaultUrl: "http://paladin-ingest:8100",
+  },
 ];
 
 // Per-role timeout. The kubelet probe timeout is 3s; fetching the
