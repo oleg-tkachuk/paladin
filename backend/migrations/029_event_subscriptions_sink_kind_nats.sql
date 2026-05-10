@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 -- 029_event_subscriptions_sink_kind_nats.sql
 --
 -- Widen `event_subscriptions.sink_kind` CHECK to include 'nats'.
@@ -26,3 +28,14 @@ ALTER TABLE event_subscriptions
 ALTER TABLE event_subscriptions
     ADD CONSTRAINT event_subscriptions_sink_kind_check
     CHECK (sink_kind IN ('http', 'nats', 'kafka', 'sqs'));
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+ALTER TABLE event_subscriptions
+    DROP CONSTRAINT IF EXISTS event_subscriptions_sink_kind_check;
+
+ALTER TABLE event_subscriptions
+    ADD CONSTRAINT event_subscriptions_sink_kind_check
+    CHECK (sink_kind IN ('http', 'kafka', 'sqs'));
+-- +goose StatementEnd
