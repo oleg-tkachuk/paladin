@@ -298,7 +298,10 @@ function DetailsBody({
     | "never"
     | undefined;
 }) {
-  const unit = cap.caveats?.unitCode || "USD";
+  // Capability without an explicit unit_code (legacy or
+  // metering-only) renders as UNIT, not USD — the bare "$" sign
+  // would imply currency where the caveat doesn't pin one.
+  const unit = cap.caveats?.unitCode || "UNIT";
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;
@@ -652,7 +655,9 @@ export default function CapabilitiesPage() {
               {
                 requestCount: u.requestCount,
                 spentAmount: u.spentAmount,
-                unitCode: u.unitCode || "USD",
+                // UsageRecord without a unit_code means metering-
+                // only; render as UNIT rather than implying USD.
+                unitCode: u.unitCode || "UNIT",
               },
             ] as const;
           } catch (err) {
@@ -796,10 +801,12 @@ export default function CapabilitiesPage() {
     useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
   const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
-  // Currency / unit picker — defaults to USD so existing operator
-  // habits still work; tenants metering in EUR / UAH / GBP can pick
-  // their preferred currency, or UNIT for non-currency metering.
-  const [issueUnitCode, setIssueUnitCode] = useState<string>("USD");
+  // Currency / unit picker. Defaults to UNIT — the abstract
+  // metering sentinel — instead of USD so the dialog doesn't
+  // assume operators want to bill in dollars. Capabilities that
+  // genuinely charge in fiat (USD/EUR/UAH/GBP) are an explicit
+  // operator choice now.
+  const [issueUnitCode, setIssueUnitCode] = useState<string>("UNIT");
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
 
@@ -821,7 +828,7 @@ export default function CapabilitiesPage() {
     setIssueMaxRequestsUnlimited(true);
     setIssueMaxBudget("");
     setIssueMaxBudgetUnlimited(true);
-    setIssueUnitCode("USD");
+    setIssueUnitCode("UNIT");
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -1272,8 +1279,12 @@ export default function CapabilitiesPage() {
                           );
                         const reqCap = c.caveats?.maxRequests ?? 0;
                         const budgetCap = c.caveats?.maxBudgetAmount ?? 0;
+                        // Usage row → caveats → UNIT fallback. The
+                        // "USD" default that lived here lied about
+                        // the actual unit when both were absent
+                        // (legacy / metering-only capabilities).
                         const cellUnit =
-                          u.unitCode || c.caveats?.unitCode || "USD";
+                          u.unitCode || c.caveats?.unitCode || "UNIT";
                         return (
                           <div className="space-y-0.5">
                             <div>

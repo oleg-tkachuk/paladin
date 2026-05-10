@@ -76,25 +76,13 @@ const QUICK_LINKS: Array<{
   },
 ];
 
-function formatMoney(amount: number, unit: string): string {
-  // ISO codes get currency formatting; "UNIT" or empty falls back to
-  // a plain number with thousands separators (the metering case).
-  const isCurrency = /^[A-Z]{3}$/.test(unit) && unit !== "UNI" && unit !== "";
-  if (isCurrency) {
-    try {
-      return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: unit,
-        maximumFractionDigits: 2,
-      }).format(amount);
-    } catch {
-      // Fall through to plain number.
-    }
-  }
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+// Re-export the shared money formatter so the Budget tile renders
+// consistently with /billing and the Tenant Budget tab. The local
+// duplicate that used to live here printed bare numbers for the
+// UNIT case (no suffix), so a metering-only tenant looked like
+// "0 / 1,000" — same digits the cap had. The shared formatter
+// emits "0 units / 1,000 units" for that case.
+import { formatMoney } from "@/lib/format/money";
 
 export default function TenantOverviewPage() {
   const tenant = useTenant();
@@ -398,7 +386,11 @@ function BudgetTile({
 }) {
   const cap = budget?.maxBudgetAmount ?? 0;
   const spent = budget?.spentAmount ?? 0;
-  const unit = budget?.unitCode || "USD";
+  // Default to "UNIT" (abstract metering sentinel) when the
+  // budget row has no unit_code — covers freshly-created budgets
+  // and tenants doing non-currency metering. Avoids a misleading
+  // "$0.00" label on a tenant that doesn't actually pay in USD.
+  const unit = budget?.unitCode || "UNIT";
   // Cap of 0 means unlimited per the proto comment; pct only
   // makes sense when there's a finite cap.
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : null;

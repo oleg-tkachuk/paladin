@@ -277,7 +277,11 @@ export default function BillingPage() {
   // Derived KPI stats. Pulled from the summary; safe to compute
   // even when the response is sparse — formatters handle 0.
   const total = summary?.totalAmount ?? 0;
-  const unit = summary?.unitCode ?? "USD";
+  // Default to "UNIT" (abstract metering sentinel) instead of
+  // "USD" when the summary doesn't carry a unit_code yet —
+  // operators using non-currency metering or freshly-created
+  // tenants don't see a misleading dollar sign on a zero total.
+  const unit = summary?.unitCode || "UNIT";
   const max = summary?.maxBudgetAmount ?? 0;
   const chargeCount = summary?.chargeCount ? Number(summary.chargeCount) : 0;
   const remaining = Math.max(0, max - total);

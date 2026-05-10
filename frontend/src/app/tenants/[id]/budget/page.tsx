@@ -103,7 +103,11 @@ export default function TenantBudgetPage() {
   }, [fetchBudget]);
 
   const [maxBudget, setMaxBudget] = useState<string>("");
-  const [unitCode, setUnitCode] = useState<string>("USD");
+  // Form picker default. Cold-start (no existing budget) starts on
+  // UNIT — the abstract metering sentinel — so the page doesn't
+  // assume operators want USD. The hydration effect below replaces
+  // this with budget.unitCode whenever a snapshot loads.
+  const [unitCode, setUnitCode] = useState<string>("UNIT");
   const [resetSpend, setResetSpend] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -113,7 +117,7 @@ export default function TenantBudgetPage() {
       if (budget.unitCode) setUnitCode(budget.unitCode);
     } else {
       setMaxBudget("");
-      setUnitCode("USD");
+      setUnitCode("UNIT");
     }
     setResetSpend(false);
   }, [budget]);
@@ -157,7 +161,11 @@ export default function TenantBudgetPage() {
 
   const spent = Number(budget?.spentAmount ?? 0);
   const cap = Number(budget?.maxBudgetAmount ?? 0);
-  const budgetUnit = budget?.unitCode || "USD";
+  // Display fallback when an existing budget row carries no
+  // unit_code (legacy data minted before the field was wired).
+  // UNIT is correct: rendering "$0.00" for what's actually
+  // metering would lie about the configured currency.
+  const budgetUnit = budget?.unitCode || "UNIT";
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
   const overCap = cap > 0 && spent >= cap;
 
