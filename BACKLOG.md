@@ -563,62 +563,51 @@ the same commit. Treat this file like a runtime invariant.
     mid-iteration cleanly (partial progress recorded).
 - **Blockers:** none. Per-executor work; can land independently.
 
-### Event dispatcher: producer wiring — Dispatch is unreachable from API handlers
+### Event dispatcher: producer wiring — `policy` / `capability` handlers + audit-log mirror
 
 - **Status:** Deferred
-- **Reason:** Commit c713f77 ("durable webhook fan-out via
-  event_deliveries outbox") wired the consumer half — dispatcher
-  pod polls `event_deliveries`, delivers, retries, marks status
-  — but no admin or data RPC handler today calls
-  `worker.Dispatcher.Dispatch(ctx, tenantID, evt)`. A grep for
-  call sites returns only the function definition itself; the
-  outbox is empty in production traffic. `TestSubscription`
-  works because it bypasses the outbox and calls
-  `Dispatcher.DeliverOne` directly — that's why the Test button
-  on the events page surfaces a real NATS publish, but real
-  business events (object uploaded, tenant created, capability
-  charged…) silently no-op as far as subscribers are concerned.
-- **Symptom that surfaced this:** smoke-testing the round trip
-  by performing a real S3 PUT and watching `>` on NATS. SF
-  publisher fired two `seaweedfs.filer` messages (directory +
-  file create) — that path works. PALADIN-side `paladin.events`
-  remained quiet because no producer ever inserts a row into
-  `event_deliveries`.
-- **Definition of Done:**
-  - Producer call sites land in the handlers that should fan
-    out a logical event:
-    - `admin/v1/tenanth.Create / Update / Delete` →
-      `paladin.tenant.created` / `.updated` / `.deleted`
-    - `admin/v1/buckh / objectkeyh / quotah / policyh` —
-      analogous create/update/delete events
-    - `data/v1/object.{Upload,Complete,Delete,Tag}` →
-      `paladin.object.uploaded` / `.deleted` / `.tagged`
-    - `capability.charge` → `paladin.capability.charged` (lower
-      priority — high cardinality; behind a config flag)
-  - `Dispatch` returns the count of rows written — surface in
-    handler-level structured log so operators can verify
-    fan-out without tailing the dispatcher.
-  - Producer-side INSERT runs as `paladin_app` and must clear the
-    `event_deliveries` WITH CHECK clause via the tenant GUC
-    set by `EnableRLS`. Already true today, but worth a
-    regression test once a real producer lands.
-  - Integration test that exercises a single handler end-to-
-    end: handler call → row in `event_deliveries` → mock NATS
-    server receives the CloudEvents envelope on the configured
-    subject. Mirrors `TestDispatcher_OutboxToNATSDelivery_HappyPath`
-    but starts from the handler, not from a hand-seeded outbox row.
-  - Decide event-naming convention up-front (BACKLOG entry
-    "Event dispatcher: CloudEvents 1.0 envelope" already
-    proposes the `type` field shape — pick that and stick to
-    it across the producer call sites).
-- **Trigger to do:** any of —
-    - First customer subscription that needs to know about a
-      real PALADIN event class (today they'd subscribe and never
-      receive anything).
-    - First feature that depends on the bus internally
-      (e.g. cross-pod cache invalidation, audit replication).
-    - Compliance / audit need: mirroring `audit_log` rows
-      onto the bus for downstream SIEM.
+- **State as of 2026-05-10:** Lifecycle producer wiring landed for
+  the entity classes that designers / customers care about today —
+  tenant, bucket, objectKey, quota, and object lifecycle. The
+  in-tree pattern is documented inline on
+  `internal/api/v1/tenant/handler.go::EventProducer` and reused
+  across the four other handlers; the wiring lives in
+  `build_listeners_admin.go` (admin pod) and
+  `build_listeners_api.go` (api pod's own dispatcher for the
+  high-cardinality object lifecycle). Coverage:
+    - `tenanth.{CreateTenant,UpdateTenant,DeleteTenant}` →
+      `paladin.tenant.created / .updated / .deleted`
+    - `bucketh.{CreateBucket,UpdateBucket,DeleteBucket}` →
+      `paladin.bucket.created / .updated / .deleted | .deleting`
+    - `objectkeyh.{CreateObjectKey,UpdateObjectKey,DeleteObjectKey}` →
+      `paladin.object_key.created / .updated / .deleted`
+    - `quotah.SetQuota` → `paladin.quota.set` (tenant + bucket scope)
+    - `object.{CompleteObject,UpdateObject,DeleteObject,RestoreObject,CopyObject}`
+      → `paladin.object.uploaded / .updated / .deleted / .restored`
+      (CompleteObject only on the actual transition — `changed=true`
+      — so retries don't double-fire)
+- **What's left:**
+  - **`policy` handler** (admin/v1/policyh) → `paladin.policy.updated`
+    on SetPolicy / RotatePolicy. Lower priority than the
+    lifecycle classes; subscribers are mostly auditing.
+  - **`capability.Charge`** → `paladin.capability.charged`. High
+    cardinality (every chargeable RPC), so should ship behind
+    a config flag (`cfg.Dispatcher.ChargeEventsEnabled = false`
+    by default) and require subscribers to set a CEL filter
+    pinning `event.kind == 'paladin.capability.charged'` to scope
+    the queue depth.
+  - **Audit-log mirror** — separate concern from lifecycle:
+    fan out every `audit_log` insert to `paladin.audit.<action>`
+    so SIEM / compliance pipelines can subscribe without
+    polling Postgres. Even higher cardinality than charges;
+    same flag pattern.
+  - Integration tests for the four new handler classes
+    (today only `tenant_events_test.go` covers the seam
+    end-to-end; bucket / object_key / quota / object inherit
+    the same wiring but don't have dedicated tests).
+- **Trigger to do:** customer subscription that depends on an
+  event class not yet wired (object_tag, policy, capability,
+  audit), or compliance / SIEM need.
 
 ### Event dispatcher: NATS sink (recommended first non-HTTP sink)
 
@@ -813,46 +802,54 @@ the same commit. Treat this file like a runtime invariant.
   when an external pipeline writes directly to the storage bucket,
   bypassing PALADIN, and PALADIN needs to discover those new objects via
   storage-side notification.
-- **State as of 2026-05-10:** SeaweedFS filer publishes events
-  to NATS via `gocdk_pub_sub` on subject `seaweedfs.filer`
-  (image `chrislusf/seaweedfs:4.23_full`, notification.toml
-  shipped via sibling ConfigMap mount, see
-  `gitops/.../seaweedfs/seaweed.yaml`). NATS broker lives at
-  `nats.nats.svc.cluster.local:4222`. End-to-end probe verified
-  filer events arriving on the subject. **The publisher half is
-  done; only the subscriber/decoder side on PALADIN is open.**
-- **What's left:** PALADIN-side NATS subscriber that decodes SF's
-  wire format (gocdk_pub_sub serialises body as
-  `proto.Marshal(*filer_pb.EventNotification)` with metadata
-  `{key: <fullpath>}`). The existing `SeaweedFSSource` parses
-  the JSON shape SF's `[notification.webhook]` driver emits —
-  not the protobuf one we receive on NATS. Two concrete
-  sub-tasks:
-    - **(a) New source adapter** `source_seaweedfs_nats.go`:
-        - Decode NATS message body as `filer_pb.EventNotification`
-          (vendor a minimal proto with just `OldEntry` /
-          `NewEntry` presence — enough to derive
-          create/update/delete; ignore Entry internals).
-        - Read NATS header `key` (or gob-decoded metadata if
-          gocloud.dev natspubsub falls back to gob — verify
-          empirically via a test subscriber first).
-        - Map (oldEntry, newEntry) presence → EventType:
-          `nil → x = create`, `x → x = update`, `x → nil = delete`.
-        - Use receipt time for `CloudEvent.Time` (TsNs is on
-          `SubscribeMetadataResponse`, not on the inner
-          `EventNotification` SF actually sends).
-        - id = sha256(key + eventType + tsApprox)[:32].
-    - **(b) Wire & deploy:**
-        - In `gitops/.../paladin-values.yaml` set
-          `ingest.enabled: true`, `ingest.driver: nats`,
-          `ingest.nats.url: nats://nats.nats.svc.cluster.local:4222`,
-          `ingest.nats.subject: seaweedfs.>`,
-          `ingest.nats.queue_group: paladin-ingest` for idempotent
-          horizontal scaling.
-        - Decide JetStream vs core pubsub. Core pubsub is fine
-          for v1; JetStream needs a stream pre-provisioned
-          (out-of-band manifest in gitops).
-- **Why this isn't urgent:** in the current production flow
+- **State as of 2026-05-10:** End-to-end pipeline live on the local
+  cluster:
+    - SeaweedFS filer publishes filer events to NATS via
+      `gocdk_pub_sub` on subject `seaweedfs.filer` (image
+      `chrislusf/seaweedfs:4.23_full`, notification.toml mounted
+      via sibling ConfigMap; see
+      `gitops/.../seaweedfs/seaweed.yaml`).
+    - PALADIN `ingest` pod runs `serve ingest` with
+      `cfg.Ingest.Driver=nats`, source_format=`seaweedfs_nats`,
+      queue group `paladin-ingest`. Pod-side healthz on `:8100`
+      (the nats / rabbitmq drivers don't bind their own
+      listener; we ship a tiny mux that always returns 200 so
+      kubelet probes don't crash-loop the pod).
+    - `internal/eventingest/source_seaweedfs_nats.go` decodes
+      gocloud.dev's gob envelope (`gob(metadata) ||
+      gob(body)`), then walks the protobuf body via
+      `protowire.ConsumeFieldValue` checking only the
+      `old_entry` (tag 1) / `new_entry` (tag 2) presence —
+      enough to derive create / update / delete without
+      vendoring the SF Entry proto.
+    - 8 unit tests on the source (create / update / delete /
+      both-absent / wrong-bucket / missing-key / malformed-gob
+      / unknown-field tolerance) + 33 integration tests on the
+      surrounding worker / dispatcher / billing remain green.
+    - Wildcard NATS probe on `>` confirms SF emits 2 messages
+      per S3 PUT (directory + file create) with full ETag /
+      content-type / x-amz-checksum metadata.
+- **Outstanding:**
+  - **End-to-end PROMOTE verification.** Today the ingest pod
+    receives messages and silently `ErrIgnoredEvent`-skips
+    them because the SF S3 gateway writes paths under
+    `/buckets/<bucket>/...`, while the PALADIN composeKey shape
+    (used by the data-plane API) is
+    `<tenant_uuid>/<object_key>/<key>` directly under the
+    bucket. To prove a real PROMOTE runs, the smoke needs to
+    upload via the PALADIN data-plane RPC (`UploadObject` →
+    presigned PUT → `CompleteObject`), not raw S3. Adding
+    that to `seed-fixture` unblocks the end-to-end
+    verification.
+  - **JetStream upgrade** — current binding is core pubsub
+    (`jetstream: false`). Fine for the lab; production
+    deployments that care about at-least-once should flip
+    `jetstream: true` and pre-provision the stream
+    out-of-band.
+  - Integration test: write an object via the PALADIN data-plane,
+    wait for ingest worker to promote the row, assert the
+    object's state flips to AVAILABLE within Y seconds.
+- **Why the PROMOTE verification isn't urgent:** in the current
   the agent path (`paladin_upload_object` → presigned PUT →
   `paladin_complete_object`) is explicit and synchronous; PALADIN
   doesn't need to discover writes async. The cycle only
@@ -956,50 +953,37 @@ the same commit. Treat this file like a runtime invariant.
   produce repeatable, scoped, easy-to-tear-down fixtures, so
   design / screenshot / demo work consistently lags the feature
   it's trying to evaluate.
-- **What this is NOT:** the existing
-  `backend/tests/integration/` suite covers correctness against a
-  real Postgres but is invisible to the UI — it spins up an
-  ephemeral container, asserts behaviour, tears down. Operators
-  can't `https://paladin.local/events` against it.
-- **Definition of Done:**
-  - **Driver shape:** a Go CLI under `backend/cmd/seed-fixture`
-    (or a `task seed:fixture-tenant` Taskfile target) that hits
-    the live admin / data RPCs the same way an operator would.
-    No DB pokes — exercising the public API surface is the whole
-    point. Auth via the bootstrap admin token (the same one the
-    UI uses).
-  - **Scope:** one CLI flag picks the fixture flavour:
-    - `--flavour=demo` — small, hand-curated set good for
-      screenshots: 3 tenants, 5 buckets each, ~20 objects, 4
-      EventSubscriptions (HTTP / NATS / one disabled / one
-      filtered), a few capability charges, a deliberately
-      failed `event_delivery` row to exercise the error chip.
-    - `--flavour=load` — ~10k objects, ~100 deliveries spread
-      across 24h so `/billing` time-series buckets look real
-      and `/events` Last-test column has a population to truncate.
-    - `--flavour=stress` — pagination boundaries (1000 / 1001 /
-      1099 rows so the cursor logic gets exercised in the UI).
-  - **Idempotency:** every fixture is keyed on a stable slug
-    (`fixture:<flavour>:<seq>`); re-running upgrades existing
-    rows in place rather than appending. Without this, repeated
-    runs balloon the tenant list and the UI fixture loses
-    determinism.
-  - **Tear-down:** sibling subcommand
-    (`seed-fixture --teardown=demo`) deletes everything created
-    under the fixture slug prefix, in dependency order. Safe to
-    run on a partial seed.
-  - **Refuses production:** seed CLI fails fast unless
-    `PALADIN_FIXTURE_OK=1` is set or the API base URL matches a
-    known-dev pattern. Don't ever let this run against real
-    customer data.
-- **Trigger to do:** the next time UI / UX work blocks on
-  "I can't see what this looks like with real data". Likely
-  candidates today: the `/events` table's pagination + last-test
-  column under load, `/billing` time-series with multi-currency,
-  any page that grew an empty-state but hasn't seen a populated
-  one. Until then, the cost-of-not-having scales with how much
-  design iteration is in flight; build it the moment the first
-  designer asks twice.
+- **State as of 2026-05-10:** Demo flavour landed —
+  `backend/cmd/seed-fixture` (also reachable via
+  `task seed:up` / `task seed:down`). Auth via bootstrap admin
+  through the existing `internal/mcp.NewClients` client bundle.
+  Seeds 4 EventSubscriptions on the caller's tenant covering
+  the `/events` page states (HTTP baseline, NATS, disabled,
+  CEL-filtered). RLS-aware: subs land on the caller's own
+  tenant rather than minting a new fixture tenant, because the
+  `event_subscriptions` policy enforces
+  `tenant_id = paladin_session_tenant_id()` on WITH CHECK and
+  cross-tenant create from platform.admin would fail there
+  even though the handler-level guard passes.
+- **Outstanding (load + stress flavours):**
+  - `--flavour=load` — ~10k objects, ~100 deliveries spread
+    across 24h so `/billing` time-series buckets look real
+    and `/events` Last-test column has a population to truncate.
+    Requires bucket + objectKey + UploadObject + CompleteObject
+    flow that demo doesn't exercise yet.
+  - `--flavour=stress` — pagination boundaries (1000 / 1001 /
+    1099 rows so the cursor logic gets exercised). Same
+    upload-flow gap.
+  - First-run UX: today the CLI requires `--admin-url=` etc.
+    when run from outside the cluster (DNS doesn't resolve
+    cluster-internal Service names). A `task seed:up` wrapper
+    that does port-forward → exec → cleanup would remove that
+    friction; today operators hand-paste the localhost URLs.
+- **Trigger to do load / stress:** the next time UI / UX work
+  blocks on "I need to see this with real data" beyond what
+  the 4 demo subscriptions cover — most likely `/billing`
+  time-series, `/events` pagination + Last-test column,
+  `/objects` listings.
 
 ### Per-worker observability runbooks
 
