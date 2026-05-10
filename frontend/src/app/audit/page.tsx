@@ -257,18 +257,33 @@ export default function AuditPage() {
                     </TableCell>
                     <TableCell className="hidden 2xl:table-cell">
                       {e.capabilityId ? (
-                        // Cross-link: clicking jumps to /capabilities
-                        // and pre-fills the cap_id filter on that
-                        // page (the page reads ?id=… on mount).
-                        // Truncated display so the column stays
-                        // narrow; full id in title for hover.
-                        <Link
-                          href={`/capabilities?id=${e.capabilityId}`}
-                          className={cn(T.code, "text-primary hover:underline")}
-                          title={e.capabilityId}
-                        >
-                          {e.capabilityId.slice(0, 8)}…
-                        </Link>
+                        // Capabilities are tenant-scoped now (the
+                        // page lives under /tenants/<id>/capabilities).
+                        // Use the audit row's actor_tenant_id to
+                        // route — TenantLayout's resolver canonicalises
+                        // UUID→slug on landing.
+                        e.actorTenantId ? (
+                          <Link
+                            href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
+                            className={cn(
+                              T.code,
+                              "text-primary hover:underline",
+                            )}
+                            title={e.capabilityId}
+                          >
+                            {e.capabilityId.slice(0, 8)}…
+                          </Link>
+                        ) : (
+                          // No actor_tenant_id (system action): show
+                          // the id as text so the column still
+                          // carries the data, just not the navigation.
+                          <span
+                            className={cn(T.code, "text-muted-foreground")}
+                            title={e.capabilityId}
+                          >
+                            {e.capabilityId.slice(0, 8)}…
+                          </span>
+                        )
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

@@ -450,7 +450,16 @@ export default function BillingPage() {
             title="Top capabilities"
             entries={summary?.topCapabilities ?? []}
             unitCode={unit}
-            linkBuilder={(id) => `/capabilities?id=${encodeURIComponent(id)}`}
+            // Capabilities are tenant-scoped now — link goes to
+            // the active tenant's Capabilities tab. Falls back to a
+            // dead anchor when scope is empty (shouldn't happen on
+            // the billing page, which already requires a tenant).
+            linkBuilder={
+              tenantId
+                ? (id) =>
+                    `/tenants/${encodeURIComponent(tenantId)}/capabilities?id=${encodeURIComponent(id)}`
+                : undefined
+            }
             emptyHint="No capability charges in this period."
           />
           <BreakdownCard

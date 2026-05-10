@@ -893,25 +893,30 @@ the same commit. Treat this file like a runtime invariant.
     server-side filter.
 - **Blockers:** none.
 
-### Remaining tab stubs in tenant subtree
+### Remaining bucket sub-tabs (Policy / Replication / Versioning / Object Keys)
 
 - **Status:** Deferred
-- **Reason:** The URL refactor (Phases 0–6) shipped real content
-  for Overview / Buckets / Object Keys / Audit. Six tabs remain
-  as `_TabStub` placeholders linking to legacy cross-tenant
-  pages: **Quotas, Capabilities, M2M Tokens, Events
-  (Subscriptions), Budget**, and the bucket-detail subtabs
-  **Policy / Replication / Versioning / Object Keys**.
+- **Reason:** The tenant-level tab stubs (Quotas, Capabilities, M2M
+  Tokens, Events Subscriptions, Budget) shipped as real pages and
+  the matching cross-tenant routes (`/capabilities`, `/m2m-tokens`,
+  `/events`, `/tenant-budgets`) were hard-deleted per Q4. What's
+  left under the bucket detail subtree: Policy (Cedar overlay editor),
+  Replication (BucketReplication proto + replicator worker),
+  Versioning (S3-side toggle), and Object Keys (per-bucket OK list).
 - **Definition of Done:**
-  - Each tab gets a tenant-scoped page (or bucket-scoped for
-    bucket sub-tabs).
-  - Quotas + Capabilities + M2M Tokens + Events Subscriptions
-    delete their cross-tenant `/quotas`-style routes after
-    migration (Q4 hard-cut).
-  - Bucket Replication tab waits on `BucketReplication` proto +
-    replicator worker (separate Features entry).
-- **Blockers:** Replication proto for that one tab; rest can
-  start anytime.
+  - Per-bucket Policy tab: small Cedar editor that wraps
+    `Bucket.cedar_policy`, validate + save flow like the
+    ObjectKey Policy tab.
+  - Replication tab: blocked on `BucketReplication` proto +
+    replicator worker (separate Features entry — see
+    "Replication: real `StorageReplicator` implementation").
+  - Versioning tab: depends on the Bucket proto exposing
+    versioning state (today the field exists but the toggle
+    handler and tests are stubs).
+  - Object Keys tab: filters the existing tenant Object Keys
+    table by `bucket = <this>`; no new RPC required.
+- **Blockers:** Replication proto + worker for the Replication
+  tab; the other three can land anytime.
 
 ### Object Tags as a filter on the Objects tab
 

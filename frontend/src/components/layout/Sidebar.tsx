@@ -11,17 +11,17 @@ import {
   Cog6ToothIcon,
   KeyIcon,
   ShieldCheckIcon,
+  // BanknotesIcon, BoltIcon, CpuChipIcon dropped along with the
+  // Capabilities / M2M Tokens / Tenant Budgets / Events sidebar
+  // entries — they live as tenant-scoped tabs now.
   CheckCircleIcon,
   UserCircleIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   ArrowRightOnRectangleIcon,
   CubeTransparentIcon,
-  BanknotesIcon,
   CommandLineIcon,
-  BoltIcon,
   CurrencyDollarIcon,
-  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -90,26 +90,21 @@ const navigationGroups: Array<{
     ],
   },
   {
-    // Agents — agent-runtime primitives. Capabilities + M2M tokens are
-    // what agents use to authenticate; their use generates charges that
-    // accumulate against tenant budgets, summarised on the billing
-    // dashboard. Grouping them keeps the full issue → restrict → spend
-    // → observe loop one click apart.
+    // Agents — what's left after the tenant-scoped collapse: Billing
+    // remains as a cross-tenant aggregate dashboard (signed-in
+    // tenant, not platform-wide). Capabilities, M2M Tokens, Tenant
+    // Budgets, and Event Subscriptions are now tenant-scoped tabs —
+    // operators reach them by clicking into Resources → tenant →
+    // Capabilities (etc.). Same for /events.
     title: "Agents",
     accent: "text-chart-4/85",
-    items: [
-      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
-      { name: "M2M Tokens", path: "/m2m-tokens", icon: CpuChipIcon },
-      { name: "Tenant Budgets", path: "/tenant-budgets", icon: BanknotesIcon },
-      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
-    ],
+    items: [{ name: "Billing", path: "/billing", icon: CurrencyDollarIcon }],
   },
   {
     title: "System",
     accent: "text-chart-3/85",
     items: [
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
-      { name: "Events", path: "/events", icon: BoltIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
       { name: "Health Status", path: "/health", icon: CheckCircleIcon },
     ],
