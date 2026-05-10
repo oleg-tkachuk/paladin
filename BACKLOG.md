@@ -806,113 +806,56 @@ the same commit. Treat this file like a runtime invariant.
   format dichotomy "HTTP gets raw, NATS gets envelope" is the wrong
   thing to ship.
 
-### Storage event ingest pipeline (SeaweedFS / MinIO → PALADIN ingest plane)
+### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
-- **Status:** Deferred
-- **Reason:** PALADIN has an `ingest` plane built (`serve ingest`,
-  drivers `webhook | nats | rabbitmq` per `cfg.Ingest`,
-  `internal/eventingest/`) but it's disabled in every overlay
-  today. Its purpose: promote object rows from PENDING → AVAILABLE
-  when storage notifies PALADIN that bytes landed. In the current
-  production flow this is unnecessary — the agent path
-  (`paladin_upload_object` → presigned PUT → `paladin_complete_object`)
-  is explicit and synchronous, and the MCP tools / data plane RPCs
-  already wire that loop end-to-end. Async ingest only matters
-  when an external pipeline writes directly to the storage bucket,
-  bypassing PALADIN, and PALADIN needs to discover those new objects via
-  storage-side notification.
-- **State as of 2026-05-10:** End-to-end pipeline live on the local
-  cluster:
-    - SeaweedFS filer publishes filer events to NATS via
-      `gocdk_pub_sub` on subject `seaweedfs.filer` (image
-      `chrislusf/seaweedfs:4.23_full`, notification.toml mounted
-      via sibling ConfigMap; see
-      `gitops/.../seaweedfs/seaweed.yaml`).
-    - PALADIN `ingest` pod runs `serve ingest` with
-      `cfg.Ingest.Driver=nats`, source_format=`seaweedfs_nats`,
-      queue group `paladin-ingest`. Pod-side healthz on `:8100`
-      (the nats / rabbitmq drivers don't bind their own
-      listener; we ship a tiny mux that always returns 200 so
-      kubelet probes don't crash-loop the pod).
-    - `internal/eventingest/source_seaweedfs_nats.go` decodes
-      gocloud.dev's gob envelope (`gob(metadata) ||
-      gob(body)`), then walks the protobuf body via
-      `protowire.ConsumeFieldValue` checking only the
-      `old_entry` (tag 1) / `new_entry` (tag 2) presence —
-      enough to derive create / update / delete without
-      vendoring the SF Entry proto.
-    - 8 unit tests on the source (create / update / delete /
-      both-absent / wrong-bucket / missing-key / malformed-gob
-      / unknown-field tolerance) + 33 integration tests on the
-      surrounding worker / dispatcher / billing remain green.
-    - Wildcard NATS probe on `>` confirms SF emits 2 messages
-      per S3 PUT (directory + file create) with full ETag /
-      content-type / x-amz-checksum metadata.
-- **Outstanding:**
-  - **End-to-end PROMOTE verification.** Today the ingest pod
-    receives messages and silently `ErrIgnoredEvent`-skips
-    them because the SF S3 gateway writes paths under
-    `/buckets/<bucket>/...`, while the PALADIN composeKey shape
-    (used by the data-plane API) is
-    `<tenant_uuid>/<object_key>/<key>` directly under the
-    bucket. To prove a real PROMOTE runs, the smoke needs to
-    upload via the PALADIN data-plane RPC (`UploadObject` →
-    presigned PUT → `CompleteObject`), not raw S3. Adding
-    that to `seed-fixture` unblocks the end-to-end
-    verification.
+- **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
+- **State as of 2026-05-10:** Full SF → NATS → PALADIN ingest pipeline
+  works end-to-end on the local cluster, **including PROMOTE on
+  a real PALADIN data-plane upload**. Verified live:
+    1. `seed-fixture smoke-upload` → UploadObject creates a
+       PENDING row, hands back a presigned PUT.
+    2. PUT to the SF S3 gateway → 200, bytes land.
+    3. SF fires filer event on `seaweedfs.filer`.
+    4. Ingest pod's NATS subscriber decodes the gob+protobuf
+       envelope (`source_seaweedfs_nats.go`), parses the path
+       through the new `buckets/`-prefix-tolerant
+       `parseSeaweedFSPath`.
+    5. PromoteHandler.Lookup runs through a BYPASSRLS pool
+       (mirroring dispatcher's pattern — same `MigrateDSN`
+       wiring), finds the row, calls `PromoteToAvailable`.
+    6. Row state flips PENDING → AVAILABLE.
+  Ingest log line proves it: `"promote outcome … changed=true"`.
+- **What's left (low priority, not blocking):**
   - **JetStream upgrade** — current binding is core pubsub
-    (`jetstream: false`). Fine for the lab; production
-    deployments that care about at-least-once should flip
+    (`jetstream: false`). Fine for the lab (missed events on
+    a restart are caught by the data-plane Reconciler); prod
+    deployments that need at-least-once should flip
     `jetstream: true` and pre-provision the stream
-    out-of-band.
-  - Integration test: write an object via the PALADIN data-plane,
-    wait for ingest worker to promote the row, assert the
-    object's state flips to AVAILABLE within Y seconds.
-- **Why the PROMOTE verification isn't urgent:** in the current
-  the agent path (`paladin_upload_object` → presigned PUT →
-  `paladin_complete_object`) is explicit and synchronous; PALADIN
-  doesn't need to discover writes async. The cycle only
-  matters when an external pipeline writes directly to the
-  storage bucket bypassing PALADIN — at which point the trigger
-  fires. Until then the publisher half just sits there
-  incurring zero cost (NATS core pubsub at-most-once with no
-  subscriber drops messages on the floor).
-- **MinIO equivalent:** if storage backend ever flips to
-  MinIO, MinIO has cleaner native webhook + AMQP + Kafka
-  bucket-notifications — an additional source adapter (mirror
-  of SF's) and a `[bucket][notify]` config block on the MinIO
-  side, then the same `ingest.driver=nats` wiring works.
-- **Definition of Done:**
-  - Pick a path based on storage backend in production AND
-    customer requirement (do they write directly to S3 buckets
-    bypassing PALADIN?). Document the choice in `docs/`.
-  - Enable `cfg.Ingest.Enabled = true` per-overlay; deploy the
-    `ingest` Helm role (already in chart, just `enabled: true`).
-  - Configure storage-side notifications to point at PALADIN's ingest
-    endpoint with a shared HMAC secret (matching
-    `cfg.Ingest.Webhook.SharedSecret`).
-  - Idempotency: `internal/eventingest/dedup_ttl` handles replays
-    via a sliding-window cache; verify it's tuned for the storage
-    notification retry profile (SeaweedFS retries aggressively on
-    failed delivery).
-  - Integration test: write an object directly via raw S3 API
-    (bypassing PALADIN), wait for ingest worker to promote the row,
-    assert object appears in PALADIN listing within Y seconds.
-  - Handle the BYPASS_RLS race: ingest worker writes as
-    `paladin_migrate` (cross-tenant) but the row's tenant_id has to
-    come from somewhere — either the bucket prefix
-    (`<tenant_id>/<object_key>/<key>` per current key shape) or
-    the storage event payload. Confirm the parser handles
-    malformed prefixes gracefully (orphaned objects in a
-    `dead-letter` bucket).
-- **Trigger to do:** real customer ask where their pipeline
-  writes to the bucket without going through PALADIN RPCs. Until then,
-  push them toward `paladin_upload_object`/`paladin_complete_object` —
-  it's faster, more observable, and doesn't depend on the
-  storage-notification subsystem's reliability. RabbitMQ-as-bus
-  variant (Path D) only makes sense if the operator already
-  invested in a RabbitMQ cluster AND has aversion to deploying
-  Kafka/Redpanda — small intersection.
+    out-of-band. Wiring already supports it (`runJetStream`
+    branch in `driver_nats.go`); just needs broker-side
+    setup + an overlay flag.
+  - **Integration test** that exercises the chain in the test
+    suite: write an object via the data-plane, wait for the
+    ingest worker to promote the row, assert state flips to
+    AVAILABLE within Y seconds. Today's confidence comes
+    from live smoke + 8 unit tests on the source adapter +
+    33 integration tests on the surrounding worker /
+    dispatcher / billing — but no test drives the full
+    chain in CI.
+  - **MinIO source** — if storage backend ever flips to MinIO,
+    MinIO has cleaner native webhook + AMQP + Kafka bucket-
+    notifications. An additional source adapter (mirror of
+    SF's) plus a `[bucket][notify]` config block on the MinIO
+    side, and the same `ingest.driver=nats` wiring works.
+  - **`buckets/` prefix observation** — the `buckets/` strip in
+    `parseSeaweedFSPath` was inferred from observed live
+    paths; document the wire-format contract under `docs/`
+    so a future SF version that drops the prefix or a
+    different storage backend doesn't silently regress.
+- **Trigger to act:** customer pipeline that writes directly
+  to the storage bucket bypassing PALADIN RPCs (the entire
+  raison d'être of the ingest plane), or production at-least-
+  once requirement that needs JetStream.
 
 ---
 
@@ -1003,52 +946,6 @@ the same commit. Treat this file like a runtime invariant.
   the 4 demo subscriptions cover — most likely `/billing`
   time-series, `/events` pagination + Last-test column,
   `/objects` listings.
-
-### Ingest pod on the `/health` page
-
-- **Status:** Deferred
-- **Reason:** The `/health` UI fans out to `/system/health.json`
-  on api / admin / worker / mcp / dispatcher (see
-  `frontend/src/app/api/health/all/route.ts`). The ingest pod
-  lit up in 0.2.58 but the BFF aggregator doesn't include it,
-  so operators viewing the page have no signal on whether the
-  NATS subscriber is connected — they have to `kubectl logs`.
-  The ingest pod's current healthz is the throwaway 200-OK mux
-  added in `serve_ingest.go::runIngestHealthServer`, which
-  doesn't speak the rich Snapshot shape `/system/health.json`
-  uses.
-- **Definition of Done:**
-  - Replace the mini-mux in `serve_ingest.go` with the real
-    `app.NewHealthHandler(...).WithRole("ingest")` pattern the
-    other workers use (see `serve_dispatcher.go::dispatcherOpsMux`
-    for the template).
-  - Register subsystem checks:
-    - **subscriber** (required): the configured driver's
-      connection state. NATS pool: at least one server in the
-      pool reports `nats.CONNECTED`. RabbitMQ: connection is
-      not closed. Webhook: HTTP listener bound.
-    - **postgres** (required): pool ping. Already covered by
-      the shared health handler's default check — verify it
-      doesn't get omitted in the ingest path.
-  - Add an `ingest` entry to `ROLES` in
-    `frontend/src/app/api/health/all/route.ts`:
-      ```
-      {
-        name: "ingest",
-        envKey: "PALADIN_INGEST_URL",
-        defaultUrl: "http://paladin-ingest:8100",
-      }
-      ```
-    The container port is `:8100` (Webhook.Addr) regardless of
-    driver — same chart deployment definition, the
-    healthz mux now binds it for non-webhook drivers too.
-  - Add `ingest:` URL under `backend.urls` in
-    `gitops/.../paladin-values.yaml` so the BFF env (`PALADIN_INGEST_URL`)
-    is set at chart-render time.
-- **Trigger to do:** the next time someone needs to know
-  whether the SF→NATS→ingest path is alive without tailing pod
-  logs. Until then, kubelet's existing liveness probe restarts
-  a wedged pod automatically.
 
 ### Per-worker observability runbooks
 

@@ -112,6 +112,9 @@ func main() {
 		"existing objectKey on the caller's tenant — must already be bound to a bucket")
 	smokeCmd.Flags().String("key", "",
 		"storage key (server picks when empty)")
+	smokeCmd.Flags().String("tenant", "platform",
+		"tenant slug for the parent resource name; data plane resolves "+
+			"the actual tenant from JWT, slug is just shape")
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "seed-fixture:", err)
 		os.Exit(1)
@@ -451,34 +454,24 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	objectKey, _ := cmd.Flags().GetString("object-key")
 	storageKey, _ := cmd.Flags().GetString("key")
 
+	tenantHint, _ := cmd.Flags().GetString("tenant")
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	// Two tokens: admin for resolving the caller's tenant_id, data
-	// for the actual UploadObject. The audience claim is enforced
-	// per-plane (see auth.RequireAudience interceptor) so a single
-	// token can't span both.
-	adminTok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
-	if err != nil {
-		return fmt.Errorf("admin login: %w", err)
-	}
+	_ = adminURL // kept for assertDevTarget heuristic; admin RPC unused below
+	// Single data-audience token. Earlier iterations used a sibling
+	// admin token to resolve the caller's tenant via ListTenants —
+	// dropped because (a) the data plane resolves tenant from the JWT
+	// at handler time and only uses parent's tenant segment for
+	// resource-name shape, (b) double-login amplified port-forward
+	// flakiness on round trips.
 	dataTok, err := login(ctx, iamURL, user, password, string(auth.AudienceData))
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
 	}
-	adminClients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, "", iamURL, adminTok)
 	dataClients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, "", dataURL, iamURL, dataTok)
 
-	// Resolve caller's tenant — same path the demo flavour uses.
-	tenants, err := adminClients.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
-	if err != nil {
-		return fmt.Errorf("list tenants: %w", err)
-	}
-	if len(tenants.Msg.GetTenants()) == 0 {
-		return errors.New("no tenants visible — bootstrap admin missing?")
-	}
-	tenant := tenants.Msg.GetTenants()[0]
-	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenant.GetTenantId(), objectKey)
+	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenantHint, objectKey)
 
 	// Compose a deterministic-looking storage key when the operator
 	// didn't pass one. Includes a unix timestamp so re-runs don't
