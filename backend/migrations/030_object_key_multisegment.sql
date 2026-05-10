@@ -1,4 +1,6 @@
--- ─── ObjectKey: allow multi-segment paths ─────────────────────────────────
+-- +goose Up
+-- +goose StatementBegin
+-- 030_object_key_multisegment.sql
 --
 -- The original `object_key_format` constraint required a single
 -- kebab-case segment (1-63 chars, [a-z0-9-]). The new format allows
@@ -22,8 +24,6 @@
 -- user-supplied `key` begins. That work is BACKLOG-tracked and
 -- doesn't block the constraint relaxation.
 
-BEGIN;
-
 ALTER TABLE object_keys
     DROP CONSTRAINT IF EXISTS object_key_format;
 
@@ -32,5 +32,15 @@ ALTER TABLE object_keys
         char_length(object_key) <= 255
         AND object_key ~ '^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?(/[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?)*$'
     );
+-- +goose StatementEnd
 
-COMMIT;
+-- +goose Down
+-- +goose StatementBegin
+ALTER TABLE object_keys
+    DROP CONSTRAINT IF EXISTS object_key_format;
+
+ALTER TABLE object_keys
+    ADD CONSTRAINT object_key_format CHECK (
+        object_key ~ '^[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?$'
+    );
+-- +goose StatementEnd
