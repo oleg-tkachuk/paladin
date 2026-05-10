@@ -1,0 +1,154 @@
+"use client";
+
+// ObjectKey detail layout — applies to every route under
+// /tenants/<id>/object-keys/<name>/. Mirrors BucketDetailLayout:
+// fetch once via GetObjectKey, expose through context, render a
+// tab strip; tab pages just read context.
+//
+// Cross-tenancy guard: ObjectKey resource_name encodes the
+// tenant. If the URL's tenant doesn't match the resource's
+// tenant, bounce to the canonical path so the address bar tells
+// the truth.
+
+import { use, useCallback, useEffect, useState } from "react";
+import { notFound, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Code, ConnectError } from "@connectrpc/connect";
+import {
+  ArrowPathIcon,
+  ChevronLeftIcon,
+  KeyIcon,
+} from "@heroicons/react/24/outline";
+
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ObjectKeyTabs } from "@/components/layout/ObjectKeyTabs";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/button";
+import { objectKeyClient } from "@/lib/connect/client";
+import type { ObjectKey } from "@/gen/paladin/admin/v1/types_pb";
+import { cn } from "@/lib/utils";
+
+import { useTenant } from "../../tenant-context";
+import { ObjectKeyProvider } from "./objectkey-context";
+
+const okResourceName = (tenantId: string, objectKey: string) =>
+  `tenants/${tenantId}/objectKeys/${objectKey}`;
+
+export default function ObjectKeyDetailLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ id: string; name: string }>;
+}) {
+  const router = useRouter();
+  const tenant = useTenant();
+  const { name: rawName } = use(params);
+  const objectKeyName = decodeURIComponent(rawName);
+
+  const [ok, setOk] = useState<ObjectKey | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notFoundFlag, setNotFoundFlag] = useState(false);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fresh = await objectKeyClient.getObjectKey({
+        name: okResourceName(tenant.tenantId, objectKeyName),
+      });
+      setOk(fresh);
+    } catch (err) {
+      if (err instanceof ConnectError && err.code === Code.NotFound) {
+        setNotFoundFlag(true);
+        return;
+      }
+      setError(
+        err instanceof ConnectError
+          ? err.rawMessage
+          : "Failed to load object key.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant.tenantId, objectKeyName]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  // Cross-ownership guard. ObjectKey.tenantId is the canonical
+  // owner — if a paste linked the wrong tenant slug, bounce. Hooks
+  // before notFound() to keep the count stable.
+  useEffect(() => {
+    if (!ok) return;
+    if (ok.tenantId && ok.tenantId !== tenant.tenantId) {
+      router.replace(
+        `/tenants/${ok.tenantId}/object-keys/${encodeURIComponent(
+          objectKeyName,
+        )}`,
+      );
+    }
+  }, [ok, tenant.tenantId, objectKeyName, router]);
+
+  if (notFoundFlag) {
+    notFound();
+  }
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={
+          <div className="space-y-1">
+            <Link
+              href={`/tenants/${tenant.slug}/object-keys`}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeftIcon className="size-4" />
+              All Object Keys
+            </Link>
+            <h1 className="flex items-center gap-2 truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              <KeyIcon className="size-6 text-primary" />
+              <span className="truncate font-mono">{objectKeyName}</span>
+            </h1>
+          </div>
+        }
+        description={ok?.displayName || "Tenant-scoped namespace"}
+        showDefaultActions={false}
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => void refetch()}
+            aria-label="Refresh"
+            disabled={loading}
+          >
+            <ArrowPathIcon
+              className={cn("size-4", loading && "animate-spin")}
+            />
+          </Button>
+        }
+      />
+
+      <ObjectKeyTabs tenantId={tenant.slug} objectKey={objectKeyName} />
+
+      {error && !ok ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      ) : loading && !ok ? (
+        <div className="space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : ok ? (
+        <ObjectKeyProvider
+          value={{ objectKey: ok, setObjectKey: setOk, refetch }}
+        >
+          {children}
+        </ObjectKeyProvider>
+      ) : null}
+    </div>
+  );
+}

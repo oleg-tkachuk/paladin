@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useObjectKeys } from "@/hooks/useObjectKeys";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
@@ -126,7 +126,7 @@ export default function ObjectKeysPage() {
   } = useObjectKeys();
   const { buckets, fetchBuckets } = useBuckets();
   const { backends: backendRows } = useBackends();
-  const { tenantId, tenant } = useTenant();
+  const { tenantId, tenant } = useScope();
   const { showNotification } = useNotification();
 
   const backends = useMemo(
@@ -361,7 +361,7 @@ export default function ObjectKeysPage() {
                         <ServerStackIcon className="size-4" />
                       </div>
                       <Link
-                        href={`/object-keys/${ok.objectKey}`}
+                        href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/object-keys/${encodeURIComponent(ok.objectKey)}`}
                         className="font-mono text-xs hover:text-primary hover:underline"
                         title={ok.objectKey}
                       >
@@ -398,7 +398,9 @@ export default function ObjectKeysPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
-                          <Link href={`/object-keys/${ok.objectKey}`}>
+                          <Link
+                            href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/object-keys/${encodeURIComponent(ok.objectKey)}`}
+                          >
                             View details
                           </Link>
                         </DropdownMenuItem>

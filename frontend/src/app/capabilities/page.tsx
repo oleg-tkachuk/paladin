@@ -51,12 +51,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
 
 // /capabilities — agent-runtime authorisation primitive.
 //
@@ -293,8 +294,12 @@ function DetailsBody({
   usageEntry,
 }: {
   cap: Capability;
-  usageEntry: { requestCount: bigint; spentUsd: number } | "never" | undefined;
+  usageEntry:
+    | { requestCount: bigint; spentAmount: number; unitCode: string }
+    | "never"
+    | undefined;
 }) {
+  const unit = cap.caveats?.unitCode || "USD";
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;
@@ -456,23 +461,29 @@ function DetailsBody({
           }
           mono
         />
+        <DetailRow label="Currency / Unit" value={unit} mono />
         <DetailRow
-          label="Max budget USD"
+          label="Max budget"
           value={
-            (cap.caveats?.maxBudgetUsd ?? 0) > 0
-              ? `$${cap.caveats!.maxBudgetUsd.toFixed(2)}`
+            (cap.caveats?.maxBudgetAmount ?? 0) > 0
+              ? formatMoney(cap.caveats!.maxBudgetAmount, unit)
               : "unlimited"
           }
           mono
         />
         <DetailRow
-          label="Spent USD"
+          label="Spent"
           value={
             usageEntry === undefined
               ? "loading…"
               : usageEntry === "never"
-                ? "$0.0000"
-                : `$${usageEntry.spentUsd.toFixed(4)}`
+                ? formatMoney(0, unit, undefined, 4)
+                : formatMoney(
+                    usageEntry.spentAmount,
+                    usageEntry.unitCode || unit,
+                    undefined,
+                    4,
+                  )
           }
           mono
         />
@@ -560,7 +571,7 @@ function isExpired(c: Capability): boolean {
 }
 
 export default function CapabilitiesPage() {
-  const { tenantId } = useTenant();
+  const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
   // ── browse filters ──────────────────────────────────────────────────
@@ -599,7 +610,10 @@ export default function CapabilitiesPage() {
   // cap.id; absent ⇒ never used (NOT_FOUND), pending ⇒ fetch
   // in-flight. Re-fetched whenever the list refreshes.
   const [usage, setUsage] = useState<
-    Map<string, { requestCount: bigint; spentUsd: number } | "never">
+    Map<
+      string,
+      { requestCount: bigint; spentAmount: number; unitCode: string } | "never"
+    >
   >(new Map());
 
   const fetchList = useCallback(async () => {
@@ -631,7 +645,11 @@ export default function CapabilitiesPage() {
             const u = await capabilityClient.getUsage({ id: c.id });
             return [
               c.id,
-              { requestCount: u.requestCount, spentUsd: u.spentUsd },
+              {
+                requestCount: u.requestCount,
+                spentAmount: u.spentAmount,
+                unitCode: u.unitCode || "USD",
+              },
             ] as const;
           } catch (err) {
             if (err instanceof ConnectError && err.code === Code.NotFound) {
@@ -648,7 +666,14 @@ export default function CapabilitiesPage() {
                 e,
               ): e is readonly [
                 string,
-                { requestCount: bigint; spentUsd: number } | "never",
+                (
+                  | {
+                      requestCount: bigint;
+                      spentAmount: number;
+                      unitCode: string;
+                    }
+                  | "never"
+                ),
               ] => e !== null,
             ),
           ),
@@ -767,6 +792,10 @@ export default function CapabilitiesPage() {
     useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
   const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
+  // Currency / unit picker — defaults to USD so existing operator
+  // habits still work; tenants metering in EUR / UAH / GBP can pick
+  // their preferred currency, or UNIT for non-currency metering.
+  const [issueUnitCode, setIssueUnitCode] = useState<string>("USD");
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
 
@@ -788,6 +817,7 @@ export default function CapabilitiesPage() {
     setIssueMaxRequestsUnlimited(true);
     setIssueMaxBudget("");
     setIssueMaxBudgetUnlimited(true);
+    setIssueUnitCode("USD");
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -871,7 +901,8 @@ export default function CapabilitiesPage() {
           // Validation above guarantees these are sane: either
           // explicitly toggled unlimited (→ 0) or a finite > 0.
           maxRequests,
-          maxBudgetUsd: maxBudget,
+          maxBudgetAmount: maxBudget,
+          unitCode: issueUnitCode,
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
           sourceIpCidr: cidrs,
@@ -1233,7 +1264,9 @@ export default function CapabilitiesPage() {
                             </span>
                           );
                         const reqCap = c.caveats?.maxRequests ?? 0;
-                        const budgetCap = c.caveats?.maxBudgetUsd ?? 0;
+                        const budgetCap = c.caveats?.maxBudgetAmount ?? 0;
+                        const cellUnit =
+                          u.unitCode || c.caveats?.unitCode || "USD";
                         return (
                           <div className="space-y-0.5">
                             <div>
@@ -1249,12 +1282,16 @@ export default function CapabilitiesPage() {
                               )}
                             </div>
                             <div>
-                              <span className="text-muted-foreground">$ </span>
-                              {u.spentUsd.toFixed(4)}
+                              {formatMoney(
+                                u.spentAmount,
+                                cellUnit,
+                                undefined,
+                                4,
+                              )}
                               {budgetCap > 0 && (
                                 <span className="text-muted-foreground">
                                   {" "}
-                                  / {budgetCap.toFixed(2)}
+                                  / {formatMoney(budgetCap, cellUnit)}
                                 </span>
                               )}
                             </div>
@@ -1509,7 +1546,7 @@ export default function CapabilitiesPage() {
                     where applicable. TTL is selected from a curated
                     list to discourage long-lived agent tokens. */}
                 <FormSection title="Limits">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                     <Field label="Max requests" htmlFor="cap-maxreq">
                       <LimitInput
                         id="cap-maxreq"
@@ -1520,7 +1557,7 @@ export default function CapabilitiesPage() {
                         placeholder="e.g. 1000"
                       />
                     </Field>
-                    <Field label="Max budget USD" htmlFor="cap-maxbudget">
+                    <Field label="Max budget" htmlFor="cap-maxbudget">
                       <LimitInput
                         id="cap-maxbudget"
                         type="number"
@@ -1530,6 +1567,20 @@ export default function CapabilitiesPage() {
                         unlimited={issueMaxBudgetUnlimited}
                         onUnlimitedChange={setIssueMaxBudgetUnlimited}
                         placeholder="e.g. 25.00"
+                      />
+                    </Field>
+                    <Field
+                      label="Currency / Unit"
+                      hint="USD/EUR/UAH/GBP or UNIT (non-currency metering)."
+                    >
+                      <Select
+                        options={ALLOWED_UNIT_CODES.map((u) => ({
+                          value: u,
+                          label: u,
+                        }))}
+                        value={issueUnitCode}
+                        onChange={setIssueUnitCode}
+                        className="w-full"
                       />
                     </Field>
                     <Field label="TTL">

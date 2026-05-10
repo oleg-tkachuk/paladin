@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -43,9 +44,28 @@ type NATSDriver struct {
 	SourceAdapt Source // exactly one — one driver, one source format
 
 	Logger *zap.Logger
+
+	// connRef holds the live *nats.Conn while Run is in progress so
+	// the ingest pod's /system/health.json can ask "is the subscriber
+	// actually connected?". Atomic pointer: nil before Run, non-nil
+	// once nats.Connect returns, nil-again after Run unwinds. The
+	// `subscriber` health check reads it on every probe.
+	connRef atomic.Pointer[nats.Conn]
 }
 
 func (d *NATSDriver) Name() string { return "nats" }
+
+// Status reports the connection state of the underlying *nats.Conn
+// for the ingest pod's health probes. Returns nats.DISCONNECTED when
+// Run hasn't been called yet (or has returned). Safe for concurrent
+// reads; the pointer is updated atomically by Run.
+func (d *NATSDriver) Status() nats.Status {
+	c := d.connRef.Load()
+	if c == nil {
+		return nats.DISCONNECTED
+	}
+	return c.Status()
+}
 
 func (d *NATSDriver) Run(ctx context.Context, deliver func(context.Context, CloudEvent) error) error {
 	if d.SourceAdapt == nil {
@@ -73,6 +93,9 @@ func (d *NATSDriver) Run(ctx context.Context, deliver func(context.Context, Clou
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
+	// Publish the live conn to the health probe + clear it on unwind.
+	d.connRef.Store(nc)
+	defer d.connRef.Store(nil)
 	defer nc.Drain() //nolint:errcheck — best-effort on shutdown
 
 	if d.JetStream {

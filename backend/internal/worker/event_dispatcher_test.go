@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	natsserver "github.com/nats-io/nats-server/v2/server"
+	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/nats-io/nats.go"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
@@ -23,41 +27,58 @@ func (f *fakeStore) List(_ context.Context, _ admindomain.ListEventSubscriptions
 	return f.subs, "", nil
 }
 
-func TestDispatchHTTP_Success(t *testing.T) {
+func (f *fakeStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	for _, s := range f.subs {
+		if s.SubscriptionID == id {
+			return s, nil
+		}
+	}
+	return admindomain.EventSubscription{}, errors.New("not found")
+}
+
+// fakeOutbox captures what the producer writes so tests can assert
+// on row shape without standing up Postgres.
+type fakeOutbox struct {
+	mu   sync.Mutex
+	rows []OutboxRow
+}
+
+func (f *fakeOutbox) Insert(_ context.Context, row OutboxRow) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rows = append(f.rows, row)
+	return nil
+}
+
+func (f *fakeOutbox) snapshot() []OutboxRow {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]OutboxRow, len(f.rows))
+	copy(out, f.rows)
+	return out
+}
+
+// TestDispatchWritesOutbox replaces the pre-slice-9 "Dispatch POSTs
+// synchronously" test. The producer no longer touches the network —
+// it writes one row per matching sub to the outbox and returns.
+func TestDispatchWritesOutbox(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
-
-	var (
-		mu       sync.Mutex
-		bodies   [][]byte
-		sigs     []string
-		typeHdrs []string
-	)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		bodies = append(bodies, body)
-		sigs = append(sigs, r.Header.Get("X-PALADIN-Signature"))
-		typeHdrs = append(typeHdrs, r.Header.Get("X-PALADIN-Event-Type"))
-		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
+	subID := uuid.Must(uuid.NewV7())
 	cfg, _ := json.Marshal(map[string]any{
-		"url":                srv.URL,
+		"url":                "http://nowhere.invalid",
 		"signing_secret_ref": "test-secret",
 	})
+	out := &fakeOutbox{}
 	d := &Dispatcher{
 		Store: &fakeStore{
 			subs: []admindomain.EventSubscription{{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
+				SubscriptionID: subID,
 				TenantID:       tenantID,
 				SinkKind:       "http",
 				SinkConfig:     cfg,
 			}},
 		},
-		HTTPClient:  srv.Client(),
-		MaxAttempts: 1,
+		Outbox: out,
 	}
 	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{
 		Type:     "object.created",
@@ -68,51 +89,27 @@ func TestDispatchHTTP_Success(t *testing.T) {
 		t.Fatalf("Dispatch: %v", err)
 	}
 	if n != 1 {
-		t.Errorf("delivered: got %d want 1", n)
+		t.Errorf("queued: got %d want 1", n)
 	}
-	if len(bodies) != 1 {
-		t.Fatalf("bodies: got %d want 1", len(bodies))
+	rows := out.snapshot()
+	if len(rows) != 1 {
+		t.Fatalf("rows: got %d want 1", len(rows))
 	}
-	if len(sigs) != 1 || sigs[0] == "" {
-		t.Errorf("missing signature header: %+v", sigs)
+	if rows[0].SubscriptionID != subID {
+		t.Errorf("sub id: got %s want %s", rows[0].SubscriptionID, subID)
 	}
-	if typeHdrs[0] != "object.created" {
-		t.Errorf("X-PALADIN-Event-Type: got %q", typeHdrs[0])
+	if rows[0].EventType != "object.created" {
+		t.Errorf("event type: got %q", rows[0].EventType)
 	}
-}
-
-func TestDispatchHTTP_RetryThenFail(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-	cfg, _ := json.Marshal(map[string]any{"url": srv.URL})
-	d := &Dispatcher{
-		Store: &fakeStore{
-			subs: []admindomain.EventSubscription{{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
-				TenantID:       tenantID,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-			}},
-		},
-		HTTPClient:  srv.Client(),
-		MaxAttempts: 2,
-		BaseBackoff: 1 * time.Millisecond,
-	}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
-	if err != nil {
-		t.Fatalf("Dispatch returned error %v", err)
-	}
-	if n != 0 {
-		t.Errorf("delivered: got %d want 0 (all attempts 5xx)", n)
+	if len(rows[0].EventPayload) == 0 {
+		t.Error("event payload is empty")
 	}
 }
 
 func TestDispatchSkipsDisabled(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
+	out := &fakeOutbox{}
 	d := &Dispatcher{
 		Store: &fakeStore{
 			subs: []admindomain.EventSubscription{{
@@ -123,19 +120,24 @@ func TestDispatchSkipsDisabled(t *testing.T) {
 				Disabled:       true,
 			}},
 		},
+		Outbox: out,
 	}
 	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Errorf("delivered: got %d want 0 (disabled)", n)
+		t.Errorf("queued: got %d want 0 (disabled)", n)
+	}
+	if got := len(out.snapshot()); got != 0 {
+		t.Errorf("outbox writes: got %d want 0", got)
 	}
 }
 
 func TestDispatchFilterMatch(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
+	out := &fakeOutbox{}
 	d := &Dispatcher{
 		Store: &fakeStore{
 			subs: []admindomain.EventSubscription{{
@@ -146,9 +148,242 @@ func TestDispatchFilterMatch(t *testing.T) {
 				CELFilter:      "object.deleted", // exact-match in v2
 			}},
 		},
+		Outbox: out,
 	}
 	n, _ := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
 	if n != 0 {
-		t.Errorf("delivered: got %d want 0 (filter mismatch)", n)
+		t.Errorf("queued: got %d want 0 (filter mismatch)", n)
+	}
+	if got := len(out.snapshot()); got != 0 {
+		t.Errorf("outbox writes: got %d want 0", got)
+	}
+}
+
+// TestDeliverOneSucceeds keeps the synchronous "Test Webhook" path
+// honest — operators clicked Test, they want a HTTP round-trip and
+// a result, no outbox row written.
+func TestDeliverOneSucceeds(t *testing.T) {
+	tenantID := uuid.Must(uuid.NewV7())
+	var (
+		mu     sync.Mutex
+		bodies [][]byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, body)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	cfg, _ := json.Marshal(map[string]any{
+		"url":                srv.URL,
+		"signing_secret_ref": "test-secret",
+	})
+	d := &Dispatcher{
+		HTTPClient:  srv.Client(),
+		MaxAttempts: 1,
+	}
+	sub := admindomain.EventSubscription{
+		SubscriptionID: uuid.Must(uuid.NewV7()),
+		TenantID:       tenantID,
+		SinkKind:       "http",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.test"); err != nil {
+		t.Fatalf("DeliverOne: %v", err)
+	}
+	if len(bodies) != 1 {
+		t.Errorf("bodies: got %d want 1", len(bodies))
+	}
+}
+
+// runEmbeddedNATS spins up an in-process nats-server on a random port
+// and returns its client URL. The server is stopped on test cleanup.
+// Used by the NATS sink tests so we don't depend on external infra.
+func runEmbeddedNATS(t *testing.T) string {
+	t.Helper()
+	opts := natstest.DefaultTestOptions
+	opts.Port = -1 // pick a free port
+	srv := natstest.RunServer(&opts)
+	t.Cleanup(func() {
+		srv.Shutdown()
+		srv.WaitForShutdown()
+	})
+	if !srv.ReadyForConnections(2 * time.Second) {
+		t.Fatalf("embedded nats: not ready")
+	}
+	_ = natsserver.Options{} // keep import alive even when fields not referenced
+	return srv.ClientURL()
+}
+
+// TestDispatcher_NATSDelivery boots an in-process NATS server,
+// subscribes a probe consumer to the configured subject, drives one
+// DeliverOne, and asserts the CloudEvents envelope landed on the wire.
+func TestDispatcher_NATSDelivery(t *testing.T) {
+	url := runEmbeddedNATS(t)
+
+	// Probe consumer.
+	pc, err := nats.Connect(url, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect: %v", err)
+	}
+	defer pc.Close()
+	got := make(chan *nats.Msg, 1)
+	if _, err := pc.Subscribe("paladin.events.>", func(m *nats.Msg) { got <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush sub: %v", err)
+	}
+
+	tenantID := uuid.Must(uuid.NewV7())
+	subID := uuid.Must(uuid.NewV7())
+	subject := "paladin.events." + tenantID.String() + ".object.uploaded"
+	cfg, _ := json.Marshal(map[string]any{
+		"url":     url,
+		"subject": subject,
+	})
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool, MaxAttempts: 1}
+	sub := admindomain.EventSubscription{
+		SubscriptionID: subID,
+		TenantID:       tenantID,
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
+		t.Fatalf("DeliverOne: %v", err)
+	}
+
+	select {
+	case m := <-got:
+		if m.Subject != subject {
+			t.Errorf("subject: got %q want %q", m.Subject, subject)
+		}
+		var env struct {
+			SpecVersion string `json:"specversion"`
+			Type        string `json:"type"`
+			TenantID    string `json:"tenantid"`
+		}
+		if err := json.Unmarshal(m.Data, &env); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		if env.SpecVersion != "1.0" {
+			t.Errorf("specversion: got %q want 1.0", env.SpecVersion)
+		}
+		if env.Type != "paladin.object.uploaded" {
+			t.Errorf("type: got %q", env.Type)
+		}
+		if env.TenantID != tenantID.String() {
+			t.Errorf("tenantid: got %q want %s", env.TenantID, tenantID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nats: no message received within 2s")
+	}
+
+	// Pool reuses the conn — second DeliverOne shouldn't dial again.
+	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
+		t.Fatalf("DeliverOne (2): %v", err)
+	}
+	if got := pool.Statuses(); len(got) != 1 {
+		t.Errorf("pool size: got %d want 1 (connection reuse)", len(got))
+	}
+}
+
+// TestDispatcher_NATSMissingConfig: malformed sink config / empty URL
+// surfaces as a delivery error with status=0 (matches HTTP transport
+// error semantics on the row).
+func TestDispatcher_NATSMissingConfig(t *testing.T) {
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool}
+	cfg, _ := json.Marshal(map[string]any{"subject": "paladin.events.x"}) // url missing
+	sub := admindomain.EventSubscription{
+		SubscriptionID: uuid.Must(uuid.NewV7()),
+		TenantID:       uuid.Must(uuid.NewV7()),
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.test"); err == nil {
+		t.Fatal("expected error for missing url, got nil")
+	}
+}
+
+// TestParseNatsCredentials_Schemes locks the v1 contract: token works,
+// nkey/jwt are explicitly deferred, unknown schemes reject.
+func TestParseNatsCredentials_Schemes(t *testing.T) {
+	cases := []struct {
+		ref     string
+		wantErr bool
+		wantNil bool
+	}{
+		{"", false, true},
+		{"token:abc", false, false},
+		{"token:", true, false},
+		{"nkey:SUACS", true, false},
+		{"jwt:eyJ", true, false},
+		{"unknown:x", true, false},
+		{"noscheme", true, false},
+	}
+	for _, c := range cases {
+		opt, err := parseNatsCredentials(c.ref)
+		if (err != nil) != c.wantErr {
+			t.Errorf("ref=%q err=%v wantErr=%v", c.ref, err, c.wantErr)
+		}
+		if c.wantNil && opt != nil {
+			t.Errorf("ref=%q: expected nil option, got %v", c.ref, opt)
+		}
+	}
+}
+
+// TestOutboxRunnerBackoff exercises the backoff curve without standing
+// up Postgres — backoffFor is a pure function and the table-driven
+// shape lets a future tweak land with a single case-row.
+func TestOutboxRunnerBackoff(t *testing.T) {
+	r := &OutboxRunner{
+		BaseBackoff: 5 * time.Second,
+		MaxBackoff:  1 * time.Hour,
+	}
+	cases := []struct {
+		attempt int
+		want    time.Duration
+	}{
+		{1, 5 * time.Second},
+		{2, 10 * time.Second},
+		{3, 20 * time.Second},
+		{4, 40 * time.Second},
+		{5, 80 * time.Second},
+		{20, 1 * time.Hour}, // capped
+	}
+	for _, c := range cases {
+		got := r.backoffFor(c.attempt)
+		if got != c.want {
+			t.Errorf("attempt=%d backoff=%v want=%v", c.attempt, got, c.want)
+		}
+	}
+}
+
+// TestOutboxRunnerMaxAttempts exercises the per-sub override —
+// HttpSink.MaxAttempts wins when set, runner default fills in zero.
+func TestOutboxRunnerMaxAttempts(t *testing.T) {
+	r := &OutboxRunner{DefaultMaxAttempts: 5}
+	subWithOverride, _ := json.Marshal(map[string]any{"max_attempts": 9})
+	subDefault, _ := json.Marshal(map[string]any{})
+
+	cases := []struct {
+		name string
+		sub  admindomain.EventSubscription
+		want int
+	}{
+		{"override", admindomain.EventSubscription{SinkKind: "http", SinkConfig: subWithOverride}, 9},
+		{"default-when-unset", admindomain.EventSubscription{SinkKind: "http", SinkConfig: subDefault}, 5},
+		{"default-for-non-http", admindomain.EventSubscription{SinkKind: "kafka"}, 5},
+	}
+	for _, c := range cases {
+		if got := r.maxAttemptsFor(c.sub); got != c.want {
+			t.Errorf("%s: got %d want %d", c.name, got, c.want)
+		}
 	}
 }

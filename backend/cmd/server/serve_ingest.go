@@ -3,14 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // serveIngestCmd runs the storage-event consumer plane. Subscribes to
@@ -44,12 +49,45 @@ var serveIngestCmd = &cobra.Command{
 			l.Fatal("failed to build shared deps", zap.Error(err))
 		}
 
+		// Lookup + state-machine transitions for the ingest worker
+		// MUST run cross-tenant — the storage event arrives via NATS
+		// from SF without any auth context, so the runtime pool's
+		// RLS GUC is empty and `paladin_app` filters every row out.
+		// Same pattern as serve_dispatcher.go: open a dedicated pool
+		// from cfg.Datastores.Postgres.MigrateDSN (BYPASSRLS).
+		// Without this the smoke logs "no matching object for event;
+		// skipping" on every PUT — looks like a race / ordering bug,
+		// is actually RLS denying the SELECT.
+		ingestQueries := db.Queries
+		ingestSM := deps.SM
+		if cfg.Datastores.Postgres.MigrateDSN != "" {
+			pool, err := newDispatcherPool(
+				ctx,
+				cfg.Datastores.Postgres.MigrateDSN,
+				cfg.Datastores.Postgres.MigratePassword,
+				l,
+			)
+			if err != nil {
+				l.Fatal("failed to open ingest pool", zap.Error(err))
+			}
+			defer pool.Close()
+			ingestQueries = sqlc.New(pool)
+			ingestSM = statemachine.New(pool)
+		} else {
+			l.Warn("ingest: MigrateDSN not set; using runtime pool — " +
+				"RLS will gate the lookup and PROMOTE will silently no-op " +
+				"for every event. Set datastores.postgres.migrate_dsn to a " +
+				"BYPASSRLS role.")
+		}
+
 		// Wire the handler. Lookup uses the data-plane object repo
 		// so we can resolve (tenant, object_key, key) → object_id;
-		// statemachine.Transitioner already lives on SharedDeps.
+		// statemachine.Transitioner already lives on SharedDeps but
+		// we replace it with one bound to ingestQueries so PROMOTE
+		// flows through the same BYPASSRLS pool.
 		handler := &eventingest.PromoteHandler{
-			Lookup:       db.Queries,
-			Transitioner: deps.SM,
+			Lookup:       ingestQueries,
+			Transitioner: ingestSM,
 			Logger:       l.Named("ingest.handler"),
 		}
 
@@ -81,11 +119,83 @@ var serveIngestCmd = &cobra.Command{
 			}
 		}()
 
+		// Health server. The webhook driver binds its own listener on
+		// cfg.Ingest.Webhook.Addr (which serves /healthz alongside the
+		// receiver routes), but nats / rabbitmq drivers have nothing
+		// HTTP-shaped — without an ops endpoint kubelet's liveness
+		// probe sees ECONNREFUSED on :8100 and crash-loops the pod
+		// every 60s, AND the BFF /api/health/all aggregator gets no
+		// /system/health.json snapshot to render on the operator
+		// /health page.
+		//
+		// Wire the same `app.NewHealthHandler` mux the worker /
+		// dispatcher / api / admin pods serve, with one
+		// driver-specific subsystem check (subscriber connectivity).
+		// Same pattern as serve_dispatcher.go::dispatcherOpsMux.
+		if cfg.Ingest.Driver != "webhook" && cfg.Ingest.Webhook.Addr != "" {
+			go runIngestOpsServer(ctx, cfg.Ingest.Webhook.Addr, deps, driver, l)
+		}
+
 		l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
 		if err := worker.Run(ctx); err != nil && !errorsIsCancelled(err) {
 			l.Error("ingest worker exited", zap.Error(err))
 		}
 	},
+}
+
+// runIngestOpsServer mounts the same kind of ops mux the other worker
+// pods serve: health.Handler.Register adds /healthz + /readyz +
+// /startupz + /system/health.json, plus our subscriber subsystem
+// check. The check is driver-aware:
+//
+//   - NATS driver: the underlying *nats.Conn must be CONNECTED.
+//     Required, so a wedged broker fails /readyz and ArgoCD / kubelet
+//     react instead of silently dropping events.
+//
+//   - Other drivers (rabbitmq today, possibly others later): we
+//     can't introspect them with the same shape, so we skip the
+//     subscriber check rather than ship a placeholder that's
+//     always healthy. Postgres + the shared default checks still
+//     run.
+func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, drv eventingest.Driver, l *zap.Logger) {
+	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("ingest")
+
+	if natsDrv, ok := drv.(*eventingest.NATSDriver); ok {
+		app.AddSubsystemCheck(healthH, "subscriber", true, func(ctx context.Context) error {
+			if st := natsDrv.Status(); st != nats.CONNECTED {
+				return fmt.Errorf("nats subscriber: status=%s", st)
+			}
+			return nil
+		})
+	}
+
+	mux := http.NewServeMux()
+	healthH.Register(mux)
+	// Backwards-compat alias — chart probes hit `/healthz` (the
+	// historical Kubernetes path), but health.Handler.Register
+	// mounts `/livez` (the current convention). Same patch the
+	// dispatcher pod applies; without this the pod readiness flips
+	// to false on a 404 and kubelet crash-loops it every 60s.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/livez"
+		mux.ServeHTTP(w, r2)
+	})
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutCtx)
+	}()
+	l.Info("ingest ops listener", zap.String("addr", addr))
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		l.Warn("ingest ops listener exited", zap.Error(err))
+	}
 }
 
 // buildIngestDriver selects the transport based on cfg.Ingest.Driver
@@ -152,16 +262,42 @@ func buildRabbitMQDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, 
 // pickSource resolves a source-format string to the matching adapter.
 // Webhook driver picks per-route via its Sources map; NATS / RabbitMQ
 // drivers pick once via this helper.
+//
+// `seaweedfs` parses the JSON shape SeaweedFS' `[notification.webhook]`
+// driver emits — operators using the webhook publisher.
+//
+// `seaweedfs_nats` parses the gob-encoded gocdk_pub_sub envelope SF
+// emits when configured with `[notification.gocdk_pub_sub]
+// topic_url = nats://...`. This is what the in-cluster setup uses
+// (see gitops/.../seaweedfs/notification-config.yaml). The two
+// formats are NOT interchangeable — picking the wrong one produces
+// `ErrUnrecognisedEvent` on every message and the dedup table fills
+// with junk.
+//
+// BucketName for the SeaweedFS sources is hard-coded to "paladin-primary"
+// to match cfg.Storage.DefaultBackend in the local overlay. When
+// the operator's bucket name diverges this should be read from
+// cfg.Storage.Backends; threading that through is BACKLOG'd under
+// "Storage event ingest pipeline" since the producer adapter and
+// the storage config are wired by separate teams.
 func pickSource(format string) (eventingest.Source, error) {
 	switch format {
 	case "seaweedfs":
-		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
+		return &eventingest.SeaweedFSSource{
+			BucketName: "paladin-primary",
+			URI:        "seaweedfs://primary",
+		}, nil
+	case "seaweedfs_nats":
+		return &eventingest.SeaweedFSNATSSource{
+			BucketName: "paladin-primary",
+			URI:        "seaweedfs-nats://primary",
+		}, nil
 	case "minio":
 		return &eventingest.MinIOSource{URI: "minio://primary"}, nil
 	case "cloudevents":
 		return &eventingest.CloudEventsSource{URI: "cloudevents://primary"}, nil
 	case "":
-		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | minio | cloudevents)")
+		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | seaweedfs_nats | minio | cloudevents)")
 	default:
 		return nil, fmt.Errorf("ingest: unknown source_format %q", format)
 	}

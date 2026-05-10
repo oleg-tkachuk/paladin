@@ -208,10 +208,13 @@ type CapabilityRevocation struct {
 }
 
 type CapabilityUsage struct {
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	RequestCount int64              `json:"request_count"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	CapabilityID pgtype.UUID `json:"capability_id"`
+	RequestCount int64       `json:"request_count"`
+	// Accumulated spend amount. Despite the _usd suffix (kept for sqlc/query stability), the currency is determined by unit_code. Pre-migration rows are USD by default.
+	SpentUsd  pgtype.Numeric     `json:"spent_usd"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	// ISO 4217 currency code (USD/EUR/UAH/GBP) or the abstract sentinel UNIT for non-currency metering. Validated at the application layer.
+	UnitCode string `json:"unit_code"`
 }
 
 type EventSubscription struct {
@@ -417,12 +420,16 @@ type Tenant struct {
 }
 
 type TenantBudget struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	MaxBudgetUsd pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	PeriodStart  pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd    pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	// Aggregate spend cap. Despite the _usd suffix (kept for sqlc/query stability), the currency is determined by unit_code.
+	MaxBudgetUsd pgtype.Numeric `json:"max_budget_usd"`
+	// Accumulated tenant spend. Despite the _usd suffix, the currency is determined by unit_code.
+	SpentUsd    pgtype.Numeric     `json:"spent_usd"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	// ISO 4217 currency code (USD/EUR/UAH/GBP) or the abstract sentinel UNIT for non-currency metering. Validated at the application layer.
+	UnitCode string `json:"unit_code"`
 }
 
 type User struct {

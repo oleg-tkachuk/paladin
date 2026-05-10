@@ -121,3 +121,19 @@ tasks:
     desc: "Alias for k8s:restart — rolls the deployment in K8S_NAMESPACE"
     cmds:
       - task: k8s:restart
+
+  # ─── Seed-fixture (UI/UX populated state) ────────────────────────────────
+  # Build-and-run the seed-fixture CLI from source so a fresh checkout
+  # never has to know about a separate binary install. The CLI itself
+  # refuses to run against URLs that don't smell like a dev cluster
+  # unless PALADIN_FIXTURE_OK=1 — that's where the production guard lives;
+  # the Taskfile just makes the entrypoint ergonomic.
+  seed:up:
+    desc: "Apply the demo fixture to the cluster (idempotent)"
+    cmds:
+      - go run ./cmd/seed-fixture up --flavour={{.FLAVOUR | default "demo"}}
+
+  seed:down:
+    desc: "Remove the demo fixture from the cluster"
+    cmds:
+      - go run ./cmd/seed-fixture down --flavour={{.FLAVOUR | default "demo"}}

@@ -117,6 +117,145 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
+### Role split: `event-dispatcher` (extract webhook delivery from admin)
+
+- **Status:** Deferred
+- **Reason:** `worker.Dispatcher` lives in-process inside the admin
+  pod today (mounted in `build_listeners_admin.go`). Webhook delivery
+  is egress-heavy work with a fundamentally different failure mode
+  from inbound admin RPC: a slow / flaky customer endpoint can hold
+  HTTP connections open and starve the admin pod's connection pool.
+  NetworkPolicy posture is also opposite — admin should have closed
+  egress (Postgres + storage only), dispatcher needs egress=any:443.
+  Splitting also lets you scale dispatchers independently when one
+  tenant has 1000 webhook subscriptions to flaky endpoints without
+  scaling admin.
+- **Definition of Done:**
+  - `cmd/server/serve_dispatcher.go` — new subcommand. Reads
+    EventSubscription store, consumes undelivered events from an
+    outbox table (or the existing in-memory dispatcher loop made
+    durable), POSTs to sink, retries with exponential backoff,
+    updates delivery status. Same role-port shape as worker (ops
+    listener with /healthz + /readyz + /system/health.json).
+  - Helm: `deployments.dispatcher.enabled: true` (default), single
+    replica baseline, HPA-friendly (CPU + queue-depth metric when
+    available).
+  - NetworkPolicy: egress 0.0.0.0/0:443 + Postgres + storage; ingress
+    only kube-proxy on /healthz.
+  - admin pod stops mounting `worker.Dispatcher`; the existing
+    `EventSubscriptionService.TestSubscription` RPC stays where it
+    is (it's a synchronous one-shot that's fine on admin).
+  - MCPInspectService gains a "dispatcher" component view (delivery
+    queue depth, last error per subscription).
+- **Trigger to do:** when webhook delivery latency starts impacting
+  admin RPC p99, OR when one tenant's subscription failures begin
+  starving the dispatcher loop in admin. Also worth doing
+  pre-emptively before the first paying customer's webhooks land —
+  avoid the on-call regret of "one subscription took down admin".
+
+### Role split: `scheduler` (extract cron-like triggers from worker)
+
+- **Status:** Aspirational
+- **Reason:** `worker` runs ALL background jobs today — lifecycle
+  reaper (30m), refresh-token reaper (1h), capability/api_token
+  reaper (1h), housekeeping (1h), replication (5m), lifecycle
+  enforcement (30m). All compete for the same lease pool. As the
+  job set grows, lease contention starts to dominate.
+- **Definition of Done:**
+  - New `serve scheduler` role: a single-replica process holding
+    cron-style schedule definitions (interval-based) that emits
+    "tick events" the worker pool picks up. Decouples "when to run"
+    from "who runs it" — multiple worker replicas can race for the
+    tick.
+  - OR alternative: stay in-worker but split into multiple
+    component-typed Deployments (e.g. `worker-reapers`,
+    `worker-replication`) so resource limits don't spill across
+    job classes.
+- **Trigger to do:** when the job set grows past ~10 concurrent
+  tasks, OR when one heavy job (replication) starts dominating
+  shared CPU / DB connection budget, OR when an operator reports
+  a reaper missing its window because replication held the lease.
+
+### Role split: `indexer` / `embedder` (semantic search)
+
+- **Status:** Aspirational
+- **Reason:** No semantic-search feature today. When it lands
+  (BACKLOG-aspirational), the embedder is fundamentally different
+  from any existing role: heavy CPU/memory profile (LLM client
+  calls + vector math), batched throughput pattern, separate
+  egress to embedding API providers (Voyage / OpenAI / Cohere) or
+  GPU access for local models.
+- **Definition of Done:**
+  - New `serve indexer` role: long-running consumer of object
+    upload events, generates embeddings, writes to vector store
+    (pgvector or external — Pinecone / Weaviate). Same observability
+    contract as workers.
+  - `cfg.Indexer` block: provider selector + per-provider options.
+  - HPA tied to backlog-depth metric, not CPU.
+- **Trigger to do:** when semantic search becomes a committed
+  feature on the roadmap.
+
+### Role split: `billing-aggregator`
+
+- **Status:** Aspirational
+- **Reason:** When per-tenant billing dashboard (BACKLOG step 5)
+  lands, real-time aggregation queries (group by day × op × tenant
+  across audit_log + capability_usage) become expensive on large
+  tenants. A dedicated job that pre-computes daily snapshots into
+  a `billing_snapshots` table makes the dashboard render fast and
+  isolates analytical-query load from OLTP.
+- **Definition of Done:**
+  - New `serve billing` role (or fold into `worker` as one more job
+    if scheduler split happens first): periodic aggregation pass
+    over `audit_log` + `capability_usage` → daily snapshot rows.
+  - `BillingService.GetTenantSnapshot(tenant, period)` → fast read
+    of pre-computed totals.
+  - Snapshot retention policy + reaper.
+- **Trigger to do:** when the billing dashboard is built and a
+  real tenant exceeds ~1M audit log rows per period, making
+  on-the-fly aggregation slower than the SLA.
+
+### Role split: `auth-server` (OAuth / OIDC isolation)
+
+- **Status:** Aspirational
+- **Reason:** When OAuth 2.0 authorization-code flow lands (per the
+  OAuth BACKLOG entry below), the authorization server has its own
+  attack surface (browser-facing /authorize, code storage, refresh
+  rotation, JWKS rotation, client registration). Isolating from the
+  iam plane lets you rotate signing keys without rolling api pods,
+  apply a tighter NetworkPolicy on the OAuth endpoints, and run
+  separate replicas for auth traffic vs request traffic.
+- **Definition of Done:**
+  - `serve auth-server` role hosting `/oauth/authorize`, `/token`,
+    `/register`, `/.well-known/oauth-authorization-server`,
+    `/.well-known/jwks.json`.
+  - Independent JWKS rotation runbook.
+  - api / admin verify tokens against the auth-server's JWKS — same
+    code path that already exists for the federated-IdP case.
+- **Trigger to do:** when OAuth lands (separate BACKLOG entry) and
+  becomes the primary auth path for at least one customer. Until
+  then, fold OAuth endpoints into the existing iam plane.
+
+### Role split: `realtime` (SSE / WebSocket subscriptions)
+
+- **Status:** Aspirational
+- **Reason:** No realtime subscription feature today. When live
+  audit-log streaming, capability-budget alerts, or tool-call
+  spectator views land, they're long-lived connections with a
+  totally different memory profile (one connection holds for
+  minutes/hours vs ms-scale RPC). They don't belong on api pods
+  that scale on request rate — pod restart latency would drop
+  every active connection.
+- **Definition of Done:**
+  - `serve realtime` role with SSE / WebSocket handlers backed by a
+    Postgres LISTEN/NOTIFY pump (or NATS / Redis pub/sub once
+    that's around).
+  - Per-tenant connection limits.
+  - Graceful shutdown that drains existing connections instead of
+    SIGKILLing them.
+- **Trigger to do:** when the first real subscription feature
+  ships. Skip until then.
+
 ### Phase 5b.1 — Drop user-authn IAM, accept OIDC
 
 - **Status:** Blocked
@@ -304,6 +443,87 @@ the same commit. Treat this file like a runtime invariant.
   - Integration test using two MinIO instances.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
+### OAuth 2.0 authorization-code flow for MCP clients (Claude Desktop / Cursor / agent hosts)
+
+- **Status:** Deferred
+- **Reason:** Claude Desktop's "Custom Connectors" prefer OAuth
+  authorization-code with PKCE for browser-based consent. PALADIN today
+  authenticates MCP requests with either short-lived JWTs (15m, painful
+  to refresh manually in a Connector form) or long-lived API tokens
+  (paste-once, works fine but lacks browser consent UX). For now the
+  documented Claude Desktop integration uses an API token minted via
+  `APITokenService.Create`; OAuth is the proper-but-deferred path.
+- **Definition of Done:**
+  - **Discovery:** `GET /.well-known/oauth-protected-resource` (RFC
+    9728) on the MCP plane pointing at the auth server, and
+    `GET /.well-known/oauth-authorization-server` (RFC 8414) on the
+    IAM plane listing supported response_types, grant_types, PKCE
+    methods, scopes, token endpoint URL.
+  - **Endpoints (RFC 6749 form-encoded, NOT Connect):**
+    - `GET /oauth/authorize` — reuses existing IAM session (refresh
+      cookie); when not logged in, redirects to `/login?next=...`.
+      Renders a consent screen (frontend route) showing client +
+      requested scopes; POST commits the decision and redirects with
+      `code` to the registered `redirect_uri`.
+    - `POST /oauth/token` — exchanges `code + code_verifier` for an
+      `access_token` (re-using the existing `auth.JWTIssuer` with
+      audience binding) and optionally a `refresh_token`. PKCE S256
+      mandatory for public clients.
+    - `POST /oauth/register` (RFC 7591) — dynamic client registration.
+      Behind a feature flag; first cut can hardcode known clients
+      (`claude-desktop`, `cursor`) in config.
+  - **Storage:**
+    - `oauth_clients` (id, redirect_uris[], allowed_scopes[],
+      secret_hash NULL for public, created_at).
+    - `oauth_authorization_codes` (code_hash PK, client_id, user_id,
+      redirect_uri, code_challenge, scopes[], expires_at <60s,
+      used_at NULL).
+    - `oauth_refresh_tokens` — either new table or extend the
+      existing `refresh_tokens` schema with an `oauth_client_id`
+      column + audience tag.
+    - All on `paladin_app` with RLS keyed on `user_id` / `tenant_id`.
+  - **Consent UI:** new `/oauth/consent` page in
+    `frontend/src/app/oauth/consent/page.tsx` rendering client name,
+    scope list, Allow/Deny buttons; posts the decision back to the
+    backend `/oauth/authorize` endpoint via the existing IAM
+    transport. Localised same as login.
+  - **Audience binding (RFC 8707):** access tokens carry `aud` set
+    to the resource indicator the client requested (e.g.
+    `mcp.paladin.local`); existing JWT verifier on the MCP plane
+    enforces it. No data-plane token usable on admin and vice versa.
+  - **Hardening:**
+    - Codes single-use (mark `used_at` atomically; reject reuse).
+    - Refresh tokens rotated on every grant (RFC 6749 §6).
+    - `client_secret` (when present) hashed with argon2id, like
+      api_tokens.
+    - Rate-limit `/oauth/token` per client_id (re-use the
+      api_token limiter).
+    - CORS on `/oauth/token` for browser-based clients (preflight
+      from Claude Desktop's renderer is acceptable).
+  - **Config block** `oauth: { enabled: bool, dynamic_registration:
+      bool, access_token_ttl, refresh_token_ttl,
+      allowed_redirect_schemes: [https, claude-desktop, cursor] }`.
+  - **Tests:**
+    - Unit: PKCE verifier, code single-use, expiry, audience
+      validation, refresh rotation.
+    - Integration (hurl in `tests/api/e2e/oauth.hurl`): full
+      authorise → token → refresh → revoke loop.
+    - Manual: real Claude Desktop Custom Connector against
+      `paladin.local` end-to-end.
+  - **Cedar gating:** `oauth:authorize` action — admins control
+    which roles can grant which scopes to which clients.
+  - BACKLOG.md entry deleted in the same commit that lands the
+    full Phase-1 slice.
+- **Blockers:**
+  - Decide whether to keep IAM as the auth server or fold it into a
+    federated OIDC IdP (overlaps with the existing
+    `Phase 5b.1 — Drop user-authn IAM, accept OIDC` entry above).
+    Building OAuth here makes the OIDC migration cheaper because
+    the discovery + endpoint shape is mostly the same; choose this
+    deliberately, not by accident.
+  - Consent-screen branding / scope-string copy — needs a product
+    pass before exposing to non-internal Claude Desktop users.
+
 ### `ResetPassword` — email/SSO delivery
 
 - **Status:** Deferred
@@ -343,17 +563,273 @@ the same commit. Treat this file like a runtime invariant.
     mid-iteration cleanly (partial progress recorded).
 - **Blockers:** none. Per-executor work; can land independently.
 
-### Event dispatcher: Kafka / SQS sinks
+### Event dispatcher: producer wiring — handler-class integration tests + adoption
+
+- **Status:** Deferred (parent SHIPPED — only follow-ups remain)
+- **State as of 2026-05-10:** Producer wiring complete across
+  every handler class that today's customer surface needs:
+    - **Lifecycle classes** (always-on): tenant / bucket /
+      objectKey / quota / object. Pattern in
+      `internal/api/v1/tenant/handler.go::EventProducer`,
+      reused across the four sibling handlers; admin pod
+      wiring in `build_listeners_admin.go`, api pod wiring
+      in `build_listeners_api.go::apiDispatcher`. Event
+      classes: `paladin.{tenant,bucket,object_key,quota,object}.*`.
+    - **Cross-cutting classes** (opt-in): capability charge
+      + audit-log mirror, both gated on cfg.Dispatcher
+      toggles (`charge_events_enabled` /
+      `audit_mirror_enabled`, default OFF). Adapters in
+      `internal/app/{charge_emitter,audit_mirror}.go`
+      bridge `*worker.Dispatcher` to
+      `auth.ChargeEventEmitter` and
+      `middleware.AuditMirrorEmitter`. Event classes:
+      `paladin.capability.charged` and `paladin.audit.<action>`.
+    - **Not applicable:** `policy` event class — the data-
+      plane policy handler is read-only; Cedar policy
+      mutations go through parent `*.updated` events.
+- **What's left:**
+  - **Integration tests for bucket / object_key / quota /
+    object lifecycle handlers.** Today only
+    `tenant_events_test.go` covers the seam end-to-end. The
+    other four handler classes inherit the exact same
+    pattern; the contract holds, but there's no regression
+    safety in CI for any of them. Copy-paste from the tenant
+    test, swap repo + handler + lifecycle method.
+  - **Adoption check** — once a real subscriber needs charge
+    or audit events, flip `cfg.Dispatcher.ChargeEventsEnabled`
+    / `audit_mirror_enabled` per overlay and verify the
+    expected fan-out volume against operator expectations.
+    Both default OFF; subscribers MUST add a CEL filter on
+    their EventSubscription so a noisy tenant doesn't drown
+    the dispatcher's outbox loop.
+- **Trigger to do:** any of —
+    - Adding a 6th lifecycle handler that follows the same
+      pattern (e.g. object_tags, when its lifecycle becomes
+      first-class).
+    - First customer that flips charge / audit events on —
+      validate the cardinality assumption holds for their
+      tenant.
+
+### Event dispatcher: NATS sink (recommended first non-HTTP sink)
+
+- **Status:** Aspirational
+- **Reason:** Cloud-native customers and most agentic-platform stacks
+  (Letta / AutoGen / similar) already run NATS. Of the four broker
+  options, NATS has the smallest dependency footprint
+  (`nats-io/nats.go`, ~1MB), no SASL/SSL configuration ceremony, and
+  CloudEvents-friendly subject conventions. Wiring NATS first
+  validates that the outbox + dispatcher pattern handles non-HTTP
+  sinks cleanly before we touch heavier brokers.
+- **Definition of Done:**
+  - Proto: extend `EventSink.oneof` with a `NatsSink` (URL, subject
+    pattern, optional credentials reference).
+  - `internal/worker/sink_nats.go` — connection-pooled client with
+    reconnect / publish / health-ping.
+  - `Dispatcher.deliverNATS` publishes a CloudEvents 1.0 envelope
+    (`specversion=1.0`, `type=paladin.<resource>.<action>`,
+    `source=paladin.local/...`, `data=<payload>`) to the configured
+    subject. JSON encoding for the MVP.
+  - Auth options: token, nkey, JWT/seed (all via SecretRef pattern;
+    no inline credentials in YAML).
+  - `cfg.Dispatcher.NATS.URL` (default empty = disabled), `MaxReconnect`,
+    `ReconnectWait` knobs.
+  - Health probe: dispatcher's `/system/health.json` gains a
+    "nats:<server>" subsystem check that reports broker connectivity
+    when at least one NATS sink is configured.
+  - Frontend `/events` connector template: prefilled subject pattern
+    + auth-field group for NATS sinks.
+  - Tests: outbox row → NATS publish round-trip via embedded server,
+    reconnect handling, envelope structure conformance.
+- **Trigger to do:** real customer ask, OR launch of an
+  agentic-platform integration that depends on NATS as its event
+  bus. Don't pre-build before either signal.
+
+### Event dispatcher: Kafka sink
 
 - **Status:** Deferred
 - **Reason:** [event_dispatcher.go:120](internal/worker/event_dispatcher.go)
-  returns `"sink %q delivery not yet wired (slice 8)"` for `kafka` /
-  `sqs`. Only `http` works today.
+  returns `"sink %q delivery not yet wired (slice 8)"` for `kafka`.
+  Heavier dependency than NATS (~5MB for `franz-go` or
+  `segmentio/kafka-go`) and brings configuration complexity
+  (partition assignment, consumer groups, optional Schema Registry,
+  SASL/SCRAM/mTLS auth). Worth doing only when a customer commits
+  on Kafka — pre-built adapters tend to bake in choices the eventual
+  customer will want changed.
 - **Definition of Done:**
-  - SQS sink with batch `SendMessageBatch`.
-  - Kafka sink with `franz-go` and per-tenant topic prefix.
+  - Kafka client library decision (`franz-go` preferred — pure-Go,
+    actively maintained, no CGO).
+  - Proto extension matches the existing `KafkaSink` stub
+    (brokers, topic) plus credentials reference.
+  - Per-tenant topic prefix (e.g. `paladin.{tenant_id}.{event_type}`)
+    or operator-defined topic — pick after customer feedback.
+  - CloudEvents envelope, same as NATS.
   - Sink-config schema validation at `Create`/`Update` time.
-- **Blockers:** Kafka client library decision (sarama vs franz-go).
+  - Tests: outbox row → Kafka publish round-trip via testcontainers
+    or embedded redpanda.
+- **Blockers:** customer ask + Kafka client library decision.
+
+### Event dispatcher: RabbitMQ sink
+
+- **Status:** Deferred
+- **Reason:** Same proto stub returns `"not yet wired"` shape — but
+  RabbitMQ isn't even in the proto today (no `RabbitMQSink` field in
+  `EventSink.oneof`). Library footprint is moderate (~2MB for
+  `rabbitmq/amqp091-go`), middling enterprise prevalence (legacy
+  banking / fintech, slowly migrating off). Lower priority than NATS
+  (cloud-native fit) and Kafka (enterprise standard); only worth
+  building when a customer specifically runs it.
+- **Definition of Done:**
+  - Proto extension: add `RabbitMQSink` to `EventSink.oneof`
+    (URL, exchange, routing_key, optional virtual_host, optional
+    credentials reference).
+  - `internal/worker/sink_rabbitmq.go` — connection-pooled client
+    with `amqp091-go`, channel-per-publisher, reconnect on socket
+    drop, publisher-confirms enabled (so `deliverRabbitMQ` only
+    returns success after the broker ACKs the publish).
+  - `Dispatcher.deliverRabbitMQ` publishes a CloudEvents 1.0
+    envelope to the configured exchange + routing key. JSON body,
+    `content_type: application/cloudevents+json`.
+  - Auth: AMQP URL with embedded user:pass (resolved from SecretRef)
+    or AMQPS with TLS client certs.
+  - `cfg.Dispatcher.RabbitMQ.URL` (default empty = disabled),
+    `MaxReconnect`, `Heartbeat` knobs.
+  - Health probe: dispatcher's `/system/health.json` gains a
+    "rabbitmq:<host>" subsystem check that reports broker
+    connectivity when at least one RabbitMQ sink is configured.
+  - Frontend `/events` connector template: prefilled exchange +
+    routing-key fields + auth-field group for RabbitMQ sinks.
+  - Tests: outbox row → RabbitMQ publish round-trip via
+    testcontainers, reconnect handling, publisher-confirms behaviour
+    when broker drops the channel mid-publish.
+- **Trigger to do:** customer ask — typically banking / fintech
+  enterprise that already has a RabbitMQ cluster as their event bus
+  and won't migrate to NATS / Kafka for one new producer.
+
+### NATS auth: NKey / JWT support
+
+- **Status:** Deferred
+- **Reason:** The two production NATS edges PALADIN cares about
+  today both run unauthenticated:
+    - **Outbound** — `Dispatcher` → NATS via `EventSubscription`
+      `NatsSink`. The proto's `credentials_ref` accepts
+      `<scheme>:<value>`; v1 only honours `token:<plaintext>`
+      (see `internal/worker/sink_nats.go`).
+    - **SeaweedFS publisher** — `gocdk_pub_sub` reads
+      `NATS_SERVER_URL` from process env (set on
+      `spec.filer.env` in `gitops/.../seaweedfs/seaweed.yaml`).
+      No auth fields; gocloud.dev's natspubsub driver doesn't
+      surface them.
+  Fine for the lab cluster — NATS service has no exposed
+  ingress and lives on the cluster network. Production needs
+  one of NKey / JWT so a stolen Pod identity can't fan-out
+  arbitrary events.
+- **Definition of Done:**
+  - `NatsSink.credentials_ref` supports `nkey:<seed>` and
+    `jwt:<jwt>+nkey:<seed>` schemes. Need on-disk credential
+    file materialisation (the nats.go client only accepts
+    file paths for these). Use `os.CreateTemp` with
+    `0600`-perm files, deleted on connection close.
+  - `NATS_SERVER_URL` for SeaweedFS published via a
+    Kubernetes `Secret` (the URL itself becomes
+    `nats://<token>@host:port` for the simplest auth flavour).
+  - `gitops` overlay enables NKey/JWT on the NATS broker
+    deployment. Today `nats` chart runs auth-free.
+  - Document the credential-rotation flow in `docs/`.
+- **Trigger to do:** before any non-lab deployment of either
+  the PALADIN NATS sink or the SF NATS publisher.
+
+### Event dispatcher: SQS sink
+
+- **Status:** Deferred
+- **Reason:** Same proto stub returns `"not yet wired"` for `sqs`.
+  Only matters for AWS-native customers. AWS SDK v2 already in tree
+  (used by `internal/storage/s3.go`); adding `aws-sdk-go-v2/service/sqs`
+  is light. Lower priority than NATS / Kafka because the customer
+  base wanting SQS specifically is small (most AWS customers can use
+  EventBridge or HTTP webhooks).
+- **Definition of Done:**
+  - `SqsSink` populated (queue_url, region, optional role_arn for
+    cross-account delivery).
+  - `deliverSQS` uses `SendMessageBatch` for throughput when the
+    outbox poll returns multiple rows targeting the same queue.
+  - IAM role wiring documented (when running outside EKS / not on
+    AWS, expect explicit access keys via SecretRef).
+  - CloudEvents envelope (encoded as the SQS message body string).
+- **Trigger to do:** AWS-native customer with SQS as their bus.
+
+### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
+
+- **Status:** Aspirational
+- **Reason:** Outbound payload format is currently the raw `Event`
+  struct. CloudEvents 1.0 is the CNCF-graduated standard for
+  event-driven systems; consumers route / filter / dead-letter on
+  attributes (`type`, `source`, `subject`) without parsing the
+  body. The inbound ingest path
+  (`internal/eventingest/source_cloudevents.go`) already speaks
+  CloudEvents — outbound symmetry simplifies operator mental model.
+- **Definition of Done:**
+  - Decision: pick **JSON event format** (RFC 7159) for the wire,
+    not Protobuf — broader consumer compatibility, easier debugging.
+  - Outbound HTTP sink switches to `Content-Type:
+    application/cloudevents+json`, body is the envelope.
+  - NATS / Kafka / SQS sinks use the same envelope as the message
+    body.
+  - `type` follows `paladin.<resource>.<action>` convention
+    (e.g. `paladin.object.uploaded`, `paladin.tenant.created`,
+    `paladin.capability.revoked`).
+  - `source` is the PALADIN deployment URL.
+  - `subject` is the resource name when applicable.
+  - `data` carries the existing `Event.Payload` map.
+  - Existing webhook subscribers may break if they parsed the raw
+    JSON shape — coordinate with operators or version the sink
+    config (`v1` raw, `v2` cloudevents) for backward compat.
+- **Trigger to do:** when the first non-HTTP sink lands (NATS most
+  likely). Sink-side broker consumers expect CloudEvents — the
+  format dichotomy "HTTP gets raw, NATS gets envelope" is the wrong
+  thing to ship.
+
+### Storage event ingest pipeline — JetStream upgrade + integration coverage
+
+- **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
+- **State as of 2026-05-10:** Full SF → NATS → PALADIN ingest pipeline
+  works end-to-end on the local cluster, **including PROMOTE on
+  a real PALADIN data-plane upload**. Verified live:
+    1. `seed-fixture smoke-upload` → UploadObject creates a
+       PENDING row, hands back a presigned PUT.
+    2. PUT to the SF S3 gateway → 200, bytes land.
+    3. SF fires filer event on `seaweedfs.filer`.
+    4. Ingest pod's NATS subscriber decodes the gob+protobuf
+       envelope (`source_seaweedfs_nats.go`), parses the path
+       through the new `buckets/`-prefix-tolerant
+       `parseSeaweedFSPath`.
+    5. PromoteHandler.Lookup runs through a BYPASSRLS pool
+       (mirroring dispatcher's pattern — same `MigrateDSN`
+       wiring), finds the row, calls `PromoteToAvailable`.
+    6. Row state flips PENDING → AVAILABLE.
+  Ingest log line proves it: `"promote outcome … changed=true"`.
+- **What's left (low priority, not blocking):**
+  - **JetStream upgrade** — current binding is core pubsub
+    (`jetstream: false`). Fine for the lab (missed events on
+    a restart are caught by the data-plane Reconciler); prod
+    deployments that need at-least-once should flip
+    `jetstream: true` and pre-provision the stream
+    out-of-band. Wiring already supports it (`runJetStream`
+    branch in `driver_nats.go`); just needs broker-side
+    setup + an overlay flag.
+  - **MinIO source** — if storage backend ever flips to MinIO,
+    MinIO has cleaner native webhook + AMQP + Kafka bucket-
+    notifications. An additional source adapter (mirror of
+    SF's) plus a `[bucket][notify]` config block on the MinIO
+    side, and the same `ingest.driver=nats` wiring works.
+  - **`buckets/` prefix observation** — the `buckets/` strip in
+    `parseSeaweedFSPath` was inferred from observed live
+    paths; document the wire-format contract under `docs/`
+    so a future SF version that drops the prefix or a
+    different storage backend doesn't silently regress.
+- **Trigger to act:** customer pipeline that writes directly
+  to the storage bucket bypassing PALADIN RPCs (the entire
+  raison d'être of the ingest plane), or production at-least-
+  once requirement that needs JetStream.
 
 ---
 
@@ -397,6 +873,53 @@ the same commit. Treat this file like a runtime invariant.
   - Latency target on the replica.
 - **Blockers:** business RPO requirement (zero-data-loss vs minutes-
   scale lag) and budget for the second-region instance.
+
+### API-test fixture for UI/UX with real-shape data
+
+- **Status:** Deferred
+- **Reason:** Most admin pages render gracefully when empty —
+  `/events`, `/billing`, `/policies`, `/buckets`, `/objects`,
+  `/audit`, `/capabilities` — but designing the populated state
+  (truncation rules, pagination boundaries, status-pill
+  combinatorics, time-series sparsity, error chips) requires
+  realistic data sitting in front of the UI. Today the only ways
+  to populate a tenant are (a) hand-clicking through every form,
+  (b) writing one-off SQL inserts, or (c) running an end-to-end
+  agent against a freshly bootstrapped cluster. None of those
+  produce repeatable, scoped, easy-to-tear-down fixtures, so
+  design / screenshot / demo work consistently lags the feature
+  it's trying to evaluate.
+- **State as of 2026-05-10:** Demo flavour landed —
+  `backend/cmd/seed-fixture` (also reachable via
+  `task seed:up` / `task seed:down`). Auth via bootstrap admin
+  through the existing `internal/mcp.NewClients` client bundle.
+  Seeds 4 EventSubscriptions on the caller's tenant covering
+  the `/events` page states (HTTP baseline, NATS, disabled,
+  CEL-filtered). RLS-aware: subs land on the caller's own
+  tenant rather than minting a new fixture tenant, because the
+  `event_subscriptions` policy enforces
+  `tenant_id = paladin_session_tenant_id()` on WITH CHECK and
+  cross-tenant create from platform.admin would fail there
+  even though the handler-level guard passes.
+- **Outstanding (load + stress flavours):**
+  - `--flavour=load` — ~10k objects, ~100 deliveries spread
+    across 24h so `/billing` time-series buckets look real
+    and `/events` Last-test column has a population to truncate.
+    Requires bucket + objectKey + UploadObject + CompleteObject
+    flow that demo doesn't exercise yet.
+  - `--flavour=stress` — pagination boundaries (1000 / 1001 /
+    1099 rows so the cursor logic gets exercised). Same
+    upload-flow gap.
+  - First-run UX: today the CLI requires `--admin-url=` etc.
+    when run from outside the cluster (DNS doesn't resolve
+    cluster-internal Service names). A `task seed:up` wrapper
+    that does port-forward → exec → cleanup would remove that
+    friction; today operators hand-paste the localhost URLs.
+- **Trigger to do load / stress:** the next time UI / UX work
+  blocks on "I need to see this with real data" beyond what
+  the 4 demo subscriptions cover — most likely `/billing`
+  time-series, `/events` pagination + Last-test column,
+  `/objects` listings.
 
 ### Per-worker observability runbooks
 

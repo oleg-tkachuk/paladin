@@ -15,11 +15,29 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer is the narrow seam the handler uses to fan out tenant
+// lifecycle events to subscribers. Defined here (not imported as
+// `worker.Dispatcher`) so tests can stub it without spinning up the
+// real outbox + Postgres. nil-safe: when the wiring layer omits the
+// producer (e.g. in unit tests, or before the dispatcher is enabled
+// in a fresh deployment) the handler logs a debug breadcrumb and
+// continues — fan-out is best-effort, never blocks the RPC reply.
+//
+// Why a method named `Dispatch` and not `Publish` / `Fire`: this is
+// the same vocabulary `worker.Dispatcher.Dispatch` uses; matching
+// names lets the production wiring pass `*worker.Dispatcher`
+// directly with no adapter.
+type EventProducer interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
 
 // Use apiutil.RolePlatformAdmin as the canonical role string ("platform.admin").
 // A previous local copy here used the hyphen form which silently failed every
@@ -82,6 +100,13 @@ type RenameTenantSlugArgs struct {
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
+
+	// events is optional — when nil, lifecycle Dispatch calls are
+	// silent no-ops. Set via SetEventProducer once the dispatcher is
+	// wired in build_listeners_admin (after repos + policy are
+	// constructed but before the listener starts serving).
+	events EventProducer
+	log    *zap.Logger // best-effort sink for fan-out failures
 }
 
 // NewHandler builds a tenant handler. policyEngine is required — production
@@ -90,7 +115,59 @@ func NewHandler(repo Repository, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("tenant: policy authorizer is required")
 	}
-	return &Handler{repo: repo, policy: policyEngine}
+	return &Handler{repo: repo, policy: policyEngine, log: zap.NewNop()}
+}
+
+// SetEventProducer attaches the optional outbox producer. nil clears
+// the wiring (useful in tests). Production wiring lives in
+// build_listeners_admin.go alongside SetDispatcher on the eventsubh
+// handler.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+
+// SetLogger attaches a non-nop logger so fan-out failures surface in
+// the admin pod's structured log. Without this, dispatch errors
+// silently disappear — the handler still returns success because the
+// underlying lifecycle write committed.
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+// dispatchEvent is best-effort: the lifecycle write already committed
+// by the time we get here, so a fan-out failure must not flip the
+// RPC reply to error. We log + return. The dispatcher pod's outbox
+// reaper retries delivery from the row; this layer's only job is to
+// land the row (or quietly miss it if the producer is unconfigured).
+func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
+	if h.events == nil {
+		return
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	if err != nil {
+		h.log.Warn("tenant event fan-out failed",
+			zap.String("event_type", eventType),
+			zap.String("tenant_id", tenantID.String()),
+			zap.Error(err),
+		)
+		return
+	}
+	h.log.Debug("tenant event queued",
+		zap.String("event_type", eventType),
+		zap.String("tenant_id", tenantID.String()),
+		zap.Int("subscriptions_matched", queued),
+	)
 }
 
 // authorize evaluates Cedar against the Tenant resource.
@@ -146,6 +223,13 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
 	}
+	h.dispatchEvent(ctx, t.TenantID, "paladin.tenant.created",
+		fmt.Sprintf("tenants/%s", t.TenantID),
+		map[string]any{
+			"tenant_id":    t.TenantID.String(),
+			"slug":         t.Slug,
+			"display_name": t.DisplayName,
+		})
 	return &t, nil
 }
 
@@ -184,6 +268,19 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Snapshot of the post-update state — subscribers can diff against
+	// the previous state they cached. We don't ship a `fields_changed`
+	// list because the FieldMask the caller passed lives upstream of
+	// the handler and would tie the event payload to a connect-shim
+	// detail; downstream consumers can derive the diff themselves.
+	h.dispatchEvent(ctx, t.TenantID, "paladin.tenant.updated",
+		fmt.Sprintf("tenants/%s", t.TenantID),
+		map[string]any{
+			"tenant_id":        t.TenantID.String(),
+			"slug":             t.Slug,
+			"display_name":     t.DisplayName,
+			"resource_version": t.ResourceVersion,
+		})
 	return &t, nil
 }
 
@@ -203,6 +300,12 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, tenantID, "paladin.tenant.deleted",
+		fmt.Sprintf("tenants/%s", tenantID),
+		map[string]any{
+			"tenant_id":        tenantID.String(),
+			"resource_version": expectedVersion,
+		})
 	return nil
 }
 

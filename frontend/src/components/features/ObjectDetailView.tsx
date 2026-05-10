@@ -2,7 +2,7 @@
 
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -34,6 +34,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ObjectVersionsTab } from "@/components/features/ObjectVersionsTab";
 import { T } from "@/lib/ui/typography";
 
 // SpecRow renders one fact in the Specs sidebar — label above value,
@@ -87,16 +89,57 @@ export function ObjectDetailView({
   parentObjectKey = DEFAULT_OBJECT_KEY,
 }: ObjectDetailViewProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { showNotification } = useNotification();
+
+  // Back-link target. The ObjectDetailView is now mounted under
+  // /tenants/<id>/object-keys/<name>/objects/<objectId>; "back" should
+  // land on the Objects tab one level up. Derive from the current
+  // pathname rather than threading a prop through (the parent route is
+  // implicit in the URL — propagating it would just duplicate it).
+  // Falls back to /tenants if the pathname doesn't fit the expected
+  // shape, which only happens if the component is mounted outside the
+  // OK subtree (no current callsite, but safe default).
+  const backHref = (() => {
+    const m = pathname?.match(
+      /^(\/tenants\/[^/]+\/object-keys\/[^/]+\/objects)(\/|$)/,
+    );
+    return m ? m[1] : "/tenants";
+  })();
   const {
     object,
     downloadUrl,
     loading,
+    refresh,
     patchObjectMeta,
     softDeleteObject,
     restoreObject,
     purgeObject,
   } = useObject(objectKey, parentObjectKey);
+
+  // Active tab (Object | Versions). Persisted in URL hash so a deep link
+  // from the audit log (`#versions`) lands on the right view, and so the
+  // browser back button preserves tab context. Read once on mount via
+  // `window.location.hash` (SSR-safe), update via `history.replaceState`
+  // on user-driven changes.
+  const [activeTab, setActiveTab] = React.useState<"object" | "versions">(
+    "object",
+  );
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash === "versions" || hash === "object") {
+      setActiveTab(hash);
+    }
+  }, []);
+  const handleTabChange = (next: string) => {
+    if (next !== "object" && next !== "versions") return;
+    setActiveTab(next);
+    if (typeof window !== "undefined") {
+      const url = `${window.location.pathname}${window.location.search}#${next}`;
+      window.history.replaceState(null, "", url);
+    }
+  };
 
   // State for tag editing
   const [editingLabels, setEditingLabels] = React.useState<
@@ -178,10 +221,10 @@ export function ObjectDetailView({
     try {
       if (confirmAction === "trash") {
         await softDeleteObject();
-        router.push("/objects");
+        router.push(backHref);
       } else if (confirmAction === "purge") {
         await purgeObject();
-        router.push("/objects");
+        router.push(backHref);
       } else if (confirmAction === "restore") {
         await restoreObject();
       }
@@ -228,7 +271,7 @@ export function ObjectDetailView({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => router.push("/objects")}
+                onClick={() => router.push(backHref)}
                 aria-label="Back to Objects"
               >
                 <ArrowLeftIcon className="size-5" />
@@ -248,7 +291,7 @@ export function ObjectDetailView({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push("/objects")}
+            onClick={() => router.push(backHref)}
           >
             Back to Objects
           </Button>
@@ -271,7 +314,7 @@ export function ObjectDetailView({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => router.push("/objects")}
+              onClick={() => router.push(backHref)}
               aria-label="Back to Objects"
             >
               <ArrowLeftIcon className="size-5" />
@@ -334,152 +377,178 @@ export function ObjectDetailView({
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* ─── Main column ────────────────────────────────────────── */}
-        <div className="space-y-4 lg:col-span-2">
-          {/* Preview */}
-          <Card className="overflow-hidden p-0">
-            <div className="flex min-h-[360px] items-center justify-center bg-muted">
-              {isImage && downloadUrl ? (
-                <Image
-                  src={downloadUrl.url}
-                  alt={fileName}
-                  width={800}
-                  height={600}
-                  className="max-h-[450px] w-auto rounded-md object-contain"
-                  loading="eager"
-                  unoptimized
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <DocumentIcon className="size-12" />
-                  <p className={T.hint}>
-                    {object.contentType || "Binary object"}
-                  </p>
+        {/* ─── Main column ──────────────────────────────────────────
+            Wrapped in a Tabs container so the Versions history view
+            can swap in without disturbing the Specs sidebar (which
+            always reflects the *current* version regardless of tab).
+            Active tab is mirrored into the URL hash so audit-log
+            deep links can land on `#versions`. */}
+        <div className="space-y-3 lg:col-span-2">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="gap-3"
+          >
+            <TabsList className="w-full overflow-x-auto sm:w-fit">
+              <TabsTrigger value="object">Object</TabsTrigger>
+              <TabsTrigger value="versions">Versions</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="object" className="space-y-4">
+              {/* Preview */}
+              <Card className="overflow-hidden p-0">
+                <div className="flex min-h-[360px] items-center justify-center bg-muted">
+                  {isImage && downloadUrl ? (
+                    <Image
+                      src={downloadUrl.url}
+                      alt={fileName}
+                      width={800}
+                      height={600}
+                      className="max-h-[450px] w-auto rounded-md object-contain"
+                      loading="eager"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <DocumentIcon className="size-12" />
+                      <p className={T.hint}>
+                        {object.contentType || "Binary object"}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Card>
+              </Card>
 
-          {/* Tags */}
-          <Card className="space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Tags</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsEditing(!isEditing);
-                  if (!isEditing) setEditingLabels({ ...object.tags });
-                }}
-              >
-                {isEditing ? "Cancel" : "Edit"}
-              </Button>
-            </div>
-
-            {isEditing ? (
-              <div className="space-y-3">
-                <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                  <Input
-                    placeholder="TAG_KEY"
-                    value={newLabelKey}
-                    onChange={(e) =>
-                      setNewLabelKey(e.target.value.toUpperCase())
-                    }
-                    className="font-mono text-xs"
-                  />
-                  <Input
-                    placeholder="TAG_VALUE"
-                    value={newLabelValue}
-                    onChange={(e) => setNewLabelValue(e.target.value)}
-                    className="font-mono text-xs"
-                  />
+              {/* Tags */}
+              <Card className="space-y-3 p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">Tags</h2>
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={addLabel}
-                    disabled={!newLabelKey || !newLabelValue}
+                    onClick={() => {
+                      setIsEditing(!isEditing);
+                      if (!isEditing) setEditingLabels({ ...object.tags });
+                    }}
                   >
-                    <PlusIcon className="size-4" />
-                    Add
+                    {isEditing ? "Cancel" : "Edit"}
                   </Button>
                 </div>
 
-                {/* Free-form tags only. The reserved `object_tag` key
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                      <Input
+                        placeholder="TAG_KEY"
+                        value={newLabelKey}
+                        onChange={(e) =>
+                          setNewLabelKey(e.target.value.toUpperCase())
+                        }
+                        className="font-mono text-xs"
+                      />
+                      <Input
+                        placeholder="TAG_VALUE"
+                        value={newLabelValue}
+                        onChange={(e) => setNewLabelValue(e.target.value)}
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={addLabel}
+                        disabled={!newLabelKey || !newLabelValue}
+                      >
+                        <PlusIcon className="size-4" />
+                        Add
+                      </Button>
+                    </div>
+
+                    {/* Free-form tags only. The reserved `object_tag` key
                     is the classification slug — surfaced in the Specs
                     sidebar instead, edited via the admin taxonomy
                     flow. Hiding it here also prevents the user from
                     accidentally clearing it via the trash button on
                     a row whose semantics don't match the rest. */}
-                <div className="space-y-1.5">
-                  {Object.entries(editingLabels).filter(
-                    ([k]) => k !== "object_tag",
-                  ).length === 0 ? (
-                    <p className={T.hint}>No tags assigned.</p>
-                  ) : (
-                    Object.entries(editingLabels)
-                      .filter(([k]) => k !== "object_tag")
-                      .map(([key, value]) => (
-                        <div
-                          key={key}
-                          className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
-                        >
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {key}
-                          </span>
-                          <span className="text-muted-foreground">=</span>
-                          <span className="flex-1 break-all font-mono text-xs">
-                            {value}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => removeLabel(key)}
-                            aria-label="Remove tag"
-                          >
-                            <TrashIcon className="size-3.5" />
-                          </Button>
-                        </div>
-                      ))
-                  )}
-                </div>
+                    <div className="space-y-1.5">
+                      {Object.entries(editingLabels).filter(
+                        ([k]) => k !== "object_tag",
+                      ).length === 0 ? (
+                        <p className={T.hint}>No tags assigned.</p>
+                      ) : (
+                        Object.entries(editingLabels)
+                          .filter(([k]) => k !== "object_tag")
+                          .map(([key, value]) => (
+                            <div
+                              key={key}
+                              className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
+                            >
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {key}
+                              </span>
+                              <span className="text-muted-foreground">=</span>
+                              <span className="flex-1 break-all font-mono text-xs">
+                                {value}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => removeLabel(key)}
+                                aria-label="Remove tag"
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </Button>
+                            </div>
+                          ))
+                      )}
+                    </div>
 
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={handleSaveLabels}
-                    disabled={isSaving}
-                  >
-                    <CheckIcon className="size-4" />
-                    {isSaving ? "Saving…" : "Save"}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              (() => {
-                // View-mode also filters `object_tag` — its value is the
-                // classification slug rendered in the Specs sidebar.
-                // Computed once so the empty-state branch keys on the
-                // same filtered list as the rendered one.
-                const freeFormTags = Object.entries(object.tags || {}).filter(
-                  ([k]) => k !== "object_tag",
-                );
-                return freeFormTags.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {freeFormTags.map(([key, value]) => (
-                      <Badge
-                        key={key}
-                        variant="outline"
-                        className="justify-start font-mono text-xs"
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveLabels}
+                        disabled={isSaving}
                       >
-                        {key}={value}
-                      </Badge>
-                    ))}
+                        <CheckIcon className="size-4" />
+                        {isSaving ? "Saving…" : "Save"}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <p className={T.hint}>No tags assigned.</p>
-                );
-              })()
-            )}
-          </Card>
+                  (() => {
+                    // View-mode also filters `object_tag` — its value is the
+                    // classification slug rendered in the Specs sidebar.
+                    // Computed once so the empty-state branch keys on the
+                    // same filtered list as the rendered one.
+                    const freeFormTags = Object.entries(
+                      object.tags || {},
+                    ).filter(([k]) => k !== "object_tag");
+                    return freeFormTags.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {freeFormTags.map(([key, value]) => (
+                          <Badge
+                            key={key}
+                            variant="outline"
+                            className="justify-start font-mono text-xs"
+                          >
+                            {key}={value}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className={T.hint}>No tags assigned.</p>
+                    );
+                  })()
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="versions">
+              <ObjectVersionsTab
+                active={activeTab === "versions"}
+                object={object}
+                onObjectChanged={refresh}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* ─── Sidebar ─────────────────────────────────────────────

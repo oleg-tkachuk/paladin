@@ -17,6 +17,7 @@ import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { PolicyService } from "@/gen/paladin/admin/v1/policy_service_pb";
+import { CELService } from "@/gen/paladin/admin/v1/cel_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { AuditLogService } from "@/gen/paladin/admin/v1/audit_service_pb";
@@ -26,6 +27,7 @@ import { SystemService as AdminSystemService } from "@/gen/paladin/admin/v1/syst
 import { APITokenService } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import { BillingService } from "@/gen/paladin/admin/v1/billing_service_pb";
 import { MCPInspectService } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 
 // data plane services
@@ -68,6 +70,7 @@ const planeServices: Record<Plane, DescService[]> = {
     BucketService,
     TenantService,
     PolicyService,
+    CELService,
     BackendService,
     QuotaService,
     AuditLogService,
@@ -77,6 +80,7 @@ const planeServices: Record<Plane, DescService[]> = {
     APITokenService,
     CapabilityService,
     TenantBudgetService,
+    BillingService,
     MCPInspectService,
   ],
   data: [

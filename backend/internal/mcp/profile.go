@@ -69,7 +69,13 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_audit_recent", Audience: "admin", Description: "Tail the audit log; supports CEL filter."},
 	{Name: "paladin_audit_export", Audience: "admin", Description: "Materialise an audit-log dump for compliance."},
 	{Name: "paladin_list_subscriptions", Audience: "admin", Description: "List event subscriptions per tenant."},
+	{Name: "paladin_get_subscription", Audience: "admin", Description: "Read a single event subscription."},
+	{Name: "paladin_create_subscription", Audience: "admin", Description: "Create an event subscription with HTTP / Kafka / SQS sink.", Mutates: true},
+	{Name: "paladin_update_subscription", Audience: "admin", Description: "Replace filter / sink / disabled on an existing subscription.", Mutates: true},
+	{Name: "paladin_delete_subscription", Audience: "admin", Description: "Delete an event subscription.", Mutates: true},
+	{Name: "paladin_test_subscription", Audience: "admin", Description: "Deliver a synthetic event to a subscription's sink (non-mutating)."},
 	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true},
+	{Name: "paladin_validate_cel", Audience: "admin", Description: "Compile-check a CEL expression against an PALADIN schema (Object | ObjectKey | AuditLogEntry | EventEnvelope)."},
 
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under an object_key with CEL filter.", CapabilityOp: "list"},
@@ -108,6 +114,7 @@ var DefaultProfiles = map[string][]string{
 		"paladin_query_*",
 		"paladin_audit_recent",
 		"paladin_validate_policy",
+		"paladin_validate_cel",
 		"paladin_simulate_authz",
 	},
 	"agent_safe": {
@@ -116,6 +123,7 @@ var DefaultProfiles = map[string][]string{
 		"paladin_query_*",
 		"paladin_audit_recent",
 		"paladin_validate_policy",
+		"paladin_validate_cel",
 		"paladin_simulate_authz",
 		"paladin_presign_download",
 		"paladin_upload_object",

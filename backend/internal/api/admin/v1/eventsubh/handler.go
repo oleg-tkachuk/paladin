@@ -65,9 +65,14 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if err := h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
 		return nil, err
 	}
-	if err := h.repo.Create(ctx, s); err != nil {
+	if err := h.repo.Create(ctx, &s); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// repo.Create stamps the generated SubscriptionID onto s; without
+	// the pointer receiver this Get would look up the caller's zero
+	// UUID and fail closed with ErrNotFound, leaving an "orphan" row
+	// in the DB and surfacing a confusing "admin: resource not found"
+	// CodeInternal back to the operator.
 	got, err := h.repo.Get(ctx, s.SubscriptionID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

@@ -292,6 +292,33 @@ worker: {
   } // close worker.jobs
 } // close worker
 
+// Dispatcher role — `serve dispatcher`. The durable webhook fan-out
+// loop. Producer (admin pod) writes event_deliveries rows; this pod
+// consumes them via FOR UPDATE SKIP LOCKED. Multiple replicas safe.
+// Default port 8099 matches the chart's dispatcher containerPort.
+dispatcher: {
+  ops: #HTTPServer & {addr: string | *"0.0.0.0:8099"}
+  // PollInterval — idle-loop sleep when no rows are ready.
+  poll_interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1s"
+  // BatchSize — rows pulled per FOR UPDATE SKIP LOCKED scan.
+  batch_size:           int & >= 1 | *50
+  // BaseBackoff / MaxBackoff — per-row retry curve, doubles per
+  // attempt up to MaxBackoff.
+  base_backoff:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+  max_backoff:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+  // DefaultMaxAttempts — retry budget when the sub's
+  // HttpSink.MaxAttempts is unset. Beyond this, the row flips to
+  // status='failed' and the queue stops touching it.
+  default_max_attempts: int & >= 1 | *5
+  // ChargeEventsEnabled fans out one paladin.capability.charged event
+  // per successful capability.UsageStore.Charge. Default OFF; high
+  // cardinality.
+  charge_events_enabled: bool | *false
+  // AuditMirrorEnabled mirrors every audit_log row to paladin.audit.<action>.
+  // Default OFF; even higher cardinality than charges.
+  audit_mirror_enabled: bool | *false
+}
+
 // Storage is the registry of physical object-storage backends. Each
 // logical object_key picks one by name; when its `storage_backend`
 // column is empty the service falls back to `default_backend`.
@@ -391,14 +418,21 @@ vector: {
 }
 
 capability: {
-  enabled:               bool   | *false
-  issuer_name:           string | *""
-  trusted_issuers:       [...string] | *[]
-  signing_key_path:      string | *""
-  signing_key_kid:       string | *""
-  default_ttl:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-  verifier_leeway:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-  revocation_cache_ttl:  =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  enabled:                  bool   | *false
+  issuer_name:              string | *""
+  trusted_issuers:          [...string] | *[]
+  signing_key_path:         string | *""
+  signing_key_kid:          string | *""
+  default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  revocation_cache_ttl:     =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  // Auto-charge knob: amount + unit consumed by the capability
+  // interceptor on each billable handler call. Unit values are
+  // ISO 4217 fiat (USD/EUR/UAH/GBP) or the abstract sentinel UNIT
+  // for non-currency metering; empty defers to the capability's own
+  // declared unit (which defaults to USD).
+  charge_per_request_amount: number | *0
+  charge_per_request_unit:   "USD" | "EUR" | "UAH" | "GBP" | "UNIT" | *""
 }
 
 api_token: {

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RealTimeStatus } from "@/components/features/RealTimeStatus";
 import { useAuth } from "@/context/AuthContext";
+import { ScopePicker } from "@/components/layout/ScopePicker";
 
 interface TopBarProps {
   onMenuToggle: () => void;
@@ -96,6 +97,8 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       </button>
 
       <div className="ml-auto flex items-center gap-3">
+        <ScopePicker />
+        <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <RealTimeStatus />
         <Separator orientation="vertical" className="h-6" />
         {/* Avatar → user menu. The avatar used to be a static fallback;

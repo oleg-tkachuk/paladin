@@ -6,13 +6,21 @@ import { ChevronRightIcon, HomeIcon } from "@heroicons/react/20/solid";
 
 /**
  * Known parent routes that have detail pages with dynamic segments.
- * Maps parent path → human-readable label for the detail segment.
+ * The breadcrumb labels the segment that follows by decoding it as a
+ * resource identifier (slug / key / UUID) instead of a route name.
+ *
+ * Tenant subtree adds: tenants/<id>/buckets/<backend>/<name>/...
+ * and tenants/<id>/object-keys/<key>/objects/<id>. Listing the
+ * intermediate "buckets" / "object-keys" / "objects" parents keeps
+ * the immediately-following segment treated as a resource id.
  */
 const ENTITY_PARENTS = new Set([
-  "objects",
-  "objectKeys",
-  "object-tags",
   "tenants",
+  "buckets",
+  "object-keys",
+  "objectKeys",
+  "objects",
+  "object-tags",
 ]);
 
 /**

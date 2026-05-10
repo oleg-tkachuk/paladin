@@ -71,18 +71,45 @@ type AuditWriter interface {
 	Insert(ctx context.Context, e admindomain.AuditEntry) error
 }
 
+// AuditMirrorEmitter is the optional fan-out seam every Audit row
+// runs through after Insert. nil-safe: when unwired the interceptor
+// behaves exactly like the pre-mirror Audit. Implementations live
+// in the wiring layer (app/audit_mirror.go).
+//
+// EmitAudited fires AFTER the row commits; failures here are
+// best-effort + logged on the implementation side. Same trade-off
+// as the audit Insert itself: the request returns success regardless.
+type AuditMirrorEmitter interface {
+	EmitAudited(ctx context.Context, entry admindomain.AuditEntry)
+}
+
 // Audit returns a Connect interceptor that records every successful and
 // failed mutation against the configured AuditRepository. Reads are skipped
 // to keep audit volume manageable; turn `recordReads=true` for stricter
 // compliance regimes.
 func Audit(w AuditWriter, audience string, recordReads bool) connect.Interceptor {
-	return &auditInterceptor{w: w, audience: audience, recordReads: recordReads}
+	return AuditWithMirror(w, audience, recordReads, nil)
+}
+
+// AuditWithMirror is the events-aware variant — fan-out one
+// `paladin.audit.<action>` event per Insert when `mirror` is non-nil.
+// Wiring at the app layer gates this on
+// cfg.Dispatcher.AuditMirrorEnabled (default off — even higher
+// cardinality than charge events because every mutation logs).
+func AuditWithMirror(w AuditWriter, audience string, recordReads bool, mirror AuditMirrorEmitter) connect.Interceptor {
+	return &auditInterceptor{
+		w:           w,
+		audience:    audience,
+		recordReads: recordReads,
+		mirror:      mirror,
+	}
 }
 
 type auditInterceptor struct {
 	w           AuditWriter
 	audience    string
 	recordReads bool
+	mirror      AuditMirrorEmitter
 }
 
 func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -155,7 +182,16 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 	}
 	entry.BeforeJSON = beforeFromContext(ctx)
 	entry.AfterJSON = marshalAuditPayload(req.Any())
-	return a.w.Insert(ctx, entry)
+	if err := a.w.Insert(ctx, entry); err != nil {
+		return err
+	}
+	// Mirror only when the row landed cleanly — fanning out a
+	// non-committed audit row would diverge from the audit_log
+	// table the dashboard reads.
+	if a.mirror != nil {
+		a.mirror.EmitAudited(ctx, entry)
+	}
+	return nil
 }
 
 func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID string, rpcErr error) error {
@@ -173,7 +209,13 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
-	return a.w.Insert(ctx, entry)
+	if err := a.w.Insert(ctx, entry); err != nil {
+		return err
+	}
+	if a.mirror != nil {
+		a.mirror.EmitAudited(ctx, entry)
+	}
+	return nil
 }
 
 func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {

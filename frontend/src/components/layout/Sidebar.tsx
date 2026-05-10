@@ -5,12 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   HomeIcon,
-  CubeIcon,
   CloudArrowUpIcon,
   UsersIcon,
-  ArchiveBoxIcon,
-  TagIcon,
-  TrashIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
   KeyIcon,
@@ -23,11 +19,12 @@ import {
   CubeTransparentIcon,
   BanknotesIcon,
   CommandLineIcon,
+  BoltIcon,
+  CurrencyDollarIcon,
+  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
-import { TenantSwitcher } from "./TenantSwitcher";
-import { useTenant } from "@/context/TenantContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebarCounts, SidebarCounts } from "@/hooks/useSidebarCounts";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -56,55 +53,55 @@ const navigationGroups: Array<{
   }>;
 }> = [
   {
+    // The flat Objects entry was removed in Phase 5 — object
+    // listing now requires a tenant + ObjectKey scope (lives at
+    // /tenants/<id>/object-keys/<name>/objects, reached via
+    // Resources). Upload stays in Core because it doesn't need a
+    // pre-selected OK and is the most-used Core entry-point.
     title: "Core",
     accent: "text-primary/80",
     items: [
       { name: "Dashboard", path: "/", icon: HomeIcon },
-      {
-        name: "Objects",
-        path: "/objects",
-        icon: CubeIcon,
-        countKey: "objects" as keyof SidebarCounts,
-      },
       { name: "Upload", path: "/upload", icon: CloudArrowUpIcon },
     ],
   },
   {
+    // Management — collapsed to a single "Resources" entry per Phase 4
+    // of the URL refactor. /tenants is the gateway; drilldown into
+    // Buckets / Object Keys / Quotas / Capabilities / Budget / Audit /
+    // Events lives under /tenants/<id>/<tab>. The cross-tenant flat
+    // indexes (/buckets, /object-keys) still exist for platform-admin
+    // oversight — reachable via Cmd+K — but they're not in the sidebar
+    // anymore so the primary path is unambiguous.
+    //
+    // Policies stays as its own row: it's the system-wide Cedar editor,
+    // not a per-tenant view (the per-tenant graph lives under the
+    // tenant's Policies tab).
     title: "Management",
     accent: "text-chart-2/85",
     items: [
       {
-        name: "Tenants",
+        name: "Resources",
         path: "/tenants",
         icon: UsersIcon,
         countKey: "tenants" as keyof SidebarCounts,
       },
-      {
-        name: "S3 Buckets",
-        path: "/buckets",
-        icon: ArchiveBoxIcon,
-        countKey: "buckets" as keyof SidebarCounts,
-      },
-      {
-        name: "Object Keys",
-        path: "/object-keys",
-        icon: ArchiveBoxIcon,
-        countKey: "objectKeys" as keyof SidebarCounts,
-      },
-      {
-        name: "Object Tags",
-        path: "/object-tags",
-        icon: TagIcon,
-        countKey: "objectTags" as keyof SidebarCounts,
-      },
-      {
-        name: "Trash",
-        path: "/trash",
-        icon: TrashIcon,
-        countKey: "trash" as keyof SidebarCounts,
-      },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
+    ],
+  },
+  {
+    // Agents — agent-runtime primitives. Capabilities + M2M tokens are
+    // what agents use to authenticate; their use generates charges that
+    // accumulate against tenant budgets, summarised on the billing
+    // dashboard. Grouping them keeps the full issue → restrict → spend
+    // → observe loop one click apart.
+    title: "Agents",
+    accent: "text-chart-4/85",
+    items: [
+      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
+      { name: "M2M Tokens", path: "/m2m-tokens", icon: CpuChipIcon },
       { name: "Tenant Budgets", path: "/tenant-budgets", icon: BanknotesIcon },
+      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
     ],
   },
   {
@@ -112,6 +109,7 @@ const navigationGroups: Array<{
     accent: "text-chart-3/85",
     items: [
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
+      { name: "Events", path: "/events", icon: BoltIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
       { name: "Health Status", path: "/health", icon: CheckCircleIcon },
     ],
@@ -122,8 +120,6 @@ const navigationGroups: Array<{
     items: [
       { name: "Profile", path: "/profile", icon: UserCircleIcon },
       { name: "Personal Tokens", path: "/api-tokens", icon: KeyIcon },
-      { name: "M2M Tokens", path: "/m2m-tokens", icon: KeyIcon },
-      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
   },
@@ -186,7 +182,6 @@ function SidebarBody({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { tenantId } = useTenant();
   const { user, logout } = useAuth();
   const counts = useSidebarCounts();
 
@@ -231,12 +226,10 @@ function SidebarBody({
         </Link>
       </div>
 
-      {/* Tenant switcher */}
-      {!collapsed && (
-        <div className="border-b border-sidebar-border">
-          <TenantSwitcher key={tenantId || "loading"} />
-        </div>
-      )}
+      {/* Scope picker now lives in the TopBar (see TopBar.tsx) so the
+          breadcrumb and trigger sit alongside the search and user menu.
+          The sidebar header keeps the tenantId-keyed layout below it
+          intact via `key={tenantId}` on the parent component. */}
 
       {/*
         Navigation. min-h-0 is load-bearing: without it the flex-1 child

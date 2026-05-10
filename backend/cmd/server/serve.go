@@ -23,7 +23,7 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	serveCmd.AddCommand(serveAPICmd, serveAdminCmd, serveWorkerCmd, serveMCPCmd, serveIngestCmd)
+	serveCmd.AddCommand(serveAPICmd, serveAdminCmd, serveWorkerCmd, serveMCPCmd, serveIngestCmd, serveDispatcherCmd)
 }
 
 // runListeners is the shared run-loop for serve api / admin. It builds an

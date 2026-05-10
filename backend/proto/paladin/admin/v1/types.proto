@@ -279,11 +279,29 @@ message EventSubscription {
   google.protobuf.Timestamp updated_at = 8;
 }
 
+// EventSink is a tagged union of the supported delivery targets. Sink
+// pick conventions, in order of preference for new operator subs:
+//
+//   - HttpSink  — universal "send a signed POST somewhere"; the right
+//                 default for SaaS endpoints (Slack, PagerDuty) and
+//                 customer-owned webhook receivers.
+//   - NatsSink  — cloud-native pub/sub. Fire-and-forget core publish
+//                 keeps the dispatcher hot loop fast; the natural
+//                 sink for in-cluster agent-platform consumers and
+//                 anything that wants subject-based fan-out without
+//                 owning an HTTP listener.
+//   - KafkaSink — durable, ordered, partitioned. Pick when the
+//                 consumer needs replay or strict per-key ordering.
+//                 Heavier dependency footprint (still BACKLOG).
+//   - SqsSink   — AWS-native at-least-once queue. Pick when the
+//                 receiver lives inside the AWS managed-services
+//                 boundary already (still BACKLOG).
 message EventSink {
   oneof target {
     HttpSink http = 1;
     KafkaSink kafka = 2;
     SqsSink sqs = 3;
+    NatsSink nats = 4;
   }
 }
 
@@ -303,4 +321,35 @@ message KafkaSink {
 message SqsSink {
   string queue_url = 1;
   string region = 2;
+}
+
+// NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS
+// subject via core publish (fire-and-forget). JetStream durable
+// streams are BACKLOG — opt-in once the agentic platform needs the
+// at-least-once guarantees beyond what core NATS gives us.
+message NatsSink {
+  // NATS server URL. Comma-separated for cluster (e.g.
+  // "nats://nats-0.nats.svc:4222,nats://nats-1.nats.svc:4222").
+  // The dispatcher reuses one connection per server pool across all
+  // subscriptions targeting the same servers — connection-pooled by
+  // URL string equality.
+  string url = 1;
+
+  // Subject pattern. Static or interpolated; for v1 only static.
+  // Convention: `paladin.events.<tenant_id>.<event_type>` so consumers
+  // can wildcard-subscribe per tenant or per event class. Operator
+  // picks the convention that matches their downstream routing.
+  string subject = 2;
+
+  // Optional credentials. SecretRef so plaintext never lives in YAML.
+  // Auth modes:
+  //   - empty / no auth: anonymous publish (lab clusters only)
+  //   - `token:<plaintext>`: bare token auth
+  //   - `nkey:<plaintext>`: NKey-based auth (BACKLOG — needs file
+  //     materialisation; v1 ships token only)
+  //   - `jwt:<plaintext>`: JWT + nkey credential file (BACKLOG —
+  //     same materialisation gap)
+  // Format is `<scheme>:<value>` to keep one string field, parsed
+  // server-side. Validation rejects unknown schemes.
+  string credentials_ref = 3;
 }

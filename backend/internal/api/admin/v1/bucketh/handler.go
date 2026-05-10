@@ -10,13 +10,22 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer mirrors the seam used by tenanth — narrow interface
+// so handler tests can stub the dispatcher without spinning up the
+// outbox + Postgres. *worker.Dispatcher implements it.
+type EventProducer interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
 
 // Cedar action names — must match policies/schema.cedarschema.
 const (
@@ -35,13 +44,75 @@ type Handler struct {
 	repo        admindomain.BucketRepository
 	provisioner Provisioner
 	policy      cedar.Authorizer
+
+	events EventProducer
+	log    *zap.Logger
 }
 
 func NewHandler(r admindomain.BucketRepository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("bucketh: policy authorizer is required")
 	}
-	return &Handler{repo: r, provisioner: p, policy: policyEngine}
+	return &Handler{repo: r, provisioner: p, policy: policyEngine, log: zap.NewNop()}
+}
+
+// SetEventProducer attaches the optional outbox producer. nil is
+// silent — same contract as tenanth.SetEventProducer. Handlers
+// that don't pump events into the bus (unit tests, deployments
+// where ingest/dispatcher is intentionally off) leave it unset.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+
+// SetLogger attaches a non-nop logger so fan-out failures surface
+// in structured form. dispatchEvent is best-effort: a failure to
+// queue an outbox row must not flip the RPC reply, so the only
+// place these errors can land is the log.
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+// dispatchEvent fans out a bucket lifecycle event into the outbox.
+// Best-effort: the lifecycle write already committed, so any
+// outbox-insert failure logs and returns rather than failing the
+// whole RPC (which would mislead the caller into retrying).
+func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
+	if h.events == nil {
+		return
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	if err != nil {
+		h.log.Warn("bucket event fan-out failed",
+			zap.String("event_type", eventType),
+			zap.String("tenant_id", tenantID.String()),
+			zap.String("resource", resourceName),
+			zap.Error(err),
+		)
+		return
+	}
+	h.log.Debug("bucket event queued",
+		zap.String("event_type", eventType),
+		zap.String("tenant_id", tenantID.String()),
+		zap.Int("subscriptions_matched", queued),
+	)
+}
+
+// bucketResourceName is the canonical resource string subscribers
+// route on. Mirrors the path `tenants/{tenant_id}/buckets/{backend}/{name}`
+// the admin RPCs use elsewhere.
+func bucketResourceName(tenantID uuid.UUID, backendID, bucketName string) string {
+	return fmt.Sprintf("tenants/%s/buckets/%s/%s", tenantID, backendID, bucketName)
 }
 
 // authorize evaluates Cedar against the Bucket resource. The Bucket entity
@@ -121,6 +192,15 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, got.OwnerTenantID, "paladin.bucket.created",
+		bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
+		map[string]any{
+			"tenant_id":       got.OwnerTenantID.String(),
+			"backend_id":      got.BackendID,
+			"bucket_name":     got.BucketName,
+			"region":          got.Region,
+			"provision_state": string(got.ProvisionState),
+		})
 	return &got, nil
 }
 
@@ -197,6 +277,17 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, got.OwnerTenantID, "paladin.bucket.updated",
+		bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
+		map[string]any{
+			"tenant_id":        got.OwnerTenantID.String(),
+			"backend_id":       got.BackendID,
+			"bucket_name":      got.BucketName,
+			"resource_version": got.ResourceVersion,
+			// We don't ship UpdateMask: the field-mask is a connect-shim
+			// concern and downstream consumers can diff against their
+			// cached snapshot if they care which scalar moved.
+		})
 	return &got, nil
 }
 
@@ -315,13 +406,44 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 		// the row right away. Faster and avoids parking dev/test rows
 		// in a 'deleting' loop the worker can never resolve (no S3 →
 		// always transient).
+		// Snapshot the row before deletion so we can attach owner
+		// tenant_id to the event payload — repo.Delete leaves us
+		// without that context.
+		preDelete, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
 		if err := h.repo.Delete(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
 			return mapVersion(err)
 		}
+		if getErr == nil {
+			h.dispatchEvent(ctx, preDelete.OwnerTenantID, "paladin.bucket.deleted",
+				bucketResourceName(preDelete.OwnerTenantID, preDelete.BackendID, preDelete.BucketName),
+				map[string]any{
+					"tenant_id":   preDelete.OwnerTenantID.String(),
+					"backend_id":  preDelete.BackendID,
+					"bucket_name": preDelete.BucketName,
+					"mode":        "immediate",
+				})
+		}
 		return nil
 	}
+	preMark, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
 	if err := h.repo.MarkDeleting(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
 		return mapVersion(err)
+	}
+	// Outbox-mode delete fires a `.deleting` (not `.deleted`) event
+	// because the bucket isn't actually gone yet — the reconciler
+	// worker drives the physical S3 DeleteBucket and only THEN does
+	// the row disappear. Subscribers that want the terminal state
+	// can listen for `.deleted` once the worker emits it (BACKLOG —
+	// reconciler doesn't yet emit per-row events on completion).
+	if getErr == nil {
+		h.dispatchEvent(ctx, preMark.OwnerTenantID, "paladin.bucket.deleting",
+			bucketResourceName(preMark.OwnerTenantID, preMark.BackendID, preMark.BucketName),
+			map[string]any{
+				"tenant_id":   preMark.OwnerTenantID.String(),
+				"backend_id":  preMark.BackendID,
+				"bucket_name": preMark.BucketName,
+				"mode":        "outbox",
+			})
 	}
 	return nil
 }

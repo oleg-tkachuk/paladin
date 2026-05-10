@@ -24,7 +24,7 @@ type fakeUsageStore struct {
 func (f *fakeUsageStore) BumpRequest(context.Context, uuid.UUID, int64) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, uuid.UUID) (float64, error) {
+func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID, string, string) (float64, error) {
 	return 0, errors.New("not used")
 }
 func (f *fakeUsageStore) RefundCapability(context.Context, uuid.UUID, float64) error {
@@ -52,15 +52,23 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	if f.budgets == nil {
 		f.budgets = map[uuid.UUID]capability.TenantBudget{}
 	}
+	unit := args.UnitCode
+	if unit == "" {
+		unit = f.budgets[args.TenantID].UnitCode
+	}
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
 	tb := capability.TenantBudget{
-		TenantID:     args.TenantID,
-		MaxBudgetUSD: args.MaxBudgetUSD,
-		// SpentUSD: ResetSpend semantics aren't unit-tested here —
-		// the postgres impl owns the SQL that zeroes it.
-		SpentUSD: f.budgets[args.TenantID].SpentUSD,
+		TenantID:        args.TenantID,
+		MaxBudgetAmount: args.MaxBudgetAmount,
+		UnitCode:        unit,
+		// SpentAmount: ResetSpend semantics aren't unit-tested
+		// here — the postgres impl owns the SQL that zeroes it.
+		SpentAmount: f.budgets[args.TenantID].SpentAmount,
 	}
 	if args.ResetSpend {
-		tb.SpentUSD = 0
+		tb.SpentAmount = 0
 	}
 	f.budgets[args.TenantID] = tb
 	return tb, nil
@@ -94,15 +102,18 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	tenantID := uuid.New()
 
 	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
-		TenantId:     tenantID.String(),
-		MaxBudgetUsd: 100.0,
-		ResetSpend:   true,
+		TenantId:        tenantID.String(),
+		MaxBudgetAmount: 100.0,
+		ResetSpend:      true,
 	}))
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.Msg.GetBudget().GetMaxBudgetUsd(); got != 100.0 {
-		t.Errorf("max_budget_usd: got %v, want 100", got)
+	if got := setRes.Msg.GetBudget().GetMaxBudgetAmount(); got != 100.0 {
+		t.Errorf("max_budget_amount: got %v, want 100", got)
+	}
+	if got := setRes.Msg.GetBudget().GetUnitCode(); got != capability.DefaultUnitCode {
+		t.Errorf("unit_code: got %q, want %q (default)", got, capability.DefaultUnitCode)
 	}
 
 	getRes, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
@@ -124,6 +135,43 @@ func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeUnavailable {
 		t.Errorf("expected CodeUnavailable on nil store, got %v", err)
+	}
+}
+
+// TestTenantBudgetServer_Set_NonUSDUnit covers the new unit_code
+// path: a budget set with unit_code=EUR round-trips through
+// {Set, Get} carrying the EUR designation.
+func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
+	store := &fakeUsageStore{}
+	srv := NewTenantBudgetServer(store)
+	tenantID := uuid.New()
+
+	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        tenantID.String(),
+		MaxBudgetAmount: 250.0,
+		UnitCode:        "EUR",
+		ResetSpend:      true,
+	}))
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := setRes.Msg.GetBudget().GetUnitCode(); got != "EUR" {
+		t.Errorf("unit_code: got %q, want EUR", got)
+	}
+}
+
+// TestTenantBudgetServer_Set_BadUnit rejects unknown unit codes at
+// the boundary with CodeInvalidArgument.
+func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        uuid.New().String(),
+		MaxBudgetAmount: 1.0,
+		UnitCode:        "XYZ",
+	}))
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
+		t.Errorf("expected CodeInvalidArgument on unknown unit, got %v", err)
 	}
 }
 

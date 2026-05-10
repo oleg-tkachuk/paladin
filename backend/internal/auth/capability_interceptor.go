@@ -78,12 +78,37 @@ func WithCapability(ctx context.Context, c *capability.Capability) context.Conte
 // "fall back to req.Header().Get('X-Real-Ip') or skip CIDR check
 // entirely". The chart's HTTPServer config already pins the
 // trusted-proxy header per plane; this value mirrors it.
+//
+// chargePerRequestAmount + chargePerRequestUnit form the auto-charge
+// stamped onto the context. The amount is denominated in the unit;
+// at handler time, ChargeRequest passes both into UsageStore.Charge.
+// Falling back to the capability's own UnitCode happens inside
+// ChargeCapability when the stamp's unit is empty.
 func CapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore,
 	realIPHeader string,
-	chargePerRequest float64,
+	chargePerRequestAmount float64,
+	chargePerRequestUnit string,
+) connect.Interceptor {
+	return CapabilityInterceptorWithEvents(verifier, audience, usage, realIPHeader,
+		chargePerRequestAmount, chargePerRequestUnit, nil)
+}
+
+// CapabilityInterceptorWithEvents is the events-aware variant. The
+// emitter is stamped on every authenticated request's context so
+// ChargeCapability can fan out an `paladin.capability.charged` event AFTER
+// the running totals commit. nil emitter = no events (the default —
+// gated on cfg.Dispatcher.ChargeEventsEnabled at the wiring layer).
+func CapabilityInterceptorWithEvents(
+	verifier *capability.StandardVerifier,
+	audience string,
+	usage capability.UsageStore,
+	realIPHeader string,
+	chargePerRequestAmount float64,
+	chargePerRequestUnit string,
+	emitter ChargeEventEmitter,
 ) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
@@ -92,20 +117,24 @@ func CapabilityInterceptor(
 		realIPHeader = "X-Forwarded-For"
 	}
 	return &capabilityInterceptor{
-		verifier:         verifier,
-		audience:         audience,
-		usage:            usage,
-		realIPHeader:     realIPHeader,
-		chargePerRequest: chargePerRequest,
+		verifier:               verifier,
+		audience:               audience,
+		usage:                  usage,
+		realIPHeader:           realIPHeader,
+		chargePerRequestAmount: chargePerRequestAmount,
+		chargePerRequestUnit:   chargePerRequestUnit,
+		emitter:                emitter,
 	}
 }
 
 type capabilityInterceptor struct {
-	verifier         *capability.StandardVerifier
-	audience         string
-	usage            capability.UsageStore
-	realIPHeader     string
-	chargePerRequest float64
+	verifier               *capability.StandardVerifier
+	audience               string
+	usage                  capability.UsageStore
+	realIPHeader           string
+	chargePerRequestAmount float64
+	chargePerRequestUnit   string
+	emitter                ChargeEventEmitter
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -127,7 +156,9 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		}
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
-		ctx = WithChargeAmount(ctx, i.chargePerRequest)
+		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = WithChargeEventEmitter(ctx, i.emitter)
+		ctx = withLastOpHolder(ctx)
 		return next(ctx, req)
 	}
 }
@@ -151,7 +182,9 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		}
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
-		ctx = WithChargeAmount(ctx, i.chargePerRequest)
+		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = WithChargeEventEmitter(ctx, i.emitter)
+		ctx = withLastOpHolder(ctx)
 		return next(ctx, conn)
 	}
 }
@@ -274,11 +307,101 @@ func extractCapabilityToken(xocp, authz string) string {
 // subsystem is wired so handlers don't need a global reference.
 type chargeKey struct{}
 
-// chargeAmountKey carries the per-request default charge amount
-// (cfg.Capability.ChargePerRequest) so handlers don't need to read
-// config — they call auth.ChargeRequest(ctx) and the interceptor's
-// stamp determines the amount.
+// lastOpKey carries a per-request *string that AssertCapabilityOp
+// writes the most-recently-asserted capability op into, so a later
+// ChargeRequest / ChargeCapability call in the same handler can
+// stamp it onto the charges-ledger row without the caller threading
+// the op as an extra arg.
+//
+// Using a pointer-to-string holder rather than a context.WithValue
+// rebind keeps existing handler code shape: handlers call
+// AssertCapabilityOp(ctx, op, uri) without re-binding ctx (return
+// signature stays `error`, not `(context.Context, error)`). The
+// interceptor allocates one holder per request and pins it in ctx
+// before the handler runs; AssertCapabilityOp mutates the target.
+type lastOpKey struct{}
+
+// withLastOpHolder allocates a fresh holder and stamps it. Called
+// once per request from the interceptor, before the handler runs.
+// Handler-side: AssertCapabilityOp writes via stampLastOp,
+// ChargeCapability reads via readLastOp.
+func withLastOpHolder(ctx context.Context) context.Context {
+	holder := new(string)
+	return context.WithValue(ctx, lastOpKey{}, holder)
+}
+
+// stampLastOp writes the supplied op into the per-request holder.
+// No-op when no holder is installed (unit-test contexts that bypass
+// the interceptor; the read side falls back to "").
+func stampLastOp(ctx context.Context, op capability.Op) {
+	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok {
+		*holder = string(op)
+	}
+}
+
+// readLastOp returns the most-recently-asserted op for this request,
+// or "" if AssertCapabilityOp hasn't been called yet (or the holder
+// isn't installed).
+func readLastOp(ctx context.Context) string {
+	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok && holder != nil {
+		return *holder
+	}
+	return ""
+}
+
+// chargeAmountKey carries the per-request default charge amount +
+// unit code (cfg.Capability.ChargePerRequestAmount /
+// ChargePerRequestUnit) so handlers don't need to read config —
+// they call auth.ChargeRequest(ctx) and the interceptor's stamp
+// determines the amount and currency.
 type chargeAmountKey struct{}
+
+// chargeEventsKey carries an optional ChargeEventEmitter that
+// ChargeCapability fans an `paladin.capability.charged` event through
+// AFTER the running totals commit. nil-safe: when unset (or
+// cfg.Dispatcher.ChargeEventsEnabled = false at boot) the dispatch
+// is a no-op and the charge path stays a single DB write.
+//
+// Pattern parallels chargeKey/chargeAmountKey: interceptor stamps
+// at request time; ChargeCapability reads. Decoupled because charge
+// events are high-cardinality (every chargeable RPC) and operators
+// may want them on for one tenant and off for another — a future
+// per-tenant override would land here without touching ChargeCapability.
+type chargeEventsKey struct{}
+
+// ChargeEventEmitter is the narrow seam ChargeCapability uses to fan
+// out per-charge events. Implementations: a thin adapter over
+// *worker.Dispatcher (lives in the wiring layer; can't import worker
+// from auth without a cycle). Nil-safe.
+type ChargeEventEmitter interface {
+	EmitCharged(ctx context.Context, tenantID, capabilityID, op, actor string, amount float64, unitCode string)
+}
+
+// WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
+// passes a real emitter only when cfg.Dispatcher.ChargeEventsEnabled
+// is true; otherwise this is never called and the chargeEventsKey
+// stays unset.
+func WithChargeEventEmitter(ctx context.Context, e ChargeEventEmitter) context.Context {
+	if e == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, chargeEventsKey{}, e)
+}
+
+// chargeEventEmitterFromContext returns the stamped emitter or nil.
+// Internal — only ChargeCapability needs this.
+func chargeEventEmitterFromContext(ctx context.Context) ChargeEventEmitter {
+	e, _ := ctx.Value(chargeEventsKey{}).(ChargeEventEmitter)
+	return e
+}
+
+// chargeAmount is the typed value behind chargeAmountKey. Bundling
+// amount + unit avoids two context lookups per charge (the unit is
+// always read alongside the amount).
+type chargeAmount struct {
+	Amount float64
+	Unit   string
+}
 
 // WithChargeStore stamps the UsageStore onto a context. Wired by the
 // capability interceptor at request time; tests can preset for unit
@@ -290,14 +413,18 @@ func WithChargeStore(ctx context.Context, s capability.UsageStore) context.Conte
 	return context.WithValue(ctx, chargeKey{}, s)
 }
 
-// WithChargeAmount stamps the per-request default charge amount.
-// Independent of WithChargeStore so a test can wire one without the
-// other (e.g. verify the no-store path is a no-op).
-func WithChargeAmount(ctx context.Context, amountUSD float64) context.Context {
-	if amountUSD <= 0 {
+// WithChargeAmount stamps the per-request default charge amount and
+// unit code. Independent of WithChargeStore so a test can wire one
+// without the other (e.g. verify the no-store path is a no-op).
+//
+// An empty unit string means "use the capability's own UnitCode at
+// charge time"; the resolution happens in ChargeCapability so
+// callers don't have to reach across config + capability state.
+func WithChargeAmount(ctx context.Context, amount float64, unit string) context.Context {
+	if amount <= 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, chargeAmountKey{}, amountUSD)
+	return context.WithValue(ctx, chargeAmountKey{}, chargeAmount{Amount: amount, Unit: unit})
 }
 
 // ChargeCapability is the handler-side spend hook. Handlers that emit
@@ -324,9 +451,39 @@ func WithChargeAmount(ctx context.Context, amountUSD float64) context.Context {
 //     CodeResourceExhausted with ErrTenantBudgetExceeded.
 //   - UsageStore not wired → no-op (operator opted out).
 //
+
+// ChargeCapability is the handler-side spend hook. Handlers that emit
+// cost (e.g. presign issuance, batch op kickoff, future LLM calls)
+// call this once the work is committed:
+//
+//	if err := auth.ChargeCapability(ctx, 0.0001, "USD"); err != nil {
+//	    return nil, err
+//	}
+//
+// unit may be empty — in that case the capability's own UnitCode is
+// used (defaulting to capability.DefaultUnitCode when even that is
+// blank). This keeps existing callers — which only knew about USD —
+// working without a per-call unit-string thread-through.
+//
+// Behaviour:
+//
+//   - No capability on context (JWT auth) → no-op, returns nil.
+//   - Capability without MaxBudgetAmount AND tenant without aggregate
+//     cap → records spend on both counters but never rejects
+//     (operator audits via capability.UsageStore.Get / GetTenantBudget).
+//   - Capability cap set and the new charge would exceed it →
+//     CodeResourceExhausted; per-capability row NOT mutated so the
+//     handler can decide to refund / log / retry. Tenant counter
+//     also untouched.
+//   - Tenant aggregate cap set and the new charge would exceed it
+//     after the per-capability charge already committed → the
+//     UsageStore compensates the capability counter, returns
+//     CodeResourceExhausted with ErrTenantBudgetExceeded.
+//   - UsageStore not wired → no-op (operator opted out).
+//
 // Refunds are exposed via auth.RefundCapability for handlers that
 // detect a partial failure after the charge.
-func ChargeCapability(ctx context.Context, amountUSD float64) error {
+func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -335,11 +492,27 @@ func ChargeCapability(ctx context.Context, amountUSD float64) error {
 	if !ok || store == nil {
 		return nil
 	}
-	if amountUSD <= 0 {
+	if amount <= 0 {
 		return nil
 	}
+	resolvedUnit := unit
+	if resolvedUnit == "" {
+		resolvedUnit = cap.Caveats.UnitCode
+	}
+	if resolvedUnit == "" {
+		resolvedUnit = capability.DefaultUnitCode
+	}
 	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
-	_, err := store.Charge(ctx, cap.ID, amountUSD, cap.Caveats.MaxBudgetUSD, tenantID)
+	// op + actor populate the charges ledger row (migration 027).
+	// op is read from the per-request holder that AssertCapabilityOp
+	// writes into. If the handler hasn't called AssertCapabilityOp
+	// (legacy paths, JWT-only flows) op stays "" and the ledger row
+	// has no op attribution — operator's "Top ops" /billing breakdown
+	// will collect those into the empty-string row, which is the
+	// honest answer.
+	op := readLastOp(ctx)
+	actor := cap.Subject.Subject
+	_, err := store.Charge(ctx, cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor)
 	if err != nil {
 		if errors.Is(err, capability.ErrBudgetExceeded) ||
 			errors.Is(err, capability.ErrTenantBudgetExceeded) {
@@ -347,50 +520,56 @@ func ChargeCapability(ctx context.Context, amountUSD float64) error {
 		}
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
+	// Optional fan-out — only fires when the wiring layer attached
+	// an emitter (gated on cfg.Dispatcher.ChargeEventsEnabled).
+	// Best-effort: the charge already committed; the emitter's
+	// implementation logs + swallows on its side, so we don't even
+	// need an error return.
+	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
+		emitter.EmitCharged(ctx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
+	}
 	return nil
 }
 
 // ChargeRequest is the canonical post-work hook handlers call to
 // burn the cfg-driven per-request budget against the active
-// capability. Equivalent to ChargeCapability(ctx, amount) where
-// amount comes from cfg.Capability.ChargePerRequest stamped onto
-// the context by the interceptor.
+// capability. Equivalent to ChargeCapability(ctx, amount, unit)
+// where amount + unit come from cfg.Capability.ChargePerRequest*
+// stamped onto the context by the interceptor.
 //
 // Behaviour mirrors ChargeCapability:
 //
 //   - No capability on context (JWT auth) → no-op.
-//   - No charge amount on context (cfg.ChargePerRequest = 0) →
-//     no-op. Handlers wire this defensively so the path is hot
-//     even when ops haven't tuned a non-zero charge yet.
+//   - No charge amount on context (cfg.ChargePerRequestAmount = 0)
+//     → no-op.
 //   - Otherwise: forwards to ChargeCapability with the stamped
-//     amount.
-//
-// Idiomatic call site:
-//
-//	if err := h.work(...); err != nil { return nil, err }
-//	if err := auth.ChargeRequest(ctx); err != nil { return nil, err }
-//	return result, nil
+//     amount + unit.
 //
 // Charging AFTER successful work avoids burning budget on requests
 // that never produced a billable artifact (denied, panicked,
 // validation failure).
 func ChargeRequest(ctx context.Context) error {
-	amount, ok := ctx.Value(chargeAmountKey{}).(float64)
-	if !ok || amount <= 0 {
+	amt, ok := ctx.Value(chargeAmountKey{}).(chargeAmount)
+	if !ok || amt.Amount <= 0 {
 		return nil
 	}
-	return ChargeCapability(ctx, amount)
+	return ChargeCapability(ctx, amt.Amount, amt.Unit)
 }
 
-// RefundCapability subtracts amountUSD from the per-capability spend
+// RefundCapability subtracts amount from the per-capability spend
 // AND the tenant aggregate. Use it when a handler detects that an
 // already-charged operation must be rolled back (storage write
 // failed after presign was issued, agent cancelled mid-flow).
 //
 // Idempotent on both counters — flooring at 0 means a double-refund
 // doesn't go negative. No-op when no capability is on context, no
-// store wired, or amountUSD <= 0.
-func RefundCapability(ctx context.Context, amountUSD float64) error {
+// store wired, or amount <= 0.
+//
+// Currency-naive: refunds the same numeric value off whatever
+// counter exists. Both counters are pinned to the same unit (the
+// capability's UnitCode), so the refund always cancels the right
+// quantity.
+func RefundCapability(ctx context.Context, amount float64) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -399,14 +578,14 @@ func RefundCapability(ctx context.Context, amountUSD float64) error {
 	if !ok || store == nil {
 		return nil
 	}
-	if amountUSD <= 0 {
+	if amount <= 0 {
 		return nil
 	}
-	if err := store.RefundCapability(ctx, cap.ID, amountUSD); err != nil {
+	if err := store.RefundCapability(ctx, cap.ID, amount); err != nil {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	if cap.Subject.TenantID != uuid.Nil {
-		if err := store.RefundTenant(ctx, cap.Subject.TenantID, amountUSD); err != nil {
+		if err := store.RefundTenant(ctx, cap.Subject.TenantID, amount); err != nil {
 			return connect.NewError(connect.CodeUnavailable, err)
 		}
 	}
@@ -452,6 +631,13 @@ func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 		return connect.NewError(connect.CodePermissionDenied,
 			capabilityResourceNotAllowed{uri: resourceURI})
 	}
+	// Stamp the op into the per-request holder so a later
+	// ChargeRequest / ChargeCapability call attributes the charges-
+	// ledger row to the correct op without an extra signature thread.
+	// Last call wins when a handler asserts multiple ops in the same
+	// request — convention is to call AssertCapabilityOp once for the
+	// dominant action.
+	stampLastOp(ctx, op)
 	return nil
 }
 

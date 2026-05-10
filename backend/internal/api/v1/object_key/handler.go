@@ -14,11 +14,20 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer mirrors the seam used by tenanth / bucketh — narrow
+// interface so handler tests can stub the dispatcher. *worker.Dispatcher
+// implements it. nil-safe via dispatchEvent's guard.
+type EventProducer interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
 
 type ObjectKey struct {
 	TenantID        uuid.UUID
@@ -81,10 +90,59 @@ type Handler struct {
 	repo           Repository
 	policy         cedar.Authorizer
 	defaultBackend string
+
+	events EventProducer
+	log    *zap.Logger
 }
 
 func NewHandler(repo Repository, policy cedar.Authorizer, defaultBackend string) *Handler {
-	return &Handler{repo: repo, policy: policy, defaultBackend: defaultBackend}
+	return &Handler{repo: repo, policy: policy, defaultBackend: defaultBackend, log: zap.NewNop()}
+}
+
+// SetEventProducer / SetLogger — same opt-in contract as tenanth /
+// bucketh. nil-safe; an unset producer makes dispatchEvent a no-op
+// so unit tests don't need to stand up the outbox.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
+	if h.events == nil {
+		return
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	if err != nil {
+		h.log.Warn("object_key event fan-out failed",
+			zap.String("event_type", eventType),
+			zap.String("tenant_id", tenantID.String()),
+			zap.String("resource", resourceName),
+			zap.Error(err),
+		)
+		return
+	}
+	h.log.Debug("object_key event queued",
+		zap.String("event_type", eventType),
+		zap.String("tenant_id", tenantID.String()),
+		zap.Int("subscriptions_matched", queued),
+	)
+}
+
+func objectKeyResourceName(tenantID uuid.UUID, key string) string {
+	return fmt.Sprintf("tenants/%s/objectKeys/%s", tenantID, key)
 }
 
 func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
@@ -106,6 +164,15 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create objectKey: %w", err))
 	}
+	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.created",
+		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		map[string]any{
+			"tenant_id":    b.TenantID.String(),
+			"object_key":   b.ObjectKey,
+			"display_name": b.DisplayName,
+			"backend_id":   b.BackendID,
+			"bucket_name":  b.BucketName,
+		})
 	return &b, nil
 }
 
@@ -137,6 +204,13 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 	if err != nil {
 		return nil, mapVersionErr(err)
 	}
+	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.updated",
+		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		map[string]any{
+			"tenant_id":        b.TenantID.String(),
+			"object_key":       b.ObjectKey,
+			"resource_version": b.ResourceVersion,
+		})
 	return &b, nil
 }
 
@@ -151,6 +225,13 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	if err := h.repo.Delete(ctx, tenantID, objectKey, expectedVersion); err != nil {
 		return mapVersionErr(err)
 	}
+	h.dispatchEvent(ctx, tenantID, "paladin.object_key.deleted",
+		objectKeyResourceName(tenantID, objectKey),
+		map[string]any{
+			"tenant_id":        tenantID.String(),
+			"object_key":       objectKey,
+			"resource_version": expectedVersion,
+		})
 	return nil
 }
 

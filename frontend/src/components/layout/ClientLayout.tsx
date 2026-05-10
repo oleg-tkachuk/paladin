@@ -7,7 +7,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { ActionsProvider } from "@/context/ActionsContext";
-import { TenantProvider } from "@/context/TenantContext";
 import { ScopeProvider } from "@/context/ScopeContext";
 import { StatsProvider } from "@/context/StatsContext";
 import { RefreshProvider } from "@/context/RefreshContext";
@@ -43,27 +42,25 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <RefreshProvider>
       <ActionsProvider>
-        <TenantProvider>
-          <ScopeProvider>
-            <StatsProvider>
-              <div className="flex min-h-screen w-full bg-background text-foreground">
-                <CommandPalette />
-                <Sidebar
-                  isOpen={isSidebarOpen}
-                  onClose={() => setSidebarOpen(false)}
-                />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
-                  <main className="flex-1">
-                    <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                      {children}
-                    </div>
-                  </main>
-                </div>
+        <ScopeProvider>
+          <StatsProvider>
+            <div className="flex min-h-screen w-full bg-background text-foreground">
+              <CommandPalette />
+              <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <TopBar onMenuToggle={() => setSidebarOpen((v) => !v)} />
+                <main className="flex-1">
+                  <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                    {children}
+                  </div>
+                </main>
               </div>
-            </StatsProvider>
-          </ScopeProvider>
-        </TenantProvider>
+            </div>
+          </StatsProvider>
+        </ScopeProvider>
       </ActionsProvider>
     </RefreshProvider>
   );

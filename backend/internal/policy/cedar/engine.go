@@ -114,6 +114,11 @@ const (
 	// op's tenant_id.
 	ActionReadOperation   = "ReadOperation"
 	ActionCancelOperation = "CancelOperation"
+
+	// Billing-scoped actions. Resource is the Tenant entity. Used by
+	// BillingService (admin plane) over the charges ledger from
+	// migration 027.
+	ActionReadBilling = "ReadBilling"
 )
 
 // Entity type names — must match the Cedar schema exactly.

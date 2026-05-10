@@ -7,15 +7,14 @@ import {
   ArchiveBoxIcon,
   ArrowRightIcon,
   ArrowUpTrayIcon,
+  BoltIcon,
   CheckCircleIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
-  CubeIcon,
+  CommandLineIcon,
   ExclamationTriangleIcon,
   KeyIcon,
   ShieldCheckIcon,
-  TagIcon,
-  TrashIcon,
   UserCircleIcon,
   UsersIcon,
   XCircleIcon,
@@ -44,6 +43,7 @@ import {
 } from "@/lib/connect/system";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
 
 // /  — Dashboard / nav grid.
 //
@@ -112,6 +112,47 @@ function PageTileCard({ tile }: { tile: PageTile }) {
   );
 }
 
+// BuildBadge renders one labelled "label v · sha" pill. Used for the
+// stacked backend / ui pair in the status strip footer; see the
+// JSX below for the side-by-side comparison rationale.
+function BuildBadge({ label, build }: { label: string; build: BuildInfo }) {
+  if (!build.version) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <AdjustmentsVerticalIcon className="size-4 shrink-0" />
+      <span>
+        <span className="text-muted-foreground">{label}</span>{" "}
+        <span className={cn(T.code, "text-foreground")}>{build.version}</span>
+        {build.commit && (
+          <>
+            {" · "}
+            <span
+              className={cn(T.code, "text-foreground")}
+              title={build.buildTime || undefined}
+            >
+              {build.commit}
+            </span>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// backendBuild lifts the *VersionInfo shape the SystemService returns
+// onto the BuildInfo shape BuildBadge consumes. Returns an empty
+// shell when stats haven't landed yet — BuildBadge renders nothing
+// for an empty version.
+function backendBuild(
+  stats: { version?: { version: string; commit: string } } | null | undefined,
+): BuildInfo {
+  return {
+    version: stats?.version?.version ?? "",
+    commit: (stats?.version?.commit ?? "").slice(0, 7),
+    buildTime: "",
+  };
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { tenants, fetchTenants, loading: tenantsLoading } = useTenants();
@@ -123,6 +164,11 @@ export default function DashboardPage() {
     loading: objectKeysLoading,
   } = useObjectKeys();
   const { stats, loading: statsLoading } = useStats();
+  // UI build-info is bundle-time static — three string lookups against
+  // baked-in env vars. No useMemo: react-hooks/use-memo flags the
+  // literal-arg form, and the per-render cost (one object alloc with
+  // three string properties) is below noise.
+  const ui = uiBuildInfo();
 
   useEffect(() => {
     void fetchTenants();
@@ -172,16 +218,14 @@ export default function DashboardPage() {
   const groups: PageGroup[] = useMemo(
     () => [
       {
+        // The flat /objects explorer was deleted in Phase 5 (objects
+        // are now tenant + ObjectKey scoped via /tenants/<id>/
+        // object-keys/<name>/objects). Operators land on Resources
+        // and pick a tenant; Upload still has its own dedicated entry
+        // because the upload flow doesn't depend on a pre-selected OK.
         title: "Core",
         accent: "text-primary/80",
         tiles: [
-          {
-            name: "Objects",
-            href: "/objects",
-            description: "Browse stored assets across keys.",
-            icon: CubeIcon,
-            accent: "text-primary/80",
-          },
           {
             name: "Upload",
             href: "/upload",
@@ -219,20 +263,11 @@ export default function DashboardPage() {
             accent: "text-chart-2/85",
             count: objectKeysLoading ? null : objectKeys.length,
           },
-          {
-            name: "Object Tags",
-            href: "/object-tags",
-            description: "Tenant-wide tag inventory and per-object editor.",
-            icon: TagIcon,
-            accent: "text-chart-2/85",
-          },
-          {
-            name: "Trash",
-            href: "/trash",
-            description: "Soft-deleted objects awaiting purge.",
-            icon: TrashIcon,
-            accent: "text-chart-2/85",
-          },
+          // Object Tags + Trash dropped from the dashboard in Phase 5.
+          // Trash is now a per-ObjectKey tab (/tenants/.../object-keys/
+          // <name>/trash); Object Tags drop entirely (BACKLOG: comes
+          // back as a label filter on the Objects tab once a
+          // cross-bucket label index lands).
           {
             name: "Policies",
             href: "/policies",
@@ -251,6 +286,28 @@ export default function DashboardPage() {
             href: "/audit",
             description: "Append-only log of every mutation.",
             icon: ClipboardDocumentListIcon,
+            accent: "text-chart-3/85",
+          },
+          // Events tile mirrors the sidebar — Dashboard had drifted out
+          // of sync after EventSubscriptionService landed (sidebar got
+          // the entry, Dashboard didn't). No count: subscription totals
+          // would require a per-tenant ListSubscriptions on every
+          // Dashboard load, and the count alone isn't a useful
+          // indicator (one healthy webhook is plenty).
+          {
+            name: "Events",
+            href: "/events",
+            description:
+              "Outbound subscriptions — webhook (HTTP) or NATS subject.",
+            icon: BoltIcon,
+            accent: "text-chart-3/85",
+          },
+          {
+            name: "MCP Bridge",
+            href: "/mcp",
+            description:
+              "Operator view of the MCP tool catalog and dispatch deny-list.",
+            icon: CommandLineIcon,
             accent: "text-chart-3/85",
           },
           {
@@ -362,25 +419,16 @@ export default function DashboardPage() {
               )}
             </span>
           </div>
-          {stats?.version?.version && (
-            <div className={cn(T.hint, "ml-auto flex items-center gap-2")}>
-              <AdjustmentsVerticalIcon className="size-4" />
-              <span>
-                build{" "}
-                <span className={cn(T.code, "text-foreground")}>
-                  {stats.version.version}
-                </span>
-                {stats.version.commit && (
-                  <>
-                    {" · "}
-                    <span className={cn(T.code, "text-foreground")}>
-                      {stats.version.commit.slice(0, 7)}
-                    </span>
-                  </>
-                )}
-              </span>
-            </div>
-          )}
+          <div
+            className={cn(T.hint, "ml-auto flex flex-col items-end gap-0.5")}
+          >
+            {/* Two rows — backend (from SystemService.GetVersion) and
+                UI (from NEXT_PUBLIC_UI_* baked at build time). Stacked
+                so a UI / backend skew (stale browser tab vs redeployed
+                backend, or vice versa) is obvious at a glance. */}
+            <BuildBadge label="backend" build={backendBuild(stats)} />
+            <BuildBadge label="ui" build={ui} />
+          </div>
         </CardContent>
       </Card>
 

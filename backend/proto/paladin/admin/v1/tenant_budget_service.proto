@@ -36,17 +36,23 @@ service TenantBudgetService {
 message TenantBudget {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // max_budget_usd is the cap. 0 = unlimited (counter still
-  // accumulates so admin tooling can show "current spend").
-  double max_budget_usd = 2 [(buf.validate.field).double.gte = 0];
+  // max_budget_amount is the cap. 0 = unlimited (counter still
+  // accumulates so admin tooling can show "current spend"). Field
+  // number unchanged (wire-compatible with the previous
+  // max_budget_usd name). Currency given by unit_code.
+  double max_budget_amount = 2 [(buf.validate.field).double.gte = 0];
 
-  // spent_usd is the accumulated spend within the current period.
-  double spent_usd = 3;
+  // spent_amount is the accumulated spend within the current period.
+  // Field number unchanged (wire-compatible with previous spent_usd).
+  double spent_amount = 3;
 
   google.protobuf.Timestamp period_start = 4;
   // period_end is optional — NULL means open-ended.
   google.protobuf.Timestamp period_end = 5;
   google.protobuf.Timestamp updated_at = 6;
+  // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
+  // (non-currency metering). One per TenantBudget message.
+  string unit_code = 7;
 }
 
 message TenantBudgetServiceGetRequest {
@@ -60,10 +66,11 @@ message TenantBudgetServiceGetResponse {
 message TenantBudgetServiceSetRequest {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
 
-  // max_budget_usd is the new cap. 0 = unlimited.
-  double max_budget_usd = 2 [(buf.validate.field).double.gte = 0];
+  // max_budget_amount is the new cap. 0 = unlimited. Field number
+  // unchanged (wire-compatible with previous max_budget_usd).
+  double max_budget_amount = 2 [(buf.validate.field).double.gte = 0];
 
-  // reset_spend rolls the period: zeros spent_usd, moves
+  // reset_spend rolls the period: zeros spent_amount, moves
   // period_start to now. false leaves the counter alone — the cap
   // changes mid-window.
   bool reset_spend = 3;
@@ -71,6 +78,10 @@ message TenantBudgetServiceSetRequest {
   // period_end pins a closing time for the new accounting window.
   // Optional; nil = open-ended.
   google.protobuf.Timestamp period_end = 4;
+
+  // unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
+  // GBP or UNIT). Empty = keep existing or default to "USD".
+  string unit_code = 5;
 }
 
 message TenantBudgetServiceSetResponse {

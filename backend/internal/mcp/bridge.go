@@ -19,6 +19,7 @@ import (
 	"connectrpc.com/connect"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	adminv1connect "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
@@ -45,6 +46,7 @@ type Clients struct {
 	Quota    adminv1connect.QuotaServiceClient
 	Audit    adminv1connect.AuditLogServiceClient
 	EventSub adminv1connect.EventSubscriptionServiceClient
+	CEL      adminv1connect.CELServiceClient
 
 	Object        datav1connect.ObjectServiceClient
 	Multipart     datav1connect.MultipartUploadServiceClient
@@ -106,6 +108,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		Quota:    adminv1connect.NewQuotaServiceClient(httpc, adminURL, authInjector),
 		Audit:    adminv1connect.NewAuditLogServiceClient(httpc, adminURL, authInjector),
 		EventSub: adminv1connect.NewEventSubscriptionServiceClient(httpc, adminURL, authInjector),
+		CEL:      adminv1connect.NewCELServiceClient(httpc, adminURL, authInjector),
 
 		Object:        datav1connect.NewObjectServiceClient(httpc, dataURL, authInjector),
 		Multipart:     datav1connect.NewMultipartUploadServiceClient(httpc, dataURL, authInjector),
@@ -405,6 +408,28 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_get_subscription",
+		Description: "Read a single event subscription by resource name.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.EventSub.GetSubscription(ctx, connect.NewRequest(&adminv1.GetSubscriptionRequest{Name: in.Name})))
+	})
+
+	// CEL expression validator. Same trust posture as PolicyService.Validate
+	// — admin audience, no DB, no audit. Lets the agent type-check a CEL
+	// expression against a named PALADIN schema (Object | ObjectKey |
+	// AuditLogEntry | EventEnvelope) before passing it into a list-RPC
+	// query, lifecycle.match, or eventsub.filter.
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_validate_cel",
+		Description: "Compile-check a CEL expression against an PALADIN schema. Returns {valid, message, line, column}. Empty expression always validates.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in validateCELArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.CEL.Validate(ctx, connect.NewRequest(&adminv1.ValidateCELRequest{
+			Schema:     in.Schema,
+			Expression: in.Expression,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_operations",
 		Description: "List long-running operations (BatchDelete / BatchCopy / …) for the active tenant.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listOperationsArgs) (*mcpsdk.CallToolResult, any, error) {
@@ -455,6 +480,51 @@ type setLifecycleRulesArgs struct {
 	ResourceVersion string             `json:"resource_version,omitempty" jsonschema:"OCC guard from prior GetBucket"`
 	Rules           []lifecycleRuleArg `json:"rules,omitempty" jsonschema:"rule list; pass empty to clear all rules"`
 }
+
+// CEL validator args. Schema is one of the registered names exposed by
+// internal/filter/cel.SchemaByName; the handler returns
+// CodeInvalidArgument on anything else.
+type validateCELArgs struct {
+	Schema     string `json:"schema" jsonschema:"one of Object | ObjectKey | AuditLogEntry | EventEnvelope"`
+	Expression string `json:"expression,omitempty" jsonschema:"CEL source; empty validates as 'match all'"`
+}
+
+// EventSubscription mutating args. Sink is a discriminated union: only
+// one of {http_url, kafka_brokers+kafka_topic, sqs_queue_url+sqs_region}
+// should be populated per call. The CEL filter is validated server-side
+// against EventEnvelope; empty = receive all events for the tenant.
+type createSubscriptionArgs struct {
+	TenantID string `json:"tenant_id" jsonschema:"tenant UUID"`
+	Filter   string `json:"filter,omitempty" jsonschema:"CEL filter against EventEnvelope; empty = all events"`
+	Disabled bool   `json:"disabled,omitempty" jsonschema:"true to create in disabled state"`
+
+	// HTTP sink
+	HTTPURL         string `json:"http_url,omitempty" jsonschema:"HTTPS endpoint receiving signed POSTs"`
+	HTTPSecretRef   string `json:"http_signing_secret_ref,omitempty" jsonschema:"Secret name holding the HMAC-SHA256 signing key; empty = unsigned"`
+	HTTPMaxAttempts int32  `json:"http_max_attempts,omitempty" jsonschema:"retry cap; 1..10, defaults server-side when 0"`
+
+	// Kafka sink
+	KafkaBrokers string `json:"kafka_brokers,omitempty" jsonschema:"comma-separated bootstrap.servers"`
+	KafkaTopic   string `json:"kafka_topic,omitempty" jsonschema:"topic name"`
+
+	// SQS sink
+	SQSQueueURL string `json:"sqs_queue_url,omitempty" jsonschema:"AWS SQS queue URL"`
+	SQSRegion   string `json:"sqs_region,omitempty" jsonschema:"AWS region; e.g. us-east-1"`
+}
+
+// updateSubscriptionArgs reuses createSubscriptionArgs verbatim for the
+// payload and adds Name + ResourceVersion for OCC.
+type updateSubscriptionArgs struct {
+	createSubscriptionArgs
+	Name            string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"`
+	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"OCC guard; from a prior list/get"`
+}
+
+type deleteSubscriptionArgs struct {
+	Name            string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/eventSubscriptions/{id}"`
+	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"OCC guard; from a prior list/get"`
+}
+
 type revokeApiKeyArgs struct {
 	Name string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/apiKeys/{id}"`
 }
@@ -554,6 +624,60 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			ResourceVersion: in.ResourceVersion,
 			Rules:           pbRules,
 		})))
+	})
+
+	// EventSubscription mutating surface. The Test variant is non-
+	// destructive but lives next to the rest for cohesion. Create / Update
+	// / Delete are gated as destructive — an agent that gets `ops=manage`
+	// could redirect production webhooks if uncaught.
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_create_subscription",
+		Description: "Create an event subscription for a tenant. Sink is one of HTTP / Kafka / SQS. CEL filter is validated against EventEnvelope; empty = all events.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
+		sub, err := buildEventSubscription(in)
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(c.EventSub.CreateSubscription(ctx, connect.NewRequest(&adminv1.CreateSubscriptionRequest{
+			Parent:       "tenants/" + in.TenantID,
+			Subscription: sub,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_update_subscription",
+		Description: "Replace filter / sink / disabled on an existing subscription. Resource name from paladin_list_subscriptions; pass resource_version from the prior fetch for OCC.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in updateSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
+		sub, err := buildEventSubscription(in.createSubscriptionArgs)
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(c.EventSub.UpdateSubscription(ctx, connect.NewRequest(&adminv1.UpdateSubscriptionRequest{
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"filter", "sink", "disabled"}},
+			Subscription:    sub,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_delete_subscription",
+		Description: "Delete an event subscription. Existing in-flight deliveries continue; no events sent after this point.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.EventSub.DeleteSubscription(ctx, connect.NewRequest(&adminv1.DeleteSubscriptionRequest{
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_test_subscription",
+		Description: "Deliver a synthetic event to the configured sink. Returns {delivered, status_code, error_message}. Safe — does not mutate any state.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.EventSub.TestSubscription(ctx, connect.NewRequest(&adminv1.TestSubscriptionRequest{Name: in.Name})))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -842,4 +966,59 @@ func stringScopesToProto(in []string) ([]*commonv1.Scope, error) {
 		out = append(out, &sc)
 	}
 	return out, nil
+}
+
+// buildEventSubscription assembles an *adminv1.EventSubscription from the
+// flat MCP arg shape. The sink is a discriminated union — exactly one of
+// {http_url, kafka_*, sqs_*} must be set; the helper rejects the call
+// otherwise, so a malformed agent request fails before reaching the
+// admin handler. Used by both create and update tools.
+func buildEventSubscription(in createSubscriptionArgs) (*adminv1.EventSubscription, error) {
+	hasHTTP := in.HTTPURL != ""
+	hasKafka := in.KafkaBrokers != "" || in.KafkaTopic != ""
+	hasSQS := in.SQSQueueURL != "" || in.SQSRegion != ""
+	count := 0
+	if hasHTTP {
+		count++
+	}
+	if hasKafka {
+		count++
+	}
+	if hasSQS {
+		count++
+	}
+	if count != 1 {
+		return nil, fmt.Errorf("exactly one sink required (http_url | kafka_* | sqs_*); got %d configured", count)
+	}
+	sink := &adminv1.EventSink{}
+	switch {
+	case hasHTTP:
+		sink.Target = &adminv1.EventSink_Http{Http: &adminv1.HttpSink{
+			Url:              in.HTTPURL,
+			SigningSecretRef: in.HTTPSecretRef,
+			MaxAttempts:      in.HTTPMaxAttempts,
+		}}
+	case hasKafka:
+		if in.KafkaBrokers == "" || in.KafkaTopic == "" {
+			return nil, fmt.Errorf("kafka sink requires both kafka_brokers and kafka_topic")
+		}
+		sink.Target = &adminv1.EventSink_Kafka{Kafka: &adminv1.KafkaSink{
+			Brokers: in.KafkaBrokers,
+			Topic:   in.KafkaTopic,
+		}}
+	case hasSQS:
+		if in.SQSQueueURL == "" || in.SQSRegion == "" {
+			return nil, fmt.Errorf("sqs sink requires both sqs_queue_url and sqs_region")
+		}
+		sink.Target = &adminv1.EventSink_Sqs{Sqs: &adminv1.SqsSink{
+			QueueUrl: in.SQSQueueURL,
+			Region:   in.SQSRegion,
+		}}
+	}
+	return &adminv1.EventSubscription{
+		TenantId: in.TenantID,
+		Filter:   in.Filter,
+		Sink:     sink,
+		Disabled: in.Disabled,
+	}, nil
 }

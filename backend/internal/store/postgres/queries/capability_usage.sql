@@ -1,11 +1,16 @@
 -- Per-capability runtime counters. Atomic UPSERT-and-check shape so
 -- the hot path is a single round-trip with concurrency-safe semantics.
+--
+-- Naming dichotomy: the SQL columns retain their `_usd` suffixes for
+-- historical reasons (avoiding sqlc regen + every-query churn). The
+-- unit_code column added in migration 026 is the source of truth for
+-- currency interpretation; the Go domain types use Amount + UnitCode.
 
 -- name: BumpCapabilityRequestCount :one
 -- Increments request_count by 1 and rejects when over the supplied cap.
 -- max=0 means unlimited; we still write the row for spend tracking + UI.
-INSERT INTO capability_usage (capability_id, request_count, spent_usd, updated_at)
-VALUES ($1, 1, 0, now())
+INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
+VALUES ($1, 1, 0, 'USD', now())
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,
     updated_at    = now()
@@ -16,9 +21,10 @@ RETURNING request_count;
 
 -- name: ChargeCapability :one
 -- Adds amount to spent_usd and rejects when over the supplied cap.
--- max_budget=0 means unlimited.
-INSERT INTO capability_usage (capability_id, request_count, spent_usd, updated_at)
-VALUES ($1, 0, sqlc.arg('amount_usd')::numeric, now())
+-- max_budget=0 means unlimited. unit_code is set on insert and
+-- preserved on conflict (an existing row owns its currency).
+INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
+VALUES ($1, 0, sqlc.arg('amount_usd')::numeric, sqlc.arg('unit_code')::text, now())
 ON CONFLICT (capability_id) DO UPDATE
 SET spent_usd  = capability_usage.spent_usd + sqlc.arg('amount_usd')::numeric,
     updated_at = now()
@@ -28,7 +34,7 @@ WHERE
 RETURNING spent_usd;
 
 -- name: GetCapabilityUsage :one
-SELECT capability_id, request_count, spent_usd, updated_at
+SELECT capability_id, request_count, spent_usd, unit_code, updated_at
 FROM capability_usage
 WHERE capability_id = $1;
 

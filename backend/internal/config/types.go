@@ -37,6 +37,7 @@ type Config struct {
 	Admin      Admin      `yaml:"admin" json:"admin"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
+	Dispatcher Dispatcher `yaml:"dispatcher" json:"dispatcher"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -363,6 +364,56 @@ type WorkerJobs struct {
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
+}
+
+// Dispatcher is the per-role config block for the `serve dispatcher`
+// binary — the durable webhook fan-out loop introduced by migration
+// 028 (event_deliveries outbox). Producer (admin pod) writes rows;
+// this loop consumes them.
+//
+// Per-knob notes:
+//
+//   - PollInterval — idle-loop sleep when no rows are ready. Hot
+//     spikes burn down without polling pressure (the loop reschedules
+//     immediately when a batch returns rows); a 1s tick is the cost of
+//     a cold queue.
+//   - BatchSize — rows pulled per FOR UPDATE SKIP LOCKED scan. Larger
+//     batches amortise the tx round-trip but hold row locks longer
+//     while the loop processes them serially. 50 is a safe default
+//     for the HTTP-bound delivery profile.
+//   - BaseBackoff / MaxBackoff — per-row retry curve. Doubles per
+//     attempt up to MaxBackoff. Lifted from the prior in-process
+//     defaults; tuned at runtime if a noisy customer dominates.
+//   - DefaultMaxAttempts — retry budget when the sub's
+//     HttpSink.MaxAttempts is unset. Beyond this, the row flips to
+//     status='failed' and the queue stops touching it.
+type Dispatcher struct {
+	// Ops is the dispatcher pod's HTTP listener for /healthz +
+	// /readyz + /system/health.json. Defaults to :8099 — same shape
+	// as the worker's ops listener but a different role tag.
+	Ops                HTTPServer    `yaml:"ops" json:"ops"`
+	PollInterval       time.Duration `yaml:"poll_interval" json:"poll_interval"`
+	BatchSize          int           `yaml:"batch_size" json:"batch_size"`
+	BaseBackoff        time.Duration `yaml:"base_backoff" json:"base_backoff"`
+	MaxBackoff         time.Duration `yaml:"max_backoff" json:"max_backoff"`
+	DefaultMaxAttempts int           `yaml:"default_max_attempts" json:"default_max_attempts"`
+
+	// ChargeEventsEnabled fans out one paladin.capability.charged event
+	// per successful capability.UsageStore.Charge. Default OFF —
+	// every chargeable RPC fires, so the cardinality multiplies the
+	// outbox volume by the per-tenant request rate. Subscribers MUST
+	// set a CEL filter pinning `event.kind == 'paladin.capability.charged'`
+	// (or just dropping events on the floor at the broker) before
+	// flipping this on for a noisy tenant.
+	ChargeEventsEnabled bool `yaml:"charge_events_enabled" json:"charge_events_enabled"`
+
+	// AuditMirrorEnabled mirrors every audit_log row to
+	// paladin.audit.<action>. Default OFF — designed for SIEM /
+	// compliance pipelines that already accept high-volume event
+	// streams. Even noisier than ChargeEventsEnabled because every
+	// mutation is logged; only flip on with a downstream consumer
+	// already in place.
+	AuditMirrorEnabled bool `yaml:"audit_mirror_enabled" json:"audit_mirror_enabled"`
 }
 
 // OperationsWorker drives the long-running operation queue
@@ -722,18 +773,30 @@ type Capability struct {
 	// Default 30s; matches existing internal/auth.Auth.Leeway.
 	VerifierLeeway time.Duration `yaml:"verifier_leeway" json:"verifier_leeway"`
 
-	// ChargePerRequest is the USD amount automatically charged
+	// ChargePerRequestAmount is the amount automatically charged
 	// against the capability + tenant budgets for each "billable"
 	// handler call (presign, complete object, batch op kick-off).
 	// 0 = no automatic charge (default) — handlers still emit the
-	// request-count bump, but spent_usd never moves.
+	// request-count bump, but the spend counter never moves.
 	//
 	// One uniform knob covers the typical "track per-call cost"
 	// model. Operators who want per-handler differentiation extend
-	// the call sites with explicit ChargeCapability(ctx, custom)
+	// the call sites with explicit ChargeCapability(ctx, amt, unit)
 	// invocations; this default is the "bare minimum so caveats
 	// matter".
-	ChargePerRequest float64 `yaml:"charge_per_request" json:"charge_per_request"`
+	//
+	// Renamed from ChargePerRequest — same semantic, just no longer
+	// USD-pinned in name.
+	ChargePerRequestAmount float64 `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
+
+	// ChargePerRequestUnit pins the currency / unit for the auto-
+	// charge amount. Empty falls back to the capability's own
+	// UnitCode (which itself defaults to "USD"). Set this when the
+	// platform wants every billable call denominated in a specific
+	// currency regardless of the capability's declared unit — e.g.
+	// EUR-denominated metering on a tenant whose capabilities are
+	// minted with the empty default.
+	ChargePerRequestUnit string `yaml:"charge_per_request_unit" json:"charge_per_request_unit"`
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers. Default 2s; the SLO for revocation propagation. Set <0
@@ -884,7 +947,18 @@ type IngestNATS struct {
 	DurableName string `yaml:"durable_name" json:"durable_name"`
 
 	// SourceFormat tells the worker which adapter to use:
-	// "seaweedfs" | "minio" | "cloudevents". Required.
+	// "seaweedfs" | "seaweedfs_nats" | "minio" | "cloudevents". Required.
+	//
+	// `seaweedfs` is for SF's `[notification.webhook]` driver — JSON
+	// payload posted over HTTP. NOT compatible with this NATS driver,
+	// kept selectable here only so the schema doesn't reject overlays
+	// that mistakenly mix-and-match.
+	//
+	// `seaweedfs_nats` is for SF's `[notification.gocdk_pub_sub]`
+	// driver routed via `topic_url = nats://...` — gob-encoded
+	// envelope wrapping a proto-marshalled `filer_pb.EventNotification`.
+	// This is what the in-cluster setup uses; see
+	// gitops/.../seaweedfs/notification-config.yaml.
 	SourceFormat string `yaml:"source_format" json:"source_format"`
 
 	// Auth — token / nkey / TLS. NATS-go has many auth flavours;

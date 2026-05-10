@@ -2,19 +2,37 @@
 // @generated from file paladin/admin/v1/types.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { ChecksumAlgorithm, CompletionMode } from "../../common/v1/resource_pb";
+import {
+  file_google_protobuf_duration,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
+import type {
+  ChecksumAlgorithm,
+  CompletionMode,
+} from "../../common/v1/resource_pb";
 import { file_paladin_common_v1_resource } from "../../common/v1/resource_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/admin/v1/types.proto.
  */
-export const file_paladin_admin_v1_types: GenFile = /*@__PURE__*/
-  fileDesc("ChhvY3AvYWRtaW4vdjEvdHlwZXMucHJvdG8SDG9jcC5hZG1pbi52MSLYAwoOU3RvcmFnZUJhY2tlbmQSDAoEbmFtZRgBIAEoCRISCgpiYWNrZW5kX2lkGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRInCgRraW5kGAQgASgOMhkub2NwLmFkbWluLnYxLlN0b3JhZ2VLaW5kEhAKCGVuZHBvaW50GAUgASgJEhcKD3B1YmxpY19lbmRwb2ludBgGIAEoCRIOCgZyZWdpb24YByABKAkSGAoQZm9yY2VfcGF0aF9zdHlsZRgIIAEoCBIeChZjcmVkZW50aWFsc19zZWNyZXRfcmVmGAkgASgJEi8KA3NzZRgKIAEoCzIiLm9jcC5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIvCgZldmVudHMYCyABKAsyHy5vY3AuYWRtaW4udjEuRXZlbnRTb3VyY2VDb25maWcSFAoMY2VkYXJfcG9saWN5GAwgASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDSABKAkSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiSwoUU2VydmVyU2lkZUVuY3J5cHRpb24SIwoEdHlwZRgBIAEoDjIVLm9jcC5hZG1pbi52MS5Tc2VUeXBlEg4KBmtleV9pZBgCIAEoCSKUAQoRRXZlbnRTb3VyY2VDb25maWcSDwoHZW5hYmxlZBgBIAEoCBIpCgZ0YXJnZXQYAiABKA4yGS5vY3AuYWRtaW4udjEuRXZlbnRUYXJnZXQSEQoJcXVldWVfdXJsGAMgASgJEjAKDXBvbGxfaW50ZXJ2YWwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ikwUKBkJ1Y2tldBIMCgRuYW1lGAEgASgJEhIKCmJhY2tlbmRfaWQYAiABKAkSEwoLYnVja2V0X25hbWUYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBnJlZ2lvbhgFIAEoCRIXCg9vd25lcl90ZW5hbnRfaWQYBiABKAkSFAoMY2VkYXJfcG9saWN5GAcgASgJEjQKC2NvbnN0cmFpbnRzGAggASgLMh8ub2NwLmFkbWluLnYxLkJ1Y2tldENvbnN0cmFpbnRzEjQKD2xpZmVjeWNsZV9ydWxlcxgJIAMoCzIbLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVSdWxlEjMKC29iamVjdF9sb2NrGAogASgLMh4ub2NwLmFkbWluLnYxLk9iamVjdExvY2tDb25maWcSMgoKdmVyc2lvbmluZxgLIAEoCzIeLm9jcC5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nEjQKC3JlcGxpY2F0aW9uGAwgASgLMh8ub2NwLmFkbWluLnYxLkJ1Y2tldFJlcGxpY2F0aW9uEjAKBmxhYmVscxgNIAMoCzIgLm9jcC5hZG1pbi52MS5CdWNrZXQuTGFiZWxzRW50cnkSGAoQcmVzb3VyY2VfdmVyc2lvbhgOIAEoCRIuCgpjcmVhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCg9wcm92aXNpb25fc3RhdGUYESABKAkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLVAgoRQnVja2V0Q29uc3RyYWludHMSHQoVbWF4X29iamVjdF9zaXplX2J5dGVzGAEgASgDEhsKE21pbl9wYXJ0X3NpemVfYnl0ZXMYAiABKAMSGwoTbWF4X3BhcnRfc2l6ZV9ieXRlcxgDIAEoAxIRCgltYXhfcGFydHMYBCABKAUSHQoVYWxsb3dlZF9jb250ZW50X3R5cGVzGAUgAygJEjYKE21heF9wcmVzaWduX3B1dF90dGwYBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SNgoTbWF4X3ByZXNpZ25fZ2V0X3R0bBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhJFChtyZXF1aXJlZF9jaGVja3N1bV9hbGdvcml0aG0YCCABKA4yIC5vY3AuY29tbW9uLnYxLkNoZWNrc3VtQWxnb3JpdGhtIrcBCg1MaWZlY3ljbGVSdWxlEgoKAmlkGAEgASgJEg8KB2VuYWJsZWQYAiABKAgSDQoFbWF0Y2gYAyABKAkSNwoKdHJhbnNpdGlvbhgEIAEoCzIhLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVUcmFuc2l0aW9uSAASNwoKZXhwaXJhdGlvbhgFIAEoCzIhLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVFeHBpcmF0aW9uSABCCAoGYWN0aW9uIlYKE0xpZmVjeWNsZVRyYW5zaXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFQoNc3RvcmFnZV9jbGFzcxgCIAEoCSI/ChNMaWZlY3ljbGVFeHBpcmF0aW9uEigKBWFmdGVyGAEgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIo0BChBPYmplY3RMb2NrQ29uZmlnEg8KB2VuYWJsZWQYASABKAgSMgoMZGVmYXVsdF9tb2RlGAIgASgOMhwub2NwLmFkbWluLnYxLk9iamVjdExvY2tNb2RlEjQKEWRlZmF1bHRfcmV0ZW50aW9uGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkEKEEJ1Y2tldFZlcnNpb25pbmcSDwoHZW5hYmxlZBgBIAEoCBIcChRrZWVwX2RlbGV0ZXNfZm9yZXZlchgCIAEoCCJQChFCdWNrZXRSZXBsaWNhdGlvbhIPCgdlbmFibGVkGAEgASgIEhoKEmRlc3RpbmF0aW9uX2J1Y2tldBgCIAEoCRIOCgZmaWx0ZXIYAyABKAkiugIKBlRlbmFudBIMCgRuYW1lGAEgASgJEhEKCXRlbmFudF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMAoGbGFiZWxzGAQgAygLMiAub2NwLmFkbWluLnYxLlRlbmFudC5MYWJlbHNFbnRyeRIeChZpbmhlcml0ZWRfY2VkYXJfcG9saWN5GAUgASgJEhgKEHJlc291cmNlX3ZlcnNpb24YBiABKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLkAgoJT2JqZWN0S2V5EgwKBG5hbWUYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEhIKCm9iamVjdF9rZXkYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBmJ1Y2tldBgFIAEoCRI2Cg9jb21wbGV0aW9uX21vZGUYBiABKA4yHS5vY3AuY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI0Cgtjb25zdHJhaW50cxgIIAEoCzIfLm9jcC5hZG1pbi52MS5CdWNrZXRDb25zdHJhaW50cxIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvMBCgVRdW90YRIMCgRuYW1lGAEgASgJEhcKD21heF90b3RhbF9ieXRlcxgCIAEoAxIYChBtYXhfb2JqZWN0X2NvdW50GAMgASgDEhkKEW1heF9ieXRlc19wZXJfZGF5GAQgASgDEhsKE21heF9vYmplY3RzX3Blcl9kYXkYBSABKAMSJwoFdXNhZ2UYBiABKAsyGC5vY3AuYWRtaW4udjEuUXVvdGFVc2FnZRIYChByZXNvdXJjZV92ZXJzaW9uGAcgASgJEi4KCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpYBCgpRdW90YVVzYWdlEhMKC3RvdGFsX2J5dGVzGAEgASgDEhQKDG9iamVjdF9jb3VudBgCIAEoAxITCgtieXRlc190b2RheRgDIAEoAxIVCg1vYmplY3RzX3RvZGF5GAQgASgDEjEKDWxhc3RfcmVzZXRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIrYCCg1BdWRpdExvZ0VudHJ5EhAKCGVudHJ5X2lkGAEgASgJEiYKAmF0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1hY3Rvcl9zdWJqZWN0GAMgASgJEhcKD2FjdG9yX3RlbmFudF9pZBgEIAEoCRIWCg5hY3Rvcl9hdWRpZW5jZRgFIAEoCRIOCgZhY3Rpb24YBiABKAkSFQoNcmVzb3VyY2VfbmFtZRgHIAEoCRISCgpyZXF1ZXN0X2lkGAggASgJEhEKCXNvdXJjZV9pcBgJIAEoCRITCgtiZWZvcmVfanNvbhgKIAEoDBISCgphZnRlcl9qc29uGAsgASgMEhUKDWVycm9yX21lc3NhZ2UYDCABKAkSFQoNY2FwYWJpbGl0eV9pZBgNIAEoCSL3AQoRRXZlbnRTdWJzY3JpcHRpb24SDAoEbmFtZRgBIAEoCRIRCgl0ZW5hbnRfaWQYAiABKAkSDgoGZmlsdGVyGAMgASgJEiUKBHNpbmsYBCABKAsyFy5vY3AuYWRtaW4udjEuRXZlbnRTaW5rEhAKCGRpc2FibGVkGAUgASgIEhgKEHJlc291cmNlX3ZlcnNpb24YBiABKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAijQEKCUV2ZW50U2luaxImCgRodHRwGAEgASgLMhYub2NwLmFkbWluLnYxLkh0dHBTaW5rSAASKAoFa2Fma2EYAiABKAsyFy5vY3AuYWRtaW4udjEuS2Fma2FTaW5rSAASJAoDc3FzGAMgASgLMhUub2NwLmFkbWluLnYxLlNxc1NpbmtIAEIICgZ0YXJnZXQiSQoISHR0cFNpbmsSCwoDdXJsGAEgASgJEhoKEnNpZ25pbmdfc2VjcmV0X3JlZhgCIAEoCRIUCgxtYXhfYXR0ZW1wdHMYAyABKAUiKwoJS2Fma2FTaW5rEg8KB2Jyb2tlcnMYASABKAkSDQoFdG9waWMYAiABKAkiLAoHU3FzU2luaxIRCglxdWV1ZV91cmwYASABKAkSDgoGcmVnaW9uGAIgASgJKnoKC1N0b3JhZ2VLaW5kEhwKGFNUT1JBR0VfS0lORF9VTlNQRUNJRklFRBAAEhcKE1NUT1JBR0VfS0lORF9BV1NfUzMQARIeChpTVE9SQUdFX0tJTkRfUzNfQ09NUEFUSUJMRRACEhQKEFNUT1JBR0VfS0lORF9HQ1MQAypdCgdTc2VUeXBlEhgKFFNTRV9UWVBFX1VOU1BFQ0lGSUVEEAASEQoNU1NFX1RZUEVfTk9ORRABEhMKD1NTRV9UWVBFX0FFUzI1NhACEhAKDFNTRV9UWVBFX0tNUxADKnAKC0V2ZW50VGFyZ2V0EhwKGEVWRU5UX1RBUkdFVF9VTlNQRUNJRklFRBAAEhUKEUVWRU5UX1RBUkdFVF9OT05FEAESFAoQRVZFTlRfVEFSR0VUX1NRUxACEhYKEkVWRU5UX1RBUkdFVF9SRURJUxADKnQKDk9iamVjdExvY2tNb2RlEiAKHE9CSkVDVF9MT0NLX01PREVfVU5TUEVDSUZJRUQQABIfChtPQkpFQ1RfTE9DS19NT0RFX0dPVkVSTkFOQ0UQARIfChtPQkpFQ1RfTE9DS19NT0RFX0NPTVBMSUFOQ0UQAkJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_paladin_common_v1_resource]);
+export const file_paladin_admin_v1_types: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChhvY3AvYWRtaW4vdjEvdHlwZXMucHJvdG8SDG9jcC5hZG1pbi52MSLYAwoOU3RvcmFnZUJhY2tlbmQSDAoEbmFtZRgBIAEoCRISCgpiYWNrZW5kX2lkGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRInCgRraW5kGAQgASgOMhkub2NwLmFkbWluLnYxLlN0b3JhZ2VLaW5kEhAKCGVuZHBvaW50GAUgASgJEhcKD3B1YmxpY19lbmRwb2ludBgGIAEoCRIOCgZyZWdpb24YByABKAkSGAoQZm9yY2VfcGF0aF9zdHlsZRgIIAEoCBIeChZjcmVkZW50aWFsc19zZWNyZXRfcmVmGAkgASgJEi8KA3NzZRgKIAEoCzIiLm9jcC5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIvCgZldmVudHMYCyABKAsyHy5vY3AuYWRtaW4udjEuRXZlbnRTb3VyY2VDb25maWcSFAoMY2VkYXJfcG9saWN5GAwgASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDSABKAkSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiSwoUU2VydmVyU2lkZUVuY3J5cHRpb24SIwoEdHlwZRgBIAEoDjIVLm9jcC5hZG1pbi52MS5Tc2VUeXBlEg4KBmtleV9pZBgCIAEoCSKUAQoRRXZlbnRTb3VyY2VDb25maWcSDwoHZW5hYmxlZBgBIAEoCBIpCgZ0YXJnZXQYAiABKA4yGS5vY3AuYWRtaW4udjEuRXZlbnRUYXJnZXQSEQoJcXVldWVfdXJsGAMgASgJEjAKDXBvbGxfaW50ZXJ2YWwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ikwUKBkJ1Y2tldBIMCgRuYW1lGAEgASgJEhIKCmJhY2tlbmRfaWQYAiABKAkSEwoLYnVja2V0X25hbWUYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBnJlZ2lvbhgFIAEoCRIXCg9vd25lcl90ZW5hbnRfaWQYBiABKAkSFAoMY2VkYXJfcG9saWN5GAcgASgJEjQKC2NvbnN0cmFpbnRzGAggASgLMh8ub2NwLmFkbWluLnYxLkJ1Y2tldENvbnN0cmFpbnRzEjQKD2xpZmVjeWNsZV9ydWxlcxgJIAMoCzIbLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVSdWxlEjMKC29iamVjdF9sb2NrGAogASgLMh4ub2NwLmFkbWluLnYxLk9iamVjdExvY2tDb25maWcSMgoKdmVyc2lvbmluZxgLIAEoCzIeLm9jcC5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nEjQKC3JlcGxpY2F0aW9uGAwgASgLMh8ub2NwLmFkbWluLnYxLkJ1Y2tldFJlcGxpY2F0aW9uEjAKBmxhYmVscxgNIAMoCzIgLm9jcC5hZG1pbi52MS5CdWNrZXQuTGFiZWxzRW50cnkSGAoQcmVzb3VyY2VfdmVyc2lvbhgOIAEoCRIuCgpjcmVhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCg9wcm92aXNpb25fc3RhdGUYESABKAkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLVAgoRQnVja2V0Q29uc3RyYWludHMSHQoVbWF4X29iamVjdF9zaXplX2J5dGVzGAEgASgDEhsKE21pbl9wYXJ0X3NpemVfYnl0ZXMYAiABKAMSGwoTbWF4X3BhcnRfc2l6ZV9ieXRlcxgDIAEoAxIRCgltYXhfcGFydHMYBCABKAUSHQoVYWxsb3dlZF9jb250ZW50X3R5cGVzGAUgAygJEjYKE21heF9wcmVzaWduX3B1dF90dGwYBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SNgoTbWF4X3ByZXNpZ25fZ2V0X3R0bBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhJFChtyZXF1aXJlZF9jaGVja3N1bV9hbGdvcml0aG0YCCABKA4yIC5vY3AuY29tbW9uLnYxLkNoZWNrc3VtQWxnb3JpdGhtIrcBCg1MaWZlY3ljbGVSdWxlEgoKAmlkGAEgASgJEg8KB2VuYWJsZWQYAiABKAgSDQoFbWF0Y2gYAyABKAkSNwoKdHJhbnNpdGlvbhgEIAEoCzIhLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVUcmFuc2l0aW9uSAASNwoKZXhwaXJhdGlvbhgFIAEoCzIhLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVFeHBpcmF0aW9uSABCCAoGYWN0aW9uIlYKE0xpZmVjeWNsZVRyYW5zaXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFQoNc3RvcmFnZV9jbGFzcxgCIAEoCSI/ChNMaWZlY3ljbGVFeHBpcmF0aW9uEigKBWFmdGVyGAEgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIo0BChBPYmplY3RMb2NrQ29uZmlnEg8KB2VuYWJsZWQYASABKAgSMgoMZGVmYXVsdF9tb2RlGAIgASgOMhwub2NwLmFkbWluLnYxLk9iamVjdExvY2tNb2RlEjQKEWRlZmF1bHRfcmV0ZW50aW9uGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkEKEEJ1Y2tldFZlcnNpb25pbmcSDwoHZW5hYmxlZBgBIAEoCBIcChRrZWVwX2RlbGV0ZXNfZm9yZXZlchgCIAEoCCJQChFCdWNrZXRSZXBsaWNhdGlvbhIPCgdlbmFibGVkGAEgASgIEhoKEmRlc3RpbmF0aW9uX2J1Y2tldBgCIAEoCRIOCgZmaWx0ZXIYAyABKAkiugIKBlRlbmFudBIMCgRuYW1lGAEgASgJEhEKCXRlbmFudF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMAoGbGFiZWxzGAQgAygLMiAub2NwLmFkbWluLnYxLlRlbmFudC5MYWJlbHNFbnRyeRIeChZpbmhlcml0ZWRfY2VkYXJfcG9saWN5GAUgASgJEhgKEHJlc291cmNlX3ZlcnNpb24YBiABKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLkAgoJT2JqZWN0S2V5EgwKBG5hbWUYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEhIKCm9iamVjdF9rZXkYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBmJ1Y2tldBgFIAEoCRI2Cg9jb21wbGV0aW9uX21vZGUYBiABKA4yHS5vY3AuY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI0Cgtjb25zdHJhaW50cxgIIAEoCzIfLm9jcC5hZG1pbi52MS5CdWNrZXRDb25zdHJhaW50cxIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvMBCgVRdW90YRIMCgRuYW1lGAEgASgJEhcKD21heF90b3RhbF9ieXRlcxgCIAEoAxIYChBtYXhfb2JqZWN0X2NvdW50GAMgASgDEhkKEW1heF9ieXRlc19wZXJfZGF5GAQgASgDEhsKE21heF9vYmplY3RzX3Blcl9kYXkYBSABKAMSJwoFdXNhZ2UYBiABKAsyGC5vY3AuYWRtaW4udjEuUXVvdGFVc2FnZRIYChByZXNvdXJjZV92ZXJzaW9uGAcgASgJEi4KCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpYBCgpRdW90YVVzYWdlEhMKC3RvdGFsX2J5dGVzGAEgASgDEhQKDG9iamVjdF9jb3VudBgCIAEoAxITCgtieXRlc190b2RheRgDIAEoAxIVCg1vYmplY3RzX3RvZGF5GAQgASgDEjEKDWxhc3RfcmVzZXRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIrYCCg1BdWRpdExvZ0VudHJ5EhAKCGVudHJ5X2lkGAEgASgJEiYKAmF0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1hY3Rvcl9zdWJqZWN0GAMgASgJEhcKD2FjdG9yX3RlbmFudF9pZBgEIAEoCRIWCg5hY3Rvcl9hdWRpZW5jZRgFIAEoCRIOCgZhY3Rpb24YBiABKAkSFQoNcmVzb3VyY2VfbmFtZRgHIAEoCRISCgpyZXF1ZXN0X2lkGAggASgJEhEKCXNvdXJjZV9pcBgJIAEoCRITCgtiZWZvcmVfanNvbhgKIAEoDBISCgphZnRlcl9qc29uGAsgASgMEhUKDWVycm9yX21lc3NhZ2UYDCABKAkSFQoNY2FwYWJpbGl0eV9pZBgNIAEoCSL3AQoRRXZlbnRTdWJzY3JpcHRpb24SDAoEbmFtZRgBIAEoCRIRCgl0ZW5hbnRfaWQYAiABKAkSDgoGZmlsdGVyGAMgASgJEiUKBHNpbmsYBCABKAsyFy5vY3AuYWRtaW4udjEuRXZlbnRTaW5rEhAKCGRpc2FibGVkGAUgASgIEhgKEHJlc291cmNlX3ZlcnNpb24YBiABKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAitQEKCUV2ZW50U2luaxImCgRodHRwGAEgASgLMhYub2NwLmFkbWluLnYxLkh0dHBTaW5rSAASKAoFa2Fma2EYAiABKAsyFy5vY3AuYWRtaW4udjEuS2Fma2FTaW5rSAASJAoDc3FzGAMgASgLMhUub2NwLmFkbWluLnYxLlNxc1NpbmtIABImCgRuYXRzGAQgASgLMhYub2NwLmFkbWluLnYxLk5hdHNTaW5rSABCCAoGdGFyZ2V0IkkKCEh0dHBTaW5rEgsKA3VybBgBIAEoCRIaChJzaWduaW5nX3NlY3JldF9yZWYYAiABKAkSFAoMbWF4X2F0dGVtcHRzGAMgASgFIisKCUthZmthU2luaxIPCgdicm9rZXJzGAEgASgJEg0KBXRvcGljGAIgASgJIiwKB1Nxc1NpbmsSEQoJcXVldWVfdXJsGAEgASgJEg4KBnJlZ2lvbhgCIAEoCSJBCghOYXRzU2luaxILCgN1cmwYASABKAkSDwoHc3ViamVjdBgCIAEoCRIXCg9jcmVkZW50aWFsc19yZWYYAyABKAkqegoLU3RvcmFnZUtpbmQSHAoYU1RPUkFHRV9LSU5EX1VOU1BFQ0lGSUVEEAASFwoTU1RPUkFHRV9LSU5EX0FXU19TMxABEh4KGlNUT1JBR0VfS0lORF9TM19DT01QQVRJQkxFEAISFAoQU1RPUkFHRV9LSU5EX0dDUxADKl0KB1NzZVR5cGUSGAoUU1NFX1RZUEVfVU5TUEVDSUZJRUQQABIRCg1TU0VfVFlQRV9OT05FEAESEwoPU1NFX1RZUEVfQUVTMjU2EAISEAoMU1NFX1RZUEVfS01TEAMqcAoLRXZlbnRUYXJnZXQSHAoYRVZFTlRfVEFSR0VUX1VOU1BFQ0lGSUVEEAASFQoRRVZFTlRfVEFSR0VUX05PTkUQARIUChBFVkVOVF9UQVJHRVRfU1FTEAISFgoSRVZFTlRfVEFSR0VUX1JFRElTEAMqdAoOT2JqZWN0TG9ja01vZGUSIAocT0JKRUNUX0xPQ0tfTU9ERV9VTlNQRUNJRklFRBAAEh8KG09CSkVDVF9MT0NLX01PREVfR09WRVJOQU5DRRABEh8KG09CSkVDVF9MT0NLX01PREVfQ09NUExJQU5DRRACQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM",
+    [
+      file_google_protobuf_duration,
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_resource,
+    ],
+  );
 
 /**
  * StorageBackend is the physical S3-compatible target. Provisioned by
@@ -117,31 +135,34 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
  * Describes the message paladin.admin.v1.StorageBackend.
  * Use `create(StorageBackendSchema)` to create a new message.
  */
-export const StorageBackendSchema: GenMessage<StorageBackend> = /*@__PURE__*/
+export const StorageBackendSchema: GenMessage<StorageBackend> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 0);
 
 /**
  * @generated from message paladin.admin.v1.ServerSideEncryption
  */
-export type ServerSideEncryption = Message<"paladin.admin.v1.ServerSideEncryption"> & {
-  /**
-   * @generated from field: paladin.admin.v1.SseType type = 1;
-   */
-  type: SseType;
+export type ServerSideEncryption =
+  Message<"paladin.admin.v1.ServerSideEncryption"> & {
+    /**
+     * @generated from field: paladin.admin.v1.SseType type = 1;
+     */
+    type: SseType;
 
-  /**
-   * required when type=KMS
-   *
-   * @generated from field: string key_id = 2;
-   */
-  keyId: string;
-};
+    /**
+     * required when type=KMS
+     *
+     * @generated from field: string key_id = 2;
+     */
+    keyId: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ServerSideEncryption.
  * Use `create(ServerSideEncryptionSchema)` to create a new message.
  */
-export const ServerSideEncryptionSchema: GenMessage<ServerSideEncryption> = /*@__PURE__*/
+export const ServerSideEncryptionSchema: GenMessage<ServerSideEncryption> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 1);
 
 /**
@@ -173,7 +194,8 @@ export type EventSourceConfig = Message<"paladin.admin.v1.EventSourceConfig"> & 
  * Describes the message paladin.admin.v1.EventSourceConfig.
  * Use `create(EventSourceConfigSchema)` to create a new message.
  */
-export const EventSourceConfigSchema: GenMessage<EventSourceConfig> = /*@__PURE__*/
+export const EventSourceConfigSchema: GenMessage<EventSourceConfig> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 2);
 
 /**
@@ -301,7 +323,8 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
  * Describes the message paladin.admin.v1.Bucket.
  * Use `create(BucketSchema)` to create a new message.
  */
-export const BucketSchema: GenMessage<Bucket> = /*@__PURE__*/
+export const BucketSchema: GenMessage<Bucket> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 3);
 
 /**
@@ -363,7 +386,8 @@ export type BucketConstraints = Message<"paladin.admin.v1.BucketConstraints"> & 
  * Describes the message paladin.admin.v1.BucketConstraints.
  * Use `create(BucketConstraintsSchema)` to create a new message.
  */
-export const BucketConstraintsSchema: GenMessage<BucketConstraints> = /*@__PURE__*/
+export const BucketConstraintsSchema: GenMessage<BucketConstraints> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 4);
 
 /**
@@ -390,65 +414,73 @@ export type LifecycleRule = Message<"paladin.admin.v1.LifecycleRule"> & {
   /**
    * @generated from oneof paladin.admin.v1.LifecycleRule.action
    */
-  action: {
-    /**
-     * @generated from field: paladin.admin.v1.LifecycleTransition transition = 4;
-     */
-    value: LifecycleTransition;
-    case: "transition";
-  } | {
-    /**
-     * @generated from field: paladin.admin.v1.LifecycleExpiration expiration = 5;
-     */
-    value: LifecycleExpiration;
-    case: "expiration";
-  } | { case: undefined; value?: undefined };
+  action:
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.LifecycleTransition transition = 4;
+         */
+        value: LifecycleTransition;
+        case: "transition";
+      }
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.LifecycleExpiration expiration = 5;
+         */
+        value: LifecycleExpiration;
+        case: "expiration";
+      }
+    | { case: undefined; value?: undefined };
 };
 
 /**
  * Describes the message paladin.admin.v1.LifecycleRule.
  * Use `create(LifecycleRuleSchema)` to create a new message.
  */
-export const LifecycleRuleSchema: GenMessage<LifecycleRule> = /*@__PURE__*/
+export const LifecycleRuleSchema: GenMessage<LifecycleRule> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 5);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleTransition
  */
-export type LifecycleTransition = Message<"paladin.admin.v1.LifecycleTransition"> & {
-  /**
-   * @generated from field: google.protobuf.Duration after = 1;
-   */
-  after?: Duration | undefined;
+export type LifecycleTransition =
+  Message<"paladin.admin.v1.LifecycleTransition"> & {
+    /**
+     * @generated from field: google.protobuf.Duration after = 1;
+     */
+    after?: Duration | undefined;
 
-  /**
-   * @generated from field: string storage_class = 2;
-   */
-  storageClass: string;
-};
+    /**
+     * @generated from field: string storage_class = 2;
+     */
+    storageClass: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.LifecycleTransition.
  * Use `create(LifecycleTransitionSchema)` to create a new message.
  */
-export const LifecycleTransitionSchema: GenMessage<LifecycleTransition> = /*@__PURE__*/
+export const LifecycleTransitionSchema: GenMessage<LifecycleTransition> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 6);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleExpiration
  */
-export type LifecycleExpiration = Message<"paladin.admin.v1.LifecycleExpiration"> & {
-  /**
-   * @generated from field: google.protobuf.Duration after = 1;
-   */
-  after?: Duration | undefined;
-};
+export type LifecycleExpiration =
+  Message<"paladin.admin.v1.LifecycleExpiration"> & {
+    /**
+     * @generated from field: google.protobuf.Duration after = 1;
+     */
+    after?: Duration | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.LifecycleExpiration.
  * Use `create(LifecycleExpirationSchema)` to create a new message.
  */
-export const LifecycleExpirationSchema: GenMessage<LifecycleExpiration> = /*@__PURE__*/
+export const LifecycleExpirationSchema: GenMessage<LifecycleExpiration> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 7);
 
 /**
@@ -475,7 +507,8 @@ export type ObjectLockConfig = Message<"paladin.admin.v1.ObjectLockConfig"> & {
  * Describes the message paladin.admin.v1.ObjectLockConfig.
  * Use `create(ObjectLockConfigSchema)` to create a new message.
  */
-export const ObjectLockConfigSchema: GenMessage<ObjectLockConfig> = /*@__PURE__*/
+export const ObjectLockConfigSchema: GenMessage<ObjectLockConfig> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 8);
 
 /**
@@ -499,7 +532,8 @@ export type BucketVersioning = Message<"paladin.admin.v1.BucketVersioning"> & {
  * Describes the message paladin.admin.v1.BucketVersioning.
  * Use `create(BucketVersioningSchema)` to create a new message.
  */
-export const BucketVersioningSchema: GenMessage<BucketVersioning> = /*@__PURE__*/
+export const BucketVersioningSchema: GenMessage<BucketVersioning> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 9);
 
 /**
@@ -530,7 +564,8 @@ export type BucketReplication = Message<"paladin.admin.v1.BucketReplication"> & 
  * Describes the message paladin.admin.v1.BucketReplication.
  * Use `create(BucketReplicationSchema)` to create a new message.
  */
-export const BucketReplicationSchema: GenMessage<BucketReplication> = /*@__PURE__*/
+export const BucketReplicationSchema: GenMessage<BucketReplication> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 10);
 
 /**
@@ -586,7 +621,8 @@ export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
  * Describes the message paladin.admin.v1.Tenant.
  * Use `create(TenantSchema)` to create a new message.
  */
-export const TenantSchema: GenMessage<Tenant> = /*@__PURE__*/
+export const TenantSchema: GenMessage<Tenant> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 11);
 
 /**
@@ -665,7 +701,8 @@ export type ObjectKey = Message<"paladin.admin.v1.ObjectKey"> & {
  * Describes the message paladin.admin.v1.ObjectKey.
  * Use `create(ObjectKeySchema)` to create a new message.
  */
-export const ObjectKeySchema: GenMessage<ObjectKey> = /*@__PURE__*/
+export const ObjectKeySchema: GenMessage<ObjectKey> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 12);
 
 /**
@@ -726,7 +763,8 @@ export type Quota = Message<"paladin.admin.v1.Quota"> & {
  * Describes the message paladin.admin.v1.Quota.
  * Use `create(QuotaSchema)` to create a new message.
  */
-export const QuotaSchema: GenMessage<Quota> = /*@__PURE__*/
+export const QuotaSchema: GenMessage<Quota> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 13);
 
 /**
@@ -763,7 +801,8 @@ export type QuotaUsage = Message<"paladin.admin.v1.QuotaUsage"> & {
  * Describes the message paladin.admin.v1.QuotaUsage.
  * Use `create(QuotaUsageSchema)` to create a new message.
  */
-export const QuotaUsageSchema: GenMessage<QuotaUsage> = /*@__PURE__*/
+export const QuotaUsageSchema: GenMessage<QuotaUsage> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 14);
 
 /**
@@ -856,7 +895,8 @@ export type AuditLogEntry = Message<"paladin.admin.v1.AuditLogEntry"> & {
  * Describes the message paladin.admin.v1.AuditLogEntry.
  * Use `create(AuditLogEntrySchema)` to create a new message.
  */
-export const AuditLogEntrySchema: GenMessage<AuditLogEntry> = /*@__PURE__*/
+export const AuditLogEntrySchema: GenMessage<AuditLogEntry> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 15);
 
 /**
@@ -915,42 +955,73 @@ export type EventSubscription = Message<"paladin.admin.v1.EventSubscription"> & 
  * Describes the message paladin.admin.v1.EventSubscription.
  * Use `create(EventSubscriptionSchema)` to create a new message.
  */
-export const EventSubscriptionSchema: GenMessage<EventSubscription> = /*@__PURE__*/
+export const EventSubscriptionSchema: GenMessage<EventSubscription> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 16);
 
 /**
+ * EventSink is a tagged union of the supported delivery targets. Sink
+ * pick conventions, in order of preference for new operator subs:
+ *
+ *   - HttpSink  — universal "send a signed POST somewhere"; the right
+ *                 default for SaaS endpoints (Slack, PagerDuty) and
+ *                 customer-owned webhook receivers.
+ *   - NatsSink  — cloud-native pub/sub. Fire-and-forget core publish
+ *                 keeps the dispatcher hot loop fast; the natural
+ *                 sink for in-cluster agent-platform consumers and
+ *                 anything that wants subject-based fan-out without
+ *                 owning an HTTP listener.
+ *   - KafkaSink — durable, ordered, partitioned. Pick when the
+ *                 consumer needs replay or strict per-key ordering.
+ *                 Heavier dependency footprint (still BACKLOG).
+ *   - SqsSink   — AWS-native at-least-once queue. Pick when the
+ *                 receiver lives inside the AWS managed-services
+ *                 boundary already (still BACKLOG).
+ *
  * @generated from message paladin.admin.v1.EventSink
  */
 export type EventSink = Message<"paladin.admin.v1.EventSink"> & {
   /**
    * @generated from oneof paladin.admin.v1.EventSink.target
    */
-  target: {
-    /**
-     * @generated from field: paladin.admin.v1.HttpSink http = 1;
-     */
-    value: HttpSink;
-    case: "http";
-  } | {
-    /**
-     * @generated from field: paladin.admin.v1.KafkaSink kafka = 2;
-     */
-    value: KafkaSink;
-    case: "kafka";
-  } | {
-    /**
-     * @generated from field: paladin.admin.v1.SqsSink sqs = 3;
-     */
-    value: SqsSink;
-    case: "sqs";
-  } | { case: undefined; value?: undefined };
+  target:
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.HttpSink http = 1;
+         */
+        value: HttpSink;
+        case: "http";
+      }
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.KafkaSink kafka = 2;
+         */
+        value: KafkaSink;
+        case: "kafka";
+      }
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.SqsSink sqs = 3;
+         */
+        value: SqsSink;
+        case: "sqs";
+      }
+    | {
+        /**
+         * @generated from field: paladin.admin.v1.NatsSink nats = 4;
+         */
+        value: NatsSink;
+        case: "nats";
+      }
+    | { case: undefined; value?: undefined };
 };
 
 /**
  * Describes the message paladin.admin.v1.EventSink.
  * Use `create(EventSinkSchema)` to create a new message.
  */
-export const EventSinkSchema: GenMessage<EventSink> = /*@__PURE__*/
+export const EventSinkSchema: GenMessage<EventSink> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 17);
 
 /**
@@ -981,7 +1052,8 @@ export type HttpSink = Message<"paladin.admin.v1.HttpSink"> & {
  * Describes the message paladin.admin.v1.HttpSink.
  * Use `create(HttpSinkSchema)` to create a new message.
  */
-export const HttpSinkSchema: GenMessage<HttpSink> = /*@__PURE__*/
+export const HttpSinkSchema: GenMessage<HttpSink> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 18);
 
 /**
@@ -1003,7 +1075,8 @@ export type KafkaSink = Message<"paladin.admin.v1.KafkaSink"> & {
  * Describes the message paladin.admin.v1.KafkaSink.
  * Use `create(KafkaSinkSchema)` to create a new message.
  */
-export const KafkaSinkSchema: GenMessage<KafkaSink> = /*@__PURE__*/
+export const KafkaSinkSchema: GenMessage<KafkaSink> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 19);
 
 /**
@@ -1025,8 +1098,64 @@ export type SqsSink = Message<"paladin.admin.v1.SqsSink"> & {
  * Describes the message paladin.admin.v1.SqsSink.
  * Use `create(SqsSinkSchema)` to create a new message.
  */
-export const SqsSinkSchema: GenMessage<SqsSink> = /*@__PURE__*/
+export const SqsSinkSchema: GenMessage<SqsSink> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 20);
+
+/**
+ * NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS
+ * subject via core publish (fire-and-forget). JetStream durable
+ * streams are BACKLOG — opt-in once the agentic platform needs the
+ * at-least-once guarantees beyond what core NATS gives us.
+ *
+ * @generated from message paladin.admin.v1.NatsSink
+ */
+export type NatsSink = Message<"paladin.admin.v1.NatsSink"> & {
+  /**
+   * NATS server URL. Comma-separated for cluster (e.g.
+   * "nats://nats-0.nats.svc:4222,nats://nats-1.nats.svc:4222").
+   * The dispatcher reuses one connection per server pool across all
+   * subscriptions targeting the same servers — connection-pooled by
+   * URL string equality.
+   *
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * Subject pattern. Static or interpolated; for v1 only static.
+   * Convention: `paladin.events.<tenant_id>.<event_type>` so consumers
+   * can wildcard-subscribe per tenant or per event class. Operator
+   * picks the convention that matches their downstream routing.
+   *
+   * @generated from field: string subject = 2;
+   */
+  subject: string;
+
+  /**
+   * Optional credentials. SecretRef so plaintext never lives in YAML.
+   * Auth modes:
+   *   - empty / no auth: anonymous publish (lab clusters only)
+   *   - `token:<plaintext>`: bare token auth
+   *   - `nkey:<plaintext>`: NKey-based auth (BACKLOG — needs file
+   *     materialisation; v1 ships token only)
+   *   - `jwt:<plaintext>`: JWT + nkey credential file (BACKLOG —
+   *     same materialisation gap)
+   * Format is `<scheme>:<value>` to keep one string field, parsed
+   * server-side. Validation rejects unknown schemes.
+   *
+   * @generated from field: string credentials_ref = 3;
+   */
+  credentialsRef: string;
+};
+
+/**
+ * Describes the message paladin.admin.v1.NatsSink.
+ * Use `create(NatsSinkSchema)` to create a new message.
+ */
+export const NatsSinkSchema: GenMessage<NatsSink> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_types, 21);
 
 /**
  * @generated from enum paladin.admin.v1.StorageKind
@@ -1058,7 +1187,8 @@ export enum StorageKind {
 /**
  * Describes the enum paladin.admin.v1.StorageKind.
  */
-export const StorageKindSchema: GenEnum<StorageKind> = /*@__PURE__*/
+export const StorageKindSchema: GenEnum<StorageKind> =
+  /*@__PURE__*/
   enumDesc(file_paladin_admin_v1_types, 0);
 
 /**
@@ -1089,7 +1219,8 @@ export enum SseType {
 /**
  * Describes the enum paladin.admin.v1.SseType.
  */
-export const SseTypeSchema: GenEnum<SseType> = /*@__PURE__*/
+export const SseTypeSchema: GenEnum<SseType> =
+  /*@__PURE__*/
   enumDesc(file_paladin_admin_v1_types, 1);
 
 /**
@@ -1120,7 +1251,8 @@ export enum EventTarget {
 /**
  * Describes the enum paladin.admin.v1.EventTarget.
  */
-export const EventTargetSchema: GenEnum<EventTarget> = /*@__PURE__*/
+export const EventTargetSchema: GenEnum<EventTarget> =
+  /*@__PURE__*/
   enumDesc(file_paladin_admin_v1_types, 2);
 
 /**
@@ -1150,6 +1282,6 @@ export enum ObjectLockMode {
 /**
  * Describes the enum paladin.admin.v1.ObjectLockMode.
  */
-export const ObjectLockModeSchema: GenEnum<ObjectLockMode> = /*@__PURE__*/
+export const ObjectLockModeSchema: GenEnum<ObjectLockMode> =
+  /*@__PURE__*/
   enumDesc(file_paladin_admin_v1_types, 3);
-

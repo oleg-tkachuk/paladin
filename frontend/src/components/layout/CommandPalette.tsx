@@ -12,19 +12,18 @@ import {
   MagnifyingGlassIcon,
   DocumentIcon,
   ChartBarIcon,
-  TrashIcon,
   HeartIcon,
   Cog6ToothIcon,
   CommandLineIcon,
   ArrowRightIcon,
   ServerStackIcon,
-  TagIcon,
   BuildingOfficeIcon,
+  ClockIcon,
 } from "@heroicons/react/24/outline";
 import { useActions } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
-import { objectClient, tenantClient } from "@/lib/connect/client";
-import { Object$ } from "@/gen/paladin/data/v1/types_pb";
+import { tenantClient } from "@/lib/connect/client";
+import { API_PAGE_SIZE_MAX } from "@/constants";
 interface SearchResult {
   id: string;
   type: "action" | "object" | "nav";
@@ -44,38 +43,122 @@ export function CommandPalette() {
 
   const router = useRouter();
   const { actions } = useActions();
-  const { objectKey: scopedObjectKey } = useScope();
+  const { tenant: scopedTenant, objectKey: scopedObjectKey } = useScope();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Resolve the URL slug for the active scoped tenant. Tenant proto
+  // doesn't expose a slug field today (BACKLOG), so fall back to
+  // tenantId — that still routes correctly because TenantLayout
+  // accepts both forms and replaces the address bar with the
+  // canonical slug once it resolves.
+  const scopedTenantSlug = scopedTenant?.tenantId ?? null;
+
+  const tenantScopedNavs: SearchResult[] = useMemo(() => {
+    if (!scopedTenantSlug) return [];
+    const base = `/tenants/${encodeURIComponent(scopedTenantSlug)}`;
+    const label = scopedTenant?.displayName || scopedTenantSlug;
+    return [
+      {
+        id: "nav-tenant-overview",
+        type: "nav",
+        title: `Open ${label}`,
+        subtitle: "Tenant overview, identity + quick links",
+        icon: BuildingOfficeIcon,
+        shortcut: "G T",
+        onSelect: () => router.push(base),
+      },
+      {
+        id: "nav-tenant-buckets",
+        type: "nav",
+        title: `Buckets in ${label}`,
+        subtitle: "S3 buckets owned by this tenant",
+        icon: ServerStackIcon,
+        shortcut: "G B",
+        onSelect: () => router.push(`${base}/buckets`),
+      },
+      {
+        id: "nav-tenant-object-keys",
+        type: "nav",
+        title: `Object Keys in ${label}`,
+        subtitle: "Tenant-scoped namespaces routed to a bucket",
+        icon: ServerStackIcon,
+        shortcut: "G K",
+        onSelect: () => router.push(`${base}/object-keys`),
+      },
+      {
+        id: "nav-tenant-policies",
+        type: "nav",
+        title: `Policies in ${label}`,
+        subtitle: "Effective Cedar graph for this tenant",
+        icon: CommandLineIcon,
+        onSelect: () => router.push(`${base}/policies`),
+      },
+      {
+        id: "nav-tenant-audit",
+        type: "nav",
+        title: `Audit log for ${label}`,
+        subtitle: "Tenant-scoped mutation log",
+        icon: ClockIcon,
+        onSelect: () => router.push(`${base}/audit-log`),
+      },
+    ];
+  }, [router, scopedTenantSlug, scopedTenant?.displayName]);
 
   const staticNavs: SearchResult[] = useMemo(
     () => [
       {
-        id: "nav-objects",
+        id: "nav-tenants",
         type: "nav",
-        title: "Object Explorer",
-        subtitle: "Browse all stored objects",
-        icon: DocumentIcon,
-        shortcut: "G O",
-        onSelect: () => router.push("/objects"),
+        title: "Resources",
+        subtitle: "Tenant index — gateway to all resource subtrees",
+        icon: BuildingOfficeIcon,
+        shortcut: "G R",
+        onSelect: () => router.push("/tenants"),
       },
       {
-        id: "nav-objectKeys",
+        id: "nav-policies",
         type: "nav",
-        title: "Buckets Management",
-        subtitle: "Manage storage objectKeys and configurations",
+        title: "Policies",
+        subtitle: "System-wide Cedar editor",
+        icon: CommandLineIcon,
+        shortcut: "G P",
+        onSelect: () => router.push("/policies"),
+      },
+      // Cross-tenant Object Explorer is gone — flat /objects page
+      // was deleted in Phase 5. Object listing now requires an
+      // ObjectKey scope (lives under /tenants/<id>/object-keys/
+      // <name>/objects). The cross-tenant /buckets and /object-keys
+      // entries below stay because their RPCs accept empty parents.
+      {
+        id: "nav-buckets",
+        type: "nav",
+        title: "Buckets (cross-tenant)",
+        subtitle: "Platform-admin index of every bucket",
         icon: ServerStackIcon,
-        shortcut: "G B",
+        onSelect: () => router.push("/buckets"),
+      },
+      {
+        id: "nav-object-keys",
+        type: "nav",
+        title: "Object Keys (cross-tenant)",
+        subtitle: "Platform-admin index of every ObjectKey",
+        icon: ServerStackIcon,
         onSelect: () => router.push("/object-keys"),
       },
       {
         id: "nav-upload",
         type: "nav",
         title: "Upload Assets",
-        subtitle: "Upload new files to object tags",
+        subtitle: "Upload new files",
         icon: DocumentIcon,
         shortcut: "G U",
         onSelect: () => router.push("/upload"),
       },
+      // /trash and /object-tags removed in Phase 5. Trash is now
+      // a per-ObjectKey tab (/tenants/.../object-keys/<name>/trash).
+      // Object Tags drop entirely — they were a holdover taxonomy
+      // surface; per the BACKLOG they'll come back as a label
+      // filter on the Objects tab once the cross-bucket index lands.
       {
         id: "nav-stats",
         type: "nav",
@@ -84,33 +167,6 @@ export function CommandPalette() {
         icon: ChartBarIcon,
         shortcut: "G S",
         onSelect: () => router.push("/health"),
-      },
-      {
-        id: "nav-trash",
-        type: "nav",
-        title: "Trash Bin",
-        subtitle: "Recover or delete trashed items",
-        icon: TrashIcon,
-        shortcut: "G T",
-        onSelect: () => router.push("/trash"),
-      },
-      {
-        id: "nav-object-tags",
-        type: "nav",
-        title: "Object Tags",
-        subtitle: "Manage object classification and taxonomies",
-        icon: TagIcon,
-        shortcut: "G K",
-        onSelect: () => router.push("/object-tags"),
-      },
-      {
-        id: "nav-tenants",
-        type: "nav",
-        title: "Tenants",
-        subtitle: "Manage tenant identity and metadata",
-        icon: BuildingOfficeIcon,
-        shortcut: "G L",
-        onSelect: () => router.push("/tenants"),
       },
       {
         id: "nav-health",
@@ -132,6 +188,14 @@ export function CommandPalette() {
       },
     ],
     [router],
+  );
+
+  // Default-state list (palette open, no query): show the tenant
+  // jumps first when a tenant is in scope, then the global static
+  // navs. Searching merges both pools; see performSearch below.
+  const defaultNavs = useMemo(
+    () => [...tenantScopedNavs, ...staticNavs],
+    [tenantScopedNavs, staticNavs],
   );
 
   const performSearch = useCallback(
@@ -161,61 +225,63 @@ export function CommandPalette() {
           onSelect: () => a.perform(),
         }));
 
-      const navResults: SearchResult[] = staticNavs.filter(
+      // Tenant-scoped jumps + global static navs both in the search
+      // pool. Tenant-scoped entries naturally rank higher because
+      // their labels include the active tenant name (operators
+      // typing "buckets" while in tenant T see "Buckets in T" first).
+      const lowerQuery = searchQuery.toLowerCase();
+      const navResults: SearchResult[] = [
+        ...tenantScopedNavs,
+        ...staticNavs,
+      ].filter(
         (n) =>
-          n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (n.subtitle &&
-            n.subtitle.toLowerCase().includes(searchQuery.toLowerCase())),
+          n.title.toLowerCase().includes(lowerQuery) ||
+          (n.subtitle && n.subtitle.toLowerCase().includes(lowerQuery)),
       );
 
       setSearchResults([...actionResults, ...navResults]);
       setSelectedIndex(0);
 
       try {
-        // Object/tenant search parked during proto migration. ListObjects /
-        // ListTenants request shapes diverged (no top-level objectKey/pageSize);
-        // palette will be wired against the new pagination model after auth +
-        // multi-plane plumbing.
-        void scopedObjectKey;
-        const objectResults: SearchResult[] = [];
-        const objectTagResults: SearchResult[] = [];
-        const tenantResponse: {
-          tenants: Array<{ tenantId: string; displayName: string }>;
-        } = {
-          tenants: [],
-        };
+        // Tenant search via ListTenants — once the proto exposes a
+        // slug field, this should switch to slug-form URLs. Until
+        // then tenantId routes correctly through the layout's
+        // resolver (which canonicalises UUID→slug on landing).
+        const tenantResponse = await tenantClient.listTenants({
+          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+          filter: searchQuery,
+        });
 
         const tenantResults: SearchResult[] = tenantResponse.tenants.map(
           (t) => ({
             id: `tenant-${t.tenantId}`,
             type: "nav",
             title: t.displayName || t.tenantId,
-            subtitle: `Tenant ID: ${t.tenantId}`,
+            subtitle: `Open tenant — id ${t.tenantId}`,
             icon: BuildingOfficeIcon,
-            onSelect: () => router.push(`/tenants?search=${t.tenantId}`),
+            onSelect: () =>
+              router.push(`/tenants/${encodeURIComponent(t.tenantId)}`),
           }),
         );
 
-        if (
-          objectResults.length > 0 ||
-          objectTagResults.length > 0 ||
-          tenantResults.length > 0
-        ) {
-          setSearchResults((prev) => [
-            ...prev,
-            ...objectTagResults,
-            ...tenantResults,
-            ...objectResults,
-          ]);
+        // Object search left out — ListObjects requires backend +
+        // bucket scoping today. Once the data plane exposes a
+        // tenant-wide cross-bucket search, surface object hits
+        // here. `scopedObjectKey` retained so the dependency array
+        // re-fires when scope changes (placeholder for that future
+        // wiring).
+        void scopedObjectKey;
+
+        if (tenantResults.length > 0) {
+          setSearchResults((prev) => [...prev, ...tenantResults]);
         }
       } catch (err) {
         console.error("Command Palette API search failed", err);
-        // We don't clear the local results if API fails
       } finally {
         setIsSearching(false);
       }
     },
-    [actions, staticNavs, router, scopedObjectKey],
+    [actions, staticNavs, tenantScopedNavs, router, scopedObjectKey],
   );
 
   // Debounced search
@@ -254,18 +320,19 @@ export function CommandPalette() {
         if (e.key === "ArrowDown") {
           e.preventDefault();
           setSelectedIndex(
-            (i) => (i + 1) % (searchResults.length || staticNavs.length),
+            (i) => (i + 1) % (searchResults.length || defaultNavs.length),
           );
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
           setSelectedIndex(
             (i) =>
-              (i - 1 + (searchResults.length || staticNavs.length)) %
-              (searchResults.length || staticNavs.length),
+              (i - 1 + (searchResults.length || defaultNavs.length)) %
+              (searchResults.length || defaultNavs.length),
           );
         } else if (e.key === "Enter") {
           e.preventDefault();
-          const results = searchResults.length > 0 ? searchResults : staticNavs;
+          const results =
+            searchResults.length > 0 ? searchResults : defaultNavs;
           const selected = results[selectedIndex];
           if (selected) {
             selected.onSelect();
@@ -275,7 +342,10 @@ export function CommandPalette() {
         return;
       }
 
-      // Global Shortcuts (g + ...)
+      // Global Shortcuts (g + ...). Tenant-scoped jumps win over
+      // generic ones — that way "G B" goes to "Buckets in <scope>"
+      // when a tenant is active and to the cross-tenant index when
+      // it isn't.
       if (
         !isOpen &&
         !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
@@ -284,9 +354,8 @@ export function CommandPalette() {
         const key = e.key.toLowerCase();
 
         if (lastKey === "g" && now - lastKeyTime < 500) {
-          const nav = staticNavs.find((n) =>
-            n.shortcut?.toLowerCase().endsWith(key),
-          );
+          const pool = [...tenantScopedNavs, ...staticNavs];
+          const nav = pool.find((n) => n.shortcut?.toLowerCase().endsWith(key));
           if (nav) {
             e.preventDefault();
             nav.onSelect();
@@ -303,7 +372,15 @@ export function CommandPalette() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggle, staticNavs, isOpen, searchResults, selectedIndex]);
+  }, [
+    toggle,
+    staticNavs,
+    tenantScopedNavs,
+    defaultNavs,
+    isOpen,
+    searchResults,
+    selectedIndex,
+  ]);
 
   // Auto-scroll to selected index
   useEffect(() => {
@@ -320,7 +397,7 @@ export function CommandPalette() {
   if (!isOpen) return null;
 
   const displayedResults =
-    searchResults.length > 0 || query !== "" ? searchResults : staticNavs;
+    searchResults.length > 0 || query !== "" ? searchResults : defaultNavs;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] px-4">

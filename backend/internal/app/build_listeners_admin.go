@@ -6,10 +6,13 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
@@ -43,12 +46,45 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine)
+	// Admin pod owns the producer side of the outbox — Dispatch writes
+	// rows; the dispatcher pod (a separate Deployment, see
+	// cmd/server/serve_dispatcher.go) consumes them. The same struct
+	// retains DeliverOne for the synchronous TestSubscription RPC,
+	// which intentionally bypasses the outbox: operator clicked
+	// "Test delivery", they want the result now.
+	//
+	// NATS pool is wired here too — TestSubscription on a NATS sink
+	// runs through this Dispatcher (not the dispatcher pod's), so
+	// without an attached pool deliverNATS errors with "dispatcher
+	// has no NATS pool". The pool is lazy: NewNatsConnPool allocates
+	// no sockets, and the per-(url, credentials_ref) `get` only
+	// dials on first use — admin pods that never see a NATS Test
+	// pay nothing.
 	dispatcher := &worker.Dispatcher{
 		Store:       eventSubStoreAdapter{r: repos.EventSub},
+		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
+		NATS:        worker.NewNatsConnPool(l.Named("nats-pool")),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}
 	eventSubH.SetDispatcher(dispatcher)
+
+	// Producer wiring — handler-level lifecycle events fan out into
+	// event_deliveries on commit. Without this attach the outbox
+	// stays empty in production traffic and only TestSubscription's
+	// DeliverOne path lights up NATS / HTTP. Scope today: tenant
+	// lifecycle (created / updated / deleted). Bucket / object_key /
+	// quota lifecycle and data-plane object events follow the same
+	// pattern; tracked under the BACKLOG entry "Event dispatcher:
+	// producer wiring".
+	tenantH.SetEventProducer(dispatcher)
+	tenantH.SetLogger(l.Named("tenant-events"))
+	bucketV2H.SetEventProducer(dispatcher)
+	bucketV2H.SetLogger(l.Named("bucket-events"))
+	objectKeyH.SetEventProducer(dispatcher)
+	objectKeyH.SetLogger(l.Named("object-key-events"))
+	quotaH.SetEventProducer(dispatcher)
+	quotaH.SetLogger(l.Named("quota-events"))
 
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
@@ -66,15 +102,26 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// principal via auth.CapabilityFromContext / APITokenFromContext.
 	var capAdmin, apiTokAdmin connect.Interceptor
 	if deps.Capability != nil {
-		capAdmin = auth.CapabilityInterceptor(
+		// Charge-event fan-out is opt-in — high-cardinality (every
+		// chargeable RPC fires), default off in cfg. When enabled
+		// the wiring builds an emitter wrapping the admin pod's
+		// dispatcher; otherwise nil is safe (interceptor stamps
+		// nil on ctx, ChargeCapability skips the dispatch).
+		var chargeEm auth.ChargeEventEmitter
+		if cfg.Dispatcher.ChargeEventsEnabled {
+			chargeEm = newChargeEmitter(dispatcher, l.Named("charge-events"))
+		}
+		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Admin.Server.RealIPHeader,
-			cfg.Capability.ChargePerRequest,
+			cfg.Capability.ChargePerRequestAmount,
+			cfg.Capability.ChargePerRequestUnit,
+			chargeEm,
 		)
 	} else {
-		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0)
+		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
 	}
 	if deps.APIToken != nil {
 		apiTokAdmin = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")
@@ -88,7 +135,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capAdmin,
 		apiTokAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
-		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
+			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")
@@ -121,6 +169,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
+	// CELService — stateless validator for CEL filter / match expressions
+	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,
+	// list-RPC query strings). Same trust posture as PolicyService.Validate:
+	// admin-audience JWT only, no DB, no audit, no Cedar gate.
+	mux.Handle(paladinadminv1connect.NewCELServiceHandler(celh.NewHandler(), adminOpts))
 	mux.Handle(paladinadminv1connect.NewOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
 	{
@@ -130,6 +183,16 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		}
 		mux.Handle(paladinadminv1connect.NewTenantBudgetServiceHandler(
 			admin.NewTenantBudgetServer(usageStore), adminOpts,
+		))
+		// BillingService — read-only aggregation over the charges
+		// ledger (migration 027). Only mounted with a real handler
+		// when the capability subsystem is wired (pool + usage).
+		var billingHandler *billingh.Handler
+		if deps.Capability != nil {
+			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine)
+		}
+		mux.Handle(paladinadminv1connect.NewBillingServiceHandler(
+			admin.NewBillingServer(billingHandler), adminOpts,
 		))
 	}
 	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
@@ -212,12 +275,18 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 	return listener, healthH, nil
 }
 
-// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository under
-// the worker.SubscriptionStore interface (List-only).
+// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository
+// under the worker.SubscriptionStore interface (List + Get). List feeds
+// the producer-side fan-out; Get is the dispatcher pod's per-row sink
+// lookup at delivery time.
 type eventSubStoreAdapter struct {
 	r admindomain.EventSubscriptionRepository
 }
 
 func (a eventSubStoreAdapter) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	return a.r.List(ctx, args)
+}
+
+func (a eventSubStoreAdapter) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	return a.r.Get(ctx, id)
 }

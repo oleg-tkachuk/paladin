@@ -38,3 +38,11 @@ Thumbs.db
 backend/tests/grpcurl/reports/
 backend/tests/api/mutations/reports/
 backend/tests/api/security/reports/
+
+# Claude worktrees
+.claude/worktrees/*
+
+# seed-fixture binary
+backend/seed-fixture
+backend/cmd/seed-fixture/main.go.bak
+

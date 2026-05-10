@@ -76,10 +76,21 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("tenant_id: %w", err))
 	}
+	// Validate the optional unit_code at the boundary; the store
+	// also re-validates but surfacing InvalidArgument to the caller
+	// here is more useful than the generic Internal we'd otherwise
+	// return. Empty string defers to the existing row's unit_code
+	// (or DEFAULT 'USD' on first insert).
+	unit := m.GetUnitCode()
+	if unit != "" && !capability.IsAllowedUnitCode(unit) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("unit_code: %q not in %v", unit, capability.AllowedUnitCodes))
+	}
 	args := capability.SetTenantBudgetArgs{
-		TenantID:     tenantID,
-		MaxBudgetUSD: m.GetMaxBudgetUsd(),
-		ResetSpend:   m.GetResetSpend(),
+		TenantID:        tenantID,
+		MaxBudgetAmount: m.GetMaxBudgetAmount(),
+		UnitCode:        unit,
+		ResetSpend:      m.GetResetSpend(),
 	}
 	if pe := m.GetPeriodEnd(); pe != nil {
 		t := pe.AsTime()
@@ -100,10 +111,15 @@ var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(n
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
 func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
+	unit := tb.UnitCode
+	if unit == "" {
+		unit = capability.DefaultUnitCode
+	}
 	out := &pb.TenantBudget{
-		TenantId:     tb.TenantID.String(),
-		MaxBudgetUsd: tb.MaxBudgetUSD,
-		SpentUsd:     tb.SpentUSD,
+		TenantId:        tb.TenantID.String(),
+		MaxBudgetAmount: tb.MaxBudgetAmount,
+		SpentAmount:     tb.SpentAmount,
+		UnitCode:        unit,
 	}
 	if !tb.PeriodStart.IsZero() {
 		out.PeriodStart = timestamppb.New(tb.PeriodStart)

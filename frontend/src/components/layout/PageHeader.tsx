@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { ArrowUpTrayIcon, CubeIcon } from "@heroicons/react/24/outline";
@@ -5,13 +7,16 @@ import { ArrowUpTrayIcon, CubeIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
+import { T } from "@/lib/ui/typography";
+import { cn } from "@/lib/utils";
 
 import { Breadcrumbs } from "./Breadcrumbs";
 
 interface PageHeaderProps {
   title: React.ReactNode;
   description?: string;
+  /** @deprecated tenantId now comes from useScope(); prop kept for API back-compat. */
   tenantId?: string;
   actions?: React.ReactNode;
   showDefaultActions?: boolean;
@@ -21,10 +26,11 @@ interface PageHeaderProps {
 /**
  * Standard page header. Hierarchy:
  *
- *   Breadcrumbs
+ *   Breadcrumbs (route)
  *   ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──
  *   Title              [actions...] [defaultActions]
- *   Description / tenant pill
+ *   Description
+ *   Scope breadcrumb [backend] · [bucket] · [tenant]
  */
 export const PageHeader: React.FC<PageHeaderProps> = ({
   title,
@@ -34,10 +40,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   showDefaultActions = true,
   showBreadcrumbs = true,
 }) => {
-  const { tenantId: ctxTenantId, tenant } = useTenant();
-  const displayTenant = propTenantId || ctxTenantId || "default";
-  const shortId =
-    displayTenant.length > 12 ? `${displayTenant.slice(0, 8)}…` : displayTenant;
+  const { tenantId, tenant, backendId, bucketName, openScopePicker } =
+    useScope();
+
+  const tenantLabel =
+    tenant?.displayName?.trim() ||
+    propTenantId ||
+    (tenantId ? `${tenantId.slice(0, 8)}…` : null);
 
   return (
     <div className="space-y-4">
@@ -51,12 +60,19 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           ) : (
             title
           )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <Badge variant="outline" className="font-mono text-xs">
-              {tenant?.displayName || shortId}
-            </Badge>
-            {description && <span>{description}</span>}
-          </div>
+          {description && (
+            <div
+              className={cn(T.helper, "flex flex-wrap items-center gap-x-3")}
+            >
+              <span>{description}</span>
+            </div>
+          )}
+          <ScopeBreadcrumb
+            backendId={backendId}
+            bucketName={bucketName}
+            tenantLabel={tenantLabel}
+            onOpen={openScopePicker}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {actions}
@@ -74,8 +90,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                   Upload
                 </Link>
               </Button>
+              {/* Default "Explore" CTA targets the resource gateway —
+                  /tenants — now that /objects (cross-tenant flat list)
+                  no longer exists. From there the operator picks a
+                  tenant → ObjectKey → Objects tab. Pages that want a
+                  scoped explore link still pass their own actions
+                  prop. */}
               <Button size="sm" asChild>
-                <Link href="/objects">
+                <Link href="/tenants">
                   <CubeIcon className="size-4" />
                   Explore
                 </Link>
@@ -88,3 +110,84 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     </div>
   );
 };
+
+// ─── ScopeBreadcrumb ────────────────────────────────────────────────────────
+
+interface ScopeBreadcrumbProps {
+  backendId: string | null;
+  bucketName: string | null;
+  tenantLabel: string | null;
+  onOpen: () => void;
+}
+
+/**
+ * Three-segment breadcrumb [backend] · [bucket] · [tenant]. Each
+ * segment is a Badge styled as a button — clicking any opens the
+ * <ScopePicker> via the shared open state on ScopeContext. Empty
+ * values render "—" so the breadcrumb shape stays stable across
+ * pages. Backend + bucket segments hide on phones (md breakpoint)
+ * — the tenant segment is always visible because every page is
+ * tenant-scoped.
+ */
+function ScopeBreadcrumb({
+  backendId,
+  bucketName,
+  tenantLabel,
+  onOpen,
+}: ScopeBreadcrumbProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <ScopeSegment
+        label="backend"
+        value={backendId}
+        onOpen={onOpen}
+        className="hidden md:inline-flex"
+      />
+      <span
+        className={cn(T.hint, "hidden shrink-0 md:inline")}
+        aria-hidden="true"
+      >
+        ·
+      </span>
+      <ScopeSegment
+        label="bucket"
+        value={bucketName}
+        onOpen={onOpen}
+        className="hidden md:inline-flex"
+      />
+      <span
+        className={cn(T.hint, "hidden shrink-0 md:inline")}
+        aria-hidden="true"
+      >
+        ·
+      </span>
+      <ScopeSegment label="tenant" value={tenantLabel} onOpen={onOpen} />
+    </div>
+  );
+}
+
+interface ScopeSegmentProps {
+  label: string;
+  value: string | null;
+  onOpen: () => void;
+  className?: string;
+}
+
+function ScopeSegment({ label, value, onOpen, className }: ScopeSegmentProps) {
+  return (
+    <Badge asChild variant="outline" className={cn("gap-1", className)}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Change ${label} (currently ${value ?? "unset"})`}
+        title={`Change ${label}`}
+        className="cursor-pointer"
+      >
+        <span className={cn(T.labelTight)}>{label}</span>
+        <span className={cn(T.codeSmall, value ? "" : "italic opacity-70")}>
+          {value ?? "—"}
+        </span>
+      </button>
+    </Badge>
+  );
+}

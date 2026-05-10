@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/tenant_budget_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -12,8 +20,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/tenant_budget_service.proto.
  */
-export const file_paladin_admin_v1_tenant_budget_service: GenFile = /*@__PURE__*/
-  fileDesc("CihvY3AvYWRtaW4vdjEvdGVuYW50X2J1ZGdldF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEi+AEKDFRlbmFudEJ1ZGdldBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEiYKDm1heF9idWRnZXRfdXNkGAIgASgBQg66SAsSCSkAAAAAAAAAABIRCglzcGVudF91c2QYAyABKAESMAoMcGVyaW9kX3N0YXJ0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI8Ch1UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBIkwKHlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZRIqCgZidWRnZXQYASABKAsyGi5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0IqkBCh1UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEiYKDm1heF9idWRnZXRfdXNkGAIgASgBQg66SAsSCSkAAAAAAAAAABITCgtyZXNldF9zcGVuZBgDIAEoCBIuCgpwZXJpb2RfZW5kGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJMCh5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2USKgoGYnVkZ2V0GAEgASgLMhoub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldDLZAQoTVGVuYW50QnVkZ2V0U2VydmljZRJgCgNHZXQSKy5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QaLC5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlc3BvbnNlEmAKA1NldBIrLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVxdWVzdBosLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+export const file_paladin_admin_v1_tenant_budget_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CihvY3AvYWRtaW4vdjEvdGVuYW50X2J1ZGdldF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEikQIKDFRlbmFudEJ1ZGdldBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEikKEW1heF9idWRnZXRfYW1vdW50GAIgASgBQg66SAsSCSkAAAAAAAAAABIUCgxzcGVudF9hbW91bnQYAyABKAESMAoMcGVyaW9kX3N0YXJ0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgl1bml0X2NvZGUYByABKAkiPAodVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABASJMCh5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USKgoGYnVkZ2V0GAEgASgLMhoub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldCK/AQodVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIpChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIOukgLEgkpAAAAAAAAAAASEwoLcmVzZXRfc3BlbmQYAyABKAgSLgoKcGVyaW9kX2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJdW5pdF9jb2RlGAUgASgJIkwKHlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZRIqCgZidWRnZXQYASABKAsyGi5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0MtkBChNUZW5hbnRCdWRnZXRTZXJ2aWNlEmAKA0dldBIrLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVxdWVzdBosLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USYAoDU2V0Eisub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0Giwub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    [file_buf_validate_validate, file_google_protobuf_timestamp],
+  );
 
 /**
  * TenantBudget is the typed metadata view of a per-tenant aggregate
@@ -28,19 +40,22 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
   tenantId: string;
 
   /**
-   * max_budget_usd is the cap. 0 = unlimited (counter still
-   * accumulates so admin tooling can show "current spend").
+   * max_budget_amount is the cap. 0 = unlimited (counter still
+   * accumulates so admin tooling can show "current spend"). Field
+   * number unchanged (wire-compatible with the previous
+   * max_budget_usd name). Currency given by unit_code.
    *
-   * @generated from field: double max_budget_usd = 2;
+   * @generated from field: double max_budget_amount = 2;
    */
-  maxBudgetUsd: number;
+  maxBudgetAmount: number;
 
   /**
-   * spent_usd is the accumulated spend within the current period.
+   * spent_amount is the accumulated spend within the current period.
+   * Field number unchanged (wire-compatible with previous spent_usd).
    *
-   * @generated from field: double spent_usd = 3;
+   * @generated from field: double spent_amount = 3;
    */
-  spentUsd: number;
+  spentAmount: number;
 
   /**
    * @generated from field: google.protobuf.Timestamp period_start = 4;
@@ -58,105 +73,131 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
    * @generated from field: google.protobuf.Timestamp updated_at = 6;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
+   * (non-currency metering). One per TenantBudget message.
+   *
+   * @generated from field: string unit_code = 7;
+   */
+  unitCode: string;
 };
 
 /**
  * Describes the message paladin.admin.v1.TenantBudget.
  * Use `create(TenantBudgetSchema)` to create a new message.
  */
-export const TenantBudgetSchema: GenMessage<TenantBudget> = /*@__PURE__*/
+export const TenantBudgetSchema: GenMessage<TenantBudget> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 0);
 
 /**
  * @generated from message paladin.admin.v1.TenantBudgetServiceGetRequest
  */
-export type TenantBudgetServiceGetRequest = Message<"paladin.admin.v1.TenantBudgetServiceGetRequest"> & {
-  /**
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
-};
+export type TenantBudgetServiceGetRequest =
+  Message<"paladin.admin.v1.TenantBudgetServiceGetRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TenantBudgetServiceGetRequest.
  * Use `create(TenantBudgetServiceGetRequestSchema)` to create a new message.
  */
-export const TenantBudgetServiceGetRequestSchema: GenMessage<TenantBudgetServiceGetRequest> = /*@__PURE__*/
+export const TenantBudgetServiceGetRequestSchema: GenMessage<TenantBudgetServiceGetRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.TenantBudgetServiceGetResponse
  */
-export type TenantBudgetServiceGetResponse = Message<"paladin.admin.v1.TenantBudgetServiceGetResponse"> & {
-  /**
-   * @generated from field: paladin.admin.v1.TenantBudget budget = 1;
-   */
-  budget?: TenantBudget | undefined;
-};
+export type TenantBudgetServiceGetResponse =
+  Message<"paladin.admin.v1.TenantBudgetServiceGetResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.TenantBudget budget = 1;
+     */
+    budget?: TenantBudget | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TenantBudgetServiceGetResponse.
  * Use `create(TenantBudgetServiceGetResponseSchema)` to create a new message.
  */
-export const TenantBudgetServiceGetResponseSchema: GenMessage<TenantBudgetServiceGetResponse> = /*@__PURE__*/
+export const TenantBudgetServiceGetResponseSchema: GenMessage<TenantBudgetServiceGetResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.TenantBudgetServiceSetRequest
  */
-export type TenantBudgetServiceSetRequest = Message<"paladin.admin.v1.TenantBudgetServiceSetRequest"> & {
-  /**
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
+export type TenantBudgetServiceSetRequest =
+  Message<"paladin.admin.v1.TenantBudgetServiceSetRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
 
-  /**
-   * max_budget_usd is the new cap. 0 = unlimited.
-   *
-   * @generated from field: double max_budget_usd = 2;
-   */
-  maxBudgetUsd: number;
+    /**
+     * max_budget_amount is the new cap. 0 = unlimited. Field number
+     * unchanged (wire-compatible with previous max_budget_usd).
+     *
+     * @generated from field: double max_budget_amount = 2;
+     */
+    maxBudgetAmount: number;
 
-  /**
-   * reset_spend rolls the period: zeros spent_usd, moves
-   * period_start to now. false leaves the counter alone — the cap
-   * changes mid-window.
-   *
-   * @generated from field: bool reset_spend = 3;
-   */
-  resetSpend: boolean;
+    /**
+     * reset_spend rolls the period: zeros spent_amount, moves
+     * period_start to now. false leaves the counter alone — the cap
+     * changes mid-window.
+     *
+     * @generated from field: bool reset_spend = 3;
+     */
+    resetSpend: boolean;
 
-  /**
-   * period_end pins a closing time for the new accounting window.
-   * Optional; nil = open-ended.
-   *
-   * @generated from field: google.protobuf.Timestamp period_end = 4;
-   */
-  periodEnd?: Timestamp | undefined;
-};
+    /**
+     * period_end pins a closing time for the new accounting window.
+     * Optional; nil = open-ended.
+     *
+     * @generated from field: google.protobuf.Timestamp period_end = 4;
+     */
+    periodEnd?: Timestamp | undefined;
+
+    /**
+     * unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
+     * GBP or UNIT). Empty = keep existing or default to "USD".
+     *
+     * @generated from field: string unit_code = 5;
+     */
+    unitCode: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TenantBudgetServiceSetRequest.
  * Use `create(TenantBudgetServiceSetRequestSchema)` to create a new message.
  */
-export const TenantBudgetServiceSetRequestSchema: GenMessage<TenantBudgetServiceSetRequest> = /*@__PURE__*/
+export const TenantBudgetServiceSetRequestSchema: GenMessage<TenantBudgetServiceSetRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.TenantBudgetServiceSetResponse
  */
-export type TenantBudgetServiceSetResponse = Message<"paladin.admin.v1.TenantBudgetServiceSetResponse"> & {
-  /**
-   * @generated from field: paladin.admin.v1.TenantBudget budget = 1;
-   */
-  budget?: TenantBudget | undefined;
-};
+export type TenantBudgetServiceSetResponse =
+  Message<"paladin.admin.v1.TenantBudgetServiceSetResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.TenantBudget budget = 1;
+     */
+    budget?: TenantBudget | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TenantBudgetServiceSetResponse.
  * Use `create(TenantBudgetServiceSetResponseSchema)` to create a new message.
  */
-export const TenantBudgetServiceSetResponseSchema: GenMessage<TenantBudgetServiceSetResponse> = /*@__PURE__*/
+export const TenantBudgetServiceSetResponseSchema: GenMessage<TenantBudgetServiceSetResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 4);
 
 /**
@@ -187,7 +228,7 @@ export const TenantBudgetService: GenService<{
     methodKind: "unary";
     input: typeof TenantBudgetServiceGetRequestSchema;
     output: typeof TenantBudgetServiceGetResponseSchema;
-  },
+  };
   /**
    * Set upserts the cap. ResetSpend=true rolls the accounting period
    * and zeros spent_usd (typical: monthly billing close). false
@@ -199,7 +240,5 @@ export const TenantBudgetService: GenService<{
     methodKind: "unary";
     input: typeof TenantBudgetServiceSetRequestSchema;
     output: typeof TenantBudgetServiceSetResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_tenant_budget_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_budget_service, 0);

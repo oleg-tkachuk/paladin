@@ -283,6 +283,53 @@ deployments:
           port: 8095
           targetPort: mcp
 
+  # Dispatcher plane — durable webhook fan-out. Consumes the
+  # event_deliveries outbox (migration 028). Producer (admin pod)
+  # writes rows; this Deployment polls them via FOR UPDATE SKIP LOCKED
+  # and POSTs to customer sinks. Multiple replicas safe — SKIP LOCKED
+  # hands each row to exactly one replica per cycle. HPA-friendly when
+  # a queue-depth metric is wired (BACKLOG).
+  dispatcher:
+    enabled: true
+    replicas: 1
+    args:
+      - "serve"
+      - "dispatcher"
+    ports:
+      - name: ops
+        containerPort: 8099
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: ops
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: ops
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /readyz
+        port: ops
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      ports:
+        - name: ops
+          port: 8099
+          targetPort: ops
+
   # Ingest plane — storage-event consumer. Disabled by default in the
   # chart because it requires a publisher (SeaweedFS / MinIO / NATS /
   # RabbitMQ) to be in place; flip enabled=true when the source is
@@ -527,6 +574,22 @@ config:
         interval: 5m
         lookback_window: 1h
 
+  # Dispatcher role — durable webhook fan-out. The pod polls the
+  # event_deliveries outbox (migration 028) and POSTs to customer
+  # sinks. See backend/configs/config.yaml for full inline docs on
+  # each knob. Cross-tenant note: production deploys MUST point
+  # datastores.postgres.migrate_dsn at a BYPASSRLS role (paladin_migrate)
+  # so the loop can scan across tenants. Without it the SELECT
+  # returns zero rows under RLS.
+  dispatcher:
+    ops:
+      addr: "0.0.0.0:8099"
+    poll_interval: 1s
+    batch_size: 50
+    base_backoff: 5s
+    max_backoff: 1h
+    default_max_attempts: 5
+
   storage:
     default_backend: primary
     backends:
@@ -591,7 +654,8 @@ config:
     signing_key_kid: ""                 # JWT header kid; "" → derived from public key bytes
     default_ttl: 15m                    # cap when Issue.TTL omitted
     verifier_leeway: 30s                # clock-skew window for nbf / exp
-    charge_per_request: 0               # USD auto-charged on billable handler calls; 0 = no auto-charge
+    charge_per_request_amount: 0        # amount auto-charged on billable handler calls; 0 = no auto-charge
+    charge_per_request_unit: ""         # unit code (USD/EUR/UAH/GBP/UNIT); empty = use capability's own unit
     revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
 
   # ─── API tokens (hashed-bearer M2M, long-lived) ──────────────────────

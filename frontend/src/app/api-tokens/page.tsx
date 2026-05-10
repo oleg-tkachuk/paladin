@@ -49,7 +49,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
-import { useTenant } from "@/context/TenantContext";
+import { useScope } from "@/context/ScopeContext";
 import { apiKeyClient } from "@/lib/connect/client";
 import { copyToClipboard } from "@/lib/utils";
 import type { ApiKey } from "@/gen/paladin/iam/v1/types_pb";
@@ -101,7 +101,7 @@ function formatTimestamp(ts: { seconds: bigint } | undefined): string {
 }
 
 export default function ApiTokensPage() {
-  const { tenantId } = useTenant();
+  const { tenantId } = useScope();
   const { showNotification } = useNotification();
   const parent = tenantParent(tenantId);
 

@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -65,8 +66,8 @@ type CapabilityServiceClient interface {
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
 	// GetUsage returns the runtime counters for a capability:
-	// request_count (vs Caveats.max_requests) and spent_usd
-	// (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+	// request_count (vs Caveats.max_requests) and spent_amount
+	// (vs Caveats.max_budget_amount). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
 }
@@ -166,8 +167,8 @@ type CapabilityServiceHandler interface {
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
 	// GetUsage returns the runtime counters for a capability:
-	// request_count (vs Caveats.max_requests) and spent_usd
-	// (vs Caveats.max_budget_usd). Returns NOT_FOUND when the
+	// request_count (vs Caveats.max_requests) and spent_amount
+	// (vs Caveats.max_budget_amount). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
 }

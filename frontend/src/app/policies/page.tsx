@@ -13,11 +13,11 @@ import { ConnectError } from "@connectrpc/connect";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -40,8 +40,78 @@ import {
 import { useTenants } from "@/hooks/useTenants";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useObjectKeys } from "@/hooks/useObjectKeys";
+import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
+import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
+import { TestSuite } from "./_TestSuite";
+
+// Curated Cedar policy starters surfaced via the "Load template"
+// dropdown above the editor textarea. Pure UI constants — never round-
+// tripped through the backend. Loading a template replaces the editor
+// buffer (with a confirm dialog when there's unsaved content).
+const POLICY_TEMPLATES: {
+  id: string;
+  label: string;
+  description: string;
+  cedar: string;
+}[] = [
+  {
+    id: "read-only-auditor",
+    label: "Read-only auditor",
+    description:
+      "Permits Get/List against any resource in the active tenant; forbids any write.",
+    cedar: `permit (
+  principal in Role::"tenant.auditor",
+  action in [Action::"GetObject", Action::"ListObjects", Action::"GetTenant", Action::"ListBuckets"],
+  resource
+);
+forbid (
+  principal,
+  action in [Action::"PutObject", Action::"DeleteObject", Action::"SetObjectTags", Action::"SetQuota"],
+  resource
+);`,
+  },
+  {
+    id: "tenant-uploader",
+    label: "Tenant uploader (bucket-scoped)",
+    description:
+      "Lets a service account PUT/Complete objects under one bucket only.",
+    cedar: `permit (
+  principal in Role::"tenant.uploader",
+  action in [Action::"UploadObject", Action::"CompleteObject", Action::"PresignDownload"],
+  resource in Bucket::"tenants/{tenant_id}/buckets/{bucket}"
+);`,
+  },
+  {
+    id: "agent-with-budget",
+    label: "Agent with capability budget",
+    description:
+      "Restricts an agent principal to read+presign on one object_key, with capability caveats enforcing the budget separately.",
+    cedar: `permit (
+  principal in Role::"agent",
+  action in [Action::"GetObject", Action::"PresignDownload", Action::"ListObjects"],
+  resource in ObjectKey::"tenants/{tenant_id}/objectKeys/{object_key}"
+);`,
+  },
+  {
+    id: "forbid-destructive-non-admin",
+    label: "Forbid destructive ops to non-admin principals",
+    description:
+      "A forbid rule that vetoes DeleteObject / DeleteBucket / PurgeObject for any principal not in the platform.admin role. Pair with one or more permit rules that grant the rest of the surface to lower-privileged roles — Cedar evaluates forbid first, so this acts as a hard ceiling regardless of what permits allow.",
+    cedar: `// Forbid destructive ops unless the caller is platform.admin.
+// Cedar evaluates forbid before permit, so this acts as a hard
+// ceiling — pair with permits for the rest of the action surface.
+forbid (
+  principal,
+  action in [Action::"DeleteObject", Action::"DeleteBucket", Action::"PurgeObject"],
+  resource
+)
+unless {
+  principal in Role::"platform.admin"
+};`,
+  },
+];
 
 // Cedar policy editor: pick a scope (tenant / bucket / object_key), load
 // its current cedar text + the merged effective stack, edit + validate
@@ -138,6 +208,19 @@ export default function PoliciesPage() {
   );
   const [validating, setValidating] = useState(false);
 
+  // Live Cedar validation runs continuously alongside the manual
+  // Validate button. The button stays for the "force a re-check now"
+  // affordance even when the live indicator already says valid; the
+  // live indicator is what gates Save.
+  const cedarState = useCedarValidation(policyText);
+  const hasErrors = hasCedarErrors(cedarState);
+
+  // Track the currently-loaded server snapshot so the "load template"
+  // confirm dialog only fires when there's unsaved divergence. Reset
+  // every time the target's policy is (re)loaded.
+  const [serverSnapshot, setServerSnapshot] = useState("");
+  const [templateId, setTemplateId] = useState<string>("");
+
   const [layers, setLayers] = useState<PolicyLayer[]>([]);
   const [merged, setMerged] = useState<string>("");
   const [loadingEffective, setLoadingEffective] = useState(false);
@@ -145,6 +228,7 @@ export default function PoliciesPage() {
   const loadPolicyForTarget = useCallback(async () => {
     if (!target) {
       setPolicyText("");
+      setServerSnapshot("");
       setResourceVersion("");
       setLayers([]);
       setMerged("");
@@ -152,19 +236,23 @@ export default function PoliciesPage() {
     }
     setLoadingPolicy(true);
     try {
+      let loaded = "";
       if (scope === "tenant") {
         const t = await tenantClient.getTenant({ name: target });
-        setPolicyText(t.inheritedCedarPolicy);
+        loaded = t.inheritedCedarPolicy;
         setResourceVersion(t.resourceVersion);
       } else if (scope === "bucket") {
         const b = await bucketClient.getBucket({ name: target });
-        setPolicyText(b.cedarPolicy);
+        loaded = b.cedarPolicy;
         setResourceVersion(b.resourceVersion);
       } else {
         const k = await objectKeyClient.getObjectKey({ name: target });
-        setPolicyText(k.cedarPolicy);
+        loaded = k.cedarPolicy;
         setResourceVersion(k.resourceVersion);
       }
+      setPolicyText(loaded);
+      setServerSnapshot(loaded);
+      setTemplateId("");
       setDiagnostics(null);
     } catch (err) {
       const msg =
@@ -232,6 +320,47 @@ export default function PoliciesPage() {
     }
   }, [policyText, showNotification]);
 
+  // Pending template confirmation: when the editor buffer diverges
+  // from the server snapshot, applying a template would clobber unsaved
+  // work. Stash the candidate id and open <ConfirmModal> instead of
+  // the native window.confirm() — same warning UX as the rest of the
+  // app (Move to Trash / Restore / Revoke). Clean buffer applies
+  // immediately with no dialog.
+  const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(
+    null,
+  );
+
+  const applyTemplate = useCallback((id: string) => {
+    const tpl = POLICY_TEMPLATES.find((t) => t.id === id);
+    if (!tpl) return;
+    setPolicyText(tpl.cedar);
+    setTemplateId(tpl.id);
+    setDiagnostics(null);
+  }, []);
+
+  const handleLoadTemplate = useCallback(
+    (id: string) => {
+      const tpl = POLICY_TEMPLATES.find((t) => t.id === id);
+      if (!tpl) return;
+      const dirty =
+        policyText.trim().length > 0 && policyText !== serverSnapshot;
+      if (dirty) {
+        setPendingTemplateId(id);
+        return;
+      }
+      applyTemplate(id);
+    },
+    [policyText, serverSnapshot, applyTemplate],
+  );
+
+  const pendingTemplate = useMemo(
+    () =>
+      pendingTemplateId
+        ? POLICY_TEMPLATES.find((t) => t.id === pendingTemplateId)
+        : null,
+    [pendingTemplateId],
+  );
+
   const handleSave = useCallback(async () => {
     if (!target) return;
     setSaving(true);
@@ -258,6 +387,7 @@ export default function PoliciesPage() {
         });
         setResourceVersion(updated.resourceVersion);
       }
+      setServerSnapshot(policyText);
       showNotification({
         type: "success",
         title: "Policy saved",
@@ -365,9 +495,34 @@ export default function PoliciesPage() {
 
         <TabsContent value="editor" className="space-y-4">
           <Card className="space-y-3 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="policy-textarea">Cedar policy</Label>
-              <div className="flex items-center gap-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div className="space-y-1.5">
+                <Label htmlFor="policy-template">Load template</Label>
+                <SelectRoot
+                  value={templateId}
+                  onValueChange={handleLoadTemplate}
+                >
+                  <SelectTrigger id="policy-template" className="w-full">
+                    <SelectValue placeholder="Pick a starter…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POLICY_TEMPLATES.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </SelectRoot>
+                {templateId && (
+                  <p className="text-xs text-muted-foreground">
+                    {
+                      POLICY_TEMPLATES.find((t) => t.id === templateId)
+                        ?.description
+                    }
+                  </p>
+                )}
+              </div>
+              <div className="flex items-end gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -379,12 +534,13 @@ export default function PoliciesPage() {
                 <Button
                   size="sm"
                   onClick={handleSave}
-                  disabled={saving || !target}
+                  disabled={saving || !target || hasErrors}
                 >
                   {saving ? "Saving…" : "Save"}
                 </Button>
               </div>
             </div>
+            <Label htmlFor="policy-textarea">Cedar policy</Label>
             {loadingPolicy ? (
               <Skeleton className="h-64 w-full" />
             ) : (
@@ -402,6 +558,7 @@ export default function PoliciesPage() {
                 spellCheck={false}
               />
             )}
+            <CedarIndicator state={cedarState} />
             {diagnostics !== null && diagnostics.length === 0 && (
               <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-sm text-emerald-700 dark:text-emerald-400">
                 <CheckCircleIcon className="size-4" />
@@ -490,9 +647,32 @@ export default function PoliciesPage() {
         </TabsContent>
 
         <TabsContent value="simulate" className="space-y-4">
-          <SimulatePanel defaultResource={target} />
+          <TestSuite defaultResource={target} />
         </TabsContent>
       </Tabs>
+
+      {/* ─── Load-template confirmation ───────────────────────────────
+          Mirrors the warn-before-clobber pattern used by the object
+          inspector / capability revoke flows. Type=warning because
+          dropping unsaved edits is recoverable from git / muscle
+          memory but not from the editor itself. */}
+      <ConfirmModal
+        isOpen={pendingTemplate !== null}
+        onClose={() => setPendingTemplateId(null)}
+        onConfirm={() => {
+          if (pendingTemplateId) applyTemplate(pendingTemplateId);
+          setPendingTemplateId(null);
+        }}
+        title="Replace editor contents?"
+        message={
+          pendingTemplate
+            ? `Loading the "${pendingTemplate.label}" template will replace your unsaved Cedar edits. This cannot be undone from the UI.`
+            : ""
+        }
+        type="warning"
+        confirmText="Load template"
+        cancelText="Keep editing"
+      />
     </div>
   );
 }
@@ -521,159 +701,5 @@ function DiagnosticRow({ diag }: { diag: PolicyDiagnostic }) {
         )}
       </div>
     </div>
-  );
-}
-
-// ─── Simulate panel ────────────────────────────────────────────────────────
-
-function SimulatePanel({ defaultResource }: { defaultResource: string }) {
-  const { showNotification } = useNotification();
-
-  const [subject, setSubject] = useState("");
-  const [tenantId, setTenantId] = useState("");
-  const [rolesText, setRolesText] = useState("platform.admin");
-  const [action, setAction] = useState("ReadObject");
-  const [resourceName, setResourceName] = useState(defaultResource);
-  const [running, setRunning] = useState(false);
-
-  const [result, setResult] = useState<{
-    allowed: boolean;
-    matchedPolicies: string[];
-    explanation: string;
-  } | null>(null);
-
-  // Sync selected target down into the form when it changes upstream.
-  useEffect(() => {
-    setResourceName(defaultResource);
-  }, [defaultResource]);
-
-  const handleRun = useCallback(async () => {
-    setRunning(true);
-    try {
-      const res = await policyClient.simulateAuthz({
-        principalSubject: subject,
-        principalTenantId: tenantId,
-        principalRoles: rolesText
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        action,
-        resourceName,
-      });
-      setResult({
-        allowed: res.allowed,
-        matchedPolicies: res.matchedPolicies,
-        explanation: res.explanation,
-      });
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Simulate failed";
-      showNotification({
-        type: "error",
-        title: "Simulate failed",
-        message: msg,
-      });
-    } finally {
-      setRunning(false);
-    }
-  }, [subject, tenantId, rolesText, action, resourceName, showNotification]);
-
-  return (
-    <Card className="space-y-3 p-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="sim-subject">Principal subject</Label>
-          <Input
-            id="sim-subject"
-            placeholder="user-12345"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="sim-tenant">Principal tenant</Label>
-          <Input
-            id="sim-tenant"
-            placeholder="019dfeaa-94c3-…"
-            value={tenantId}
-            onChange={(e) => setTenantId(e.target.value)}
-            className="font-mono text-xs"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="sim-roles">Roles (comma-separated)</Label>
-          <Input
-            id="sim-roles"
-            placeholder="platform.admin, viewer"
-            value={rolesText}
-            onChange={(e) => setRolesText(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="sim-action">Action</Label>
-          <Input
-            id="sim-action"
-            placeholder="ReadObject"
-            value={action}
-            onChange={(e) => setAction(e.target.value)}
-            className="font-mono text-xs"
-          />
-        </div>
-        <div className="md:col-span-2 space-y-1.5">
-          <Label htmlFor="sim-resource">Resource name</Label>
-          <Input
-            id="sim-resource"
-            placeholder="tenants/{id}/objectKeys/{key}"
-            value={resourceName}
-            onChange={(e) => setResourceName(e.target.value)}
-            className="font-mono text-xs"
-          />
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          onClick={handleRun}
-          disabled={running || !action || !resourceName}
-        >
-          {running ? "Running…" : "Simulate"}
-        </Button>
-      </div>
-
-      {result && (
-        <div
-          className={cn(
-            "rounded-md border p-3 text-sm",
-            result.allowed
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-              : "border-destructive/40 bg-destructive/10 text-destructive",
-          )}
-        >
-          <div className="flex items-center gap-2 font-medium">
-            {result.allowed ? (
-              <CheckCircleIcon className="size-4" />
-            ) : (
-              <ExclamationTriangleIcon className="size-4" />
-            )}
-            {result.allowed ? "ALLOWED" : "DENIED"}
-          </div>
-          {result.explanation && (
-            <p className="mt-1 text-xs opacity-90">{result.explanation}</p>
-          )}
-          {result.matchedPolicies.length > 0 && (
-            <div className="mt-2 space-y-1">
-              <p className="text-xs font-medium">Matched policies</p>
-              <ul className="list-inside list-disc text-xs opacity-90">
-                {result.matchedPolicies.map((p, i) => (
-                  <li key={i} className="font-mono">
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
   );
 }

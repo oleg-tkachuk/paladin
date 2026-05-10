@@ -251,6 +251,23 @@ worker:
       interval: 5m
       lookback_window: 1h
 
+# ─── dispatcher role: durable webhook fan-out ──────────────────────────────
+# `serve dispatcher` polls the event_deliveries outbox (migration 028) and
+# POSTs to customer sinks. Producer (admin pod) writes rows on each event;
+# this loop drains them via FOR UPDATE SKIP LOCKED so multiple replicas can
+# run concurrently. Per-row retry curve is BaseBackoff * 2^attempts capped
+# at MaxBackoff. Cross-tenant scans require the pod to connect as a
+# BYPASSRLS role — set datastores.postgres.migrate_dsn for production.
+dispatcher:
+  ops:
+    <<: *http_defaults
+    addr: "0.0.0.0:8099"
+  poll_interval: 1s                     # idle-loop sleep when no rows are ready
+  batch_size: 50                        # rows per FOR UPDATE SKIP LOCKED scan
+  base_backoff: 5s                      # first retry delay; doubles per attempt
+  max_backoff: 1h                       # cap for the exponential curve
+  default_max_attempts: 5               # used when sub HttpSink.MaxAttempts==0
+
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks
 # one by name (or falls back to `default_backend`). `events.enabled=true`
@@ -356,7 +373,8 @@ capability:
   signing_key_kid: ""                # JWT header kid; empty → derived from public key bytes
   default_ttl: 15m                   # cap when Issue.TTL omitted
   verifier_leeway: 30s               # clock-skew window for nbf / exp
-  charge_per_request: 0              # USD auto-charged on billable handler calls; 0 = no auto-charge
+  charge_per_request_amount: 0       # amount auto-charged on billable handler calls; 0 = no auto-charge
+  charge_per_request_unit: ""        # unit code (USD/EUR/UAH/GBP/UNIT); empty = use capability's own unit
   revocation_cache_ttl: 2s           # IsRevoked cache TTL; <0 disables (every check hits DB)
 
 # ── API tokens (hashed-bearer M2M, long-lived) ─────────────────────────────

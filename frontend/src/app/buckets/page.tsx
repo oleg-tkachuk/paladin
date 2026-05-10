@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
@@ -8,6 +9,7 @@ import {
   ArrowsUpDownIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  ClockIcon,
   EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
   PlusIcon,
@@ -424,6 +426,21 @@ export default function BucketsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {/* Detail subtree lives under the owner tenant
+                            (Phase 2 of the URL refactor). Shared
+                            buckets — no owner_tenant_id — don't have
+                            one, so we hide the link rather than
+                            invent a placeholder route that 404s. */}
+                        {b.ownerTenantId && (
+                          <DropdownMenuItem asChild>
+                            <Link
+                              href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketName)}/lifecycle`}
+                            >
+                              <ClockIcon className="size-4" />
+                              Lifecycle rules
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           variant="destructive"
                           onSelect={() => setDeleteTarget(b)}
