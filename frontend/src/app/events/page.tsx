@@ -257,6 +257,13 @@ function sinkSummary(sub: EventSubscription): {
   if (t?.case === "http") {
     return { badge: "HTTP", detail: t.value.url || "—" };
   }
+  if (t?.case === "nats") {
+    const n = t.value;
+    // Show subject prominently — it's the discriminator a subscriber
+    // configures their listener with. URL is auxiliary; truncated
+    // visually by the table cell anyway.
+    return { badge: "NATS", detail: `${n.subject} @ ${n.url}` };
+  }
   if (t?.case === "kafka") {
     const k = t.value;
     return { badge: "Kafka", detail: `${k.topic} @ ${k.brokers}` };
@@ -432,6 +439,18 @@ function validateForm(form: FormState): FormErrors {
 
 // ─── Test result inline display ───────────────────────────────────────
 function TestResultDisplay({ result }: { result: TestResult }) {
+  // NATS / non-HTTP sinks: dispatcher returns statusCode=0 on success
+  // because the protocol has no broker-level ack analogous to an HTTP
+  // 2xx. Treat 0 as "delivered, no status code applicable" and drop
+  // the parenthesised number so the chip doesn't read "Delivered (0)".
+  if (result.delivered && result.statusCode === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-chart-2">
+        <CheckCircleSolid className="size-4" />
+        Delivered
+      </span>
+    );
+  }
   if (result.delivered && result.statusCode === 200) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-chart-2">
@@ -960,7 +979,7 @@ export default function EventsPage() {
             <DialogDescription>
               {editing
                 ? "Update the sink configuration and CEL filter for this subscription."
-                : "Forward events from this tenant to a webhook, Kafka topic, or SQS queue."}
+                : "Forward events from this tenant to a webhook (HTTP) or NATS subject. Kafka / SQS sinks are roadmap stubs."}
             </DialogDescription>
           </DialogHeader>
 
@@ -986,7 +1005,7 @@ export default function EventsPage() {
             <FormSection title="Sink type">
               <Field
                 label="Target"
-                hint="HTTP delivers a signed POST. Kafka/SQS publish to a queue."
+                hint="HTTP delivers an HMAC-signed POST. NATS publishes a CloudEvents 1.0 JSON message to a subject. Kafka / SQS are roadmap stubs — selectable for visibility, but the dispatcher rejects subscriptions targeting them today."
               >
                 <ToggleRow
                   options={SINK_OPTIONS}
@@ -1226,10 +1245,12 @@ export default function EventsPage() {
             {editing && (
               <div className="flex items-center justify-between gap-3 rounded-md border border-input p-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">Test webhook</p>
+                  <p className="text-sm font-medium">Test delivery</p>
                   <p className={T.hint}>
-                    Posts a synthetic event to the currently saved sink. Save
-                    changes first if you&apos;ve edited URL/topic/queue.
+                    Delivers a synthetic <code>paladin.test</code> event to the
+                    currently saved sink (HTTP POST, or a CloudEvents publish on
+                    the configured NATS subject). Save changes first if
+                    you&apos;ve edited URL / subject / topic.
                   </p>
                   {tests.get(editing.name) ? (
                     <div className="mt-1.5">
