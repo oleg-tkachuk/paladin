@@ -28,7 +28,15 @@ service TenantService {
 }
 
 message CreateTenantRequest {
-  string tenant_id = 1; // optional; UUIDv7 generated when empty
+  // tenant_id — optional. When empty the server generates a fresh
+  // UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
+  // the zero UUID. Immutable post-create (enforced by migration 033's
+  // tenants_immutable_columns trigger).
+  string tenant_id = 1;
+  // tenant.slug is required and validated against ValidateTenantSlug.
+  // tenant.display_name is optional; defaults to slug at create time.
+  // Both are unique across tenants. tenant_id, slug — immutable;
+  // display_name — editable via UpdateTenant.
   Tenant tenant = 2 [(buf.validate.field).required = true];
 }
 

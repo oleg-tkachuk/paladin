@@ -119,8 +119,14 @@ function SortHeader({
   );
 }
 
+// UUID format check is permissive across versions (v1/v4/v7) — server
+// generates v7 by default but accepts any RFC 4122 UUID from clients.
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// SLUG_RE mirrors backend/internal/api/v1/apiutil/slug.go ValidateTenantSlug.
+// Keep in lockstep with the server-side regex.
+const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
 
 export default function TenantsPage() {
   const {
@@ -145,7 +151,11 @@ export default function TenantsPage() {
   );
 
   // ─── create ───────────────────────────────────────────────────────────────
+  // Phase 0 contract: slug is required, tenant_id is optional (server
+  // mints UUIDv7 when empty), display_name is optional (defaults to
+  // slug). Both slug and display_name are unique across tenants.
   const [createOpen, setCreateOpen] = useState(false);
+  const [newSlug, setNewSlug] = useState("");
   const [newId, setNewId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -190,22 +200,38 @@ export default function TenantsPage() {
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!UUID_RE.test(newId)) {
+    // Slug is required and must match the kebab-case format the
+    // server validates against (mirrors apiutil.ValidateTenantSlug).
+    if (!SLUG_RE.test(newSlug)) {
       showNotification({
         type: "error",
-        title: "Invalid ID",
-        message: "Tenant ID must be a valid UUID v4.",
+        title: "Invalid slug",
+        message:
+          "Slug must be 3–63 chars, kebab-case, starting with a letter and ending alphanumeric.",
+      });
+      return;
+    }
+    // tenant_id is optional. If supplied, validate UUID format
+    // client-side so the server's INVALID_ARGUMENT round-trip isn't
+    // the first signal of a typo.
+    if (newId && !UUID_RE.test(newId)) {
+      showNotification({
+        type: "error",
+        title: "Invalid Tenant ID",
+        message:
+          "Tenant ID must be a valid UUID, or leave empty to auto-generate.",
       });
       return;
     }
     try {
       setSubmitting(true);
-      await createTenant(newId, newDisplayName);
+      const created = await createTenant(newSlug, newId, newDisplayName);
       showNotification({
         type: "success",
         title: "Tenant created",
-        message: newDisplayName || newId,
+        message: created.displayName || created.slug || created.tenantId,
       });
+      setNewSlug("");
       setNewId("");
       setNewDisplayName("");
       setCreateOpen(false);
@@ -492,14 +518,35 @@ export default function TenantsPage() {
             <DialogHeader>
               <DialogTitle>New tenant</DialogTitle>
               <DialogDescription>
-                Provision a fresh tenant scope. The default Cedar policy will be
-                applied automatically.
+                Slug is the human-readable handle and is immutable after
+                creation. The default Cedar policy is applied automatically.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-1.5">
+                <Label htmlFor="tenant-slug">
+                  Slug <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="tenant-slug"
+                  autoFocus
+                  placeholder="acme-prod"
+                  value={newSlug}
+                  onChange={(e) => setNewSlug(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  3–63 chars, kebab-case. Immutable after create — used in
+                  resource names and URLs.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="tenant-id">Tenant ID (UUID v4)</Label>
+                  <Label htmlFor="tenant-id">
+                    Tenant ID{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </Label>
                   <Button
                     type="button"
                     size="sm"
@@ -513,21 +560,31 @@ export default function TenantsPage() {
                 </div>
                 <Input
                   id="tenant-id"
-                  autoFocus
-                  placeholder="550e8400-e29b-41d4-a716-446655440000"
+                  placeholder="Leave empty to auto-generate"
                   className="font-mono text-xs"
                   value={newId}
                   onChange={(e) => setNewId(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  UUID — immutable. Server generates UUIDv7 when empty.
+                </p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="tenant-display-name">Display name</Label>
+                <Label htmlFor="tenant-display-name">
+                  Display name{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
                 <Input
                   id="tenant-display-name"
-                  placeholder="Acme Corporation"
+                  placeholder="Defaults to slug"
                   value={newDisplayName}
                   onChange={(e) => setNewDisplayName(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Unique across tenants. Editable later.
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -538,7 +595,7 @@ export default function TenantsPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting || !newId}>
+              <Button type="submit" disabled={submitting || !newSlug}>
                 {submitting ? "Creating…" : "Create tenant"}
               </Button>
             </DialogFooter>
@@ -553,7 +610,9 @@ export default function TenantsPage() {
             <DialogHeader>
               <DialogTitle>Edit tenant</DialogTitle>
               <DialogDescription>
-                Update display metadata. Tenant ID is immutable.
+                Display name is the only editable identity field. Tenant ID and
+                slug are immutable — slug rotation requires the RenameTenantSlug
+                RPC.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -566,6 +625,14 @@ export default function TenantsPage() {
                 />
               </div>
               <div className="space-y-1.5">
+                <Label>Slug</Label>
+                <Input
+                  disabled
+                  value={editing?.slug || ""}
+                  className="text-muted-foreground"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="edit-display-name">Display name</Label>
                 <Input
                   id="edit-display-name"
@@ -574,6 +641,9 @@ export default function TenantsPage() {
                   value={editDisplayName}
                   onChange={(e) => setEditDisplayName(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Must be unique across tenants.
+                </p>
               </div>
             </div>
             <DialogFooter>

@@ -18,7 +18,7 @@ VALUES ($1, $2, $3, $4, $5)
 `
 
 // Tenant queries.
-func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error {
+func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string) error {
 	_, err := q.db.Exec(ctx, createTenant,
 		tenantID,
 		slug,

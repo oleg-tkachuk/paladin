@@ -437,7 +437,7 @@ type StorageBackend struct {
 
 type Tenant struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	DisplayName          *string            `json:"display_name"`
+	DisplayName          string             `json:"display_name"`
 	Labels               []byte             `json:"labels"`
 	InheritedCedarPolicy string             `json:"inherited_cedar_policy"`
 	InheritedPolicyHash  []byte             `json:"inherited_policy_hash"`

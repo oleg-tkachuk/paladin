@@ -85,6 +85,19 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	}
 	args := tenant.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
 	mask := m.GetUpdateMask().GetPaths()
+	// Reject attempts to mutate immutable fields. Migration 033 also
+	// enforces this at the DB level via a trigger, but catching it
+	// here gives a clearer error and avoids burning a tx.
+	for _, path := range mask {
+		switch path {
+		case "tenant_id":
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("tenant_id is immutable"))
+		case "slug":
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("slug is immutable; use RenameTenantSlug"))
+		}
+	}
 	src := m.GetTenant()
 	if slices.Contains(mask, "display_name") {
 		v := src.GetDisplayName()

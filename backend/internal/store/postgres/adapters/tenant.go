@@ -42,10 +42,24 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 	if err := r.q.CreateTenant(ctx,
 		pgUUID(args.TenantID),
 		args.Slug,
-		strPtr(args.DisplayName),
+		args.DisplayName,
 		labels,
 		args.InheritedCedarPolicy,
 	); err != nil {
+		// Map UNIQUE violations to typed sentinels so the handler can
+		// surface ALREADY_EXISTS with the offending field. Constraint
+		// names match migrations 001 (PK), 009 (slug), 033 (display_name).
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case "tenants_pkey":
+				return tenant.Tenant{}, tenant.ErrTenantIDConflict
+			case "tenants_slug_unique":
+				return tenant.Tenant{}, tenant.ErrSlugConflict
+			case "tenants_display_name_unique":
+				return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+			}
+		}
 		return tenant.Tenant{}, fmt.Errorf("create tenant: %w", err)
 	}
 	return r.Get(ctx, args.TenantID)
@@ -89,6 +103,14 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 		args.ExpectedVersion,
 	)
 	if err != nil {
+		// display_name UNIQUE collision lands here. Map to a typed
+		// sentinel so the handler surfaces ALREADY_EXISTS with the
+		// offending field.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
+			pgErr.ConstraintName == "tenants_display_name_unique" {
+			return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+		}
 		return tenant.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 	if rows == 0 {
@@ -162,6 +184,15 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		return tenant.Tenant{}, fmt.Errorf("rename tenant: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Migration 033 added a BEFORE UPDATE trigger that blocks
+	// slug changes unless the tx opts in via this session GUC.
+	// Set it once at the top of the rename tx so the UPDATE below
+	// passes the trigger; the LOCAL scope means it's gone the moment
+	// this tx commits or rolls back.
+	if _, err := tx.Exec(ctx, "SET LOCAL paladin.allow_slug_rename = on"); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: enable slug rename: %w", err)
+	}
 
 	// Read + lock the tenant row. SELECT FOR UPDATE so a concurrent
 	// rename or update can't race past us between the read and the
@@ -305,7 +336,7 @@ func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 	return tenant.Tenant{
 		TenantID:             uuidFrom(t.TenantID),
 		Slug:                 t.Slug,
-		DisplayName:          derefStr(t.DisplayName),
+		DisplayName:          t.DisplayName,
 		Labels:               t.Labels,
 		InheritedCedarPolicy: t.InheritedCedarPolicy,
 		InheritedPolicyHash:  t.InheritedPolicyHash,

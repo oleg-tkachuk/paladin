@@ -58,17 +58,27 @@ export function useTenants() {
     [],
   );
 
+  // createTenant — Phase 0 contract:
+  //   - slug is required (caller-supplied kebab-case handle).
+  //   - tenantId is optional; empty string lets the server mint UUIDv7.
+  //   - displayName is optional; the server defaults it to slug when empty.
+  // The previous signature (id, name) has been replaced — id-only callers
+  // need to choose a slug before they can land a tenant.
   const createTenant = useCallback(
     async (
-      tenantId: string,
+      slug: string,
+      tenantId: string = "",
       displayName: string = "",
       labels: Record<string, string> = {},
     ): Promise<Tenant> => {
       try {
         setError(null);
         const tenant = create(TenantSchema, {
-          name: tenantResourceName(tenantId),
+          // name is server-derived — caller's value is ignored at the
+          // server but we set it to "" to keep the wire shape clean.
+          name: "",
           tenantId,
+          slug,
           displayName,
           labels,
           inheritedCedarPolicy: "",

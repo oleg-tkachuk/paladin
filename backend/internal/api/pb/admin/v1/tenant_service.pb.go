@@ -7,14 +7,15 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -25,9 +26,17 @@ const (
 )
 
 type CreateTenantRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"` // optional; UUIDv7 generated when empty
-	Tenant        *Tenant                `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// tenant_id — optional. When empty the server generates a fresh
+	// UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
+	// the zero UUID. Immutable post-create (enforced by migration 033's
+	// tenants_immutable_columns trigger).
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// tenant.slug is required and validated against ValidateTenantSlug.
+	// tenant.display_name is optional; defaults to slug at create time.
+	// Both are unique across tenants. tenant_id, slug — immutable;
+	// display_name — editable via UpdateTenant.
+	Tenant        *Tenant `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

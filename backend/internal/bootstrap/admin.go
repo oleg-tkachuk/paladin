@@ -44,7 +44,7 @@ type TenantStore interface {
 		ctx context.Context,
 		tenantID pgtype.UUID,
 		slug string,
-		displayName *string,
+		displayName string,
 		labels []byte,
 		inheritedCedarPolicy string,
 	) error
@@ -238,7 +238,7 @@ func ensureTenant(
 		ctx,
 		pgtype.UUID{Bytes: tenantID, Valid: true},
 		cfg.TenantSlug,
-		&display,
+		display,
 		labels,
 		"", // inherited_cedar_policy — empty default
 	); err != nil {

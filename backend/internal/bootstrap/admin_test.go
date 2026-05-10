@@ -38,7 +38,7 @@ func (f *fakeTenants) CreateTenant(
 	_ context.Context,
 	tenantID pgtype.UUID,
 	slug string,
-	displayName *string,
+	displayName string,
 	_ []byte,
 	_ string,
 ) error {
@@ -48,14 +48,10 @@ func (f *fakeTenants) CreateTenant(
 	if _, exists := f.bySlug[slug]; exists {
 		return errors.New("duplicate slug")
 	}
-	dn := ""
-	if displayName != nil {
-		dn = *displayName
-	}
 	f.bySlug[slug] = sqlc.Tenant{
 		TenantID:    tenantID,
 		Slug:        slug,
-		DisplayName: &dn,
+		DisplayName: displayName,
 	}
 	f.creates++
 	return nil

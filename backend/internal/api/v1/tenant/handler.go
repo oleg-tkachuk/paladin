@@ -200,18 +200,32 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, err
 	}
+	// tenant_id: client-supplied or server-generated. Zero UUID is
+	// reserved as the in-memory sentinel meaning "no value" — reject
+	// it explicitly so a caller passing all-zeros doesn't silently get
+	// a server-generated row.
 	if args.TenantID == uuid.Nil {
 		args.TenantID = uuid.Must(uuid.NewV7())
 	}
-	// Slug defaults: when the caller omits a slug, derive a stable backfill
-	// matching migrations/009_tenant_slug.sql so existing UUID-based clients
-	// keep working. New callers should pass an operator-chosen slug.
+	// Slug is required. Migration 033 makes the column NOT NULL UNIQUE
+	// and the API contract follows: no auto-derivation from tenant_id.
+	// Operators who don't have a slug yet must pick one before they
+	// can land a tenant — matches the user-facing identity model where
+	// tenant_id is a UUID and slug is the human handle.
 	if args.Slug == "" {
-		args.Slug = "t-" + strings.ReplaceAll(args.TenantID.String(), "-", "")
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("slug is required"))
 	}
 	if err := apiutil.ValidateTenantSlug(args.Slug); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("slug: %w", err))
+	}
+	// display_name defaults to slug when omitted. Trim before checking
+	// so " " also triggers the default. Length + format are enforced
+	// at the DB layer (tenants_display_name_format CHECK from migr 033).
+	args.DisplayName = strings.TrimSpace(args.DisplayName)
+	if args.DisplayName == "" {
+		args.DisplayName = args.Slug
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -226,7 +240,14 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	}
 	t, err := h.repo.Create(ctx, args)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
+		switch {
+		case errors.Is(err, ErrTenantIDConflict),
+			errors.Is(err, ErrSlugConflict),
+			errors.Is(err, ErrDisplayNameConflict):
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		default:
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
+		}
 	}
 	h.dispatchEvent(ctx, t.TenantID, "paladin.tenant.created",
 		fmt.Sprintf("tenants/%s", t.TenantID),
@@ -300,10 +321,26 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
 	}
+	// display_name validation: trim and reject empty edits — an empty
+	// string would clear the column (UpdateTenant uses COALESCE on
+	// nullable args, but the API path passes a *string so empty means
+	// "set to empty"). The DB CHECK would reject it; surface a clearer
+	// error before the round-trip.
+	if args.DisplayName != nil {
+		trimmed := strings.TrimSpace(*args.DisplayName)
+		if trimmed == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				errors.New("display_name must not be empty"))
+		}
+		args.DisplayName = &trimmed
+	}
 	t, err := h.repo.Update(ctx, args)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		if errors.Is(err, ErrDisplayNameConflict) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -424,6 +461,15 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // unambiguous "missing", not a version conflict).
 var ErrNotFound = errors.New("tenant not found")
 
-// ErrSlugConflict — Repository.Rename returns this when the requested
-// new_slug is already in use by another tenant (uniqueness violation).
+// ErrSlugConflict — Repository.Rename or Create returns this when the
+// requested slug is already in use by another tenant.
 var ErrSlugConflict = errors.New("tenant slug already in use")
+
+// ErrTenantIDConflict — Repository.Create returns this when the
+// caller-supplied tenant_id (UUID) collides with an existing row.
+var ErrTenantIDConflict = errors.New("tenant_id already in use")
+
+// ErrDisplayNameConflict — Repository.Create or Update returns this
+// when the requested display_name collides with another tenant's.
+// display_name is UNIQUE since migration 033.
+var ErrDisplayNameConflict = errors.New("display_name already in use")

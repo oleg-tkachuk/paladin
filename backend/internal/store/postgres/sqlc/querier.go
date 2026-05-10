@@ -70,7 +70,7 @@ type Querier interface {
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// Tenant queries.
-	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error
+	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
 	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	// Physical row delete. Called by the bucket-reconciler worker AFTER
