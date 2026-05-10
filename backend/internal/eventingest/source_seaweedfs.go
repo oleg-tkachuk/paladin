@@ -127,6 +127,14 @@ func seaweedFSEventType(srcType string) (EventType, bool) {
 // configuration). Anything else returns ok=false.
 func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 	trimmed := strings.TrimPrefix(path, "/")
+	// SF's S3 gateway materialises bucket-rooted paths under
+	// `/buckets/<bucket>/...` in the filer namespace. The webhook
+	// notification driver emits the bare `<bucket>/...` shape, but
+	// the gocdk_pub_sub-over-NATS path observes the full filer
+	// namespace and includes the `buckets/` prefix. Strip it
+	// upfront so the bucket-prefix check below works for both
+	// publishers.
+	trimmed = strings.TrimPrefix(trimmed, "buckets/")
 	if bucket != "" {
 		bp := strings.TrimPrefix(trimmed, bucket+"/")
 		if bp == trimmed {

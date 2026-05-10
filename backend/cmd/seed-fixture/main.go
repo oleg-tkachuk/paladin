@@ -141,13 +141,18 @@ func assertDevTarget(adminURL string) error {
 
 // ─── Auth ────────────────────────────────────────────────────────────────
 
-func login(ctx context.Context, iamURL, user, password string) (string, error) {
+// login issues an access token for the given audience. The data /
+// admin / iam planes each enforce their own audience claim, so a
+// caller that touches both (e.g. smoke-upload reads admin for
+// resolving tenant + writes data for UploadObject) needs separate
+// tokens.
+func login(ctx context.Context, iamURL, user, password, audience string) (string, error) {
 	httpc := &http.Client{Timeout: 30 * time.Second}
 	authClient := mcp.NewClients(httpc, "", "", iamURL, "").Auth
 	resp, err := authClient.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{
 		Subject:           user,
 		Password:          password,
-		RequestedAudience: string(auth.AudienceAdmin),
+		RequestedAudience: audience,
 	}))
 	if err != nil {
 		return "", fmt.Errorf("login: %w", err)
@@ -174,7 +179,7 @@ func runUp(cmd *cobra.Command) error {
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	tok, err := login(ctx, iamURL, user, password)
+	tok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
 	if err != nil {
 		return err
 	}
@@ -208,7 +213,7 @@ func runDown(cmd *cobra.Command) error {
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	tok, err := login(ctx, iamURL, user, password)
+	tok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
 	if err != nil {
 		return err
 	}
@@ -449,14 +454,23 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	tok, err := login(ctx, iamURL, user, password)
+	// Two tokens: admin for resolving the caller's tenant_id, data
+	// for the actual UploadObject. The audience claim is enforced
+	// per-plane (see auth.RequireAudience interceptor) so a single
+	// token can't span both.
+	adminTok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
 	if err != nil {
-		return err
+		return fmt.Errorf("admin login: %w", err)
 	}
-	clients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, dataURL, iamURL, tok)
+	dataTok, err := login(ctx, iamURL, user, password, string(auth.AudienceData))
+	if err != nil {
+		return fmt.Errorf("data login: %w", err)
+	}
+	adminClients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, "", iamURL, adminTok)
+	dataClients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, "", dataURL, iamURL, dataTok)
 
 	// Resolve caller's tenant — same path the demo flavour uses.
-	tenants, err := clients.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
+	tenants, err := adminClients.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
@@ -474,7 +488,7 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	}
 	payload := []byte(fmt.Sprintf("smoke-promote-payload at %s\n", time.Now().UTC().Format(time.RFC3339Nano)))
 
-	uresp, err := clients.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	uresp, err := dataClients.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
 		Parent:        parent,
 		Key:           storageKey,
 		ContentType:   "text/plain",
