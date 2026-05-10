@@ -13,7 +13,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/app"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 // serveIngestCmd runs the storage-event consumer plane. Subscribes to
@@ -47,12 +49,45 @@ var serveIngestCmd = &cobra.Command{
 			l.Fatal("failed to build shared deps", zap.Error(err))
 		}
 
+		// Lookup + state-machine transitions for the ingest worker
+		// MUST run cross-tenant — the storage event arrives via NATS
+		// from SF without any auth context, so the runtime pool's
+		// RLS GUC is empty and `paladin_app` filters every row out.
+		// Same pattern as serve_dispatcher.go: open a dedicated pool
+		// from cfg.Datastores.Postgres.MigrateDSN (BYPASSRLS).
+		// Without this the smoke logs "no matching object for event;
+		// skipping" on every PUT — looks like a race / ordering bug,
+		// is actually RLS denying the SELECT.
+		ingestQueries := db.Queries
+		ingestSM := deps.SM
+		if cfg.Datastores.Postgres.MigrateDSN != "" {
+			pool, err := newDispatcherPool(
+				ctx,
+				cfg.Datastores.Postgres.MigrateDSN,
+				cfg.Datastores.Postgres.MigratePassword,
+				l,
+			)
+			if err != nil {
+				l.Fatal("failed to open ingest pool", zap.Error(err))
+			}
+			defer pool.Close()
+			ingestQueries = sqlc.New(pool)
+			ingestSM = statemachine.New(pool)
+		} else {
+			l.Warn("ingest: MigrateDSN not set; using runtime pool — " +
+				"RLS will gate the lookup and PROMOTE will silently no-op " +
+				"for every event. Set datastores.postgres.migrate_dsn to a " +
+				"BYPASSRLS role.")
+		}
+
 		// Wire the handler. Lookup uses the data-plane object repo
 		// so we can resolve (tenant, object_key, key) → object_id;
-		// statemachine.Transitioner already lives on SharedDeps.
+		// statemachine.Transitioner already lives on SharedDeps but
+		// we replace it with one bound to ingestQueries so PROMOTE
+		// flows through the same BYPASSRLS pool.
 		handler := &eventingest.PromoteHandler{
-			Lookup:       db.Queries,
-			Transitioner: deps.SM,
+			Lookup:       ingestQueries,
+			Transitioner: ingestSM,
 			Logger:       l.Named("ingest.handler"),
 		}
 
