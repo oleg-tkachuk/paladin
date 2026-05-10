@@ -884,6 +884,66 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** business RPO requirement (zero-data-loss vs minutes-
   scale lag) and budget for the second-region instance.
 
+### API-test fixture for UI/UX with real-shape data
+
+- **Status:** Deferred
+- **Reason:** Most admin pages render gracefully when empty —
+  `/events`, `/billing`, `/policies`, `/buckets`, `/objects`,
+  `/audit`, `/capabilities` — but designing the populated state
+  (truncation rules, pagination boundaries, status-pill
+  combinatorics, time-series sparsity, error chips) requires
+  realistic data sitting in front of the UI. Today the only ways
+  to populate a tenant are (a) hand-clicking through every form,
+  (b) writing one-off SQL inserts, or (c) running an end-to-end
+  agent against a freshly bootstrapped cluster. None of those
+  produce repeatable, scoped, easy-to-tear-down fixtures, so
+  design / screenshot / demo work consistently lags the feature
+  it's trying to evaluate.
+- **What this is NOT:** the existing
+  `backend/tests/integration/` suite covers correctness against a
+  real Postgres but is invisible to the UI — it spins up an
+  ephemeral container, asserts behaviour, tears down. Operators
+  can't `https://paladin.local/events` against it.
+- **Definition of Done:**
+  - **Driver shape:** a Go CLI under `backend/cmd/seed-fixture`
+    (or a `task seed:fixture-tenant` Taskfile target) that hits
+    the live admin / data RPCs the same way an operator would.
+    No DB pokes — exercising the public API surface is the whole
+    point. Auth via the bootstrap admin token (the same one the
+    UI uses).
+  - **Scope:** one CLI flag picks the fixture flavour:
+    - `--flavour=demo` — small, hand-curated set good for
+      screenshots: 3 tenants, 5 buckets each, ~20 objects, 4
+      EventSubscriptions (HTTP / NATS / one disabled / one
+      filtered), a few capability charges, a deliberately
+      failed `event_delivery` row to exercise the error chip.
+    - `--flavour=load` — ~10k objects, ~100 deliveries spread
+      across 24h so `/billing` time-series buckets look real
+      and `/events` Last-test column has a population to truncate.
+    - `--flavour=stress` — pagination boundaries (1000 / 1001 /
+      1099 rows so the cursor logic gets exercised in the UI).
+  - **Idempotency:** every fixture is keyed on a stable slug
+    (`fixture:<flavour>:<seq>`); re-running upgrades existing
+    rows in place rather than appending. Without this, repeated
+    runs balloon the tenant list and the UI fixture loses
+    determinism.
+  - **Tear-down:** sibling subcommand
+    (`seed-fixture --teardown=demo`) deletes everything created
+    under the fixture slug prefix, in dependency order. Safe to
+    run on a partial seed.
+  - **Refuses production:** seed CLI fails fast unless
+    `PALADIN_FIXTURE_OK=1` is set or the API base URL matches a
+    known-dev pattern. Don't ever let this run against real
+    customer data.
+- **Trigger to do:** the next time UI / UX work blocks on
+  "I can't see what this looks like with real data". Likely
+  candidates today: the `/events` table's pagination + last-test
+  column under load, `/billing` time-series with multi-currency,
+  any page that grew an empty-state but hasn't seen a populated
+  one. Until then, the cost-of-not-having scales with how much
+  design iteration is in flight; build it the moment the first
+  designer asks twice.
+
 ### Per-worker observability runbooks
 
 - **Status:** Deferred
