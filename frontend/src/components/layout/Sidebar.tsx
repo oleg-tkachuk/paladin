@@ -232,12 +232,12 @@ function SidebarBody({
   // signed-in user's tenant. Returns null when auth hasn't loaded
   // yet — caller hides the entry to avoid a broken link.
   //
-  // We use tenantId (UUID) here because UserDTO doesn't carry the
-  // slug field — the resolver in TenantLayout canonicalises UUID→
-  // slug on landing via replaceState, so the address bar ends up
-  // showing the slug after a brief flash. Threading slug through
-  // /api/auth/me would tighten this up; tracked in BACKLOG.
-  const tenantHandle = user?.tenantId || null;
+  // Prefer the slug — it comes through WhoAmIResponse.tenant_slug
+  // and lands directly in the AuthUser. Falling back to tenantId
+  // (UUID) covers legacy sessions minted before the slug-claim
+  // wiring; TenantLayout's resolver canonicalises those at landing
+  // via replaceState.
+  const tenantHandle = user?.tenantSlug || user?.tenantId || null;
   const resolveItemHref = (item: NavItem): string | null => {
     if (item.path) return item.path;
     if (!tenantHandle) return null;

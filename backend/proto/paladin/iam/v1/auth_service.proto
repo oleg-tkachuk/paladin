@@ -82,6 +82,11 @@ message WhoAmIResponse {
   // Audience extracted from the presented token; useful for SPAs that
   // reuse one client to talk to multiple planes.
   string audience = 2;
+  // Tenant slug for the caller's tenant — populated from the JWT's
+  // `tenant_slug` claim minted by the issuer. SPAs use this to render
+  // slug-form URLs (`/tenants/<slug>/...`) without a follow-up
+  // GetTenant lookup.
+  string tenant_slug = 3;
 }
 
 message ChangePasswordRequest {

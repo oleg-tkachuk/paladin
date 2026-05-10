@@ -2,8 +2,16 @@
 // @generated from file paladin/iam/v1/auth_service.proto (package paladin.iam.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { TokenPair, User } from "./types_pb";
 import { file_paladin_iam_v1_types } from "./types_pb";
@@ -12,8 +20,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/iam/v1/auth_service.proto.
  */
-export const file_paladin_iam_v1_auth_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QiQgoOV2hvQW1JUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLm9jcC5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCSJVChVDaGFuZ2VQYXNzd29yZFJlcXVlc3QSHQoMb2xkX3Bhc3N3b3JkGAEgASgJQge6SARyAhABEh0KDG5ld19wYXNzd29yZBgCIAEoCUIHukgEcgIQDCIYChZDaGFuZ2VQYXNzd29yZFJlc3BvbnNlIlsKF0V4Y2hhbmdlQXVkaWVuY2VSZXF1ZXN0Eh4KDXJlZnJlc2hfdG9rZW4YASABKAlCB7pIBHICEAESIAoPdGFyZ2V0X2F1ZGllbmNlGAIgASgJQge6SARyAhABImcKGEV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSIQoZYWNjZXNzX2V4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBRISCgp0b2tlbl90eXBlGAMgASgJMtgDCgtBdXRoU2VydmljZRI8CgVMb2dpbhIYLm9jcC5pYW0udjEuTG9naW5SZXF1ZXN0Ghkub2NwLmlhbS52MS5Mb2dpblJlc3BvbnNlElEKDFJlZnJlc2hUb2tlbhIfLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVxdWVzdBogLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVzcG9uc2USPwoGUmV2b2tlEhkub2NwLmlhbS52MS5SZXZva2VSZXF1ZXN0Ghoub2NwLmlhbS52MS5SZXZva2VSZXNwb25zZRI/CgZXaG9BbUkSGS5vY3AuaWFtLnYxLldob0FtSVJlcXVlc3QaGi5vY3AuaWFtLnYxLldob0FtSVJlc3BvbnNlElcKDkNoYW5nZVBhc3N3b3JkEiEub2NwLmlhbS52MS5DaGFuZ2VQYXNzd29yZFJlcXVlc3QaIi5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVzcG9uc2USXQoQRXhjaGFuZ2VBdWRpZW5jZRIjLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QaJC5vY3AuaWFtLnYxLkV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM", [file_buf_validate_validate, file_paladin_iam_v1_types]);
+export const file_paladin_iam_v1_auth_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QiVwoOV2hvQW1JUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLm9jcC5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCSJVChVDaGFuZ2VQYXNzd29yZFJlcXVlc3QSHQoMb2xkX3Bhc3N3b3JkGAEgASgJQge6SARyAhABEh0KDG5ld19wYXNzd29yZBgCIAEoCUIHukgEcgIQDCIYChZDaGFuZ2VQYXNzd29yZFJlc3BvbnNlIlsKF0V4Y2hhbmdlQXVkaWVuY2VSZXF1ZXN0Eh4KDXJlZnJlc2hfdG9rZW4YASABKAlCB7pIBHICEAESIAoPdGFyZ2V0X2F1ZGllbmNlGAIgASgJQge6SARyAhABImcKGEV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSIQoZYWNjZXNzX2V4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBRISCgp0b2tlbl90eXBlGAMgASgJMtgDCgtBdXRoU2VydmljZRI8CgVMb2dpbhIYLm9jcC5pYW0udjEuTG9naW5SZXF1ZXN0Ghkub2NwLmlhbS52MS5Mb2dpblJlc3BvbnNlElEKDFJlZnJlc2hUb2tlbhIfLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVxdWVzdBogLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVzcG9uc2USPwoGUmV2b2tlEhkub2NwLmlhbS52MS5SZXZva2VSZXF1ZXN0Ghoub2NwLmlhbS52MS5SZXZva2VSZXNwb25zZRI/CgZXaG9BbUkSGS5vY3AuaWFtLnYxLldob0FtSVJlcXVlc3QaGi5vY3AuaWFtLnYxLldob0FtSVJlc3BvbnNlElcKDkNoYW5nZVBhc3N3b3JkEiEub2NwLmlhbS52MS5DaGFuZ2VQYXNzd29yZFJlcXVlc3QaIi5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVzcG9uc2USXQoQRXhjaGFuZ2VBdWRpZW5jZRIjLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QaJC5vY3AuaWFtLnYxLkV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    [file_buf_validate_validate, file_paladin_iam_v1_types],
+  );
 
 /**
  * @generated from message paladin.iam.v1.LoginRequest
@@ -54,7 +66,8 @@ export type LoginRequest = Message<"paladin.iam.v1.LoginRequest"> & {
  * Describes the message paladin.iam.v1.LoginRequest.
  * Use `create(LoginRequestSchema)` to create a new message.
  */
-export const LoginRequestSchema: GenMessage<LoginRequest> = /*@__PURE__*/
+export const LoginRequestSchema: GenMessage<LoginRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 0);
 
 /**
@@ -76,7 +89,8 @@ export type LoginResponse = Message<"paladin.iam.v1.LoginResponse"> & {
  * Describes the message paladin.iam.v1.LoginResponse.
  * Use `create(LoginResponseSchema)` to create a new message.
  */
-export const LoginResponseSchema: GenMessage<LoginResponse> = /*@__PURE__*/
+export const LoginResponseSchema: GenMessage<LoginResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 1);
 
 /**
@@ -102,24 +116,27 @@ export type RefreshTokenRequest = Message<"paladin.iam.v1.RefreshTokenRequest"> 
  * Describes the message paladin.iam.v1.RefreshTokenRequest.
  * Use `create(RefreshTokenRequestSchema)` to create a new message.
  */
-export const RefreshTokenRequestSchema: GenMessage<RefreshTokenRequest> = /*@__PURE__*/
+export const RefreshTokenRequestSchema: GenMessage<RefreshTokenRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 2);
 
 /**
  * @generated from message paladin.iam.v1.RefreshTokenResponse
  */
-export type RefreshTokenResponse = Message<"paladin.iam.v1.RefreshTokenResponse"> & {
-  /**
-   * @generated from field: paladin.iam.v1.TokenPair tokens = 1;
-   */
-  tokens?: TokenPair | undefined;
-};
+export type RefreshTokenResponse =
+  Message<"paladin.iam.v1.RefreshTokenResponse"> & {
+    /**
+     * @generated from field: paladin.iam.v1.TokenPair tokens = 1;
+     */
+    tokens?: TokenPair | undefined;
+  };
 
 /**
  * Describes the message paladin.iam.v1.RefreshTokenResponse.
  * Use `create(RefreshTokenResponseSchema)` to create a new message.
  */
-export const RefreshTokenResponseSchema: GenMessage<RefreshTokenResponse> = /*@__PURE__*/
+export const RefreshTokenResponseSchema: GenMessage<RefreshTokenResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 3);
 
 /**
@@ -138,33 +155,34 @@ export type RevokeRequest = Message<"paladin.iam.v1.RevokeRequest"> & {
  * Describes the message paladin.iam.v1.RevokeRequest.
  * Use `create(RevokeRequestSchema)` to create a new message.
  */
-export const RevokeRequestSchema: GenMessage<RevokeRequest> = /*@__PURE__*/
+export const RevokeRequestSchema: GenMessage<RevokeRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 4);
 
 /**
  * @generated from message paladin.iam.v1.RevokeResponse
  */
-export type RevokeResponse = Message<"paladin.iam.v1.RevokeResponse"> & {
-};
+export type RevokeResponse = Message<"paladin.iam.v1.RevokeResponse"> & {};
 
 /**
  * Describes the message paladin.iam.v1.RevokeResponse.
  * Use `create(RevokeResponseSchema)` to create a new message.
  */
-export const RevokeResponseSchema: GenMessage<RevokeResponse> = /*@__PURE__*/
+export const RevokeResponseSchema: GenMessage<RevokeResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 5);
 
 /**
  * @generated from message paladin.iam.v1.WhoAmIRequest
  */
-export type WhoAmIRequest = Message<"paladin.iam.v1.WhoAmIRequest"> & {
-};
+export type WhoAmIRequest = Message<"paladin.iam.v1.WhoAmIRequest"> & {};
 
 /**
  * Describes the message paladin.iam.v1.WhoAmIRequest.
  * Use `create(WhoAmIRequestSchema)` to create a new message.
  */
-export const WhoAmIRequestSchema: GenMessage<WhoAmIRequest> = /*@__PURE__*/
+export const WhoAmIRequestSchema: GenMessage<WhoAmIRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 6);
 
 /**
@@ -183,106 +201,124 @@ export type WhoAmIResponse = Message<"paladin.iam.v1.WhoAmIResponse"> & {
    * @generated from field: string audience = 2;
    */
   audience: string;
+
+  /**
+   * Tenant slug for the caller's tenant — populated from the JWT's
+   * `tenant_slug` claim minted by the issuer. SPAs use this to render
+   * slug-form URLs (`/tenants/<slug>/...`) without a follow-up
+   * GetTenant lookup.
+   *
+   * @generated from field: string tenant_slug = 3;
+   */
+  tenantSlug: string;
 };
 
 /**
  * Describes the message paladin.iam.v1.WhoAmIResponse.
  * Use `create(WhoAmIResponseSchema)` to create a new message.
  */
-export const WhoAmIResponseSchema: GenMessage<WhoAmIResponse> = /*@__PURE__*/
+export const WhoAmIResponseSchema: GenMessage<WhoAmIResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 7);
 
 /**
  * @generated from message paladin.iam.v1.ChangePasswordRequest
  */
-export type ChangePasswordRequest = Message<"paladin.iam.v1.ChangePasswordRequest"> & {
-  /**
-   * @generated from field: string old_password = 1;
-   */
-  oldPassword: string;
+export type ChangePasswordRequest =
+  Message<"paladin.iam.v1.ChangePasswordRequest"> & {
+    /**
+     * @generated from field: string old_password = 1;
+     */
+    oldPassword: string;
 
-  /**
-   * @generated from field: string new_password = 2;
-   */
-  newPassword: string;
-};
+    /**
+     * @generated from field: string new_password = 2;
+     */
+    newPassword: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.ChangePasswordRequest.
  * Use `create(ChangePasswordRequestSchema)` to create a new message.
  */
-export const ChangePasswordRequestSchema: GenMessage<ChangePasswordRequest> = /*@__PURE__*/
+export const ChangePasswordRequestSchema: GenMessage<ChangePasswordRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 8);
 
 /**
  * @generated from message paladin.iam.v1.ChangePasswordResponse
  */
-export type ChangePasswordResponse = Message<"paladin.iam.v1.ChangePasswordResponse"> & {
-};
+export type ChangePasswordResponse =
+  Message<"paladin.iam.v1.ChangePasswordResponse"> & {};
 
 /**
  * Describes the message paladin.iam.v1.ChangePasswordResponse.
  * Use `create(ChangePasswordResponseSchema)` to create a new message.
  */
-export const ChangePasswordResponseSchema: GenMessage<ChangePasswordResponse> = /*@__PURE__*/
+export const ChangePasswordResponseSchema: GenMessage<ChangePasswordResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 9);
 
 /**
  * @generated from message paladin.iam.v1.ExchangeAudienceRequest
  */
-export type ExchangeAudienceRequest = Message<"paladin.iam.v1.ExchangeAudienceRequest"> & {
-  /**
-   * Refresh token from the active session. Validated but NOT consumed.
-   *
-   * @generated from field: string refresh_token = 1;
-   */
-  refreshToken: string;
+export type ExchangeAudienceRequest =
+  Message<"paladin.iam.v1.ExchangeAudienceRequest"> & {
+    /**
+     * Refresh token from the active session. Validated but NOT consumed.
+     *
+     * @generated from field: string refresh_token = 1;
+     */
+    refreshToken: string;
 
-  /**
-   * Target audience: "paladin-data" | "paladin-admin" | "paladin-iam".
-   *
-   * @generated from field: string target_audience = 2;
-   */
-  targetAudience: string;
-};
+    /**
+     * Target audience: "paladin-data" | "paladin-admin" | "paladin-iam".
+     *
+     * @generated from field: string target_audience = 2;
+     */
+    targetAudience: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.ExchangeAudienceRequest.
  * Use `create(ExchangeAudienceRequestSchema)` to create a new message.
  */
-export const ExchangeAudienceRequestSchema: GenMessage<ExchangeAudienceRequest> = /*@__PURE__*/
+export const ExchangeAudienceRequestSchema: GenMessage<ExchangeAudienceRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 10);
 
 /**
  * @generated from message paladin.iam.v1.ExchangeAudienceResponse
  */
-export type ExchangeAudienceResponse = Message<"paladin.iam.v1.ExchangeAudienceResponse"> & {
-  /**
-   * Short-lived access token bound to target_audience. No refresh token
-   * is issued — the caller's existing refresh chain is unchanged.
-   *
-   * @generated from field: string access_token = 1;
-   */
-  accessToken: string;
+export type ExchangeAudienceResponse =
+  Message<"paladin.iam.v1.ExchangeAudienceResponse"> & {
+    /**
+     * Short-lived access token bound to target_audience. No refresh token
+     * is issued — the caller's existing refresh chain is unchanged.
+     *
+     * @generated from field: string access_token = 1;
+     */
+    accessToken: string;
 
-  /**
-   * @generated from field: int32 access_expires_in_seconds = 2;
-   */
-  accessExpiresInSeconds: number;
+    /**
+     * @generated from field: int32 access_expires_in_seconds = 2;
+     */
+    accessExpiresInSeconds: number;
 
-  /**
-   * Always "Bearer" today; reserved for future scoped-token kinds.
-   *
-   * @generated from field: string token_type = 3;
-   */
-  tokenType: string;
-};
+    /**
+     * Always "Bearer" today; reserved for future scoped-token kinds.
+     *
+     * @generated from field: string token_type = 3;
+     */
+    tokenType: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.ExchangeAudienceResponse.
  * Use `create(ExchangeAudienceResponseSchema)` to create a new message.
  */
-export const ExchangeAudienceResponseSchema: GenMessage<ExchangeAudienceResponse> = /*@__PURE__*/
+export const ExchangeAudienceResponseSchema: GenMessage<ExchangeAudienceResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 11);
 
 /**
@@ -303,7 +339,7 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof LoginRequestSchema;
     output: typeof LoginResponseSchema;
-  },
+  };
   /**
    * RefreshToken exchanges a still-valid refresh token for a fresh access+
    * refresh pair. The old refresh token is invalidated (rotation).
@@ -314,7 +350,7 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof RefreshTokenRequestSchema;
     output: typeof RefreshTokenResponseSchema;
-  },
+  };
   /**
    * Revoke invalidates a token (access or refresh). Idempotent.
    *
@@ -324,7 +360,7 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof RevokeRequestSchema;
     output: typeof RevokeResponseSchema;
-  },
+  };
   /**
    * WhoAmI returns the caller's current Principal — used by SPAs to render
    * identity / role-gated UI without re-decoding the JWT client-side.
@@ -335,7 +371,7 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof WhoAmIRequestSchema;
     output: typeof WhoAmIResponseSchema;
-  },
+  };
   /**
    * ChangePassword updates the caller's password. Local-IdP only.
    *
@@ -345,7 +381,7 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof ChangePasswordRequestSchema;
     output: typeof ChangePasswordResponseSchema;
-  },
+  };
   /**
    * ExchangeAudience derives a short-lived access token for a different
    * audience from a still-valid refresh token, WITHOUT rotating the
@@ -361,7 +397,5 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof ExchangeAudienceRequestSchema;
     output: typeof ExchangeAudienceResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_iam_v1_auth_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_auth_service, 0);

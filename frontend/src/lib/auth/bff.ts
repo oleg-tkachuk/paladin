@@ -163,27 +163,37 @@ export async function refreshIamChain(
 /**
  * Browser-facing user payload. Strips proto-runtime fields ($typeName,
  * Timestamp objects) so the AuthContext can JSON.stringify it freely.
+ *
+ * `tenantSlug` is sourced from the JWT's `tenant_slug` claim via
+ * WhoAmIResponse.tenant_slug — populated separately from the User
+ * proto (which carries only tenant_id). The /api/auth/me handler
+ * splices it in at DTO time.
  */
 export type UserDTO = {
   userId: string;
   tenantId: string;
+  tenantSlug: string;
   subject: string;
   displayName: string;
   roles: string[];
   resourceVersion: string;
 };
 
-export function toUserDTO(u: {
-  userId: string;
-  tenantId: string;
-  subject: string;
-  displayName: string;
-  roles: string[];
-  resourceVersion: string;
-}): UserDTO {
+export function toUserDTO(
+  u: {
+    userId: string;
+    tenantId: string;
+    subject: string;
+    displayName: string;
+    roles: string[];
+    resourceVersion: string;
+  },
+  tenantSlug = "",
+): UserDTO {
   return {
     userId: u.userId,
     tenantId: u.tenantId,
+    tenantSlug,
     subject: u.subject,
     displayName: u.displayName,
     roles: u.roles,

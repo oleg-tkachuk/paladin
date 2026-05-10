@@ -213,7 +213,11 @@ export default function BillingPage() {
   const [summary, setSummary] = useState<GetTenantSummaryResponse | null>(null);
   const [timeseries, setTimeseries] =
     useState<GetTenantTimeSeriesResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  // `loading` was used by the skeleton conditions but they switched
+  // to `!summary` / `!timeseries` (no flash between mount and first
+  // fetch). Keep the setter — the in-flight flag may still be useful
+  // for "Refresh" button affordance later.
+  const [, setLoading] = useState(false);
 
   // Debounce period changes — date pickers fire on each keystroke,
   // we don't want one RPC per character.
@@ -249,13 +253,25 @@ export default function BillingPage() {
   }, [tenantId, preset, customStart, customEnd, granularity, showNotification]);
 
   useEffect(() => {
+    // Debounce only after the first successful load — without this
+    // every navigation INTO /billing waited 300ms before firing the
+    // fetch (blank cards visible during the wait, then a skeleton
+    // burst, then data; three visual states). The debounce IS still
+    // useful for the date pickers — they fire the effect on each
+    // keystroke. So: 0ms when summary is missing (initial load),
+    // 300ms otherwise.
+    const delay = summary ? 300 : 0;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       void fetchAll();
-    }, 300);
+    }, delay);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+    // summary intentionally not in the dep list — only the FIRST
+    // load needs the no-delay path; once we have data the 300ms
+    // debounce kicks in for subsequent changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchAll]);
 
   // Derived KPI stats. Pulled from the summary; safe to compute
@@ -337,8 +353,12 @@ export default function BillingPage() {
         </div>
       </Card>
 
-      {/* KPI tiles */}
-      {loading && !summary ? (
+      {/* KPI tiles. Show skeleton whenever we don't have data yet —
+          covers both "first fetch in flight" and "haven't started
+          fetching" (tenantId still resolving). The previous
+          condition `loading && !summary` left a brief flash of
+          empty tiles between mount and the first fetch firing. */}
+      {!summary ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
@@ -409,7 +429,7 @@ export default function BillingPage() {
             />
           </div>
         </div>
-        {loading && !timeseries ? (
+        {!timeseries ? (
           <Skeleton className="h-32" />
         ) : buckets.length === 0 ? (
           <div className={cn(T.helper, "py-8 text-center")}>

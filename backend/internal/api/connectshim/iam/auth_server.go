@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/authh"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // AuthServer bridges generated Connect handlers to authh.Handler.
@@ -88,9 +89,20 @@ func (s *AuthServer) WhoAmI(ctx context.Context, _ *connect.Request[pb.WhoAmIReq
 	if err != nil {
 		return nil, err
 	}
+	// tenant_slug is sourced from the JWT principal claim (minted by
+	// the issuer with the value of tenants.slug at login time). The
+	// SPA uses it to render slug-form tenant URLs without a
+	// follow-up GetTenant lookup. PrincipalFromContext can fail in
+	// edge cases (token without principal — shouldn't happen post-
+	// authn-middleware), so we surface empty rather than 5xx.
+	var tenantSlug string
+	if p, perr := auth.PrincipalFromContext(ctx); perr == nil {
+		tenantSlug = p.TenantSlug
+	}
 	return connect.NewResponse(&pb.WhoAmIResponse{
-		User:     userToProto(&out.User),
-		Audience: out.Audience,
+		User:       userToProto(&out.User),
+		Audience:   out.Audience,
+		TenantSlug: tenantSlug,
 	}), nil
 }
 
