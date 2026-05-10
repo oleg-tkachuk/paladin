@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -81,11 +83,52 @@ var serveIngestCmd = &cobra.Command{
 			}
 		}()
 
+		// Health server. The webhook driver binds its own listener on
+		// cfg.Ingest.Webhook.Addr (which serves /healthz alongside the
+		// receiver routes), but nats / rabbitmq drivers have nothing
+		// HTTP-shaped — without a tiny health endpoint kubelet's
+		// liveness probe sees ECONNREFUSED on :8100 and crash-loops the
+		// pod every 60s. Bind a minimal /healthz + /readyz on the same
+		// addr so the chart's probes work uniformly across drivers.
+		if cfg.Ingest.Driver != "webhook" && cfg.Ingest.Webhook.Addr != "" {
+			go runIngestHealthServer(ctx, cfg.Ingest.Webhook.Addr, l)
+		}
+
 		l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
 		if err := worker.Run(ctx); err != nil && !errorsIsCancelled(err) {
 			l.Error("ingest worker exited", zap.Error(err))
 		}
 	},
+}
+
+// runIngestHealthServer is the lightweight `/healthz` + `/readyz`
+// endpoint nats / rabbitmq drivers expose so kubelet's probes don't
+// crash-loop the pod. It always returns 200 — once the worker is up
+// the broker subscription is the source of truth, and broker
+// disconnects show up in the worker's own log + reconnect loop.
+func runIngestHealthServer(ctx context.Context, addr string, l *zap.Logger) {
+	mux := http.NewServeMux()
+	for _, path := range []string{"/healthz", "/readyz"} {
+		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok\n"))
+		})
+	}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutCtx)
+	}()
+	l.Info("ingest health server starting", zap.String("addr", addr))
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		l.Warn("ingest health server exited", zap.Error(err))
+	}
 }
 
 // buildIngestDriver selects the transport based on cfg.Ingest.Driver
