@@ -658,6 +658,39 @@ the same commit. Treat this file like a runtime invariant.
   enterprise that already has a RabbitMQ cluster as their event bus
   and won't migrate to NATS / Kafka for one new producer.
 
+### NATS auth: NKey / JWT support
+
+- **Status:** Deferred
+- **Reason:** The two production NATS edges PALADIN cares about
+  today both run unauthenticated:
+    - **Outbound** — `Dispatcher` → NATS via `EventSubscription`
+      `NatsSink`. The proto's `credentials_ref` accepts
+      `<scheme>:<value>`; v1 only honours `token:<plaintext>`
+      (see `internal/worker/sink_nats.go`).
+    - **SeaweedFS publisher** — `gocdk_pub_sub` reads
+      `NATS_SERVER_URL` from process env (set on
+      `spec.filer.env` in `gitops/.../seaweedfs/seaweed.yaml`).
+      No auth fields; gocloud.dev's natspubsub driver doesn't
+      surface them.
+  Fine for the lab cluster — NATS service has no exposed
+  ingress and lives on the cluster network. Production needs
+  one of NKey / JWT so a stolen Pod identity can't fan-out
+  arbitrary events.
+- **Definition of Done:**
+  - `NatsSink.credentials_ref` supports `nkey:<seed>` and
+    `jwt:<jwt>+nkey:<seed>` schemes. Need on-disk credential
+    file materialisation (the nats.go client only accepts
+    file paths for these). Use `os.CreateTemp` with
+    `0600`-perm files, deleted on connection close.
+  - `NATS_SERVER_URL` for SeaweedFS published via a
+    Kubernetes `Secret` (the URL itself becomes
+    `nats://<token>@host:port` for the simplest auth flavour).
+  - `gitops` overlay enables NKey/JWT on the NATS broker
+    deployment. Today `nats` chart runs auth-free.
+  - Document the credential-rotation flow in `docs/`.
+- **Trigger to do:** before any non-lab deployment of either
+  the PALADIN NATS sink or the SF NATS publisher.
+
 ### Event dispatcher: SQS sink
 
 - **Status:** Deferred
@@ -723,31 +756,59 @@ the same commit. Treat this file like a runtime invariant.
   when an external pipeline writes directly to the storage bucket,
   bypassing PALADIN, and PALADIN needs to discover those new objects via
   storage-side notification.
-- **Why no quick wire-up via SeaweedFS today:** SeaweedFS native
-  notification targets are Kafka / AWS SQS / GCP PubSub / log.
-  Recent versions added a generic webhook target (~v3.59+) but
-  it's lightly documented and version-specific. RabbitMQ is NOT
-  supported natively. The four realistic paths if this ever
-  becomes load-bearing:
-    - **Path A (cleanest if SF version supports it):** SeaweedFS
-      `[notification.webhook]` → PALADIN ingest plane's webhook driver.
-      Single hop, reuses existing PALADIN code. Verify SeaweedFS
-      version supports webhook before relying on this.
-    - **Path B:** SeaweedFS Kafka notifications → PALADIN. Requires a
-      Kafka cluster (Redpanda would do) AND a Kafka driver on the
-      PALADIN ingest side (only `webhook | nats | rabbitmq` exist
-      today — no Kafka driver).
-    - **Path C:** SeaweedFS SQS notifications → PALADIN. Only sensible
-      on AWS where SQS is native; locally needs ElasticMQ.
-    - **Path D:** Log-tail sidecar that watches SeaweedFS filer
-      notification log and pushes to RabbitMQ → PALADIN ingest's
-      RabbitMQ driver. Operationally fragile (file rotation,
-      sidecar lifecycle, dedup) but the only path that actually
-      uses the operator-deployed RabbitMQ.
-  In all paths, the bottleneck isn't PALADIN — it's the storage
-  notification subsystem. SeaweedFS is the limiting factor; MinIO
-  has cleaner native webhook + AMQP support if that becomes the
-  storage backend.
+- **State as of 2026-05-10:** SeaweedFS filer publishes events
+  to NATS via `gocdk_pub_sub` on subject `seaweedfs.filer`
+  (image `chrislusf/seaweedfs:4.23_full`, notification.toml
+  shipped via sibling ConfigMap mount, see
+  `gitops/.../seaweedfs/seaweed.yaml`). NATS broker lives at
+  `nats.nats.svc.cluster.local:4222`. End-to-end probe verified
+  filer events arriving on the subject. **The publisher half is
+  done; only the subscriber/decoder side on PALADIN is open.**
+- **What's left:** PALADIN-side NATS subscriber that decodes SF's
+  wire format (gocdk_pub_sub serialises body as
+  `proto.Marshal(*filer_pb.EventNotification)` with metadata
+  `{key: <fullpath>}`). The existing `SeaweedFSSource` parses
+  the JSON shape SF's `[notification.webhook]` driver emits —
+  not the protobuf one we receive on NATS. Two concrete
+  sub-tasks:
+    - **(a) New source adapter** `source_seaweedfs_nats.go`:
+        - Decode NATS message body as `filer_pb.EventNotification`
+          (vendor a minimal proto with just `OldEntry` /
+          `NewEntry` presence — enough to derive
+          create/update/delete; ignore Entry internals).
+        - Read NATS header `key` (or gob-decoded metadata if
+          gocloud.dev natspubsub falls back to gob — verify
+          empirically via a test subscriber first).
+        - Map (oldEntry, newEntry) presence → EventType:
+          `nil → x = create`, `x → x = update`, `x → nil = delete`.
+        - Use receipt time for `CloudEvent.Time` (TsNs is on
+          `SubscribeMetadataResponse`, not on the inner
+          `EventNotification` SF actually sends).
+        - id = sha256(key + eventType + tsApprox)[:32].
+    - **(b) Wire & deploy:**
+        - In `gitops/.../paladin-values.yaml` set
+          `ingest.enabled: true`, `ingest.driver: nats`,
+          `ingest.nats.url: nats://nats.nats.svc.cluster.local:4222`,
+          `ingest.nats.subject: seaweedfs.>`,
+          `ingest.nats.queue_group: paladin-ingest` for idempotent
+          horizontal scaling.
+        - Decide JetStream vs core pubsub. Core pubsub is fine
+          for v1; JetStream needs a stream pre-provisioned
+          (out-of-band manifest in gitops).
+- **Why this isn't urgent:** in the current production flow
+  the agent path (`paladin_upload_object` → presigned PUT →
+  `paladin_complete_object`) is explicit and synchronous; PALADIN
+  doesn't need to discover writes async. The cycle only
+  matters when an external pipeline writes directly to the
+  storage bucket bypassing PALADIN — at which point the trigger
+  fires. Until then the publisher half just sits there
+  incurring zero cost (NATS core pubsub at-most-once with no
+  subscriber drops messages on the floor).
+- **MinIO equivalent:** if storage backend ever flips to
+  MinIO, MinIO has cleaner native webhook + AMQP + Kafka
+  bucket-notifications — an additional source adapter (mirror
+  of SF's) and a `[bucket][notify]` config block on the MinIO
+  side, then the same `ingest.driver=nats` wiring works.
 - **Definition of Done:**
   - Pick a path based on storage backend in production AND
     customer requirement (do they write directly to S3 buckets
