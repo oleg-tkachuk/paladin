@@ -58,18 +58,21 @@ export function useTenants() {
     [],
   );
 
-  // createTenant — Phase 0 contract:
+  // createTenant — Phase 0 + default-binding contract:
   //   - slug is required (caller-supplied kebab-case handle).
   //   - tenantId is optional; empty string lets the server mint UUIDv7.
-  //   - displayName is optional; the server defaults it to slug when empty.
-  // The previous signature (id, name) has been replaced — id-only callers
-  // need to choose a slug before they can land a tenant.
+  //   - displayName is optional; defaults to slug when empty.
+  //   - defaultBucket — resource name "storageBackends/{b}/buckets/{bk}";
+  //     when non-empty, the server pins this tenant's default
+  //     (backend, bucket) in tenant_default_bindings. Optional; legacy
+  //     bootstrap callers omit it.
   const createTenant = useCallback(
     async (
       slug: string,
       tenantId: string = "",
       displayName: string = "",
       labels: Record<string, string> = {},
+      defaultBucket: string = "",
     ): Promise<Tenant> => {
       try {
         setError(null);
@@ -84,7 +87,11 @@ export function useTenants() {
           inheritedCedarPolicy: "",
           resourceVersion: "",
         });
-        const created = await tenantClient.createTenant({ tenantId, tenant });
+        const created = await tenantClient.createTenant({
+          tenantId,
+          tenant,
+          defaultBucket,
+        });
         setTenants((prev) => [...prev, created]);
         bumpRefresh("tenants");
         return created;

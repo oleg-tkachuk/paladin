@@ -21,8 +21,17 @@ import { ConnectError } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useTenants } from "@/hooks/useTenants";
+import { useBackends } from "@/hooks/useBackends";
+import { useBuckets } from "@/hooks/useBuckets";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { useNotification } from "@/components/ui/Notification";
+import {
+  SelectRoot,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,7 +167,43 @@ export default function TenantsPage() {
   const [newSlug, setNewSlug] = useState("");
   const [newId, setNewId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
+  const [newBackend, setNewBackend] = useState("");
+  const [newBucket, setNewBucket] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Backends + buckets feed the cascading Backend → Bucket dropdowns
+  // in the create dialog. Tenants land on a (backend, bucket) pair so
+  // the default binding can be persisted at create time. Both lists
+  // are tiny (handful of rows) and refreshed on dialog open.
+  const { backends } = useBackends(createOpen);
+  const { buckets, fetchBuckets } = useBuckets();
+  useEffect(() => {
+    if (createOpen) void fetchBuckets();
+  }, [createOpen, fetchBuckets]);
+  const bucketsForBackend = useMemo(
+    () => (newBackend ? buckets.filter((b) => b.backendId === newBackend) : []),
+    [buckets, newBackend],
+  );
+  // Pick a sensible default backend the moment the dialog opens with
+  // backends loaded — saves a click in the typical single-backend
+  // dev environment.
+  useEffect(() => {
+    if (createOpen && !newBackend && backends.length > 0) {
+      setNewBackend(backends[0].backendId);
+    }
+  }, [createOpen, newBackend, backends]);
+  // Reset bucket when backend changes; the previous bucket may not
+  // belong to the new backend.
+  useEffect(() => {
+    if (
+      newBucket &&
+      !buckets.some(
+        (b) => b.backendId === newBackend && b.bucketName === newBucket,
+      )
+    ) {
+      setNewBucket("");
+    }
+  }, [newBackend, newBucket, buckets]);
 
   // ─── edit ─────────────────────────────────────────────────────────────────
   const [editing, setEditing] = useState<Tenant | null>(null);
@@ -226,9 +271,25 @@ export default function TenantsPage() {
       });
       return;
     }
+    if (!newBackend || !newBucket) {
+      showNotification({
+        type: "error",
+        title: "Default location required",
+        message:
+          "Pick a storage backend and a bucket. Tenant objects live there by default.",
+      });
+      return;
+    }
+    const defaultBucketRef = `storageBackends/${newBackend}/buckets/${newBucket}`;
     try {
       setSubmitting(true);
-      const created = await createTenant(newSlug, newId, newDisplayName);
+      const created = await createTenant(
+        newSlug,
+        newId,
+        newDisplayName,
+        {},
+        defaultBucketRef,
+      );
       showNotification({
         type: "success",
         title: "Tenant created",
@@ -237,6 +298,8 @@ export default function TenantsPage() {
       setNewSlug("");
       setNewId("");
       setNewDisplayName("");
+      setNewBucket("");
+      // keep newBackend so the next create defaults to the same one
       setCreateOpen(false);
     } catch (err) {
       console.error(err);
@@ -593,6 +656,78 @@ export default function TenantsPage() {
                   Unique, editable. Defaults to slug when empty.
                 </p>
               </div>
+              {/* Default location — required. The tenant's objects
+                  live under <bucket>/<tenant_id>/... after create;
+                  this picks WHERE that prefix exists. Backend +
+                  bucket cascade. Empty bucket list means the chosen
+                  backend has no buckets registered yet — operator
+                  needs to create one in /buckets before continuing. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenant-backend">
+                    Storage backend <span className="text-destructive">*</span>
+                  </Label>
+                  <SelectRoot
+                    value={newBackend}
+                    onValueChange={(v) => setNewBackend(v)}
+                  >
+                    <SelectTrigger id="tenant-backend">
+                      <SelectValue
+                        placeholder={
+                          backends.length === 0
+                            ? "No backends registered"
+                            : "Pick backend"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {backends.map((b) => (
+                        <SelectItem key={b.backendId} value={b.backendId}>
+                          {b.displayName
+                            ? `${b.displayName} (${b.backendId})`
+                            : b.backendId}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenant-bucket">
+                    Bucket <span className="text-destructive">*</span>
+                  </Label>
+                  <SelectRoot
+                    value={newBucket}
+                    onValueChange={(v) => setNewBucket(v)}
+                    disabled={!newBackend || bucketsForBackend.length === 0}
+                  >
+                    <SelectTrigger id="tenant-bucket">
+                      <SelectValue
+                        placeholder={
+                          !newBackend
+                            ? "Pick backend first"
+                            : bucketsForBackend.length === 0
+                              ? "No buckets on this backend"
+                              : "Pick bucket"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bucketsForBackend.map((b) => (
+                        <SelectItem key={b.bucketName} value={b.bucketName}>
+                          {b.bucketName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Tenant objects will live under{" "}
+                <span className={cn(T.code, "text-[10px]")}>
+                  {newBucket || "<bucket>"}/&lt;tenant_id&gt;/…
+                </span>
+                . Bind cannot be moved without rebinding via the admin RPC.
+              </p>
               {/* Advanced — Tenant ID lives under a disclosure since
                   the typical operator never touches it (server mints
                   UUIDv7). Power users importing a known UUID open
@@ -638,7 +773,10 @@ export default function TenantsPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting || !newSlug}>
+              <Button
+                type="submit"
+                disabled={submitting || !newSlug || !newBackend || !newBucket}
+              >
                 {submitting ? "Creating…" : "Create tenant"}
               </Button>
             </DialogFooter>

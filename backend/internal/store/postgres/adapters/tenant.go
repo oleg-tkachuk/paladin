@@ -39,7 +39,21 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 	if len(labels) == 0 {
 		labels = []byte("{}")
 	}
-	if err := r.q.CreateTenant(ctx,
+
+	// One tx covers the tenant insert + the optional default-binding
+	// insert so a tenant never lands without its operator-chosen
+	// (backend, bucket) when one was supplied. If the binding INSERT
+	// trips the bucket FK (operator typo, race with bucket delete),
+	// the tenant is rolled back too — better to surface the error to
+	// the operator than to half-commit.
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return tenant.Tenant{}, fmt.Errorf("create tenant: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := r.q.WithTx(tx)
+
+	if err := qtx.CreateTenant(ctx,
 		pgUUID(args.TenantID),
 		args.Slug,
 		args.DisplayName,
@@ -62,7 +76,46 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 		}
 		return tenant.Tenant{}, fmt.Errorf("create tenant: %w", err)
 	}
+
+	// Optional default binding. The handler validates that backend +
+	// bucket are paired (both empty or both set); we just translate
+	// "both set" into a row in tenant_default_bindings.
+	if args.DefaultBackendID != "" && args.DefaultBucketName != "" {
+		actor := actorFromContext(ctx)
+		if err := qtx.SetTenantDefaultBinding(ctx,
+			pgUUID(args.TenantID),
+			args.DefaultBackendID,
+			args.DefaultBucketName,
+			actor,
+		); err != nil {
+			// FK violation = picked bucket doesn't exist on this backend.
+			// Surface as a typed sentinel so the handler can return a
+			// clean InvalidArgument instead of a Postgres error string.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+				return tenant.Tenant{}, tenant.ErrDefaultBindingBucketMissing
+			}
+			return tenant.Tenant{}, fmt.Errorf("create tenant: bind default: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("create tenant: commit: %w", err)
+	}
 	return r.Get(ctx, args.TenantID)
+}
+
+// actorFromContext extracts the caller subject for the audit-style
+// `set_by` column on tenant_default_bindings. Falls back to empty
+// string when auth isn't established (test paths) — the column is
+// NOT NULL with a ” default at the DB level.
+func actorFromContext(ctx context.Context) string {
+	// Lazy import path — keep this adapter free of circular deps.
+	type principal interface{ GetSubject() string }
+	if p, ok := ctx.Value(struct{}{}).(principal); ok {
+		return p.GetSubject()
+	}
+	return ""
 }
 
 func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {

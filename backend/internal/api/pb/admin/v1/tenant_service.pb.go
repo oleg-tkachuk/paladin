@@ -36,7 +36,14 @@ type CreateTenantRequest struct {
 	// tenant.display_name is optional; defaults to slug at create time.
 	// Both are unique across tenants. tenant_id, slug — immutable;
 	// display_name — editable via UpdateTenant.
-	Tenant        *Tenant `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	Tenant *Tenant `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// default_bucket — resource name of the (backend, bucket) where this
+	// tenant's objects will live by default. Format:
+	// "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+	// when empty the tenant has no default binding (legacy shape); when
+	// set, the server inserts a matching tenant_default_bindings row in
+	// the same tx as the tenant insert.
+	DefaultBucket string `protobuf:"bytes,3,opt,name=default_bucket,json=defaultBucket,proto3" json:"default_bucket,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -83,6 +90,13 @@ func (x *CreateTenantRequest) GetTenant() *Tenant {
 		return x.Tenant
 	}
 	return nil
+}
+
+func (x *CreateTenantRequest) GetDefaultBucket() string {
+	if x != nil {
+		return x.DefaultBucket
+	}
+	return ""
 }
 
 type GetTenantRequest struct {
@@ -526,10 +540,11 @@ var File_paladin_admin_v1_tenant_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\n" +
-	"!paladin/admin/v1/tenant_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x18ocp/admin/v1/types.proto\x1a\x1eocp/common/v1/pagination.proto\"h\n" +
+	"!paladin/admin/v1/tenant_service.proto\x12\focp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x18ocp/admin/v1/types.proto\x1a\x1eocp/common/v1/pagination.proto\"\x8f\x01\n" +
 	"\x13CreateTenantRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x124\n" +
-	"\x06tenant\x18\x02 \x01(\v2\x14.paladin.admin.v1.TenantB\x06\xbaH\x03\xc8\x01\x01R\x06tenant\"/\n" +
+	"\x06tenant\x18\x02 \x01(\v2\x14.paladin.admin.v1.TenantB\x06\xbaH\x03\xc8\x01\x01R\x06tenant\x12%\n" +
+	"\x0edefault_bucket\x18\x03 \x01(\tR\rdefaultBucket\"/\n" +
 	"\x10GetTenantRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xd0\x01\n" +
 	"\x13UpdateTenantRequest\x12\x1b\n" +

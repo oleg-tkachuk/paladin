@@ -27,6 +27,7 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 	m := req.Msg
 	src := m.GetTenant()
 	args := tenant.CreateTenantArgs{
+		Slug:                 src.GetSlug(),
 		DisplayName:          src.GetDisplayName(),
 		InheritedCedarPolicy: src.GetInheritedCedarPolicy(),
 	}
@@ -40,6 +41,15 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 	if labels := src.GetLabels(); len(labels) > 0 {
 		b, _ := json.Marshal(labels)
 		args.Labels = b
+	}
+	if name := m.GetDefaultBucket(); name != "" {
+		backend, bucket, err := bucketNameParts(name)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("default_bucket: %w", err))
+		}
+		args.DefaultBackendID = backend
+		args.DefaultBucketName = bucket
 	}
 	t, err := s.H.CreateTenant(ctx, args)
 	if err != nil {

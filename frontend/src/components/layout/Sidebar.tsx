@@ -22,6 +22,8 @@ import {
   BanknotesIcon,
   BoltIcon,
   CpuChipIcon,
+  ServerStackIcon,
+  ArchiveBoxIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -91,7 +93,24 @@ const navigationGroups: Array<{
     accent: "text-chart-2/85",
     items: [
       {
-        name: "Resources",
+        // Storage Backends — physical S3-compatible endpoints (AWS,
+        // R2, MinIO, SeaweedFS) registered with the platform. Buckets
+        // FK into this table; tenants pick one of these as their
+        // default binding at creation.
+        name: "Storage Backends",
+        path: "/storage-backends",
+        icon: ServerStackIcon,
+      },
+      {
+        // Buckets — cross-tenant flat list of S3 buckets owned across
+        // backends. The per-tenant view lives at
+        // /tenants/<slug>/buckets; this is the platform-admin index.
+        name: "Buckets",
+        path: "/buckets",
+        icon: ArchiveBoxIcon,
+      },
+      {
+        name: "Tenants",
         path: "/tenants",
         icon: UsersIcon,
         countKey: "tenants" as keyof SidebarCounts,

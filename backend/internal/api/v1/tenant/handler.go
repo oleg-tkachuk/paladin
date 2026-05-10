@@ -57,14 +57,19 @@ type Tenant struct {
 
 type CreateTenantArgs struct {
 	TenantID uuid.UUID
-	// Slug is the human-readable tenant identifier exposed in Cedar policies
-	// and resource names. Required — auto-derived from TenantID when empty so
-	// existing UUID-only callers keep working through the rollout. Validated
-	// via apiutil.ValidateTenantSlug; uniqueness is enforced by the database.
+	// Slug — human-readable, required, validated by apiutil.ValidateTenantSlug.
 	Slug                 string
 	DisplayName          string
 	Labels               []byte
 	InheritedCedarPolicy string
+	// DefaultBackendID + DefaultBucketName — required for tenants
+	// landing under the canonical-resource-names model. Together they
+	// pin the (backend, bucket) where this tenant's objects will live;
+	// the repository inserts a corresponding row into
+	// `tenant_default_bindings` in the same tx as the tenant insert.
+	// Empty strings = no binding (legacy / scripted-bootstrap path).
+	DefaultBackendID  string
+	DefaultBucketName string
 }
 
 type UpdateTenantArgs struct {
@@ -227,6 +232,16 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.DisplayName == "" {
 		args.DisplayName = args.Slug
 	}
+	// Default binding: (backend_id, bucket_name) must be both empty or
+	// both set. Prevents half-formed bindings where the operator picked
+	// a backend but forgot the bucket (or vice-versa) and ended up with
+	// a tenant whose objects had no destination.
+	args.DefaultBackendID = strings.TrimSpace(args.DefaultBackendID)
+	args.DefaultBucketName = strings.TrimSpace(args.DefaultBucketName)
+	if (args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("default_binding requires both backend and bucket"))
+	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
 	}
@@ -245,6 +260,8 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 			errors.Is(err, ErrSlugConflict),
 			errors.Is(err, ErrDisplayNameConflict):
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		case errors.Is(err, ErrDefaultBindingBucketMissing):
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		default:
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
 		}
@@ -473,3 +490,10 @@ var ErrTenantIDConflict = errors.New("tenant_id already in use")
 // when the requested display_name collides with another tenant's.
 // display_name is UNIQUE since migration 033.
 var ErrDisplayNameConflict = errors.New("display_name already in use")
+
+// ErrDefaultBindingBucketMissing — Repository.Create returns this
+// when the (backend_id, bucket_name) supplied as default binding
+// doesn't reference an existing buckets row. The FK check on
+// tenant_default_bindings raises 23503; the adapter maps it here.
+var ErrDefaultBindingBucketMissing = errors.New(
+	"default binding bucket does not exist on the chosen backend")

@@ -38,6 +38,13 @@ message CreateTenantRequest {
   // Both are unique across tenants. tenant_id, slug — immutable;
   // display_name — editable via UpdateTenant.
   Tenant tenant = 2 [(buf.validate.field).required = true];
+  // default_bucket — resource name of the (backend, bucket) where this
+  // tenant's objects will live by default. Format:
+  // "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+  // when empty the tenant has no default binding (legacy shape); when
+  // set, the server inserts a matching tenant_default_bindings row in
+  // the same tx as the tenant insert.
+  string default_bucket = 3;
 }
 
 message GetTenantRequest {

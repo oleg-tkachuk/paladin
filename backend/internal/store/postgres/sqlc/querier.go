@@ -44,6 +44,7 @@ type Querier interface {
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
+	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
@@ -121,6 +122,7 @@ type Querier interface {
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
+	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (TenantDefaultBinding, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
@@ -323,6 +325,13 @@ type Querier interface {
 	// arg keeps the existing currency unchanged — operators editing
 	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
 	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool) (SetTenantBudgetRow, error)
+	// Tenant default-binding queries.
+	//
+	// One row per tenant. Set at CreateTenant time; updated by future
+	// SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
+	// deleted; deletion of the underlying bucket is RESTRICTed so an
+	// operator must rebind before tearing down the bucket.
+	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error

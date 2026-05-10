@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJWChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQEiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIk4KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkiZwoTTGlzdFRlbmFudHNSZXNwb25zZRIlCgd0ZW5hbnRzGAEgAygLMhQub2NwLmFkbWluLnYxLlRlbmFudBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATK1BAoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIk4KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkiZwoTTGlzdFRlbmFudHNSZXNwb25zZRIlCgd0ZW5hbnRzGAEgAygLMhQub2NwLmFkbWluLnYxLlRlbmFudBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATK1BAoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -42,16 +42,36 @@ export const file_paladin_admin_v1_tenant_service: GenFile =
 export type CreateTenantRequest =
   Message<"paladin.admin.v1.CreateTenantRequest"> & {
     /**
-     * optional; UUIDv7 generated when empty
+     * tenant_id — optional. When empty the server generates a fresh
+     * UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
+     * the zero UUID. Immutable post-create (enforced by migration 033's
+     * tenants_immutable_columns trigger).
      *
      * @generated from field: string tenant_id = 1;
      */
     tenantId: string;
 
     /**
+     * tenant.slug is required and validated against ValidateTenantSlug.
+     * tenant.display_name is optional; defaults to slug at create time.
+     * Both are unique across tenants. tenant_id, slug — immutable;
+     * display_name — editable via UpdateTenant.
+     *
      * @generated from field: paladin.admin.v1.Tenant tenant = 2;
      */
     tenant?: Tenant | undefined;
+
+    /**
+     * default_bucket — resource name of the (backend, bucket) where this
+     * tenant's objects will live by default. Format:
+     * "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+     * when empty the tenant has no default binding (legacy shape); when
+     * set, the server inserts a matching tenant_default_bindings row in
+     * the same tx as the tenant insert.
+     *
+     * @generated from field: string default_bucket = 3;
+     */
+    defaultBucket: string;
   };
 
 /**

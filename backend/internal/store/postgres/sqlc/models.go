@@ -460,6 +460,14 @@ type TenantBudget struct {
 	UnitCode string `json:"unit_code"`
 }
 
+type TenantDefaultBinding struct {
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	BackendID  string             `json:"backend_id"`
+	BucketName string             `json:"bucket_name"`
+	SetAt      pgtype.Timestamptz `json:"set_at"`
+	SetBy      string             `json:"set_by"`
+}
+
 type User struct {
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
