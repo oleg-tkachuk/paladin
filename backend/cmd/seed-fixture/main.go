@@ -202,23 +202,40 @@ func runDown(cmd *cobra.Command) error {
 
 // ─── Demo flavour ─────────────────────────────────────────────────────────
 
-const demoTenantDisplayName = fixturePrefix + "demo:tenant"
-
-// seedDemo writes one tenant with four EventSubscriptions covering the
-// states the operator will look at on the /events page:
+// seedDemo writes four EventSubscriptions on the bootstrap admin's
+// tenant covering the states the operator will look at on the /events
+// page:
 //
 //   - HTTP sink, no filter — the "everything goes here" baseline
 //   - NATS sink, paladin.events subject — the second wired sink
 //   - HTTP sink, disabled — exercises the dim "disabled" pill
 //   - HTTP sink, with CEL filter — exercises the filter column
 //
-// Idempotency: every resource lookup is by display_name prefix.
-// Re-running produces the same on-disk state without duplicates.
+// We seed onto the caller's tenant (platform tenant for the
+// bootstrap admin) rather than minting a new fixture tenant —
+// `event_subscriptions` is RLS-enforced and the producer-side
+// INSERT runs as `paladin_app` with a session GUC pinned to the
+// caller's tenant_id. A cross-tenant create from
+// platform.admin would hit a WITH CHECK violation. Operators
+// who want fixture data on a non-platform tenant should run
+// the CLI with --user / --password for that tenant's admin.
+//
+// Idempotency: every sink is keyed by sink shape (URL or
+// subject). Re-running produces the same on-disk state.
 func seedDemo(ctx context.Context, c *mcp.Clients) error {
-	tenant, err := ensureTenant(ctx, c, demoTenantDisplayName)
+	// Look up the caller's own tenant via Login response side-effect:
+	// the JWT carries it, but we don't decode JWTs here. Use ListTenants
+	// instead — bootstrap admin sees only their tenant unless they're
+	// platform.admin (in which case the first hit is fine because we
+	// only need ANY tenant scoped to the caller for RLS).
+	resp, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
 	if err != nil {
-		return fmt.Errorf("tenant: %w", err)
+		return fmt.Errorf("list tenants: %w", err)
 	}
+	if len(resp.Msg.GetTenants()) == 0 {
+		return errors.New("no tenants visible — bootstrap admin should at least see the Platform tenant")
+	}
+	tenant := resp.Msg.GetTenants()[0]
 	fmt.Printf("tenant: %s (%s)\n", tenant.GetDisplayName(), tenant.GetTenantId())
 
 	subscriptions := []demoSubscription{
@@ -264,28 +281,55 @@ func seedDemo(ctx context.Context, c *mcp.Clients) error {
 }
 
 func teardownDemo(ctx context.Context, c *mcp.Clients) error {
-	// Find the demo tenant. If it doesn't exist, nothing to do — the
-	// demo subs FK to it, so deleting the tenant cascades.
+	// Walk the caller's tenants and delete every subscription whose
+	// sink target matches a fixture-shaped URL or subject. We can't
+	// delete-by-display-name because EventSubscription has no
+	// display name in v1 — discriminating by sink config is what
+	// the seedDemo idempotency check uses too.
 	tenants, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
+	deleted := 0
 	for _, t := range tenants.Msg.GetTenants() {
-		if !strings.HasPrefix(t.GetDisplayName(), fixturePrefix+"demo:") {
-			continue
-		}
-		// Tenant deletion CASCADES to event_subscriptions per the FK
-		// in migration 006, so we don't have to enumerate subs.
-		_, err := c.Tenant.DeleteTenant(ctx, connect.NewRequest(&adminv1.DeleteTenantRequest{
-			Name: t.GetName(),
-		}))
+		parent := "tenants/" + t.GetTenantId()
+		listResp, err := c.EventSub.ListSubscriptions(ctx,
+			connect.NewRequest(&adminv1.ListSubscriptionsRequest{Parent: parent}),
+		)
 		if err != nil {
-			return fmt.Errorf("delete tenant %s: %w", t.GetTenantId(), err)
+			return fmt.Errorf("list subs %s: %w", t.GetTenantId(), err)
 		}
-		fmt.Printf("deleted tenant: %s (%s)\n", t.GetDisplayName(), t.GetTenantId())
+		for _, sub := range listResp.Msg.GetSubscriptions() {
+			if !isFixtureSink(sub.GetSink()) {
+				continue
+			}
+			if _, err := c.EventSub.DeleteSubscription(ctx,
+				connect.NewRequest(&adminv1.DeleteSubscriptionRequest{Name: sub.GetName()}),
+			); err != nil {
+				return fmt.Errorf("delete sub %s: %w", sub.GetName(), err)
+			}
+			deleted++
+		}
 	}
-	fmt.Println("demo flavour torn down")
+	fmt.Printf("demo flavour torn down (deleted %d subscriptions)\n", deleted)
 	return nil
+}
+
+// isFixtureSink discriminates on the URLs / subjects seedDemo writes —
+// `https://example.test/webhook/...` for HTTP and `paladin.events` on the
+// fixture's NATS subject. Anything else is left alone.
+func isFixtureSink(sink *adminv1.EventSink) bool {
+	if sink == nil {
+		return false
+	}
+	switch t := sink.GetTarget().(type) {
+	case *adminv1.EventSink_Http:
+		return strings.HasPrefix(t.Http.GetUrl(), "https://example.test/webhook/")
+	case *adminv1.EventSink_Nats:
+		return t.Nats.GetSubject() == "paladin.events" &&
+			strings.Contains(t.Nats.GetUrl(), "nats.nats.svc.cluster.local")
+	}
+	return false
 }
 
 // ─── Resource helpers ─────────────────────────────────────────────────────
@@ -295,31 +339,6 @@ type demoSubscription struct {
 	sink     *adminv1.EventSink
 	filter   string
 	disabled bool
-}
-
-// ensureTenant returns the existing fixture tenant when present; creates
-// it otherwise. We match by exact display_name — Tenant proto doesn't
-// expose a slug filter today.
-func ensureTenant(ctx context.Context, c *mcp.Clients, displayName string) (*adminv1.Tenant, error) {
-	resp, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
-	if err != nil {
-		return nil, fmt.Errorf("list: %w", err)
-	}
-	for _, t := range resp.Msg.GetTenants() {
-		if t.GetDisplayName() == displayName {
-			return t, nil
-		}
-	}
-	cresp, err := c.Tenant.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantRequest{
-		Tenant: &adminv1.Tenant{
-			DisplayName: displayName,
-			Labels:      map[string]string{"managed_by": "seed-fixture", "flavour": "demo"},
-		},
-	}))
-	if err != nil {
-		return nil, fmt.Errorf("create: %w", err)
-	}
-	return cresp.Msg, nil
 }
 
 // ensureSubscription writes (or no-ops when present) one EventSubscription
