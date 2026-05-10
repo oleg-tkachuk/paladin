@@ -140,13 +140,24 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// mcp). User-authn flows that go through iam are not the agent path.
 	var capData connect.Interceptor
 	if deps.Capability != nil {
-		capData = auth.CapabilityInterceptor(
+		// Same opt-in event-emitter pattern as the admin pod —
+		// the api dispatcher fan-out into event_deliveries when
+		// cfg.Dispatcher.ChargeEventsEnabled is on. Object lifecycle
+		// is the highest-cardinality producer, capability charges
+		// are the second; subscribers must filter by event.kind to
+		// keep their queue depth bounded.
+		var chargeEm auth.ChargeEventEmitter
+		if cfg.Dispatcher.ChargeEventsEnabled {
+			chargeEm = newChargeEmitter(apiDispatcher, l.Named("charge-events"))
+		}
+		capData = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
 			deps.Capability.Usage,
 			cfg.API.Server.Data.RealIPHeader,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
+			chargeEm,
 		)
 	} else {
 		capData = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")

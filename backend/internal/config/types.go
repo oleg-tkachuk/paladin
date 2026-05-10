@@ -397,6 +397,23 @@ type Dispatcher struct {
 	BaseBackoff        time.Duration `yaml:"base_backoff" json:"base_backoff"`
 	MaxBackoff         time.Duration `yaml:"max_backoff" json:"max_backoff"`
 	DefaultMaxAttempts int           `yaml:"default_max_attempts" json:"default_max_attempts"`
+
+	// ChargeEventsEnabled fans out one paladin.capability.charged event
+	// per successful capability.UsageStore.Charge. Default OFF —
+	// every chargeable RPC fires, so the cardinality multiplies the
+	// outbox volume by the per-tenant request rate. Subscribers MUST
+	// set a CEL filter pinning `event.kind == 'paladin.capability.charged'`
+	// (or just dropping events on the floor at the broker) before
+	// flipping this on for a noisy tenant.
+	ChargeEventsEnabled bool `yaml:"charge_events_enabled" json:"charge_events_enabled"`
+
+	// AuditMirrorEnabled mirrors every audit_log row to
+	// paladin.audit.<action>. Default OFF — designed for SIEM /
+	// compliance pipelines that already accept high-volume event
+	// streams. Even noisier than ChargeEventsEnabled because every
+	// mutation is logged; only flip on with a downstream consumer
+	// already in place.
+	AuditMirrorEnabled bool `yaml:"audit_mirror_enabled" json:"audit_mirror_enabled"`
 }
 
 // OperationsWorker drives the long-running operation queue

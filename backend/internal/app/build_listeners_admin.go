@@ -102,13 +102,23 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// principal via auth.CapabilityFromContext / APITokenFromContext.
 	var capAdmin, apiTokAdmin connect.Interceptor
 	if deps.Capability != nil {
-		capAdmin = auth.CapabilityInterceptor(
+		// Charge-event fan-out is opt-in — high-cardinality (every
+		// chargeable RPC fires), default off in cfg. When enabled
+		// the wiring builds an emitter wrapping the admin pod's
+		// dispatcher; otherwise nil is safe (interceptor stamps
+		// nil on ctx, ChargeCapability skips the dispatch).
+		var chargeEm auth.ChargeEventEmitter
+		if cfg.Dispatcher.ChargeEventsEnabled {
+			chargeEm = newChargeEmitter(dispatcher, l.Named("charge-events"))
+		}
+		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
 			capability.AudiencePlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Admin.Server.RealIPHeader,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
+			chargeEm,
 		)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, "", 0, "")
@@ -125,7 +135,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capAdmin,
 		apiTokAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
-		middleware.Audit(repos.Audit, auth.AudienceAdmin, false),
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
+			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")

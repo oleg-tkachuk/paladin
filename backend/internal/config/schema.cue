@@ -310,6 +310,13 @@ dispatcher: {
   // HttpSink.MaxAttempts is unset. Beyond this, the row flips to
   // status='failed' and the queue stops touching it.
   default_max_attempts: int & >= 1 | *5
+  // ChargeEventsEnabled fans out one paladin.capability.charged event
+  // per successful capability.UsageStore.Charge. Default OFF; high
+  // cardinality.
+  charge_events_enabled: bool | *false
+  // AuditMirrorEnabled mirrors every audit_log row to paladin.audit.<action>.
+  // Default OFF; even higher cardinality than charges.
+  audit_mirror_enabled: bool | *false
 }
 
 // Storage is the registry of physical object-storage backends. Each

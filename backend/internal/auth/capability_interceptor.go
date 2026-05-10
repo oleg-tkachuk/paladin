@@ -92,6 +92,24 @@ func CapabilityInterceptor(
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 ) connect.Interceptor {
+	return CapabilityInterceptorWithEvents(verifier, audience, usage, realIPHeader,
+		chargePerRequestAmount, chargePerRequestUnit, nil)
+}
+
+// CapabilityInterceptorWithEvents is the events-aware variant. The
+// emitter is stamped on every authenticated request's context so
+// ChargeCapability can fan out an `paladin.capability.charged` event AFTER
+// the running totals commit. nil emitter = no events (the default —
+// gated on cfg.Dispatcher.ChargeEventsEnabled at the wiring layer).
+func CapabilityInterceptorWithEvents(
+	verifier *capability.StandardVerifier,
+	audience string,
+	usage capability.UsageStore,
+	realIPHeader string,
+	chargePerRequestAmount float64,
+	chargePerRequestUnit string,
+	emitter ChargeEventEmitter,
+) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
 	}
@@ -105,6 +123,7 @@ func CapabilityInterceptor(
 		realIPHeader:           realIPHeader,
 		chargePerRequestAmount: chargePerRequestAmount,
 		chargePerRequestUnit:   chargePerRequestUnit,
+		emitter:                emitter,
 	}
 }
 
@@ -115,6 +134,7 @@ type capabilityInterceptor struct {
 	realIPHeader           string
 	chargePerRequestAmount float64
 	chargePerRequestUnit   string
+	emitter                ChargeEventEmitter
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -137,6 +157,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
 		return next(ctx, req)
 	}
@@ -162,6 +183,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		ctx = WithCapability(ctx, cap)
 		ctx = WithChargeStore(ctx, i.usage)
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
 		return next(ctx, conn)
 	}
@@ -334,6 +356,45 @@ func readLastOp(ctx context.Context) string {
 // determines the amount and currency.
 type chargeAmountKey struct{}
 
+// chargeEventsKey carries an optional ChargeEventEmitter that
+// ChargeCapability fans an `paladin.capability.charged` event through
+// AFTER the running totals commit. nil-safe: when unset (or
+// cfg.Dispatcher.ChargeEventsEnabled = false at boot) the dispatch
+// is a no-op and the charge path stays a single DB write.
+//
+// Pattern parallels chargeKey/chargeAmountKey: interceptor stamps
+// at request time; ChargeCapability reads. Decoupled because charge
+// events are high-cardinality (every chargeable RPC) and operators
+// may want them on for one tenant and off for another — a future
+// per-tenant override would land here without touching ChargeCapability.
+type chargeEventsKey struct{}
+
+// ChargeEventEmitter is the narrow seam ChargeCapability uses to fan
+// out per-charge events. Implementations: a thin adapter over
+// *worker.Dispatcher (lives in the wiring layer; can't import worker
+// from auth without a cycle). Nil-safe.
+type ChargeEventEmitter interface {
+	EmitCharged(ctx context.Context, tenantID, capabilityID, op, actor string, amount float64, unitCode string)
+}
+
+// WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
+// passes a real emitter only when cfg.Dispatcher.ChargeEventsEnabled
+// is true; otherwise this is never called and the chargeEventsKey
+// stays unset.
+func WithChargeEventEmitter(ctx context.Context, e ChargeEventEmitter) context.Context {
+	if e == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, chargeEventsKey{}, e)
+}
+
+// chargeEventEmitterFromContext returns the stamped emitter or nil.
+// Internal — only ChargeCapability needs this.
+func chargeEventEmitterFromContext(ctx context.Context) ChargeEventEmitter {
+	e, _ := ctx.Value(chargeEventsKey{}).(ChargeEventEmitter)
+	return e
+}
+
 // chargeAmount is the typed value behind chargeAmountKey. Bundling
 // amount + unit avoids two context lookups per charge (the unit is
 // always read alongside the amount).
@@ -458,6 +519,14 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 			return connect.NewError(connect.CodeResourceExhausted, err)
 		}
 		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	// Optional fan-out — only fires when the wiring layer attached
+	// an emitter (gated on cfg.Dispatcher.ChargeEventsEnabled).
+	// Best-effort: the charge already committed; the emitter's
+	// implementation logs + swallows on its side, so we don't even
+	// need an error return.
+	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
+		emitter.EmitCharged(ctx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
 	}
 	return nil
 }
