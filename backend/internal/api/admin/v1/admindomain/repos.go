@@ -120,7 +120,13 @@ type QuotaRepository interface {
 // ─── Event subscription repository ──────────────────────────────────────────
 
 type EventSubscriptionRepository interface {
-	Create(ctx context.Context, s EventSubscription) error
+	// Create persists s and stamps the generated SubscriptionID back
+	// onto the input. Pointer receiver is load-bearing — the handler
+	// uses s.SubscriptionID immediately after to fetch the freshly
+	// inserted row, and a value-receiver would silently retain the
+	// caller's zero UUID, causing the post-Create Get to look up
+	// `subscription_id = '00000000-...'` and return ErrNotFound.
+	Create(ctx context.Context, s *EventSubscription) error
 	Get(ctx context.Context, id uuid.UUID) (EventSubscription, error)
 	List(ctx context.Context, args ListEventSubscriptionsArgs) ([]EventSubscription, string, error)
 	Update(ctx context.Context, s EventSubscription, expectedVersion int64, mask []string) error

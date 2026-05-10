@@ -23,7 +23,7 @@ func NewEventSubscriptionRepoV2(q *sqlc.Queries) *EventSubscriptionRepoV2 {
 
 var _ admindomain.EventSubscriptionRepository = (*EventSubscriptionRepoV2)(nil)
 
-func (r *EventSubscriptionRepoV2) Create(ctx context.Context, s admindomain.EventSubscription) error {
+func (r *EventSubscriptionRepoV2) Create(ctx context.Context, s *admindomain.EventSubscription) error {
 	if s.SubscriptionID == uuid.Nil {
 		s.SubscriptionID = uuid.Must(uuid.NewV7())
 	}
