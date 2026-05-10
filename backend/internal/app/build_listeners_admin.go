@@ -51,10 +51,19 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// cmd/server/serve_dispatcher.go) consumes them. The same struct
 	// retains DeliverOne for the synchronous TestSubscription RPC,
 	// which intentionally bypasses the outbox: operator clicked
-	// "Test Webhook", they want the result now.
+	// "Test delivery", they want the result now.
+	//
+	// NATS pool is wired here too — TestSubscription on a NATS sink
+	// runs through this Dispatcher (not the dispatcher pod's), so
+	// without an attached pool deliverNATS errors with "dispatcher
+	// has no NATS pool". The pool is lazy: NewNatsConnPool allocates
+	// no sockets, and the per-(url, credentials_ref) `get` only
+	// dials on first use — admin pods that never see a NATS Test
+	// pay nothing.
 	dispatcher := &worker.Dispatcher{
 		Store:       eventSubStoreAdapter{r: repos.EventSub},
 		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
+		NATS:        worker.NewNatsConnPool(l.Named("nats-pool")),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}
