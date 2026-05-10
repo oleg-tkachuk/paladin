@@ -10,8 +10,8 @@
 // tenant, bounce to the canonical path so the address bar tells
 // the truth.
 
-import { use, useCallback, useEffect, useState } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { notFound, useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
@@ -36,14 +36,16 @@ const okResourceName = (tenantId: string, objectKey: string) =>
 
 export default function ObjectKeyDetailLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const tenant = useTenant();
-  const { name: rawName } = use(params);
+  // useParams() (sync) avoids the `use(promise)` re-suspension that
+  // flashes the layout's loading skeleton on every nested-route
+  // change. See TenantLayout for the full rationale.
+  const params = useParams<{ name: string }>();
+  const rawName = params?.name ?? "";
   const objectKeyName = decodeURIComponent(rawName);
 
   const [ok, setOk] = useState<ObjectKey | null>(null);

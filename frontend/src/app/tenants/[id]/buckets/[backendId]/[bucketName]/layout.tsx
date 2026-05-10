@@ -11,8 +11,8 @@
 // On 404 / not-found we surface notFound() so the operator gets the
 // standard 404 chrome instead of a generic "load failed" toast.
 
-import { use, useCallback, useEffect, useState } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 
 import { BucketTabs } from "@/components/layout/BucketTabs";
@@ -35,15 +35,15 @@ const bucketResourceName = (backendId: string, bucketName: string) =>
 
 export default function BucketDetailLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string; backendId: string; bucketName: string }>;
 }) {
   const router = useRouter();
-  const { backendId: rawBackend, bucketName: rawName } = use(params);
-  const backendId = decodeURIComponent(rawBackend);
-  const bucketName = decodeURIComponent(rawName);
+  // useParams() (sync) instead of `use(promise)` to avoid layout
+  // re-suspension on nested route changes — see TenantLayout.
+  const params = useParams<{ backendId: string; bucketName: string }>();
+  const backendId = decodeURIComponent(params?.backendId ?? "");
+  const bucketName = decodeURIComponent(params?.bucketName ?? "");
   const tenant = useTenant();
 
   const [bucket, setBucket] = useState<Bucket | null>(null);

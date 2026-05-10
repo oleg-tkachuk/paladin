@@ -15,8 +15,7 @@
 // tenant — the layout stays mounted. Each tab page renders its
 // own content area underneath.
 
-import { use } from "react";
-import { notFound } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
@@ -33,16 +32,19 @@ import { TenantProvider } from "./tenant-context";
 
 export default function TenantLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  // Next.js 15+: params is a Promise in app-router layouts. `use(...)`
-  // unwraps in client components without converting the layout to
-  // an async server component (which would lose the "use client"
-  // hooks below).
-  params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
+  // useParams() (sync, from the router context) instead of `use(params)`
+  // (Promise unwrap). Next.js's app router passes a NEW Promise for
+  // `params` to the layout on every sub-route change — even when the
+  // dynamic segment value is identical — and `use(newPromise)`
+  // suspends, causing the layout to flash its loading skeleton on
+  // every tab navigation. useParams reads the resolved value off the
+  // router context synchronously, so this layout stays mounted and
+  // useTenantResolve's cache survives.
+  const params = useParams<{ id: string }>();
+  const id = params?.id ?? "";
   const { tenant, loading, error, errorIsNotFound, retry } =
     useTenantResolve(id);
 
