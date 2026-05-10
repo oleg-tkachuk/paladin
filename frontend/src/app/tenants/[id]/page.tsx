@@ -24,6 +24,9 @@ import {
   ArrowRightIcon,
   BanknotesIcon,
   ClipboardDocumentListIcon,
+  ClipboardIcon,
+  CheckIcon,
+  LockClosedIcon,
   ServerStackIcon,
   ShieldCheckIcon,
   TagIcon,
@@ -83,6 +86,106 @@ const QUICK_LINKS: Array<{
 // "0 / 1,000" — same digits the cap had. The shared formatter
 // emits "0 units / 1,000 units" for that case.
 import { formatMoney } from "@/lib/format/money";
+
+// IdentityCard renders the tenant's three identity fields in priority
+// order — display name as the heading (mutable, human-friendly), slug
+// as the immutable handle (operator-friendly), tenant_id as the
+// immutable canonical UUID (audit / debug). Lock icons mark immutable
+// fields; copy buttons sit beside slug + UUID since those are what
+// operators paste into shells, configs, and Cedar policies.
+function IdentityCard({
+  tenant,
+}: {
+  tenant: { tenantId: string; slug: string; displayName: string };
+}) {
+  const [copied, setCopied] = useState<"slug" | "id" | null>(null);
+  const copy = async (which: "slug" | "id", value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(which);
+      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1200);
+    } catch {
+      // clipboard API unavailable (e.g. http context) — silent
+    }
+  };
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <CardTitle className="text-lg leading-tight">
+            {tenant.displayName || (
+              <span className="text-muted-foreground italic">(unnamed)</span>
+            )}
+          </CardTitle>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Tenant
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 pt-0">
+        {/* slug — primary handle, immutable */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-16 uppercase tracking-wider text-muted-foreground">
+            slug
+          </span>
+          <span className={cn(T.code, "font-medium")}>{tenant.slug}</span>
+          <LockClosedIcon
+            className="size-3 text-muted-foreground/70"
+            aria-label="immutable"
+          />
+          <button
+            type="button"
+            onClick={() => copy("slug", tenant.slug)}
+            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Copy slug"
+          >
+            {copied === "slug" ? (
+              <>
+                <CheckIcon className="size-3" /> copied
+              </>
+            ) : (
+              <>
+                <ClipboardIcon className="size-3" /> copy
+              </>
+            )}
+          </button>
+        </div>
+        {/* tenant_id — canonical UUID, immutable, debug-grade */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-16 uppercase tracking-wider text-muted-foreground">
+            id
+          </span>
+          <span
+            className={cn(T.code, "text-[11px] text-muted-foreground truncate")}
+            title={tenant.tenantId}
+          >
+            {tenant.tenantId}
+          </span>
+          <LockClosedIcon
+            className="size-3 text-muted-foreground/70"
+            aria-label="immutable"
+          />
+          <button
+            type="button"
+            onClick={() => copy("id", tenant.tenantId)}
+            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Copy tenant_id"
+          >
+            {copied === "id" ? (
+              <>
+                <CheckIcon className="size-3" /> copied
+              </>
+            ) : (
+              <>
+                <ClipboardIcon className="size-3" /> copy
+              </>
+            )}
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function TenantOverviewPage() {
   const tenant = useTenant();
@@ -210,31 +313,7 @@ export default function TenantOverviewPage() {
   return (
     <div className="space-y-4">
       {/* ─── Identity ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Identity</CardTitle>
-        </CardHeader>
-        <CardContent className={cn(T.helper, "space-y-1.5 text-xs")}>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              slug
-            </span>
-            <span className={T.code}>{tenant.slug}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              tenant_id
-            </span>
-            <span className={T.code}>{tenant.tenantId}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              display
-            </span>
-            <span>{tenant.displayName}</span>
-          </div>
-        </CardContent>
-      </Card>
+      <IdentityCard tenant={tenant} />
 
       {/* ─── Counts row ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

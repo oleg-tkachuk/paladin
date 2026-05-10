@@ -66,7 +66,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
-type SortColumn = "tenantId" | "displayName";
+type SortColumn = "slug" | "displayName";
 type SortDirection = "asc" | "desc" | null;
 
 interface SortState {
@@ -175,23 +175,26 @@ export default function TenantsPage() {
     const q = search.trim().toLowerCase();
     let list = tenants;
     if (q) {
+      // Search across all three identity fields. Slug is the most
+      // common keystroke target, ID is the audit/debug fallback.
       list = list.filter(
         (t) =>
-          t.tenantId.toLowerCase().includes(q) ||
-          (t.displayName || "").toLowerCase().includes(q),
+          (t.slug || "").toLowerCase().includes(q) ||
+          (t.displayName || "").toLowerCase().includes(q) ||
+          t.tenantId.toLowerCase().includes(q),
       );
     }
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
         const va =
-          sort.column === "tenantId"
-            ? a.tenantId
-            : (a.displayName || a.tenantId).toLowerCase();
+          sort.column === "slug"
+            ? (a.slug || a.tenantId).toLowerCase()
+            : (a.displayName || a.slug || a.tenantId).toLowerCase();
         const vb =
-          sort.column === "tenantId"
-            ? b.tenantId
-            : (b.displayName || b.tenantId).toLowerCase();
+          sort.column === "slug"
+            ? (b.slug || b.tenantId).toLowerCase()
+            : (b.displayName || b.slug || b.tenantId).toLowerCase();
         return va < vb ? -dir : va > vb ? dir : 0;
       });
     }
@@ -351,10 +354,10 @@ export default function TenantsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[360px]">
+              <TableHead className="w-[220px]">
                 <SortHeader
-                  label="Tenant ID"
-                  column="tenantId"
+                  label="Slug"
+                  column="slug"
                   current={sort}
                   onSort={handleSort}
                 />
@@ -368,6 +371,9 @@ export default function TenantsPage() {
                 />
               </TableHead>
               <TableHead className="hidden md:table-cell">Labels</TableHead>
+              <TableHead className="hidden lg:table-cell w-[280px]">
+                Tenant ID
+              </TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -377,14 +383,14 @@ export default function TenantsPage() {
             {loading && tenants.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={4} className="py-3">
+                  <TableCell colSpan={5} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-48 text-center">
+                <TableCell colSpan={5} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <BuildingOfficeIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -408,11 +414,10 @@ export default function TenantsPage() {
             ) : (
               filtered.map((tenant) => {
                 const labelEntries = Object.entries(tenant.labels);
-                // Prefer slug for the URL — Tenant proto carries it
-                // since the slug-field commit. UUID is the safety net
-                // when the field is empty (legacy rows pre-backfill);
-                // TenantLayout's resolver canonicalises UUID→slug on
-                // landing in either case.
+                // Slug is the canonical handle in URLs; UUID is the
+                // safety net when slug is empty (legacy rows). Phase 0
+                // makes slug NOT NULL UNIQUE, so the fallback only
+                // matters during the rolling deploy.
                 const handle = tenant.slug || tenant.tenantId;
                 const detailHref = `/tenants/${encodeURIComponent(handle)}`;
                 return (
@@ -425,12 +430,16 @@ export default function TenantsPage() {
                         <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
                           <BuildingOfficeIcon className="size-4" />
                         </div>
-                        <span className="font-mono text-xs text-muted-foreground group-hover:text-foreground">
-                          {tenant.tenantId}
+                        <span className="font-medium group-hover:underline">
+                          {tenant.slug || (
+                            <span className="text-muted-foreground italic">
+                              (no slug)
+                            </span>
+                          )}
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell>
                       <Link
                         href={detailHref}
                         className="hover:text-primary hover:underline"
@@ -463,6 +472,15 @@ export default function TenantsPage() {
                           )}
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <span
+                        className="font-mono text-[11px] text-muted-foreground"
+                        title={tenant.tenantId}
+                      >
+                        {tenant.tenantId.slice(0, 8)}…
+                        {tenant.tenantId.slice(-4)}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -523,10 +541,27 @@ export default function TenantsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Slug — required, primary identity field. Live-validated
+                  against SLUG_RE so the operator sees green/red before
+                  hitting submit. */}
               <div className="space-y-1.5">
-                <Label htmlFor="tenant-slug">
-                  Slug <span className="text-destructive">*</span>
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="tenant-slug">
+                    Slug <span className="text-destructive">*</span>
+                  </Label>
+                  {newSlug.length > 0 && (
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium",
+                        SLUG_RE.test(newSlug)
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-destructive",
+                      )}
+                    >
+                      {SLUG_RE.test(newSlug) ? "valid" : "invalid format"}
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="tenant-slug"
                   autoFocus
@@ -535,40 +570,12 @@ export default function TenantsPage() {
                   onChange={(e) => setNewSlug(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  3–63 chars, kebab-case. Immutable after create — used in
-                  resource names and URLs.
+                  3–63 chars, lowercase kebab-case. Used in URLs and Cedar
+                  policies. <span className="font-medium">Immutable</span> after
+                  creation.
                 </p>
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="tenant-id">
-                    Tenant ID{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (optional)
-                    </span>
-                  </Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    onClick={() => setNewId(crypto.randomUUID())}
-                  >
-                    <SparklesIcon className="size-3" />
-                    Generate
-                  </Button>
-                </div>
-                <Input
-                  id="tenant-id"
-                  placeholder="Leave empty to auto-generate"
-                  className="font-mono text-xs"
-                  value={newId}
-                  onChange={(e) => setNewId(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  UUID — immutable. Server generates UUIDv7 when empty.
-                </p>
-              </div>
+              {/* Display name — optional, defaults to slug on the server. */}
               <div className="space-y-1.5">
                 <Label htmlFor="tenant-display-name">
                   Display name{" "}
@@ -578,14 +585,50 @@ export default function TenantsPage() {
                 </Label>
                 <Input
                   id="tenant-display-name"
-                  placeholder="Defaults to slug"
+                  placeholder={newSlug || "Acme Corporation"}
                   value={newDisplayName}
                   onChange={(e) => setNewDisplayName(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Unique across tenants. Editable later.
+                  Unique, editable. Defaults to slug when empty.
                 </p>
               </div>
+              {/* Advanced — Tenant ID lives under a disclosure since
+                  the typical operator never touches it (server mints
+                  UUIDv7). Power users importing a known UUID open
+                  this. */}
+              <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                  Advanced — supply your own UUID
+                </summary>
+                <div className="space-y-1.5 pt-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tenant-id" className="text-xs">
+                      Tenant ID
+                    </Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setNewId(crypto.randomUUID())}
+                    >
+                      <SparklesIcon className="size-3" />
+                      Generate
+                    </Button>
+                  </div>
+                  <Input
+                    id="tenant-id"
+                    placeholder="Leave empty — server mints UUIDv7"
+                    className="font-mono text-xs"
+                    value={newId}
+                    onChange={(e) => setNewId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Any RFC 4122 UUID. Immutable after creation.
+                  </p>
+                </div>
+              </details>
             </div>
             <DialogFooter>
               <Button
