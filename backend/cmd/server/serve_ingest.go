@@ -136,6 +136,16 @@ func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, 
 
 	mux := http.NewServeMux()
 	healthH.Register(mux)
+	// Backwards-compat alias — chart probes hit `/healthz` (the
+	// historical Kubernetes path), but health.Handler.Register
+	// mounts `/livez` (the current convention). Same patch the
+	// dispatcher pod applies; without this the pod readiness flips
+	// to false on a 404 and kubelet crash-loops it every 60s.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/livez"
+		mux.ServeHTTP(w, r2)
+	})
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
