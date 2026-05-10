@@ -563,70 +563,52 @@ the same commit. Treat this file like a runtime invariant.
     mid-iteration cleanly (partial progress recorded).
 - **Blockers:** none. Per-executor work; can land independently.
 
-### Event dispatcher: producer wiring — `policy` / `capability` handlers + audit-log mirror
+### Event dispatcher: producer wiring — handler-class integration tests + adoption
 
-- **Status:** Deferred
-- **State as of 2026-05-10:** Lifecycle producer wiring landed for
-  the entity classes that designers / customers care about today —
-  tenant, bucket, objectKey, quota, and object lifecycle. The
-  in-tree pattern is documented inline on
-  `internal/api/v1/tenant/handler.go::EventProducer` and reused
-  across the four other handlers; the wiring lives in
-  `build_listeners_admin.go` (admin pod) and
-  `build_listeners_api.go` (api pod's own dispatcher for the
-  high-cardinality object lifecycle). Coverage:
-    - `tenanth.{CreateTenant,UpdateTenant,DeleteTenant}` →
-      `paladin.tenant.created / .updated / .deleted`
-    - `bucketh.{CreateBucket,UpdateBucket,DeleteBucket}` →
-      `paladin.bucket.created / .updated / .deleted | .deleting`
-    - `objectkeyh.{CreateObjectKey,UpdateObjectKey,DeleteObjectKey}` →
-      `paladin.object_key.created / .updated / .deleted`
-    - `quotah.SetQuota` → `paladin.quota.set` (tenant + bucket scope)
-    - `object.{CompleteObject,UpdateObject,DeleteObject,RestoreObject,CopyObject}`
-      → `paladin.object.uploaded / .updated / .deleted / .restored`
-      (CompleteObject only on the actual transition — `changed=true`
-      — so retries don't double-fire)
+- **Status:** Deferred (parent SHIPPED — only follow-ups remain)
+- **State as of 2026-05-10:** Producer wiring complete across
+  every handler class that today's customer surface needs:
+    - **Lifecycle classes** (always-on): tenant / bucket /
+      objectKey / quota / object. Pattern in
+      `internal/api/v1/tenant/handler.go::EventProducer`,
+      reused across the four sibling handlers; admin pod
+      wiring in `build_listeners_admin.go`, api pod wiring
+      in `build_listeners_api.go::apiDispatcher`. Event
+      classes: `paladin.{tenant,bucket,object_key,quota,object}.*`.
+    - **Cross-cutting classes** (opt-in): capability charge
+      + audit-log mirror, both gated on cfg.Dispatcher
+      toggles (`charge_events_enabled` /
+      `audit_mirror_enabled`, default OFF). Adapters in
+      `internal/app/{charge_emitter,audit_mirror}.go`
+      bridge `*worker.Dispatcher` to
+      `auth.ChargeEventEmitter` and
+      `middleware.AuditMirrorEmitter`. Event classes:
+      `paladin.capability.charged` and `paladin.audit.<action>`.
+    - **Not applicable:** `policy` event class — the data-
+      plane policy handler is read-only; Cedar policy
+      mutations go through parent `*.updated` events.
 - **What's left:**
-  - **`capability.Charge`** → `paladin.capability.charged`. High
-    cardinality — every chargeable RPC. Plumbing pattern:
-      - Add `chargeEventsKey{}` context value alongside the
-        existing `chargeKey{}` (capability_interceptor.go) —
-        the interceptor stamps an `EventProducer` (or nil)
-        when the new `cfg.Dispatcher.ChargeEventsEnabled`
-        toggle is true.
-      - `ChargeCapability` reads it and fires
-        `paladin.capability.charged` AFTER the running totals
-        commit (matching the ledger-row semantics — fan-out
-        is best-effort, never undoes the spend).
-      - Default OFF in cfg + chart values. Subscribers MUST
-        set a CEL filter pinning the `type` field to scope
-        their queue depth.
-    See `internal/auth/capability_interceptor.go::ChargeCapability`
-    for the existing read-from-ctx pattern that maps onto this
-    wiring.
-  - **Audit-log mirror** → `paladin.audit.<action>`. Separate
-    concern from lifecycle: fan every `audit_log` row to the
-    bus so SIEM / compliance can subscribe without polling
-    Postgres. Same flag pattern as charges
-    (`cfg.Dispatcher.AuditMirrorEnabled = false`). Hook lives
-    in `internal/middleware.Audit` interceptor — wrapping the
-    `repos.Audit.Log()` call with a post-commit dispatch.
-  - **NOT applicable:** `policy` event class. The
-    `internal/api/v1/policy` handler is read-only (Validate,
-    Simulate, GetEffectivePolicy); Cedar policy mutations go
-    through `tenant.RenameTenantSlug`, `bucket.SetPolicy`,
-    `objectKey.UpdateCedarPolicy` — already covered by
-    `paladin.tenant.updated` / `paladin.bucket.updated` /
-    `paladin.object_key.updated`. Subscribers that care about
-    policy changes filter on the parent resource's update
-    event with a CEL pinning the changed field.
-  - Integration tests for the four new handler classes that
-    landed (only `tenant_events_test.go` covers the seam end-
-    to-end; bucket / object_key / quota / object inherit the
-    same wiring but don't have dedicated tests).
-- **Trigger to do:** customer subscription that depends on
-  capability charges or audit-log mirroring, or compliance /
-  SIEM need.
+  - **Integration tests for bucket / object_key / quota /
+    object lifecycle handlers.** Today only
+    `tenant_events_test.go` covers the seam end-to-end. The
+    other four handler classes inherit the exact same
+    pattern; the contract holds, but there's no regression
+    safety in CI for any of them. Copy-paste from the tenant
+    test, swap repo + handler + lifecycle method.
+  - **Adoption check** — once a real subscriber needs charge
+    or audit events, flip `cfg.Dispatcher.ChargeEventsEnabled`
+    / `audit_mirror_enabled` per overlay and verify the
+    expected fan-out volume against operator expectations.
+    Both default OFF; subscribers MUST add a CEL filter on
+    their EventSubscription so a noisy tenant doesn't drown
+    the dispatcher's outbox loop.
+- **Trigger to do:** any of —
+    - Adding a 6th lifecycle handler that follows the same
+      pattern (e.g. object_tags, when its lifecycle becomes
+      first-class).
+    - First customer that flips charge / audit events on —
+      validate the cardinality assumption holds for their
+      tenant.
 
 ### Event dispatcher: NATS sink (recommended first non-HTTP sink)
 
@@ -834,14 +816,6 @@ the same commit. Treat this file like a runtime invariant.
     out-of-band. Wiring already supports it (`runJetStream`
     branch in `driver_nats.go`); just needs broker-side
     setup + an overlay flag.
-  - **Integration test** that exercises the chain in the test
-    suite: write an object via the data-plane, wait for the
-    ingest worker to promote the row, assert state flips to
-    AVAILABLE within Y seconds. Today's confidence comes
-    from live smoke + 8 unit tests on the source adapter +
-    33 integration tests on the surrounding worker /
-    dispatcher / billing — but no test drives the full
-    chain in CI.
   - **MinIO source** — if storage backend ever flips to MinIO,
     MinIO has cleaner native webhook + AMQP + Kafka bucket-
     notifications. An additional source adapter (mirror of
