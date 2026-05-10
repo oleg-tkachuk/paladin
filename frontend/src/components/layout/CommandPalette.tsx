@@ -536,7 +536,22 @@ export function CommandPalette() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-indigo-500/40">PALADIN v2.0 Global Index</span>
+            {/* Hint at scope rather than versioning — version lives in
+                the topbar build-info pill. Empty scope = global; a
+                tenant in scope reads as "tenant: <slug>" so the
+                operator sees why scoped jumps appear up top. */}
+            <span className="text-indigo-500/40">
+              {scopedTenantSlug ? (
+                <>
+                  Scope:{" "}
+                  <span className="text-indigo-300/70 font-mono normal-case tracking-normal">
+                    {scopedTenantSlug}
+                  </span>
+                </>
+              ) : (
+                "Global"
+              )}
+            </span>
           </div>
         </div>
       </div>

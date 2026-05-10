@@ -833,6 +833,106 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## UI / Admin Console
+
+### Tenant proto missing `slug` field
+
+- **Status:** Aspirational
+- **Reason:** Phase 0 of the URL refactor introduced slug-first
+  tenant URLs (`/tenants/<slug>/...`), but the `Tenant` proto only
+  carries `tenant_id`. The frontend resolver
+  ([frontend/src/lib/resources/tenant-resolve.ts](frontend/src/lib/resources/tenant-resolve.ts))
+  falls back to UUID as the "slug" — so the slug-form URL is
+  effectively the UUID-form URL, and the auto-canonicalise step is a
+  no-op. Database carries a `slug` column already (used by the IAM
+  bootstrap for `platform`); the gap is just the proto + handler.
+- **Definition of Done:**
+  - Add `string slug = N;` to `paladin.admin.v1.Tenant` and to the
+    response shape of `TenantService.GetTenant` /  `ListTenants`.
+  - Backend reads the column and populates the field (already
+    accepted on `tenants/{tenant_id_or_slug}` parsing path).
+  - Frontend resolver uses `res.slug` instead of falling back to
+    UUID; URL canonicalisation actually swaps `<uuid>` →
+    `<slug>` on landing.
+  - Cmd+K palette tenant-jumps use slug-form URLs (currently they
+    `encodeURIComponent(tenant.tenantId)`).
+- **Blockers:** none — proto + handler change.
+
+### Slug-rename history redirect
+
+- **Status:** Deferred
+- **Reason:** When `RenameTenantSlug` rotates a slug, bookmarks
+  using the old slug 404 by design (fail-fast over silent redirect
+  to the wrong tenant). For cross-org link sharing in the wild
+  this is annoying — a grace-window redirect via the audit log
+  would soften it.
+- **Definition of Done:**
+  - On a 404 for `/tenants/<x>/...`, look up the audit log for
+    a recent `RenameTenantSlug` whose `before.slug == x`; if
+    found and within a configurable grace window, surface a
+    "did you mean <new-slug>?" CTA (or auto-redirect with a
+    banner).
+  - Configurable grace window (default 30d).
+- **Blockers:** none — UI-only with audit-log read.
+
+### Server-side bucket index by `owner_tenant_id`
+
+- **Status:** Deferred
+- **Reason:** `BucketService.ListBuckets` takes a backend `parent`
+  but no tenant filter. Both the tenant-scoped Buckets tab
+  ([frontend/src/app/tenants/\[id\]/buckets/page.tsx](frontend/src/app/tenants/[id]/buckets/page.tsx))
+  and the Tenant Overview's bucket count fetch ALL buckets and
+  filter client-side. Fine at N(buckets) ≈ 10²-10³; grows linearly
+  with cluster size and burns bandwidth on every Overview page
+  load.
+- **Definition of Done:**
+  - `ListBucketsRequest.filter` accepts `owner_tenant_id == "X"` as
+    a CEL clause (or add a dedicated `owner_tenant_id` field).
+  - DB index on `buckets(owner_tenant_id)`.
+  - Frontend tenant Buckets tab + Overview count switch to the
+    server-side filter.
+- **Blockers:** none.
+
+### Remaining tab stubs in tenant subtree
+
+- **Status:** Deferred
+- **Reason:** The URL refactor (Phases 0–6) shipped real content
+  for Overview / Buckets / Object Keys / Audit. Six tabs remain
+  as `_TabStub` placeholders linking to legacy cross-tenant
+  pages: **Quotas, Capabilities, M2M Tokens, Events
+  (Subscriptions), Budget**, and the bucket-detail subtabs
+  **Policy / Replication / Versioning / Object Keys**.
+- **Definition of Done:**
+  - Each tab gets a tenant-scoped page (or bucket-scoped for
+    bucket sub-tabs).
+  - Quotas + Capabilities + M2M Tokens + Events Subscriptions
+    delete their cross-tenant `/quotas`-style routes after
+    migration (Q4 hard-cut).
+  - Bucket Replication tab waits on `BucketReplication` proto +
+    replicator worker (separate Features entry).
+- **Blockers:** Replication proto for that one tab; rest can
+  start anytime.
+
+### Object Tags as a filter on the Objects tab
+
+- **Status:** Deferred
+- **Reason:** The flat `/object-tags` page was deleted in Phase
+  5 of the URL refactor (taxonomy view that didn't fit the
+  resource tree). Operators still want to filter objects by tag.
+  Today the Objects tab inside an ObjectKey lists every object;
+  a tag dropdown in the filter bar would replace the deleted
+  taxonomy view.
+- **Definition of Done:**
+  - Tag-aware index on the data plane (per-tenant; tag values
+    sourced from object metadata).
+  - Filter dropdown in
+    [frontend/src/app/tenants/\[id\]/object-keys/\[name\]/objects/page.tsx](frontend/src/app/tenants/[id]/object-keys/[name]/objects/page.tsx)
+    populated from the index, applied as a CEL filter on
+    `ListObjects`.
+- **Blockers:** data-plane tag index.
+
+---
+
 ## Operational
 
 ### `pg_cron` integration as alternative to in-process reapers
