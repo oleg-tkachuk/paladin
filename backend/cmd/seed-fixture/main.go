@@ -36,9 +36,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -48,6 +50,8 @@ import (
 	"github.com/spf13/cobra"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
+	datav1 "github.com/oleg-tkachuk/paladin/internal/api/pb/data/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/iam/v1"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/mcp"
@@ -82,8 +86,18 @@ func main() {
 		Short: "Remove every resource the chosen flavour created",
 		RunE:  func(cmd *cobra.Command, _ []string) error { return runDown(cmd) },
 	}
-	for _, c := range []*cobra.Command{upCmd, downCmd} {
-		c.Flags().String("flavour", "demo", "demo | load | stress")
+	smokeCmd := &cobra.Command{
+		Use:   "smoke-upload",
+		Short: "Trigger a data-plane UploadObject + presigned PUT, then DON'T call CompleteObject",
+		Long: "Exercises the SF→NATS→ingest pipeline end-to-end: data-plane " +
+			"UploadObject creates a PENDING row, the PUT writes bytes through " +
+			"the SF S3 gateway which fires a filer event on `seaweedfs.filer`, " +
+			"the ingest pod decodes it and promotes the row to AVAILABLE. " +
+			"Operators verify by re-running with --verify (or by tailing " +
+			"paladin-ingest logs).",
+		RunE: func(cmd *cobra.Command, _ []string) error { return runSmokeUpload(cmd) },
+	}
+	for _, c := range []*cobra.Command{upCmd, downCmd, smokeCmd} {
 		c.Flags().String("admin-url", "https://paladin.local/api/rpc/admin", "Admin plane URL")
 		c.Flags().String("iam-url", "https://paladin.local/api/rpc/iam", "IAM plane URL")
 		c.Flags().String("data-url", "https://paladin.local/api/rpc/data", "Data plane URL")
@@ -91,6 +105,13 @@ func main() {
 		c.Flags().String("password", "password", "Bootstrap admin password")
 		root.AddCommand(c)
 	}
+	for _, c := range []*cobra.Command{upCmd, downCmd} {
+		c.Flags().String("flavour", "demo", "demo | load | stress")
+	}
+	smokeCmd.Flags().String("object-key", "test",
+		"existing objectKey on the caller's tenant — must already be bound to a bucket")
+	smokeCmd.Flags().String("key", "",
+		"storage key (server picks when empty)")
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "seed-fixture:", err)
 		os.Exit(1)
@@ -392,4 +413,112 @@ func subSinkMatches(a, b *adminv1.EventSink) bool {
 		return ok && ax.Nats.GetSubject() == bx.Nats.GetSubject() && ax.Nats.GetUrl() == bx.Nats.GetUrl()
 	}
 	return false
+}
+
+// ─── Smoke: end-to-end PROMOTE through SF→NATS→ingest ─────────────────────
+
+// runSmokeUpload exercises the storage-event ingest pipeline:
+//
+//  1. Authenticate as the bootstrap admin against the data plane.
+//  2. UploadObject — server creates a PENDING `objects` row and
+//     hands back a presigned PUT URL.
+//  3. HTTP PUT bytes to that URL. The PUT lands on the SF S3
+//     gateway, which writes the object AND fires a filer event
+//     on `seaweedfs.filer`.
+//  4. We deliberately SKIP the CompleteObject call. Promotion is
+//     supposed to be driven by the ingest pod consuming the
+//     filer event, looking up the row by composeKey, and calling
+//     PromoteToAvailable.
+//
+// This proves that everything between "client wrote bytes" and
+// "PALADIN knows the bytes are there" works without PALADIN RPC's normal
+// synchronous CompleteObject path. Operators verify the row's
+// state by re-running with an extra query or by inspecting
+// /objects in the UI a few seconds after the PUT.
+func runSmokeUpload(cmd *cobra.Command) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), 60*time.Second)
+	defer cancel()
+	adminURL, _ := cmd.Flags().GetString("admin-url")
+	iamURL, _ := cmd.Flags().GetString("iam-url")
+	dataURL, _ := cmd.Flags().GetString("data-url")
+	user, _ := cmd.Flags().GetString("user")
+	password, _ := cmd.Flags().GetString("password")
+	objectKey, _ := cmd.Flags().GetString("object-key")
+	storageKey, _ := cmd.Flags().GetString("key")
+
+	if err := assertDevTarget(adminURL); err != nil {
+		return err
+	}
+	tok, err := login(ctx, iamURL, user, password)
+	if err != nil {
+		return err
+	}
+	clients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, dataURL, iamURL, tok)
+
+	// Resolve caller's tenant — same path the demo flavour uses.
+	tenants, err := clients.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
+	if err != nil {
+		return fmt.Errorf("list tenants: %w", err)
+	}
+	if len(tenants.Msg.GetTenants()) == 0 {
+		return errors.New("no tenants visible — bootstrap admin missing?")
+	}
+	tenant := tenants.Msg.GetTenants()[0]
+	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenant.GetTenantId(), objectKey)
+
+	// Compose a deterministic-looking storage key when the operator
+	// didn't pass one. Includes a unix timestamp so re-runs don't
+	// collide and we can read the matching ingest log line.
+	if storageKey == "" {
+		storageKey = fmt.Sprintf("smoke-promote/%d.txt", time.Now().Unix())
+	}
+	payload := []byte(fmt.Sprintf("smoke-promote-payload at %s\n", time.Now().UTC().Format(time.RFC3339Nano)))
+
+	uresp, err := clients.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent:        parent,
+		Key:           storageKey,
+		ContentType:   "text/plain",
+		SizeHintBytes: int64(len(payload)),
+		// SHA256 is the data-plane default; explicit so the PUT side
+		// knows which checksum header (if any) the server expects.
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+	}))
+	if err != nil {
+		return fmt.Errorf("UploadObject: %w", err)
+	}
+	obj := uresp.Msg.GetObject()
+	url := uresp.Msg.GetUploadUrl()
+	fmt.Printf("UploadObject: object_id=%s state=%s key=%s\n",
+		obj.GetObjectId(), obj.GetState(), obj.GetKey())
+	fmt.Printf("Presigned PUT: %s\n", url.GetUrl())
+
+	// Honour any RequiredHeaders the signer specified — typically
+	// Content-Type and the checksum algo header. Missing them flips
+	// SF's S3 gateway to "SignatureDoesNotMatch" with a confusing
+	// message; copy verbatim.
+	req, err := http.NewRequestWithContext(ctx, url.GetMethod(), url.GetUrl(), bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("PUT build: %w", err)
+	}
+	for k, v := range url.GetRequiredHeaders() {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("PUT do: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("PUT response: %d %s\n", resp.StatusCode, string(body))
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("PUT failed with %d", resp.StatusCode)
+	}
+
+	fmt.Println("\nSkipping CompleteObject on purpose. Watch the ingest pod:")
+	fmt.Println("  kubectl logs -n paladin deploy/paladin-ingest -f")
+	fmt.Println("Within a few seconds the row should transition PENDING→AVAILABLE")
+	fmt.Println("via PromoteHandler. Verify with the data-plane GetObject RPC or:")
+	fmt.Printf("  SELECT state FROM objects WHERE object_id = '%s';\n",
+		obj.GetObjectId())
+	return nil
 }

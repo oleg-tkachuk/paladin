@@ -587,27 +587,46 @@ the same commit. Treat this file like a runtime invariant.
       (CompleteObject only on the actual transition — `changed=true`
       — so retries don't double-fire)
 - **What's left:**
-  - **`policy` handler** (admin/v1/policyh) → `paladin.policy.updated`
-    on SetPolicy / RotatePolicy. Lower priority than the
-    lifecycle classes; subscribers are mostly auditing.
   - **`capability.Charge`** → `paladin.capability.charged`. High
-    cardinality (every chargeable RPC), so should ship behind
-    a config flag (`cfg.Dispatcher.ChargeEventsEnabled = false`
-    by default) and require subscribers to set a CEL filter
-    pinning `event.kind == 'paladin.capability.charged'` to scope
-    the queue depth.
-  - **Audit-log mirror** — separate concern from lifecycle:
-    fan out every `audit_log` insert to `paladin.audit.<action>`
-    so SIEM / compliance pipelines can subscribe without
-    polling Postgres. Even higher cardinality than charges;
-    same flag pattern.
-  - Integration tests for the four new handler classes
-    (today only `tenant_events_test.go` covers the seam
-    end-to-end; bucket / object_key / quota / object inherit
-    the same wiring but don't have dedicated tests).
-- **Trigger to do:** customer subscription that depends on an
-  event class not yet wired (object_tag, policy, capability,
-  audit), or compliance / SIEM need.
+    cardinality — every chargeable RPC. Plumbing pattern:
+      - Add `chargeEventsKey{}` context value alongside the
+        existing `chargeKey{}` (capability_interceptor.go) —
+        the interceptor stamps an `EventProducer` (or nil)
+        when the new `cfg.Dispatcher.ChargeEventsEnabled`
+        toggle is true.
+      - `ChargeCapability` reads it and fires
+        `paladin.capability.charged` AFTER the running totals
+        commit (matching the ledger-row semantics — fan-out
+        is best-effort, never undoes the spend).
+      - Default OFF in cfg + chart values. Subscribers MUST
+        set a CEL filter pinning the `type` field to scope
+        their queue depth.
+    See `internal/auth/capability_interceptor.go::ChargeCapability`
+    for the existing read-from-ctx pattern that maps onto this
+    wiring.
+  - **Audit-log mirror** → `paladin.audit.<action>`. Separate
+    concern from lifecycle: fan every `audit_log` row to the
+    bus so SIEM / compliance can subscribe without polling
+    Postgres. Same flag pattern as charges
+    (`cfg.Dispatcher.AuditMirrorEnabled = false`). Hook lives
+    in `internal/middleware.Audit` interceptor — wrapping the
+    `repos.Audit.Log()` call with a post-commit dispatch.
+  - **NOT applicable:** `policy` event class. The
+    `internal/api/v1/policy` handler is read-only (Validate,
+    Simulate, GetEffectivePolicy); Cedar policy mutations go
+    through `tenant.RenameTenantSlug`, `bucket.SetPolicy`,
+    `objectKey.UpdateCedarPolicy` — already covered by
+    `paladin.tenant.updated` / `paladin.bucket.updated` /
+    `paladin.object_key.updated`. Subscribers that care about
+    policy changes filter on the parent resource's update
+    event with a CEL pinning the changed field.
+  - Integration tests for the four new handler classes that
+    landed (only `tenant_events_test.go` covers the seam end-
+    to-end; bucket / object_key / quota / object inherit the
+    same wiring but don't have dedicated tests).
+- **Trigger to do:** customer subscription that depends on
+  capability charges or audit-log mirroring, or compliance /
+  SIEM need.
 
 ### Event dispatcher: NATS sink (recommended first non-HTTP sink)
 
