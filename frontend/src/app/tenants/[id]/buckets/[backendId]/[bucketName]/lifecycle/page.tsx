@@ -1,43 +1,38 @@
 "use client";
 
-// Lifecycle rules CRUD for a single bucket. Dedicated route rather than
-// a tab inside a bucket detail page because the detail-page surface
-// doesn't exist yet (buckets is currently a flat table). Bucket
-// identity needs two segments (backendId + bucketName), so a nested
-// route is the natural shape.
+// Lifecycle rules CRUD for a single bucket — tenant-scoped path.
+//
+// The parent BucketDetailLayout already fetched the Bucket and
+// owns the page header. This page renders only the rules list,
+// editor dialog, and delete confirmation; mutation results go
+// back into BucketContext so sibling tabs see the updated rule
+// count without a refetch.
 //
 // Backend semantics:
 //   - SetLifecycleRules is a destructive replace. Edit/Toggle/Delete
 //     all build the full desired list locally and ship it.
 //   - Optimistic concurrency via resourceVersion — on Aborted we
-//     refetch and ask the operator to retry.
+//     refetch (via context.refetch) and ask the operator to retry.
 
-import React, { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
+import React, { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema } from "@bufbuild/protobuf/wkt";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
-  ArrowPathIcon,
-  ChevronLeftIcon,
   ClockIcon,
   EllipsisHorizontalIcon,
-  ExclamationTriangleIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -75,7 +70,6 @@ import { useNotification } from "@/components/ui/Notification";
 
 import { bucketClient } from "@/lib/connect/client";
 import {
-  type Bucket,
   type LifecycleRule,
   LifecycleRuleSchema,
   LifecycleTransitionSchema,
@@ -85,6 +79,8 @@ import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import { useCELValidation } from "@/hooks/useCELValidation";
 import { CELIndicator } from "@/components/ui/CELIndicator";
+
+import { useBucket } from "../bucket-context";
 
 // ─── duration helpers ────────────────────────────────────────────────────────
 //
@@ -108,10 +104,6 @@ function buildDuration(amount: number, unit: DurationUnit): Duration {
   });
 }
 
-/**
- * Pick the largest unit that divides cleanly. e.g. 86400 → "1d", 3600
- * → "1h", 2_592_000 → "1m". Fallback to days with a fractional cap.
- */
 function decomposeDuration(d?: Duration): {
   amount: number;
   unit: DurationUnit;
@@ -128,8 +120,6 @@ function decomposeDuration(d?: Duration): {
   if (sec % SEC_PER_UNIT.h === 0n) {
     return { amount: Number(sec / SEC_PER_UNIT.h), unit: "h" };
   }
-  // odd value — round down to days. Rare; only occurs if a CLI/API
-  // operator wrote a non-canonical Duration.
   return { amount: Number(sec / SEC_PER_UNIT.d), unit: "d" };
 }
 
@@ -255,65 +245,29 @@ function formToRule(form: RuleFormState): LifecycleRule {
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function BucketLifecyclePage() {
-  const params = useParams<{ backendId: string; bucketName: string }>();
-  const backendId = decodeURIComponent(params?.backendId ?? "");
-  const bucketName = decodeURIComponent(params?.bucketName ?? "");
-  const resourceName = `storageBackends/${backendId}/buckets/${bucketName}`;
-
+  const { bucket, setBucket, refetch } = useBucket();
   const { showNotification } = useNotification();
 
-  const [bucket, setBucket] = useState<Bucket | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Editor dialog state.
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [form, setForm] = useState<RuleFormState>(DEFAULT_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // Delete confirmation state.
   const [deleteTarget, setDeleteTarget] = useState<LifecycleRule | null>(null);
 
-  const fetchBucket = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const fresh = await bucketClient.getBucket({ name: resourceName });
-      setBucket(fresh);
-      return fresh;
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to load bucket.";
-      setLoadError(msg);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [resourceName]);
+  const rules = bucket.lifecycleRules ?? [];
 
-  useEffect(() => {
-    fetchBucket().catch(() => {
-      /* error already surfaced via loadError */
-    });
-  }, [fetchBucket]);
-
-  const rules = bucket?.lifecycleRules ?? [];
-
-  // Persist `nextRules` via SetLifecycleRules. On Aborted (stale
-  // resourceVersion) we refetch and prompt the operator to retry —
-  // safer than blind retries that could clobber a concurrent edit.
   const persistRules = useCallback(
     async (
       nextRules: LifecycleRule[],
       successMessage: string,
     ): Promise<boolean> => {
-      if (!bucket) return false;
       setSaving(true);
       try {
         const updated = await bucketClient.setLifecycleRules({
-          name: resourceName,
+          name: bucket.name,
           resourceVersion: bucket.resourceVersion,
           rules: nextRules,
         });
@@ -322,7 +276,7 @@ export default function BucketLifecyclePage() {
         return true;
       } catch (err) {
         if (err instanceof ConnectError && err.code === Code.Aborted) {
-          await fetchBucket().catch(() => {});
+          await refetch();
           showNotification({
             type: "error",
             title: "Bucket changed elsewhere",
@@ -340,10 +294,8 @@ export default function BucketLifecyclePage() {
         setSaving(false);
       }
     },
-    [bucket, fetchBucket, resourceName, showNotification],
+    [bucket.name, bucket.resourceVersion, refetch, setBucket, showNotification],
   );
-
-  // ─── handlers ──────────────────────────────────────────────────────────────
 
   const openCreate = () => {
     setEditorMode("create");
@@ -378,7 +330,7 @@ export default function BucketLifecyclePage() {
   };
 
   const handleToggle = async (rule: LifecycleRule) => {
-    // Optimistic update — flip the row, persist, revert on failure.
+    // Optimistic — flip in-context, persist, revert on failure.
     const previous = rules;
     const optimistic = rules.map((r) =>
       r.id === rule.id
@@ -402,73 +354,23 @@ export default function BucketLifecyclePage() {
     if (ok) setDeleteTarget(null);
   };
 
-  // ─── render ────────────────────────────────────────────────────────────────
-
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={
-          <div className="space-y-1">
-            <Link
-              href="/buckets"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeftIcon className="size-4" />
-              All buckets
-            </Link>
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              Lifecycle rules
-            </h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info" className={T.code}>
-                {backendId}
-              </Badge>
-              <span className={T.codeSmall}>{bucketName}</span>
-            </div>
-          </div>
-        }
-        description="Automate transitions and expirations of objects based on age and a CEL filter."
-        showDefaultActions={false}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => fetchBucket().catch(() => {})}
-              aria-label="Refresh"
-              disabled={loading}
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
-            </Button>
-            <Button size="sm" onClick={openCreate} disabled={!bucket}>
-              <PlusIcon className="size-4" />
-              Add rule
-            </Button>
-          </div>
-        }
-      />
-
-      {loadError && !bucket ? (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
-          <ExclamationTriangleIcon className="size-10 text-destructive" />
-          <p className={T.body}>{loadError}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchBucket().catch(() => {})}
-          >
-            Retry
-          </Button>
-        </Card>
-      ) : loading && !bucket ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-20 w-full" />
-          ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Lifecycle rules</h2>
+          <p className={cn(T.helper, "max-w-prose")}>
+            Automate transitions and expirations of objects based on age and a
+            CEL filter.
+          </p>
         </div>
-      ) : rules.length === 0 ? (
+        <Button size="sm" onClick={openCreate}>
+          <PlusIcon className="size-4" />
+          Add rule
+        </Button>
+      </div>
+
+      {rules.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
           <ClockIcon className="size-10 text-muted-foreground" />
           <h2 className={T.cardTitleProse}>No lifecycle rules</h2>
@@ -575,8 +477,6 @@ interface RuleCardProps {
 }
 
 function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
-  // Card is fully clickable (opens editor). The kebab is in a stop-prop
-  // wrapper so its dropdown items don't bubble up as a card click.
   return (
     <Card
       className="cursor-pointer p-4 transition-colors hover:border-foreground/20"
@@ -686,10 +586,6 @@ function RuleEditor({
     value: RuleFormState[K],
   ) => onChange({ ...form, [key]: value });
 
-  // Live CEL validation against the Object schema. Keeps submit disabled
-  // when the expression is in flight or compiles to an error — the
-  // backend rejects bad CEL at apply-time anyway, but failing fast at
-  // edit-time avoids a round-trip + a confusing notification.
   const celState = useCELValidation(form.match, "Object");
   const celBlocksSubmit =
     celState.status === "invalid" || celState.status === "validating";
@@ -715,7 +611,6 @@ function RuleEditor({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* ID + enabled */}
             <div className="grid grid-cols-[1fr_auto] items-end gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="rule-id">Rule ID</Label>
@@ -749,7 +644,6 @@ function RuleEditor({
               </div>
             </div>
 
-            {/* CEL match */}
             <div className="space-y-1.5">
               <Label htmlFor="rule-match">Match (CEL)</Label>
               <Textarea
@@ -767,7 +661,6 @@ function RuleEditor({
               <CELIndicator state={celState} />
             </div>
 
-            {/* Action picker */}
             <div className="space-y-1.5">
               <Label>Action</Label>
               <div className="grid grid-cols-2 gap-2">
@@ -786,7 +679,6 @@ function RuleEditor({
               </div>
             </div>
 
-            {/* After (duration) */}
             <div className="space-y-1.5">
               <Label htmlFor="rule-after">After</Label>
               <div className="flex gap-2">
@@ -863,8 +755,6 @@ function RuleEditor({
   );
 }
 
-// Inline radio-style toggle — reuses the existing button + ring pattern
-// rather than introducing a new RadioGroup primitive.
 function ActionToggle({
   active,
   onClick,
