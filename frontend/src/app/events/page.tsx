@@ -829,8 +829,9 @@ export default function EventsPage() {
                         No event subscriptions
                       </p>
                       <p className={cn(T.helper, "mt-1 max-w-md")}>
-                        Forward PALADIN events to webhooks, Kafka topics, or SQS
-                        queues. Create one to start receiving deliveries.
+                        Forward PALADIN events to a webhook (HTTP) or NATS subject.
+                        Create one to start receiving deliveries — Kafka and SQS
+                        sinks are roadmap stubs.
                       </p>
                     </div>
                     <Button onClick={openCreate} size="sm">

@@ -7,9 +7,11 @@ import {
   ArchiveBoxIcon,
   ArrowRightIcon,
   ArrowUpTrayIcon,
+  BoltIcon,
   CheckCircleIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
+  CommandLineIcon,
   CubeIcon,
   ExclamationTriangleIcon,
   KeyIcon,
@@ -251,6 +253,28 @@ export default function DashboardPage() {
             href: "/audit",
             description: "Append-only log of every mutation.",
             icon: ClipboardDocumentListIcon,
+            accent: "text-chart-3/85",
+          },
+          // Events tile mirrors the sidebar — Dashboard had drifted out
+          // of sync after EventSubscriptionService landed (sidebar got
+          // the entry, Dashboard didn't). No count: subscription totals
+          // would require a per-tenant ListSubscriptions on every
+          // Dashboard load, and the count alone isn't a useful
+          // indicator (one healthy webhook is plenty).
+          {
+            name: "Events",
+            href: "/events",
+            description:
+              "Outbound subscriptions — webhook (HTTP) or NATS subject.",
+            icon: BoltIcon,
+            accent: "text-chart-3/85",
+          },
+          {
+            name: "MCP Bridge",
+            href: "/mcp",
+            description:
+              "Operator view of the MCP tool catalog and dispatch deny-list.",
+            icon: CommandLineIcon,
             accent: "text-chart-3/85",
           },
           {
