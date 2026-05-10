@@ -152,16 +152,42 @@ func buildRabbitMQDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, 
 // pickSource resolves a source-format string to the matching adapter.
 // Webhook driver picks per-route via its Sources map; NATS / RabbitMQ
 // drivers pick once via this helper.
+//
+// `seaweedfs` parses the JSON shape SeaweedFS' `[notification.webhook]`
+// driver emits — operators using the webhook publisher.
+//
+// `seaweedfs_nats` parses the gob-encoded gocdk_pub_sub envelope SF
+// emits when configured with `[notification.gocdk_pub_sub]
+// topic_url = nats://...`. This is what the in-cluster setup uses
+// (see gitops/.../seaweedfs/notification-config.yaml). The two
+// formats are NOT interchangeable — picking the wrong one produces
+// `ErrUnrecognisedEvent` on every message and the dedup table fills
+// with junk.
+//
+// BucketName for the SeaweedFS sources is hard-coded to "paladin-primary"
+// to match cfg.Storage.DefaultBackend in the local overlay. When
+// the operator's bucket name diverges this should be read from
+// cfg.Storage.Backends; threading that through is BACKLOG'd under
+// "Storage event ingest pipeline" since the producer adapter and
+// the storage config are wired by separate teams.
 func pickSource(format string) (eventingest.Source, error) {
 	switch format {
 	case "seaweedfs":
-		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
+		return &eventingest.SeaweedFSSource{
+			BucketName: "paladin-primary",
+			URI:        "seaweedfs://primary",
+		}, nil
+	case "seaweedfs_nats":
+		return &eventingest.SeaweedFSNATSSource{
+			BucketName: "paladin-primary",
+			URI:        "seaweedfs-nats://primary",
+		}, nil
 	case "minio":
 		return &eventingest.MinIOSource{URI: "minio://primary"}, nil
 	case "cloudevents":
 		return &eventingest.CloudEventsSource{URI: "cloudevents://primary"}, nil
 	case "":
-		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | minio | cloudevents)")
+		return nil, fmt.Errorf("ingest: source_format required (seaweedfs | seaweedfs_nats | minio | cloudevents)")
 	default:
 		return nil, fmt.Errorf("ingest: unknown source_format %q", format)
 	}

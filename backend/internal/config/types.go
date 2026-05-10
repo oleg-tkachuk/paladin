@@ -930,7 +930,18 @@ type IngestNATS struct {
 	DurableName string `yaml:"durable_name" json:"durable_name"`
 
 	// SourceFormat tells the worker which adapter to use:
-	// "seaweedfs" | "minio" | "cloudevents". Required.
+	// "seaweedfs" | "seaweedfs_nats" | "minio" | "cloudevents". Required.
+	//
+	// `seaweedfs` is for SF's `[notification.webhook]` driver — JSON
+	// payload posted over HTTP. NOT compatible with this NATS driver,
+	// kept selectable here only so the schema doesn't reject overlays
+	// that mistakenly mix-and-match.
+	//
+	// `seaweedfs_nats` is for SF's `[notification.gocdk_pub_sub]`
+	// driver routed via `topic_url = nats://...` — gob-encoded
+	// envelope wrapping a proto-marshalled `filer_pb.EventNotification`.
+	// This is what the in-cluster setup uses; see
+	// gitops/.../seaweedfs/notification-config.yaml.
 	SourceFormat string `yaml:"source_format" json:"source_format"`
 
 	// Auth — token / nkey / TLS. NATS-go has many auth flavours;
