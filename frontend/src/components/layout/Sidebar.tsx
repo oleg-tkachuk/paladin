@@ -11,9 +11,6 @@ import {
   Cog6ToothIcon,
   KeyIcon,
   ShieldCheckIcon,
-  // BanknotesIcon, BoltIcon, CpuChipIcon dropped along with the
-  // Capabilities / M2M Tokens / Tenant Budgets / Events sidebar
-  // entries — they live as tenant-scoped tabs now.
   CheckCircleIcon,
   UserCircleIcon,
   ChevronDoubleLeftIcon,
@@ -22,6 +19,9 @@ import {
   CubeTransparentIcon,
   CommandLineIcon,
   CurrencyDollarIcon,
+  BanknotesIcon,
+  BoltIcon,
+  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -40,17 +40,27 @@ import {
  * tint so the operator can locate sections at a glance without making
  * the whole row noisy. The active item still uses primary blue + a
  * left-rail accent — see `SidebarBody` below.
+ *
+ * `path` is for absolute routes that don't depend on the signed-in
+ * user; `tenantTab` is a per-user shortcut that resolves to
+ * /tenants/<my-slug>/<tab> at render time. Tenant-scoped sidebar
+ * entries (Capabilities, M2M Tokens, Budget, Events) use the
+ * latter so they always land on the operator's own tenant subtree.
+ * Items with `tenantTab` are hidden until `useAuth` exposes a
+ * tenantId/slug, so a not-yet-authenticated user doesn't see broken
+ * placeholders.
  */
+type NavItem = {
+  name: string;
+  icon: React.ElementType;
+  countKey?: keyof SidebarCounts;
+} & ({ path: string; tenantTab?: never } | { path?: never; tenantTab: string });
+
 const navigationGroups: Array<{
   title: string;
   /** Tailwind class on the icon foreground (idle state). */
   accent: string;
-  items: Array<{
-    name: string;
-    path: string;
-    icon: React.ElementType;
-    countKey?: keyof SidebarCounts;
-  }>;
+  items: Array<NavItem>;
 }> = [
   {
     // The flat Objects entry was removed in Phase 5 — object
@@ -90,15 +100,31 @@ const navigationGroups: Array<{
     ],
   },
   {
-    // Agents — what's left after the tenant-scoped collapse: Billing
-    // remains as a cross-tenant aggregate dashboard (signed-in
-    // tenant, not platform-wide). Capabilities, M2M Tokens, Tenant
-    // Budgets, and Event Subscriptions are now tenant-scoped tabs —
-    // operators reach them by clicking into Resources → tenant →
-    // Capabilities (etc.). Same for /events.
+    // Agents — Capabilities, M2M Tokens, Tenant Budgets, Events
+    // Subscriptions are tenant-scoped pages now (Phase 5+); they
+    // appear here as `tenantTab` shortcuts that resolve to
+    // /tenants/<signed-in-tenant>/<tab> at render time. Operators
+    // who routinely manage their own tenant don't need to bounce
+    // through Resources → tenant → tab on every visit. Billing
+    // stays an absolute path — it's a cross-tenant aggregate
+    // dashboard scoped by the JWT, not a per-tenant view.
     title: "Agents",
     accent: "text-chart-4/85",
-    items: [{ name: "Billing", path: "/billing", icon: CurrencyDollarIcon }],
+    items: [
+      {
+        name: "Capabilities",
+        tenantTab: "capabilities",
+        icon: ShieldCheckIcon,
+      },
+      { name: "M2M Tokens", tenantTab: "m2m-tokens", icon: CpuChipIcon },
+      { name: "Tenant Budget", tenantTab: "budget", icon: BanknotesIcon },
+      {
+        name: "Events",
+        tenantTab: "event-subscriptions",
+        icon: BoltIcon,
+      },
+      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
+    ],
   },
   {
     title: "System",
@@ -202,6 +228,22 @@ function SidebarBody({
   const isCurrent = (path: string) =>
     path === "/" ? pathname === "/" : pathname.startsWith(path);
 
+  // Resolve a tenantTab item to its absolute URL using the
+  // signed-in user's tenant. Returns null when auth hasn't loaded
+  // yet — caller hides the entry to avoid a broken link.
+  //
+  // We use tenantId (UUID) here because UserDTO doesn't carry the
+  // slug field — the resolver in TenantLayout canonicalises UUID→
+  // slug on landing via replaceState, so the address bar ends up
+  // showing the slug after a brief flash. Threading slug through
+  // /api/auth/me would tighten this up; tracked in BACKLOG.
+  const tenantHandle = user?.tenantId || null;
+  const resolveItemHref = (item: NavItem): string | null => {
+    if (item.path) return item.path;
+    if (!tenantHandle) return null;
+    return `/tenants/${encodeURIComponent(tenantHandle)}/${item.tenantTab}`;
+  };
+
   return (
     <div className="flex h-full w-full flex-col">
       {/* Brand */}
@@ -257,7 +299,12 @@ function SidebarBody({
                 </div>
               )}
               {group.items.map((item) => {
-                const active = isCurrent(item.path);
+                const href = resolveItemHref(item);
+                // Tenant-scoped item without a known tenant — hide
+                // rather than render a broken `/tenants//capabilities`
+                // placeholder. Restored after auth resolves.
+                if (href === null) return null;
+                const active = isCurrent(href);
                 const Icon = item.icon;
                 const count =
                   "countKey" in item && item.countKey
@@ -267,7 +314,7 @@ function SidebarBody({
                 const link = (
                   <Link
                     key={item.name}
-                    href={item.path}
+                    href={href}
                     onClick={onNavigate}
                     className={cn(
                       // Layout — left rail consumes 2px on the inside
