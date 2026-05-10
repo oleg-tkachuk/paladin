@@ -78,10 +78,33 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     // data / admin: ExchangeAudience derives an access token without
     // touching the refresh chain.
-    const res = await iamAuthClient().exchangeAudience({
-      refreshToken,
-      targetAudience: audience,
-    });
+    //
+    // Rotation race: a parallel /exchange?audience=paladin-iam call
+    // rotates the cookie. If we read `refreshToken` before it
+    // happened but call ExchangeAudience after the server invalidated
+    // it, we get Unauthenticated even though the session is valid.
+    // Self-heal: on Unauthenticated, re-read the cookie (which the
+    // parallel iam refresh has updated by now) and retry once.
+    let res;
+    try {
+      res = await iamAuthClient().exchangeAudience({
+        refreshToken,
+        targetAudience: audience,
+      });
+    } catch (err) {
+      const code = (err as { code?: number }).code;
+      // Connect's Unauthenticated maps to numeric Code.Unauthenticated
+      // = 16. We don't import the enum here to avoid pulling
+      // @connectrpc/connect into the BFF; numeric compare works for
+      // the only failure mode we want to retry.
+      if (code !== 16) throw err;
+      const fresh = await readSessionCookie();
+      if (!fresh || fresh === refreshToken) throw err;
+      res = await iamAuthClient().exchangeAudience({
+        refreshToken: fresh,
+        targetAudience: audience,
+      });
+    }
     const payload: AccessTokenDTO = toAccessTokenDTO(
       audience,
       res.accessToken,

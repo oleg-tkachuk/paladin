@@ -106,11 +106,26 @@ export function setAccessToken(audience: Audience, entry: TokenEntry) {
   broadcast({ kind: "set", audience, entry });
 }
 
-/** Wipe all cached tokens (called on logout / 401). */
+/** Wipe all cached tokens (called on logout). */
 export function clearAllTokens() {
   cache.clear();
   inflight.clear();
   broadcast({ kind: "clear" });
+}
+
+/**
+ * Mark a single audience's cached token stale without touching the
+ * inflight dedup map. Used by the transport's 401 self-heal: parallel
+ * RPCs all hit Unauthenticated, all need a fresh token, but we want
+ * exactly ONE refetch to fire — the inflight Map enforces that. The
+ * earlier path used clearAllTokens() which dropped the inflight Map
+ * too, so each parallel 401 fired its own /exchange call, each
+ * clobbering the previous cache entry and (worse) racing the BFF's
+ * refresh-token rotation. Separate stale-marking restores the
+ * single-flight property on the recovery path.
+ */
+export function markAudienceStale(audience: Audience) {
+  cache.delete(audience);
 }
 
 /** Test/debug helper — peek without triggering a fetch. */
