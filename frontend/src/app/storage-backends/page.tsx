@@ -352,7 +352,7 @@ export default function StorageBackendsPage() {
                         AWS S3
                       </SelectItem>
                       <SelectItem value={String(StorageKind.S3_COMPATIBLE)}>
-                        S3-compatible (R2, MinIO, Ceph, SeaweedFS)
+                        S3-compatible
                       </SelectItem>
                       <SelectItem value={String(StorageKind.GCS)}>
                         GCS
