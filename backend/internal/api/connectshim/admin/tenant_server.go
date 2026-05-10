@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 )
 
@@ -48,15 +49,20 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.GetTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	idStr, err := tenantIDFromName(req.Msg.GetName())
+	// Resource name format is `tenants/{tenant_id_or_slug}` — accept
+	// either form. apiutil.ParseTenantNameRef returns a TenantRef
+	// carrying exactly one of {ID, Slug}; we route to the matching
+	// handler entry-point.
+	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	var t *tenant.Tenant
+	if ref.HasID() {
+		t, err = s.H.GetTenant(ctx, ref.ID)
+	} else {
+		t, err = s.H.GetTenantBySlug(ctx, ref.Slug)
 	}
-	t, err := s.H.GetTenant(ctx, id)
 	if err != nil {
 		return nil, err
 	}

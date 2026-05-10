@@ -78,6 +78,11 @@ type UpdateTenantArgs struct {
 type Repository interface {
 	Create(ctx context.Context, args CreateTenantArgs) (Tenant, error)
 	Get(ctx context.Context, tenantID uuid.UUID) (Tenant, error)
+	// GetBySlug looks up a tenant by its kebab-case slug. ErrNotFound
+	// when no row matches. Used by handlers accepting the slug-form
+	// resource name (`tenants/{tenant_id_or_slug}`) — see
+	// apiutil.ParseTenantNameRef.
+	GetBySlug(ctx context.Context, slug string) (Tenant, error)
 	Update(ctx context.Context, args UpdateTenantArgs) (Tenant, error)
 	Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
 	List(ctx context.Context, pageSize int32, afterID uuid.UUID) ([]Tenant, string, error)
@@ -250,6 +255,40 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return &t, nil
+}
+
+// GetTenantBySlug resolves a slug to a tenant row and applies the
+// same authorization gating as GetTenant. The tenant resource name
+// format `tenants/{tenant_id_or_slug}` requires this — handlers
+// receiving a non-UUID body have no other way to materialise the
+// UUID needed for the standard auth path.
+//
+// Resolution is split (slug → row, row → authz) so the unauthorised
+// caller still gets NotFound instead of "you aren't allowed to know
+// this tenant exists" — keeps slug enumeration off the table.
+//
+// The authz block mirrors GetTenant verbatim — duplicated rather
+// than delegated so the connectshim coverage test can statically
+// see the gate markers (h.authorize / requirePlatformAdmin) in this
+// method's body.
+func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, error) {
+	t, err := h.repo.GetBySlug(ctx, slug)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	callerTenant, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if callerTenant != t.TenantID {
+		if err := requirePlatformAdmin(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := h.authorize(ctx, cedar.ActionReadTenant, t.TenantID); err != nil {
+		return nil, err
 	}
 	return &t, nil
 }

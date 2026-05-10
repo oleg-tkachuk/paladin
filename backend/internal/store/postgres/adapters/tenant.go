@@ -59,6 +59,21 @@ func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant
 	return tenantFromSQLC(row.Tenant), nil
 }
 
+// GetBySlug — slug → tenant row. Used by handlers accepting the
+// `tenants/{tenant_id_or_slug}` resource-name form. pgx's no-row
+// error becomes the domain ErrNotFound so the handler can surface
+// CodeNotFound (kept consistent with the Get-by-UUID path).
+func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant, error) {
+	row, err := r.q.GetTenantBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tenant.Tenant{}, tenant.ErrNotFound
+		}
+		return tenant.Tenant{}, err
+	}
+	return tenantFromSQLC(row.Tenant), nil
+}
+
 func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
 	var policyHash []byte
 	if args.InheritedCedarPolicy != nil {
