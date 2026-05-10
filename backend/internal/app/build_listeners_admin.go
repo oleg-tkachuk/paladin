@@ -79,6 +79,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// producer wiring".
 	tenantH.SetEventProducer(dispatcher)
 	tenantH.SetLogger(l.Named("tenant-events"))
+	bucketV2H.SetEventProducer(dispatcher)
+	bucketV2H.SetLogger(l.Named("bucket-events"))
+	objectKeyH.SetEventProducer(dispatcher)
+	objectKeyH.SetLogger(l.Named("object-key-events"))
+	quotaH.SetEventProducer(dispatcher)
+	quotaH.SetLogger(l.Named("quota-events"))
 
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()

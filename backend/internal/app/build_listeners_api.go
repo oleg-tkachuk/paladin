@@ -6,7 +6,9 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
+	admindomain "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/internal/api/iam/v1/usersettingsh"
@@ -20,7 +22,24 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/wire"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// apiEventSubStoreAdapter exposes the EventSubscription repository under
+// worker.SubscriptionStore — same shape as the admin builder's
+// eventSubStoreAdapter, duplicated here to keep the api builder
+// import surface flat (no admin-builder cross-import).
+type apiEventSubStoreAdapter struct {
+	r admindomain.EventSubscriptionRepository
+}
+
+func (a apiEventSubStoreAdapter) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	return a.r.List(ctx, args)
+}
+
+func (a apiEventSubStoreAdapter) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	return a.r.Get(ctx, id)
+}
 
 // BuildMeta carries link-time identity surfaces SystemService needs.
 // Threaded through builders rather than read from package globals so each
@@ -58,6 +77,25 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries)
 	objH.SetVersionHandler(versionH)
 	objH.SetQuotaUpdater(quotaUpdater)
+
+	// Object lifecycle producer wiring — fans CompleteObject /
+	// DeleteObject / RestoreObject / UpdateObject / CopyObject events
+	// into event_deliveries. Same shape as the admin builder's
+	// dispatcher; we construct a fresh one here because each plane
+	// has its own listener scope (the admin builder's dispatcher is
+	// not exported across packages, and crossing it would weld the
+	// admin and api builders together unnecessarily). NATS pool is
+	// lazy — sockets only open if a NATS sink is actually configured
+	// for an object event the api plane fires.
+	apiDispatcher := &worker.Dispatcher{
+		Store:       apiEventSubStoreAdapter{r: deps.Repos.EventSub},
+		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
+		NATS:        worker.NewNatsConnPool(l.Named("api-nats-pool")),
+		Logger:      l.Named("api-event-dispatcher"),
+		MaxAttempts: 3,
+	}
+	objH.SetEventProducer(apiDispatcher)
+	objH.SetLogger(l.Named("object-events"))
 	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
 	mpH.SetQuotaUpdater(quotaUpdater)
 

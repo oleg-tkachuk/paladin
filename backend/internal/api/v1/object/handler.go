@@ -22,6 +22,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
@@ -29,7 +30,27 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer mirrors the seam used by the admin handlers — narrow
+// interface, *worker.Dispatcher implements it.
+//
+// Object lifecycle is the highest-cardinality producer in the
+// system: every CompleteObject call fans out, so the per-tenant
+// CEL filters on EventSubscriptions become load-bearing for any
+// realistic object workload. A subscription with an empty filter
+// catches every event class; subscribers that only care about
+// `paladin.object.uploaded` should set
+//
+//	`event.kind == 'paladin.object.uploaded'`
+//
+// (see frontend/src/app/events/page.tsx hint copy) so the
+// dispatcher's per-row List doesn't queue rows the consumer would
+// drop anyway.
+type EventProducer interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
 
 // Storage abstracts S3 / GCS / MinIO. Keep this interface intentionally
 // narrow — handler logic does not know which backend it's talking to.
@@ -224,6 +245,9 @@ type Handler struct {
 	// promote. Increments tenant-scope usage counters; the post-completion
 	// hard check that complements the presign-time soft check lives there.
 	quota QuotaUpdater
+
+	events EventProducer
+	log    *zap.Logger
 }
 
 // SetVersionHandler attaches the optional version recorder. Wired by main.
@@ -237,6 +261,56 @@ type QuotaUpdater interface {
 
 // SetQuotaUpdater attaches the optional usage hook. Wired by main.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
+
+// SetEventProducer / SetLogger — same opt-in contract as the admin
+// handlers. nil-safe via dispatchEvent's guard.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+// dispatchEvent fans out an object lifecycle event. Best-effort:
+// the lifecycle write already committed by the time we get here.
+func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
+	if h.events == nil {
+		return
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	if err != nil {
+		if h.log != nil {
+			h.log.Warn("object event fan-out failed",
+				zap.String("event_type", eventType),
+				zap.String("tenant_id", tenantID.String()),
+				zap.String("resource", resourceName),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+	if h.log != nil {
+		h.log.Debug("object event queued",
+			zap.String("event_type", eventType),
+			zap.Int("subscriptions_matched", queued),
+		)
+	}
+}
+
+func objectResourceName(tenantID uuid.UUID, objectKey, key string) string {
+	return fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", tenantID, objectKey, key)
+}
 
 type PresignConfig struct {
 	DefaultTTL     time.Duration
@@ -508,6 +582,21 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		if err := auth.ChargeRequest(ctx); err != nil {
 			return nil, err
 		}
+		// Fan out the lifecycle event ONLY on the real transition.
+		// Idempotent retries skip dispatch (`changed=false` path)
+		// for the same reason charges skip — at-least-once callers
+		// would otherwise see duplicate events.
+		h.dispatchEvent(ctx, tenantID, "paladin.object.uploaded",
+			objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
+			map[string]any{
+				"tenant_id":    tenantID.String(),
+				"object_key":   fresh.ObjectKey,
+				"key":          fresh.Key,
+				"object_id":    fresh.ObjectID.String(),
+				"size_bytes":   fresh.SizeBytes,
+				"etag":         fresh.ETag,
+				"content_type": fresh.ContentType,
+			})
 	}
 	return &fresh, nil
 }
@@ -803,6 +892,15 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, tenantID, "paladin.object.updated",
+		objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+		map[string]any{
+			"tenant_id":      tenantID.String(),
+			"object_key":     obj.ObjectKey,
+			"key":            obj.Key,
+			"object_id":      obj.ObjectID.String(),
+			"updated_fields": in.UpdatedFields,
+		})
 	return &obj, nil
 }
 
@@ -853,6 +951,15 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		// Best-effort delete-marker write; failure here does not undo the
 		// state transition (the object is still soft-deleted).
 		_ = h.versions.OnSoftDelete(ctx, obj)
+		h.dispatchEvent(ctx, tenantID, "paladin.object.deleted",
+			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			map[string]any{
+				"tenant_id":  tenantID.String(),
+				"object_key": obj.ObjectKey,
+				"key":        obj.Key,
+				"object_id":  obj.ObjectID.String(),
+				"mode":       "soft",
+			})
 		return nil
 	}
 	// Permanent: remove from storage backend first, then drop the row.
@@ -877,6 +984,16 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, tenantID, "paladin.object.deleted",
+		objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+		map[string]any{
+			"tenant_id":         tenantID.String(),
+			"object_key":        obj.ObjectKey,
+			"key":               obj.Key,
+			"object_id":         obj.ObjectID.String(),
+			"mode":              "permanent",
+			"bypass_governance": bypassGovernance,
+		})
 	return nil
 }
 
@@ -955,6 +1072,14 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	h.dispatchEvent(ctx, tenantID, "paladin.object.restored",
+		objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
+		map[string]any{
+			"tenant_id":  tenantID.String(),
+			"object_key": fresh.ObjectKey,
+			"key":        fresh.Key,
+			"object_id":  fresh.ObjectID.String(),
+		})
 	return &fresh, nil
 }
 
@@ -1065,6 +1190,25 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
 		h.touchQuota(ctx, fresh)
+		// Copy materialises a brand-new object, so subscribers see
+		// the same `paladin.object.uploaded` they'd get from a normal
+		// CompleteObject path. The payload's `source` discriminator
+		// lets a consumer that cares about origin route copies vs
+		// direct uploads.
+		h.dispatchEvent(ctx, tenantID, "paladin.object.uploaded",
+			objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
+			map[string]any{
+				"tenant_id":         tenantID.String(),
+				"object_key":        fresh.ObjectKey,
+				"key":               fresh.Key,
+				"object_id":         fresh.ObjectID.String(),
+				"size_bytes":        fresh.SizeBytes,
+				"etag":              fresh.ETag,
+				"content_type":      fresh.ContentType,
+				"source":            "copy",
+				"source_object_key": in.SourceObjectKey,
+				"source_object_id":  in.SourceObjectID,
+			})
 	}
 	return &fresh, nil
 }

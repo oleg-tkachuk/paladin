@@ -9,23 +9,76 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer mirrors the seam used by tenanth / bucketh /
+// objectkeyh — narrow interface, *worker.Dispatcher implements it.
+type EventProducer interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
 
 type Handler struct {
 	repo   admindomain.QuotaRepository
 	policy cedar.Authorizer
+
+	events EventProducer
+	log    *zap.Logger
 }
 
 func NewHandler(r admindomain.QuotaRepository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("quotah: policy authorizer is required")
 	}
-	return &Handler{repo: r, policy: policy}
+	return &Handler{repo: r, policy: policy, log: zap.NewNop()}
+}
+
+// SetEventProducer / SetLogger — same opt-in contract as the rest
+// of the producer-wired handlers.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
+	if h.events == nil || tenantID == uuid.Nil {
+		// quota.ResetUsage on a quotaID we haven't loaded yields tenantID=Nil;
+		// we'd have no fan-out target. Skip rather than emit a malformed
+		// event with empty tenant_id.
+		return
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	if err != nil {
+		h.log.Warn("quota event fan-out failed",
+			zap.String("event_type", eventType),
+			zap.String("tenant_id", tenantID.String()),
+			zap.Error(err),
+		)
+		return
+	}
+	h.log.Debug("quota event queued",
+		zap.String("event_type", eventType),
+		zap.Int("subscriptions_matched", queued),
+	)
 }
 
 // authorize gates a quota RPC against Cedar. The Resource carries the
@@ -123,6 +176,16 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
+		h.dispatchEvent(ctx, got.TenantID, "paladin.quota.set",
+			fmt.Sprintf("tenants/%s/quota", got.TenantID),
+			map[string]any{
+				"tenant_id":           got.TenantID.String(),
+				"scope":               "tenant",
+				"max_total_bytes":     got.MaxTotalBytes,
+				"max_object_count":    got.MaxObjectCount,
+				"max_bytes_per_day":   got.MaxBytesPerDay,
+				"max_objects_per_day": got.MaxObjectsPerDay,
+			})
 		return &got, nil
 	}
 	if err := h.repo.UpsertBucket(ctx, q); err != nil {
@@ -132,6 +195,20 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Bucket-scoped quotas inherit the bucket's owner tenant_id for
+	// the fan-out target. The repo stamps it onto the loaded row.
+	h.dispatchEvent(ctx, got.TenantID, "paladin.quota.set",
+		fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.TenantID, got.BackendID, got.BucketName),
+		map[string]any{
+			"tenant_id":           got.TenantID.String(),
+			"scope":               "bucket",
+			"backend_id":          got.BackendID,
+			"bucket_name":         got.BucketName,
+			"max_total_bytes":     got.MaxTotalBytes,
+			"max_object_count":    got.MaxObjectCount,
+			"max_bytes_per_day":   got.MaxBytesPerDay,
+			"max_objects_per_day": got.MaxObjectsPerDay,
+		})
 	return &got, nil
 }
 
