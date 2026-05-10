@@ -35,9 +35,9 @@ import { useAuth } from "@/context/AuthContext";
  *               when backendId changes — a bucket only makes sense in
  *               the context of one backend)
  *   objectKey → which ObjectKey namespace the user is browsing.
- *               Single source of truth so /objects, sidebar counts,
- *               CommandPalette searches, and ObjectInspector always
- *               agree.
+ *               Single source of truth so the OK Objects/Trash tabs,
+ *               sidebar counts, CommandPalette searches, and
+ *               ObjectInspector always agree.
  *
  * UI bus:
  *   isPickerOpen / openScopePicker / closeScopePicker — lets

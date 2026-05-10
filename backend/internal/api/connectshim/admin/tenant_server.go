@@ -185,8 +185,15 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 		return nil
 	}
 	out := &pb.Tenant{
-		Name:                 fmt.Sprintf("tenants/%s", t.TenantID),
-		TenantId:             t.TenantID.String(),
+		Name:     fmt.Sprintf("tenants/%s", t.TenantID),
+		TenantId: t.TenantID.String(),
+		// Domain Tenant.Slug is populated by Repository reads
+		// (see migrations/009_tenant_slug.sql + handler.CreateTenant
+		// fallback). Front-end uses it to render slug-first URLs and
+		// canonicalise UUID URLs to it; empty slug is impossible
+		// after migration 009 backfilled every row, but we surface
+		// whatever's there rather than synthesise.
+		Slug:                 t.Slug,
 		DisplayName:          t.DisplayName,
 		InheritedCedarPolicy: t.InheritedCedarPolicy,
 		ResourceVersion:      resourceVersion(t.ResourceVersion),

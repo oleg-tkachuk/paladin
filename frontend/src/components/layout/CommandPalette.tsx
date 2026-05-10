@@ -46,12 +46,11 @@ export function CommandPalette() {
   const { tenant: scopedTenant, objectKey: scopedObjectKey } = useScope();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Resolve the URL slug for the active scoped tenant. Tenant proto
-  // doesn't expose a slug field today (BACKLOG), so fall back to
-  // tenantId — that still routes correctly because TenantLayout
-  // accepts both forms and replaces the address bar with the
-  // canonical slug once it resolves.
-  const scopedTenantSlug = scopedTenant?.tenantId ?? null;
+  // Resolve the URL handle for the active scoped tenant. Prefer
+  // slug; fall back to UUID for backwards compat with deploys that
+  // pre-date the proto-slug field. TenantLayout's resolver still
+  // canonicalises UUID URLs to slug on landing if both present.
+  const scopedTenantSlug = scopedTenant?.slug || scopedTenant?.tenantId || null;
 
   const tenantScopedNavs: SearchResult[] = useMemo(() => {
     if (!scopedTenantSlug) return [];
@@ -253,15 +252,21 @@ export function CommandPalette() {
         });
 
         const tenantResults: SearchResult[] = tenantResponse.tenants.map(
-          (t) => ({
-            id: `tenant-${t.tenantId}`,
-            type: "nav",
-            title: t.displayName || t.tenantId,
-            subtitle: `Open tenant — id ${t.tenantId}`,
-            icon: BuildingOfficeIcon,
-            onSelect: () =>
-              router.push(`/tenants/${encodeURIComponent(t.tenantId)}`),
-          }),
+          (t) => {
+            // Prefer slug for the URL; fall back to UUID only if the
+            // backend hasn't populated slug yet (shouldn't happen
+            // post migration-009 but guards against partial deploys).
+            const handle = t.slug || t.tenantId;
+            return {
+              id: `tenant-${t.tenantId}`,
+              type: "nav",
+              title: t.displayName || handle,
+              subtitle: `Open tenant — ${t.slug ? `slug ${t.slug}` : `id ${t.tenantId}`}`,
+              icon: BuildingOfficeIcon,
+              onSelect: () =>
+                router.push(`/tenants/${encodeURIComponent(handle)}`),
+            };
+          },
         );
 
         // Object search left out — ListObjects requires backend +

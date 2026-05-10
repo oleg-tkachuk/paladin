@@ -82,12 +82,12 @@ export function useTenantResolve(id: string): {
         const tenantId = name.startsWith("tenants/")
           ? name.slice("tenants/".length)
           : (res.tenantId ?? id);
-        // Slug isn't on the v1 Tenant proto today, so use the
-        // displayName-derived slug or the UUID itself as a stable
-        // string. Operators can still hit /tenants/<uuid>/... and
-        // bookmarks remain valid; once Tenant proto exposes slug
-        // (BACKLOG), this resolver canonicalises automatically.
-        const slug = (res as { slug?: string }).slug ?? tenantId;
+        // Tenant proto carries `slug` (UNIQUE kebab-case handle,
+        // populated by the server from `tenants.slug`). Empty
+        // shouldn't happen after migration-009 backfilled every
+        // row, but fall back to the UUID so the breadcrumb still
+        // renders rather than going blank if it does.
+        const slug = res.slug || tenantId;
         const tenant: ResolvedTenant = {
           tenantId,
           slug,

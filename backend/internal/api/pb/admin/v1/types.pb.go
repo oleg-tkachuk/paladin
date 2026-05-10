@@ -1205,8 +1205,14 @@ type Tenant struct {
 	ResourceVersion      string                 `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt            *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Human-readable kebab-case handle (e.g. "platform", "acme-prod").
+	// Stable across the tenant's lifetime unless rotated via
+	// RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
+	// by every read RPC. Front-end uses this to render slug-first URLs
+	// (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
+	Slug          string `protobuf:"bytes,9,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Tenant) Reset() {
@@ -1293,6 +1299,13 @@ func (x *Tenant) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Tenant) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
 }
 
 type ObjectKey struct {
@@ -2334,7 +2347,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x11BucketReplication\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
 	"\x12destination_bucket\x18\x02 \x01(\tR\x11destinationBucket\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xa8\x03\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xbc\x03\n" +
 	"\x06Tenant\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12!\n" +
@@ -2345,7 +2358,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a9\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x12\n" +
+	"\x04slug\x18\t \x01(\tR\x04slug\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x03\n" +

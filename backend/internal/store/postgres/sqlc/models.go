@@ -217,6 +217,34 @@ type CapabilityUsage struct {
 	UnitCode string `json:"unit_code"`
 }
 
+type Charge struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
+	Amount       pgtype.Numeric     `json:"amount"`
+	UnitCode     string             `json:"unit_code"`
+	Op           string             `json:"op"`
+	ActorSubject string             `json:"actor_subject"`
+}
+
+type EventDelivery struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	EventType      string             `json:"event_type"`
+	EventAt        pgtype.Timestamptz `json:"event_at"`
+	EventPayload   []byte             `json:"event_payload"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	LastError      string             `json:"last_error"`
+	LastStatusCode int32              `json:"last_status_code"`
+	LastAttemptAt  pgtype.Timestamptz `json:"last_attempt_at"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type EventSubscription struct {
 	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`

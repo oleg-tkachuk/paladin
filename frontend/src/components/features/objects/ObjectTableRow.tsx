@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import {
   DocumentIcon,
@@ -101,6 +102,15 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
   onMove,
   onGenerateDownloadUrl,
 }: ObjectTableRowProps) {
+  // Detail link is `<current-pathname>/<key>` — the row is rendered
+  // inside the OK Objects tab (/tenants/<id>/object-keys/<ok>/
+  // objects) since Phase 5, so detail = same path + storage key.
+  // Falls back to the storage key alone for any future host that
+  // mounts the row outside the Objects tab; that won't 404 silently
+  // — the parent route will reject the path unambiguously.
+  const pathname = usePathname() || "";
+  const detailHref = `${pathname}/${encodeURIComponent(obj.key)}`;
+
   return (
     <tr
       key={obj.objectId}
@@ -320,7 +330,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               <Dropdown.Menu className="py-1">
                 <Dropdown.Item className="p-0">
                   <Link
-                    href={`/objects/${encodeURIComponent(obj.key)}?objectKey=${encodeURIComponent(obj.objectKey)}`}
+                    href={detailHref}
                     className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
                   >
                     <EyeIcon className="w-4 h-4 text-primary" />
