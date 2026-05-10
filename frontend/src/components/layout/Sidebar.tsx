@@ -8,7 +8,6 @@ import {
   CubeIcon,
   CloudArrowUpIcon,
   UsersIcon,
-  ArchiveBoxIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
   KeyIcon,
@@ -69,37 +68,25 @@ const navigationGroups: Array<{
     ],
   },
   {
-    // Management — anchored on Tenants. Each tenant detail
-    // (/tenants/<id>) carries its own tabs for Buckets, Object Keys,
-    // Policies, Quotas, Capabilities, Budget, Audit, Events. The
-    // flat /buckets and /object-keys entries below are CROSS-TENANT
-    // indexes (platform-admin oversight), not the primary navigation;
-    // their rows route to the canonical tenant-scoped URLs.
+    // Management — collapsed to a single "Resources" entry per Phase 4
+    // of the URL refactor. /tenants is the gateway; drilldown into
+    // Buckets / Object Keys / Quotas / Capabilities / Budget / Audit /
+    // Events lives under /tenants/<id>/<tab>. The cross-tenant flat
+    // indexes (/buckets, /object-keys) still exist for platform-admin
+    // oversight — reachable via Cmd+K — but they're not in the sidebar
+    // anymore so the primary path is unambiguous.
     //
-    // Object Tags + Trash dropped from the sidebar — they're filters
-    // over Objects (`?state=trashed`, `?tag=foo`) once the
-    // /tenants/<id>/object-keys/<ok>/objects route lands, not
-    // first-class entities.
+    // Policies stays as its own row: it's the system-wide Cedar editor,
+    // not a per-tenant view (the per-tenant graph lives under the
+    // tenant's Policies tab).
     title: "Management",
     accent: "text-chart-2/85",
     items: [
       {
-        name: "Tenants",
+        name: "Resources",
         path: "/tenants",
         icon: UsersIcon,
         countKey: "tenants" as keyof SidebarCounts,
-      },
-      {
-        name: "S3 Buckets",
-        path: "/buckets",
-        icon: ArchiveBoxIcon,
-        countKey: "buckets" as keyof SidebarCounts,
-      },
-      {
-        name: "Object Keys",
-        path: "/object-keys",
-        icon: ArchiveBoxIcon,
-        countKey: "objectKeys" as keyof SidebarCounts,
       },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
     ],
