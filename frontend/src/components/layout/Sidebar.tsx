@@ -9,8 +9,6 @@ import {
   CloudArrowUpIcon,
   UsersIcon,
   ArchiveBoxIcon,
-  TagIcon,
-  TrashIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
   KeyIcon,
@@ -71,6 +69,17 @@ const navigationGroups: Array<{
     ],
   },
   {
+    // Management — anchored on Tenants. Each tenant detail
+    // (/tenants/<id>) carries its own tabs for Buckets, Object Keys,
+    // Policies, Quotas, Capabilities, Budget, Audit, Events. The
+    // flat /buckets and /object-keys entries below are CROSS-TENANT
+    // indexes (platform-admin oversight), not the primary navigation;
+    // their rows route to the canonical tenant-scoped URLs.
+    //
+    // Object Tags + Trash dropped from the sidebar — they're filters
+    // over Objects (`?state=trashed`, `?tag=foo`) once the
+    // /tenants/<id>/object-keys/<ok>/objects route lands, not
+    // first-class entities.
     title: "Management",
     accent: "text-chart-2/85",
     items: [
@@ -91,18 +100,6 @@ const navigationGroups: Array<{
         path: "/object-keys",
         icon: ArchiveBoxIcon,
         countKey: "objectKeys" as keyof SidebarCounts,
-      },
-      {
-        name: "Object Tags",
-        path: "/object-tags",
-        icon: TagIcon,
-        countKey: "objectTags" as keyof SidebarCounts,
-      },
-      {
-        name: "Trash",
-        path: "/trash",
-        icon: TrashIcon,
-        countKey: "trash" as keyof SidebarCounts,
       },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
     ],
