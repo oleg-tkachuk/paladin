@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -71,6 +72,20 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 		if backend, err := backendIDFromName(m.GetParent()); err == nil {
 			args.BackendID = backend
 		}
+	}
+	// owner_tenant_id accepts UUID or slug (consistent with the
+	// `tenants/{tenant_id_or_slug}` resource-name convention used by
+	// every other RPC). Slug → UUID resolution would need a tenant
+	// repo handle in this shim; for now we only accept UUID form
+	// here and rely on the frontend (which has the tenant context)
+	// to pass UUID. Empty = no filter (platform-admin path).
+	if owner := m.GetOwnerTenantId(); owner != "" {
+		id, err := uuid.Parse(owner)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("owner_tenant_id must be a UUID: %w", err))
+		}
+		args.OwnerTenantID = &id
 	}
 	if tok := m.GetPage().GetPageToken(); tok != "" {
 		args.AfterBackend, args.AfterName = splitBucketCursor(tok)

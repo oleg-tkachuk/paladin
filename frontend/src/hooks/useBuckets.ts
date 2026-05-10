@@ -34,14 +34,24 @@ export function useBuckets() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchBuckets = useCallback(
-    async (backendId?: string, filter: string = "", pageToken: string = "") => {
+    async (
+      backendId?: string,
+      filter: string = "",
+      pageToken: string = "",
+      ownerTenantId?: string,
+    ) => {
       setLoading(true);
       setError(null);
       try {
+        // ownerTenantId pushes the tenant-narrow filter to the
+        // server (uses the partial index on buckets.owner_tenant_id).
+        // Empty/undefined preserves the cross-tenant listing for
+        // platform-admin views.
         const res = await bucketClient.listBuckets({
           parent: backendId ? backendParent(backendId) : "",
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
           filter,
+          ownerTenantId: ownerTenantId ?? "",
         });
         setBuckets(res.buckets);
         return {

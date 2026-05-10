@@ -168,7 +168,11 @@ type Querier interface {
 	// handler, not in this WHERE clause.
 	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
-	ListBucketsV2(ctx context.Context, backendID *string, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
+	// owner_tenant_id is an optional filter (nullable arg → skipped).
+	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+	// (migration 006) makes the per-tenant filter cheap; the WHERE clause
+	// below is plain equality so the planner uses the partial index.
+	ListBucketsV2(ctx context.Context, backendID *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.

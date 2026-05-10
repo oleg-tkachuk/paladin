@@ -53,6 +53,10 @@ SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'failed' ELSE
 WHERE backend_id = $1 AND bucket_name = $2;
 
 -- name: ListBucketsV2 :many
+-- owner_tenant_id is an optional filter (nullable arg → skipped).
+-- Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+-- (migration 006) makes the per-tenant filter cheap; the WHERE clause
+-- below is plain equality so the planner uses the partial index.
 SELECT backend_id, bucket_name, display_name, region, labels,
        owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
        lifecycle_rules,
@@ -63,6 +67,7 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE (sqlc.narg('backend_id')::text IS NULL OR backend_id = sqlc.narg('backend_id')::text)
+  AND (sqlc.narg('owner_tenant_id')::uuid IS NULL OR owner_tenant_id = sqlc.narg('owner_tenant_id')::uuid)
   AND (backend_id, bucket_name) > (sqlc.arg('after_backend_id')::text, sqlc.arg('after_name')::text)
 ORDER BY backend_id, bucket_name
 LIMIT sqlc.arg('page_size');

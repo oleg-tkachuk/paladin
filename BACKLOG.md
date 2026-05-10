@@ -835,29 +835,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
-### Tenant proto missing `slug` field
-
-- **Status:** Aspirational
-- **Reason:** Phase 0 of the URL refactor introduced slug-first
-  tenant URLs (`/tenants/<slug>/...`), but the `Tenant` proto only
-  carries `tenant_id`. The frontend resolver
-  ([frontend/src/lib/resources/tenant-resolve.ts](frontend/src/lib/resources/tenant-resolve.ts))
-  falls back to UUID as the "slug" — so the slug-form URL is
-  effectively the UUID-form URL, and the auto-canonicalise step is a
-  no-op. Database carries a `slug` column already (used by the IAM
-  bootstrap for `platform`); the gap is just the proto + handler.
-- **Definition of Done:**
-  - Add `string slug = N;` to `paladin.admin.v1.Tenant` and to the
-    response shape of `TenantService.GetTenant` /  `ListTenants`.
-  - Backend reads the column and populates the field (already
-    accepted on `tenants/{tenant_id_or_slug}` parsing path).
-  - Frontend resolver uses `res.slug` instead of falling back to
-    UUID; URL canonicalisation actually swaps `<uuid>` →
-    `<slug>` on landing.
-  - Cmd+K palette tenant-jumps use slug-form URLs (currently they
-    `encodeURIComponent(tenant.tenantId)`).
-- **Blockers:** none — proto + handler change.
-
 ### Slug-rename history redirect
 
 - **Status:** Deferred
@@ -875,48 +852,23 @@ the same commit. Treat this file like a runtime invariant.
   - Configurable grace window (default 30d).
 - **Blockers:** none — UI-only with audit-log read.
 
-### Server-side bucket index by `owner_tenant_id`
+### Remaining bucket sub-tabs (Replication / Versioning)
 
 - **Status:** Deferred
-- **Reason:** `BucketService.ListBuckets` takes a backend `parent`
-  but no tenant filter. Both the tenant-scoped Buckets tab
-  ([frontend/src/app/tenants/\[id\]/buckets/page.tsx](frontend/src/app/tenants/[id]/buckets/page.tsx))
-  and the Tenant Overview's bucket count fetch ALL buckets and
-  filter client-side. Fine at N(buckets) ≈ 10²-10³; grows linearly
-  with cluster size and burns bandwidth on every Overview page
-  load.
+- **Reason:** Phase 5+ shipped real pages for the tenant-level
+  tab stubs (Quotas, Capabilities, M2M Tokens, Events
+  Subscriptions, Budget) and the bucket sub-tabs Policy + Object
+  Keys. Versioning and Replication remain stubs because they
+  need backend support that isn't there yet:
 - **Definition of Done:**
-  - `ListBucketsRequest.filter` accepts `owner_tenant_id == "X"` as
-    a CEL clause (or add a dedicated `owner_tenant_id` field).
-  - DB index on `buckets(owner_tenant_id)`.
-  - Frontend tenant Buckets tab + Overview count switch to the
-    server-side filter.
-- **Blockers:** none.
-
-### Remaining bucket sub-tabs (Policy / Replication / Versioning / Object Keys)
-
-- **Status:** Deferred
-- **Reason:** The tenant-level tab stubs (Quotas, Capabilities, M2M
-  Tokens, Events Subscriptions, Budget) shipped as real pages and
-  the matching cross-tenant routes (`/capabilities`, `/m2m-tokens`,
-  `/events`, `/tenant-budgets`) were hard-deleted per Q4. What's
-  left under the bucket detail subtree: Policy (Cedar overlay editor),
-  Replication (BucketReplication proto + replicator worker),
-  Versioning (S3-side toggle), and Object Keys (per-bucket OK list).
-- **Definition of Done:**
-  - Per-bucket Policy tab: small Cedar editor that wraps
-    `Bucket.cedar_policy`, validate + save flow like the
-    ObjectKey Policy tab.
   - Replication tab: blocked on `BucketReplication` proto +
-    replicator worker (separate Features entry — see
+    replicator worker (see Features →
     "Replication: real `StorageReplicator` implementation").
   - Versioning tab: depends on the Bucket proto exposing
-    versioning state (today the field exists but the toggle
-    handler and tests are stubs).
-  - Object Keys tab: filters the existing tenant Object Keys
-    table by `bucket = <this>`; no new RPC required.
+    versioning state with a real toggle handler (today the
+    field exists but the toggle handler and tests are stubs).
 - **Blockers:** Replication proto + worker for the Replication
-  tab; the other three can land anytime.
+  tab; Versioning needs the toggle handler.
 
 ### Object Tags as a filter on the Objects tab
 

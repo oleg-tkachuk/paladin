@@ -107,20 +107,17 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Buckets list takes a backend `parent` — to count tenant
-        // ownership we list everything (empty parent = all backends)
-        // and filter client-side. Same approach the tenant Buckets
-        // tab uses; tracked in BACKLOG to push to a server-side
-        // owner_tenant_id index.
+        // Server-side narrow via owner_tenant_id (backed by the
+        // partial index from migration 006). Skips the cross-backend
+        // scan + client-side filter the previous version did.
         const res = await bucketClient.listBuckets({
           parent: "",
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
           filter: "",
+          ownerTenantId: tenant.tenantId,
         });
         if (cancelled) return;
-        setBucketCount(
-          res.buckets.filter((b) => b.ownerTenantId === tenant.tenantId).length,
-        );
+        setBucketCount(res.buckets.length);
       } catch {
         if (!cancelled) setBucketCount(0);
       }
