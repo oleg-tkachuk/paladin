@@ -563,6 +563,63 @@ the same commit. Treat this file like a runtime invariant.
     mid-iteration cleanly (partial progress recorded).
 - **Blockers:** none. Per-executor work; can land independently.
 
+### Event dispatcher: producer wiring — Dispatch is unreachable from API handlers
+
+- **Status:** Deferred
+- **Reason:** Commit c713f77 ("durable webhook fan-out via
+  event_deliveries outbox") wired the consumer half — dispatcher
+  pod polls `event_deliveries`, delivers, retries, marks status
+  — but no admin or data RPC handler today calls
+  `worker.Dispatcher.Dispatch(ctx, tenantID, evt)`. A grep for
+  call sites returns only the function definition itself; the
+  outbox is empty in production traffic. `TestSubscription`
+  works because it bypasses the outbox and calls
+  `Dispatcher.DeliverOne` directly — that's why the Test button
+  on the events page surfaces a real NATS publish, but real
+  business events (object uploaded, tenant created, capability
+  charged…) silently no-op as far as subscribers are concerned.
+- **Symptom that surfaced this:** smoke-testing the round trip
+  by performing a real S3 PUT and watching `>` on NATS. SF
+  publisher fired two `seaweedfs.filer` messages (directory +
+  file create) — that path works. PALADIN-side `paladin.events`
+  remained quiet because no producer ever inserts a row into
+  `event_deliveries`.
+- **Definition of Done:**
+  - Producer call sites land in the handlers that should fan
+    out a logical event:
+    - `admin/v1/tenanth.Create / Update / Delete` →
+      `paladin.tenant.created` / `.updated` / `.deleted`
+    - `admin/v1/buckh / objectkeyh / quotah / policyh` —
+      analogous create/update/delete events
+    - `data/v1/object.{Upload,Complete,Delete,Tag}` →
+      `paladin.object.uploaded` / `.deleted` / `.tagged`
+    - `capability.charge` → `paladin.capability.charged` (lower
+      priority — high cardinality; behind a config flag)
+  - `Dispatch` returns the count of rows written — surface in
+    handler-level structured log so operators can verify
+    fan-out without tailing the dispatcher.
+  - Producer-side INSERT runs as `paladin_app` and must clear the
+    `event_deliveries` WITH CHECK clause via the tenant GUC
+    set by `EnableRLS`. Already true today, but worth a
+    regression test once a real producer lands.
+  - Integration test that exercises a single handler end-to-
+    end: handler call → row in `event_deliveries` → mock NATS
+    server receives the CloudEvents envelope on the configured
+    subject. Mirrors `TestDispatcher_OutboxToNATSDelivery_HappyPath`
+    but starts from the handler, not from a hand-seeded outbox row.
+  - Decide event-naming convention up-front (BACKLOG entry
+    "Event dispatcher: CloudEvents 1.0 envelope" already
+    proposes the `type` field shape — pick that and stick to
+    it across the producer call sites).
+- **Trigger to do:** any of —
+    - First customer subscription that needs to know about a
+      real PALADIN event class (today they'd subscribe and never
+      receive anything).
+    - First feature that depends on the bus internally
+      (e.g. cross-pod cache invalidation, audit replication).
+    - Compliance / audit need: mirroring `audit_log` rows
+      onto the bus for downstream SIEM.
+
 ### Event dispatcher: NATS sink (recommended first non-HTTP sink)
 
 - **Status:** Aspirational
