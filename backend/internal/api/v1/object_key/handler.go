@@ -141,8 +141,13 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 	)
 }
 
+// objectKeyResourceName — kept as the C-shape emitter for callers
+// that don't have (backend, bucket) in scope. Phase 1 prefers
+// CanonicalName when the full tuple is available (event payloads
+// after Create / Update / Delete read the row's backend/bucket and
+// can canonicalize). Plain Delete with no row read still uses C.
 func objectKeyResourceName(tenantID uuid.UUID, key string) string {
-	return fmt.Sprintf("tenants/%s/objectKeys/%s", tenantID, key)
+	return TenantPathName(tenantID, key)
 }
 
 func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
@@ -164,8 +169,10 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create objectKey: %w", err))
 	}
+	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
+	apiutil.StashResource(ctx, canonical) // writes into the slot the audit mw installed
 	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.created",
-		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		canonical,
 		map[string]any{
 			"tenant_id":    b.TenantID.String(),
 			"object_key":   b.ObjectKey,
@@ -204,11 +211,15 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 	if err != nil {
 		return nil, mapVersionErr(err)
 	}
+	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
+	apiutil.StashResource(ctx, canonical)
 	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.updated",
-		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		canonical,
 		map[string]any{
 			"tenant_id":        b.TenantID.String(),
 			"object_key":       b.ObjectKey,
+			"backend_id":       b.BackendID,
+			"bucket_name":      b.BucketName,
 			"resource_version": b.ResourceVersion,
 		})
 	return &b, nil
@@ -222,11 +233,21 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return err
 	}
+	// Read the row before delete so the event payload can carry the
+	// canonical resource name (which needs backend + bucket). Best-
+	// effort: if Get fails we fall back to the C-shape resource name —
+	// the delete itself still runs through the OCC guard below.
+	pre, getErr := h.repo.Get(ctx, tenantID, objectKey)
 	if err := h.repo.Delete(ctx, tenantID, objectKey, expectedVersion); err != nil {
 		return mapVersionErr(err)
 	}
+	resourceName := objectKeyResourceName(tenantID, objectKey)
+	if getErr == nil {
+		resourceName = CanonicalName(pre.BackendID, pre.BucketName, tenantID, objectKey)
+	}
+	apiutil.StashResource(ctx, resourceName)
 	h.dispatchEvent(ctx, tenantID, "paladin.object_key.deleted",
-		objectKeyResourceName(tenantID, objectKey),
+		resourceName,
 		map[string]any{
 			"tenant_id":        tenantID.String(),
 			"object_key":       objectKey,

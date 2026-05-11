@@ -913,6 +913,33 @@ the same commit. Treat this file like a runtime invariant.
     paths collide (e.g. `invoices` + `invoices/2026`).
 - **Blockers:** none — pure backend refactor, no proto change.
 
+### Cedar policy templates: canonical resource literals
+
+- **Status:** Aspirational
+- **Reason:** Phase 1 of `backend/docs/canonical-resource-names.md`
+  switches audit_log and event payload `resource_name` to the A-shape
+  `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}`.
+  The default policy template (`internal/api/v1/tenant/defaultpolicy.go`)
+  uses unconstrained `resource` so it's untouched. Operator-authored
+  policies that reference resources by C-shape EUID
+  (`ObjectKey::"tenants/{tid}/objectKeys/{ok}"`) keep working — the
+  Cedar evaluator's `cedar.Resource` builder still emits the C-shape
+  EUID at evaluation time. Migrating those EUIDs to canonical is a
+  separate decision that touches operator-written policies in
+  `tenants.inherited_cedar_policy` + `object_keys.cedar_policy`.
+- **Definition of Done:**
+  - `cedar.Resource` builds canonical EUID for ObjectKey-rooted
+    resources.
+  - Rewrite pass over `tenants.inherited_cedar_policy` +
+    `object_keys.cedar_policy` (similar shape to the slug-rename
+    rewrite in `adapters/tenant.go`) translates existing C-shape
+    EUIDs to canonical.
+  - Cedar authoring docs (`backend/docs/cedar-authoring.md`)
+    updated to show the canonical EUID form.
+- **Blockers:** none technical; needs a deploy window so the
+  policy-rewrite pass can run before clients start receiving
+  canonical-EUID authz decisions.
+
 ### `pg_cron` integration as alternative to in-process reapers
 
 - **Status:** Deferred
