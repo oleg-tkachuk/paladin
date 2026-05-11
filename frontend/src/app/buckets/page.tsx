@@ -381,78 +381,100 @@ export default function BucketsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((b) => (
-                <TableRow
-                  key={`${b.backendId}/${b.bucketName}`}
-                  className="group"
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <ServerStackIcon className="size-4 text-chart-5" />
-                      <Badge variant="info" className={T.code}>
-                        {b.backendId}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                        <ArchiveBoxIcon className="size-4" />
-                      </div>
-                      <span className="font-mono text-xs">{b.bucketName}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell font-medium">
-                    {b.displayName || (
-                      <span className="text-muted-foreground italic">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-xs font-mono">
-                    {b.region || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <ProvisionStateBadge state={b.provisionState} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 opacity-60 group-hover:opacity-100"
-                          aria-label={`Actions for ${b.bucketName}`}
-                        >
-                          <EllipsisHorizontalIcon className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {/* Detail subtree lives under the owner tenant
+              filtered.map((b) => {
+                // Drill into the storage-first browser: backend → bucket →
+                // tenants → folders → files. The tenant-scoped path
+                // (/tenants/.../buckets/.../object-keys) is for the
+                // operator who already knows which tenant they care about;
+                // /storage-backends/.../buckets/... is the "show me
+                // what's physically here" view that scales naturally to
+                // shared buckets with multiple tenant prefixes.
+                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketName)}`;
+                return (
+                  <TableRow
+                    key={`${b.backendId}/${b.bucketName}`}
+                    className="group"
+                  >
+                    <TableCell>
+                      <Link
+                        href={`/storage-backends/${encodeURIComponent(b.backendId)}`}
+                        className="flex items-center gap-2 hover:text-primary"
+                      >
+                        <ServerStackIcon className="size-4 text-chart-5" />
+                        <Badge variant="info" className={T.code}>
+                          {b.backendId}
+                        </Badge>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={detailHref}
+                        className="flex items-center gap-3 hover:text-primary"
+                      >
+                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+                          <ArchiveBoxIcon className="size-4" />
+                        </div>
+                        <span className="font-mono text-xs group-hover:underline">
+                          {b.bucketName}
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell font-medium">
+                      <Link href={detailHref} className="hover:text-primary">
+                        {b.displayName || (
+                          <span className="text-muted-foreground italic">
+                            —
+                          </span>
+                        )}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs font-mono">
+                      {b.region || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <ProvisionStateBadge state={b.provisionState} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 opacity-60 group-hover:opacity-100"
+                            aria-label={`Actions for ${b.bucketName}`}
+                          >
+                            <EllipsisHorizontalIcon className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {/* Detail subtree lives under the owner tenant
                             (Phase 2 of the URL refactor). Shared
                             buckets — no owner_tenant_id — don't have
                             one, so we hide the link rather than
                             invent a placeholder route that 404s. */}
-                        {b.ownerTenantId && (
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketName)}/lifecycle`}
-                            >
-                              <ClockIcon className="size-4" />
-                              Lifecycle rules
-                            </Link>
+                          {b.ownerTenantId && (
+                            <DropdownMenuItem asChild>
+                              <Link
+                                href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketName)}/lifecycle`}
+                              >
+                                <ClockIcon className="size-4" />
+                                Lifecycle rules
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setDeleteTarget(b)}
+                          >
+                            <TrashIcon className="size-4" />
+                            Delete bucket
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setDeleteTarget(b)}
-                        >
-                          <TrashIcon className="size-4" />
-                          Delete bucket
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

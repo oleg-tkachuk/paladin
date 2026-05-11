@@ -12,6 +12,7 @@
 // 80% case for this page.
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
@@ -253,43 +254,53 @@ export default function StorageBackendsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((b) => (
-                <TableRow key={b.backendId} className="group">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                        <ServerStackIcon className="size-4" />
-                      </div>
-                      <span className="font-medium">{b.backendId}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {b.displayName || (
-                      <span className="text-muted-foreground italic">
-                        (unnamed)
+              filtered.map((b) => {
+                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}`;
+                return (
+                  <TableRow key={b.backendId} className="group">
+                    <TableCell>
+                      <Link
+                        href={detailHref}
+                        className="flex items-center gap-3 hover:text-primary"
+                      >
+                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+                          <ServerStackIcon className="size-4" />
+                        </div>
+                        <span className="font-medium group-hover:underline">
+                          {b.backendId}
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link href={detailHref} className="hover:text-primary">
+                        {b.displayName || (
+                          <span className="text-muted-foreground italic">
+                            (unnamed)
+                          </span>
+                        )}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Badge variant="outline" className={T.labelTight}>
+                        {KIND_LABELS[b.kind] || "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {b.region || "—"}
                       </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <Badge variant="outline" className={T.labelTight}>
-                      {KIND_LABELS[b.kind] || "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {b.region || "—"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <span
-                      className="font-mono text-[11px] text-muted-foreground truncate"
-                      title={b.endpoint}
-                    >
-                      {b.endpoint || "—"}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <span
+                        className="font-mono text-[11px] text-muted-foreground truncate"
+                        title={b.endpoint}
+                      >
+                        {b.endpoint || "—"}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
