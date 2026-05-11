@@ -40,7 +40,8 @@ backend/tests/api/mutations/reports/
 backend/tests/api/security/reports/
 
 # Claude worktrees
-.claude/worktrees/*
+.claude/
+.claude/*
 
 # seed-fixture binary
 backend/seed-fixture
