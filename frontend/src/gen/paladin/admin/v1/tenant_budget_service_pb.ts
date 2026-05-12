@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_budget_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihvY3AvYWRtaW4vdjEvdGVuYW50X2J1ZGdldF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEikQIKDFRlbmFudEJ1ZGdldBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEikKEW1heF9idWRnZXRfYW1vdW50GAIgASgBQg66SAsSCSkAAAAAAAAAABIUCgxzcGVudF9hbW91bnQYAyABKAESMAoMcGVyaW9kX3N0YXJ0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgl1bml0X2NvZGUYByABKAkiPAodVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABASJMCh5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USKgoGYnVkZ2V0GAEgASgLMhoub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldCK/AQodVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIpChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIOukgLEgkpAAAAAAAAAAASEwoLcmVzZXRfc3BlbmQYAyABKAgSLgoKcGVyaW9kX2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJdW5pdF9jb2RlGAUgASgJIkwKHlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZRIqCgZidWRnZXQYASABKAsyGi5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0MtkBChNUZW5hbnRCdWRnZXRTZXJ2aWNlEmAKA0dldBIrLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVxdWVzdBosLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USYAoDU2V0Eisub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0Giwub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    "CihvY3AvYWRtaW4vdjEvdGVuYW50X2J1ZGdldF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEikQIKDFRlbmFudEJ1ZGdldBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEikKEW1heF9idWRnZXRfYW1vdW50GAIgASgBQg66SAsSCSkAAAAAAAAAABIUCgxzcGVudF9hbW91bnQYAyABKAESMAoMcGVyaW9kX3N0YXJ0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgl1bml0X2NvZGUYByABKAkiPAodVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABASJMCh5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USKgoGYnVkZ2V0GAEgASgLMhoub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldCK/AQodVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIpChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIOukgLEgkpAAAAAAAAAAASEwoLcmVzZXRfc3BlbmQYAyABKAgSLgoKcGVyaW9kX2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJdW5pdF9jb2RlGAUgASgJIkwKHlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZRIqCgZidWRnZXQYASABKAsyGi5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0IpEBChNUZW5hbnRCdWRnZXRTdW1tYXJ5EhEKCXRlbmFudF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIqCgZidWRnZXQYBCABKAsyGi5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0EhcKD3V0aWxpc2F0aW9uX3BjdBgFIAEoASKiAQojVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QSLgoNdGhyZXNob2xkX3BjdBgBIAEoAUIXukgUEhIZAAAAAAAAWUApAAAAAAAAAAASFgoOdW5saW1pdGVkX29ubHkYAiABKAgSGAoQZXhjbHVkZV9pbmFjdGl2ZRgDIAEoCBIZCgVsaW1pdBgEIAEoBUIKukgHGgUY9AMoACJcCiRUZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2USNAoJc3VtbWFyaWVzGAEgAygLMiEub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFN1bW1hcnkyzQIKE1RlbmFudEJ1ZGdldFNlcnZpY2USYAoDR2V0Eisub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0Giwub2NwLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZRJgCgNTZXQSKy5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QaLC5vY3AuYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlc3BvbnNlEnIKCVN1bW1hcml6ZRIxLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVxdWVzdBoyLm9jcC5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
     [file_buf_validate_validate, file_google_protobuf_timestamp],
   );
 
@@ -201,6 +201,119 @@ export const TenantBudgetServiceSetResponseSchema: GenMessage<TenantBudgetServic
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 4);
 
 /**
+ * TenantBudgetSummary joins a TenantBudget row with the tenant's
+ * human handle and a derived utilisation percent so the dashboard
+ * can render "acme-prod · 87 % of $1,000" without a second lookup.
+ *
+ * @generated from message paladin.admin.v1.TenantBudgetSummary
+ */
+export type TenantBudgetSummary =
+  Message<"paladin.admin.v1.TenantBudgetSummary"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
+
+    /**
+     * @generated from field: string slug = 2;
+     */
+    slug: string;
+
+    /**
+     * @generated from field: string display_name = 3;
+     */
+    displayName: string;
+
+    /**
+     * @generated from field: paladin.admin.v1.TenantBudget budget = 4;
+     */
+    budget?: TenantBudget | undefined;
+
+    /**
+     * utilisation_pct = spent / max × 100, capped at 100 for display.
+     * 0 when max_budget_amount == 0 (unlimited / metering-only).
+     *
+     * @generated from field: double utilisation_pct = 5;
+     */
+    utilisationPct: number;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantBudgetSummary.
+ * Use `create(TenantBudgetSummarySchema)` to create a new message.
+ */
+export const TenantBudgetSummarySchema: GenMessage<TenantBudgetSummary> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 5);
+
+/**
+ * @generated from message paladin.admin.v1.TenantBudgetServiceSummarizeRequest
+ */
+export type TenantBudgetServiceSummarizeRequest =
+  Message<"paladin.admin.v1.TenantBudgetServiceSummarizeRequest"> & {
+    /**
+     * threshold_pct — include rows whose utilisation_pct >= threshold.
+     * 0 = no threshold (return everything matching the other filters).
+     *
+     * @generated from field: double threshold_pct = 1;
+     */
+    thresholdPct: number;
+
+    /**
+     * unlimited_only — when true, return only rows where
+     * max_budget_amount == 0 (cap-less metering). Mutually exclusive
+     * with a non-zero threshold_pct; the server enforces this.
+     *
+     * @generated from field: bool unlimited_only = 2;
+     */
+    unlimitedOnly: boolean;
+
+    /**
+     * exclude_inactive — when true (default), skip soft-deleted
+     * tenants (deleted_at IS NOT NULL). The dashboard widget passes
+     * true; an admin auditing a recovery scenario sets false.
+     *
+     * @generated from field: bool exclude_inactive = 3;
+     */
+    excludeInactive: boolean;
+
+    /**
+     * limit — cap result count. 0 = server default (50). The widget
+     * typically asks for 10.
+     *
+     * @generated from field: int32 limit = 4;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantBudgetServiceSummarizeRequest.
+ * Use `create(TenantBudgetServiceSummarizeRequestSchema)` to create a new message.
+ */
+export const TenantBudgetServiceSummarizeRequestSchema: GenMessage<TenantBudgetServiceSummarizeRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 6);
+
+/**
+ * @generated from message paladin.admin.v1.TenantBudgetServiceSummarizeResponse
+ */
+export type TenantBudgetServiceSummarizeResponse =
+  Message<"paladin.admin.v1.TenantBudgetServiceSummarizeResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.TenantBudgetSummary summaries = 1;
+     */
+    summaries: TenantBudgetSummary[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantBudgetServiceSummarizeResponse.
+ * Use `create(TenantBudgetServiceSummarizeResponseSchema)` to create a new message.
+ */
+export const TenantBudgetServiceSummarizeResponseSchema: GenMessage<TenantBudgetServiceSummarizeResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 7);
+
+/**
  * TenantBudgetService manages the per-tenant aggregate USD spend cap
  * for the capability subsystem (cfg.Capability.* + migration 025
  * `tenant_budgets`). Distinct from QuotaService — quotas are bytes /
@@ -240,5 +353,21 @@ export const TenantBudgetService: GenService<{
     methodKind: "unary";
     input: typeof TenantBudgetServiceSetRequestSchema;
     output: typeof TenantBudgetServiceSetResponseSchema;
+  };
+  /**
+   * Summarize returns every tenant's budget snapshot joined with
+   * tenant identity (slug, display_name) + a derived utilisation
+   * percent. Drives the cross-tenant dashboard widget that surfaces
+   * tenants approaching caps. Platform-admin only.
+   *
+   * Filters keep the wire payload small on platforms with many
+   * tenants — typical operator query is "show me anyone over 80 %".
+   *
+   * @generated from rpc paladin.admin.v1.TenantBudgetService.Summarize
+   */
+  summarize: {
+    methodKind: "unary";
+    input: typeof TenantBudgetServiceSummarizeRequestSchema;
+    output: typeof TenantBudgetServiceSummarizeResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_budget_service, 0);

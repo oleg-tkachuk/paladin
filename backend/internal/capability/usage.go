@@ -97,6 +97,19 @@ type UsageStore interface {
 	// mid-cycle without affecting accumulated spend.
 	SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error)
 
+	// ListTenantBudgets returns every tenant's budget row joined with
+	// the tenants table so callers can render slug + display_name
+	// without a follow-up read. Filters at the SQL layer:
+	//   - excludeInactive: skip soft-deleted tenants.
+	//   - thresholdPct > 0: include only rows where
+	//     spent / max * 100 >= thresholdPct (and max > 0).
+	//   - unlimitedOnly: include only rows where max == 0.
+	//   - limit: hard cap on result count. ≤ 0 → 50.
+	//
+	// Rows are returned in descending utilisation order so the most
+	// at-risk tenants surface first.
+	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error)
+
 	// Delete drops the row. Called by CapabilityPurger when the parent
 	// capability is reaped.
 	Delete(ctx context.Context, capID uuid.UUID) error
@@ -133,6 +146,28 @@ type SetTenantBudgetArgs struct {
 	// now. false leaves the counter alone — the cap changes mid-
 	// window.
 	ResetSpend bool
+}
+
+// TenantBudgetSummary joins TenantBudget with the tenant's slug +
+// display_name so dashboard widgets don't need a second round-trip.
+// Returned by ListTenantBudgets.
+type TenantBudgetSummary struct {
+	TenantID    uuid.UUID
+	Slug        string
+	DisplayName string
+	Budget      TenantBudget
+	// UtilisationPct = spent / max × 100, clamped to [0, 100]. 0
+	// when MaxBudgetAmount == 0 (unlimited/metering-only).
+	UtilisationPct float64
+}
+
+// ListTenantBudgetsArgs is the input shape for
+// UsageStore.ListTenantBudgets.
+type ListTenantBudgetsArgs struct {
+	ThresholdPct    float64
+	UnlimitedOnly   bool
+	ExcludeInactive bool
+	Limit           int32
 }
 
 // Usage is the snapshot view of a capability's runtime counters.

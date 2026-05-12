@@ -105,6 +105,10 @@ func (s *MeteringStore) SetTenantBudget(ctx context.Context, args SetTenantBudge
 	return s.Inner.SetTenantBudget(ctx, args)
 }
 
+func (s *MeteringStore) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error) {
+	return s.Inner.ListTenantBudgets(ctx, args)
+}
+
 func (s *MeteringStore) Delete(ctx context.Context, capID uuid.UUID) error {
 	return s.Inner.Delete(ctx, capID)
 }

@@ -226,6 +226,19 @@ type Querier interface {
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
 	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
+	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
+	// display_name so the dashboard's BudgetAlerts widget doesn't need a
+	// follow-up read.
+	//
+	// Predicate semantics:
+	//   unlimited_only=true  → return only rows with max_budget_usd = 0
+	//   unlimited_only=false → return rows whose utilisation ≥
+	//                          threshold_pct (threshold_pct = 0 includes
+	//                          everything).
+	//   exclude_inactive=true → join filters tenants.deleted_at IS NULL.
+	//
+	// Ordered by utilisation DESC so at-risk tenants surface first.
+	ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, rowLimit int32) ([]ListTenantBudgetSummariesRow, error)
 	// include_trashed = false → active rows only; true → both;
 	// only_trashed = true → trashed only (overrides include_trashed).
 	// The boolean gating is inline-CASE so sqlc emits a single prepared

@@ -344,6 +344,209 @@ func (x *TenantBudgetServiceSetResponse) GetBudget() *TenantBudget {
 	return nil
 }
 
+// TenantBudgetSummary joins a TenantBudget row with the tenant's
+// human handle and a derived utilisation percent so the dashboard
+// can render "acme-prod · 87 % of $1,000" without a second lookup.
+type TenantBudgetSummary struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TenantId    string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Slug        string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Budget      *TenantBudget          `protobuf:"bytes,4,opt,name=budget,proto3" json:"budget,omitempty"`
+	// utilisation_pct = spent / max × 100, capped at 100 for display.
+	// 0 when max_budget_amount == 0 (unlimited / metering-only).
+	UtilisationPct float64 `protobuf:"fixed64,5,opt,name=utilisation_pct,json=utilisationPct,proto3" json:"utilisation_pct,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TenantBudgetSummary) Reset() {
+	*x = TenantBudgetSummary{}
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantBudgetSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantBudgetSummary) ProtoMessage() {}
+
+func (x *TenantBudgetSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantBudgetSummary.ProtoReflect.Descriptor instead.
+func (*TenantBudgetSummary) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_tenant_budget_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TenantBudgetSummary) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TenantBudgetSummary) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *TenantBudgetSummary) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *TenantBudgetSummary) GetBudget() *TenantBudget {
+	if x != nil {
+		return x.Budget
+	}
+	return nil
+}
+
+func (x *TenantBudgetSummary) GetUtilisationPct() float64 {
+	if x != nil {
+		return x.UtilisationPct
+	}
+	return 0
+}
+
+type TenantBudgetServiceSummarizeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// threshold_pct — include rows whose utilisation_pct >= threshold.
+	// 0 = no threshold (return everything matching the other filters).
+	ThresholdPct float64 `protobuf:"fixed64,1,opt,name=threshold_pct,json=thresholdPct,proto3" json:"threshold_pct,omitempty"`
+	// unlimited_only — when true, return only rows where
+	// max_budget_amount == 0 (cap-less metering). Mutually exclusive
+	// with a non-zero threshold_pct; the server enforces this.
+	UnlimitedOnly bool `protobuf:"varint,2,opt,name=unlimited_only,json=unlimitedOnly,proto3" json:"unlimited_only,omitempty"`
+	// exclude_inactive — when true (default), skip soft-deleted
+	// tenants (deleted_at IS NOT NULL). The dashboard widget passes
+	// true; an admin auditing a recovery scenario sets false.
+	ExcludeInactive bool `protobuf:"varint,3,opt,name=exclude_inactive,json=excludeInactive,proto3" json:"exclude_inactive,omitempty"`
+	// limit — cap result count. 0 = server default (50). The widget
+	// typically asks for 10.
+	Limit         int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) Reset() {
+	*x = TenantBudgetServiceSummarizeRequest{}
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantBudgetServiceSummarizeRequest) ProtoMessage() {}
+
+func (x *TenantBudgetServiceSummarizeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantBudgetServiceSummarizeRequest.ProtoReflect.Descriptor instead.
+func (*TenantBudgetServiceSummarizeRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_tenant_budget_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) GetThresholdPct() float64 {
+	if x != nil {
+		return x.ThresholdPct
+	}
+	return 0
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) GetUnlimitedOnly() bool {
+	if x != nil {
+		return x.UnlimitedOnly
+	}
+	return false
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) GetExcludeInactive() bool {
+	if x != nil {
+		return x.ExcludeInactive
+	}
+	return false
+}
+
+func (x *TenantBudgetServiceSummarizeRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type TenantBudgetServiceSummarizeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Summaries     []*TenantBudgetSummary `protobuf:"bytes,1,rep,name=summaries,proto3" json:"summaries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TenantBudgetServiceSummarizeResponse) Reset() {
+	*x = TenantBudgetServiceSummarizeResponse{}
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantBudgetServiceSummarizeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantBudgetServiceSummarizeResponse) ProtoMessage() {}
+
+func (x *TenantBudgetServiceSummarizeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantBudgetServiceSummarizeResponse.ProtoReflect.Descriptor instead.
+func (*TenantBudgetServiceSummarizeResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_tenant_budget_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TenantBudgetServiceSummarizeResponse) GetSummaries() []*TenantBudgetSummary {
+	if x != nil {
+		return x.Summaries
+	}
+	return nil
+}
+
 var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
@@ -372,10 +575,25 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\x1b\n" +
 	"\tunit_code\x18\x05 \x01(\tR\bunitCode\"T\n" +
 	"\x1eTenantBudgetServiceSetResponse\x122\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget2\xd9\x01\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget\"\xc6\x01\n" +
+	"\x13TenantBudgetSummary\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x122\n" +
+	"\x06budget\x18\x04 \x01(\v2\x1a.paladin.admin.v1.TenantBudgetR\x06budget\x12'\n" +
+	"\x0futilisation_pct\x18\x05 \x01(\x01R\x0eutilisationPct\"\xd7\x01\n" +
+	"#TenantBudgetServiceSummarizeRequest\x12<\n" +
+	"\rthreshold_pct\x18\x01 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00Y@)\x00\x00\x00\x00\x00\x00\x00\x00R\fthresholdPct\x12%\n" +
+	"\x0eunlimited_only\x18\x02 \x01(\bR\runlimitedOnly\x12)\n" +
+	"\x10exclude_inactive\x18\x03 \x01(\bR\x0fexcludeInactive\x12 \n" +
+	"\x05limit\x18\x04 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\"g\n" +
+	"$TenantBudgetServiceSummarizeResponse\x12?\n" +
+	"\tsummaries\x18\x01 \x03(\v2!.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xcd\x02\n" +
 	"\x13TenantBudgetService\x12`\n" +
 	"\x03Get\x12+.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a,.paladin.admin.v1.TenantBudgetServiceGetResponse\x12`\n" +
-	"\x03Set\x12+.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a,.paladin.admin.v1.TenantBudgetServiceSetResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x03Set\x12+.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a,.paladin.admin.v1.TenantBudgetServiceSetResponse\x12r\n" +
+	"\tSummarize\x121.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a2.paladin.admin.v1.TenantBudgetServiceSummarizeResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_tenant_budget_service_proto_rawDescOnce sync.Once
@@ -389,31 +607,38 @@ func file_paladin_admin_v1_tenant_budget_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_tenant_budget_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_tenant_budget_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_paladin_admin_v1_tenant_budget_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_paladin_admin_v1_tenant_budget_service_proto_goTypes = []any{
-	(*TenantBudget)(nil),                   // 0: paladin.admin.v1.TenantBudget
-	(*TenantBudgetServiceGetRequest)(nil),  // 1: paladin.admin.v1.TenantBudgetServiceGetRequest
-	(*TenantBudgetServiceGetResponse)(nil), // 2: paladin.admin.v1.TenantBudgetServiceGetResponse
-	(*TenantBudgetServiceSetRequest)(nil),  // 3: paladin.admin.v1.TenantBudgetServiceSetRequest
-	(*TenantBudgetServiceSetResponse)(nil), // 4: paladin.admin.v1.TenantBudgetServiceSetResponse
-	(*timestamppb.Timestamp)(nil),          // 5: google.protobuf.Timestamp
+	(*TenantBudget)(nil),                         // 0: paladin.admin.v1.TenantBudget
+	(*TenantBudgetServiceGetRequest)(nil),        // 1: paladin.admin.v1.TenantBudgetServiceGetRequest
+	(*TenantBudgetServiceGetResponse)(nil),       // 2: paladin.admin.v1.TenantBudgetServiceGetResponse
+	(*TenantBudgetServiceSetRequest)(nil),        // 3: paladin.admin.v1.TenantBudgetServiceSetRequest
+	(*TenantBudgetServiceSetResponse)(nil),       // 4: paladin.admin.v1.TenantBudgetServiceSetResponse
+	(*TenantBudgetSummary)(nil),                  // 5: paladin.admin.v1.TenantBudgetSummary
+	(*TenantBudgetServiceSummarizeRequest)(nil),  // 6: paladin.admin.v1.TenantBudgetServiceSummarizeRequest
+	(*TenantBudgetServiceSummarizeResponse)(nil), // 7: paladin.admin.v1.TenantBudgetServiceSummarizeResponse
+	(*timestamppb.Timestamp)(nil),                // 8: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_tenant_budget_service_proto_depIdxs = []int32{
-	5, // 0: paladin.admin.v1.TenantBudget.period_start:type_name -> google.protobuf.Timestamp
-	5, // 1: paladin.admin.v1.TenantBudget.period_end:type_name -> google.protobuf.Timestamp
-	5, // 2: paladin.admin.v1.TenantBudget.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 3: paladin.admin.v1.TenantBudgetServiceGetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
-	5, // 4: paladin.admin.v1.TenantBudgetServiceSetRequest.period_end:type_name -> google.protobuf.Timestamp
-	0, // 5: paladin.admin.v1.TenantBudgetServiceSetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
-	1, // 6: paladin.admin.v1.TenantBudgetService.Get:input_type -> paladin.admin.v1.TenantBudgetServiceGetRequest
-	3, // 7: paladin.admin.v1.TenantBudgetService.Set:input_type -> paladin.admin.v1.TenantBudgetServiceSetRequest
-	2, // 8: paladin.admin.v1.TenantBudgetService.Get:output_type -> paladin.admin.v1.TenantBudgetServiceGetResponse
-	4, // 9: paladin.admin.v1.TenantBudgetService.Set:output_type -> paladin.admin.v1.TenantBudgetServiceSetResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	8,  // 0: paladin.admin.v1.TenantBudget.period_start:type_name -> google.protobuf.Timestamp
+	8,  // 1: paladin.admin.v1.TenantBudget.period_end:type_name -> google.protobuf.Timestamp
+	8,  // 2: paladin.admin.v1.TenantBudget.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 3: paladin.admin.v1.TenantBudgetServiceGetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
+	8,  // 4: paladin.admin.v1.TenantBudgetServiceSetRequest.period_end:type_name -> google.protobuf.Timestamp
+	0,  // 5: paladin.admin.v1.TenantBudgetServiceSetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
+	0,  // 6: paladin.admin.v1.TenantBudgetSummary.budget:type_name -> paladin.admin.v1.TenantBudget
+	5,  // 7: paladin.admin.v1.TenantBudgetServiceSummarizeResponse.summaries:type_name -> paladin.admin.v1.TenantBudgetSummary
+	1,  // 8: paladin.admin.v1.TenantBudgetService.Get:input_type -> paladin.admin.v1.TenantBudgetServiceGetRequest
+	3,  // 9: paladin.admin.v1.TenantBudgetService.Set:input_type -> paladin.admin.v1.TenantBudgetServiceSetRequest
+	6,  // 10: paladin.admin.v1.TenantBudgetService.Summarize:input_type -> paladin.admin.v1.TenantBudgetServiceSummarizeRequest
+	2,  // 11: paladin.admin.v1.TenantBudgetService.Get:output_type -> paladin.admin.v1.TenantBudgetServiceGetResponse
+	4,  // 12: paladin.admin.v1.TenantBudgetService.Set:output_type -> paladin.admin.v1.TenantBudgetServiceSetResponse
+	7,  // 13: paladin.admin.v1.TenantBudgetService.Summarize:output_type -> paladin.admin.v1.TenantBudgetServiceSummarizeResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_tenant_budget_service_proto_init() }
@@ -427,7 +652,7 @@ func file_paladin_admin_v1_tenant_budget_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_tenant_budget_service_proto_rawDesc), len(file_paladin_admin_v1_tenant_budget_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

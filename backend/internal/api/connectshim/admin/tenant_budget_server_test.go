@@ -80,6 +80,9 @@ func (f *fakeUsageStore) Delete(context.Context, uuid.UUID) error {
 func (f *fakeUsageStore) PurgeOrphans(context.Context) (int64, error) {
 	return 0, errors.New("not used")
 }
+func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
+	return nil, nil
+}
 
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})

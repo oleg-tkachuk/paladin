@@ -287,6 +287,52 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt), nil
 }
 
+// ListTenantBudgets joins tenant_budgets with tenants and applies the
+// threshold / unlimited / exclude_inactive filters server-side.
+// Domain default for `limit` is 50; clamped to ≤ 500 to match the
+// proto's bound. The sqlc query returns utilisation pre-computed so
+// callers don't have to redo the division (and we keep the
+// numeric-precision path inside Postgres where it belongs).
+func (s *UsageStore) ListTenantBudgets(
+	ctx context.Context,
+	args capability.ListTenantBudgetsArgs,
+) ([]capability.TenantBudgetSummary, error) {
+	limit := args.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	threshold, err := numericFromFloat(args.ThresholdPct)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: threshold_pct: %w", err)
+	}
+	rows, err := s.q.ListTenantBudgetSummaries(ctx,
+		args.ExcludeInactive,
+		args.UnlimitedOnly,
+		threshold,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: list tenant budgets: %w", err)
+	}
+	out := make([]capability.TenantBudgetSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, capability.TenantBudgetSummary{
+			TenantID:    uuid.UUID(r.TenantID.Bytes),
+			Slug:        r.Slug,
+			DisplayName: r.DisplayName,
+			Budget: tenantBudgetFromRow(
+				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.UnitCode,
+				r.PeriodStart, r.PeriodEnd, r.UpdatedAt,
+			),
+			UtilisationPct: floatFromNumeric(r.UtilisationPct),
+		})
+	}
+	return out, nil
+}
+
 // tenantBudgetFromRow normalises sqlc row types into the public shape.
 func tenantBudgetFromRow(
 	tenantID pgtype.UUID,
