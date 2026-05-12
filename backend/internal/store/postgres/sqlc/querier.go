@@ -86,7 +86,6 @@ type Querier interface {
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
-	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
@@ -140,6 +139,9 @@ type Querier interface {
 	// no-op. Worker callers pass the version they read from
 	// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
 	HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Unconditional physical delete. Used by Delete(force=true) and Purge.
+	// expected_version=0 → no OCC guard; non-zero → strict match.
+	HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
 	IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
 	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
@@ -224,7 +226,12 @@ type Querier interface {
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
 	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
-	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
+	// include_trashed = false → active rows only; true → both;
+	// only_trashed = true → trashed only (overrides include_trashed).
+	// The boolean gating is inline-CASE so sqlc emits a single prepared
+	// statement; planner uses the partial idx_tenants_active index on
+	// the common path.
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error)
@@ -296,6 +303,9 @@ type Querier interface {
 	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.
 	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
+	// Clears deleted_at on a trashed row. Bumps resource_version +
+	// updated_at.
+	RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	RevokeApiKey(ctx context.Context, apiKeyID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -334,6 +344,11 @@ type Querier interface {
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Sets deleted_at on an active row. expected_version=0 means
+	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
+	// the match. Updates resource_version + updated_at so audit reflects
+	// the soft-delete time independently of any subsequent restore.
+	SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error
 	TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).

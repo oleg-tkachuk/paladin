@@ -29,22 +29,8 @@ func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug s
 	return err
 }
 
-const deleteTenant = `-- name: DeleteTenant :execrows
-DELETE FROM tenants
-WHERE tenant_id = $1
-  AND resource_version = $2
-`
-
-func (q *Queries) DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteTenant, tenantID, expectedVersion)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
 FROM tenants
 WHERE tenant_id = $1
 `
@@ -66,12 +52,13 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
+		&i.Tenant.DeletedAt,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
 FROM tenants
 WHERE slug = $1
 `
@@ -93,24 +80,59 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 		&i.Tenant.CreatedAt,
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
+		&i.Tenant.DeletedAt,
 	)
 	return i, err
 }
 
+const hardDeleteTenant = `-- name: HardDeleteTenant :execrows
+DELETE FROM tenants
+WHERE tenant_id = $1
+  AND ($2::bigint = 0
+       OR resource_version = $2::bigint)
+`
+
+// Unconditional physical delete. Used by Delete(force=true) and Purge.
+// expected_version=0 → no OCC guard; non-zero → strict match.
+func (q *Queries) HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteTenant, tenantID, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
 FROM tenants
 WHERE ($1::uuid IS NULL OR tenant_id > $1::uuid)
+  AND (
+    CASE
+      WHEN $2::bool      THEN deleted_at IS NOT NULL
+      WHEN $3::bool   THEN TRUE
+      ELSE                                          deleted_at IS NULL
+    END
+  )
 ORDER BY tenant_id
-LIMIT $2
+LIMIT $4
 `
 
 type ListTenantsRow struct {
 	Tenant Tenant `json:"tenant"`
 }
 
-func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error) {
-	rows, err := q.db.Query(ctx, listTenants, afterID, pageSize)
+// include_trashed = false → active rows only; true → both;
+// only_trashed = true → trashed only (overrides include_trashed).
+// The boolean gating is inline-CASE so sqlc emits a single prepared
+// statement; planner uses the partial idx_tenants_active index on
+// the common path.
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, pageSize int32) ([]ListTenantsRow, error) {
+	rows, err := q.db.Query(ctx, listTenants,
+		afterID,
+		onlyTrashed,
+		includeTrashed,
+		pageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +150,7 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize
 			&i.Tenant.CreatedAt,
 			&i.Tenant.UpdatedAt,
 			&i.Tenant.Slug,
+			&i.Tenant.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -137,6 +160,48 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize
 		return nil, err
 	}
 	return items, nil
+}
+
+const restoreTenant = `-- name: RestoreTenant :execrows
+UPDATE tenants
+   SET deleted_at = NULL,
+       updated_at = now(),
+       resource_version = resource_version + 1
+ WHERE tenant_id = $1
+   AND deleted_at IS NOT NULL
+`
+
+// Clears deleted_at on a trashed row. Bumps resource_version +
+// updated_at.
+func (q *Queries) RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreTenant, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteTenant = `-- name: SoftDeleteTenant :execrows
+UPDATE tenants
+   SET deleted_at = now(),
+       updated_at = now(),
+       resource_version = resource_version + 1
+ WHERE tenant_id = $1
+   AND deleted_at IS NULL
+   AND ($2::bigint = 0
+        OR resource_version = $2::bigint)
+`
+
+// Sets deleted_at on an active row. expected_version=0 means
+// "no OCC guard" (legacy / scripted path); a non-zero value enforces
+// the match. Updates resource_version + updated_at so audit reflects
+// the soft-delete time independently of any subsequent restore.
+func (q *Queries) SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteTenant, tenantID, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateTenant = `-- name: UpdateTenant :execrows

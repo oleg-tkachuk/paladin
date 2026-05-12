@@ -30,14 +30,24 @@ export function useTenants() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // fetchTenants — defaults to the active set (deleted_at IS NULL).
+  // Pass `includeTrashed: true` to get both; `onlyTrashed: true` to
+  // get just the trash. /trash page uses onlyTrashed; default everywhere
+  // else stays clean so deleted rows can't accept new bindings.
   const fetchTenants = useCallback(
-    async (filter: string = "", pageToken: string = "") => {
+    async (
+      filter: string = "",
+      pageToken: string = "",
+      opts: { includeTrashed?: boolean; onlyTrashed?: boolean } = {},
+    ) => {
       setLoading(true);
       setError(null);
       try {
         const res = await tenantClient.listTenants({
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
           filter,
+          includeTrashed: !!opts.includeTrashed,
+          onlyTrashed: !!opts.onlyTrashed,
         });
         setTenants(res.tenants);
         return {
@@ -149,6 +159,10 @@ export function useTenants() {
     [],
   );
 
+  // deleteTenant — defaults to SOFT delete (server moves the row to
+  // trash with deleted_at set). Pass `force=true` to skip the trash
+  // and hard-delete in one shot (E2E cleanups, emergency purge from
+  // an active tenant).
   const deleteTenant = useCallback(
     async (
       tenantId: string,
@@ -176,6 +190,53 @@ export function useTenants() {
     [],
   );
 
+  // restoreTenant — clears deleted_at on a trashed row. Returns the
+  // restored Tenant (with deleted_at unset). Slug/display_name UNIQUE
+  // collisions surface as ALREADY_EXISTS — operator must rename the
+  // active claimer first.
+  const restoreTenant = useCallback(
+    async (tenantId: string): Promise<Tenant> => {
+      try {
+        setError(null);
+        const restored = await tenantClient.restoreTenant({
+          name: tenantResourceName(tenantId),
+        });
+        setTenants((prev) =>
+          prev.map((t) => (t.tenantId === tenantId ? restored : t)),
+        );
+        bumpRefresh("tenants");
+        return restored;
+      } catch (err) {
+        const msg =
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Failed to restore tenant";
+        setError(msg);
+        throw err;
+      }
+    },
+    [],
+  );
+
+  // purgeTenant — hard-deletes a soft-deleted row. The server refuses
+  // to operate on an active tenant (FAILED_PRECONDITION) so callers
+  // must soft-delete first.
+  const purgeTenant = useCallback(async (tenantId: string): Promise<void> => {
+    try {
+      setError(null);
+      await tenantClient.purgeTenant({
+        name: tenantResourceName(tenantId),
+      });
+      setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
+      bumpRefresh("tenants");
+    } catch (err) {
+      const msg =
+        err instanceof ConnectError ? err.rawMessage : "Failed to purge tenant";
+      setError(msg);
+      throw err;
+    }
+  }, []);
+
   return {
     tenants,
     loading,
@@ -184,5 +245,7 @@ export function useTenants() {
     createTenant,
     updateTenantMetadata,
     deleteTenant,
+    restoreTenant,
+    purgeTenant,
   };
 }

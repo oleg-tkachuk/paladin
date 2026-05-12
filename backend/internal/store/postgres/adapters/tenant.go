@@ -174,35 +174,97 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 	return r.Get(ctx, args.TenantID)
 }
 
-func (r *TenantRepo) Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
-	// expectedVersion == 0 means "no OCC guard" — DeleteTenantRequest doesn't
-	// carry a resource_version, so the connect shim always passes 0. Drop the
-	// version predicate in that case; sqlc's DeleteTenant hardcodes it.
-	if expectedVersion == 0 {
-		tag, err := r.pool.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, pgUUID(tenantID))
-		if err != nil {
-			return fmt.Errorf("delete tenant: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return tenant.ErrNotFound
-		}
-		return nil
-	}
-	rows, err := r.q.DeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
+// SoftDelete moves an active row to the trash. Returns ErrAlreadyDeleted
+// when the row is already trashed (rows=0 on the conditional UPDATE),
+// or ErrVersionMismatch when expected_version > 0 and doesn't match.
+// Distinguishing the two by re-reading the row is acceptable here —
+// soft-delete is a control-plane op, not on the hot path.
+func (r *TenantRepo) SoftDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
+	rows, err := r.q.SoftDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
-		return fmt.Errorf("delete tenant: %w", err)
+		return fmt.Errorf("soft-delete tenant: %w", err)
 	}
 	if rows == 0 {
+		// Re-read to disambiguate.
+		t, gerr := r.Get(ctx, tenantID)
+		if errors.Is(gerr, pgx.ErrNoRows) {
+			return tenant.ErrNotFound
+		}
+		if gerr != nil {
+			return fmt.Errorf("soft-delete tenant: probe: %w", gerr)
+		}
+		if !t.DeletedAt.IsZero() {
+			return tenant.ErrAlreadyDeleted
+		}
 		return tenant.ErrVersionMismatch
 	}
 	return nil
 }
 
-func (r *TenantRepo) List(ctx context.Context, pageSize int32, afterID uuid.UUID) ([]tenant.Tenant, string, error) {
+// HardDelete physically removes the row. expected_version=0 means
+// "no OCC guard" (purge path); a non-zero value enforces match.
+func (r *TenantRepo) HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
+	rows, err := r.q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
+	if err != nil {
+		return fmt.Errorf("hard-delete tenant: %w", err)
+	}
+	if rows == 0 {
+		if expectedVersion == 0 {
+			return tenant.ErrNotFound
+		}
+		return tenant.ErrVersionMismatch
+	}
+	return nil
+}
+
+// Restore clears deleted_at on a trashed row. Returns ErrNotTrashed
+// when the row is currently active; ErrNotFound when missing; maps
+// slug/display_name UNIQUE collisions (a fresh tenant claimed the
+// handle while this one was trashed) to typed sentinels.
+func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
+	rows, err := r.q.RestoreTenant(ctx, pgUUID(tenantID))
+	if err != nil {
+		// UNIQUE violations can fire even on UPDATE-to-non-NULL paths
+		// if a concurrent restore raced; map them.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case schema.TenantsSlugUnique:
+				return tenant.Tenant{}, tenant.ErrSlugConflict
+			case schema.TenantsDisplayNameUnique:
+				return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+			}
+		}
+		return tenant.Tenant{}, fmt.Errorf("restore tenant: %w", err)
+	}
+	if rows == 0 {
+		// Re-read to distinguish missing vs active.
+		t, gerr := r.Get(ctx, tenantID)
+		if errors.Is(gerr, pgx.ErrNoRows) {
+			return tenant.Tenant{}, tenant.ErrNotFound
+		}
+		if gerr != nil {
+			return tenant.Tenant{}, fmt.Errorf("restore tenant: probe: %w", gerr)
+		}
+		if t.DeletedAt.IsZero() {
+			return tenant.Tenant{}, tenant.ErrNotTrashed
+		}
+		return tenant.Tenant{}, tenant.ErrNotFound
+	}
+	return r.Get(ctx, tenantID)
+}
+
+func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]tenant.Tenant, string, error) {
+	pageSize := args.PageSize
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	rows, err := r.q.ListTenants(ctx, pgUUID(afterID), pageSize)
+	rows, err := r.q.ListTenants(ctx,
+		pgUUID(args.AfterID),
+		args.OnlyTrashed,
+		args.IncludeTrashed,
+		pageSize,
+	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list tenants: %w", err)
 	}
@@ -398,5 +460,6 @@ func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 		ResourceVersion:      t.ResourceVersion,
 		CreatedAt:            timeFrom(t.CreatedAt),
 		UpdatedAt:            timeFrom(t.UpdatedAt),
+		DeletedAt:            timeFrom(t.DeletedAt),
 	}
 }

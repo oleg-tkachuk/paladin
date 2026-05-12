@@ -53,6 +53,10 @@ type Tenant struct {
 	ResourceVersion      int64
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	// DeletedAt is zero (== time.Time{}) for active tenants. Migration
+	// 036 added the underlying column; the soft-delete RPCs populate
+	// it; restore clears it back to zero.
+	DeletedAt time.Time
 }
 
 type CreateTenantArgs struct {
@@ -89,8 +93,16 @@ type Repository interface {
 	// apiutil.ParseTenantNameRef.
 	GetBySlug(ctx context.Context, slug string) (Tenant, error)
 	Update(ctx context.Context, args UpdateTenantArgs) (Tenant, error)
-	Delete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
-	List(ctx context.Context, pageSize int32, afterID uuid.UUID) ([]Tenant, string, error)
+	// SoftDelete sets deleted_at = now() on an active row. Returns
+	// ErrAlreadyDeleted when the row is already trashed.
+	SoftDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
+	// HardDelete physically removes the row regardless of deleted_at
+	// state. Used by Delete(force=true) and by Purge.
+	HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error
+	// Restore clears deleted_at on a trashed row. Returns
+	// ErrNotTrashed when the row is currently active.
+	Restore(ctx context.Context, tenantID uuid.UUID) (Tenant, error)
+	List(ctx context.Context, args ListTenantsArgs) ([]Tenant, string, error)
 	// Rename atomically updates tenants.slug AND rewrites every
 	// `Tenant::"<old>"` reference in the tenant's
 	// inherited_cedar_policy + every object_keys row's cedar_policy
@@ -106,6 +118,26 @@ type RenameTenantSlugArgs struct {
 	NewSlug         string
 	ExpectedVersion int64
 }
+
+// ListTenantsArgs replaces the previous List(pageSize, afterID) so
+// callers can opt into seeing soft-deleted rows. Default behaviour
+// (both flags false) returns the active set only.
+type ListTenantsArgs struct {
+	PageSize       int32
+	AfterID        uuid.UUID
+	IncludeTrashed bool
+	OnlyTrashed    bool
+}
+
+// Tenant gains a single bit of derived state for callers that need
+// to render Active/Trashed differently. Internal callers read
+// DeletedAt directly.
+type TenantState string
+
+const (
+	TenantStateActive  TenantState = "active"
+	TenantStateTrashed TenantState = "trashed"
+)
 
 type Handler struct {
 	repo   Repository
@@ -398,27 +430,123 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	return &t, nil
 }
 
-func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
+// DeleteTenant supports two modes:
+//   - force=false (default): soft-delete. Sets deleted_at; tenant
+//     becomes recoverable via RestoreTenant within the retention TTL.
+//   - force=true: hard-delete. Skips the trash entirely.
+//
+// The force flag preserves the legacy "rip and run" path that E2E
+// cleanups + emergency procedures rely on, while the default protects
+// operators from undoable accidents.
+func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expectedVersion int64, force bool) error {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return err
 	}
-	if err := h.repo.Delete(ctx, tenantID, expectedVersion); err != nil {
+	var (
+		op  = "paladin.tenant.deleted"
+		err error
+	)
+	if force {
+		err = h.repo.HardDelete(ctx, tenantID, expectedVersion)
+		op = "paladin.tenant.purged"
+	} else {
+		err = h.repo.SoftDelete(ctx, tenantID, expectedVersion)
+		op = "paladin.tenant.trashed"
+	}
+	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
 		if errors.Is(err, ErrNotFound) {
 			return connect.NewError(connect.CodeNotFound, err)
 		}
+		if errors.Is(err, ErrAlreadyDeleted) {
+			// Soft-delete on a trashed row → noop'ish; surface as a
+			// FailedPrecondition so the UI can show "this is already
+			// in the trash" instead of treating it as success.
+			return connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.tenant.deleted",
+	h.dispatchEvent(ctx, tenantID, op,
 		fmt.Sprintf("tenants/%s", tenantID),
 		map[string]any{
 			"tenant_id":        tenantID.String(),
 			"resource_version": expectedVersion,
+			"force":            force,
+		})
+	return nil
+}
+
+// RestoreTenant returns a soft-deleted tenant to the active set.
+// Slug + display_name UNIQUE constraints span both sets, so a slug
+// claimed by a fresh tenant since soft-delete will trip the unique
+// constraint at the DB level and surface as ALREADY_EXISTS.
+func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, error) {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return nil, err
+	}
+	t, err := h.repo.Restore(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		if errors.Is(err, ErrNotTrashed) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+		if errors.Is(err, ErrSlugConflict) || errors.Is(err, ErrDisplayNameConflict) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	h.dispatchEvent(ctx, tenantID, "paladin.tenant.restored",
+		fmt.Sprintf("tenants/%s", tenantID),
+		map[string]any{
+			"tenant_id":    tenantID.String(),
+			"slug":         t.Slug,
+			"display_name": t.DisplayName,
+		})
+	return &t, nil
+}
+
+// PurgeTenant hard-deletes a soft-deleted row. Requires the row to be
+// trashed first; on an active tenant returns FailedPrecondition. The
+// rare "skip the trash" path is DeleteTenant(force=true).
+func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return err
+	}
+	// Pre-read so we can reject purging an active tenant before any
+	// destructive call lands.
+	t, err := h.repo.Get(ctx, tenantID)
+	if err != nil {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if t.DeletedAt.IsZero() {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("tenant is active; soft-delete it first or use DeleteTenant(force=true)"))
+	}
+	// expectedVersion=0 — the row is already trashed and OCC was
+	// enforced at SoftDelete time. Purge is monotonically destructive.
+	if err := h.repo.HardDelete(ctx, tenantID, 0); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return connect.NewError(connect.CodeNotFound, err)
+		}
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	h.dispatchEvent(ctx, tenantID, "paladin.tenant.purged",
+		fmt.Sprintf("tenants/%s", tenantID),
+		map[string]any{
+			"tenant_id": tenantID.String(),
 		})
 	return nil
 }
@@ -460,23 +588,22 @@ func (h *Handler) RenameTenantSlug(ctx context.Context, args RenameTenantSlugArg
 	return &t, nil
 }
 
-func (h *Handler) ListTenants(ctx context.Context, pageSize int32, pageToken string) ([]Tenant, string, error) {
+func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageToken string) ([]Tenant, string, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, "", err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadTenant, uuid.Nil); err != nil {
 		return nil, "", err
 	}
-	var afterID uuid.UUID
 	if pageToken != "" {
 		id, err := uuid.Parse(pageToken)
 		if err != nil {
 			return nil, "", connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("invalid page_token: %w", err))
 		}
-		afterID = id
+		args.AfterID = id
 	}
-	return h.repo.List(ctx, pageSize, afterID)
+	return h.repo.List(ctx, args)
 }
 
 func requirePlatformAdmin(ctx context.Context) error {
@@ -511,6 +638,15 @@ var ErrTenantIDConflict = errors.New("tenant_id already in use")
 // when the requested display_name collides with another tenant's.
 // display_name is UNIQUE since migration 033.
 var ErrDisplayNameConflict = errors.New("display_name already in use")
+
+// ErrAlreadyDeleted — Repository.SoftDelete returns this when the
+// row is already trashed. Surfaced as FAILED_PRECONDITION so UI can
+// distinguish a re-delete from a successful one.
+var ErrAlreadyDeleted = errors.New("tenant already in trash")
+
+// ErrNotTrashed — Repository.Restore returns this when the row is
+// currently active. Surfaced as FAILED_PRECONDITION.
+var ErrNotTrashed = errors.New("tenant is not in trash")
 
 // ErrDefaultBindingBucketMissing — Repository.Create returns this
 // when the (backend_id, bucket_name) supplied as default binding

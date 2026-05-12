@@ -26,13 +26,52 @@ WHERE tenant_id = $1
   AND resource_version = sqlc.arg('expected_version');
 
 -- name: ListTenants :many
+-- include_trashed = false → active rows only; true → both;
+-- only_trashed = true → trashed only (overrides include_trashed).
+-- The boolean gating is inline-CASE so sqlc emits a single prepared
+-- statement; planner uses the partial idx_tenants_active index on
+-- the common path.
 SELECT sqlc.embed(tenants)
 FROM tenants
 WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenant_id > sqlc.narg('after_id')::uuid)
+  AND (
+    CASE
+      WHEN sqlc.arg('only_trashed')::bool      THEN deleted_at IS NOT NULL
+      WHEN sqlc.arg('include_trashed')::bool   THEN TRUE
+      ELSE                                          deleted_at IS NULL
+    END
+  )
 ORDER BY tenant_id
 LIMIT sqlc.arg('page_size');
 
--- name: DeleteTenant :execrows
+-- name: SoftDeleteTenant :execrows
+-- Sets deleted_at on an active row. expected_version=0 means
+-- "no OCC guard" (legacy / scripted path); a non-zero value enforces
+-- the match. Updates resource_version + updated_at so audit reflects
+-- the soft-delete time independently of any subsequent restore.
+UPDATE tenants
+   SET deleted_at = now(),
+       updated_at = now(),
+       resource_version = resource_version + 1
+ WHERE tenant_id = $1
+   AND deleted_at IS NULL
+   AND (sqlc.arg('expected_version')::bigint = 0
+        OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: HardDeleteTenant :execrows
+-- Unconditional physical delete. Used by Delete(force=true) and Purge.
+-- expected_version=0 → no OCC guard; non-zero → strict match.
 DELETE FROM tenants
 WHERE tenant_id = $1
-  AND resource_version = sqlc.arg('expected_version');
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: RestoreTenant :execrows
+-- Clears deleted_at on a trashed row. Bumps resource_version +
+-- updated_at.
+UPDATE tenants
+   SET deleted_at = NULL,
+       updated_at = now(),
+       resource_version = resource_version + 1
+ WHERE tenant_id = $1
+   AND deleted_at IS NOT NULL;

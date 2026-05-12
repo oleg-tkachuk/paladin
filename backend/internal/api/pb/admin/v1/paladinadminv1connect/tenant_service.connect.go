@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -50,6 +51,12 @@ const (
 	// TenantServiceSetInheritedPolicyProcedure is the fully-qualified name of the TenantService's
 	// SetInheritedPolicy RPC.
 	TenantServiceSetInheritedPolicyProcedure = "/paladin.admin.v1.TenantService/SetInheritedPolicy"
+	// TenantServiceRestoreTenantProcedure is the fully-qualified name of the TenantService's
+	// RestoreTenant RPC.
+	TenantServiceRestoreTenantProcedure = "/paladin.admin.v1.TenantService/RestoreTenant"
+	// TenantServicePurgeTenantProcedure is the fully-qualified name of the TenantService's PurgeTenant
+	// RPC.
+	TenantServicePurgeTenantProcedure = "/paladin.admin.v1.TenantService/PurgeTenant"
 	// TenantServiceRenameTenantSlugProcedure is the fully-qualified name of the TenantService's
 	// RenameTenantSlug RPC.
 	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
@@ -60,9 +67,25 @@ type TenantServiceClient interface {
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+	// remains recoverable via RestoreTenant within the retention window.
+	// Pass `force=true` to skip the trash and hard-delete immediately —
+	// used by automated test cleanups + emergency-purge flows.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
+	// it to the active set. Slug + display_name UNIQUE constraints still
+	// apply across both active and trashed rows (see migration 036
+	// commentary) — if a new tenant claimed the slug while this one was
+	// trashed, restore fails with ALREADY_EXISTS and the operator must
+	// rename one side first.
+	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
+	// an active tenant (operators have to soft-delete first) so the
+	// two-step recovery window is preserved by default. Idempotent on
+	// a missing row.
+	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every object_key's cedar_policy to
@@ -118,6 +141,18 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
 			connect.WithClientOptions(opts...),
 		),
+		restoreTenant: connect.NewClient[v1.RestoreTenantRequest, v1.Tenant](
+			httpClient,
+			baseURL+TenantServiceRestoreTenantProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("RestoreTenant")),
+			connect.WithClientOptions(opts...),
+		),
+		purgeTenant: connect.NewClient[v1.PurgeTenantRequest, v1.PurgeTenantResponse](
+			httpClient,
+			baseURL+TenantServicePurgeTenantProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
+			connect.WithClientOptions(opts...),
+		),
 		renameTenantSlug: connect.NewClient[v1.RenameTenantSlugRequest, v1.Tenant](
 			httpClient,
 			baseURL+TenantServiceRenameTenantSlugProcedure,
@@ -135,6 +170,8 @@ type tenantServiceClient struct {
 	deleteTenant       *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
 	listTenants        *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
 	setInheritedPolicy *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
+	restoreTenant      *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
+	purgeTenant        *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
 	renameTenantSlug   *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
 }
 
@@ -168,6 +205,16 @@ func (c *tenantServiceClient) SetInheritedPolicy(ctx context.Context, req *conne
 	return c.setInheritedPolicy.CallUnary(ctx, req)
 }
 
+// RestoreTenant calls paladin.admin.v1.TenantService.RestoreTenant.
+func (c *tenantServiceClient) RestoreTenant(ctx context.Context, req *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error) {
+	return c.restoreTenant.CallUnary(ctx, req)
+}
+
+// PurgeTenant calls paladin.admin.v1.TenantService.PurgeTenant.
+func (c *tenantServiceClient) PurgeTenant(ctx context.Context, req *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error) {
+	return c.purgeTenant.CallUnary(ctx, req)
+}
+
 // RenameTenantSlug calls paladin.admin.v1.TenantService.RenameTenantSlug.
 func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
 	return c.renameTenantSlug.CallUnary(ctx, req)
@@ -178,9 +225,25 @@ type TenantServiceHandler interface {
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
 	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
 	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+	// remains recoverable via RestoreTenant within the retention window.
+	// Pass `force=true` to skip the trash and hard-delete immediately —
+	// used by automated test cleanups + emergency-purge flows.
 	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
 	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
+	// it to the active set. Slug + display_name UNIQUE constraints still
+	// apply across both active and trashed rows (see migration 036
+	// commentary) — if a new tenant claimed the slug while this one was
+	// trashed, restore fails with ALREADY_EXISTS and the operator must
+	// rename one side first.
+	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
+	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
+	// an active tenant (operators have to soft-delete first) so the
+	// two-step recovery window is preserved by default. Idempotent on
+	// a missing row.
+	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every object_key's cedar_policy to
@@ -232,6 +295,18 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantServiceRestoreTenantHandler := connect.NewUnaryHandler(
+		TenantServiceRestoreTenantProcedure,
+		svc.RestoreTenant,
+		connect.WithSchema(tenantServiceMethods.ByName("RestoreTenant")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tenantServicePurgeTenantHandler := connect.NewUnaryHandler(
+		TenantServicePurgeTenantProcedure,
+		svc.PurgeTenant,
+		connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
+		connect.WithHandlerOptions(opts...),
+	)
 	tenantServiceRenameTenantSlugHandler := connect.NewUnaryHandler(
 		TenantServiceRenameTenantSlugProcedure,
 		svc.RenameTenantSlug,
@@ -252,6 +327,10 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 			tenantServiceListTenantsHandler.ServeHTTP(w, r)
 		case TenantServiceSetInheritedPolicyProcedure:
 			tenantServiceSetInheritedPolicyHandler.ServeHTTP(w, r)
+		case TenantServiceRestoreTenantProcedure:
+			tenantServiceRestoreTenantHandler.ServeHTTP(w, r)
+		case TenantServicePurgeTenantProcedure:
+			tenantServicePurgeTenantHandler.ServeHTTP(w, r)
 		case TenantServiceRenameTenantSlugProcedure:
 			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
 		default:
@@ -285,6 +364,14 @@ func (UnimplementedTenantServiceHandler) ListTenants(context.Context, *connect.R
 
 func (UnimplementedTenantServiceHandler) SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.SetInheritedPolicy is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RestoreTenant is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.PurgeTenant is not implemented"))
 }
 
 func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {

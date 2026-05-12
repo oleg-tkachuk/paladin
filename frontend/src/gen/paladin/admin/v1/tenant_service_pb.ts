@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIk4KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkiZwoTTGlzdFRlbmFudHNSZXNwb25zZRIlCgd0ZW5hbnRzGAEgAygLMhQub2NwLmFkbWluLnYxLlRlbmFudBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiYgoZU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSFAoMY2VkYXJfcG9saWN5GAMgASgJImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATK1BAoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIn0KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkSFwoPaW5jbHVkZV90cmFzaGVkGAMgASgIEhQKDG9ubHlfdHJhc2hlZBgEIAEoCCJnChNMaXN0VGVuYW50c1Jlc3BvbnNlEiUKB3RlbmFudHMYASADKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJiChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATLUBQoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSSQoNUmVzdG9yZVRlbmFudBIiLm9jcC5hZG1pbi52MS5SZXN0b3JlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSUgoLUHVyZ2VUZW5hbnQSIC5vY3AuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXF1ZXN0GiEub2NwLmFkbWluLnYxLlB1cmdlVGVuYW50UmVzcG9uc2USTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -192,6 +192,25 @@ export type ListTenantsRequest = Message<"paladin.admin.v1.ListTenantsRequest"> 
    * @generated from field: string filter = 2;
    */
   filter: string;
+
+  /**
+   * include_trashed — when true, return both active and soft-deleted
+   * rows; default (false) hides trashed tenants from the active list.
+   * The /trash UI sets this to true; everywhere else defaults to the
+   * active set so deleted rows can't accidentally accept new bindings.
+   *
+   * @generated from field: bool include_trashed = 3;
+   */
+  includeTrashed: boolean;
+
+  /**
+   * only_trashed — when true, return ONLY soft-deleted rows. Overrides
+   * `include_trashed`. Used by the /trash page to render the recovery
+   * view.
+   *
+   * @generated from field: bool only_trashed = 4;
+   */
+  onlyTrashed: boolean;
 };
 
 /**
@@ -256,6 +275,64 @@ export const SetInheritedPolicyRequestSchema: GenMessage<SetInheritedPolicyReque
   messageDesc(file_paladin_admin_v1_tenant_service, 7);
 
 /**
+ * @generated from message paladin.admin.v1.RestoreTenantRequest
+ */
+export type RestoreTenantRequest =
+  Message<"paladin.admin.v1.RestoreTenantRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
+     * soft-deleted, otherwise the server returns FAILED_PRECONDITION.
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.RestoreTenantRequest.
+ * Use `create(RestoreTenantRequestSchema)` to create a new message.
+ */
+export const RestoreTenantRequestSchema: GenMessage<RestoreTenantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 8);
+
+/**
+ * @generated from message paladin.admin.v1.PurgeTenantRequest
+ */
+export type PurgeTenantRequest = Message<"paladin.admin.v1.PurgeTenantRequest"> & {
+  /**
+   * name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
+   * soft-deleted, otherwise FAILED_PRECONDITION. Use DeleteTenant with
+   * force=true for the rare "skip the trash" path.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message paladin.admin.v1.PurgeTenantRequest.
+ * Use `create(PurgeTenantRequestSchema)` to create a new message.
+ */
+export const PurgeTenantRequestSchema: GenMessage<PurgeTenantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 9);
+
+/**
+ * @generated from message paladin.admin.v1.PurgeTenantResponse
+ */
+export type PurgeTenantResponse =
+  Message<"paladin.admin.v1.PurgeTenantResponse"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.PurgeTenantResponse.
+ * Use `create(PurgeTenantResponseSchema)` to create a new message.
+ */
+export const PurgeTenantResponseSchema: GenMessage<PurgeTenantResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 10);
+
+/**
  * @generated from message paladin.admin.v1.RenameTenantSlugRequest
  */
 export type RenameTenantSlugRequest =
@@ -289,7 +366,7 @@ export type RenameTenantSlugRequest =
  */
 export const RenameTenantSlugRequestSchema: GenMessage<RenameTenantSlugRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 8);
+  messageDesc(file_paladin_admin_v1_tenant_service, 11);
 
 /**
  * TenantService manages tenants. Platform-admin only.
@@ -322,6 +399,11 @@ export const TenantService: GenService<{
     output: typeof TenantSchema;
   };
   /**
+   * DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+   * remains recoverable via RestoreTenant within the retention window.
+   * Pass `force=true` to skip the trash and hard-delete immediately —
+   * used by automated test cleanups + emergency-purge flows.
+   *
    * @generated from rpc paladin.admin.v1.TenantService.DeleteTenant
    */
   deleteTenant: {
@@ -344,6 +426,34 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof SetInheritedPolicyRequestSchema;
     output: typeof TenantSchema;
+  };
+  /**
+   * RestoreTenant clears `deleted_at` on a soft-deleted row, returning
+   * it to the active set. Slug + display_name UNIQUE constraints still
+   * apply across both active and trashed rows (see migration 036
+   * commentary) — if a new tenant claimed the slug while this one was
+   * trashed, restore fails with ALREADY_EXISTS and the operator must
+   * rename one side first.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.RestoreTenant
+   */
+  restoreTenant: {
+    methodKind: "unary";
+    input: typeof RestoreTenantRequestSchema;
+    output: typeof TenantSchema;
+  };
+  /**
+   * PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
+   * an active tenant (operators have to soft-delete first) so the
+   * two-step recovery window is preserved by default. Idempotent on
+   * a missing row.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.PurgeTenant
+   */
+  purgeTenant: {
+    methodKind: "unary";
+    input: typeof PurgeTenantRequestSchema;
+    output: typeof PurgeTenantResponseSchema;
   };
   /**
    * RenameTenantSlug rewrites the tenant's `slug` and rewrites every

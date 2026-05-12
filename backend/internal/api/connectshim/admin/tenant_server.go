@@ -160,15 +160,68 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("resource_version is required; pass force=true to bypass"))
 	}
-	if err := s.H.DeleteTenant(ctx, id, rv); err != nil {
+	if err := s.H.DeleteTenant(ctx, id, rv, req.Msg.GetForce()); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteTenantResponse{}), nil
 }
 
+// RestoreTenant — soft-delete recovery. Operator-facing — see proto
+// commentary for the failure modes (ALREADY_EXISTS on slug collision,
+// FAILED_PRECONDITION on already-active rows).
+func (s *TenantServer) RestoreTenant(ctx context.Context, req *connect.Request[pb.RestoreTenantRequest]) (*connect.Response[pb.Tenant], error) {
+	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// Restore needs a UUID — slug-form lookup would require a list
+	// query against trashed rows. Resolve via GetTenantBySlug when
+	// slug-form is passed; the handler authz layer rejects if the
+	// caller isn't allowed to even see the row.
+	tid := ref.ID
+	if !ref.HasID() {
+		t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
+		if err != nil {
+			return nil, err
+		}
+		tid = t.TenantID
+	}
+	t, err := s.H.RestoreTenant(ctx, tid)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(tenantDomainToProto(t)), nil
+}
+
+// PurgeTenant — hard-delete on a trashed row. Refuses to operate on
+// an active tenant.
+func (s *TenantServer) PurgeTenant(ctx context.Context, req *connect.Request[pb.PurgeTenantRequest]) (*connect.Response[pb.PurgeTenantResponse], error) {
+	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	tid := ref.ID
+	if !ref.HasID() {
+		t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
+		if err != nil {
+			return nil, err
+		}
+		tid = t.TenantID
+	}
+	if err := s.H.PurgeTenant(ctx, tid); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.PurgeTenantResponse{}), nil
+}
+
 func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.ListTenantsRequest]) (*connect.Response[pb.ListTenantsResponse], error) {
 	m := req.Msg
-	list, next, err := s.H.ListTenants(ctx, m.GetPage().GetPageSize(), m.GetPage().GetPageToken())
+	args := tenant.ListTenantsArgs{
+		PageSize:       m.GetPage().GetPageSize(),
+		IncludeTrashed: m.GetIncludeTrashed(),
+		OnlyTrashed:    m.GetOnlyTrashed(),
+	}
+	list, next, err := s.H.ListTenants(ctx, args, m.GetPage().GetPageToken())
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +303,9 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 		ResourceVersion:      resourceVersion(t.ResourceVersion),
 		CreatedAt:            tsProto(t.CreatedAt),
 		UpdatedAt:            tsProto(t.UpdatedAt),
+	}
+	if !t.DeletedAt.IsZero() {
+		out.DeletedAt = tsProto(t.DeletedAt)
 	}
 	if len(t.Labels) > 0 {
 		var m map[string]string
