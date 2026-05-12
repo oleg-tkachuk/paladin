@@ -24,6 +24,7 @@ import {
   CpuChipIcon,
   ServerStackIcon,
   ArchiveBoxIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -115,7 +116,9 @@ const navigationGroups: Array<{
         icon: UsersIcon,
         countKey: "tenants" as keyof SidebarCounts,
       },
+      { name: "Users", path: "/users", icon: UserCircleIcon },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
+      { name: "Trash", path: "/trash", icon: TrashIcon },
     ],
   },
   {

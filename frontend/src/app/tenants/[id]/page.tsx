@@ -32,6 +32,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { IdentityField } from "@/components/IdentityField";
+import { RelativeTime } from "@/components/RelativeTime";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -516,7 +517,6 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
   const method = lastDot >= 0 ? entry.action.slice(lastDot + 1) : entry.action;
   const prefix = lastDot >= 0 ? entry.action.slice(0, lastDot) : "";
 
-  const when = entry.at ? formatDate(timestampToDate(entry.at)) : "—";
   const failed = !!entry.errorMessage;
 
   return (
@@ -564,12 +564,10 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
           )}
         </div>
       </div>
-      <span
+      <RelativeTime
+        ts={entry.at}
         className={cn(T.hint, "shrink-0 whitespace-nowrap")}
-        title={entry.at ? timestampToDate(entry.at).toISOString() : undefined}
-      >
-        {when}
-      </span>
+      />
     </li>
   );
 }

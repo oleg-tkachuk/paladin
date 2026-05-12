@@ -20,6 +20,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardWidgets } from "@/components/DashboardWidgets";
 import {
   Card,
   CardContent,
@@ -366,6 +367,9 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {/* ─── Dashboard widgets (recent activity, failed ops, budgets) */}
+      <DashboardWidgets />
 
       {/* ─── Status strip ─────────────────────────────────────────── */}
       <Card>
