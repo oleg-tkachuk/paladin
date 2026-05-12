@@ -112,6 +112,15 @@ func (s *ObjectKeyServer) ListObjectKeys(ctx context.Context, req *connect.Reque
 			args.TenantID = id
 		}
 	}
+	if b := m.GetBucket(); b != "" {
+		backend, bucket, err := bucketRef(b)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("bucket: %w", err))
+		}
+		args.BackendID = backend
+		args.BucketName = bucket
+	}
 	list, next, err := s.H.ListObjectKeys(ctx, args)
 	if err != nil {
 		return nil, err

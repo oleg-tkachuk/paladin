@@ -72,6 +72,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IdentityField } from "@/components/IdentityField";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -662,6 +663,44 @@ export default function TenantsPage() {
                   bucket cascade. Empty bucket list means the chosen
                   backend has no buckets registered yet — operator
                   needs to create one in /buckets before continuing. */}
+              {backends.length === 0 && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    No storage backends registered yet
+                  </p>
+                  <p className="text-muted-foreground">
+                    Tenants need a backend + bucket to land. Register one before
+                    creating the first tenant.
+                  </p>
+                  <Link
+                    href="/storage-backends"
+                    className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
+                    onClick={() => setCreateOpen(false)}
+                  >
+                    Open Storage Backends →
+                  </Link>
+                </div>
+              )}
+              {backends.length > 0 &&
+                bucketsForBackend.length === 0 &&
+                newBackend && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
+                    <p className="font-medium text-amber-900 dark:text-amber-200">
+                      No buckets on backend{" "}
+                      <span className={T.code}>{newBackend}</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      Create a bucket on this backend before continuing.
+                    </p>
+                    <Link
+                      href={`/buckets`}
+                      className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
+                      onClick={() => setCreateOpen(false)}
+                    >
+                      Open Buckets →
+                    </Link>
+                  </div>
+                )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="tenant-backend">
@@ -797,20 +836,22 @@ export default function TenantsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label>Tenant ID</Label>
-                <Input
-                  disabled
-                  value={editing?.tenantId || ""}
-                  className="font-mono text-xs text-muted-foreground"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Slug</Label>
-                <Input
-                  disabled
+              {/* Immutable identity rows — IdentityField gives the
+                  operator a copy affordance, matching the overview
+                  page. Plain disabled <Input> didn't. */}
+              <div className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <IdentityField
+                  label="slug"
                   value={editing?.slug || ""}
-                  className="text-muted-foreground"
+                  immutable
+                  labelWidth="w-20"
+                />
+                <IdentityField
+                  label="tenant id"
+                  value={editing?.tenantId || ""}
+                  immutable
+                  truncate
+                  labelWidth="w-20"
                 />
               </div>
               <div className="space-y-1.5">
@@ -851,11 +892,43 @@ export default function TenantsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this tenant?</AlertDialogTitle>
-            <AlertDialogDescription>
-              All data scoped to{" "}
-              <span className="font-mono text-foreground">{deleteTarget}</span>{" "}
-              will become inaccessible. This action cannot be undone from the UI
-              — recovery requires direct database intervention.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  All data scoped to{" "}
+                  <span className="font-mono text-foreground">
+                    {deleteTarget}
+                  </span>{" "}
+                  will become inaccessible.
+                </p>
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold text-destructive">
+                    What gets removed (cascade)
+                  </p>
+                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
+                    <li>Default backend/bucket binding</li>
+                    <li>All Object Keys + their cedar policies</li>
+                    <li>Audit log entries (after retention TTL)</li>
+                    <li>API tokens, M2M tokens, capabilities</li>
+                  </ul>
+                </div>
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold">What stays</p>
+                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
+                    <li>
+                      Physical S3 objects under{" "}
+                      <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span>
+                    </li>
+                    <li>
+                      In-flight presigned URLs (continue working until TTL
+                      expires)
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-xs italic text-muted-foreground">
+                  Recovery requires direct database intervention.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

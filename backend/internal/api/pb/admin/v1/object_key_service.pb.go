@@ -7,14 +7,15 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -294,10 +295,18 @@ func (*DeleteObjectKeyResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListObjectKeysRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
-	Page          *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	Filter        string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Parent string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
+	Page   *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	Filter string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	// bucket — optional server-side narrow to ObjectKeys bound to a
+	// specific (backend, bucket) pair. Resource-name form
+	// "storageBackends/{backend_id}/buckets/{bucket_name}". When set
+	// with an empty parent, the request becomes a cross-tenant scan
+	// over that bucket — gated to platform.admin server-side. Used by
+	// the storage-first UI browser to avoid pulling every OK
+	// platform-wide just to client-filter a handful per bucket.
+	Bucket        string `protobuf:"bytes,4,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -349,6 +358,13 @@ func (x *ListObjectKeysRequest) GetPage() *v1.PageRequest {
 func (x *ListObjectKeysRequest) GetFilter() string {
 	if x != nil {
 		return x.Filter
+	}
+	return ""
+}
+
+func (x *ListObjectKeysRequest) GetBucket() string {
+	if x != nil {
+		return x.Bucket
 	}
 	return ""
 }
@@ -548,11 +564,12 @@ const file_paladin_admin_v1_object_key_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12\x14\n" +
 	"\x05force\x18\x03 \x01(\bR\x05force\"\x19\n" +
-	"\x17DeleteObjectKeyResponse\"w\n" +
+	"\x17DeleteObjectKeyResponse\"\x8f\x01\n" +
 	"\x15ListObjectKeysRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x12.\n" +
 	"\x04page\x18\x02 \x01(\v2\x1a.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\x83\x01\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\x12\x16\n" +
+	"\x06bucket\x18\x04 \x01(\tR\x06bucket\"\x83\x01\n" +
 	"\x16ListObjectKeysResponse\x128\n" +
 	"\vobject_keys\x18\x01 \x03(\v2\x17.paladin.admin.v1.ObjectKeyR\n" +
 	"objectKeys\x12/\n" +

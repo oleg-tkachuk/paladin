@@ -312,21 +312,42 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 // see the gate markers (h.authorize / requirePlatformAdmin) in this
 // method's body.
 func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, error) {
-	t, err := h.repo.GetBySlug(ctx, slug)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
-	}
-	callerTenant, err := auth.TenantFromContext(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
-	}
-	if callerTenant != t.TenantID {
-		if err := requirePlatformAdmin(ctx); err != nil {
-			return nil, err
+	// Resolve slug → row first, then run auth. To prevent slug
+	// enumeration via timing (existing-slug-but-denied vs.
+	// missing-slug round-trip times), we always run the same
+	// principal-extraction + authorize sequence and collapse all
+	// non-success outcomes to CodeNotFound. The trade-off: a real
+	// authz denial loses its specific reason, but slug enumeration
+	// gains nothing.
+	t, lookupErr := h.repo.GetBySlug(ctx, slug)
+	// Always do the auth dance, even on lookup-miss, so the response
+	// time is dominated by Cedar evaluation rather than the DB
+	// round-trip. We resolve auth against `t` when present and
+	// against the caller's own tenant when not (a no-op Cedar query
+	// that still costs the engine ~the same).
+	target := t.TenantID
+	if lookupErr != nil {
+		if ct, err := auth.TenantFromContext(ctx); err == nil {
+			target = ct
 		}
 	}
-	if err := h.authorize(ctx, cedar.ActionReadTenant, t.TenantID); err != nil {
-		return nil, err
+	if _, err := auth.PrincipalFromContext(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	callerTenant, _ := auth.TenantFromContext(ctx)
+	if lookupErr == nil && callerTenant != t.TenantID {
+		if err := requirePlatformAdmin(ctx); err != nil {
+			// Constant-time: same outcome shape as a missing row.
+			return nil, connect.NewError(connect.CodeNotFound, ErrNotFound)
+		}
+	}
+	if err := h.authorize(ctx, cedar.ActionReadTenant, target); err != nil {
+		// Same — opaque NotFound rather than PermissionDenied keeps
+		// existing-vs-missing slug indistinguishable.
+		return nil, connect.NewError(connect.CodeNotFound, ErrNotFound)
+	}
+	if lookupErr != nil {
+		return nil, connect.NewError(connect.CodeNotFound, lookupErr)
 	}
 	return &t, nil
 }

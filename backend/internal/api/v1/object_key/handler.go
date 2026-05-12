@@ -72,6 +72,12 @@ type ListObjectKeysArgs struct {
 	TenantID  uuid.UUID
 	PageSize  int32
 	PageToken string
+	// BackendID + BucketName are optional server-side filters. When both
+	// are set, only ObjectKeys bound to that (backend, bucket) pair are
+	// returned. Used by the storage-first UI browser to avoid pulling
+	// every OK platform-wide just to client-filter a handful per bucket.
+	BackendID  string
+	BucketName string
 }
 
 type Repository interface {
@@ -151,18 +157,31 @@ func objectKeyResourceName(tenantID uuid.UUID, key string) string {
 }
 
 func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	args.TenantID = tenantID
+	// Resource-owner tenant: by default it's the caller's tenant. A
+	// platform.admin can explicitly target a different tenant by
+	// supplying `args.TenantID` (the connectshim parses this from
+	// `parent: "tenants/{id}"` in the request). Without the
+	// platform.admin gate the override is silently ignored so a
+	// non-admin can't write into someone else's namespace.
+	if args.TenantID == uuid.Nil {
+		args.TenantID = callerTenantID
+	} else if args.TenantID != callerTenantID {
+		if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant CreateObjectKey requires platform.admin"))
+		}
+	}
 	// Fall back to the configured default backend when the caller omits it.
 	// The backend name is a FK to storage_backends.id, so an empty string
 	// would fail the constraint.
 	if args.BackendID == "" {
 		args.BackendID = h.defaultBackend
 	}
-	if err := h.authorizeFull(ctx, principal, tenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorizeFull(ctx, principal, args.TenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Create(ctx, args)
@@ -257,14 +276,38 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 }
 
 func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	args.TenantID = tenantID
+	// Cross-tenant listing (TenantID==Nil + a (backend, bucket) filter)
+	// is reserved for platform.admin — used by the storage-first
+	// browser to enumerate every OK on a given bucket. Without the
+	// gate any tenant could enumerate sibling tenants' OKs by sending
+	// an empty parent + a known bucket.
+	if args.TenantID == uuid.Nil {
+		if args.BackendID == "" || args.BucketName == "" {
+			// Tenant-scoped list: pin to caller's tenant.
+			args.TenantID = callerTenantID
+		} else if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+		}
+	} else if args.TenantID != callerTenantID {
+		if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+		}
+	}
 	// One tenant-scoped Cedar check up front; per-row filtering would
 	// dominate pagination cost so we don't repeat it for every objectKey.
-	if err := h.authorize(ctx, principal, tenantID, "", cedar.ActionManageObjectKey); err != nil {
+	// For cross-tenant listing we authorize against the caller's tenant
+	// (the principal-tenant invariant the Cedar engine encodes).
+	authzTenant := args.TenantID
+	if authzTenant == uuid.Nil {
+		authzTenant = callerTenantID
+	}
+	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageObjectKey); err != nil {
 		return nil, "", err
 	}
 	return h.repo.List(ctx, args)

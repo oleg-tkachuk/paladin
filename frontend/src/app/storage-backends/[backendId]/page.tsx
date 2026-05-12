@@ -16,6 +16,7 @@ import {
   ArrowPathIcon,
   ChevronRightIcon,
   CloudIcon,
+  PlusIcon,
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -175,10 +176,18 @@ export default function StorageBackendDetailPage() {
               ))
             ) : bucketsHere.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <TableCell colSpan={4} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-8 opacity-40" />
                     <p className="text-sm">No buckets on this backend yet.</p>
+                    <Button size="sm" variant="outline" asChild>
+                      <Link
+                        href={`/buckets?backend=${encodeURIComponent(backendId)}`}
+                      >
+                        <PlusIcon className="size-4" />
+                        Create bucket on this backend
+                      </Link>
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

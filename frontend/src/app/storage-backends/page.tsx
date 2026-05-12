@@ -398,26 +398,6 @@ export default function StorageBackendsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="be-pub">
-                  Public endpoint{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="be-pub"
-                  placeholder="defaults to internal endpoint"
-                  value={form.publicEndpoint}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, publicEndpoint: e.target.value }))
-                  }
-                  className="font-mono text-xs"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used in presigned URLs handed to clients.
-                </p>
-              </div>
-              <div className="space-y-1.5">
                 <Label htmlFor="be-secret">
                   Credentials secret reference{" "}
                   <span className="text-destructive">*</span>
@@ -439,23 +419,53 @@ export default function StorageBackendsPage() {
                   stored or returned.
                 </p>
               </div>
-              <label className="flex items-start gap-2 text-sm">
-                <Checkbox
-                  checked={form.forcePathStyle}
-                  onCheckedChange={(v) =>
-                    setForm((f) => ({ ...f, forcePathStyle: v === true }))
-                  }
-                  id="be-pathstyle"
-                />
-                <span className="space-y-0.5">
-                  <span className="font-medium leading-none">
-                    Force path-style addressing
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Required for MinIO/SeaweedFS; usually off for AWS S3.
-                  </span>
-                </span>
-              </label>
+              {/* Advanced — public_endpoint + force_path_style live
+                  here because the typical AWS S3 setup uses defaults
+                  for both. MinIO/SeaweedFS operators expand this. */}
+              <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                  Advanced — public endpoint, path-style addressing
+                </summary>
+                <div className="space-y-3 pt-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="be-pub" className="text-xs">
+                      Public endpoint
+                    </Label>
+                    <Input
+                      id="be-pub"
+                      placeholder="defaults to internal endpoint"
+                      value={form.publicEndpoint}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          publicEndpoint: e.target.value,
+                        }))
+                      }
+                      className="font-mono text-xs"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Used in presigned URLs handed to clients.
+                    </p>
+                  </div>
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={form.forcePathStyle}
+                      onCheckedChange={(v) =>
+                        setForm((f) => ({ ...f, forcePathStyle: v === true }))
+                      }
+                      id="be-pathstyle"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="font-medium leading-none">
+                        Force path-style addressing
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Required for MinIO/SeaweedFS; usually off for AWS S3.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </details>
             </div>
             <DialogFooter>
               <Button

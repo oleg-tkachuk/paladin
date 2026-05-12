@@ -24,7 +24,23 @@ type TenantServer struct {
 func NewTenantServer(h *tenant.Handler) *TenantServer { return &TenantServer{H: h} }
 
 func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb.CreateTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	m := req.Msg
+	args, err := parseCreateTenantArgs(req.Msg)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	t, err := s.H.CreateTenant(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(tenantDomainToProto(t)), nil
+}
+
+// parseCreateTenantArgs is the pure proto→domain translator. Extracted
+// so field_mapping_test.go can pin every field's mapping without
+// spinning up auth/Cedar/DB. Any new field on CreateTenantRequest or
+// its nested Tenant message that needs to reach the handler MUST land
+// here — the field-mapping test fails until it does.
+func parseCreateTenantArgs(m *pb.CreateTenantRequest) (tenant.CreateTenantArgs, error) {
 	src := m.GetTenant()
 	args := tenant.CreateTenantArgs{
 		Slug:                 src.GetSlug(),
@@ -34,7 +50,7 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 	if id := m.GetTenantId(); id != "" {
 		parsed, err := uuid.Parse(id)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return args, fmt.Errorf("tenant_id: %w", err)
 		}
 		args.TenantID = parsed
 	}
@@ -45,17 +61,12 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb
 	if name := m.GetDefaultBucket(); name != "" {
 		backend, bucket, err := bucketNameParts(name)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("default_bucket: %w", err))
+			return args, fmt.Errorf("default_bucket: %w", err)
 		}
 		args.DefaultBackendID = backend
 		args.DefaultBucketName = bucket
 	}
-	t, err := s.H.CreateTenant(ctx, args)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return args, nil
 }
 
 func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.GetTenantRequest]) (*connect.Response[pb.Tenant], error) {
@@ -137,7 +148,18 @@ func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	rv, _ := parseRV(req.Msg.GetResourceVersion())
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// Require either an OCC guard or an explicit `force` opt-out. Without
+	// this, a race-delete is silent: caller A reads version 7, caller B
+	// deletes (no rv), A's next mutation against the missing row returns
+	// 404 with no signal that the row was concurrently removed.
+	if rv == 0 && !req.Msg.GetForce() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version is required; pass force=true to bypass"))
+	}
 	if err := s.H.DeleteTenant(ctx, id, rv); err != nil {
 		return nil, err
 	}

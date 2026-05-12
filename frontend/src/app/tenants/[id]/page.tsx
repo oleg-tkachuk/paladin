@@ -18,19 +18,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
+  ArrowLeftIcon,
   ArrowRightIcon,
   BanknotesIcon,
   ClipboardDocumentListIcon,
-  ClipboardIcon,
-  CheckIcon,
-  LockClosedIcon,
   ServerStackIcon,
   ShieldCheckIcon,
   TagIcon,
 } from "@heroicons/react/24/outline";
+
+import { IdentityField } from "@/components/IdentityField";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -93,21 +94,35 @@ import { formatMoney } from "@/lib/format/money";
 // immutable canonical UUID (audit / debug). Lock icons mark immutable
 // fields; copy buttons sit beside slug + UUID since those are what
 // operators paste into shells, configs, and Cedar policies.
+// StorageBreadcrumb reads ?from=storage&backend=X&bucket=Y from the
+// URL. When present it renders a small "← Back to bucket Y on X"
+// link so an operator who drilled in from /storage-backends/.../
+// buckets/Y/ doesn't lose the trail.
+function StorageBreadcrumb() {
+  const params = useSearchParams();
+  if (params.get("from") !== "storage") return null;
+  const backend = params.get("backend") || "";
+  const bucket = params.get("bucket") || "";
+  if (!backend || !bucket) return null;
+  return (
+    <div className="-mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <Link
+        href={`/storage-backends/${encodeURIComponent(backend)}/buckets/${encodeURIComponent(bucket)}`}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 hover:bg-muted hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-3" />
+        Back to bucket <span className="font-mono">{bucket}</span> on{" "}
+        <span className="font-mono">{backend}</span>
+      </Link>
+    </div>
+  );
+}
+
 function IdentityCard({
   tenant,
 }: {
   tenant: { tenantId: string; slug: string; displayName: string };
 }) {
-  const [copied, setCopied] = useState<"slug" | "id" | null>(null);
-  const copy = async (which: "slug" | "id", value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(which);
-      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1200);
-    } catch {
-      // clipboard API unavailable (e.g. http context) — silent
-    }
-  };
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -123,65 +138,8 @@ function IdentityCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-2 pt-0">
-        {/* slug — primary handle, immutable */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="w-16 uppercase tracking-wider text-muted-foreground">
-            slug
-          </span>
-          <span className={cn(T.code, "font-medium")}>{tenant.slug}</span>
-          <LockClosedIcon
-            className="size-3 text-muted-foreground/70"
-            aria-label="immutable"
-          />
-          <button
-            type="button"
-            onClick={() => copy("slug", tenant.slug)}
-            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Copy slug"
-          >
-            {copied === "slug" ? (
-              <>
-                <CheckIcon className="size-3" /> copied
-              </>
-            ) : (
-              <>
-                <ClipboardIcon className="size-3" /> copy
-              </>
-            )}
-          </button>
-        </div>
-        {/* tenant_id — canonical UUID, immutable, debug-grade */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="w-16 uppercase tracking-wider text-muted-foreground">
-            id
-          </span>
-          <span
-            className={cn(T.code, "text-[11px] text-muted-foreground truncate")}
-            title={tenant.tenantId}
-          >
-            {tenant.tenantId}
-          </span>
-          <LockClosedIcon
-            className="size-3 text-muted-foreground/70"
-            aria-label="immutable"
-          />
-          <button
-            type="button"
-            onClick={() => copy("id", tenant.tenantId)}
-            className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Copy tenant_id"
-          >
-            {copied === "id" ? (
-              <>
-                <CheckIcon className="size-3" /> copied
-              </>
-            ) : (
-              <>
-                <ClipboardIcon className="size-3" /> copy
-              </>
-            )}
-          </button>
-        </div>
+        <IdentityField label="slug" value={tenant.slug} immutable />
+        <IdentityField label="id" value={tenant.tenantId} immutable truncate />
       </CardContent>
     </Card>
   );
@@ -312,6 +270,13 @@ export default function TenantOverviewPage() {
 
   return (
     <div className="space-y-4">
+      {/* Storage-first context: when the operator landed here from
+          `/storage-backends/.../buckets/.../`, show a back-link so
+          they can hop back into the bucket browser without losing
+          their place in the IA. ?from=storage carries backend+bucket
+          so the link is reversible. */}
+      <StorageBreadcrumb />
+
       {/* ─── Identity ──────────────────────────────────────────── */}
       <IdentityCard tenant={tenant} />
 

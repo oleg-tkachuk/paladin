@@ -164,6 +164,14 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	// Same OCC contract as DeleteTenant: require non-zero rv unless the
+	// caller explicitly opts into force-delete via the `delete_on_backend`
+	// flag (which already implies "I know what I'm doing, the physical
+	// bucket is going too"). Empty rv + delete_on_backend=false → reject.
+	if rv == 0 && !req.Msg.GetDeleteOnBackend() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version required; pass delete_on_backend=true to bypass"))
+	}
 	if err := s.H.DeleteBucket(ctx, bucketh.DeleteBucketInput{
 		BackendID:       backend,
 		BucketName:      name,

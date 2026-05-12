@@ -62,11 +62,12 @@ export default function BucketDetailPage() {
   const [okError, setOkError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  // Cross-tenant ListObjectKeys (parent = "") returns every OK on the
-  // platform; we narrow client-side to those bound to this bucket.
-  // Server-side filtering by (backend_id, bucket_name) via CEL would
-  // be cheaper at scale, but the current dev/prod footprint is well
-  // under a thousand OKs total — the simpler client filter is fine.
+  // Server-side narrow via the new `bucket` field on
+  // ListObjectKeysRequest (platform.admin gated; checked by the
+  // handler). Returns only the OKs bound to this (backend, bucket)
+  // pair so we don't pull every OK platform-wide just to filter a
+  // handful client-side.
+  const bucketRef = `storageBackends/${backendId}/buckets/${bucketName}`;
   const reloadObjectKeys = async () => {
     setLoadingOKs(true);
     setOkError(null);
@@ -75,6 +76,7 @@ export default function BucketDetailPage() {
         parent: "",
         page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
         filter: "",
+        bucket: bucketRef,
       });
       setObjectKeys(res.objectKeys);
     } catch (err) {
@@ -103,15 +105,9 @@ export default function BucketDetailPage() {
     [buckets, backendId, bucketName],
   );
 
-  // Filter to this (backend, bucket); the proto Bucket field on
-  // ObjectKey is "storageBackends/{b}/buckets/{bk}" but the
-  // domain row carries backendId/bucketName fields — generated TS
-  // surfaces them as `bucket` resource-name plus the parsed pair
-  // isn't exposed. Parse on the fly.
-  const oksHere = useMemo(() => {
-    const prefix = `storageBackends/${backendId}/buckets/${bucketName}`;
-    return objectKeys.filter((ok) => ok.bucket === prefix);
-  }, [objectKeys, backendId, bucketName]);
+  // Server already narrowed by (backend, bucket) — `objectKeys` IS
+  // the in-bucket set. No client-side filter needed.
+  const oksHere = objectKeys;
 
   // Group ObjectKeys by tenant — operator's mental model of bucket
   // browsing is "which tenant stored what here?". Tenant slug is
@@ -252,7 +248,7 @@ export default function BucketDetailPage() {
         <h2 className="text-sm font-semibold tracking-tight">
           What&apos;s stored here
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            Tenants → folders → files
+            Tenants → Object Keys → files
           </span>
         </h2>
         <Button
@@ -316,7 +312,7 @@ export default function BucketDetailPage() {
               <CardHeader className="bg-muted/40 py-3 px-4">
                 <div className="flex items-center justify-between gap-3">
                   <Link
-                    href={`/tenants/${encodeURIComponent(g.slug)}`}
+                    href={`/tenants/${encodeURIComponent(g.slug)}?from=storage&backend=${encodeURIComponent(backendId)}&bucket=${encodeURIComponent(bucketName)}`}
                     className="flex items-center gap-2 text-sm font-semibold hover:text-primary"
                   >
                     <div className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
@@ -344,7 +340,7 @@ export default function BucketDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {g.oks.map((ok) => {
-                    const filesHref = `/tenants/${encodeURIComponent(g.slug)}/object-keys/${encodeURIComponent(ok.objectKey)}/objects`;
+                    const filesHref = `/tenants/${encodeURIComponent(g.slug)}/object-keys/${encodeURIComponent(ok.objectKey)}/objects?from=storage&backend=${encodeURIComponent(backendId)}&bucket=${encodeURIComponent(bucketName)}`;
                     return (
                       <TableRow key={ok.objectKey} className="group">
                         <TableCell>

@@ -913,6 +913,57 @@ the same commit. Treat this file like a runtime invariant.
     paths collide (e.g. `invoices` + `invoices/2026`).
 - **Blockers:** none — pure backend refactor, no proto change.
 
+### BackendService.RotateCredentials end-to-end implementation
+
+- **Status:** Aspirational
+- **Reason:** Proto + connectshim entry-point exist
+  (`backend_server.go:92`) but the handler underneath returns
+  Unimplemented. RotateCredentials needs: (1) write the new secret
+  ref to the row, (2) preserve the old one for `grace_period` so
+  in-flight presigns don't break, (3) emit
+  `paladin.backend.credentials_rotated` event so downstream caches
+  invalidate.
+- **Definition of Done:**
+  - `backendh.Handler.RotateCredentials` does the dual-write + cache
+    invalidation.
+  - State column on `backends` carrying `(active_secret_ref,
+    previous_secret_ref, previous_valid_until)` triple.
+  - Test that a presign issued just before rotate keeps working
+    until `grace_period` elapses.
+- **Blockers:** none.
+
+### BackendService.TestBackend connectivity probe
+
+- **Status:** Aspirational
+- **Reason:** Proto + connectshim entry-point exist; handler returns
+  Unimplemented. UI's "Test connection" affordance can't be wired up
+  until this lands.
+- **Definition of Done:**
+  - HEAD + ListBuckets probe with timeout against the backend's
+    endpoint using the registered credentials.
+  - Latency + reachable flag in response.
+  - Read-only — no audit row.
+- **Blockers:** none.
+
+### ResolveObjectKey RPC (Phase 2 of canonical-resource-names)
+
+- **Status:** Aspirational
+- **Reason:** Phase 1 landed canonical resource names in audit + event
+  payloads. Phase 2 of the plan in
+  `backend/docs/canonical-resource-names.md` adds a `ResolveObjectKey`
+  RPC + a central resolver on the connectshim edge so clients can
+  send any of the three name shapes (canonical A, tenant-first C,
+  bare B) without each handler doing its own parsing.
+- **Definition of Done:**
+  - `internal/api/connectshim/resolve/resolver.go` exists, exported as
+    `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)`.
+  - Every `*_server.go` under `connectshim/admin/` and `connectshim/data/`
+    that calls `objectKeyParts` / `tenantUUIDFromParent` swaps to the
+    central resolver.
+  - Metric `paladin_resource_name_shape_total{shape="…"}` so we can see
+    real-world distribution before unlocking Phase 3.
+- **Blockers:** none — pure refactor.
+
 ### Cedar policy templates: canonical resource literals
 
 - **Status:** Aspirational

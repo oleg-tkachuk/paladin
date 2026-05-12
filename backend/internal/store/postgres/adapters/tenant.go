@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
@@ -66,11 +67,11 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			switch pgErr.ConstraintName {
-			case "tenants_pkey":
+			case schema.TenantsPK:
 				return tenant.Tenant{}, tenant.ErrTenantIDConflict
-			case "tenants_slug_unique":
+			case schema.TenantsSlugUnique:
 				return tenant.Tenant{}, tenant.ErrSlugConflict
-			case "tenants_display_name_unique":
+			case schema.TenantsDisplayNameUnique:
 				return tenant.Tenant{}, tenant.ErrDisplayNameConflict
 			}
 		}
@@ -92,7 +93,8 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 			// Surface as a typed sentinel so the handler can return a
 			// clean InvalidArgument instead of a Postgres error string.
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			if errors.As(err, &pgErr) && pgErr.Code == "23503" &&
+				pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
 				return tenant.Tenant{}, tenant.ErrDefaultBindingBucketMissing
 			}
 			return tenant.Tenant{}, fmt.Errorf("create tenant: bind default: %w", err)
@@ -161,7 +163,7 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 		// offending field.
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" &&
-			pgErr.ConstraintName == "tenants_display_name_unique" {
+			pgErr.ConstraintName == schema.TenantsDisplayNameUnique {
 			return tenant.Tenant{}, tenant.ErrDisplayNameConflict
 		}
 		return tenant.Tenant{}, fmt.Errorf("update tenant: %w", err)
@@ -302,7 +304,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		// PG error — translate to ErrSlugConflict so the handler can
 		// return AlreadyExists.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.ConstraintName == "tenants_slug_unique" {
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantsSlugUnique {
 			return tenant.Tenant{}, tenant.ErrSlugConflict
 		}
 		return tenant.Tenant{}, fmt.Errorf("rename tenant: update tenant: %w", err)
