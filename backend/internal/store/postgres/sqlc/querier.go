@@ -44,6 +44,7 @@ type Querier interface {
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
+	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountBucketsForBackend(ctx context.Context, backendID string) (int64, error)
 	CountObjectKeysReferencingBucket(ctx context.Context, backendID string, bucketName string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState) (int64, error)
@@ -70,7 +71,7 @@ type Querier interface {
 	CreateOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	CreateStorageBackend(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string) error
 	// Tenant queries.
-	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, labels []byte, inheritedCedarPolicy string) error
+	CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string) error
 	CreateUser(ctx context.Context, userID pgtype.UUID, tenantID pgtype.UUID, subject string, displayName *string, passwordHash []byte, roles []byte, scopes []byte, disabled bool) error
 	DeleteBucket(ctx context.Context, backendID string, bucketName string, expectedVersion int64) (int64, error)
 	// Physical row delete. Called by the bucket-reconciler worker AFTER
@@ -85,7 +86,6 @@ type Querier interface {
 	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeleteStorageBackend(ctx context.Context, iD string, expectedVersion int64) (int64, error)
-	DeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, userID pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// Cross-tenant subject lookup. Used by AuthService.Login when the caller did
@@ -121,6 +121,7 @@ type Querier interface {
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
+	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (TenantDefaultBinding, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
@@ -138,6 +139,9 @@ type Querier interface {
 	// no-op. Worker callers pass the version they read from
 	// ListHardDeletable; mismatch ⇒ 0 rows affected ⇒ skip.
 	HardDeleteObjectIfStillDeleted(ctx context.Context, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Unconditional physical delete. Used by Delete(force=true) and Purge.
+	// expected_version=0 → no OCC guard; non-zero → strict match.
+	HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
 	IncrementQuotaUsage(ctx context.Context, quotaID pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
 	InsertAuditEntry(ctx context.Context, entryID pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID *string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
@@ -168,7 +172,11 @@ type Querier interface {
 	// handler, not in this WHERE clause.
 	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]AuditLog, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
-	ListBucketsV2(ctx context.Context, backendID *string, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
+	// owner_tenant_id is an optional filter (nullable arg → skipped).
+	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+	// (migration 006) makes the per-tenant filter cheap; the WHERE clause
+	// below is plain equality so the planner uses the partial index.
+	ListBucketsV2(ctx context.Context, backendID *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.
@@ -218,7 +226,25 @@ type Querier interface {
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
 	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
-	ListTenants(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]ListTenantsRow, error)
+	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
+	// display_name so the dashboard's BudgetAlerts widget doesn't need a
+	// follow-up read.
+	//
+	// Predicate semantics:
+	//   unlimited_only=true  → return only rows with max_budget_usd = 0
+	//   unlimited_only=false → return rows whose utilisation ≥
+	//                          threshold_pct (threshold_pct = 0 includes
+	//                          everything).
+	//   exclude_inactive=true → join filters tenants.deleted_at IS NULL.
+	//
+	// Ordered by utilisation DESC so at-risk tenants surface first.
+	ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, rowLimit int32) ([]ListTenantBudgetSummariesRow, error)
+	// include_trashed = false → active rows only; true → both;
+	// only_trashed = true → trashed only (overrides include_trashed).
+	// The boolean gating is inline-CASE so sqlc emits a single prepared
+	// statement; planner uses the partial idx_tenants_active index on
+	// the common path.
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error)
@@ -290,6 +316,9 @@ type Querier interface {
 	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.
 	RestoreObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (int64, error)
+	// Clears deleted_at on a trashed row. Bumps resource_version +
+	// updated_at.
+	RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	RevokeApiKey(ctx context.Context, apiKeyID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
@@ -319,8 +348,20 @@ type Querier interface {
 	// arg keeps the existing currency unchanged — operators editing
 	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
 	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool) (SetTenantBudgetRow, error)
+	// Tenant default-binding queries.
+	//
+	// One row per tenant. Set at CreateTenant time; updated by future
+	// SetTenantDefaultBinding RPC; deleted CASCADE when the tenant is
+	// deleted; deletion of the underlying bucket is RESTRICTed so an
+	// operator must rebind before tearing down the bucket.
+	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, backendID string, bucketName string, setBy string) error
 	// expected_version=0 disables the OCC guard (force).
 	SoftDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
+	// Sets deleted_at on an active row. expected_version=0 means
+	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
+	// the match. Updates resource_version + updated_at so audit reflects
+	// the soft-delete time independently of any subsequent restore.
+	SoftDeleteTenant(ctx context.Context, tenantID pgtype.UUID, expectedVersion int64) (int64, error)
 	TouchApiKeyUse(ctx context.Context, apiKeyID pgtype.UUID, lastUsedAt pgtype.Timestamptz) error
 	TouchUserLogin(ctx context.Context, userID pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
 	// expected_version=0 disables the OCC guard (force update).

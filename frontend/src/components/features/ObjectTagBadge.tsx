@@ -1,5 +1,4 @@
 import React from "react";
-import Link from "next/link";
 import { TagIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +42,10 @@ export const ObjectTagBadge: React.FC<ObjectTagBadgeProps> = ({
     </span>
   );
 
-  if (linked) {
-    return (
-      <Link href={`/object-tags?search=${encodeURIComponent(objectTag)}`}>
-        {badge}
-      </Link>
-    );
-  }
-
+  // `linked` used to point at the legacy /object-tags taxonomy
+  // page (deleted in Phase 5). Until the BACKLOG "Object Tags as a
+  // filter on Objects tab" lands, the badge has nowhere meaningful
+  // to navigate; render the same badge non-link, no behaviour change
+  // for callers that pass `linked` (just no href).
   return badge;
 };

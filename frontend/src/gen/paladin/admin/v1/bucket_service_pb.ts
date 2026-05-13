@@ -2,12 +2,27 @@
 // @generated from file paladin/admin/v1/bucket_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
-import type { Bucket, BucketReplication, BucketSchema, BucketVersioning, LifecycleRule, ObjectLockConfig } from "./types_pb";
+import type {
+  Bucket,
+  BucketReplication,
+  BucketSchema,
+  BucketVersioning,
+  LifecycleRule,
+  ObjectLockConfig,
+} from "./types_pb";
 import { file_paladin_admin_v1_types } from "./types_pb";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
@@ -16,44 +31,55 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/bucket_service.proto.
  */
-export const file_paladin_admin_v1_bucket_service: GenFile = /*@__PURE__*/
-  fileDesc("CiFvY3AvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSKaAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHgoLYnVja2V0X25hbWUYAiABKAlCCbpIBnIEEAMYPxIsCgZidWNrZXQYAyABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0Qga6SAPIAQESHAoUcHJvdmlzaW9uX29uX2JhY2tlbmQYBCABKAgiKQoQR2V0QnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZidWNrZXQYBCABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0ImEKE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIIhYKFERlbGV0ZUJ1Y2tldFJlc3BvbnNlIl4KEkxpc3RCdWNrZXRzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJImcKE0xpc3RCdWNrZXRzUmVzcG9uc2USJQoHYnVja2V0cxgBIAMoCzIULm9jcC5hZG1pbi52MS5CdWNrZXQSKQoEcGFnZRgCIAEoCzIbLm9jcC5jb21tb24udjEuUGFnZVJlc3BvbnNlIl8KFlNldEJ1Y2tldFBvbGljeVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhQKDGNlZGFyX3BvbGljeRgDIAEoCSJ3ChhTZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEioKBXJ1bGVzGAMgAygLMhsub2NwLmFkbWluLnYxLkxpZmVjeWNsZVJ1bGUifwoUU2V0T2JqZWN0TG9ja1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjYKBmNvbmZpZxgDIAEoCzIeLm9jcC5hZG1pbi52MS5PYmplY3RMb2NrQ29uZmlnQga6SAPIAQEigwEKFFNldFZlcnNpb25pbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI6Cgp2ZXJzaW9uaW5nGAMgASgLMh4ub2NwLmFkbWluLnYxLkJ1Y2tldFZlcnNpb25pbmdCBrpIA8gBASKGAQoVU2V0UmVwbGljYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI8CgtyZXBsaWNhdGlvbhgDIAEoCzIfLm9jcC5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbkIGukgDyAEBImEKHExpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QSFwoGdGVuYW50GAEgASgJQge6SARyAhABEigKBHBhZ2UYAiABKAsyGi5vY3AuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0MvwGCg1CdWNrZXRTZXJ2aWNlEkcKDENyZWF0ZUJ1Y2tldBIhLm9jcC5hZG1pbi52MS5DcmVhdGVCdWNrZXRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJBCglHZXRCdWNrZXQSHi5vY3AuYWRtaW4udjEuR2V0QnVja2V0UmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSRwoMVXBkYXRlQnVja2V0EiEub2NwLmFkbWluLnYxLlVwZGF0ZUJ1Y2tldFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0ElUKDERlbGV0ZUJ1Y2tldBIhLm9jcC5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkRlbGV0ZUJ1Y2tldFJlc3BvbnNlElIKC0xpc3RCdWNrZXRzEiAub2NwLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVxdWVzdBohLm9jcC5hZG1pbi52MS5MaXN0QnVja2V0c1Jlc3BvbnNlEk0KD1NldEJ1Y2tldFBvbGljeRIkLm9jcC5hZG1pbi52MS5TZXRCdWNrZXRQb2xpY3lSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJRChFTZXRMaWZlY3ljbGVSdWxlcxImLm9jcC5hZG1pbi52MS5TZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EkkKDVNldE9iamVjdExvY2sSIi5vY3AuYWRtaW4udjEuU2V0T2JqZWN0TG9ja1JlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EkkKDVNldFZlcnNpb25pbmcSIi5vY3AuYWRtaW4udjEuU2V0VmVyc2lvbmluZ1JlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EksKDlNldFJlcGxpY2F0aW9uEiMub2NwLmFkbWluLnYxLlNldFJlcGxpY2F0aW9uUmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSZgoVTGlzdEFjY2Vzc2libGVCdWNrZXRzEioub2NwLmFkbWluLnYxLkxpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_admin_v1_types, file_paladin_common_v1_pagination]);
+export const file_paladin_admin_v1_bucket_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiFvY3AvYWRtaW4vdjEvYnVja2V0X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSKaAQoTQ3JlYXRlQnVja2V0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESHgoLYnVja2V0X25hbWUYAiABKAlCCbpIBnIEEAMYPxIsCgZidWNrZXQYAyABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0Qga6SAPIAQESHAoUcHJvdmlzaW9uX29uX2JhY2tlbmQYBCABKAgiKQoQR2V0QnVja2V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZidWNrZXQYBCABKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0ImEKE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIIhYKFERlbGV0ZUJ1Y2tldFJlc3BvbnNlIncKEkxpc3RCdWNrZXRzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhcKD293bmVyX3RlbmFudF9pZBgEIAEoCSJnChNMaXN0QnVja2V0c1Jlc3BvbnNlEiUKB2J1Y2tldHMYASADKAsyFC5vY3AuYWRtaW4udjEuQnVja2V0EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChZTZXRCdWNrZXRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkidwoYU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIqCgVydWxlcxgDIAMoCzIbLm9jcC5hZG1pbi52MS5MaWZlY3ljbGVSdWxlIn8KFFNldE9iamVjdExvY2tSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI2CgZjb25maWcYAyABKAsyHi5vY3AuYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZ0IGukgDyAEBIoMBChRTZXRWZXJzaW9uaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSOgoKdmVyc2lvbmluZxgDIAEoCzIeLm9jcC5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nQga6SAPIAQEihgEKFVNldFJlcGxpY2F0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSPAoLcmVwbGljYXRpb24YAyABKAsyHy5vY3AuYWRtaW4udjEuQnVja2V0UmVwbGljYXRpb25CBrpIA8gBASJhChxMaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0EhcKBnRlbmFudBgBIAEoCUIHukgEcgIQARIoCgRwYWdlGAIgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdDL8BgoNQnVja2V0U2VydmljZRJHCgxDcmVhdGVCdWNrZXQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlQnVja2V0UmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSQQoJR2V0QnVja2V0Eh4ub2NwLmFkbWluLnYxLkdldEJ1Y2tldFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EkcKDFVwZGF0ZUJ1Y2tldBIhLm9jcC5hZG1pbi52MS5VcGRhdGVCdWNrZXRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJVCgxEZWxldGVCdWNrZXQSIS5vY3AuYWRtaW4udjEuRGVsZXRlQnVja2V0UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXNwb25zZRJSCgtMaXN0QnVja2V0cxIgLm9jcC5hZG1pbi52MS5MaXN0QnVja2V0c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZRJNCg9TZXRCdWNrZXRQb2xpY3kSJC5vY3AuYWRtaW4udjEuU2V0QnVja2V0UG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5CdWNrZXQSUQoRU2V0TGlmZWN5Y2xlUnVsZXMSJi5vY3AuYWRtaW4udjEuU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJJCg1TZXRPYmplY3RMb2NrEiIub2NwLmFkbWluLnYxLlNldE9iamVjdExvY2tSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJJCg1TZXRWZXJzaW9uaW5nEiIub2NwLmFkbWluLnYxLlNldFZlcnNpb25pbmdSZXF1ZXN0GhQub2NwLmFkbWluLnYxLkJ1Y2tldBJLCg5TZXRSZXBsaWNhdGlvbhIjLm9jcC5hZG1pbi52MS5TZXRSZXBsaWNhdGlvblJlcXVlc3QaFC5vY3AuYWRtaW4udjEuQnVja2V0EmYKFUxpc3RBY2Nlc3NpYmxlQnVja2V0cxIqLm9jcC5hZG1pbi52MS5MaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0GiEub2NwLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_admin_v1_types,
+      file_paladin_common_v1_pagination,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.CreateBucketRequest
  */
-export type CreateBucketRequest = Message<"paladin.admin.v1.CreateBucketRequest"> & {
-  /**
-   * Parent: "storageBackends/{backend_id}".
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type CreateBucketRequest =
+  Message<"paladin.admin.v1.CreateBucketRequest"> & {
+    /**
+     * Parent: "storageBackends/{backend_id}".
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: string bucket_name = 2;
-   */
-  bucketName: string;
+    /**
+     * @generated from field: string bucket_name = 2;
+     */
+    bucketName: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.Bucket bucket = 3;
-   */
-  bucket?: Bucket | undefined;
+    /**
+     * @generated from field: paladin.admin.v1.Bucket bucket = 3;
+     */
+    bucket?: Bucket | undefined;
 
-  /**
-   * When true, PALADIN also calls the backend to physically create the bucket.
-   * When false, the bucket is assumed to exist out-of-band.
-   *
-   * @generated from field: bool provision_on_backend = 4;
-   */
-  provisionOnBackend: boolean;
-};
+    /**
+     * When true, PALADIN also calls the backend to physically create the bucket.
+     * When false, the bucket is assumed to exist out-of-band.
+     *
+     * @generated from field: bool provision_on_backend = 4;
+     */
+    provisionOnBackend: boolean;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CreateBucketRequest.
  * Use `create(CreateBucketRequestSchema)` to create a new message.
  */
-export const CreateBucketRequestSchema: GenMessage<CreateBucketRequest> = /*@__PURE__*/
+export const CreateBucketRequestSchema: GenMessage<CreateBucketRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 0);
 
 /**
@@ -70,81 +96,87 @@ export type GetBucketRequest = Message<"paladin.admin.v1.GetBucketRequest"> & {
  * Describes the message paladin.admin.v1.GetBucketRequest.
  * Use `create(GetBucketRequestSchema)` to create a new message.
  */
-export const GetBucketRequestSchema: GenMessage<GetBucketRequest> = /*@__PURE__*/
+export const GetBucketRequestSchema: GenMessage<GetBucketRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.UpdateBucketRequest
  */
-export type UpdateBucketRequest = Message<"paladin.admin.v1.UpdateBucketRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type UpdateBucketRequest =
+  Message<"paladin.admin.v1.UpdateBucketRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: google.protobuf.FieldMask update_mask = 3;
-   */
-  updateMask?: FieldMask | undefined;
+    /**
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 
-  /**
-   * @generated from field: paladin.admin.v1.Bucket bucket = 4;
-   */
-  bucket?: Bucket | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.Bucket bucket = 4;
+     */
+    bucket?: Bucket | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.UpdateBucketRequest.
  * Use `create(UpdateBucketRequestSchema)` to create a new message.
  */
-export const UpdateBucketRequestSchema: GenMessage<UpdateBucketRequest> = /*@__PURE__*/
+export const UpdateBucketRequestSchema: GenMessage<UpdateBucketRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.DeleteBucketRequest
  */
-export type DeleteBucketRequest = Message<"paladin.admin.v1.DeleteBucketRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteBucketRequest =
+  Message<"paladin.admin.v1.DeleteBucketRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * When true, also removes the physical bucket (and is a destructive op).
-   *
-   * @generated from field: bool delete_on_backend = 3;
-   */
-  deleteOnBackend: boolean;
-};
+    /**
+     * When true, also removes the physical bucket (and is a destructive op).
+     *
+     * @generated from field: bool delete_on_backend = 3;
+     */
+    deleteOnBackend: boolean;
+  };
 
 /**
  * Describes the message paladin.admin.v1.DeleteBucketRequest.
  * Use `create(DeleteBucketRequestSchema)` to create a new message.
  */
-export const DeleteBucketRequestSchema: GenMessage<DeleteBucketRequest> = /*@__PURE__*/
+export const DeleteBucketRequestSchema: GenMessage<DeleteBucketRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.DeleteBucketResponse
  */
-export type DeleteBucketResponse = Message<"paladin.admin.v1.DeleteBucketResponse"> & {
-};
+export type DeleteBucketResponse =
+  Message<"paladin.admin.v1.DeleteBucketResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.DeleteBucketResponse.
  * Use `create(DeleteBucketResponseSchema)` to create a new message.
  */
-export const DeleteBucketResponseSchema: GenMessage<DeleteBucketResponse> = /*@__PURE__*/
+export const DeleteBucketResponseSchema: GenMessage<DeleteBucketResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 4);
 
 /**
@@ -164,199 +196,226 @@ export type ListBucketsRequest = Message<"paladin.admin.v1.ListBucketsRequest"> 
   page?: PageRequest | undefined;
 
   /**
-   * CEL over Bucket
+   * CEL over Bucket (reserved — not yet evaluated)
    *
    * @generated from field: string filter = 3;
    */
   filter: string;
+
+  /**
+   * owner_tenant_id narrows the listing to buckets owned by exactly
+   * this tenant (matches buckets.owner_tenant_id). UUID or slug;
+   * empty = no tenant filter (cross-tenant listing for platform-
+   * admin). Backed by the partial index on
+   * buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+   * (migration 006), so per-tenant lookups are cheap.
+   *
+   * @generated from field: string owner_tenant_id = 4;
+   */
+  ownerTenantId: string;
 };
 
 /**
  * Describes the message paladin.admin.v1.ListBucketsRequest.
  * Use `create(ListBucketsRequestSchema)` to create a new message.
  */
-export const ListBucketsRequestSchema: GenMessage<ListBucketsRequest> = /*@__PURE__*/
+export const ListBucketsRequestSchema: GenMessage<ListBucketsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.ListBucketsResponse
  */
-export type ListBucketsResponse = Message<"paladin.admin.v1.ListBucketsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.Bucket buckets = 1;
-   */
-  buckets: Bucket[];
+export type ListBucketsResponse =
+  Message<"paladin.admin.v1.ListBucketsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.Bucket buckets = 1;
+     */
+    buckets: Bucket[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListBucketsResponse.
  * Use `create(ListBucketsResponseSchema)` to create a new message.
  */
-export const ListBucketsResponseSchema: GenMessage<ListBucketsResponse> = /*@__PURE__*/
+export const ListBucketsResponseSchema: GenMessage<ListBucketsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.SetBucketPolicyRequest
  */
-export type SetBucketPolicyRequest = Message<"paladin.admin.v1.SetBucketPolicyRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetBucketPolicyRequest =
+  Message<"paladin.admin.v1.SetBucketPolicyRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: string cedar_policy = 3;
-   */
-  cedarPolicy: string;
-};
+    /**
+     * @generated from field: string cedar_policy = 3;
+     */
+    cedarPolicy: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetBucketPolicyRequest.
  * Use `create(SetBucketPolicyRequestSchema)` to create a new message.
  */
-export const SetBucketPolicyRequestSchema: GenMessage<SetBucketPolicyRequest> = /*@__PURE__*/
+export const SetBucketPolicyRequestSchema: GenMessage<SetBucketPolicyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.SetLifecycleRulesRequest
  */
-export type SetLifecycleRulesRequest = Message<"paladin.admin.v1.SetLifecycleRulesRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetLifecycleRulesRequest =
+  Message<"paladin.admin.v1.SetLifecycleRulesRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: repeated paladin.admin.v1.LifecycleRule rules = 3;
-   */
-  rules: LifecycleRule[];
-};
+    /**
+     * @generated from field: repeated paladin.admin.v1.LifecycleRule rules = 3;
+     */
+    rules: LifecycleRule[];
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetLifecycleRulesRequest.
  * Use `create(SetLifecycleRulesRequestSchema)` to create a new message.
  */
-export const SetLifecycleRulesRequestSchema: GenMessage<SetLifecycleRulesRequest> = /*@__PURE__*/
+export const SetLifecycleRulesRequestSchema: GenMessage<SetLifecycleRulesRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.SetObjectLockRequest
  */
-export type SetObjectLockRequest = Message<"paladin.admin.v1.SetObjectLockRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetObjectLockRequest =
+  Message<"paladin.admin.v1.SetObjectLockRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.ObjectLockConfig config = 3;
-   */
-  config?: ObjectLockConfig | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.ObjectLockConfig config = 3;
+     */
+    config?: ObjectLockConfig | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetObjectLockRequest.
  * Use `create(SetObjectLockRequestSchema)` to create a new message.
  */
-export const SetObjectLockRequestSchema: GenMessage<SetObjectLockRequest> = /*@__PURE__*/
+export const SetObjectLockRequestSchema: GenMessage<SetObjectLockRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.SetVersioningRequest
  */
-export type SetVersioningRequest = Message<"paladin.admin.v1.SetVersioningRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetVersioningRequest =
+  Message<"paladin.admin.v1.SetVersioningRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.BucketVersioning versioning = 3;
-   */
-  versioning?: BucketVersioning | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.BucketVersioning versioning = 3;
+     */
+    versioning?: BucketVersioning | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetVersioningRequest.
  * Use `create(SetVersioningRequestSchema)` to create a new message.
  */
-export const SetVersioningRequestSchema: GenMessage<SetVersioningRequest> = /*@__PURE__*/
+export const SetVersioningRequestSchema: GenMessage<SetVersioningRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 10);
 
 /**
  * @generated from message paladin.admin.v1.SetReplicationRequest
  */
-export type SetReplicationRequest = Message<"paladin.admin.v1.SetReplicationRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type SetReplicationRequest =
+  Message<"paladin.admin.v1.SetReplicationRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.BucketReplication replication = 3;
-   */
-  replication?: BucketReplication | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.BucketReplication replication = 3;
+     */
+    replication?: BucketReplication | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SetReplicationRequest.
  * Use `create(SetReplicationRequestSchema)` to create a new message.
  */
-export const SetReplicationRequestSchema: GenMessage<SetReplicationRequest> = /*@__PURE__*/
+export const SetReplicationRequestSchema: GenMessage<SetReplicationRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 11);
 
 /**
  * @generated from message paladin.admin.v1.ListAccessibleBucketsRequest
  */
-export type ListAccessibleBucketsRequest = Message<"paladin.admin.v1.ListAccessibleBucketsRequest"> & {
-  /**
-   * Tenant: "tenants/{tenant_id_or_slug}". Required.
-   *
-   * @generated from field: string tenant = 1;
-   */
-  tenant: string;
+export type ListAccessibleBucketsRequest =
+  Message<"paladin.admin.v1.ListAccessibleBucketsRequest"> & {
+    /**
+     * Tenant: "tenants/{tenant_id_or_slug}". Required.
+     *
+     * @generated from field: string tenant = 1;
+     */
+    tenant: string;
 
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 2;
-   */
-  page?: PageRequest | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListAccessibleBucketsRequest.
  * Use `create(ListAccessibleBucketsRequestSchema)` to create a new message.
  */
-export const ListAccessibleBucketsRequestSchema: GenMessage<ListAccessibleBucketsRequest> = /*@__PURE__*/
+export const ListAccessibleBucketsRequestSchema: GenMessage<ListAccessibleBucketsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_bucket_service, 12);
 
 /**
@@ -373,7 +432,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof CreateBucketRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.GetBucket
    */
@@ -381,7 +440,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof GetBucketRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.UpdateBucket
    */
@@ -389,7 +448,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof UpdateBucketRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.DeleteBucket
    */
@@ -397,7 +456,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof DeleteBucketRequestSchema;
     output: typeof DeleteBucketResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.ListBuckets
    */
@@ -405,7 +464,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof ListBucketsRequestSchema;
     output: typeof ListBucketsResponseSchema;
-  },
+  };
   /**
    * SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
    *
@@ -415,7 +474,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof SetBucketPolicyRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
    * single-purpose RPCs to keep audit log entries focused.
@@ -426,7 +485,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof SetLifecycleRulesRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.SetObjectLock
    */
@@ -434,7 +493,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof SetObjectLockRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.SetVersioning
    */
@@ -442,7 +501,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof SetVersioningRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BucketService.SetReplication
    */
@@ -450,7 +509,7 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof SetReplicationRequestSchema;
     output: typeof BucketSchema;
-  },
+  };
   /**
    * ListAccessibleBuckets is callable by tenant admins. Returns only buckets
    * the caller's principal/scopes are allowed to bind ObjectKeys to.
@@ -461,7 +520,5 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof ListAccessibleBucketsRequestSchema;
     output: typeof ListBucketsResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_bucket_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_bucket_service, 0);

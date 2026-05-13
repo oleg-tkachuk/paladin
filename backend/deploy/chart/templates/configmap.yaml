@@ -23,4 +23,8 @@ metadata:
     {{- include "chart.labels" . | nindent 4 }}
 data:
   config.yaml: |
-    {{- toYaml .Values.config | nindent 4 }}
+    # Rendered through `tpl` so values may reference chart helpers
+    # (notably `chart.fullname`) — see `mcp.upstreams.*` defaults below
+    # which need to resolve to the in-cluster Service names of the
+    # admin / api roles spun up by this same release.
+    {{- tpl (toYaml .Values.config) . | nindent 4 }}

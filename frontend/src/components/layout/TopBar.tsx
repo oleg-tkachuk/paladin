@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { RealTimeStatus } from "@/components/features/RealTimeStatus";
+import { BackgroundOpsDrawer } from "@/components/BackgroundOpsDrawer";
 import { useAuth } from "@/context/AuthContext";
 import { ScopePicker } from "@/components/layout/ScopePicker";
 
@@ -100,6 +101,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
         <ScopePicker />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <RealTimeStatus />
+        <BackgroundOpsDrawer />
         <Separator orientation="vertical" className="h-6" />
         {/* Avatar → user menu. The avatar used to be a static fallback;
             now it's a dropdown trigger with shortcuts to /profile,

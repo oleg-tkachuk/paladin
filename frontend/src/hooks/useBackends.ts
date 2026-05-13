@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { create } from "@bufbuild/protobuf";
 import { ConnectError } from "@connectrpc/connect";
 
 import { backendClient } from "@/lib/connect/client";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
-import { useRefreshSignal } from "@/context/RefreshContext";
+import { StorageBackendSchema, StorageKind } from "@/gen/paladin/admin/v1/types_pb";
+import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 // useBackends — list rows from the `backends` table via
@@ -15,10 +17,22 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 // this table, so config-only entries can't actually receive Buckets and
 // will trip `buckets_backend_id_fkey` on insert.
 
+export interface CreateBackendInput {
+  backendId: string;
+  displayName: string;
+  kind: StorageKind;
+  endpoint: string;
+  publicEndpoint?: string;
+  region: string;
+  forcePathStyle: boolean;
+  credentialsSecretRef: string;
+}
+
 export function useBackends(autoFetch: boolean = true) {
   const [backends, setBackends] = useState<StorageBackend[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const bumpRefresh = useBumpRefresh();
 
   const fetchBackends = useCallback(async () => {
     setLoading(true);
@@ -42,10 +56,49 @@ export function useBackends(autoFetch: boolean = true) {
     }
   }, []);
 
+  // createBackend — wraps BackendService.CreateBackend. The proto's
+  // Create takes the backend_id at the top level and a nested
+  // StorageBackend resource carrying the rest of the fields. Tenants
+  // and buckets cannot exist without a registered backend, so this
+  // is the entry point for first-run platform bootstrap and any
+  // later expansion to a new region/cluster.
+  const createBackend = useCallback(
+    async (input: CreateBackendInput): Promise<StorageBackend> => {
+      try {
+        setError(null);
+        const backend = create(StorageBackendSchema, {
+          backendId: input.backendId,
+          displayName: input.displayName,
+          kind: input.kind,
+          endpoint: input.endpoint,
+          publicEndpoint: input.publicEndpoint || "",
+          region: input.region,
+          forcePathStyle: input.forcePathStyle,
+          credentialsSecretRef: input.credentialsSecretRef,
+        });
+        const created = await backendClient.createBackend({
+          backendId: input.backendId,
+          backend,
+        });
+        setBackends((prev) => [...prev, created]);
+        bumpRefresh("backends");
+        return created;
+      } catch (err) {
+        const msg =
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Failed to create backend";
+        setError(msg);
+        throw err;
+      }
+    },
+    [bumpRefresh],
+  );
+
   const refreshSignal = useRefreshSignal("backends");
   useEffect(() => {
     if (autoFetch) void fetchBackends();
   }, [autoFetch, fetchBackends, refreshSignal]);
 
-  return { backends, loading, error, fetchBackends };
+  return { backends, loading, error, fetchBackends, createBackend };
 }

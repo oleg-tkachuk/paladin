@@ -179,11 +179,15 @@ type listTenantsArgs struct {
 	PageSize int32 `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
 type listObjectKeysArgs struct {
-	TenantID string `json:"tenant_id" jsonschema:"required tenant UUID"`
+	// `tenant_id_or_slug` accepted as input — the field name stays
+	// `tenant_id` for MCP-client backwards compat, but the resolver
+	// downstream (apiutil.ParseTenantNameRef) accepts both forms,
+	// matching the UI's slug-first URL behaviour.
+	TenantID string `json:"tenant_id" jsonschema:"tenant UUID or slug (e.g. 'platform')"`
 	PageSize int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
 }
 type queryObjectsArgs struct {
-	TenantID  string `json:"tenant_id" jsonschema:"tenant UUID"`
+	TenantID  string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
 	ObjectKey string `json:"object_key" jsonschema:"object key (namespace) name"`
 	Filter    string `json:"filter,omitempty" jsonschema:"optional CEL filter, e.g. tags['type']=='invoice'"`
 	PageSize  int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
@@ -206,7 +210,7 @@ type getEffectivePolicyArgs struct {
 }
 type simulateAuthzArgs struct {
 	PrincipalSubject  string   `json:"principal_subject" jsonschema:"subject (user_id or service-account ref)"`
-	PrincipalTenantID string   `json:"principal_tenant_id,omitempty" jsonschema:"optional tenant UUID for the simulated principal"`
+	PrincipalTenantID string   `json:"principal_tenant_id,omitempty" jsonschema:"optional tenant UUID or slug for the simulated principal"`
 	PrincipalRoles    []string `json:"principal_roles,omitempty" jsonschema:"roles the simulated principal carries"`
 	Action            string   `json:"action" jsonschema:"Cedar action name (e.g. PutObject, ManageBucket)"`
 	ResourceName      string   `json:"resource_name" jsonschema:"Resource name to authorize against"`
@@ -449,8 +453,8 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 // ─── Mutating tool argument types ───────────────────────────────────────────
 
 type createObjectKeyArgs struct {
-	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID"`
-	ObjectKey   string `json:"object_key" jsonschema:"kebab-case namespace name"`
+	TenantID    string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
+	ObjectKey   string `json:"object_key" jsonschema:"object key path: kebab-case segments joined by '/' (e.g. 'assets-prod' or 'invoices/2026/q1')"`
 	Bucket      string `json:"bucket" jsonschema:"bucket resource name (storageBackends/{b}/buckets/{n})"`
 	DisplayName string `json:"display_name,omitempty" jsonschema:"optional display label"`
 	CedarPolicy string `json:"cedar_policy,omitempty" jsonschema:"optional Cedar policy"`
@@ -463,7 +467,7 @@ type restoreVersionArgs struct {
 	VersionName string `json:"version_name" jsonschema:".../objects/{id}/versions/{ver}"`
 }
 type createUserArgs struct {
-	TenantID        string   `json:"tenant_id" jsonschema:"tenant UUID"`
+	TenantID        string   `json:"tenant_id" jsonschema:"tenant UUID or slug"`
 	Subject         string   `json:"subject" jsonschema:"login subject (email-style)"`
 	DisplayName     string   `json:"display_name,omitempty" jsonschema:"display label"`
 	InitialPassword string   `json:"initial_password" jsonschema:"≥12 chars; rotated by user on first login"`
@@ -494,7 +498,7 @@ type validateCELArgs struct {
 // should be populated per call. The CEL filter is validated server-side
 // against EventEnvelope; empty = receive all events for the tenant.
 type createSubscriptionArgs struct {
-	TenantID string `json:"tenant_id" jsonschema:"tenant UUID"`
+	TenantID string `json:"tenant_id" jsonschema:"tenant UUID or slug"`
 	Filter   string `json:"filter,omitempty" jsonschema:"CEL filter against EventEnvelope; empty = all events"`
 	Disabled bool   `json:"disabled,omitempty" jsonschema:"true to create in disabled state"`
 
@@ -874,7 +878,7 @@ func registerPrompts(s *mcpsdk.Server) {
 		Name:        "audit_access_for_tenant",
 		Description: "Audit who has access to what within a tenant.",
 		Arguments: []*mcpsdk.PromptArgument{
-			{Name: "tenant_id", Description: "tenant UUID", Required: true},
+			{Name: "tenant_id", Description: "tenant UUID or slug", Required: true},
 		},
 	}, func(_ context.Context, req *mcpsdk.GetPromptRequest) (*mcpsdk.GetPromptResult, error) {
 		t := req.Params.Arguments["tenant_id"]

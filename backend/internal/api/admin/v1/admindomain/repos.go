@@ -71,10 +71,14 @@ type BucketRepository interface {
 }
 
 type ListBucketsArgs struct {
-	BackendID    string // "" → all
-	PageSize     int32
-	AfterBackend string
-	AfterName    string
+	BackendID string // "" → all
+	// OwnerTenantID — when non-nil, narrows the listing to buckets
+	// owned by exactly that tenant (matches buckets.owner_tenant_id).
+	// nil = no tenant filter (cross-tenant listing for platform-admin).
+	OwnerTenantID *uuid.UUID
+	PageSize      int32
+	AfterBackend  string
+	AfterName     string
 }
 
 // ─── Audit repository ───────────────────────────────────────────────────────

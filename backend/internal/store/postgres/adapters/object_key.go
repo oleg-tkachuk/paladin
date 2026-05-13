@@ -107,18 +107,80 @@ func (r *ObjectKeyRepo) List(ctx context.Context, args objectkey.ListObjectKeysA
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	var after *string
+
+	// Fast path: the sqlc-generated query handles (tenant_id, after,
+	// page_size) — used when no (backend, bucket) filter is set. The
+	// filter is rare enough (only the storage-first browser hits it)
+	// that hand-writing a parameterised query here keeps the sqlc
+	// surface lean. When the filter is present we go through the
+	// raw pool with a parameterised UPDATE-safe statement.
+	if args.BackendID == "" && args.BucketName == "" {
+		var after *string
+		if args.PageToken != "" {
+			tok := args.PageToken
+			after = &tok
+		}
+		rows, err := r.q.ListObjectKeys(ctx, pgUUID(args.TenantID), after, pageSize)
+		if err != nil {
+			return nil, "", fmt.Errorf("list object_keys: %w", err)
+		}
+		out := make([]objectkey.ObjectKey, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, bucketFromSQLC(row.ObjectKey))
+		}
+		var next string
+		if int32(len(out)) == pageSize && len(out) > 0 {
+			next = out[len(out)-1].ObjectKey
+		}
+		return out, next, nil
+	}
+
+	// Filtered path: (backend, bucket) narrow. Tenant filter is
+	// optional here — the storage-first browser passes uuid.Nil to
+	// get cross-tenant results on a specific bucket. Cursor is on
+	// (tenant_id, object_key) so pagination stays deterministic
+	// across tenants.
+	const filteredQ = `
+		SELECT tenant_id, object_key, display_name, backend_id, bucket_name,
+		       cedar_policy, lifecycle_rules, resource_version,
+		       created_at, updated_at
+		  FROM object_keys
+		 WHERE backend_id  = $1
+		   AND bucket_name = $2
+		   AND ($3::uuid IS NULL OR tenant_id = $3)
+		   AND ($4::text IS NULL OR object_key > $4)
+		 ORDER BY tenant_id, object_key
+		 LIMIT $5
+	`
+	var tenantFilter any
+	if args.TenantID != uuid.Nil {
+		tenantFilter = pgUUID(args.TenantID)
+	}
+	var afterTok any
 	if args.PageToken != "" {
-		tok := args.PageToken
-		after = &tok
+		afterTok = args.PageToken
 	}
-	rows, err := r.q.ListObjectKeys(ctx, pgUUID(args.TenantID), after, pageSize)
+	rows, err := r.pool.Query(ctx, filteredQ,
+		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize)
 	if err != nil {
-		return nil, "", fmt.Errorf("list object_keys: %w", err)
+		return nil, "", fmt.Errorf("list object_keys (filtered): %w", err)
 	}
-	out := make([]objectkey.ObjectKey, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, bucketFromSQLC(row.ObjectKey))
+	defer rows.Close()
+	out := make([]objectkey.ObjectKey, 0)
+	for rows.Next() {
+		var row sqlc.ObjectKey
+		if err := rows.Scan(
+			&row.TenantID, &row.ObjectKey, &row.DisplayName,
+			&row.BackendID, &row.BucketName,
+			&row.CedarPolicy, &row.LifecycleRules,
+			&row.ResourceVersion, &row.CreatedAt, &row.UpdatedAt,
+		); err != nil {
+			return nil, "", fmt.Errorf("list object_keys: scan: %w", err)
+		}
+		out = append(out, bucketFromSQLC(row))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("list object_keys: rows err: %w", err)
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {

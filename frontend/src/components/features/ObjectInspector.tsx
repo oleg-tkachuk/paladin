@@ -35,7 +35,7 @@ export function ObjectInspector({
   // a single scope at a time, so this keeps the lookup honest — without
   // this, the Inspector always queries `objectKey: "default"` and any
   // object outside the bootstrap default returns `not_found`.
-  const { objectKey: scopedObjectKey } = useScope();
+  const { objectKey: scopedObjectKey, tenantId, tenant } = useScope();
   const effectiveParent = parentObjectKey || scopedObjectKey;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(objectKey || undefined, effectiveParent);
@@ -227,11 +227,17 @@ export function ObjectInspector({
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
+                    // Object detail moved under the tenant subtree
+                    // in Phase 5: /tenants/<id>/object-keys/<ok>/
+                    // objects/<key>. Prefer slug; fall back to UUID
+                    // (resolver canonicalises on landing).
+                    const handle = tenant?.slug || tenantId || "";
+                    if (!handle) return;
                     router.push(
-                      `/objects/${encodeURIComponent(object.key)}?objectKey=${encodeURIComponent(object.objectKey)}`,
-                    )
-                  }
+                      `/tenants/${encodeURIComponent(handle)}/object-keys/${encodeURIComponent(object.objectKey)}/objects/${encodeURIComponent(object.key)}`,
+                    );
+                  }}
                 >
                   <EyeIcon className="size-4" />
                   Full Details

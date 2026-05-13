@@ -7,14 +7,15 @@
 package paladinadminv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -307,9 +308,16 @@ func (*DeleteBucketResponse) Descriptor() ([]byte, []int) {
 type ListBucketsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent: "storageBackends/{backend_id}" or empty for cross-backend.
-	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	Filter        string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over Bucket
+	Parent string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Page   *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	Filter string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over Bucket (reserved — not yet evaluated)
+	// owner_tenant_id narrows the listing to buckets owned by exactly
+	// this tenant (matches buckets.owner_tenant_id). UUID or slug;
+	// empty = no tenant filter (cross-tenant listing for platform-
+	// admin). Backed by the partial index on
+	// buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+	// (migration 006), so per-tenant lookups are cheap.
+	OwnerTenantId string `protobuf:"bytes,4,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -361,6 +369,13 @@ func (x *ListBucketsRequest) GetPage() *v1.PageRequest {
 func (x *ListBucketsRequest) GetFilter() string {
 	if x != nil {
 		return x.Filter
+	}
+	return ""
+}
+
+func (x *ListBucketsRequest) GetOwnerTenantId() string {
+	if x != nil {
+		return x.OwnerTenantId
 	}
 	return ""
 }
@@ -793,11 +808,12 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12)\n" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12*\n" +
 	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\"\x16\n" +
-	"\x14DeleteBucketResponse\"t\n" +
+	"\x14DeleteBucketResponse\"\x9c\x01\n" +
 	"\x12ListBucketsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x12.\n" +
 	"\x04page\x18\x02 \x01(\v2\x1a.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"v\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\x12&\n" +
+	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\"v\n" +
 	"\x13ListBucketsResponse\x12.\n" +
 	"\abuckets\x18\x01 \x03(\v2\x14.paladin.admin.v1.BucketR\abuckets\x12/\n" +
 	"\x04page\x18\x02 \x01(\v2\x1b.paladin.common.v1.PageResponseR\x04page\"\x83\x01\n" +

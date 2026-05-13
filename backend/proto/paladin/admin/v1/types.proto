@@ -188,6 +188,18 @@ message Tenant {
   string resource_version = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // Human-readable kebab-case handle (e.g. "platform", "acme-prod").
+  // Stable across the tenant's lifetime unless rotated via
+  // RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
+  // by every read RPC. Front-end uses this to render slug-first URLs
+  // (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
+  string slug = 9;
+  // deleted_at — soft-delete marker. Zero (unset) for active tenants;
+  // non-zero for trashed rows recoverable via RestoreTenant. Filtered
+  // out of ListTenants by default (set include_trashed or only_trashed
+  // to see them). Hard-delete (PurgeTenant / DeleteTenant force=true)
+  // removes the row physically.
+  google.protobuf.Timestamp deleted_at = 10;
 }
 
 // ─── ObjectKey ──────────────────────────────────────────────────────────────

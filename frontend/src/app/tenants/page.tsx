@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowPathIcon,
+  ArrowRightIcon,
   ArrowsUpDownIcon,
   ArrowDownIcon,
   ArrowUpIcon,
@@ -19,8 +21,17 @@ import { ConnectError } from "@connectrpc/connect";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useTenants } from "@/hooks/useTenants";
+import { useBackends } from "@/hooks/useBackends";
+import { useBuckets } from "@/hooks/useBuckets";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { useNotification } from "@/components/ui/Notification";
+import {
+  SelectRoot,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,10 +72,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IdentityField } from "@/components/IdentityField";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
-type SortColumn = "tenantId" | "displayName";
+type SortColumn = "slug" | "displayName";
 type SortDirection = "asc" | "desc" | null;
 
 interface SortState {
@@ -117,8 +129,14 @@ function SortHeader({
   );
 }
 
+// UUID format check is permissive across versions (v1/v4/v7) — server
+// generates v7 by default but accepts any RFC 4122 UUID from clients.
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// SLUG_RE mirrors backend/internal/api/v1/apiutil/slug.go ValidateTenantSlug.
+// Keep in lockstep with the server-side regex.
+const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
 
 export default function TenantsPage() {
   const {
@@ -143,10 +161,50 @@ export default function TenantsPage() {
   );
 
   // ─── create ───────────────────────────────────────────────────────────────
+  // Phase 0 contract: slug is required, tenant_id is optional (server
+  // mints UUIDv7 when empty), display_name is optional (defaults to
+  // slug). Both slug and display_name are unique across tenants.
   const [createOpen, setCreateOpen] = useState(false);
+  const [newSlug, setNewSlug] = useState("");
   const [newId, setNewId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
+  const [newBackend, setNewBackend] = useState("");
+  const [newBucket, setNewBucket] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Backends + buckets feed the cascading Backend → Bucket dropdowns
+  // in the create dialog. Tenants land on a (backend, bucket) pair so
+  // the default binding can be persisted at create time. Both lists
+  // are tiny (handful of rows) and refreshed on dialog open.
+  const { backends } = useBackends(createOpen);
+  const { buckets, fetchBuckets } = useBuckets();
+  useEffect(() => {
+    if (createOpen) void fetchBuckets();
+  }, [createOpen, fetchBuckets]);
+  const bucketsForBackend = useMemo(
+    () => (newBackend ? buckets.filter((b) => b.backendId === newBackend) : []),
+    [buckets, newBackend],
+  );
+  // Pick a sensible default backend the moment the dialog opens with
+  // backends loaded — saves a click in the typical single-backend
+  // dev environment.
+  useEffect(() => {
+    if (createOpen && !newBackend && backends.length > 0) {
+      setNewBackend(backends[0].backendId);
+    }
+  }, [createOpen, newBackend, backends]);
+  // Reset bucket when backend changes; the previous bucket may not
+  // belong to the new backend.
+  useEffect(() => {
+    if (
+      newBucket &&
+      !buckets.some(
+        (b) => b.backendId === newBackend && b.bucketName === newBucket,
+      )
+    ) {
+      setNewBucket("");
+    }
+  }, [newBackend, newBucket, buckets]);
 
   // ─── edit ─────────────────────────────────────────────────────────────────
   const [editing, setEditing] = useState<Tenant | null>(null);
@@ -163,23 +221,26 @@ export default function TenantsPage() {
     const q = search.trim().toLowerCase();
     let list = tenants;
     if (q) {
+      // Search across all three identity fields. Slug is the most
+      // common keystroke target, ID is the audit/debug fallback.
       list = list.filter(
         (t) =>
-          t.tenantId.toLowerCase().includes(q) ||
-          (t.displayName || "").toLowerCase().includes(q),
+          (t.slug || "").toLowerCase().includes(q) ||
+          (t.displayName || "").toLowerCase().includes(q) ||
+          t.tenantId.toLowerCase().includes(q),
       );
     }
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
         const va =
-          sort.column === "tenantId"
-            ? a.tenantId
-            : (a.displayName || a.tenantId).toLowerCase();
+          sort.column === "slug"
+            ? (a.slug || a.tenantId).toLowerCase()
+            : (a.displayName || a.slug || a.tenantId).toLowerCase();
         const vb =
-          sort.column === "tenantId"
-            ? b.tenantId
-            : (b.displayName || b.tenantId).toLowerCase();
+          sort.column === "slug"
+            ? (b.slug || b.tenantId).toLowerCase()
+            : (b.displayName || b.slug || b.tenantId).toLowerCase();
         return va < vb ? -dir : va > vb ? dir : 0;
       });
     }
@@ -188,24 +249,58 @@ export default function TenantsPage() {
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!UUID_RE.test(newId)) {
+    // Slug is required and must match the kebab-case format the
+    // server validates against (mirrors apiutil.ValidateTenantSlug).
+    if (!SLUG_RE.test(newSlug)) {
       showNotification({
         type: "error",
-        title: "Invalid ID",
-        message: "Tenant ID must be a valid UUID v4.",
+        title: "Invalid slug",
+        message:
+          "Slug must be 3–63 chars, kebab-case, starting with a letter and ending alphanumeric.",
       });
       return;
     }
+    // tenant_id is optional. If supplied, validate UUID format
+    // client-side so the server's INVALID_ARGUMENT round-trip isn't
+    // the first signal of a typo.
+    if (newId && !UUID_RE.test(newId)) {
+      showNotification({
+        type: "error",
+        title: "Invalid Tenant ID",
+        message:
+          "Tenant ID must be a valid UUID, or leave empty to auto-generate.",
+      });
+      return;
+    }
+    if (!newBackend || !newBucket) {
+      showNotification({
+        type: "error",
+        title: "Default location required",
+        message:
+          "Pick a storage backend and a bucket. Tenant objects live there by default.",
+      });
+      return;
+    }
+    const defaultBucketRef = `storageBackends/${newBackend}/buckets/${newBucket}`;
     try {
       setSubmitting(true);
-      await createTenant(newId, newDisplayName);
+      const created = await createTenant(
+        newSlug,
+        newId,
+        newDisplayName,
+        {},
+        defaultBucketRef,
+      );
       showNotification({
         type: "success",
         title: "Tenant created",
-        message: newDisplayName || newId,
+        message: created.displayName || created.slug || created.tenantId,
       });
+      setNewSlug("");
       setNewId("");
       setNewDisplayName("");
+      setNewBucket("");
+      // keep newBackend so the next create defaults to the same one
       setCreateOpen(false);
     } catch (err) {
       console.error(err);
@@ -323,10 +418,10 @@ export default function TenantsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[360px]">
+              <TableHead className="w-[220px]">
                 <SortHeader
-                  label="Tenant ID"
-                  column="tenantId"
+                  label="Slug"
+                  column="slug"
                   current={sort}
                   onSort={handleSort}
                 />
@@ -340,6 +435,9 @@ export default function TenantsPage() {
                 />
               </TableHead>
               <TableHead className="hidden md:table-cell">Labels</TableHead>
+              <TableHead className="hidden lg:table-cell w-[280px]">
+                Tenant ID
+              </TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -349,14 +447,14 @@ export default function TenantsPage() {
             {loading && tenants.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={4} className="py-3">
+                  <TableCell colSpan={5} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-48 text-center">
+                <TableCell colSpan={5} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <BuildingOfficeIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -380,24 +478,42 @@ export default function TenantsPage() {
             ) : (
               filtered.map((tenant) => {
                 const labelEntries = Object.entries(tenant.labels);
+                // Slug is the canonical handle in URLs; UUID is the
+                // safety net when slug is empty (legacy rows). Phase 0
+                // makes slug NOT NULL UNIQUE, so the fallback only
+                // matters during the rolling deploy.
+                const handle = tenant.slug || tenant.tenantId;
+                const detailHref = `/tenants/${encodeURIComponent(handle)}`;
                 return (
                   <TableRow key={tenant.tenantId} className="group">
                     <TableCell>
-                      <div className="flex items-center gap-3">
+                      <Link
+                        href={detailHref}
+                        className="flex items-center gap-3 hover:text-primary"
+                      >
                         <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
                           <BuildingOfficeIcon className="size-4" />
                         </div>
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {tenant.tenantId}
+                        <span className="font-medium group-hover:underline">
+                          {tenant.slug || (
+                            <span className="text-muted-foreground italic">
+                              (no slug)
+                            </span>
+                          )}
                         </span>
-                      </div>
+                      </Link>
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {tenant.displayName || (
-                        <span className="text-muted-foreground italic">
-                          (unnamed)
-                        </span>
-                      )}
+                    <TableCell>
+                      <Link
+                        href={detailHref}
+                        className="hover:text-primary hover:underline"
+                      >
+                        {tenant.displayName || (
+                          <span className="text-muted-foreground italic">
+                            (unnamed)
+                          </span>
+                        )}
+                      </Link>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {labelEntries.length === 0 ? (
@@ -421,6 +537,15 @@ export default function TenantsPage() {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <span
+                        className="font-mono text-[11px] text-muted-foreground"
+                        title={tenant.tenantId}
+                      >
+                        {tenant.tenantId.slice(0, 8)}…
+                        {tenant.tenantId.slice(-4)}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -434,6 +559,12 @@ export default function TenantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={detailHref}>
+                              <ArrowRightIcon className="size-4" />
+                              Open tenant
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {
                               setEditing(tenant);
@@ -469,43 +600,209 @@ export default function TenantsPage() {
             <DialogHeader>
               <DialogTitle>New tenant</DialogTitle>
               <DialogDescription>
-                Provision a fresh tenant scope. The default Cedar policy will be
-                applied automatically.
+                Slug is the human-readable handle and is immutable after
+                creation. The default Cedar policy is applied automatically.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Slug — required, primary identity field. Live-validated
+                  against SLUG_RE so the operator sees green/red before
+                  hitting submit. */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="tenant-id">Tenant ID (UUID v4)</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    onClick={() => setNewId(crypto.randomUUID())}
-                  >
-                    <SparklesIcon className="size-3" />
-                    Generate
-                  </Button>
+                  <Label htmlFor="tenant-slug">
+                    Slug <span className="text-destructive">*</span>
+                  </Label>
+                  {newSlug.length > 0 && (
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium",
+                        SLUG_RE.test(newSlug)
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-destructive",
+                      )}
+                    >
+                      {SLUG_RE.test(newSlug) ? "valid" : "invalid format"}
+                    </span>
+                  )}
                 </div>
                 <Input
-                  id="tenant-id"
+                  id="tenant-slug"
                   autoFocus
-                  placeholder="550e8400-e29b-41d4-a716-446655440000"
-                  className="font-mono text-xs"
-                  value={newId}
-                  onChange={(e) => setNewId(e.target.value)}
+                  placeholder="acme-prod"
+                  value={newSlug}
+                  onChange={(e) => setNewSlug(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  3–63 chars, lowercase kebab-case. Used in URLs and Cedar
+                  policies. <span className="font-medium">Immutable</span> after
+                  creation.
+                </p>
               </div>
+              {/* Display name — optional, defaults to slug on the server. */}
               <div className="space-y-1.5">
-                <Label htmlFor="tenant-display-name">Display name</Label>
+                <Label htmlFor="tenant-display-name">
+                  Display name{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
                 <Input
                   id="tenant-display-name"
-                  placeholder="Acme Corporation"
+                  placeholder={newSlug || "Acme Corporation"}
                   value={newDisplayName}
                   onChange={(e) => setNewDisplayName(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Unique, editable. Defaults to slug when empty.
+                </p>
               </div>
+              {/* Default location — required. The tenant's objects
+                  live under <bucket>/<tenant_id>/... after create;
+                  this picks WHERE that prefix exists. Backend +
+                  bucket cascade. Empty bucket list means the chosen
+                  backend has no buckets registered yet — operator
+                  needs to create one in /buckets before continuing. */}
+              {backends.length === 0 && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    No storage backends registered yet
+                  </p>
+                  <p className="text-muted-foreground">
+                    Tenants need a backend + bucket to land. Register one before
+                    creating the first tenant.
+                  </p>
+                  <Link
+                    href="/storage-backends"
+                    className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
+                    onClick={() => setCreateOpen(false)}
+                  >
+                    Open Storage Backends →
+                  </Link>
+                </div>
+              )}
+              {backends.length > 0 &&
+                bucketsForBackend.length === 0 &&
+                newBackend && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
+                    <p className="font-medium text-amber-900 dark:text-amber-200">
+                      No buckets on backend{" "}
+                      <span className={T.code}>{newBackend}</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      Create a bucket on this backend before continuing.
+                    </p>
+                    <Link
+                      href={`/buckets`}
+                      className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
+                      onClick={() => setCreateOpen(false)}
+                    >
+                      Open Buckets →
+                    </Link>
+                  </div>
+                )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenant-backend">
+                    Storage backend <span className="text-destructive">*</span>
+                  </Label>
+                  <SelectRoot
+                    value={newBackend}
+                    onValueChange={(v) => setNewBackend(v)}
+                  >
+                    <SelectTrigger id="tenant-backend">
+                      <SelectValue
+                        placeholder={
+                          backends.length === 0
+                            ? "No backends registered"
+                            : "Pick backend"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {backends.map((b) => (
+                        <SelectItem key={b.backendId} value={b.backendId}>
+                          {b.displayName
+                            ? `${b.displayName} (${b.backendId})`
+                            : b.backendId}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenant-bucket">
+                    Bucket <span className="text-destructive">*</span>
+                  </Label>
+                  <SelectRoot
+                    value={newBucket}
+                    onValueChange={(v) => setNewBucket(v)}
+                    disabled={!newBackend || bucketsForBackend.length === 0}
+                  >
+                    <SelectTrigger id="tenant-bucket">
+                      <SelectValue
+                        placeholder={
+                          !newBackend
+                            ? "Pick backend first"
+                            : bucketsForBackend.length === 0
+                              ? "No buckets on this backend"
+                              : "Pick bucket"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bucketsForBackend.map((b) => (
+                        <SelectItem key={b.bucketName} value={b.bucketName}>
+                          {b.bucketName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectRoot>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Tenant objects will live under{" "}
+                <span className={cn(T.code, "text-[10px]")}>
+                  {newBucket || "<bucket>"}/&lt;tenant_id&gt;/…
+                </span>
+                . Bind cannot be moved without rebinding via the admin RPC.
+              </p>
+              {/* Advanced — Tenant ID lives under a disclosure since
+                  the typical operator never touches it (server mints
+                  UUIDv7). Power users importing a known UUID open
+                  this. */}
+              <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                  Advanced — supply your own UUID
+                </summary>
+                <div className="space-y-1.5 pt-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="tenant-id" className="text-xs">
+                      Tenant ID
+                    </Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setNewId(crypto.randomUUID())}
+                    >
+                      <SparklesIcon className="size-3" />
+                      Generate
+                    </Button>
+                  </div>
+                  <Input
+                    id="tenant-id"
+                    placeholder="Leave empty — server mints UUIDv7"
+                    className="font-mono text-xs"
+                    value={newId}
+                    onChange={(e) => setNewId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Any RFC 4122 UUID. Immutable after creation.
+                  </p>
+                </div>
+              </details>
             </div>
             <DialogFooter>
               <Button
@@ -515,7 +812,10 @@ export default function TenantsPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting || !newId}>
+              <Button
+                type="submit"
+                disabled={submitting || !newSlug || !newBackend || !newBucket}
+              >
                 {submitting ? "Creating…" : "Create tenant"}
               </Button>
             </DialogFooter>
@@ -530,16 +830,28 @@ export default function TenantsPage() {
             <DialogHeader>
               <DialogTitle>Edit tenant</DialogTitle>
               <DialogDescription>
-                Update display metadata. Tenant ID is immutable.
+                Display name is the only editable identity field. Tenant ID and
+                slug are immutable — slug rotation requires the RenameTenantSlug
+                RPC.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label>Tenant ID</Label>
-                <Input
-                  disabled
+              {/* Immutable identity rows — IdentityField gives the
+                  operator a copy affordance, matching the overview
+                  page. Plain disabled <Input> didn't. */}
+              <div className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <IdentityField
+                  label="slug"
+                  value={editing?.slug || ""}
+                  immutable
+                  labelWidth="w-20"
+                />
+                <IdentityField
+                  label="tenant id"
                   value={editing?.tenantId || ""}
-                  className="font-mono text-xs text-muted-foreground"
+                  immutable
+                  truncate
+                  labelWidth="w-20"
                 />
               </div>
               <div className="space-y-1.5">
@@ -551,6 +863,9 @@ export default function TenantsPage() {
                   value={editDisplayName}
                   onChange={(e) => setEditDisplayName(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Must be unique across tenants.
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -577,11 +892,43 @@ export default function TenantsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this tenant?</AlertDialogTitle>
-            <AlertDialogDescription>
-              All data scoped to{" "}
-              <span className="font-mono text-foreground">{deleteTarget}</span>{" "}
-              will become inaccessible. This action cannot be undone from the UI
-              — recovery requires direct database intervention.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  All data scoped to{" "}
+                  <span className="font-mono text-foreground">
+                    {deleteTarget}
+                  </span>{" "}
+                  will become inaccessible.
+                </p>
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold text-destructive">
+                    What gets removed (cascade)
+                  </p>
+                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
+                    <li>Default backend/bucket binding</li>
+                    <li>All Object Keys + their cedar policies</li>
+                    <li>Audit log entries (after retention TTL)</li>
+                    <li>API tokens, M2M tokens, capabilities</li>
+                  </ul>
+                </div>
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold">What stays</p>
+                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
+                    <li>
+                      Physical S3 objects under{" "}
+                      <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span>
+                    </li>
+                    <li>
+                      In-flight presigned URLs (continue working until TTL
+                      expires)
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-xs italic text-muted-foreground">
+                  Recovery requires direct database intervention.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

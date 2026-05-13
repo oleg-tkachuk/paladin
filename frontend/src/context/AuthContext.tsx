@@ -28,6 +28,10 @@ import { setAccessToken, clearAllTokens } from "@/lib/auth/tokenStore";
 export type AuthUser = {
   userId: string;
   tenantId: string;
+  // Tenant slug from the JWT `tenant_slug` claim (via WhoAmI). Empty
+  // for legacy sessions minted before the slug claim wiring; callers
+  // fall back to tenantId for URL routing in that case.
+  tenantSlug: string;
   subject: string;
   displayName: string;
   roles: string[];

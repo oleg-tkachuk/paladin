@@ -22,7 +22,13 @@ import {
 } from "@heroicons/react/24/outline";
 import { useActions } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
-import { tenantClient } from "@/lib/connect/client";
+import {
+  tenantClient,
+  bucketClient,
+  objectKeyClient,
+  backendClient,
+} from "@/lib/connect/client";
+import { ArchiveBoxIcon, TagIcon } from "@heroicons/react/24/outline";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 interface SearchResult {
   id: string;
@@ -46,12 +52,11 @@ export function CommandPalette() {
   const { tenant: scopedTenant, objectKey: scopedObjectKey } = useScope();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Resolve the URL slug for the active scoped tenant. Tenant proto
-  // doesn't expose a slug field today (BACKLOG), so fall back to
-  // tenantId — that still routes correctly because TenantLayout
-  // accepts both forms and replaces the address bar with the
-  // canonical slug once it resolves.
-  const scopedTenantSlug = scopedTenant?.tenantId ?? null;
+  // Resolve the URL handle for the active scoped tenant. Prefer
+  // slug; fall back to UUID for backwards compat with deploys that
+  // pre-date the proto-slug field. TenantLayout's resolver still
+  // canonicalises UUID URLs to slug on landing if both present.
+  const scopedTenantSlug = scopedTenant?.slug || scopedTenant?.tenantId || null;
 
   const tenantScopedNavs: SearchResult[] = useMemo(() => {
     if (!scopedTenantSlug) return [];
@@ -243,37 +248,144 @@ export function CommandPalette() {
       setSelectedIndex(0);
 
       try {
-        // Tenant search via ListTenants — once the proto exposes a
-        // slug field, this should switch to slug-form URLs. Until
-        // then tenantId routes correctly through the layout's
-        // resolver (which canonicalises UUID→slug on landing).
-        const tenantResponse = await tenantClient.listTenants({
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-          filter: searchQuery,
-        });
+        // Parallel-fan-out global resource search. Each RPC is
+        // best-effort: a slow / failing one doesn't block the others
+        // from populating the palette. Result count caps per source
+        // keep the palette scannable.
+        const [tenantRes, bucketRes, okRes, backendRes] = await Promise.all([
+          tenantClient
+            .listTenants({
+              page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+              filter: searchQuery,
+            })
+            .catch(() => ({ tenants: [] })),
+          bucketClient
+            .listBuckets({
+              parent: "",
+              page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+              filter: "",
+              ownerTenantId: "",
+            })
+            .catch(() => ({ buckets: [] })),
+          objectKeyClient
+            .listObjectKeys({
+              parent: "",
+              page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+              filter: "",
+            })
+            .catch(() => ({ objectKeys: [] })),
+          backendClient
+            .listBackends({
+              page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+              filter: "",
+            })
+            .catch(() => ({ backends: [] })),
+        ]);
 
-        const tenantResults: SearchResult[] = tenantResponse.tenants.map(
-          (t) => ({
-            id: `tenant-${t.tenantId}`,
-            type: "nav",
-            title: t.displayName || t.tenantId,
-            subtitle: `Open tenant — id ${t.tenantId}`,
-            icon: BuildingOfficeIcon,
-            onSelect: () =>
-              router.push(`/tenants/${encodeURIComponent(t.tenantId)}`),
-          }),
+        const q = searchQuery.toLowerCase();
+        const matches = (s: string) => s.toLowerCase().includes(q);
+
+        const tenantResults: SearchResult[] = tenantRes.tenants
+          .filter(
+            (t) =>
+              !q ||
+              matches(t.slug || "") ||
+              matches(t.displayName || "") ||
+              matches(t.tenantId),
+          )
+          .slice(0, 5)
+          .map((t) => {
+            const handle = t.slug || t.tenantId;
+            return {
+              id: `tenant-${t.tenantId}`,
+              type: "nav",
+              title: t.displayName || handle,
+              subtitle: `Tenant · ${t.slug ? `slug ${t.slug}` : `id ${t.tenantId}`}`,
+              icon: BuildingOfficeIcon,
+              onSelect: () =>
+                router.push(`/tenants/${encodeURIComponent(handle)}`),
+            };
+          });
+
+        const tenantSlugByID = new Map(
+          tenantRes.tenants.map((t) => [t.tenantId, t.slug || t.tenantId]),
         );
 
-        // Object search left out — ListObjects requires backend +
-        // bucket scoping today. Once the data plane exposes a
-        // tenant-wide cross-bucket search, surface object hits
-        // here. `scopedObjectKey` retained so the dependency array
-        // re-fires when scope changes (placeholder for that future
-        // wiring).
+        const backendResults: SearchResult[] = backendRes.backends
+          .filter(
+            (b) =>
+              !q ||
+              matches(b.backendId) ||
+              matches(b.displayName || "") ||
+              matches(b.region || ""),
+          )
+          .slice(0, 4)
+          .map((b) => ({
+            id: `backend-${b.backendId}`,
+            type: "nav",
+            title: b.displayName || b.backendId,
+            subtitle: `Storage backend · ${b.backendId}`,
+            icon: ServerStackIcon,
+            onSelect: () =>
+              router.push(
+                `/storage-backends/${encodeURIComponent(b.backendId)}`,
+              ),
+          }));
+
+        const bucketResults: SearchResult[] = bucketRes.buckets
+          .filter(
+            (b) =>
+              !q ||
+              matches(b.bucketName) ||
+              matches(b.displayName || "") ||
+              matches(b.backendId),
+          )
+          .slice(0, 5)
+          .map((b) => ({
+            id: `bucket-${b.backendId}-${b.bucketName}`,
+            type: "nav",
+            title: b.displayName || b.bucketName,
+            subtitle: `Bucket · ${b.backendId}/${b.bucketName}`,
+            icon: ArchiveBoxIcon,
+            onSelect: () =>
+              router.push(
+                `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketName)}`,
+              ),
+          }));
+
+        const okResults: SearchResult[] = okRes.objectKeys
+          .filter(
+            (o) => !q || matches(o.objectKey) || matches(o.displayName || ""),
+          )
+          .slice(0, 5)
+          .map((o) => {
+            const tslug = tenantSlugByID.get(o.tenantId) || o.tenantId;
+            return {
+              id: `ok-${o.tenantId}-${o.objectKey}`,
+              type: "nav",
+              title: o.displayName || o.objectKey,
+              subtitle: `Object key · ${tslug}/${o.objectKey}`,
+              icon: TagIcon,
+              onSelect: () =>
+                router.push(
+                  `/tenants/${encodeURIComponent(tslug)}/object-keys/${encodeURIComponent(o.objectKey)}/objects`,
+                ),
+            };
+          });
+
+        // scopedObjectKey retained for dep-array re-fire when scope
+        // changes; once ListObjects offers cross-tenant search,
+        // surface object hits here too.
         void scopedObjectKey;
 
-        if (tenantResults.length > 0) {
-          setSearchResults((prev) => [...prev, ...tenantResults]);
+        const combined = [
+          ...tenantResults,
+          ...backendResults,
+          ...bucketResults,
+          ...okResults,
+        ];
+        if (combined.length > 0) {
+          setSearchResults((prev) => [...prev, ...combined]);
         }
       } catch (err) {
         console.error("Command Palette API search failed", err);
@@ -536,7 +648,22 @@ export function CommandPalette() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-indigo-500/40">PALADIN v2.0 Global Index</span>
+            {/* Hint at scope rather than versioning — version lives in
+                the topbar build-info pill. Empty scope = global; a
+                tenant in scope reads as "tenant: <slug>" so the
+                operator sees why scoped jumps appear up top. */}
+            <span className="text-indigo-500/40">
+              {scopedTenantSlug ? (
+                <>
+                  Scope:{" "}
+                  <span className="text-indigo-300/70 font-mono normal-case tracking-normal">
+                    {scopedTenantSlug}
+                  </span>
+                </>
+              ) : (
+                "Global"
+              )}
+            </span>
           </div>
         </div>
       </div>

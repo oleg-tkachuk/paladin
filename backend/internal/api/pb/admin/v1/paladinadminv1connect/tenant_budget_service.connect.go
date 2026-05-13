@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -37,6 +38,9 @@ const (
 	TenantBudgetServiceGetProcedure = "/paladin.admin.v1.TenantBudgetService/Get"
 	// TenantBudgetServiceSetProcedure is the fully-qualified name of the TenantBudgetService's Set RPC.
 	TenantBudgetServiceSetProcedure = "/paladin.admin.v1.TenantBudgetService/Set"
+	// TenantBudgetServiceSummarizeProcedure is the fully-qualified name of the TenantBudgetService's
+	// Summarize RPC.
+	TenantBudgetServiceSummarizeProcedure = "/paladin.admin.v1.TenantBudgetService/Summarize"
 )
 
 // TenantBudgetServiceClient is a client for the paladin.admin.v1.TenantBudgetService service.
@@ -49,6 +53,14 @@ type TenantBudgetServiceClient interface {
 	// and zeros spent_usd (typical: monthly billing close). false
 	// adjusts the cap mid-cycle without affecting accumulated spend.
 	Set(context.Context, *connect.Request[v1.TenantBudgetServiceSetRequest]) (*connect.Response[v1.TenantBudgetServiceSetResponse], error)
+	// Summarize returns every tenant's budget snapshot joined with
+	// tenant identity (slug, display_name) + a derived utilisation
+	// percent. Drives the cross-tenant dashboard widget that surfaces
+	// tenants approaching caps. Platform-admin only.
+	//
+	// Filters keep the wire payload small on platforms with many
+	// tenants — typical operator query is "show me anyone over 80 %".
+	Summarize(context.Context, *connect.Request[v1.TenantBudgetServiceSummarizeRequest]) (*connect.Response[v1.TenantBudgetServiceSummarizeResponse], error)
 }
 
 // NewTenantBudgetServiceClient constructs a client for the paladin.admin.v1.TenantBudgetService
@@ -74,13 +86,20 @@ func NewTenantBudgetServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(tenantBudgetServiceMethods.ByName("Set")),
 			connect.WithClientOptions(opts...),
 		),
+		summarize: connect.NewClient[v1.TenantBudgetServiceSummarizeRequest, v1.TenantBudgetServiceSummarizeResponse](
+			httpClient,
+			baseURL+TenantBudgetServiceSummarizeProcedure,
+			connect.WithSchema(tenantBudgetServiceMethods.ByName("Summarize")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tenantBudgetServiceClient implements TenantBudgetServiceClient.
 type tenantBudgetServiceClient struct {
-	get *connect.Client[v1.TenantBudgetServiceGetRequest, v1.TenantBudgetServiceGetResponse]
-	set *connect.Client[v1.TenantBudgetServiceSetRequest, v1.TenantBudgetServiceSetResponse]
+	get       *connect.Client[v1.TenantBudgetServiceGetRequest, v1.TenantBudgetServiceGetResponse]
+	set       *connect.Client[v1.TenantBudgetServiceSetRequest, v1.TenantBudgetServiceSetResponse]
+	summarize *connect.Client[v1.TenantBudgetServiceSummarizeRequest, v1.TenantBudgetServiceSummarizeResponse]
 }
 
 // Get calls paladin.admin.v1.TenantBudgetService.Get.
@@ -93,6 +112,11 @@ func (c *tenantBudgetServiceClient) Set(ctx context.Context, req *connect.Reques
 	return c.set.CallUnary(ctx, req)
 }
 
+// Summarize calls paladin.admin.v1.TenantBudgetService.Summarize.
+func (c *tenantBudgetServiceClient) Summarize(ctx context.Context, req *connect.Request[v1.TenantBudgetServiceSummarizeRequest]) (*connect.Response[v1.TenantBudgetServiceSummarizeResponse], error) {
+	return c.summarize.CallUnary(ctx, req)
+}
+
 // TenantBudgetServiceHandler is an implementation of the paladin.admin.v1.TenantBudgetService service.
 type TenantBudgetServiceHandler interface {
 	// Get returns the current snapshot for a tenant. Returns NOT_FOUND
@@ -103,6 +127,14 @@ type TenantBudgetServiceHandler interface {
 	// and zeros spent_usd (typical: monthly billing close). false
 	// adjusts the cap mid-cycle without affecting accumulated spend.
 	Set(context.Context, *connect.Request[v1.TenantBudgetServiceSetRequest]) (*connect.Response[v1.TenantBudgetServiceSetResponse], error)
+	// Summarize returns every tenant's budget snapshot joined with
+	// tenant identity (slug, display_name) + a derived utilisation
+	// percent. Drives the cross-tenant dashboard widget that surfaces
+	// tenants approaching caps. Platform-admin only.
+	//
+	// Filters keep the wire payload small on platforms with many
+	// tenants — typical operator query is "show me anyone over 80 %".
+	Summarize(context.Context, *connect.Request[v1.TenantBudgetServiceSummarizeRequest]) (*connect.Response[v1.TenantBudgetServiceSummarizeResponse], error)
 }
 
 // NewTenantBudgetServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -124,12 +156,20 @@ func NewTenantBudgetServiceHandler(svc TenantBudgetServiceHandler, opts ...conne
 		connect.WithSchema(tenantBudgetServiceMethods.ByName("Set")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantBudgetServiceSummarizeHandler := connect.NewUnaryHandler(
+		TenantBudgetServiceSummarizeProcedure,
+		svc.Summarize,
+		connect.WithSchema(tenantBudgetServiceMethods.ByName("Summarize")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.TenantBudgetService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TenantBudgetServiceGetProcedure:
 			tenantBudgetServiceGetHandler.ServeHTTP(w, r)
 		case TenantBudgetServiceSetProcedure:
 			tenantBudgetServiceSetHandler.ServeHTTP(w, r)
+		case TenantBudgetServiceSummarizeProcedure:
+			tenantBudgetServiceSummarizeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -145,4 +185,8 @@ func (UnimplementedTenantBudgetServiceHandler) Get(context.Context, *connect.Req
 
 func (UnimplementedTenantBudgetServiceHandler) Set(context.Context, *connect.Request[v1.TenantBudgetServiceSetRequest]) (*connect.Response[v1.TenantBudgetServiceSetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantBudgetService.Set is not implemented"))
+}
+
+func (UnimplementedTenantBudgetServiceHandler) Summarize(context.Context, *connect.Request[v1.TenantBudgetServiceSummarizeRequest]) (*connect.Response[v1.TenantBudgetServiceSummarizeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantBudgetService.Summarize is not implemented"))
 }

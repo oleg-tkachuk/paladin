@@ -105,6 +105,48 @@ func (s *TenantBudgetServer) Set(
 	}), nil
 }
 
+// Summarize returns one row per tenant joining the budget snapshot
+// with slug + display_name. The platform.admin gate is enforced by
+// the standard interceptor stack; this handler just translates
+// request → store args → proto. unlimited_only and threshold_pct
+// are mutually exclusive (server-enforced).
+func (s *TenantBudgetServer) Summarize(
+	ctx context.Context,
+	req *connect.Request[pb.TenantBudgetServiceSummarizeRequest],
+) (*connect.Response[pb.TenantBudgetServiceSummarizeResponse], error) {
+	if s.Usage == nil {
+		return nil, connect.NewError(connect.CodeUnavailable,
+			errors.New("capability subsystem disabled; tenant budget unavailable"))
+	}
+	m := req.Msg
+	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("unlimited_only is mutually exclusive with a non-zero threshold_pct"))
+	}
+	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsArgs{
+		ThresholdPct:    m.GetThresholdPct(),
+		UnlimitedOnly:   m.GetUnlimitedOnly(),
+		ExcludeInactive: m.GetExcludeInactive(),
+		Limit:           m.GetLimit(),
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := &pb.TenantBudgetServiceSummarizeResponse{
+		Summaries: make([]*pb.TenantBudgetSummary, 0, len(rows)),
+	}
+	for _, r := range rows {
+		out.Summaries = append(out.Summaries, &pb.TenantBudgetSummary{
+			TenantId:       r.TenantID.String(),
+			Slug:           r.Slug,
+			DisplayName:    r.DisplayName,
+			Budget:         tenantBudgetToProto(r.Budget),
+			UtilisationPct: r.UtilisationPct,
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
 var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(nil)
 
 // tenantBudgetToProto converts the internal snapshot to the wire shape.

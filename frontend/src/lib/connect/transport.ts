@@ -16,7 +16,7 @@ import {
 import {
   configureTokenStore,
   getAccessToken,
-  clearAllTokens,
+  markAudienceStale,
 } from "@/lib/auth/tokenStore";
 
 /**
@@ -39,12 +39,12 @@ const loggingInterceptor: Interceptor = (next) => async (req) => {
     if (err instanceof ConnectError && err.code === Code.Unimplemented) {
       throw err;
     }
-    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
-      // Wipe cached access tokens on 401 — the next RPC will re-fetch via
-      // the BFF, which re-validates the refresh-token cookie. If that
-      // also 401s the user is bounced to /login (handled at the app shell).
-      clearAllTokens();
-    }
+    // No token-cache work here — the auth interceptor (inner) owns
+    // the 401 self-heal path. An earlier version eagerly cleared
+    // the entire cache on every 401 even after the auth interceptor
+    // had already self-healed; that wiped fresh tokens for OTHER
+    // audiences and forced redundant /exchange round-trips on every
+    // subsequent RPC.
     console.error(`[RPC Error] ${req.method.name}:`, err);
     throw err;
   }
@@ -95,13 +95,17 @@ function authInterceptorFor(audience: Audience): Interceptor {
     } catch (err) {
       // Self-heal on 401: the cached access token expired (or was
       // signed by a now-rotated key) but the refresh-token cookie is
-      // still good. Wipe cache, fetch a fresh access token, retry the
-      // request ONCE. Without this, polling consumers (StatsContext,
-      // useAuditLogs, …) loop forever on stale tokens because each
-      // failure clears the cache but the consumer just re-fires the
-      // same broken request on the next tick.
+      // still good. Mark THIS audience stale, fetch a fresh access
+      // token (single-flight via inflight Map), retry once.
+      //
+      // Don't use clearAllTokens here: it drops the inflight Map too,
+      // so parallel 401s would each fire their own /exchange call
+      // against the BFF and clobber each other's cache writes —
+      // which then races the BFF's refresh-token cookie rotation
+      // and intermittently wedges the page (the symptom that lives
+      // on as "page sometimes blank on refresh").
       if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
-        clearAllTokens();
+        markAudienceStale(audience);
         try {
           const fresh = await getAccessToken(audience);
           req.header.set("Authorization", `Bearer ${fresh}`);

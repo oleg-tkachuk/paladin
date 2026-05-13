@@ -28,8 +28,8 @@ import {
  */
 
 export type RefreshTopic =
-  | "objects" // Object create/delete/restore/update — affects /objects, /trash, /object-tags, dashboard counts.
-  | "objectKeys" // ObjectKey create/delete — affects /object-keys, scope picker, sidebar counts.
+  | "objects" // Object create/delete/restore/update — affects the OK Objects/Trash tabs and dashboard counts.
+  | "objectKeys" // ObjectKey create/delete — affects /tenants/<id>/object-keys + cross-tenant /object-keys + scope picker.
   | "buckets" // Bucket create/delete/update — affects /buckets, scope picker.
   | "backends" // Backend create/delete/update — affects /backends, scope picker.
   | "tenants" // Tenant create/delete/update — affects /tenants, sidebar.

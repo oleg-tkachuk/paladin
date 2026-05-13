@@ -2,12 +2,11 @@
 
 // /tenants/<id>/buckets — tenant-scoped bucket list.
 //
-// Filtering strategy: client-side filter on `b.ownerTenantId === tenantId`
-// applied to the same backend `ListBuckets` RPC the cross-tenant page
-// uses. The proto's `parent` filter targets a backend, not a tenant,
-// so we'd need a per-tenant index to push the filter server-side —
-// tracked in BACKLOG. For the typical N(buckets) ≈ 10²-10³ scale this
-// is fine; cross-tenant /buckets stays the platform-admin index.
+// Filtering strategy: pushes `owner_tenant_id == tenantId` to the
+// server via ListBucketsRequest.owner_tenant_id (backed by the
+// partial index on buckets.owner_tenant_id from migration 006).
+// The cross-tenant /buckets page omits the filter; the same
+// useBuckets hook serves both.
 //
 // Rows link to the bucket detail subtree under the same tenant. The
 // "Create bucket" affordance pre-fills owner_tenant_id with the
@@ -175,8 +174,12 @@ export default function TenantBucketsPage() {
   const [deleteRemote, setDeleteRemote] = useState(false);
 
   useEffect(() => {
-    fetchBuckets();
-  }, [fetchBuckets]);
+    // Push the tenant filter to the server. Hook signature is
+    // (backendId?, filter?, pageToken?, ownerTenantId?) — leave
+    // backend/filter/cursor empty to list all buckets owned by
+    // this tenant across backends.
+    fetchBuckets(undefined, "", "", tenant.tenantId);
+  }, [fetchBuckets, tenant.tenantId]);
 
   useEffect(() => {
     if (createOpen && !newBackend && backends.length > 0) {
@@ -184,16 +187,13 @@ export default function TenantBucketsPage() {
     }
   }, [createOpen, newBackend, backends]);
 
-  // Tenant-scope filter: only buckets owned by this tenant. Shared
-  // buckets (empty owner_tenant_id) are deliberately hidden — they
-  // belong to the platform-admin /buckets index.
-  const tenantBuckets = useMemo(
-    () => buckets.filter((b) => b.ownerTenantId === tenant.tenantId),
-    [buckets, tenant.tenantId],
-  );
+  // The server-side `owner_tenant_id` filter (passed in fetchBuckets
+  // above) already narrows `buckets` to this tenant's rows; we list
+  // them directly. Cross-tenant /buckets uses the same hook without
+  // the filter.
 
   const filtered = useMemo(() => {
-    let list = tenantBuckets;
+    let list = buckets;
     if (filterBackend !== ALL_BACKENDS) {
       list = list.filter((b) => b.backendId === filterBackend);
     }
@@ -224,7 +224,7 @@ export default function TenantBucketsPage() {
       });
     }
     return list;
-  }, [tenantBuckets, filterBackend, search, sort]);
+  }, [buckets, filterBackend, search, sort]);
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -386,7 +386,7 @@ export default function TenantBucketsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && tenantBuckets.length === 0 ? (
+            {loading && buckets.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
                   <TableCell colSpan={6} className="py-3">

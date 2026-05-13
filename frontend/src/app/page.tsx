@@ -7,7 +7,6 @@ import {
   ArchiveBoxIcon,
   ArrowRightIcon,
   ArrowUpTrayIcon,
-  BoltIcon,
   CheckCircleIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
@@ -21,6 +20,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DashboardWidgets } from "@/components/DashboardWidgets";
 import {
   Card,
   CardContent,
@@ -288,20 +288,9 @@ export default function DashboardPage() {
             icon: ClipboardDocumentListIcon,
             accent: "text-chart-3/85",
           },
-          // Events tile mirrors the sidebar — Dashboard had drifted out
-          // of sync after EventSubscriptionService landed (sidebar got
-          // the entry, Dashboard didn't). No count: subscription totals
-          // would require a per-tenant ListSubscriptions on every
-          // Dashboard load, and the count alone isn't a useful
-          // indicator (one healthy webhook is plenty).
-          {
-            name: "Events",
-            href: "/events",
-            description:
-              "Outbound subscriptions — webhook (HTTP) or NATS subject.",
-            icon: BoltIcon,
-            accent: "text-chart-3/85",
-          },
+          // Events tile dropped: subscriptions are now a tenant-scoped
+          // tab (/tenants/<id>/event-subscriptions). Operators reach
+          // them by clicking into a tenant from Resources.
           {
             name: "MCP Bridge",
             href: "/mcp",
@@ -378,6 +367,9 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {/* ─── Dashboard widgets (recent activity, failed ops, budgets) */}
+      <DashboardWidgets />
 
       {/* ─── Status strip ─────────────────────────────────────────── */}
       <Card>

@@ -14,10 +14,28 @@ service TenantService {
   rpc CreateTenant(CreateTenantRequest) returns (Tenant);
   rpc GetTenant(GetTenantRequest) returns (Tenant);
   rpc UpdateTenant(UpdateTenantRequest) returns (Tenant);
+  // DeleteTenant defaults to SOFT delete (sets `deleted_at`); the row
+  // remains recoverable via RestoreTenant within the retention window.
+  // Pass `force=true` to skip the trash and hard-delete immediately —
+  // used by automated test cleanups + emergency-purge flows.
   rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse);
   rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
 
   rpc SetInheritedPolicy(SetInheritedPolicyRequest) returns (Tenant);
+
+  // RestoreTenant clears `deleted_at` on a soft-deleted row, returning
+  // it to the active set. Slug + display_name UNIQUE constraints still
+  // apply across both active and trashed rows (see migration 036
+  // commentary) — if a new tenant claimed the slug while this one was
+  // trashed, restore fails with ALREADY_EXISTS and the operator must
+  // rename one side first.
+  rpc RestoreTenant(RestoreTenantRequest) returns (Tenant);
+
+  // PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
+  // an active tenant (operators have to soft-delete first) so the
+  // two-step recovery window is preserved by default. Idempotent on
+  // a missing row.
+  rpc PurgeTenant(PurgeTenantRequest) returns (PurgeTenantResponse);
 
   // RenameTenantSlug rewrites the tenant's `slug` and rewrites every
   // `Tenant::"<old_slug>"` reference in the tenant's
@@ -28,8 +46,23 @@ service TenantService {
 }
 
 message CreateTenantRequest {
-  string tenant_id = 1; // optional; UUIDv7 generated when empty
+  // tenant_id — optional. When empty the server generates a fresh
+  // UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
+  // the zero UUID. Immutable post-create (enforced by migration 033's
+  // tenants_immutable_columns trigger).
+  string tenant_id = 1;
+  // tenant.slug is required and validated against ValidateTenantSlug.
+  // tenant.display_name is optional; defaults to slug at create time.
+  // Both are unique across tenants. tenant_id, slug — immutable;
+  // display_name — editable via UpdateTenant.
   Tenant tenant = 2 [(buf.validate.field).required = true];
+  // default_bucket — resource name of the (backend, bucket) where this
+  // tenant's objects will live by default. Format:
+  // "storageBackends/{backend_id}/buckets/{bucket_name}". Optional —
+  // when empty the tenant has no default binding (legacy shape); when
+  // set, the server inserts a matching tenant_default_bindings row in
+  // the same tx as the tenant insert.
+  string default_bucket = 3;
 }
 
 message GetTenantRequest {
@@ -55,6 +88,15 @@ message DeleteTenantResponse {}
 message ListTenantsRequest {
   paladin.common.v1.PageRequest page = 1;
   string filter = 2;
+  // include_trashed — when true, return both active and soft-deleted
+  // rows; default (false) hides trashed tenants from the active list.
+  // The /trash UI sets this to true; everywhere else defaults to the
+  // active set so deleted rows can't accidentally accept new bindings.
+  bool include_trashed = 3;
+  // only_trashed — when true, return ONLY soft-deleted rows. Overrides
+  // `include_trashed`. Used by the /trash page to render the recovery
+  // view.
+  bool only_trashed = 4;
 }
 
 message ListTenantsResponse {
@@ -67,6 +109,21 @@ message SetInheritedPolicyRequest {
   string resource_version = 2;
   string cedar_policy = 3;
 }
+
+message RestoreTenantRequest {
+  // name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
+  // soft-deleted, otherwise the server returns FAILED_PRECONDITION.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message PurgeTenantRequest {
+  // name — "tenants/{tenant_id_or_slug}"; the tenant MUST currently be
+  // soft-deleted, otherwise FAILED_PRECONDITION. Use DeleteTenant with
+  // force=true for the rare "skip the trash" path.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message PurgeTenantResponse {}
 
 message RenameTenantSlugRequest {
   // name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.

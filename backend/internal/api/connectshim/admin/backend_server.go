@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -82,6 +83,11 @@ func (s *BackendServer) DeleteBackend(ctx context.Context, req *connect.Request[
 	rv, err := parseRV(req.Msg.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// OCC contract: rv=0 only allowed with explicit force=true.
+	if rv == 0 && !req.Msg.GetForce() {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version required; pass force=true to bypass"))
 	}
 	if err := s.H.DeleteBackend(ctx, id, rv, req.Msg.GetForce()); err != nil {
 		return nil, err

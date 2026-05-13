@@ -57,7 +57,11 @@ export async function GET(): Promise<NextResponse> {
     }
 
     const payload: MeResponseBody = {
-      user: toUserDTO(whoAmI.user),
+      // tenantSlug comes from WhoAmIResponse.tenant_slug — populated
+      // server-side from the JWT principal claim. Empty string when
+      // the token was minted before the slug-claim wiring (legacy
+      // sessions); the SPA falls back to tenantId for URL routing.
+      user: toUserDTO(whoAmI.user, whoAmI.tenantSlug),
       accessTokens: [
         toAccessTokenDTO(
           iamAudience,

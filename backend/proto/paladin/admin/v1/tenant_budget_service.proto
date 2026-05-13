@@ -29,6 +29,15 @@ service TenantBudgetService {
   // and zeros spent_usd (typical: monthly billing close). false
   // adjusts the cap mid-cycle without affecting accumulated spend.
   rpc Set(TenantBudgetServiceSetRequest) returns (TenantBudgetServiceSetResponse);
+
+  // Summarize returns every tenant's budget snapshot joined with
+  // tenant identity (slug, display_name) + a derived utilisation
+  // percent. Drives the cross-tenant dashboard widget that surfaces
+  // tenants approaching caps. Platform-admin only.
+  //
+  // Filters keep the wire payload small on platforms with many
+  // tenants — typical operator query is "show me anyone over 80 %".
+  rpc Summarize(TenantBudgetServiceSummarizeRequest) returns (TenantBudgetServiceSummarizeResponse);
 }
 
 // TenantBudget is the typed metadata view of a per-tenant aggregate
@@ -86,4 +95,41 @@ message TenantBudgetServiceSetRequest {
 
 message TenantBudgetServiceSetResponse {
   TenantBudget budget = 1;
+}
+
+// TenantBudgetSummary joins a TenantBudget row with the tenant's
+// human handle and a derived utilisation percent so the dashboard
+// can render "acme-prod · 87 % of $1,000" without a second lookup.
+message TenantBudgetSummary {
+  string tenant_id     = 1;
+  string slug          = 2;
+  string display_name  = 3;
+  TenantBudget budget  = 4;
+  // utilisation_pct = spent / max × 100, capped at 100 for display.
+  // 0 when max_budget_amount == 0 (unlimited / metering-only).
+  double utilisation_pct = 5;
+}
+
+message TenantBudgetServiceSummarizeRequest {
+  // threshold_pct — include rows whose utilisation_pct >= threshold.
+  // 0 = no threshold (return everything matching the other filters).
+  double threshold_pct = 1 [(buf.validate.field).double = {gte: 0, lte: 100}];
+
+  // unlimited_only — when true, return only rows where
+  // max_budget_amount == 0 (cap-less metering). Mutually exclusive
+  // with a non-zero threshold_pct; the server enforces this.
+  bool unlimited_only = 2;
+
+  // exclude_inactive — when true (default), skip soft-deleted
+  // tenants (deleted_at IS NOT NULL). The dashboard widget passes
+  // true; an admin auditing a recovery scenario sets false.
+  bool exclude_inactive = 3;
+
+  // limit — cap result count. 0 = server default (50). The widget
+  // typically asks for 10.
+  int32 limit = 4 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+}
+
+message TenantBudgetServiceSummarizeResponse {
+  repeated TenantBudgetSummary summaries = 1;
 }

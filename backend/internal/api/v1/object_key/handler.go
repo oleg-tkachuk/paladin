@@ -72,6 +72,12 @@ type ListObjectKeysArgs struct {
 	TenantID  uuid.UUID
 	PageSize  int32
 	PageToken string
+	// BackendID + BucketName are optional server-side filters. When both
+	// are set, only ObjectKeys bound to that (backend, bucket) pair are
+	// returned. Used by the storage-first UI browser to avoid pulling
+	// every OK platform-wide just to client-filter a handful per bucket.
+	BackendID  string
+	BucketName string
 }
 
 type Repository interface {
@@ -141,31 +147,51 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 	)
 }
 
+// objectKeyResourceName — kept as the C-shape emitter for callers
+// that don't have (backend, bucket) in scope. Phase 1 prefers
+// CanonicalName when the full tuple is available (event payloads
+// after Create / Update / Delete read the row's backend/bucket and
+// can canonicalize). Plain Delete with no row read still uses C.
 func objectKeyResourceName(tenantID uuid.UUID, key string) string {
-	return fmt.Sprintf("tenants/%s/objectKeys/%s", tenantID, key)
+	return TenantPathName(tenantID, key)
 }
 
 func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs) (*ObjectKey, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	args.TenantID = tenantID
+	// Resource-owner tenant: by default it's the caller's tenant. A
+	// platform.admin can explicitly target a different tenant by
+	// supplying `args.TenantID` (the connectshim parses this from
+	// `parent: "tenants/{id}"` in the request). Without the
+	// platform.admin gate the override is silently ignored so a
+	// non-admin can't write into someone else's namespace.
+	if args.TenantID == uuid.Nil {
+		args.TenantID = callerTenantID
+	} else if args.TenantID != callerTenantID {
+		if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant CreateObjectKey requires platform.admin"))
+		}
+	}
 	// Fall back to the configured default backend when the caller omits it.
 	// The backend name is a FK to storage_backends.id, so an empty string
 	// would fail the constraint.
 	if args.BackendID == "" {
 		args.BackendID = h.defaultBackend
 	}
-	if err := h.authorizeFull(ctx, principal, tenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
+	if err := h.authorizeFull(ctx, principal, args.TenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Create(ctx, args)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create objectKey: %w", err))
 	}
+	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
+	apiutil.StashResource(ctx, canonical) // writes into the slot the audit mw installed
 	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.created",
-		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		canonical,
 		map[string]any{
 			"tenant_id":    b.TenantID.String(),
 			"object_key":   b.ObjectKey,
@@ -204,11 +230,15 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 	if err != nil {
 		return nil, mapVersionErr(err)
 	}
+	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
+	apiutil.StashResource(ctx, canonical)
 	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.updated",
-		objectKeyResourceName(b.TenantID, b.ObjectKey),
+		canonical,
 		map[string]any{
 			"tenant_id":        b.TenantID.String(),
 			"object_key":       b.ObjectKey,
+			"backend_id":       b.BackendID,
+			"bucket_name":      b.BucketName,
 			"resource_version": b.ResourceVersion,
 		})
 	return &b, nil
@@ -222,11 +252,21 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return err
 	}
+	// Read the row before delete so the event payload can carry the
+	// canonical resource name (which needs backend + bucket). Best-
+	// effort: if Get fails we fall back to the C-shape resource name —
+	// the delete itself still runs through the OCC guard below.
+	pre, getErr := h.repo.Get(ctx, tenantID, objectKey)
 	if err := h.repo.Delete(ctx, tenantID, objectKey, expectedVersion); err != nil {
 		return mapVersionErr(err)
 	}
+	resourceName := objectKeyResourceName(tenantID, objectKey)
+	if getErr == nil {
+		resourceName = CanonicalName(pre.BackendID, pre.BucketName, tenantID, objectKey)
+	}
+	apiutil.StashResource(ctx, resourceName)
 	h.dispatchEvent(ctx, tenantID, "paladin.object_key.deleted",
-		objectKeyResourceName(tenantID, objectKey),
+		resourceName,
 		map[string]any{
 			"tenant_id":        tenantID.String(),
 			"object_key":       objectKey,
@@ -236,14 +276,38 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 }
 
 func (h *Handler) ListObjectKeys(ctx context.Context, args ListObjectKeysArgs) ([]ObjectKey, string, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	args.TenantID = tenantID
+	// Cross-tenant listing (TenantID==Nil + a (backend, bucket) filter)
+	// is reserved for platform.admin — used by the storage-first
+	// browser to enumerate every OK on a given bucket. Without the
+	// gate any tenant could enumerate sibling tenants' OKs by sending
+	// an empty parent + a known bucket.
+	if args.TenantID == uuid.Nil {
+		if args.BackendID == "" || args.BucketName == "" {
+			// Tenant-scoped list: pin to caller's tenant.
+			args.TenantID = callerTenantID
+		} else if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+		}
+	} else if args.TenantID != callerTenantID {
+		if !principal.HasRole(apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant ListObjectKeys requires platform.admin"))
+		}
+	}
 	// One tenant-scoped Cedar check up front; per-row filtering would
 	// dominate pagination cost so we don't repeat it for every objectKey.
-	if err := h.authorize(ctx, principal, tenantID, "", cedar.ActionManageObjectKey); err != nil {
+	// For cross-tenant listing we authorize against the caller's tenant
+	// (the principal-tenant invariant the Cedar engine encodes).
+	authzTenant := args.TenantID
+	if authzTenant == uuid.Nil {
+		authzTenant = callerTenantID
+	}
+	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageObjectKey); err != nil {
 		return nil, "", err
 	}
 	return h.repo.List(ctx, args)

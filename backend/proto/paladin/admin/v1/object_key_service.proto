@@ -57,6 +57,14 @@ message ListObjectKeysRequest {
   string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;
+  // bucket — optional server-side narrow to ObjectKeys bound to a
+  // specific (backend, bucket) pair. Resource-name form
+  // "storageBackends/{backend_id}/buckets/{bucket_name}". When set
+  // with an empty parent, the request becomes a cross-tenant scan
+  // over that bucket — gated to platform.admin server-side. Used by
+  // the storage-first UI browser to avoid pulling every OK
+  // platform-wide just to client-filter a handful per bucket.
+  string bucket = 4;
 }
 
 message ListObjectKeysResponse {

@@ -61,3 +61,50 @@ UPDATE capability_usage
 SET spent_usd  = GREATEST(0, spent_usd - sqlc.arg('amount_usd')::numeric),
     updated_at = now()
 WHERE capability_id = $1;
+
+-- name: ListTenantBudgetSummaries :many
+-- Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
+-- display_name so the dashboard's BudgetAlerts widget doesn't need a
+-- follow-up read.
+--
+-- Predicate semantics:
+--   unlimited_only=true  → return only rows with max_budget_usd = 0
+--   unlimited_only=false → return rows whose utilisation ≥
+--                          threshold_pct (threshold_pct = 0 includes
+--                          everything).
+--   exclude_inactive=true → join filters tenants.deleted_at IS NULL.
+--
+-- Ordered by utilisation DESC so at-risk tenants surface first.
+SELECT
+    tb.tenant_id,
+    t.slug,
+    t.display_name,
+    tb.max_budget_usd,
+    tb.spent_usd,
+    tb.unit_code,
+    tb.period_start,
+    tb.period_end,
+    tb.updated_at,
+    (CASE
+      WHEN tb.max_budget_usd = 0 THEN 0::numeric
+      ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
+    END)::numeric AS utilisation_pct
+  FROM tenant_budgets AS tb
+  JOIN tenants AS t ON t.tenant_id = tb.tenant_id
+ WHERE (NOT sqlc.arg('exclude_inactive')::bool OR t.deleted_at IS NULL)
+   AND (
+     (sqlc.arg('unlimited_only')::bool AND tb.max_budget_usd = 0)
+     OR (NOT sqlc.arg('unlimited_only')::bool
+         AND (
+           sqlc.arg('threshold_pct')::numeric = 0
+           OR (tb.max_budget_usd > 0
+               AND (tb.spent_usd / tb.max_budget_usd) * 100 >= sqlc.arg('threshold_pct')::numeric)
+         ))
+   )
+ ORDER BY
+   CASE WHEN tb.max_budget_usd > 0
+        THEN (tb.spent_usd / tb.max_budget_usd) * 100
+        ELSE 0
+   END DESC,
+   t.slug ASC
+ LIMIT sqlc.arg('row_limit')::int;

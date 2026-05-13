@@ -20,12 +20,17 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // auditBeforeKey carries a pre-mutation snapshot stashed by a handler so the
 // audit interceptor can record before/after JSON without re-reading the row.
 type auditBeforeKey struct{}
+
+// Canonical resource-name stash lives in apiutil (see audit_stash.go)
+// so domain handlers can call StashResource without importing this
+// middleware package (which sits above them in the dependency graph).
 
 // StashBefore attaches a pre-mutation snapshot to ctx. Handlers that mutate
 // existing rows (Update*, Set*, Bind*, Patch*) should call this before
@@ -114,6 +119,10 @@ type auditInterceptor struct {
 
 func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		// Install a mutable resource-name slot the handler can write
+		// the canonical (A-shape) name into. Audit row picks it up
+		// after the handler returns (see preferCanonical).
+		ctx = apiutil.WithResourceSlot(ctx)
 		resp, err := next(ctx, req)
 		if a.shouldSkip(req.Spec().Procedure) {
 			return resp, err
@@ -172,7 +181,7 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 		ActorTenantID: tenantID,
 		ActorAudience: a.audience,
 		Action:        req.Spec().Procedure,
-		ResourceName:  resourceFromMessage(req.Any()),
+		ResourceName:  preferCanonical(ctx, req.Any()),
 		RequestID:     req.Header().Get("X-Request-Id"),
 		SourceIP:      req.Header().Get("X-Forwarded-For"),
 		CapabilityID:  capabilityID(ctx),
@@ -242,6 +251,18 @@ func capabilityID(ctx context.Context) uuid.UUID {
 // resourceFromMessage extracts a `name`/`parent` field from the request, if
 // present, via reflection on the public Get* method names. Avoids importing
 // every proto package; falls back to the message type name.
+// preferCanonical returns the handler-stashed canonical resource
+// name when present, else the C-shape `name`/`parent` from the
+// request message. Audit rows for ObjectKey-rooted mutations end up
+// carrying the (backend, bucket, tenant, objectKey) tuple as long as
+// the handler called StashResource before returning.
+func preferCanonical(ctx context.Context, msg any) string {
+	if s := apiutil.ResourceFromContext(ctx); s != "" {
+		return s
+	}
+	return resourceFromMessage(msg)
+}
+
 func resourceFromMessage(msg any) string {
 	if msg == nil {
 		return ""

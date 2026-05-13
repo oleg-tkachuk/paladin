@@ -7,12 +7,13 @@
 package paladiniamv1
 
 import (
-	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -368,7 +369,12 @@ type WhoAmIResponse struct {
 	User  *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	// Audience extracted from the presented token; useful for SPAs that
 	// reuse one client to talk to multiple planes.
-	Audience      string `protobuf:"bytes,2,opt,name=audience,proto3" json:"audience,omitempty"`
+	Audience string `protobuf:"bytes,2,opt,name=audience,proto3" json:"audience,omitempty"`
+	// Tenant slug for the caller's tenant — populated from the JWT's
+	// `tenant_slug` claim minted by the issuer. SPAs use this to render
+	// slug-form URLs (`/tenants/<slug>/...`) without a follow-up
+	// GetTenant lookup.
+	TenantSlug    string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -413,6 +419,13 @@ func (x *WhoAmIResponse) GetUser() *User {
 func (x *WhoAmIResponse) GetAudience() string {
 	if x != nil {
 		return x.Audience
+	}
+	return ""
+}
+
+func (x *WhoAmIResponse) GetTenantSlug() string {
+	if x != nil {
+		return x.TenantSlug
 	}
 	return ""
 }
@@ -644,10 +657,12 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\rRevokeRequest\x12\x1d\n" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"\x0f\n" +
-	"\rWhoAmIRequest\"R\n" +
+	"\rWhoAmIRequest\"s\n" +
 	"\x0eWhoAmIResponse\x12$\n" +
 	"\x04user\x18\x01 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
-	"\baudience\x18\x02 \x01(\tR\baudience\"o\n" +
+	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
+	"\vtenant_slug\x18\x03 \x01(\tR\n" +
+	"tenantSlug\"o\n" +
 	"\x15ChangePasswordRequest\x12*\n" +
 	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
 	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\fR\vnewPassword\"\x18\n" +

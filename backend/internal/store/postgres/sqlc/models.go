@@ -217,6 +217,34 @@ type CapabilityUsage struct {
 	UnitCode string `json:"unit_code"`
 }
 
+type Charge struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
+	Amount       pgtype.Numeric     `json:"amount"`
+	UnitCode     string             `json:"unit_code"`
+	Op           string             `json:"op"`
+	ActorSubject string             `json:"actor_subject"`
+}
+
+type EventDelivery struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	EventType      string             `json:"event_type"`
+	EventAt        pgtype.Timestamptz `json:"event_at"`
+	EventPayload   []byte             `json:"event_payload"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	LastError      string             `json:"last_error"`
+	LastStatusCode int32              `json:"last_status_code"`
+	LastAttemptAt  pgtype.Timestamptz `json:"last_attempt_at"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type EventSubscription struct {
 	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
@@ -409,7 +437,7 @@ type StorageBackend struct {
 
 type Tenant struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
-	DisplayName          *string            `json:"display_name"`
+	DisplayName          string             `json:"display_name"`
 	Labels               []byte             `json:"labels"`
 	InheritedCedarPolicy string             `json:"inherited_cedar_policy"`
 	InheritedPolicyHash  []byte             `json:"inherited_policy_hash"`
@@ -417,6 +445,7 @@ type Tenant struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	Slug                 string             `json:"slug"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type TenantBudget struct {
@@ -430,6 +459,14 @@ type TenantBudget struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	// ISO 4217 currency code (USD/EUR/UAH/GBP) or the abstract sentinel UNIT for non-currency metering. Validated at the application layer.
 	UnitCode string `json:"unit_code"`
+}
+
+type TenantDefaultBinding struct {
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	BackendID  string             `json:"backend_id"`
+	BucketName string             `json:"bucket_name"`
+	SetAt      pgtype.Timestamptz `json:"set_at"`
+	SetBy      string             `json:"set_by"`
 }
 
 type User struct {

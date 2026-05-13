@@ -833,7 +833,163 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-## Operational
+## UI / Admin Console
+
+### Slug-rename history redirect
+
+- **Status:** Deferred
+- **Reason:** When `RenameTenantSlug` rotates a slug, bookmarks
+  using the old slug 404 by design (fail-fast over silent redirect
+  to the wrong tenant). For cross-org link sharing in the wild
+  this is annoying — a grace-window redirect via the audit log
+  would soften it.
+- **Definition of Done:**
+  - On a 404 for `/tenants/<x>/...`, look up the audit log for
+    a recent `RenameTenantSlug` whose `before.slug == x`; if
+    found and within a configurable grace window, surface a
+    "did you mean <new-slug>?" CTA (or auto-redirect with a
+    banner).
+  - Configurable grace window (default 30d).
+- **Blockers:** none — UI-only with audit-log read.
+
+### Remaining bucket sub-tabs (Replication / Versioning)
+
+- **Status:** Deferred
+- **Reason:** Phase 5+ shipped real pages for the tenant-level
+  tab stubs (Quotas, Capabilities, M2M Tokens, Events
+  Subscriptions, Budget) and the bucket sub-tabs Policy + Object
+  Keys. Versioning and Replication remain stubs because they
+  need backend support that isn't there yet:
+- **Definition of Done:**
+  - Replication tab: blocked on `BucketReplication` proto +
+    replicator worker (see Features →
+    "Replication: real `StorageReplicator` implementation").
+  - Versioning tab: depends on the Bucket proto exposing
+    versioning state with a real toggle handler (today the
+    field exists but the toggle handler and tests are stubs).
+- **Blockers:** Replication proto + worker for the Replication
+  tab; Versioning needs the toggle handler.
+
+### Object Tags as a filter on the Objects tab
+
+- **Status:** Deferred
+- **Reason:** The flat `/object-tags` page was deleted in Phase
+  5 of the URL refactor (taxonomy view that didn't fit the
+  resource tree). Operators still want to filter objects by tag.
+  Today the Objects tab inside an ObjectKey lists every object;
+  a tag dropdown in the filter bar would replace the deleted
+  taxonomy view.
+- **Definition of Done:**
+  - Tag-aware index on the data plane (per-tenant; tag values
+    sourced from object metadata).
+  - Filter dropdown in
+    [frontend/src/app/tenants/\[id\]/object-keys/\[name\]/objects/page.tsx](frontend/src/app/tenants/[id]/object-keys/[name]/objects/page.tsx)
+    populated from the index, applied as a CEL filter on
+    `ListObjects`.
+- **Blockers:** data-plane tag index.
+
+### Multi-segment ObjectKey: event-ingest path disambiguation
+
+- **Status:** Aspirational
+- **Reason:** Migration 030 relaxed `object_key_format` so paths
+  like `invoices/2026/q1` are valid alongside the old
+  single-segment `assets-prod`. Read-side parsers in
+  `internal/eventingest/source_*.go` still split incoming S3 keys
+  as `<bucket>/<tenant_uuid>/<object_key>/<key>` with the third
+  segment treated as the OK and the rest as the user-key. With
+  multi-segment OK that's ambiguous: an event for path
+  `<tenant>/invoices/2026/q1/report.pdf` could resolve as OK
+  `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1`
+  + key `report.pdf`. Existing single-segment OKs are unaffected
+  (split-on-`/` happens to land on the right segment); the
+  ambiguity surfaces only once an operator creates a multi-segment
+  OK and writes objects to it.
+- **Definition of Done:**
+  - Longest-prefix-match against `object_keys` rows for the tenant
+    (cached per-tenant, invalidated on OK create/delete).
+  - All four ingest sources (seaweedfs, seaweedfs-nats, minio,
+    cloudevents) use the shared resolver.
+  - Integration test covering OK precedence ordering when nested
+    paths collide (e.g. `invoices` + `invoices/2026`).
+- **Blockers:** none — pure backend refactor, no proto change.
+
+### BackendService.RotateCredentials end-to-end implementation
+
+- **Status:** Aspirational
+- **Reason:** Proto + connectshim entry-point exist
+  (`backend_server.go:92`) but the handler underneath returns
+  Unimplemented. RotateCredentials needs: (1) write the new secret
+  ref to the row, (2) preserve the old one for `grace_period` so
+  in-flight presigns don't break, (3) emit
+  `paladin.backend.credentials_rotated` event so downstream caches
+  invalidate.
+- **Definition of Done:**
+  - `backendh.Handler.RotateCredentials` does the dual-write + cache
+    invalidation.
+  - State column on `backends` carrying `(active_secret_ref,
+    previous_secret_ref, previous_valid_until)` triple.
+  - Test that a presign issued just before rotate keeps working
+    until `grace_period` elapses.
+- **Blockers:** none.
+
+### BackendService.TestBackend connectivity probe
+
+- **Status:** Aspirational
+- **Reason:** Proto + connectshim entry-point exist; handler returns
+  Unimplemented. UI's "Test connection" affordance can't be wired up
+  until this lands.
+- **Definition of Done:**
+  - HEAD + ListBuckets probe with timeout against the backend's
+    endpoint using the registered credentials.
+  - Latency + reachable flag in response.
+  - Read-only — no audit row.
+- **Blockers:** none.
+
+### ResolveObjectKey RPC (Phase 2 of canonical-resource-names)
+
+- **Status:** Aspirational
+- **Reason:** Phase 1 landed canonical resource names in audit + event
+  payloads. Phase 2 of the plan in
+  `backend/docs/canonical-resource-names.md` adds a `ResolveObjectKey`
+  RPC + a central resolver on the connectshim edge so clients can
+  send any of the three name shapes (canonical A, tenant-first C,
+  bare B) without each handler doing its own parsing.
+- **Definition of Done:**
+  - `internal/api/connectshim/resolve/resolver.go` exists, exported as
+    `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)`.
+  - Every `*_server.go` under `connectshim/admin/` and `connectshim/data/`
+    that calls `objectKeyParts` / `tenantUUIDFromParent` swaps to the
+    central resolver.
+  - Metric `paladin_resource_name_shape_total{shape="…"}` so we can see
+    real-world distribution before unlocking Phase 3.
+- **Blockers:** none — pure refactor.
+
+### Cedar policy templates: canonical resource literals
+
+- **Status:** Aspirational
+- **Reason:** Phase 1 of `backend/docs/canonical-resource-names.md`
+  switches audit_log and event payload `resource_name` to the A-shape
+  `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}`.
+  The default policy template (`internal/api/v1/tenant/defaultpolicy.go`)
+  uses unconstrained `resource` so it's untouched. Operator-authored
+  policies that reference resources by C-shape EUID
+  (`ObjectKey::"tenants/{tid}/objectKeys/{ok}"`) keep working — the
+  Cedar evaluator's `cedar.Resource` builder still emits the C-shape
+  EUID at evaluation time. Migrating those EUIDs to canonical is a
+  separate decision that touches operator-written policies in
+  `tenants.inherited_cedar_policy` + `object_keys.cedar_policy`.
+- **Definition of Done:**
+  - `cedar.Resource` builds canonical EUID for ObjectKey-rooted
+    resources.
+  - Rewrite pass over `tenants.inherited_cedar_policy` +
+    `object_keys.cedar_policy` (similar shape to the slug-rename
+    rewrite in `adapters/tenant.go`) translates existing C-shape
+    EUIDs to canonical.
+  - Cedar authoring docs (`backend/docs/cedar-authoring.md`)
+    updated to show the canonical EUID form.
+- **Blockers:** none technical; needs a deploy window so the
+  policy-rewrite pass can run before clients start receiving
+  canonical-EUID authz decisions.
 
 ### `pg_cron` integration as alternative to in-process reapers
 

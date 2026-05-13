@@ -66,6 +66,104 @@ func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (Ge
 	return i, err
 }
 
+const listTenantBudgetSummaries = `-- name: ListTenantBudgetSummaries :many
+SELECT
+    tb.tenant_id,
+    t.slug,
+    t.display_name,
+    tb.max_budget_usd,
+    tb.spent_usd,
+    tb.unit_code,
+    tb.period_start,
+    tb.period_end,
+    tb.updated_at,
+    (CASE
+      WHEN tb.max_budget_usd = 0 THEN 0::numeric
+      ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
+    END)::numeric AS utilisation_pct
+  FROM tenant_budgets AS tb
+  JOIN tenants AS t ON t.tenant_id = tb.tenant_id
+ WHERE (NOT $1::bool OR t.deleted_at IS NULL)
+   AND (
+     ($2::bool AND tb.max_budget_usd = 0)
+     OR (NOT $2::bool
+         AND (
+           $3::numeric = 0
+           OR (tb.max_budget_usd > 0
+               AND (tb.spent_usd / tb.max_budget_usd) * 100 >= $3::numeric)
+         ))
+   )
+ ORDER BY
+   CASE WHEN tb.max_budget_usd > 0
+        THEN (tb.spent_usd / tb.max_budget_usd) * 100
+        ELSE 0
+   END DESC,
+   t.slug ASC
+ LIMIT $4::int
+`
+
+type ListTenantBudgetSummariesRow struct {
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Slug           string             `json:"slug"`
+	DisplayName    string             `json:"display_name"`
+	MaxBudgetUsd   pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd       pgtype.Numeric     `json:"spent_usd"`
+	UnitCode       string             `json:"unit_code"`
+	PeriodStart    pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd      pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UtilisationPct pgtype.Numeric     `json:"utilisation_pct"`
+}
+
+// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
+// display_name so the dashboard's BudgetAlerts widget doesn't need a
+// follow-up read.
+//
+// Predicate semantics:
+//
+//	unlimited_only=true  → return only rows with max_budget_usd = 0
+//	unlimited_only=false → return rows whose utilisation ≥
+//	                       threshold_pct (threshold_pct = 0 includes
+//	                       everything).
+//	exclude_inactive=true → join filters tenants.deleted_at IS NULL.
+//
+// Ordered by utilisation DESC so at-risk tenants surface first.
+func (q *Queries) ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, rowLimit int32) ([]ListTenantBudgetSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listTenantBudgetSummaries,
+		excludeInactive,
+		unlimitedOnly,
+		thresholdPct,
+		rowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantBudgetSummariesRow
+	for rows.Next() {
+		var i ListTenantBudgetSummariesRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.Slug,
+			&i.DisplayName,
+			&i.MaxBudgetUsd,
+			&i.SpentUsd,
+			&i.UnitCode,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+			&i.UpdatedAt,
+			&i.UtilisationPct,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const refundCapabilityUsage = `-- name: RefundCapabilityUsage :exec
 UPDATE capability_usage
 SET spent_usd  = GREATEST(0, spent_usd - $2::numeric),

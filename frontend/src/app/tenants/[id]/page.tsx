@@ -18,9 +18,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
+  ArrowLeftIcon,
   ArrowRightIcon,
   BanknotesIcon,
   ClipboardDocumentListIcon,
@@ -28,6 +30,9 @@ import {
   ShieldCheckIcon,
   TagIcon,
 } from "@heroicons/react/24/outline";
+
+import { IdentityField } from "@/components/IdentityField";
+import { RelativeTime } from "@/components/RelativeTime";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -76,24 +81,69 @@ const QUICK_LINKS: Array<{
   },
 ];
 
-function formatMoney(amount: number, unit: string): string {
-  // ISO codes get currency formatting; "UNIT" or empty falls back to
-  // a plain number with thousands separators (the metering case).
-  const isCurrency = /^[A-Z]{3}$/.test(unit) && unit !== "UNI" && unit !== "";
-  if (isCurrency) {
-    try {
-      return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: unit,
-        maximumFractionDigits: 2,
-      }).format(amount);
-    } catch {
-      // Fall through to plain number.
-    }
-  }
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 2,
-  }).format(amount);
+// Re-export the shared money formatter so the Budget tile renders
+// consistently with /billing and the Tenant Budget tab. The local
+// duplicate that used to live here printed bare numbers for the
+// UNIT case (no suffix), so a metering-only tenant looked like
+// "0 / 1,000" — same digits the cap had. The shared formatter
+// emits "0 units / 1,000 units" for that case.
+import { formatMoney } from "@/lib/format/money";
+
+// IdentityCard renders the tenant's three identity fields in priority
+// order — display name as the heading (mutable, human-friendly), slug
+// as the immutable handle (operator-friendly), tenant_id as the
+// immutable canonical UUID (audit / debug). Lock icons mark immutable
+// fields; copy buttons sit beside slug + UUID since those are what
+// operators paste into shells, configs, and Cedar policies.
+// StorageBreadcrumb reads ?from=storage&backend=X&bucket=Y from the
+// URL. When present it renders a small "← Back to bucket Y on X"
+// link so an operator who drilled in from /storage-backends/.../
+// buckets/Y/ doesn't lose the trail.
+function StorageBreadcrumb() {
+  const params = useSearchParams();
+  if (params.get("from") !== "storage") return null;
+  const backend = params.get("backend") || "";
+  const bucket = params.get("bucket") || "";
+  if (!backend || !bucket) return null;
+  return (
+    <div className="-mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <Link
+        href={`/storage-backends/${encodeURIComponent(backend)}/buckets/${encodeURIComponent(bucket)}`}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 hover:bg-muted hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-3" />
+        Back to bucket <span className="font-mono">{bucket}</span> on{" "}
+        <span className="font-mono">{backend}</span>
+      </Link>
+    </div>
+  );
+}
+
+function IdentityCard({
+  tenant,
+}: {
+  tenant: { tenantId: string; slug: string; displayName: string };
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <CardTitle className="text-lg leading-tight">
+            {tenant.displayName || (
+              <span className="text-muted-foreground italic">(unnamed)</span>
+            )}
+          </CardTitle>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Tenant
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 pt-0">
+        <IdentityField label="slug" value={tenant.slug} immutable />
+        <IdentityField label="id" value={tenant.tenantId} immutable truncate />
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function TenantOverviewPage() {
@@ -107,20 +157,17 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Buckets list takes a backend `parent` — to count tenant
-        // ownership we list everything (empty parent = all backends)
-        // and filter client-side. Same approach the tenant Buckets
-        // tab uses; tracked in BACKLOG to push to a server-side
-        // owner_tenant_id index.
+        // Server-side narrow via owner_tenant_id (backed by the
+        // partial index from migration 006). Skips the cross-backend
+        // scan + client-side filter the previous version did.
         const res = await bucketClient.listBuckets({
           parent: "",
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
           filter: "",
+          ownerTenantId: tenant.tenantId,
         });
         if (cancelled) return;
-        setBucketCount(
-          res.buckets.filter((b) => b.ownerTenantId === tenant.tenantId).length,
-        );
+        setBucketCount(res.buckets.length);
       } catch {
         if (!cancelled) setBucketCount(0);
       }
@@ -224,32 +271,15 @@ export default function TenantOverviewPage() {
 
   return (
     <div className="space-y-4">
+      {/* Storage-first context: when the operator landed here from
+          `/storage-backends/.../buckets/.../`, show a back-link so
+          they can hop back into the bucket browser without losing
+          their place in the IA. ?from=storage carries backend+bucket
+          so the link is reversible. */}
+      <StorageBreadcrumb />
+
       {/* ─── Identity ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Identity</CardTitle>
-        </CardHeader>
-        <CardContent className={cn(T.helper, "space-y-1.5 text-xs")}>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              slug
-            </span>
-            <span className={T.code}>{tenant.slug}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              tenant_id
-            </span>
-            <span className={T.code}>{tenant.tenantId}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-24 uppercase tracking-wider text-muted-foreground">
-              display
-            </span>
-            <span>{tenant.displayName}</span>
-          </div>
-        </CardContent>
-      </Card>
+      <IdentityCard tenant={tenant} />
 
       {/* ─── Counts row ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -401,7 +431,11 @@ function BudgetTile({
 }) {
   const cap = budget?.maxBudgetAmount ?? 0;
   const spent = budget?.spentAmount ?? 0;
-  const unit = budget?.unitCode || "USD";
+  // Default to "UNIT" (abstract metering sentinel) when the
+  // budget row has no unit_code — covers freshly-created budgets
+  // and tenants doing non-currency metering. Avoids a misleading
+  // "$0.00" label on a tenant that doesn't actually pay in USD.
+  const unit = budget?.unitCode || "UNIT";
   // Cap of 0 means unlimited per the proto comment; pct only
   // makes sense when there's a finite cap.
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : null;
@@ -483,7 +517,6 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
   const method = lastDot >= 0 ? entry.action.slice(lastDot + 1) : entry.action;
   const prefix = lastDot >= 0 ? entry.action.slice(0, lastDot) : "";
 
-  const when = entry.at ? formatDate(timestampToDate(entry.at)) : "—";
   const failed = !!entry.errorMessage;
 
   return (
@@ -531,12 +564,10 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
           )}
         </div>
       </div>
-      <span
+      <RelativeTime
+        ts={entry.at}
         className={cn(T.hint, "shrink-0 whitespace-nowrap")}
-        title={entry.at ? timestampToDate(entry.at).toISOString() : undefined}
-      >
-        {when}
-      </span>
+      />
     </li>
   );
 }

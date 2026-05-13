@@ -10,8 +10,8 @@
 // tenant, bounce to the canonical path so the address bar tells
 // the truth.
 
-import { use, useCallback, useEffect, useState } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { notFound, useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
@@ -20,13 +20,13 @@ import {
   KeyIcon,
 } from "@heroicons/react/24/outline";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { ObjectKeyTabs } from "@/components/layout/ObjectKeyTabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
 import { objectKeyClient } from "@/lib/connect/client";
 import type { ObjectKey } from "@/gen/paladin/admin/v1/types_pb";
 import { cn } from "@/lib/utils";
+import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../../tenant-context";
 import { ObjectKeyProvider } from "./objectkey-context";
@@ -36,14 +36,16 @@ const okResourceName = (tenantId: string, objectKey: string) =>
 
 export default function ObjectKeyDetailLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const tenant = useTenant();
-  const { name: rawName } = use(params);
+  // useParams() (sync) avoids the `use(promise)` re-suspension that
+  // flashes the layout's loading skeleton on every nested-route
+  // change. See TenantLayout for the full rationale.
+  const params = useParams<{ name: string }>();
+  const rawName = params?.name ?? "";
   const objectKeyName = decodeURIComponent(rawName);
 
   const [ok, setOk] = useState<ObjectKey | null>(null);
@@ -97,39 +99,40 @@ export default function ObjectKeyDetailLayout({
   }
 
   return (
+    // No second PageHeader here — TenantLayout already owns the
+    // page chrome (breadcrumbs + separator + tab strip). Inside
+    // that we render a focused OK header band: back-link + title +
+    // refresh action, no separator. Keeps the visual hierarchy
+    // unambiguous (one PageHeader per page).
     <div className="space-y-4">
-      <PageHeader
-        title={
-          <div className="space-y-1">
-            <Link
-              href={`/tenants/${tenant.slug}/object-keys`}
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeftIcon className="size-4" />
-              All Object Keys
-            </Link>
-            <h1 className="flex items-center gap-2 truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              <KeyIcon className="size-6 text-primary" />
-              <span className="truncate font-mono">{objectKeyName}</span>
-            </h1>
-          </div>
-        }
-        description={ok?.displayName || "Tenant-scoped namespace"}
-        showDefaultActions={false}
-        actions={
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void refetch()}
-            aria-label="Refresh"
-            disabled={loading}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <Link
+            href={`/tenants/${tenant.slug}/object-keys`}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
-            />
-          </Button>
-        }
-      />
+            <ChevronLeftIcon className="size-4" />
+            All Object Keys
+          </Link>
+          <h2 className="flex items-center gap-2 truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            <KeyIcon className="size-5 text-primary" />
+            <span className="truncate font-mono">{objectKeyName}</span>
+          </h2>
+          {ok?.displayName && (
+            <p className={cn(T.helper, "truncate")}>{ok.displayName}</p>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => void refetch()}
+          aria-label="Refresh"
+          disabled={loading}
+          className="shrink-0"
+        >
+          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
+        </Button>
+      </div>
 
       <ObjectKeyTabs tenantId={tenant.slug} objectKey={objectKeyName} />
 

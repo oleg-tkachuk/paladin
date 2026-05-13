@@ -620,11 +620,14 @@ config:
   mcp:
     upstreams:
       # Inside the cluster the MCP pod talks to the api / admin Services
-      # (not localhost — that was the standalone-binary era). Helm keeps
-      # the values in sync via the chart-fullname-suffixed Service names.
-      admin_url: ""
-      data_url: ""
-      iam_url: ""
+      # (not localhost — that was the standalone-binary era). Defaults
+      # below are rendered via `tpl` in templates/configmap.yaml so the
+      # Service names track chart.fullname automatically — override only
+      # for cross-release setups (sidecar MCP pointing at a different
+      # PALADIN install) or when terminating TLS in front of those Services.
+      admin_url: 'http://{{ include "chart.fullname" . }}-admin:8090'
+      data_url: 'http://{{ include "chart.fullname" . }}-api:8080'
+      iam_url: 'http://{{ include "chart.fullname" . }}-api:8085'
     stdio:
       enabled: false
       profile: read_only

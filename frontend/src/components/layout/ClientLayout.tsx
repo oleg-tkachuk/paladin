@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { KeyboardHelp } from "@/components/KeyboardHelp";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
 import { ScopeProvider } from "@/context/ScopeContext";
 import { StatsProvider } from "@/context/StatsContext";
@@ -32,6 +34,10 @@ const STANDALONE_ROUTES = new Set<string>(["/login"]);
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  // Wire g-prefix navigation (g+d/t/b/s/p/a/u → routes). Inert in
+  // editable elements; mounted once at the root so every page picks
+  // it up. KeyboardHelp listens for ? and toggles itself.
+  useGlobalShortcuts();
 
   if (STANDALONE_ROUTES.has(pathname)) {
     return <>{children}</>;
@@ -46,6 +52,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           <StatsProvider>
             <div className="flex min-h-screen w-full bg-background text-foreground">
               <CommandPalette />
+              <KeyboardHelp />
               <Sidebar
                 isOpen={isSidebarOpen}
                 onClose={() => setSidebarOpen(false)}

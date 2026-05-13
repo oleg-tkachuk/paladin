@@ -224,9 +224,10 @@ SELECT backend_id, bucket_name, display_name, region, labels,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE ($1::text IS NULL OR backend_id = $1::text)
-  AND (backend_id, bucket_name) > ($2::text, $3::text)
+  AND ($2::uuid IS NULL OR owner_tenant_id = $2::uuid)
+  AND (backend_id, bucket_name) > ($3::text, $4::text)
 ORDER BY backend_id, bucket_name
-LIMIT $4
+LIMIT $5
 `
 
 type ListBucketsV2Row struct {
@@ -254,9 +255,14 @@ type ListBucketsV2Row struct {
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+// owner_tenant_id is an optional filter (nullable arg → skipped).
+// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
+// (migration 006) makes the per-tenant filter cheap; the WHERE clause
+// below is plain equality so the planner uses the partial index.
+func (q *Queries) ListBucketsV2(ctx context.Context, backendID *string, ownerTenantID pgtype.UUID, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
 		backendID,
+		ownerTenantID,
 		afterBackendID,
 		afterName,
 		pageSize,

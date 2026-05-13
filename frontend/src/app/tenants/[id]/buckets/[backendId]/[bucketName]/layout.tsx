@@ -11,11 +11,10 @@
 // On 404 / not-found we surface notFound() so the operator gets the
 // standard 404 chrome instead of a generic "load failed" toast.
 
-import { use, useCallback, useEffect, useState } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { BucketTabs } from "@/components/layout/BucketTabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -36,15 +35,15 @@ const bucketResourceName = (backendId: string, bucketName: string) =>
 
 export default function BucketDetailLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ id: string; backendId: string; bucketName: string }>;
 }) {
   const router = useRouter();
-  const { backendId: rawBackend, bucketName: rawName } = use(params);
-  const backendId = decodeURIComponent(rawBackend);
-  const bucketName = decodeURIComponent(rawName);
+  // useParams() (sync) instead of `use(promise)` to avoid layout
+  // re-suspension on nested route changes — see TenantLayout.
+  const params = useParams<{ backendId: string; bucketName: string }>();
+  const backendId = decodeURIComponent(params?.backendId ?? "");
+  const bucketName = decodeURIComponent(params?.bucketName ?? "");
   const tenant = useTenant();
 
   const [bucket, setBucket] = useState<Bucket | null>(null);
@@ -101,48 +100,46 @@ export default function BucketDetailLayout({
   }
 
   return (
+    // No second PageHeader — TenantLayout already owns the page
+    // chrome. Bucket header is a focused band with back-link +
+    // identity badges + refresh action; the parent already drew the
+    // separator. Same pattern as the OK detail layout.
     <div className="space-y-4">
-      <PageHeader
-        title={
-          <div className="space-y-1">
-            <Link
-              href={`/tenants/${tenant.slug}/buckets`}
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeftIcon className="size-4" />
-              All buckets
-            </Link>
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              {bucket?.displayName || bucketName}
-            </h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info" className={T.code}>
-                {backendId}
-              </Badge>
-              <span className={T.codeSmall}>{bucketName}</span>
-            </div>
-          </div>
-        }
-        description={
-          bucket?.region
-            ? `Region ${bucket.region}`
-            : "Per-bucket configuration"
-        }
-        showDefaultActions={false}
-        actions={
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void refetch()}
-            aria-label="Refresh"
-            disabled={loading}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <Link
+            href={`/tenants/${tenant.slug}/buckets`}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
-            />
-          </Button>
-        }
-      />
+            <ChevronLeftIcon className="size-4" />
+            All buckets
+          </Link>
+          <h2 className="truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            {bucket?.displayName || bucketName}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="info" className={T.code}>
+              {backendId}
+            </Badge>
+            <span className={T.codeSmall}>{bucketName}</span>
+            {bucket?.region && (
+              <span className={cn(T.hint, "ml-1")}>
+                · region {bucket.region}
+              </span>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => void refetch()}
+          aria-label="Refresh"
+          disabled={loading}
+          className="shrink-0"
+        >
+          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
+        </Button>
+      </div>
 
       <BucketTabs
         tenantId={tenant.slug}

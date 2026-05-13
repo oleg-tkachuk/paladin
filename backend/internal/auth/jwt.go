@@ -36,17 +36,33 @@ type JWTVerifier struct {
 }
 
 type jwtClaims struct {
-	Iss        string            `json:"iss"`
-	Sub        string            `json:"sub"`
-	Aud        json.RawMessage   `json:"aud"`
-	Exp        int64             `json:"exp"`
-	Nbf        int64             `json:"nbf"`
-	Tenant     string            `json:"tenant"`
+	Iss string          `json:"iss"`
+	Sub string          `json:"sub"`
+	Aud json.RawMessage `json:"aud"`
+	Exp int64           `json:"exp"`
+	Nbf int64           `json:"nbf"`
+	// Tenant — canonical claim name. PALADIN's own issuer always emits this.
+	Tenant string `json:"tenant"`
+	// TenantAlt — accepted alias for compatibility with third-party IdPs
+	// (Auth0, Keycloak, custom dev tooling) that conventionally emit
+	// `tenant_id`. The verifier prefers `tenant` when both are set.
+	TenantAlt  string            `json:"tenant_id"`
 	TenantSlug string            `json:"tenant_slug"`
 	Roles      []string          `json:"roles"`
 	Scopes     []string          `json:"scopes"`
 	Kind       string            `json:"kind"`
 	Labels     map[string]string `json:"labels"`
+}
+
+// tenantClaim returns the effective tenant identifier from the claim
+// set, preferring `tenant` over `tenant_id` when both are present.
+// Centralised so future aliases (e.g. an OIDC-mandated `tid`) land in
+// one place.
+func (c *jwtClaims) tenantClaim() string {
+	if c.Tenant != "" {
+		return c.Tenant
+	}
+	return c.TenantAlt
 }
 
 // Verify validates the token and returns a Principal. The signature-algorithm
@@ -118,8 +134,8 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		Labels:     c.Labels,
 		TenantSlug: c.TenantSlug,
 	}
-	if c.Tenant != "" {
-		id, err := uuid.Parse(c.Tenant)
+	if t := c.tenantClaim(); t != "" {
+		id, err := uuid.Parse(t)
 		if err != nil {
 			return nil, fmt.Errorf("jwt: tenant claim: %w", err)
 		}

@@ -566,17 +566,21 @@ export default function TenantObjectKeysPage() {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ok-name">ObjectKey name</Label>
+                <Label htmlFor="ok-name">ObjectKey path</Label>
                 <Input
                   id="ok-name"
                   autoFocus
-                  placeholder="assets-prod"
+                  placeholder="invoices/2026/q1"
                   className="font-mono text-xs"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value.toLowerCase())}
                 />
                 <p className={T.hint}>
-                  3–63 lowercase alphanumerics or hyphens.
+                  Slash-separated path. Each segment: 1–63 lowercase
+                  alphanumerics or hyphens (kebab-case), starts and ends
+                  alphanumeric. Examples:{" "}
+                  <span className={T.code}>assets-prod</span> or{" "}
+                  <span className={T.code}>invoices/2026/q1</span>.
                 </p>
               </div>
               <div className="space-y-1.5">

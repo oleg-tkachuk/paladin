@@ -17,11 +17,14 @@ import {
   ChevronDoubleRightIcon,
   ArrowRightOnRectangleIcon,
   CubeTransparentIcon,
-  BanknotesIcon,
   CommandLineIcon,
-  BoltIcon,
   CurrencyDollarIcon,
+  BanknotesIcon,
+  BoltIcon,
   CpuChipIcon,
+  ServerStackIcon,
+  ArchiveBoxIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -40,17 +43,27 @@ import {
  * tint so the operator can locate sections at a glance without making
  * the whole row noisy. The active item still uses primary blue + a
  * left-rail accent — see `SidebarBody` below.
+ *
+ * `path` is for absolute routes that don't depend on the signed-in
+ * user; `tenantTab` is a per-user shortcut that resolves to
+ * /tenants/<my-slug>/<tab> at render time. Tenant-scoped sidebar
+ * entries (Capabilities, M2M Tokens, Budget, Events) use the
+ * latter so they always land on the operator's own tenant subtree.
+ * Items with `tenantTab` are hidden until `useAuth` exposes a
+ * tenantId/slug, so a not-yet-authenticated user doesn't see broken
+ * placeholders.
  */
+type NavItem = {
+  name: string;
+  icon: React.ElementType;
+  countKey?: keyof SidebarCounts;
+} & ({ path: string; tenantTab?: never } | { path?: never; tenantTab: string });
+
 const navigationGroups: Array<{
   title: string;
   /** Tailwind class on the icon foreground (idle state). */
   accent: string;
-  items: Array<{
-    name: string;
-    path: string;
-    icon: React.ElementType;
-    countKey?: keyof SidebarCounts;
-  }>;
+  items: Array<NavItem>;
 }> = [
   {
     // The flat Objects entry was removed in Phase 5 — object
@@ -81,26 +94,57 @@ const navigationGroups: Array<{
     accent: "text-chart-2/85",
     items: [
       {
-        name: "Resources",
+        // Storage Backends — physical S3-compatible endpoints (AWS,
+        // R2, MinIO, SeaweedFS) registered with the platform. Buckets
+        // FK into this table; tenants pick one of these as their
+        // default binding at creation.
+        name: "Storage Backends",
+        path: "/storage-backends",
+        icon: ServerStackIcon,
+      },
+      {
+        // Buckets — cross-tenant flat list of S3 buckets owned across
+        // backends. The per-tenant view lives at
+        // /tenants/<slug>/buckets; this is the platform-admin index.
+        name: "Buckets",
+        path: "/buckets",
+        icon: ArchiveBoxIcon,
+      },
+      {
+        name: "Tenants",
         path: "/tenants",
         icon: UsersIcon,
         countKey: "tenants" as keyof SidebarCounts,
       },
+      { name: "Users", path: "/users", icon: UserCircleIcon },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
+      { name: "Trash", path: "/trash", icon: TrashIcon },
     ],
   },
   {
-    // Agents — agent-runtime primitives. Capabilities + M2M tokens are
-    // what agents use to authenticate; their use generates charges that
-    // accumulate against tenant budgets, summarised on the billing
-    // dashboard. Grouping them keeps the full issue → restrict → spend
-    // → observe loop one click apart.
+    // Agents — Capabilities, M2M Tokens, Tenant Budgets, Events
+    // Subscriptions are tenant-scoped pages now (Phase 5+); they
+    // appear here as `tenantTab` shortcuts that resolve to
+    // /tenants/<signed-in-tenant>/<tab> at render time. Operators
+    // who routinely manage their own tenant don't need to bounce
+    // through Resources → tenant → tab on every visit. Billing
+    // stays an absolute path — it's a cross-tenant aggregate
+    // dashboard scoped by the JWT, not a per-tenant view.
     title: "Agents",
     accent: "text-chart-4/85",
     items: [
-      { name: "Capabilities", path: "/capabilities", icon: ShieldCheckIcon },
-      { name: "M2M Tokens", path: "/m2m-tokens", icon: CpuChipIcon },
-      { name: "Tenant Budgets", path: "/tenant-budgets", icon: BanknotesIcon },
+      {
+        name: "Capabilities",
+        tenantTab: "capabilities",
+        icon: ShieldCheckIcon,
+      },
+      { name: "M2M Tokens", tenantTab: "m2m-tokens", icon: CpuChipIcon },
+      { name: "Tenant Budget", tenantTab: "budget", icon: BanknotesIcon },
+      {
+        name: "Events",
+        tenantTab: "event-subscriptions",
+        icon: BoltIcon,
+      },
       { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
     ],
   },
@@ -109,7 +153,6 @@ const navigationGroups: Array<{
     accent: "text-chart-3/85",
     items: [
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
-      { name: "Events", path: "/events", icon: BoltIcon },
       { name: "MCP Bridge", path: "/mcp", icon: CommandLineIcon },
       { name: "Health Status", path: "/health", icon: CheckCircleIcon },
     ],
@@ -207,6 +250,22 @@ function SidebarBody({
   const isCurrent = (path: string) =>
     path === "/" ? pathname === "/" : pathname.startsWith(path);
 
+  // Resolve a tenantTab item to its absolute URL using the
+  // signed-in user's tenant. Returns null when auth hasn't loaded
+  // yet — caller hides the entry to avoid a broken link.
+  //
+  // Prefer the slug — it comes through WhoAmIResponse.tenant_slug
+  // and lands directly in the AuthUser. Falling back to tenantId
+  // (UUID) covers legacy sessions minted before the slug-claim
+  // wiring; TenantLayout's resolver canonicalises those at landing
+  // via replaceState.
+  const tenantHandle = user?.tenantSlug || user?.tenantId || null;
+  const resolveItemHref = (item: NavItem): string | null => {
+    if (item.path) return item.path;
+    if (!tenantHandle) return null;
+    return `/tenants/${encodeURIComponent(tenantHandle)}/${item.tenantTab}`;
+  };
+
   return (
     <div className="flex h-full w-full flex-col">
       {/* Brand */}
@@ -262,7 +321,12 @@ function SidebarBody({
                 </div>
               )}
               {group.items.map((item) => {
-                const active = isCurrent(item.path);
+                const href = resolveItemHref(item);
+                // Tenant-scoped item without a known tenant — hide
+                // rather than render a broken `/tenants//capabilities`
+                // placeholder. Restored after auth resolves.
+                if (href === null) return null;
+                const active = isCurrent(href);
                 const Icon = item.icon;
                 const count =
                   "countKey" in item && item.countKey
@@ -272,7 +336,7 @@ function SidebarBody({
                 const link = (
                   <Link
                     key={item.name}
-                    href={item.path}
+                    href={href}
                     onClick={onNavigate}
                     className={cn(
                       // Layout — left rail consumes 2px on the inside

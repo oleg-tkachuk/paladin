@@ -30,14 +30,12 @@ tasks:
         msg: "[ERROR] docker is not installed"
 
   tools:build:
-    desc: "Verify CLI tools needed for image+chart build (basic + helm + minikube)"
+    desc: "Verify CLI tools needed for image+chart build (basic + helm)"
     internal: true
     deps: [tools:basic]
     preconditions:
       - sh: command -v helm     >/dev/null
         msg: "[ERROR] helm is not installed"
-      - sh: command -v minikube >/dev/null
-        msg: "[ERROR] minikube is not installed (build-local needs it; remote build does not)"
 
   # ─── Maintenance — macOS Docker Desktop only ─────────────────────────────
   # `docker desktop` is a Docker Desktop CLI subcommand; Linux installs
