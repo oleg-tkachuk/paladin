@@ -57,19 +57,6 @@ tasks:
 
   # ─── Local stack (Docker Compose) ────────────────────────────────────────
 
-  up:
-    desc: "Bring up the local stack (UI + backend) via docker compose"
-    cmds:
-      - task: ":core:banner"
-        vars: { MESSAGE: "starting local stack" }
-      - cmd: |-
-          docker compose \
-            --progress={{.PROGRESS | default "auto"}} \
-            -f {{.COMPOSE_FILE}} \
-            -p {{.PROJECT_NAME}} \
-            --env-file {{.DEPLOY_INFO_ENV_FILE}} \
-            up -d --build
-
   # ─── Internal helpers ────────────────────────────────────────────────────
 
   _docker:build:

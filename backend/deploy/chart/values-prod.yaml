@@ -1,0 +1,115 @@
+# PALADIN Helm values overlay for PRODUCTION.
+#
+# Treat this file as the canonical "this is what runs in production"
+# document. Any change here merits a code review, a runbook update,
+# and a deliberate ArgoCD sync.
+#
+# TODO before first apply: replace any `<...>` placeholder with the
+# real prod value (from prod Pulumi outputs / secret store / SealedSecret).
+
+config:
+  app:
+    env: prod
+
+  logger:
+    level: info
+
+  otel:
+    enabled: true
+    insecure: false
+
+  auth:
+    issuer: "https://paladin.example.com/"
+    # signing_key MUST come from a SealedSecret / ExternalSecret —
+    # NEVER commit a real signing key here.
+    signing_key: "<prod-signing-key-from-sealed-secret>"
+
+  security:
+    trust_tenant_id_from_request: false
+    log_sensitive: false
+
+  storage:
+    backends:
+      primary:
+        endpoint: "https://s3.internal.example.com"
+        public_endpoint: "https://s3.example.com"
+        # Reference per-env Secrets; never literal keys in prod overlay.
+        auth:
+          access_key: "<prod-s3-access-key>"
+          secret_key: "<prod-s3-secret-key>"
+
+image:
+  pullPolicy: IfNotPresent
+
+traefik:
+  hosts:
+    - api.paladin.example.com
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-prod
+    issuerKind: ClusterIssuer
+
+# Resources sized for prod load. Tune per role based on observed
+# usage; api / dispatcher / worker scale independently via HPA.
+defaults:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 2Gi
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: paladin
+
+deployments:
+  api:
+    replicas: 3
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 12
+      targetCPUUtilizationPercentage: 70
+  admin:
+    replicas: 2
+  worker:
+    replicas: 3
+  dispatcher:
+    replicas: 2
+
+# PDB: minAvailable: 2 means a single-zone failure leaves at least
+# two pods of each multi-replica role serving.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: kube-prometheus-stack
+  alerts:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    # Prod thresholds. Tune narrower once a real SLO is published.
+    rules:
+      highErrorRate:
+        threshold: 0.01
+        for: 5m
+      highLatency:
+        thresholdSeconds: 0.8
+        for: 5m
+
+# Local-cluster bootstrap admin Secret literal is OFF; prod uses
+# externally-managed SealedSecret / ExternalSecret.
+bootstrap:
+  admin:
+    enabled: false

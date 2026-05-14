@@ -1,0 +1,76 @@
+# PALADIN Helm values overlay for the LOCAL development cluster
+# (minikube / kind / k3d — anything tagged *.local).
+#
+# Install / upgrade against the local cluster:
+#
+#   helm upgrade --install paladin ./deploy/chart \
+#     -n paladin \
+#     -f ./deploy/chart/values.yaml \
+#     -f ./deploy/chart/values-local.yaml
+#
+# Restores everything values.yaml deliberately keeps prod-safe:
+#
+#   - debug logging and gin debug mode
+#   - hard-coded auth.signing_key + issuer for dev convenience
+#   - SeaweedFS dummy_* static keys
+#   - Trust X-Tenant-Id header from request (no JWT round-trip needed)
+#   - image.pullPolicy: Always (registry.local rebuilds same tag)
+#   - cert-manager off, reuse cluster-wide `traefik-tls` Secret
+#   - Traefik hosts pointing at *.paladin.local
+#
+# DO NOT use this overlay anywhere a real user can reach the deployment.
+
+config:
+  app:
+    env: local
+
+  logger:
+    level: debug
+    development: true
+
+  otel:
+    insecure: true
+
+  runtime:
+    mode: debug
+
+  auth:
+    issuer: "paladin-dev"
+    # 32-byte dev placeholder. Production rotates via signing_key_secret
+    # in a env overlay; local accepts the literal for convenience.
+    signing_key: "dev-secret-change-me-32-bytes-min"
+
+  security:
+    trust_tenant_id_from_request: true
+
+  storage:
+    backends:
+      primary:
+        endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
+        public_endpoint: "https://s3.paladin.local"
+        auth:
+          access_key: dummy_access_key
+          secret_key: dummy_secret_key
+
+image:
+  pullPolicy: Always
+
+# Traefik IngressRoute on the local cluster's wildcard cert.
+traefik:
+  hosts:
+    - api.paladin.local
+
+# cert-manager: letsencrypt-prod can't validate *.local, so on the
+# local cluster we skip cert-manager and use the cluster-wide
+# `traefik-tls` Secret provisioned by gitops.
+tls:
+  certManager:
+    enabled: false
+  existingSecret: "traefik-tls"
+
+# Bootstrap admin Secret literal for local. Prod uses a SealedSecret
+# / ExternalSecret reference and flips `bootstrap.admin.enabled=false`.
+bootstrap:
+  admin:
+    enabled: true
+    password: "admin-dev-password-change-me"

@@ -1,0 +1,82 @@
+# PALADIN Helm values overlay for STAGING. Mirrors prod's config as
+# closely as feasible — same auth mode, same logger level (info),
+# same TLS strategies — so a regression that surfaces here is a
+# real prod risk.
+#
+# TODO before first apply: replace any `<...>` placeholder with real
+# staging values.
+
+config:
+  app:
+    env: staging
+
+  logger:
+    level: info
+
+  otel:
+    enabled: true
+    insecure: false
+
+  auth:
+    issuer: "https://paladin.staging.example/"
+    signing_key: "<staging-signing-key>"
+
+  security:
+    trust_tenant_id_from_request: false
+
+  storage:
+    backends:
+      primary:
+        endpoint: "<staging-seaweedfs-endpoint>"
+        public_endpoint: "https://s3.paladin.staging.example"
+        auth:
+          access_key: "<staging-access-key>"
+          secret_key: "<staging-secret-key>"
+
+image:
+  pullPolicy: IfNotPresent
+
+traefik:
+  hosts:
+    - api.paladin.staging.example
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-prod
+    issuerKind: ClusterIssuer
+
+# Slightly higher resources than chart defaults — staging carries
+# realistic synthetic load. Tune per role.
+defaults:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+
+deployments:
+  api:
+    replicas: 2
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+  alerts:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    # Tighter thresholds than prod — surface anomalies sooner.
+    rules:
+      highErrorRate:
+        threshold: 0.02
+      highLatency:
+        thresholdSeconds: 1.0

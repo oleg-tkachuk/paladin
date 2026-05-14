@@ -1,0 +1,36 @@
+# PALADIN UI overlay for STAGING.
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+config:
+  runtimeConfig:
+    public:
+      oidc:
+        authority: "https://authentik.staging.example/application/o/paladin-ui/"
+        clientId: "<staging-oidc-client-id>"
+        redirectUri: "https://paladin.staging.example/auth/callback"
+        postLogoutRedirectUri: "https://paladin.staging.example/"
+        disableAuth: false
+
+traefik:
+  hosts:
+    - paladin.staging.example
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-prod
+    issuerKind: ClusterIssuer

@@ -27,25 +27,11 @@ Per-role pods:
 
 Reach the api plane (data + iam):
 
-{{- if .Values.httpRoute.enabled }}
+{{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) }}
 
-  Via Gateway API:
-    {{- if .Values.httpRoute.hostnames }}
-    export APP_HOSTNAME={{ first .Values.httpRoute.hostnames }}
-    {{- else }}
-    export APP_HOSTNAME=$(kubectl -n {{(first .Values.httpRoute.parentRefs).namespace | default .Release.Namespace }} get gateway/{{ (first .Values.httpRoute.parentRefs).name }} -o jsonpath='{.spec.listeners[0].hostname}')
-    {{- end }}
-    {{- if and .Values.httpRoute.rules (first .Values.httpRoute.rules).matches (first (first .Values.httpRoute.rules).matches).path.value }}
-    curl "http://$APP_HOSTNAME{{ (first (first .Values.httpRoute.rules).matches).path.value }}livez"
-    {{- end }}
-
-{{- else if .Values.ingress.enabled }}
-
-  Via Ingress:
-    {{- range $host := .Values.ingress.hosts }}
-    {{- range .paths }}
-    curl http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}livez
-    {{- end }}
+  Via Traefik IngressRoute:
+    {{- range .Values.traefik.hosts }}
+    curl http{{ if $.Values.tls.enabled }}s{{ end }}://{{ . }}/livez
     {{- end }}
 
 {{- else }}

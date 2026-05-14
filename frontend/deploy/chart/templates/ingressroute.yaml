@@ -1,0 +1,57 @@
+{{/*
+IngressRoute — Traefik CRD that PALADIN UI exposes its Next.js SSR
+through. Same shape as acme's IngressRoute pattern — uniform
+routing model across consumer-shipped services.
+
+Renders only when Traefik is enabled AND at least one host is
+configured. routes:[] fails Traefik CRD validation; we skip emission
+when traefik.hosts is empty (right behaviour when operator hasn't
+picked an env overlay yet).
+
+Middlewares are an optional list — empty by default. Future
+security headers / auth gates plug in here without touching the
+template.
+*/}}
+{{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) -}}
+{{- $fullName := include "chart.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  {{- with .Values.traefik.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
+  routes:
+    {{- range .Values.traefik.hosts }}
+    - kind: Rule
+      match: Host(`{{ . }}`)
+      services:
+        - kind: Service
+          name: {{ $fullName }}
+          port: {{ $svcPort }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    {{- if .Values.tls.certManager.enabled }}
+    secretName: {{ $fullName }}-tls
+    {{- else if .Values.tls.existingSecret }}
+    secretName: {{ .Values.tls.existingSecret }}
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,57 @@
+{{/*
+IngressRoute — Traefik CRD that the api role exposes its data + iam
+Connect listeners through. Same shape as acme's core-api IngressRoute
+so routing is uniform across consumer-shipped services.
+
+Renders only when Traefik is enabled AND at least one host is
+configured. routes:[] fails Traefik CRD validation; we skip emission
+when traefik.hosts is empty — the right behaviour when an operator
+hasn't picked an env overlay yet.
+
+Targets the api Service's data port (8080) by default. Admin / worker /
+mcp / dispatcher / ingest get NO public ingress — operators expose them
+behind mTLS / VPN / bastion via a separate IngressRoute in the env
+overlay.
+*/}}
+{{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $apiFullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+  {{- with .Values.traefik.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
+  routes:
+    {{- range .Values.traefik.hosts }}
+    - kind: Rule
+      match: Host(`{{ . }}`)
+      services:
+        - kind: Service
+          name: {{ $apiFullname }}
+          port: 8080
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    {{- if .Values.tls.certManager.enabled }}
+    secretName: {{ $apiFullname }}-tls
+    {{- else if .Values.tls.existingSecret }}
+    secretName: {{ .Values.tls.existingSecret }}
+    {{- end }}
+  {{- end }}
+{{- end }}

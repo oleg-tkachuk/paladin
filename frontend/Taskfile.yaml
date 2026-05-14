@@ -7,7 +7,6 @@ silent: true
 
 vars:
   PROJECT_NAME: paladin-ui
-  COMPOSE_FILE: ./deploy/docker-compose.yaml
   DEPLOY_INFO_ENV_FILE: ./deploy/info.env
   DOCKERFILE: ./deploy/Dockerfile
   CHART_DIR: ./deploy/chart
@@ -85,12 +84,6 @@ tasks:
           } > '{{.DEPLOY_INFO_ENV_FILE}}'
 
           printf 'INFO: %s: bumped %s → %s\n' '{{.PROJECT_NAME}}' "$current" "$next"
-
-  # ─── Local stack ─────────────────────────────────────────────────────────
-  up:
-    desc: "Start the local stack (UI + backend) via docker compose"
-    cmds:
-      - task: docker:up
 
   # ─── Node / dev workflow ─────────────────────────────────────────────────
   dev:

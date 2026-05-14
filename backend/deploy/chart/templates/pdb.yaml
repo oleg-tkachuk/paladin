@@ -1,0 +1,42 @@
+{{/*
+PodDisruptionBudget — one per enabled role with >=2 replicas
+(replicaCount>=2 OR autoscaling.minReplicas>=2). A PDB on a single-
+replica deploy is unsatisfiable and blocks node drains indefinitely,
+so single-replica roles (e.g. admin / mcp / dispatcher in defaults)
+get no PDB.
+
+minAvailable: 1 means at least one pod of THAT role stays serving
+through voluntary disruptions (node drain, rolling update, kubectl
+delete pod).
+*/}}
+{{- $defaults := .Values.defaults -}}
+{{- if .Values.podDisruptionBudget.enabled -}}
+{{- range $role, $spec := .Values.deployments }}
+{{- if $spec.enabled }}
+{{- $replicas := int (default $defaults.replicas $spec.replicas) }}
+{{- $autoscaling := default $defaults.autoscaling $spec.autoscaling }}
+{{- $minReplicas := int (default 1 $autoscaling.minReplicas) }}
+{{- $multiReplica := or (ge $replicas 2) (and $autoscaling.enabled (ge $minReplicas 2)) }}
+{{- if $multiReplica }}
+{{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" $ "role" $role) | nindent 6 }}
+  {{- with $.Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with $.Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

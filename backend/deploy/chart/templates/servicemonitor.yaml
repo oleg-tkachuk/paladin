@@ -1,0 +1,50 @@
+{{/*
+ServiceMonitor — Prometheus Operator picks this up and scrapes the
+api role's /v1/metrics endpoint. Requires the `monitoring.coreos.com/v1`
+CRD (Prometheus Operator) in the cluster.
+
+Gated by `.Values.metrics.serviceMonitor.enabled` so the chart stays
+installable without the operator. Flip true in any env where
+Prometheus runs.
+
+The `release:` selector label is the standard discovery key the
+Prometheus CR uses — operator overlays should match their Prometheus's
+release name (e.g. `release: kube-prometheus-stack`).
+*/}}
+{{- if .Values.metrics.serviceMonitor.enabled -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $apiFullname }}
+  {{- with .Values.metrics.serviceMonitor.namespace }}
+  namespace: {{ . }}
+  {{- end }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "api") | nindent 6 }}
+  {{- if .Values.metrics.serviceMonitor.namespace }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  {{- end }}
+  endpoints:
+    - port: data
+      path: {{ .Values.metrics.serviceMonitor.path | quote }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.metrics.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

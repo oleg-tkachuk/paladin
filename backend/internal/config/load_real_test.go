@@ -13,28 +13,42 @@ import (
 // against the live CUE schema. Helm bakes this subtree into the ConfigMap
 // the pod reads, so any drift between configs/config.yaml and the chart
 // breaks every cluster deploy.
+//
+// The bare values.yaml is intentionally prod-safe (empty app.env, empty
+// signing_key, empty storage endpoints) — every env overlay supplies
+// the deltas. So we validate the merge values.yaml + values-local.yaml,
+// which is the one overlay holding concrete (non-placeholder) secrets
+// suitable for the CUE schema's min-length / URL-format constraints.
+// dev/staging/prod overlays carry `<placeholder>` tokens that get
+// replaced by SealedSecrets / external-secrets at deploy time and would
+// fail Validate() here by design.
 func TestHelmValuesConfigBlock(t *testing.T) {
-	body, err := os.ReadFile("../../deploy/chart/values.yaml")
-	if err != nil {
-		t.Fatalf("read values.yaml: %v", err)
-	}
-	var wrap struct {
-		Config map[string]any `yaml:"config"`
-	}
-	if err := goyaml.Unmarshal(body, &wrap); err != nil {
-		t.Fatalf("decode values.yaml: %v", err)
-	}
-	out, err := goyaml.Marshal(wrap.Config)
-	if err != nil {
-		t.Fatalf("re-marshal: %v", err)
+	extract := func(srcPath, dstPath string) {
+		body, err := os.ReadFile(srcPath)
+		if err != nil {
+			t.Fatalf("read %s: %v", srcPath, err)
+		}
+		var wrap struct {
+			Config map[string]any `yaml:"config"`
+		}
+		if err := goyaml.Unmarshal(body, &wrap); err != nil {
+			t.Fatalf("decode %s: %v", srcPath, err)
+		}
+		out, err := goyaml.Marshal(wrap.Config)
+		if err != nil {
+			t.Fatalf("re-marshal %s: %v", srcPath, err)
+		}
+		if err := os.WriteFile(dstPath, out, 0o600); err != nil {
+			t.Fatalf("write %s: %v", dstPath, err)
+		}
 	}
 	dir := t.TempDir()
-	path := filepath.Join(dir, "values-config.yaml")
-	if err := os.WriteFile(path, out, 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if _, err := Load([]string{path}, zap.NewNop()); err != nil {
-		t.Fatalf("Load chart values.yaml -> .config: %v", err)
+	base := filepath.Join(dir, "base.yaml")
+	overlay := filepath.Join(dir, "local.yaml")
+	extract("../../deploy/chart/values.yaml", base)
+	extract("../../deploy/chart/values-local.yaml", overlay)
+	if _, err := Load([]string{base, overlay}, zap.NewNop()); err != nil {
+		t.Fatalf("Load chart values.yaml + values-local.yaml -> .config: %v", err)
 	}
 }
 
