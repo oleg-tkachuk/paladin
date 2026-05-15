@@ -1,0 +1,29 @@
+{{/*
+PodDisruptionBudget — protects the UI through voluntary disruptions
+(node drains, rollouts). Renders only when replicaCount>=2 or
+autoscaling.minReplicas>=2; a PDB on a single-replica deploy is
+unsatisfiable and blocks node drains indefinitely.
+
+minAvailable: 1 keeps at least one pod serving SSR through a rolling
+update. Prod overlay should bump to 2 once multi-replica is the norm
+(see values-prod.yaml).
+*/}}
+{{- $multiReplica := or (ge (int .Values.replicaCount) 2) (and .Values.autoscaling.enabled (ge (int .Values.autoscaling.minReplicas) 2)) -}}
+{{- if and .Values.podDisruptionBudget.enabled $multiReplica -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "chart.fullname" . }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  {{- with .Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+{{- end }}

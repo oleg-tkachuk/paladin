@@ -1,0 +1,29 @@
+{{/*
+Certificate — cert-manager materializes the TLS Secret the IngressRoute
+references. Renders only when cert-manager IS enabled AND at least one
+host is configured.
+
+Env overlays set certManager.enabled=true and pick an issuer
+(letsencrypt-prod / letsencrypt-staging / internal CA). Local overlay
+flips certManager.enabled=false and reuses the cluster-wide `traefik-tls`
+Secret via tls.existingSecret.
+*/}}
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled (gt (len .Values.traefik.hosts) 0) -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $apiFullname }}-tls
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+spec:
+  secretName: {{ $apiFullname }}-tls
+  issuerRef:
+    name: {{ .Values.tls.certManager.issuerName }}
+    kind: {{ .Values.tls.certManager.issuerKind }}
+  dnsNames:
+    {{- toYaml .Values.traefik.hosts | nindent 4 }}
+  # Renew 15d before expiry — matches the on-call rotation cadence;
+  # cert-manager's default is 2/3 of duration which is ~30d for LE 90d.
+  renewBefore: 360h
+{{- end }}

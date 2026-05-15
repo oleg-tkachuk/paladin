@@ -1,0 +1,41 @@
+# PALADIN UI overlay for the LOCAL development cluster.
+#
+#   helm upgrade --install paladin-ui ./deploy/chart \
+#     -n paladin \
+#     -f ./deploy/chart/values.yaml \
+#     -f ./deploy/chart/values-local.yaml
+#
+# Restores everything values.yaml deliberately keeps prod-safe:
+#   - image.pullPolicy: Always (local registry rebuilds same tag)
+#   - cert-manager off, reuse cluster-wide `traefik-tls` Secret
+#   - Traefik hosts pointing at *.paladin.local
+#   - oidc.disableAuth: true + pre-minted devToken so the BFF accepts
+#     fallback Bearer; localStorage.paladin_token used in prod path.
+
+image:
+  pullPolicy: Always
+
+traefik:
+  hosts:
+    - paladin.local
+
+tls:
+  certManager:
+    enabled: false
+  existingSecret: traefik-tls
+
+config:
+  runtimeConfig:
+    public:
+      oidc:
+        # Local cluster has no working Authentik most of the time;
+        # disable browser-side auth so the BFF accepts any request.
+        disableAuth: true
+      auth:
+        # DEV ONLY. Pre-minted JWT used as a fallback Bearer when
+        # localStorage.paladin_token is empty. Carries roles=[platform-admin]
+        # and tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b (seeded dev
+        # tenant). Regenerate via `task auth:mint-token` in the PALADIN repo.
+        # Acceptable only on local minikube — never in any env reachable
+        # by real users.
+        devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvY3AtZGV2IiwiYXVkIjoib2NwLWFwaSIsInN1YiI6ImRldi11c2VyIiwiaWF0IjoxNzc3MDIyMjI5LCJuYmYiOjE3NzcwMjIyMjksImV4cCI6MTc3NzYyNzAyOSwicm9sZXMiOlsicGxhdGZvcm0tYWRtaW4iXSwidGVuYW50IjoiM2E4MjNmZDQtMGIzZC00Y2UyLWEyODAtOTNiOGQ3NWNjMDdiIn0.OK8MEvjpI-l1LoAO0raCx3xb7TAUEPqiU6YLypJE1o4"

@@ -47,3 +47,8 @@ backend/tests/api/security/reports/
 backend/seed-fixture
 backend/cmd/seed-fixture/main.go.bak
 
+
+# Auto-generated build metadata; written by Taskfile's metadata:write
+# task on every `task deploy`. Versions and timestamps go to git via
+# tags + commit history, not via a tracked file.
+**/deploy/info.env

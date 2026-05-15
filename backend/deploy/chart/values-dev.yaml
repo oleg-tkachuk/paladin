@@ -1,0 +1,61 @@
+# PALADIN Helm values overlay for the SHARED DEV cluster (vc-dev).
+#
+#   helm upgrade --install paladin ./deploy/chart \
+#     -n paladin \
+#     -f ./deploy/chart/values.yaml \
+#     -f ./deploy/chart/values-dev.yaml
+#
+# TODO before first apply: replace any `<...>` placeholder with the
+# real value from the dev-cluster Pulumi outputs / Vault secret.
+
+config:
+  app:
+    env: dev
+
+  logger:
+    level: debug
+    development: false
+
+  otel:
+    enabled: true
+    insecure: true
+
+  auth:
+    issuer: "https://paladin.dev.example/"
+    # signing_key on dev — reference a Secret in a follow-up overlay;
+    # plaintext placeholder is unsafe even for shared dev.
+    signing_key: "<dev-cluster-signing-key>"
+
+  security:
+    trust_tenant_id_from_request: false
+
+  storage:
+    backends:
+      primary:
+        endpoint: "<dev-seaweedfs-endpoint>"
+        public_endpoint: "<dev-s3-public-endpoint>"
+        auth:
+          access_key: "<dev-access-key>"
+          secret_key: "<dev-secret-key>"
+
+image:
+  pullPolicy: IfNotPresent
+
+traefik:
+  hosts:
+    - api.paladin.dev.example
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-staging
+    issuerKind: ClusterIssuer
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+  alerts:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack

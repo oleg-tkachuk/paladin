@@ -44,8 +44,13 @@ backend:
     dispatcher: "http://paladin-paladin-dispatcher.paladin.svc.cluster.local:8099"
 
 image:
+  # Registry host overridden per env. Local default points at the
+  # dev-cluster registry; envs other than local flip via
+  # values-{dev,staging,prod}.yaml.
   repository: registry.local/paladin/paladin-ui
-  pullPolicy: Always
+  # Prod-safe default. Local overlay flips to Always because the
+  # local registry rebuilds the same tag in-place.
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
@@ -55,46 +60,82 @@ fullnameOverride: ""
 
 serviceAccount:
   create: true
-  automount: true
+  # UI pod has no K8s API needs. Disabling automount drops the projected
+  # SA token, shrinking the blast radius of any RCE in the Node runtime
+  # or a Next.js SSR dependency.
+  automount: false
   annotations: {}
   name: ""
 
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
-securityContext: {}
+# ─── Security hardening ────────────────────────────────────────────────────
+# Restricted-PSS-compatible defaults. The Dockerfile creates the `nextjs`
+# user with uid/gid 1001; the chart pins both.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1001
+  # Next.js standalone writes runtime caches under /app/.next/cache
+  # (ISR / revalidation). emptyDir mounts under volumes/volumeMounts
+  # below keep readOnlyRootFilesystem viable.
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+
+# Pod-level graceful shutdown. Next.js' standalone server handles
+# SIGTERM (drains in-flight SSR); 30s is conservative.
+terminationGracePeriodSeconds: 30
 
 service:
   type: ClusterIP
   port: 3000
 
-ingress:
-  enabled: false
-  className: ""
+# ─── Traefik IngressRoute ──────────────────────────────────────────────────
+# PALADIN UI fronted by Traefik (consistent with acme's IngressRoute
+# pattern). The chart previously shipped both generic Ingress AND
+# Gateway API HTTPRoute gated off; both removed — one routing model.
+traefik:
+  enabled: true
+  entryPoints:
+    - websecure
+  # No default hosts — each env overlay declares its own DNS. Empty
+  # list means the chart emits no IngressRoute.
+  hosts: []
   annotations: {}
-  hosts:
-    - host: paladin.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
+  middlewares: []
 
-httpRoute:
-  enabled: false
-  annotations: {}
-  parentRefs:
-  - name: gateway
-    sectionName: http
-  hostnames:
-  - paladin.local
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
+# ─── TLS via cert-manager ──────────────────────────────────────────────────
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerKind: ClusterIssuer
+    issuerName: letsencrypt-prod
+  existingSecret: ""
 
-resources: {}
+# ─── Resources ─────────────────────────────────────────────────────────────
+# Sized for Next.js standalone SSR on the dev cluster. Tune in
+# values-{staging,prod}.yaml overlays. requests.cpu is REQUIRED for
+# HPA-on-CPU to work.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 
 livenessProbe:
   httpGet:
@@ -120,17 +161,41 @@ volumes:
   - name: config
     configMap:
       name: paladin-ui-config
+  # readOnlyRootFilesystem requires writable temp + Next.js runtime cache.
+  - name: tmp
+    emptyDir: {}
+  - name: next-cache
+    emptyDir: {}
 
 volumeMounts:
   - name: config
     mountPath: /app/configs
     readOnly: true
+  - name: tmp
+    mountPath: /tmp
+  - name: next-cache
+    mountPath: /app/.next/cache
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Application Configuration
+# ─── TopologySpreadConstraints ────────────────────────────────────────────
+# Empty by default; populate in values-prod.yaml for multi-zone spread.
+topologySpreadConstraints: []
+
+# ─── PodDisruptionBudget ───────────────────────────────────────────────────
+# Renders only when replicaCount>=2 or autoscaling.minReplicas>=2.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ─── App config (templated into the ConfigMap) ─────────────────────────────
+#
+# Defaults here are PROD-SAFE. The dev cluster opt-ins (disableAuth,
+# pre-minted dev JWT) live in values-local.yaml. Never restore dev
+# defaults here — a future operator who installs the chart with just
+# `helm install` MUST get a deployment that's not silently insecure.
 config:
   runtimeConfig:
     public:
@@ -139,16 +204,15 @@ config:
         upstreamUrl: "http://paladin.paladin.svc.cluster.local:8080"
         timeoutMs: 5000
       oidc:
+        # No issuer / clientId defaults — every env overlay MUST set.
+        # disableAuth=false in prod; only the local overlay flips it
+        # true for dev convenience.
         authority: ""
         clientId: ""
         redirectUri: ""
         postLogoutRedirectUri: ""
         scope: "openid profile email"
-        disableAuth: true
-      auth:
-        # DEV ONLY. Pre-minted JWT used as a fallback Bearer token when
-        # localStorage.paladin_token is empty. Do not set in production builds —
-        # the value is exposed to the browser. Carries roles=[platform-admin]
-        # and tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b (seeded dev tenant).
-        # Regenerate with `task auth:mint-token` in the PALADIN repo.
-        devToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvY3AtZGV2IiwiYXVkIjoib2NwLWFwaSIsInN1YiI6ImRldi11c2VyIiwiaWF0IjoxNzc3MDIyMjI5LCJuYmYiOjE3NzcwMjIyMjksImV4cCI6MTc3NzYyNzAyOSwicm9sZXMiOlsicGxhdGZvcm0tYWRtaW4iXSwidGVuYW50IjoiM2E4MjNmZDQtMGIzZC00Y2UyLWEyODAtOTNiOGQ3NWNjMDdiIn0.OK8MEvjpI-l1LoAO0raCx3xb7TAUEPqiU6YLypJE1o4"
+        disableAuth: false
+      # `auth.devToken` is NOT set here — see values-local.yaml. The
+      # token would be exposed to the browser via runtimeConfig.public,
+      # so committing a literal here is a real disclosure path.

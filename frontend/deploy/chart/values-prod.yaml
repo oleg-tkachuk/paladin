@@ -1,0 +1,54 @@
+# PALADIN UI overlay for PRODUCTION.
+#
+# User-facing UI. Aim for 3+ replicas across zones for AZ-failure
+# survival.
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+
+# minAvailable: 2 means a single-zone failure leaves two pods serving.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Spread SSR replicas across zones — UI is user-facing, AZ-failure
+# survival matters most here.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: paladin-ui
+
+config:
+  runtimeConfig:
+    public:
+      oidc:
+        authority: "https://authentik.example.com/application/o/paladin-ui/"
+        clientId: "<prod-oidc-client-id>"
+        redirectUri: "https://paladin.example.com/auth/callback"
+        postLogoutRedirectUri: "https://paladin.example.com/"
+        disableAuth: false
+
+traefik:
+  hosts:
+    - paladin.example.com
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-prod
+    issuerKind: ClusterIssuer

@@ -26,8 +26,13 @@ metadata:
 terminationGracePeriodSeconds: 30
 
 image:
+  # Registry host is overridden per env. Local default points at the
+  # dev-cluster registry; envs other than local flip this via
+  # values-{dev,staging,prod}.yaml.
   repository: registry.local/paladin/paladin
-  pullPolicy: Always
+  # Prod-safe default. Local overlay flips to Always because the
+  # local registry rebuilds the same tag in-place.
+  pullPolicy: IfNotPresent
   tag: ""
 
 imagePullSecrets: []
@@ -40,7 +45,12 @@ fullnameOverride: ""
 # role-scoped.
 serviceAccount:
   create: true
-  automount: true
+  # PALADIN roles run as plain workloads with no inbound K8s API needs.
+  # The K8sSecretResolver bootstrap path uses a dedicated ClusterRole
+  # (see `rbac.secretReader`), not the in-pod projected token.
+  # Disabling automount drops the projected SA token from the pod,
+  # shrinking the blast radius of any RCE in the binary.
+  automount: false
   annotations: {}
   name: ""
 
@@ -72,14 +82,35 @@ securityContext:
 # Empty / unset role-level keys fall back to here.
 defaults:
   replicas: 1
-  resources: {}
+  # Conservative defaults sized for the dev cluster. Tune in
+  # values-{dev,staging,prod}.yaml overlays per role via
+  # `deployments.<role>.resources`. requests.cpu is REQUIRED for
+  # HPA-on-CPU to work; do not drop without disabling autoscaling.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
   podAnnotations: {}
   podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  volumes: []
-  volumeMounts: []
+  # readOnlyRootFilesystem (set in securityContext) requires a
+  # writable /tmp for stdlib temp writes (TLS cert caching, tempfile,
+  # etc.). emptyDir keeps it pod-local and erased on restart.
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+  # Empty by default. Multi-zone prod overlays populate this per role
+  # so a single-AZ failure doesn't take all replicas of a role at once.
+  # See values-prod.yaml for the canonical zone-spread block.
+  topologySpreadConstraints: []
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -367,6 +398,66 @@ deployments:
           port: 8100
           targetPort: ingest
 
+# ─── PodDisruptionBudget ───────────────────────────────────────────────────
+#
+# Per-role PDBs gated on replicas>=2. A single-replica PDB is
+# unsatisfiable and blocks node drains forever. Renders only when the
+# effective replica count for a role is at least 2 (replicas>=2 or
+# autoscaling.minReplicas>=2). minAvailable: 1 means at least one pod
+# of THAT role stays serving through voluntary disruptions.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: ""  # set instead of minAvailable for percentage budgets
+
+# ─── Observability (Prometheus Operator) ───────────────────────────────────
+#
+# Backend api / admin / worker / dispatcher / ingest expose Prometheus
+# metrics. ServiceMonitor + PrometheusRule render only when the
+# Prometheus Operator CRDs are installed AND `metrics.*.enabled` flipped
+# in an env overlay — the chart stays installable in clusters without
+# the operator.
+metrics:
+  serviceMonitor:
+    enabled: false
+    # Namespace where Prometheus Operator's Prometheus CR runs. Empty =
+    # release namespace.
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /v1/metrics
+    # `release: <prometheus-release>` is the common label Prometheus
+    # Operator uses to discover ServiceMonitors. Override per env.
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+  alerts:
+    enabled: false
+    labels: {}
+    rules:
+      crashLooping:
+        enabled: true
+        severity: critical
+        for: 5m
+      highErrorRate:
+        enabled: true
+        severity: warning
+        threshold: 0.05
+        for: 10m
+      highLatency:
+        enabled: true
+        severity: warning
+        thresholdSeconds: 1.5
+        for: 10m
+      notReady:
+        enabled: true
+        severity: warning
+        for: 10m
+      oomKilled:
+        enabled: true
+        severity: warning
+        window: 15m
+
 # ─── Lifecycle Jobs ────────────────────────────────────────────────────────
 #
 # Migrate + bootstrap run as Helm hook Jobs so DDL is gated outside the
@@ -393,15 +484,28 @@ jobs:
 # Single ConfigMap shared by every role. The Go binary reads only the
 # subset relevant to its subcommand (e.g. `serve worker` ignores the
 # server.* listener block).
+# ─── App config (templated into the ConfigMap) ─────────────────────────────
+#
+# Defaults here are PROD-SAFE. The dev cluster opt-ins (debug logging,
+# dummy access keys, hard-coded signing key, `*.local` endpoints)
+# live in values-local.yaml and are applied via `helm -f values-local.yaml`.
+# Never restore dev defaults here — a future operator who installs the
+# chart with just `helm install paladin .` must get a deployment that's not
+# silently insecure.
 config:
   app:
     name: paladin
-    env: local                            # local | staging | prod
+    # Real environment is set per overlay (values-{local,dev,staging,prod}.yaml).
+    # Empty means "operator forgot to pick an overlay"; surface that loudly
+    # at startup if the binary cares about app.env (config validation).
+    env: ""
 
   logger:
-    level: debug
+    # info-level + non-development zap config is the prod default. Local
+    # overlay flips to debug + development:true for stack traces.
+    level: info
     format: json
-    development: true
+    development: false
     disable_caller: false
     disable_stacktrace: true
     sampling:
@@ -413,10 +517,13 @@ config:
     enabled: false
     endpoint: "otel-collector:4317"
     protocol: http
-    insecure: true
+    # insecure off by default — prod OTel collector terminates TLS.
+    # Local overlay flips this back on.
+    insecure: false
 
   runtime:
-    mode: debug
+    # Gin mode `release` — debug skipped in prod.
+    mode: release
     shutdown_timeout: 20s
     log_probes: false
 
@@ -492,8 +599,11 @@ config:
       default_max_size: 5368709120
 
   auth:
-    issuer: "paladin-dev"
-    signing_key: "dev-secret-change-me-32-bytes-min"
+    # No issuer / signing_key defaults — every env overlay MUST set
+    # both. An empty signing_key surfaces as a startup error rather
+    # than a quietly-broken JWT verification path.
+    issuer: ""
+    signing_key: ""
     jwks_url: ""
     leeway: 30s
     access_token_ttl: 15m
@@ -501,7 +611,10 @@ config:
     scoped_token_max_ttl: 24h
 
   security:
-    trust_tenant_id_from_request: true
+    # Prod-safe: do NOT trust client-supplied tenant header. Local
+    # overlay flips this true for dev convenience (admin tooling
+    # sending X-Tenant-Id without a JWT).
+    trust_tenant_id_from_request: false
     reject_tenant_mismatch: true
     log_sensitive: false
     # RLS is not a knob — the runtime unconditionally installs the
@@ -597,13 +710,18 @@ config:
         kind: s3-compatible
         bucket: paladin-primary
         region: us-east-1
-        endpoint: "http://seaweedfs-filer.storage.svc.cluster.local:8333"
-        public_endpoint: "https://s3.paladin.local"
+        # No default endpoint / public_endpoint — env overlay MUST
+        # set both. Empty surfaces as a startup error.
+        endpoint: ""
+        public_endpoint: ""
         force_path_style: true
+        # No default keys. Prod overlays should reference a Secret
+        # via `access_key_secret` / `secret_key_secret`; local overlay
+        # uses the SeaweedFS dummy_* keys explicitly.
         auth:
           mode: static_keys
-          access_key: dummy_access_key
-          secret_key: dummy_secret_key
+          access_key: ""
+          secret_key: ""
         part_size: "8MB"
         sse:
           type: ""
@@ -711,37 +829,44 @@ bootstrap:
       name: "paladin-bootstrap-admin"
       key: "password"
 
-# ─── Ingress / Gateway API ─────────────────────────────────────────────────
+# ─── Traefik IngressRoute ──────────────────────────────────────────────────
 #
-# Both target the api Service (data + iam ports). Admin gets no public
-# ingress by default — operators bring their own behind mTLS / VPN /
-# bastion. To expose admin externally, render a separate Ingress at the
-# manifest layer or fork this chart.
-
-ingress:
-  enabled: false
-  className: ""
+# Targets the api Service (data + iam ports) per env. Admin gets no
+# public ingress by default — operators bring their own behind mTLS /
+# VPN / bastion. To expose admin externally, render a separate
+# IngressRoute in the env overlay or fork this chart.
+#
+# Routing model: Traefik IngressRoute (consistent with acme's
+# core-api). The chart previously shipped both generic `Ingress` and
+# Gateway API `HTTPRoute` templates gated off; both removed to commit
+# to a single routing path.
+traefik:
+  enabled: true
+  # entryPoints reference Traefik's static config. Defaults to
+  # `websecure` (HTTPS); add `web` if HTTP-only is also needed.
+  entryPoints:
+    - websecure
+  # No default hosts — each env overlay declares its own DNS. Empty
+  # list means the chart emits no IngressRoute (operator hasn't picked
+  # an env yet).
+  hosts: []
   annotations: {}
-  hosts:
-    - host: api.paladin.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
+  # Optional middlewares to chain on the route. Each entry is
+  # `{name: "<middleware-name>", namespace: "<ns>"}` — namespace is
+  # optional (defaults to release namespace).
+  middlewares: []
 
-httpRoute:
-  enabled: false
-  annotations: {}
-  parentRefs:
-    - name: gateway
-      sectionName: http
-  hostnames:
-    - api.paladin.local
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
+# ─── TLS via cert-manager ──────────────────────────────────────────────────
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerKind: ClusterIssuer
+    issuerName: letsencrypt-prod
+  # If certManager.enabled=false, point at an externally-managed Secret
+  # (e.g. the cluster-wide `traefik-tls` provisioned by gitops on
+  # the local cluster).
+  existingSecret: ""
 
 # ─── RBAC for K8sSecretResolver ────────────────────────────────────────────
 #

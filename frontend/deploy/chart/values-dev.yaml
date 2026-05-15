@@ -1,0 +1,25 @@
+# PALADIN UI overlay for the SHARED DEV cluster.
+#
+# TODO before first apply: replace `<...>` placeholders with real
+# dev-cluster values.
+
+replicaCount: 2
+
+config:
+  runtimeConfig:
+    public:
+      oidc:
+        authority: "https://authentik.dev.example/application/o/paladin-ui/"
+        clientId: "<dev-oidc-client-id>"
+        redirectUri: "https://paladin.dev.example/auth/callback"
+        postLogoutRedirectUri: "https://paladin.dev.example/"
+        disableAuth: false
+
+traefik:
+  hosts:
+    - paladin.dev.example
+tls:
+  certManager:
+    enabled: true
+    issuerName: letsencrypt-staging
+    issuerKind: ClusterIssuer
