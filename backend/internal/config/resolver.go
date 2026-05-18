@@ -67,7 +67,42 @@ func NewK8sSecretResolver(log *zap.Logger) *K8sSecretResolver {
 }
 
 // ResolveConfig walks through the configuration and resolves any secrets in-place.
+//
+// Pre-flight: detect a missing projected SA token before walking the config.
+//   - Out-of-cluster (no KUBERNETES_SERVICE_HOST): silently no-op so unit
+//     tests and local runs that inline all credentials don't need to stub
+//     the resolver. The config is returned unchanged; any SecretRef fields
+//     left behind would surface later as nil dereferences or DSN errors,
+//     which is acceptable because the caller only invokes us in-cluster
+//     (see config.Load).
+//   - In-cluster (KUBERNETES_SERVICE_HOST set) but token file missing:
+//     return an actionable error pointing at the chart toggle that almost
+//     certainly caused this. The K8sSecretResolver REQUIRES the projected
+//     SA token to call the K8s API, so we cannot recover here.
+//
+// When there are no SecretRef fields in the config, the walk below is a
+// no-op anyway — but we still surface the missing-token error in-cluster
+// because it almost always indicates operator drift, not a benign skip.
 func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) error {
+	if _, err := os.Stat(r.tokenPath); os.IsNotExist(err) {
+		if os.Getenv(DefaultK8sServiceHostEnvKey) == "" {
+			// Out-of-cluster: silently skip; caller is responsible for
+			// providing inline values.
+			return nil
+		}
+		// In-cluster but no token mounted — almost always the
+		// serviceAccount.automount=false footgun. Surface the fix.
+		return fmt.Errorf(
+			"SA token missing at %s. "+
+				"Pod has automountServiceAccountToken: false but config "+
+				"contains SecretRef fields. Fix: set "+
+				"serviceAccount.automount: true in chart values, or "+
+				"replace *_secret fields with inline values, or remove "+
+				"SecretRef fields.",
+			r.tokenPath,
+		)
+	}
+
 	// Postgres
 	if cfg.Datastores.Postgres.PasswordSecret != nil {
 		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.PasswordSecret)
