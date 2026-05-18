@@ -45,12 +45,16 @@ fullnameOverride: ""
 # role-scoped.
 serviceAccount:
   create: true
-  # PALADIN roles run as plain workloads with no inbound K8s API needs.
-  # The K8sSecretResolver bootstrap path uses a dedicated ClusterRole
-  # (see `rbac.secretReader`), not the in-pod projected token.
-  # Disabling automount drops the projected SA token from the pod,
-  # shrinking the blast radius of any RCE in the binary.
-  automount: false
+  # K8sSecretResolver REQUIRES the projected SA token to call the K8s
+  # API on boot — resolver.go reads /var/run/secrets/kubernetes.io/
+  # serviceaccount/token and fatals if it's missing. The previous
+  # `automount: false` default broke migrate/bootstrap/serve pods the
+  # moment any SecretRef field landed in config (observed: migrate Job
+  # erroring 3h+ in cluster).
+  #
+  # Override to false ONLY when ALL config is inline (no `*_secret`
+  # fields anywhere). Otherwise leave true.
+  automount: true
   annotations: {}
   name: ""
 
