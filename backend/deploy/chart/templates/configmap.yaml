@@ -27,4 +27,22 @@ data:
     # (notably `chart.fullname`) — see `mcp.upstreams.*` defaults below
     # which need to resolve to the in-cluster Service names of the
     # admin / api roles spun up by this same release.
-    {{- tpl (toYaml .Values.config) . | nindent 4 }}
+    #
+    # `storage.s3CredentialsSecret` (top-level chart values) drives the
+    # SecretRef injection for the primary backend's `auth.*_secret`
+    # fields. Done as a template-time merge rather than baked into
+    # values.yaml so that overlays which inline plaintext keys
+    # (e.g. `values-local.yaml`) can simply flip create=false and
+    # NOT carry a `null` literal that CUE rejects on optional refs.
+    {{- $cfg := deepCopy .Values.config }}
+    {{- with .Values.storage }}
+    {{- if .s3CredentialsSecret }}
+    {{- $secretName := .s3CredentialsSecret.existingSecret | default .s3CredentialsSecret.name -}}
+    {{- if and $secretName (or .s3CredentialsSecret.create .s3CredentialsSecret.existingSecret) -}}
+    {{- $primary := index $cfg.storage.backends "primary" }}
+    {{- $_ := set $primary.auth "access_key_secret" (dict "name" $secretName "key" "access_key") }}
+    {{- $_ := set $primary.auth "secret_key_secret" (dict "name" $secretName "key" "secret_key") }}
+    {{- end -}}
+    {{- end -}}
+    {{- end }}
+    {{- tpl (toYaml $cfg) . | nindent 4 }}

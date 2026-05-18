@@ -715,9 +715,19 @@ config:
         endpoint: ""
         public_endpoint: ""
         force_path_style: true
-        # No default keys. Prod overlays should reference a Secret
-        # via `access_key_secret` / `secret_key_secret`; local overlay
-        # uses the SeaweedFS dummy_* keys explicitly.
+        # Credentials. By default sourced from a sibling K8s Secret via
+        # `storage.s3CredentialsSecret` (chart-managed or external) —
+        # the configmap.yaml template injects the matching SecretRef
+        # blocks (`access_key_secret` / `secret_key_secret`) at render
+        # time when that feature is on. Leave both inline keys empty
+        # here; the template + RBAC do the rest.
+        #
+        # Overlays that need inline plaintext (e.g. `values-local.yaml`)
+        # SHOULD set `storage.s3CredentialsSecret.create: false` AND
+        # provide `auth.access_key` / `auth.secret_key` here; the
+        # template suppresses the SecretRef injection when neither
+        # `create` nor `existingSecret` is set, so the inline/SecretRef
+        # mutual-exclusion check stays happy.
         auth:
           mode: static_keys
           access_key: ""
@@ -829,6 +839,44 @@ bootstrap:
       name: "paladin-bootstrap-admin"
       key: "password"
 
+# ─── Primary storage backend credentials ────────────────────────────────────
+#
+# Sibling K8s Secret holding the S3 / SeaweedFS access_key + secret_key for
+# `config.storage.backends.primary`. The default config.yaml references this
+# Secret via `*_secret` SecretRef fields — K8sSecretResolver fetches the
+# values at boot using the pod's projected token (same path as PG / bootstrap
+# creds). Chart renders the Secret with the SeaweedFS `dummy_*` values by
+# default so a `helm install` against a fresh cluster produces a config
+# that passes validation without an overlay.
+#
+# Three modes:
+#
+#   1. `create: true` (default) — chart provisions the Secret. Override
+#      `accessKey` / `secretKey` in your env overlay for non-dummy values.
+#   2. `create: true`, `existingSecret: <name>` — chart skips its own
+#      Secret; config references the externally-managed one (SealedSecret,
+#      ExternalSecret, manual `kubectl apply`). Operator is responsible
+#      for the keys being named `access_key` / `secret_key`.
+#   3. `create: false` — chart skips the Secret entirely AND the values
+#      *_secret refs still resolve to `name`, so the caller MUST either
+#      set `existingSecret` to a real one OR null out
+#      `config.storage.backends.primary.auth.{access,secret}_key_secret`
+#      in the overlay (e.g. `values-local.yaml` inlines plain keys).
+#
+# rbac.secretReader.secretNames below MUST contain `name` (or
+# `existingSecret` when used) or the resolver gets a 403 at startup.
+storage:
+  s3CredentialsSecret:
+    create: true
+    name: "paladin-s3-credentials"
+    existingSecret: ""
+    # SeaweedFS dev defaults — match the `identities` blob the storage
+    # namespace ships with so a vanilla install talks to the local
+    # SeaweedFS without an overlay edit. Production overlays MUST
+    # override these (or set `existingSecret`).
+    accessKey: "dummy_access_key"
+    secretKey: "dummy_secret_key"
+
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
 #
 # Targets the api Service (data + iam ports) per env. Admin gets no
@@ -882,6 +930,10 @@ rbac:
   secretReader:
     enabled: true
     clusterWide: true
+    # NOTE: the chart automatically appends the primary-storage credential
+    # Secret name (storage.s3CredentialsSecret.existingSecret or .name)
+    # to this list at render time — no manual entry needed when the
+    # storage block is enabled. See templates/rbac.yaml.
     secretNames:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user

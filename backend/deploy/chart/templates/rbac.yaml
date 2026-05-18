@@ -34,10 +34,26 @@ metadata:
     "argocd.argoproj.io/sync-wave": "-5"
   labels:
     {{- include "chart.labels" . | nindent 4 }}
+{{- /*
+  Build the allowlist. The static list from values comes first; if the
+  primary-storage credential Secret is wired (create or existingSecret),
+  append its name so the resolver can GET it without manual values upkeep.
+*/}}
+{{- $secretNames := .Values.rbac.secretReader.secretNames | default (list) -}}
+{{- with .Values.storage }}
+{{- if .s3CredentialsSecret }}
+{{- $s3Name := .s3CredentialsSecret.existingSecret | default .s3CredentialsSecret.name -}}
+{{- if and $s3Name (or .s3CredentialsSecret.create .s3CredentialsSecret.existingSecret) -}}
+{{- if not (has $s3Name $secretNames) -}}
+{{- $secretNames = append $secretNames $s3Name -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: {{ .Values.rbac.secretReader.secretNames | toJson }}
+    resourceNames: {{ $secretNames | toJson }}
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

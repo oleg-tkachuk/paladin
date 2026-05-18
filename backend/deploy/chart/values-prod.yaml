@@ -33,10 +33,17 @@ config:
       primary:
         endpoint: "https://s3.internal.example.com"
         public_endpoint: "https://s3.example.com"
-        # Reference per-env Secrets; never literal keys in prod overlay.
-        auth:
-          access_key: "<prod-s3-access-key>"
-          secret_key: "<prod-s3-secret-key>"
+        # auth.access_key / secret_key sourced from K8s Secret via
+        # `storage.s3CredentialsSecret` below. Production NEVER inlines
+        # plaintext keys here.
+
+# Primary-backend credentials Secret. Prod convention: ExternalSecret
+# (managed by SOPS / Vault / AWS Secrets Manager controller) provisions
+# `paladin-s3-credentials` with `access_key` and `secret_key` keys.
+storage:
+  s3CredentialsSecret:
+    create: false
+    existingSecret: "paladin-s3-credentials"
 
 image:
   pullPolicy: IfNotPresent
