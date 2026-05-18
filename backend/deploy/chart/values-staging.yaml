@@ -29,9 +29,16 @@ config:
       primary:
         endpoint: "<staging-seaweedfs-endpoint>"
         public_endpoint: "https://s3.paladin.staging.example"
-        auth:
-          access_key: "<staging-access-key>"
-          secret_key: "<staging-secret-key>"
+        # auth.access_key / secret_key sourced from K8s Secret via
+        # `storage.s3CredentialsSecret` below.
+
+# Primary-backend credentials. Staging convention: point at an
+# ExternalSecret-managed Secret named `paladin-s3-credentials` so SOPS /
+# Vault owns the values; set `create: false` to skip chart-side rendering.
+storage:
+  s3CredentialsSecret:
+    create: false
+    existingSecret: "paladin-s3-credentials"
 
 image:
   pullPolicy: IfNotPresent

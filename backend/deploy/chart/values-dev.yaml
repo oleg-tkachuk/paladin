@@ -34,9 +34,19 @@ config:
       primary:
         endpoint: "<dev-seaweedfs-endpoint>"
         public_endpoint: "<dev-s3-public-endpoint>"
-        auth:
-          access_key: "<dev-access-key>"
-          secret_key: "<dev-secret-key>"
+        # auth.access_key / secret_key sourced from the chart-managed
+        # `paladin-s3-credentials` Secret (see `storage.s3CredentialsSecret`
+        # below) via K8sSecretResolver. Set `existingSecret` instead
+        # when the dev cluster wires ExternalSecret / SealedSecret.
+
+# Chart-managed primary-backend credentials Secret. Replace the dummy
+# placeholders below with the real dev-cluster values, or point at an
+# existing ExternalSecret-managed Secret via `existingSecret`.
+storage:
+  s3CredentialsSecret:
+    create: true
+    accessKey: "<dev-access-key>"
+    secretKey: "<dev-secret-key>"
 
 image:
   pullPolicy: IfNotPresent

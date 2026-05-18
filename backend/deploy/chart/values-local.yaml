@@ -52,6 +52,13 @@ config:
           access_key: dummy_access_key
           secret_key: dummy_secret_key
 
+# Chart-managed Secret for the primary backend is unused on the local
+# overlay (config inlines plain keys above). Disable creation so the
+# configmap doesn't inject a conflicting `*_secret` SecretRef.
+storage:
+  s3CredentialsSecret:
+    create: false
+
 image:
   pullPolicy: Always
 
