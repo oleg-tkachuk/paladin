@@ -15,6 +15,14 @@
 image:
   pullPolicy: Always
 
+# Replica pinning for the minikube memory budget. Base values.yaml
+# defaults to replicaCount=1 already; pinning autoscaling.maxReplicas=1
+# guarantees HPA cannot scale up if enabled in a future env layer.
+replicaCount: 1
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 1
+
 traefik:
   hosts:
     - paladin.local

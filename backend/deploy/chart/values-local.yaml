@@ -62,6 +62,25 @@ storage:
 image:
   pullPolicy: Always
 
+# Replica pinning for the minikube memory budget (cluster sits at
+# 77-98% memory pressure). Base values.yaml ships api=2 + worker=2 for
+# redundancy; on the single-node local cluster a second replica only
+# duplicates RAM/CPU footprint without any HA benefit. Production /
+# staging keep the chart defaults.
+deployments:
+  api:
+    replicas: 1
+  admin:
+    replicas: 1
+  worker:
+    replicas: 1
+  mcp:
+    replicas: 1
+  dispatcher:
+    replicas: 1
+  ingest:
+    replicas: 1
+
 # Traefik IngressRoute on the local cluster's wildcard cert.
 traefik:
   hosts:
