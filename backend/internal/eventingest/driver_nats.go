@@ -75,11 +75,26 @@ func (d *NATSDriver) Run(ctx context.Context, deliver func(context.Context, Clou
 		nats.Name("paladin-ingest"),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2 * time.Second),
+		// RetryOnFailedConnect makes nats.Connect return a usable
+		// *nats.Conn even when the initial dial fails — the driver
+		// keeps retrying in the background under the same
+		// MaxReconnects / ReconnectWait policy that already covers
+		// post-boot disconnects. Without this, a brief NATS outage
+		// at pod boot (CNI not ready, NATS rolling, dup-IP recovery,
+		// etc.) causes nats.Connect to error → Worker.Run returns →
+		// `serve ingest` exits → kubelet CrashLoopBackOff. The pod's
+		// /readyz probe still fails until ConnectedHandler fires, so
+		// the broken state is visible to operators / ArgoCD rather
+		// than silently restarting forever.
+		nats.RetryOnFailedConnect(true),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			d.log().Warn("nats disconnected", zap.Error(err))
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
 			d.log().Info("nats reconnected", zap.String("url", c.ConnectedUrl()))
+		}),
+		nats.ConnectHandler(func(c *nats.Conn) {
+			d.log().Info("nats connected", zap.String("url", c.ConnectedUrl()))
 		}),
 	}
 	if d.Token != "" {

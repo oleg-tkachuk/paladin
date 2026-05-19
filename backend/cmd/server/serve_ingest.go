@@ -138,7 +138,17 @@ var serveIngestCmd = &cobra.Command{
 
 		l.Info("ingest plane starting", zap.String("driver", cfg.Ingest.Driver))
 		if err := worker.Run(ctx); err != nil && !errorsIsCancelled(err) {
-			l.Error("ingest worker exited", zap.Error(err))
+			// Exit non-zero so kubelet reports `Reason: Error` (not
+			// `Reason: Completed`) and CrashLoopBackOff is actually
+			// applied — a clean exit on a fatal worker error
+			// silently masks the failure and makes the pod
+			// appear to restart "for no reason" every few seconds.
+			// The NATS driver now retries the initial dial in the
+			// background (driver_nats.go: RetryOnFailedConnect),
+			// so reaching this branch means a non-recoverable
+			// failure (config error, subscribe error, stream
+			// missing, etc.) — Fatal is the right level.
+			l.Fatal("ingest worker exited", zap.Error(err))
 		}
 	},
 }
