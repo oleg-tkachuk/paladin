@@ -182,6 +182,25 @@ deployments:
         - name: iam
           port: 8085
           targetPort: iam
+    # Mount the cert-manager-provisioned paladin-api-mtls Secret (provisioned
+    # by gitops's rag-internal-mtls App into the `paladin` namespace) so
+    # the data plane can present its leaf cert + verify inbound client
+    # certs signed by the rag-internal-mtls-ca ClusterIssuer. The
+    # config.api.server.data.tls block below points its paths at this
+    # mount. The paladin-api-mtls Secret stores PEM at the standard
+    # kubernetes.io/tls keys: tls.crt, tls.key, ca.crt.
+    volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: paladin-api-mtls
+        secret:
+          secretName: paladin-api-mtls
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+      - name: paladin-api-mtls
+        mountPath: /etc/paladin-mtls
+        readOnly: true
   admin:
     enabled: true
     # Admin pod sits behind a stricter ingress; single replica is fine.
@@ -545,10 +564,28 @@ config:
         real_ip_header: "X-Forwarded-For"
         trusted_proxies: []
         cors_allowed_origins: []
-        tls: { enabled: false }
+        # mTLS termination (#25a). Permissive client_auth during the
+        # initial cutover so plaintext-disabled callers degrade
+        # gracefully while operators flip rag-api / rag-documents
+        # tls.enabled=true one at a time; switch to "strict" once
+        # every caller is verified mTLS-only.
+        tls:
+          enabled: true
+          cert_path: /etc/paladin-mtls/tls.crt
+          key_path: /etc/paladin-mtls/tls.key
+          ca_path: /etc/paladin-mtls/ca.crt
+          client_auth: permissive
       iam:
         <<: *http_defaults
         addr: "0.0.0.0:8085"
+        # iam plane shares the same mTLS posture as data — callers
+        # are also internal-cluster + same SPIFFE CA.
+        tls:
+          enabled: true
+          cert_path: /etc/paladin-mtls/tls.crt
+          key_path: /etc/paladin-mtls/tls.key
+          ca_path: /etc/paladin-mtls/ca.crt
+          client_auth: permissive
 
   admin:
     server:
