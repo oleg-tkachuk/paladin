@@ -223,6 +223,10 @@ deployments:
       httpGet:
         path: /livez
         port: admin
+        # Admin plane terminates TLS (client_auth strict); kubelet's
+        # default scheme is HTTP, so probes get rejected with
+        # "client sent an HTTP request to an HTTPS server".
+        scheme: HTTPS
       initialDelaySeconds: 15
       periodSeconds: 20
       timeoutSeconds: 1
@@ -231,6 +235,7 @@ deployments:
       httpGet:
         path: /readyz
         port: admin
+        scheme: HTTPS
       initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 3
@@ -240,6 +245,7 @@ deployments:
       httpGet:
         path: /startupz
         port: admin
+        scheme: HTTPS
       initialDelaySeconds: 5
       periodSeconds: 5
       timeoutSeconds: 3
