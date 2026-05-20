@@ -582,7 +582,7 @@ config:
           cert_path: /etc/paladin-mtls/tls.crt
           key_path: /etc/paladin-mtls/tls.key
           ca_path: /etc/paladin-mtls/ca.crt
-          client_auth: permissive
+          client_auth: strict
       iam:
         <<: *http_defaults
         addr: "0.0.0.0:8085"
@@ -593,7 +593,7 @@ config:
           cert_path: /etc/paladin-mtls/tls.crt
           key_path: /etc/paladin-mtls/tls.key
           ca_path: /etc/paladin-mtls/ca.crt
-          client_auth: permissive
+          client_auth: strict
 
   admin:
     server:
