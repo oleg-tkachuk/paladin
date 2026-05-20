@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/internal/utils"
 )
 
 // HTTPListener bundles one *http.Server with its plane label, used for
@@ -105,10 +106,42 @@ func (a *App) Run() error {
 				zap.String("plane", l.Plane),
 				zap.String("addr", l.Server.Addr),
 				zap.Bool("tls", l.TLS.Enabled),
+				zap.String("client_auth", l.TLS.ClientAuth),
 			)
 			var err error
 			if l.TLS.Enabled {
-				err = l.Server.ListenAndServeTLS(l.TLS.CertPath, l.TLS.KeyPath)
+				// mTLS termination — construct a tls.Config that adds
+				// ClientCAs + ClientAuth based on the listener's
+				// config.TLS.ClientAuth string. When ClientAuth is
+				// "none" or unset, behaviour is identical to the
+				// pre-mTLS posture (one-way TLS, ignore client cert);
+				// "permissive" verifies a presented cert without
+				// requiring one (rollout cutover so plaintext + mTLS
+				// callers both work); "strict" requires a verified
+				// client cert (the destination posture once every
+				// in-cluster caller is migrated). See
+				// utils.ParseClientAuth + internal/utils/tls.go.
+				tlsCfg, terr := utils.NewTLSConfig(
+					l.TLS.CertPath, l.TLS.KeyPath, l.TLS.CaPath,
+					l.TLS.ServerName, l.TLS.InsecureSkipVerify,
+				)
+				if terr != nil {
+					errCh <- fmt.Errorf("plane %s: build tls config: %w", l.Plane, terr)
+					return
+				}
+				clientAuth, terr := utils.ParseClientAuth(l.TLS.ClientAuth)
+				if terr != nil {
+					errCh <- fmt.Errorf("plane %s: parse client_auth: %w", l.Plane, terr)
+					return
+				}
+				tlsCfg.ClientAuth = clientAuth
+				l.Server.TLSConfig = tlsCfg
+				// Cert + key are already loaded into tlsCfg.Certificates
+				// — empty paths tell ListenAndServeTLS to use the
+				// TLSConfig directly. Without this hand-off the
+				// server would re-parse the files itself and lose
+				// the ClientAuth + ClientCAs we just set.
+				err = l.Server.ListenAndServeTLS("", "")
 			} else {
 				err = l.Server.ListenAndServe()
 			}

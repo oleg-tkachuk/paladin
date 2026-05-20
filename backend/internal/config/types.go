@@ -158,6 +158,18 @@ type TLS struct {
 	CaPath             string `yaml:"ca_path" json:"ca_path"`
 	ServerName         string `yaml:"server_name" json:"server_name"`
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
+	// ClientAuth controls how server-side TLS listeners verify
+	// inbound client certificates — the mTLS termination knob.
+	// Only meaningful on server listeners; ignored when this TLS
+	// struct is consumed as a client config.
+	//
+	// Values: "none" (default — one-way TLS, ignore client cert),
+	// "request", "require", "permissive" (verify-if-given —
+	// useful during rollout cutover so plaintext + mTLS callers
+	// both work), "strict" (require-and-verify — full mTLS,
+	// the destination posture).
+	// See utils.ParseClientAuth for the mapping onto tls.ClientAuthType.
+	ClientAuth string `yaml:"client_auth" json:"client_auth"`
 }
 
 type Datastores struct {
