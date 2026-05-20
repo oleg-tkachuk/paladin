@@ -256,7 +256,7 @@ deployments:
         - name: admin
           port: 8090
           targetPort: admin
-    # Admin plane also runs TLS (client_auth: strict) — mount the same
+    # Admin plane also runs TLS (client_auth: permissive) — mount the same
     # paladin-api-mtls Secret as the api role. Without this mount the pod
     # crashloops with "open /etc/paladin-mtls/tls.crt: no such file or
     # directory" because config.admin.server.tls.cert_path points at
@@ -605,7 +605,7 @@ config:
           cert_path: /etc/paladin-mtls/tls.crt
           key_path: /etc/paladin-mtls/tls.key
           ca_path: /etc/paladin-mtls/ca.crt
-          client_auth: strict
+          client_auth: permissive
       iam:
         <<: *http_defaults
         addr: "0.0.0.0:8085"
@@ -616,7 +616,7 @@ config:
           cert_path: /etc/paladin-mtls/tls.crt
           key_path: /etc/paladin-mtls/tls.key
           ca_path: /etc/paladin-mtls/ca.crt
-          client_auth: strict
+          client_auth: permissive
 
   admin:
     server:
