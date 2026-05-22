@@ -43,6 +43,18 @@ backend:
     # /api/health/all aggregator alongside api/admin/worker/mcp.
     dispatcher: "http://paladin-paladin-dispatcher.paladin.svc.cluster.local:8099"
 
+# Extra environment variables appended to the UI container's env block.
+# Use for knobs the chart doesn't model first-class. Common cases:
+#   - NODE_TLS_REJECT_UNAUTHORIZED=0 on dev clusters where the BFF dials
+#     internal mTLS-protected backends whose CA isn't in Node's system
+#     trust store. Production should mount the CA + use NODE_EXTRA_CA_CERTS
+#     instead — disabling verification globally is a development shortcut.
+#   - NODE_OPTIONS=--max-old-space-size=… for memory tuning.
+# Items are standard Kubernetes EnvVar entries.
+extraEnv: []
+# - name: NODE_TLS_REJECT_UNAUTHORIZED
+#   value: "0"
+
 image:
   # Registry host overridden per env. Local default points at the
   # dev-cluster registry; envs other than local flip via
