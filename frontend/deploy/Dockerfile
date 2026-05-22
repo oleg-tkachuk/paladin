@@ -32,7 +32,7 @@ RUN npm install -g npm@${NPM_VERSION}
 
 # Copy lockfiles first so this layer caches across source-only changes.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 # -----------------------------------------------------------------------------
 # Stage 2 — builder. Runs `next build` with build-time metadata baked in
