@@ -235,7 +235,19 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	} else if !hasPlatformAdmin(p) && scope != caller {
 		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant list denied"))
 	}
-	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: scope}); err != nil {
+	// Cedar authz scope: the default policy template grants
+	// ReadUser to members of Tenant::"<their-slug>". When this is a
+	// cross-tenant list (scope==Nil), we authorize against the
+	// caller's own tenant — platform.admin role on the principal
+	// unlocks the broader scan; non-admins already had scope
+	// narrowed to `caller` above. Using Nil here would feed Cedar
+	// a Resource{TenantID: Nil} that no policy literal matches,
+	// resulting in a silent deny even for legitimate admins.
+	authzScope := scope
+	if authzScope == uuid.Nil {
+		authzScope = caller
+	}
+	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: authzScope}); err != nil {
 		return nil, "", err
 	}
 	return h.users.List(ctx, authstore.ListUsersArgs{
