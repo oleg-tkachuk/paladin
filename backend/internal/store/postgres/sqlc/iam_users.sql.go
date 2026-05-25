@@ -151,13 +151,18 @@ SELECT user_id, tenant_id, subject, display_name, password_hash,
        roles, scopes, disabled, resource_version,
        created_at, updated_at, last_login_at
 FROM users
-WHERE user_id > $1
+WHERE ($1::uuid IS NULL
+       OR user_id > $1::uuid)
 ORDER BY user_id ASC
-LIMIT $2
+LIMIT $2::int
 `
 
-func (q *Queries) ListUsersAll(ctx context.Context, userID pgtype.UUID, limit int32) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsersAll, userID, limit)
+// Cross-tenant listing for platform.admin. Same NULL-safe after_id
+// pattern as ListUsersByTenant — without the IS-NULL guard the
+// /users page renders empty even when there are rows, because the
+// adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
+func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersAll, afterID, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -195,13 +200,19 @@ SELECT user_id, tenant_id, subject, display_name, password_hash,
        created_at, updated_at, last_login_at
 FROM users
 WHERE tenant_id = $1
-  AND user_id > $2
+  AND ($2::uuid IS NULL
+       OR user_id > $2::uuid)
 ORDER BY user_id ASC
-LIMIT $3
+LIMIT $3::int
 `
 
-func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, userID pgtype.UUID, limit int32) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsersByTenant, tenantID, userID, limit)
+// after_id is NULL on first page (no page token). The IS-NULL guard
+// prevents the NULL-propagation that would make a bare `user_id >
+// NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
+// Valid:false} → SQL NULL, so the guard is the contract callers
+// rely on.
+func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByTenant, tenantID, afterID, pageSize)
 	if err != nil {
 		return nil, err
 	}
