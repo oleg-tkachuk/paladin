@@ -67,18 +67,37 @@ image:
 # redundancy; on the single-node local cluster a second replica only
 # duplicates RAM/CPU footprint without any HA benefit. Production /
 # staging keep the chart defaults.
+#
+# We also lock `defaults.autoscaling.enabled=false` here. When HPA is
+# enabled in the chart template, the `replicas:` field is omitted from
+# the rendered Deployment so HPA can manage it — but then a missing /
+# misconfigured HPA leaves the deployment at the last-scaled value
+# (which can be 0). Forcing autoscaling=false on the local cluster
+# makes the chart always emit `replicas:` so server-side-apply
+# re-pins it to the value below on every Argo reconcile.
+defaults:
+  replicas: 1
+  autoscaling:
+    enabled: false
+
 deployments:
   api:
+    enabled: true
     replicas: 1
   admin:
+    enabled: true
     replicas: 1
   worker:
+    enabled: true
     replicas: 1
   mcp:
+    enabled: true
     replicas: 1
   dispatcher:
+    enabled: true
     replicas: 1
   ingest:
+    enabled: true
     replicas: 1
 
 # Traefik IngressRoute on the local cluster's wildcard cert.
