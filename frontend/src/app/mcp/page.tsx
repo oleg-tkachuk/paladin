@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -169,7 +169,13 @@ export default function MCPInspectPage() {
           </TabsList>
 
           {/* ── Profiles ──────────────────────────────────────────── */}
-          <TabsContent value="profiles" className="space-y-4">
+          {/* Table layout mirrors the Tools tab so operators get a
+              consistent at-a-glance view: name + source badge + counts
+              + the same Expanded-tools disclosure as before, but the
+              row pattern is uniform across tabs. The expansion still
+              renders the post-deny tool list so an operator can see
+              exactly what an agent on this profile sees. */}
+          <TabsContent value="profiles" className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Each transport (stdio / streamable-HTTP) selects a profile by
               name. <code className="text-xs">read_only</code>,{" "}
@@ -182,76 +188,123 @@ export default function MCPInspectPage() {
               wildcard. The expanded list shows what agents actually see after
               the always-deny denylist is applied.
             </p>
-            {profiles.map((p) => (
-              <Card key={p.name} className="p-4 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-semibold font-mono">
-                    {p.name}
-                  </h3>
-                  <Badge
-                    variant={sourceTone(p.source)}
-                    className={T.labelTight}
-                  >
-                    {p.source.replace("_", " ")}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {p.tools.length} of {tools.length} tools visible
-                  </span>
-                </div>
-
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-1">
-                    Raw patterns
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {p.rawPatterns.map((pat) => (
-                      <Badge key={pat} variant="outline" className={T.code}>
-                        {pat}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {p.deny.length > 0 && (
-                  <div>
-                    <div className="text-xs font-medium text-muted-foreground mb-1">
-                      Profile deny (overrides allow)
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {p.deny.map((d) => (
-                        <Badge key={d} variant="destructive" className={T.code}>
-                          {d}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <details className="group">
-                  <summary className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground">
-                    Expanded tool list ({p.tools.length})
-                  </summary>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {p.tools.map((tname) => {
-                      const t = toolIndex.get(tname);
-                      return (
-                        <Badge
-                          key={tname}
-                          variant={t ? audienceTone(t.audience) : "outline"}
-                          className={T.code}
-                          title={t?.description ?? ""}
-                        >
-                          {tname}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </details>
-              </Card>
-            ))}
+            <Card className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      Raw patterns
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      Profile deny
+                    </TableHead>
+                    <TableHead className="w-[140px]">Tools visible</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {profiles.map((p) => (
+                    <React.Fragment key={p.name}>
+                      <TableRow>
+                        <TableCell className={T.code}>{p.name}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={sourceTone(p.source)}
+                            className={T.labelTight}
+                          >
+                            {p.source.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {p.rawPatterns.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            ) : (
+                              p.rawPatterns.map((pat) => (
+                                <Badge
+                                  key={pat}
+                                  variant="outline"
+                                  className={T.code}
+                                >
+                                  {pat}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {p.deny.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            ) : (
+                              p.deny.map((d) => (
+                                <Badge
+                                  key={d}
+                                  variant="destructive"
+                                  className={T.code}
+                                >
+                                  {d}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <details className="group">
+                            <summary className="cursor-pointer hover:text-foreground">
+                              <span className="font-mono tabular-nums">
+                                {p.tools.length}
+                              </span>{" "}
+                              of {tools.length}
+                            </summary>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {p.tools.map((tname) => {
+                                const t = toolIndex.get(tname);
+                                return (
+                                  <Badge
+                                    key={tname}
+                                    variant={
+                                      t ? audienceTone(t.audience) : "outline"
+                                    }
+                                    className={T.code}
+                                    title={t?.description ?? ""}
+                                  >
+                                    {tname}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        </TableCell>
+                      </TableRow>
+                    </React.Fragment>
+                  ))}
+                  {profiles.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-xs text-muted-foreground"
+                      >
+                        No profiles configured.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
           </TabsContent>
 
           {/* ── Always-Deny ───────────────────────────────────────── */}
+          {/* Same table shape as Tools — one row per denied tool name,
+              joined back to the tool catalog so operators see what
+              they're blocking (audience, mutates flag, description)
+              without bouncing between tabs. Wildcard patterns render
+              with a "pattern" pseudo-audience and no catalog row. */}
           <TabsContent value="deny" className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Global blacklist applied <em>after</em> profile expansion
@@ -262,21 +315,86 @@ export default function MCPInspectPage() {
               policies). Wins over every profile, including{" "}
               <code className="text-xs">admin</code>.
             </p>
-            <Card className="p-4">
-              <div className="flex flex-wrap gap-1.5">
-                {denyList.length === 0 ? (
-                  <span className="text-sm text-muted-foreground italic">
-                    Empty list — no global denies. Operator opted out of the
-                    built-in safe defaults.
-                  </span>
-                ) : (
-                  denyList.map((d) => (
-                    <Badge key={d} variant="destructive" className={T.code}>
-                      {d}
-                    </Badge>
-                  ))
-                )}
-              </div>
+            <Card className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Pattern</TableHead>
+                    <TableHead>Audience</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      Capability op
+                    </TableHead>
+                    <TableHead>Effect</TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      Description
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {denyList.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-xs text-muted-foreground italic"
+                      >
+                        Empty list — no global denies. Operator opted out of the
+                        built-in safe defaults.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    denyList.map((d) => {
+                      const t = toolIndex.get(d);
+                      const isWildcard = d.includes("*");
+                      return (
+                        <TableRow key={d}>
+                          <TableCell className={T.code}>{d}</TableCell>
+                          <TableCell>
+                            {t ? (
+                              <Badge
+                                variant={audienceTone(t.audience)}
+                                className={T.labelTight}
+                              >
+                                {t.audience}
+                              </Badge>
+                            ) : isWildcard ? (
+                              <Badge variant="outline" className={T.labelTight}>
+                                pattern
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "hidden md:table-cell",
+                              T.code,
+                              "text-muted-foreground",
+                            )}
+                          >
+                            {t?.capabilityOp || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="destructive"
+                              className={T.labelTight}
+                            >
+                              denied
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                            {t?.description ||
+                              (isWildcard
+                                ? "wildcard pattern — matches every tool whose name has this prefix"
+                                : "tool not in current catalog (chart skew)")}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </Card>
           </TabsContent>
 

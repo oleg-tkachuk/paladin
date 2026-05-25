@@ -399,6 +399,14 @@ func (h *Handler) authorizeFull(
 	return nil
 }
 
+// ErrObjectKeyHasObjects is returned when a Delete is blocked because
+// the ObjectKey still has rows in `objects` referencing it. The FK
+// constraint is ON DELETE RESTRICT — operators must purge / move the
+// objects first. Handler maps this to FAILED_PRECONDITION so the UI
+// can surface a clear "remove the files first" prompt.
+var ErrObjectKeyHasObjects = errors.New(
+	"object_key has live objects; remove or move them before deleting")
+
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
@@ -406,6 +414,9 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 func mapVersionErr(err error) error {
 	if errors.Is(err, ErrVersionMismatch) {
 		return connect.NewError(connect.CodeAborted, err)
+	}
+	if errors.Is(err, ErrObjectKeyHasObjects) {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeInternal, err)
 }

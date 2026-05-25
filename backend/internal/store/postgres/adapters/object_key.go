@@ -3,9 +3,11 @@ package adapters
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
@@ -83,6 +85,18 @@ func (r *ObjectKeyRepo) Update(ctx context.Context, args objectkey.UpdateObjectK
 func (r *ObjectKeyRepo) Delete(ctx context.Context, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
 	rows, err := r.q.DeleteObjectKey(ctx, pgUUID(tenantID), objectKey, expectedVersion)
 	if err != nil {
+		// FK violation: objects.tenant_id_object_key_fkey still
+		// references this row. The constraint is ON DELETE RESTRICT
+		// so we can't cascade — surface as a typed sentinel and let
+		// the handler return FAILED_PRECONDITION with a clear hint
+		// rather than the opaque "internal: ERROR: ... 23001" leak.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23001", "23503":
+				return objectkey.ErrObjectKeyHasObjects
+			}
+		}
 		return fmt.Errorf("delete objectKey: %w", err)
 	}
 	if rows == 0 {
