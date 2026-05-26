@@ -1093,6 +1093,37 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Architecture (post-review 2026-05)
 
+### ArgoCD ApplicationSet valueFiles refactor (gitops)
+
+- **Status:** Aspirational
+- **Reason:** PALADIN's local-overlay patch
+  (`gitops/.../overlays/local/patches/paladin-values.yaml`) inlines two
+  ~120-line Helm value blocks as YAML strings inside an
+  ApplicationSet `generators[].list.elements[].values` field.
+  Reviewing a value-only change today means diffing inside a YAML
+  string that's nested two levels deep, with no syntax highlighting
+  for the inner Helm values. Moving them to per-file `valueFiles:`
+  references would make every change a focused diff and let editors
+  validate values against the chart's schema.
+- **Definition of Done:**
+  - Base ApplicationSet (`base/paladin/paladin/paladin.yaml`) switches to
+    `sources:` (multi-source) — one source for the OCI Helm chart,
+    a second `ref: values` source for the git repo holding the
+    value files.
+  - Per-component value files committed under
+    `gitops/deploy/argocd-apps/applications/base/paladin/paladin/values/`
+    (e.g. `backend-local.yaml`, `frontend-local.yaml`,
+    `backend-prod.yaml`).
+  - Overlay patches drop the inline `values: |` string and supply
+    `valueFiles: [$values/path/to/file.yaml]` instead.
+  - ArgoCD has read access to the gitops git repo (already true
+    today for kustomize bootstrap; verify the SA includes git creds).
+  - `task chart:verify` (or a new gitops verify task) runs
+    `argocd appset list` against a kind/minikube and asserts each
+    expanded App has the expected merged values.
+- **Blockers:** none functionally, but the work lives in gitops
+  not this repo — sequence with whoever owns the GitOps tier.
+
 ### Table-backed audit outbox for crash-durability
 
 - **Status:** Aspirational
