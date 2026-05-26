@@ -79,7 +79,17 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 	if pageSize <= 0 || pageSize > 1000 {
 		pageSize = 50
 	}
-	rows, err := r.q.ListStorageBackends(ctx, afterID, pageSize)
+	// Empty string ⇒ NULL cursor ⇒ "from the beginning". The SQL
+	// guards `id > $1 OR $1 IS NULL` (canonical IS-NULL-OR pattern;
+	// matches the rule applied to every cursor query in this
+	// package). Passing `&""` would compare against an empty string
+	// and silently exclude rows whose id sorts at or before empty,
+	// so the sentinel is `nil`, not an empty pointer.
+	var afterPtr *string
+	if afterID != "" {
+		afterPtr = &afterID
+	}
+	rows, err := r.q.ListStorageBackends(ctx, afterPtr, pageSize)
 	if err != nil {
 		return nil, "", err
 	}

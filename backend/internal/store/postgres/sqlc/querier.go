@@ -194,6 +194,11 @@ type Querier interface {
 	// replicating into or out of any of those is at best wasted work and at
 	// worst ships objects into a bucket that's about to be torn down.
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
+	// Cursor pagination with optional tenant filter. The after_id branch
+	// MUST be wrapped in `IS NULL OR …` — first-page callers pass
+	// uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
+	// `subscription_id > NULL` yields zero rows. Keep this shape on every
+	// cursor query in the package.
 	ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error)
 	// Returns api_keys whose `expires_at` has passed and that are still active.
 	// Used by the housekeeping worker to flip them to revoked.
@@ -225,7 +230,12 @@ type Querier interface {
 	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
-	ListStorageBackends(ctx context.Context, iD string, limit int32) ([]ListStorageBackendsRow, error)
+	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
+	// an empty/NULL cursor on the first page, and a bare `id > NULL`
+	// evaluates to NULL → zero rows (the same trap that bit
+	// ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
+	// shape on every cursor query in this package.
+	ListStorageBackends(ctx context.Context, afterID *string, pageSize int32) ([]ListStorageBackendsRow, error)
 	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
 	// display_name so the dashboard's BudgetAlerts widget doesn't need a
 	// follow-up read.
@@ -248,8 +258,17 @@ type Querier interface {
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]UserSetting, error)
-	ListUsersAll(ctx context.Context, userID pgtype.UUID, limit int32) ([]User, error)
-	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, userID pgtype.UUID, limit int32) ([]User, error)
+	// Cross-tenant listing for platform.admin. Same NULL-safe after_id
+	// pattern as ListUsersByTenant — without the IS-NULL guard the
+	// /users page renders empty even when there are rows, because the
+	// adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
+	ListUsersAll(ctx context.Context, afterID pgtype.UUID, pageSize int32) ([]User, error)
+	// after_id is NULL on first page (no page token). The IS-NULL guard
+	// prevents the NULL-propagation that would make a bare `user_id >
+	// NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
+	// Valid:false} → SQL NULL, so the guard is the contract callers
+	// rely on.
+	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]User, error)
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context. Joins object_keys to
 	// materialize the bucket binding so the caller can call S3 in one trip.

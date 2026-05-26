@@ -73,11 +73,17 @@ SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config,
        disabled, resource_version, created_at, updated_at
 FROM event_subscriptions
 WHERE ($1::uuid IS NULL OR tenant_id = $1::uuid)
-  AND subscription_id > $2::uuid
+  AND ($2::uuid IS NULL
+       OR subscription_id > $2::uuid)
 ORDER BY subscription_id ASC
-LIMIT $3
+LIMIT $3::int
 `
 
+// Cursor pagination with optional tenant filter. The after_id branch
+// MUST be wrapped in `IS NULL OR …` — first-page callers pass
+// uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
+// `subscription_id > NULL` yields zero rows. Keep this shape on every
+// cursor query in the package.
 func (q *Queries) ListEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, pageSize int32) ([]EventSubscription, error) {
 	rows, err := q.db.Query(ctx, listEventSubscriptions, tenantID, afterID, pageSize)
 	if err != nil {

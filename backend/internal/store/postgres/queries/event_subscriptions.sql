@@ -10,13 +10,19 @@ FROM event_subscriptions
 WHERE subscription_id = $1;
 
 -- name: ListEventSubscriptions :many
+-- Cursor pagination with optional tenant filter. The after_id branch
+-- MUST be wrapped in `IS NULL OR …` — first-page callers pass
+-- uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
+-- `subscription_id > NULL` yields zero rows. Keep this shape on every
+-- cursor query in the package.
 SELECT subscription_id, tenant_id, cel_filter, sink_kind, sink_config,
        disabled, resource_version, created_at, updated_at
 FROM event_subscriptions
 WHERE (sqlc.narg('tenant_id')::uuid IS NULL OR tenant_id = sqlc.narg('tenant_id')::uuid)
-  AND subscription_id > sqlc.arg('after_id')::uuid
+  AND (sqlc.narg('after_id')::uuid IS NULL
+       OR subscription_id > sqlc.narg('after_id')::uuid)
 ORDER BY subscription_id ASC
-LIMIT sqlc.arg('page_size');
+LIMIT sqlc.arg('page_size')::int;
 
 -- name: UpdateEventSubscription :execrows
 UPDATE event_subscriptions

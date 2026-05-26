@@ -57,18 +57,14 @@ func (r *EventSubscriptionRepoV2) List(ctx context.Context, args admindomain.Lis
 	if args.TenantID != uuid.Nil {
 		tenant = pgUUIDOptional(args.TenantID)
 	}
-	// AfterID must always be a VALID pgtype.UUID (not NULL) — the
-	// SQL is `subscription_id > $2::uuid`, and Postgres three-valued
-	// logic evaluates `x > NULL` as NULL → row excluded. pgUUID(uuid.Nil)
-	// returns Valid:false (NULL), which silently matches zero rows on
-	// the first page when no AfterID is supplied. Force the value to
-	// be valid even for the zero UUID: `subscription_id > '00000000…'`
-	// is true for every real UUID, giving the intended "start from
-	// the beginning" semantics. Bug surfaced in dispatcher integration
-	// tests — Dispatch.Store.List was returning zero subs for any
-	// AfterID-Nil call, which would have silently broken outbox
-	// fan-out the moment the first real producer wired up.
-	afterID := pgtype.UUID{Bytes: args.AfterID, Valid: true}
+	// AfterID maps to a nullable pgtype.UUID: uuid.Nil → NULL → SQL
+	// IS-NULL branch fires → "start from the beginning". The query
+	// guards `subscription_id > $2 OR $2 IS NULL` so a NULL cursor is
+	// the canonical first-page sentinel. (Earlier bandaid forced
+	// Valid:true even for uuid.Nil; that worked for the first page
+	// but broke once we centralised on the IS-NULL OR pattern across
+	// all cursor queries in the package.)
+	afterID := pgUUIDOptional(args.AfterID)
 	rows, err := r.q.ListEventSubscriptions(ctx, tenant, afterID, pageSize)
 	if err != nil {
 		return nil, "", err

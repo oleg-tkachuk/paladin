@@ -37,6 +37,11 @@ FROM storage_backends
 WHERE id = $1;
 
 -- name: ListStorageBackends :many
+-- Cursor pagination. The IS-NULL guard is mandatory: callers may pass
+-- an empty/NULL cursor on the first page, and a bare `id > NULL`
+-- evaluates to NULL → zero rows (the same trap that bit
+-- ListUsersByTenant). Keep the `sqlc.narg(after_id) IS NULL OR …`
+-- shape on every cursor query in this package.
 SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
@@ -44,9 +49,10 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        cedar_policy, cedar_policy_hash,
        resource_version, created_at, updated_at
 FROM storage_backends
-WHERE id > $1
+WHERE (sqlc.narg('after_id')::text IS NULL
+       OR id > sqlc.narg('after_id')::text)
 ORDER BY id ASC
-LIMIT $2;
+LIMIT sqlc.arg('page_size')::int;
 
 -- name: UpdateStorageBackend :execrows
 UPDATE storage_backends
