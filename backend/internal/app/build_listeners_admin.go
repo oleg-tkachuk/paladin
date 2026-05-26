@@ -144,7 +144,13 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
 			RequireOnCreate: true,
 		}),
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
+		// Audit writer: deps.AsyncAudit wraps repos.Audit with a
+		// bounded buffer + background flush. The audit interceptor
+		// sees the same AuditWriter shape; the difference is Insert
+		// now returns in microseconds instead of waiting on the
+		// Postgres round-trip. Run() of AsyncAudit is registered as
+		// a BackgroundJob from BuildSharedDeps.
+		middleware.AuditWithMirror(deps.AsyncAudit, auth.AudienceAdmin, false,
 			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
 	)
 

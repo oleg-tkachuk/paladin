@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/audit"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -55,6 +56,21 @@ type SharedDeps struct {
 	// APIToken is the hashed-bearer M2M auth primitive. Nil when
 	// cfg.APIToken.Enabled is false; callers must guard.
 	APIToken *APITokenBundle
+
+	// AsyncAudit wraps Repos.Audit with bounded buffering + a
+	// background flush goroutine. Mutating RPCs queue the audit row
+	// instead of paying the Postgres-Insert latency on the response
+	// path. Listener processes (serve api / serve admin) MUST add
+	// AsyncAuditJob() to the BackgroundJobs they hand to NewContainer,
+	// otherwise Insert will block forever on the channel.
+	AsyncAudit *audit.AsyncWriter
+
+	// BackgroundJobs are the goroutines a listener process must run
+	// alongside its HTTP handlers — today just AsyncAudit. Workers
+	// have their own BuildBackgroundJobs path and don't read this
+	// field. Kept on SharedDeps (not returned separately) so listener
+	// build sites can pull the same shared instance.
+	BackgroundJobs []BackgroundJob
 }
 
 // BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
@@ -145,6 +161,16 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, fmt.Errorf("app: api_token bundle: %w", err)
 	}
 	deps.APIToken = apiTok
+
+	// Async audit. Wraps the synchronous adapter so the audit
+	// interceptor's Insert returns immediately; a background
+	// goroutine batches writes to Postgres. The wrapper is also
+	// registered as a BackgroundJob — listener processes pull
+	// deps.BackgroundJobs into their App container.
+	deps.AsyncAudit = audit.NewAsyncWriter(repos.Audit, audit.AsyncWriterConfig{
+		Logger: l.Named("audit-async"),
+	})
+	deps.BackgroundJobs = append(deps.BackgroundJobs, deps.AsyncAudit)
 
 	return deps, nil
 }
