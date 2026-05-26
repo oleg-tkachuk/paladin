@@ -101,6 +101,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		IAMApiKey:     adapters.NewApiKeyRepo(db.Queries),
 		IAMRefresh:    adapters.NewRefreshTokenRepo(db.Queries),
 		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
+		Idempotency:   adapters.NewIdempotencyRepo(db.Queries),
 	}
 	storage := wire.Storage{
 		Object:      s3c,

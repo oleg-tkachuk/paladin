@@ -53,6 +53,7 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/internal/middleware"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
@@ -145,6 +146,12 @@ type Repos struct {
 	IAMApiKey     authstore.ApiKeyRepository
 	IAMRefresh    authstore.RefreshTokenRepository
 	ObjectVersion object.VersionRepository
+
+	// Idempotency is the per-(tenant, method, key) response cache used
+	// by the Create* enforcement gate (see internal/middleware/idempotency.go).
+	// The gate itself only checks header presence today; per-handler
+	// memoize will read/write via this repo when it lands.
+	Idempotency middleware.IdempotencyStore
 }
 
 // Storage bundles the storage-side adapters. Every handler package declares

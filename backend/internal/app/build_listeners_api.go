@@ -177,6 +177,18 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		apiTokIAM = auth.APITokenInterceptor(nil, "")
 	}
 
+	// Shared Idempotency-Key gate (see internal/middleware/idempotency.go).
+	// RequireOnCreate=true rejects any Create* RPC without an
+	// `Idempotency-Key` header. Both data and iam planes opt in:
+	//   - data plane: UploadObject/CompleteObject/... (in the future
+	//     Create* MultipartUpload, etc.) — retries on a flaky network
+	//     must collapse on the same object.
+	//   - iam plane: CreateUser, CreateApiKey — operator double-click
+	//     on the admin UI must not duplicate users / leak api keys.
+	idempotencyInterceptor := middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
+		RequireOnCreate: true,
+	})
+
 	dataOpts := connect.WithInterceptors(
 		auth.Interceptor(verifierData),
 		auth.RequireAudience(auth.AudienceData),
@@ -184,6 +196,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		apiTokData,
 		middleware.NewQuotaSoftCheck(repos.Quota),
 		connect.UnaryInterceptorFunc(validateInterceptor),
+		idempotencyInterceptor,
 	)
 	iamOpts := connect.WithInterceptors(
 		auth.NewPermissiveInterceptor(verifierIAM,
@@ -194,6 +207,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		apiTokIAM,
 		middleware.NewLoginRateLimiter(),
 		connect.UnaryInterceptorFunc(validateInterceptor),
+		idempotencyInterceptor,
 	)
 
 	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
