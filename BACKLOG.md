@@ -1091,6 +1091,134 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Architecture (post-review 2026-05)
+
+### Per-tenant S3 bucket layout
+
+- **Status:** Deferred — explicitly held for product discussion
+- **Reason:** Today every tenant lands inside one shared physical
+  S3 bucket keyed by `tenants/<tenant_uuid>/buckets/<logical>/…`. A
+  per-tenant *physical* bucket would simplify IAM blast radius
+  (one AWS-side policy per tenant), unlock lifecycle / replication
+  rules per customer, and remove the prefix-scan hotspot on the
+  shared listing index. It would also complicate provisioning,
+  multiply per-account bucket-quota pressure, fork the storage
+  cost model, and require a backfill plan for existing data.
+- **Definition of Done:** the user explicitly signals "go" — not
+  before. When greenlit, design must cover: (1) provisioning flow
+  (synchronous on CreateTenant vs async via outbox), (2) bucket
+  naming + region pinning, (3) migration of existing tenants
+  (rename in place via prefix copy, or treat legacy tenants as
+  shared-bucket forever and only new tenants get their own bucket),
+  (4) cost-attribution wiring (bucket name → tenant), (5) cleanup
+  on PurgeTenant.
+- **Blockers:** product decision. Do NOT start design without an
+  explicit user request.
+
+### paladin-worker split out of the monolith
+
+- **Status:** Aspirational
+- **Reason:** Today all planes — api, admin, iam, mcp, worker,
+  ingest — run inside one Go binary, multiplexed by HTTP listener.
+  The worker is the obvious first candidate to peel off: it owns
+  the SKIP-LOCKED outbox loop, it scales orthogonally to RPC
+  traffic, and a stuck dispatcher today can starve RPC handlers'
+  goroutines in the same process. Splitting it gives independent
+  rollout, independent HPA, and clearer ownership boundaries.
+- **Definition of Done:**
+  - New `cmd/worker` binary (or reuse `cmd/server --mode=worker`
+    via the existing mode flag).
+  - Helm chart adds a dedicated Deployment + ServiceAccount with
+    only the outbox-write / event-publish IAM the worker needs
+    (no public RPC roles).
+  - Health probes wired to the dispatcher loop, not just /healthz.
+  - The in-process worker shim in `cmd/server/serve_dispatcher.go`
+    becomes opt-in for dev/minikube only.
+- **Blockers:** none — but sequence after audit-outbox lands so we
+  don't ship two competing dispatchers.
+
+### Redis capability counter cache
+
+- **Status:** Aspirational
+- **Reason:** Capability tokens currently lean on Postgres for
+  usage counters (calls / bytes per token) via the `UsageStore`.
+  Under heavy presign traffic the row-lock per capability creates
+  contention on a single hot row. A Redis INCR (with periodic
+  flush back to Postgres via the outbox) collapses that into a
+  ~µs op.
+- **Definition of Done:**
+  - Cache-aside `UsageStore` impl backed by Redis + periodic
+    flush goroutine.
+  - Bounded staleness contract documented (e.g. ≤ 5 s lag on the
+    capability list page).
+  - Feature flag to fall back to direct-Postgres if Redis is
+    unreachable.
+- **Blockers:** none.
+
+### NATS JetStream as the event bus
+
+- **Status:** Aspirational
+- **Reason:** Events today flow Postgres → outbox poller →
+  per-subscription HTTP sink. Adding NATS JetStream between the
+  outbox writer and the dispatcher gives durable fan-out, replay
+  windows, and downstream consumers (analytics, search index)
+  without further widening the SQL outbox table.
+- **Definition of Done:**
+  - JetStream stream provisioned via the chart.
+  - Outbox writer publishes to JetStream subjects; current HTTP
+    dispatcher becomes one consumer among others.
+  - Replay tooling (rebuild a sink from sequence N).
+- **Blockers:** operator preference (NATS vs Kafka vs Redpanda).
+
+### OpenTelemetry baseline (traces + metrics + logs)
+
+- **Status:** Aspirational
+- **Reason:** Today the only structured signal is access logs.
+  Cross-plane debugging — "this presign call took 1.4 s, why?" —
+  needs OTel spans across HTTP → Connect handler → sqlc → S3
+  signer, plus RED metrics on every RPC.
+- **Definition of Done:**
+  - `otel-go` SDK wired in `cmd/server/main.go` with OTLP exporter.
+  - Connect interceptor that names spans from RPC method.
+  - pgx tracer plugged into the pool.
+  - Helm chart wires `OTEL_EXPORTER_OTLP_ENDPOINT` to whatever
+    collector the cluster runs.
+  - Dashboards committed under `deploy/grafana/`.
+- **Blockers:** collector choice (Tempo? Honeycomb? Datadog?).
+
+### Frontend Playwright suite
+
+- **Status:** Aspirational
+- **Reason:** UI regressions today are caught by manual smoke
+  testing on minikube. The login / auth-gate / tenant-switch /
+  bucket-browser flows are stable enough for E2E coverage.
+- **Definition of Done:**
+  - `frontend/tests/` with Playwright config and CI workflow.
+  - Coverage: login, AuthGate redirect-with-?next, tenant scope
+    switcher, bucket list & object key open, capability create
+    + revoke, tenant restore from trash.
+  - CI runs against a docker-compose stack of the backend +
+    Postgres + a fake S3 (minio).
+- **Blockers:** none.
+
+### SealedSecrets for prod-class clusters
+
+- **Status:** Aspirational
+- **Reason:** Minikube uses plain Kubernetes Secrets seeded from
+  the helm values. A prod cluster needs the chart values
+  (`auth.signingKeySecret`, `s3.adminCredentialsSecretRef`, etc.)
+  encrypted-at-rest in git.
+- **Definition of Done:**
+  - SealedSecrets controller installed via gitops.
+  - Chart switches to referencing pre-existing Secrets (already
+    the contract today), and the SealedSecret YAML lives in
+    gitops alongside the ApplicationSet.
+  - Bootstrap docs walk through `kubeseal --raw`.
+- **Blockers:** decision between SealedSecrets vs external-secrets
+  with Vault.
+
+---
+
 ## Documentation
 
 _(no documentation items currently deferred)_
