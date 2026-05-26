@@ -1093,6 +1093,30 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Architecture (post-review 2026-05)
 
+### Table-backed audit outbox for crash-durability
+
+- **Status:** Aspirational
+- **Reason:** `internal/audit/async_writer.go` removes Postgres-Insert
+  latency from the mutating-RPC path but in-flight entries are lost
+  on `kill -9` / pod eviction (bounded to ~one MaxBatch worth, but
+  non-zero). Compliance regimes that require "every observed mutation
+  shows up in audit_log even across crashes" need a real outbox:
+  the request handler synchronously writes to a tiny `audit_outbox`
+  table inside its own tx, then a dispatcher worker drains
+  outbox → audit_log under SKIP LOCKED.
+- **Definition of Done:**
+  - Migration adds `audit_outbox(entry_id UUID PK, payload JSONB,
+    enqueued_at TIMESTAMPTZ)` with the same indexes as event_deliveries.
+  - audit.AsyncWriter swaps to "tx-write to outbox" semantics; the
+    flusher worker reads from outbox not the in-memory channel.
+  - The flusher reuses the same SKIP-LOCKED claim pattern as
+    event_dispatcher.
+  - On successful audit_log insert the outbox row is deleted in the
+    same tx.
+- **Blockers:** none — but only worth doing once the in-memory
+  loss-rate becomes measurable in practice. Today the wrapper logs
+  drains and we can monitor.
+
 ### CNPG HA replicas in the PALADIN chart
 
 - **Status:** Aspirational
