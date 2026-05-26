@@ -1093,6 +1093,46 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Architecture (post-review 2026-05)
 
+### Per-handler idempotency memoize / replay
+
+- **Status:** Aspirational
+- **Reason:** Backend now enforces an `Idempotency-Key` header on every
+  Create* RPC (see `internal/middleware/idempotency.go`,
+  `RequireOnCreate=true` on all three planes; frontend auto-injects a
+  UUID via the transport interceptor). What's not yet wired:
+  **response replay** — a retried Create with the same key should
+  return the cached prior response and NOT create a duplicate.
+
+  The naive design (cache Get → next → Put inside the connect
+  interceptor) is architecturally impossible: `connect.AnyResponse`
+  has an unexported `internalOnly()` marker, so middleware cannot
+  reconstruct a typed `*connect.Response[T]` from cached bytes on
+  replay (we'd need static T, which we don't have).
+
+  The correct shape is the Stripe / AWS-API-Gateway pattern:
+  per-handler memoization via the resource table itself. Each
+  Create* handler does `INSERT … (idempotency_key, …) ON CONFLICT
+  (tenant_id, idempotency_key) DO NOTHING RETURNING resource` against
+  its own resource table. On replay, the conflict path looks up and
+  returns the existing resource — fully wire-correct, no middleware
+  response-capture acrobatics.
+- **Definition of Done:**
+  - Migration adds `idempotency_key UUID NULL` + a partial unique
+    index `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT
+    NULL` to every Create* target table (tenants, buckets, users,
+    api_keys, capabilities, event_subscriptions, …).
+  - Each Create* handler reads the header via
+    `middleware.IdempotencyKeyFromHeader(req)` and threads it
+    through to the adapter INSERT.
+  - On ON-CONFLICT-DO-NOTHING returning zero rows, the handler does
+    a follow-up SELECT and returns the existing resource as if it
+    had just been created.
+  - The shared `idempotency_keys` table (and the postgres adapter +
+    purger worker for it) is retired — per-handler memoize replaces
+    it.
+- **Blockers:** none — purely engineering. Sequence after audit
+  outbox lands so the migration train stays linear.
+
 ### Per-tenant S3 bucket layout
 
 - **Status:** Deferred — explicitly held for product discussion
