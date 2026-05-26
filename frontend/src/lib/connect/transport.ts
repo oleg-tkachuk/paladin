@@ -32,6 +32,39 @@ import {
  * 1:1 user-tenant refactor — there's no impersonation surface in the UI).
  */
 
+/**
+ * Idempotency-Key auto-injection.
+ *
+ * Backend enforces an `Idempotency-Key` header on every Create* RPC
+ * (see backend internal/middleware/idempotency.go,
+ * RequireOnCreate=true on all three planes). A missing header gets
+ * rejected with InvalidArgument before the handler runs. To keep
+ * call sites unaware of this, the transport auto-injects a fresh
+ * UUID on any RPC whose method name starts with `Create`, unless the
+ * caller already set one (e.g. an explicit retry that wants to
+ * collapse onto the original key).
+ *
+ * Why UUID v4 (crypto.randomUUID) and not v7: v7 needs an extra dep
+ * and the embedded timestamp gives the server nothing useful here —
+ * the key is opaque to the server. v4's 122-bit space is more than
+ * enough collision-resistance.
+ *
+ * Scope: only Create*. List/Get/Update/Delete are either idempotent
+ * by definition (reads) or already keyed by their resource ID
+ * (updates / deletes carry the ID). The gate on the server
+ * deliberately matches the same Create* shape, so the two sides
+ * agree without an explicit allowlist.
+ */
+const idempotencyInterceptor: Interceptor = (next) => async (req) => {
+  if (
+    req.method.name.startsWith("Create") &&
+    !req.header.has("Idempotency-Key")
+  ) {
+    req.header.set("Idempotency-Key", crypto.randomUUID());
+  }
+  return next(req);
+};
+
 const loggingInterceptor: Interceptor = (next) => async (req) => {
   try {
     return await next(req);
@@ -123,7 +156,15 @@ function authInterceptorFor(audience: Audience): Interceptor {
 function makePlaneTransport(plane: Plane, audience: Audience): Transport {
   return createConnectTransport({
     baseUrl: `${RPC_API_PREFIX}${RPC_PLANE_PREFIXES[plane]}`,
-    interceptors: [loggingInterceptor, authInterceptorFor(audience)],
+    // Order: idempotency runs first (header injection happens
+    // before auth/logging see the request). Auth has to wrap the
+    // network call so 401 self-heal works; logging is outermost so
+    // it observes the final outcome.
+    interceptors: [
+      idempotencyInterceptor,
+      loggingInterceptor,
+      authInterceptorFor(audience),
+    ],
   });
 }
 
