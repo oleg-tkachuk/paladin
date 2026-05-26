@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -43,6 +44,18 @@ type IdempotencyConfig struct {
 	TTL time.Duration
 	// SkipMethods are RPC names that bypass this middleware (e.g. read-only).
 	SkipMethods map[string]bool
+	// RequireOnCreate, when true, rejects any RPC whose procedure name
+	// includes `/Create` (case-sensitive — Connect routes are CamelCase,
+	// e.g. `/paladin.admin.v1.TenantService/CreateTenant`) without an
+	// Idempotency-Key header. The check fires BEFORE auth-binding, so
+	// it doesn't depend on TenantFromContext resolving; the goal is to
+	// make every mutation that produces a resource have a client-owned
+	// replay sentinel. Returns CodeInvalidArgument with a stable
+	// "idempotency: missing Idempotency-Key header" message so clients
+	// can detect the shape and retry with one. Defaults to false to
+	// preserve drop-in behaviour; flip in production once clients are
+	// guaranteed to inject the header (admin UI, MCP, capability CLI).
+	RequireOnCreate bool
 }
 
 // NewIdempotencyInterceptor returns a Connect interceptor that implements
@@ -67,6 +80,14 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		}
 		key := req.Header().Get(idempotencyHeader)
 		if key == "" {
+			// Enforcement: every Create* RPC must carry a header so
+			// retries collapse to one resource. SkipMethods above wins
+			// (lets us opt out of a specific endpoint if needed, e.g.
+			// internal seeding RPCs that already are upserts).
+			if i.cfg.RequireOnCreate && isCreateMethod(method) {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					errors.New("idempotency: missing Idempotency-Key header"))
+			}
 			return next(ctx, req)
 		}
 		tenantID, err := auth.TenantFromContext(ctx)
@@ -158,3 +179,20 @@ func RecordResponse(ctx context.Context, body []byte) error {
 // newly-computed hash on replay — indicates the client reused a key with a
 // different request body.
 var ErrReplayMismatch = errors.New("idempotency: stored response hash mismatch")
+
+// isCreateMethod reports whether the Connect procedure name corresponds
+// to a resource-creating RPC. We match on the last path segment to avoid
+// false positives on a hypothetical service whose name contains "Create"
+// (e.g. `CreateOrderHistoryService/ListOrders` — we want the ListOrders
+// shape, not the service prefix). Connect procedure strings are always
+// `/<package>.<Service>/<Method>` per the spec.
+func isCreateMethod(procedure string) bool {
+	if procedure == "" {
+		return false
+	}
+	idx := strings.LastIndex(procedure, "/")
+	if idx < 0 || idx == len(procedure)-1 {
+		return false
+	}
+	return strings.HasPrefix(procedure[idx+1:], "Create")
+}
