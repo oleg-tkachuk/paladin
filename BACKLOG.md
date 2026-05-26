@@ -1093,45 +1093,30 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Architecture (post-review 2026-05)
 
-### Per-handler idempotency memoize / replay
+### CNPG HA replicas in the PALADIN chart
 
 - **Status:** Aspirational
-- **Reason:** Backend now enforces an `Idempotency-Key` header on every
-  Create* RPC (see `internal/middleware/idempotency.go`,
-  `RequireOnCreate=true` on all three planes; frontend auto-injects a
-  UUID via the transport interceptor). What's not yet wired:
-  **response replay** — a retried Create with the same key should
-  return the cached prior response and NOT create a duplicate.
-
-  The naive design (cache Get → next → Put inside the connect
-  interceptor) is architecturally impossible: `connect.AnyResponse`
-  has an unexported `internalOnly()` marker, so middleware cannot
-  reconstruct a typed `*connect.Response[T]` from cached bytes on
-  replay (we'd need static T, which we don't have).
-
-  The correct shape is the Stripe / AWS-API-Gateway pattern:
-  per-handler memoization via the resource table itself. Each
-  Create* handler does `INSERT … (idempotency_key, …) ON CONFLICT
-  (tenant_id, idempotency_key) DO NOTHING RETURNING resource` against
-  its own resource table. On replay, the conflict path looks up and
-  returns the existing resource — fully wire-correct, no middleware
-  response-capture acrobatics.
+- **Reason:** Minikube runs a single-instance CNPG `Cluster` and the
+  PALADIN chart accepts that as the default. Production-class deploys
+  need ≥2 replicas with synchronous quorum, a PodDisruptionBudget,
+  and an explicit failover policy. The chart already templates
+  `cluster.yaml` but doesn't expose `instances`, `minSyncReplicas`,
+  `maxSyncReplicas`, or `affinity`/`topologySpreadConstraints` as
+  Helm values — operators today hand-edit the generated cluster.
 - **Definition of Done:**
-  - Migration adds `idempotency_key UUID NULL` + a partial unique
-    index `(tenant_id, idempotency_key) WHERE idempotency_key IS NOT
-    NULL` to every Create* target table (tenants, buckets, users,
-    api_keys, capabilities, event_subscriptions, …).
-  - Each Create* handler reads the header via
-    `middleware.IdempotencyKeyFromHeader(req)` and threads it
-    through to the adapter INSERT.
-  - On ON-CONFLICT-DO-NOTHING returning zero rows, the handler does
-    a follow-up SELECT and returns the existing resource as if it
-    had just been created.
-  - The shared `idempotency_keys` table (and the postgres adapter +
-    purger worker for it) is retired — per-handler memoize replaces
-    it.
-- **Blockers:** none — purely engineering. Sequence after audit
-  outbox lands so the migration train stays linear.
+  - `values.yaml` adds a `postgres.ha` block:
+    `instances`, `minSyncReplicas`, `maxSyncReplicas`,
+    `synchronousReplication.method`, `pdb.minAvailable`.
+  - `values-prod.yaml` ships sane HA defaults (3 instances, sync
+    quorum 1).
+  - `templates/cluster.yaml` wires the block into the CNPG
+    `Cluster.spec.{instances, minSyncReplicas, maxSyncReplicas,
+    affinity, topologySpreadConstraints}` and adds a sibling
+    PodDisruptionBudget gated by `postgres.ha.pdb.enabled`.
+  - `backend-chart-verify` lefthook task gains a snapshot test
+    that diff's the rendered Cluster against committed golden
+    output for each environment.
+- **Blockers:** none.
 
 ### Per-tenant S3 bucket layout
 
