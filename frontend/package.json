@@ -9,7 +9,12 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "generate": "buf generate ../backend/proto --include-imports"
+    "generate": "buf generate ../backend/proto --include-imports",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:stack": "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up",
+    "test:e2e:stack:down": "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v"
   },
   "dependencies": {
     "@connectrpc/connect": "^2.1.1",
@@ -35,6 +40,7 @@
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.70.0",
+    "@playwright/test": "^1.60.0",
     "@bufbuild/protobuf": "^2.12.0",
     "@bufbuild/protoc-gen-es": "^2.12.0",
     "@tailwindcss/postcss": "^4",

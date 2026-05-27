@@ -27,14 +27,14 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Purpose**: Install Playwright + Chromium and create the directory skeleton. No tests run yet — these tasks just make the stack ready.
 
-- [ ] T001 Setup `frontend/` package manager + Playwright. Per Constitution II (single-scope commits), ship as **two sequential commits in this order**:
+- [X] T001 Setup `frontend/` package manager + Playwright. Per Constitution II (single-scope commits), ship as **two sequential commits in this order**:
     1. **`build(frontend): migrate package manager from npm to pnpm`** (R-008, Clarification Q6) — (a) `corepack enable && corepack prepare pnpm@11.3.0 --activate`; (b) delete `frontend/package-lock.json`; (c) add `"packageManager": "pnpm@11.3.0"` to `frontend/package.json`; (d) from `frontend/`, run `pnpm install` — generates `pnpm-lock.yaml`; (e) sanity-check `pnpm run dev / lint / build` paths still resolve (pnpm scripts mirror npm's). **Workspace-wide tool swap** — call it out explicitly in the commit message because the change reaches beyond the e2e folder.
     2. **`build(frontend): add @playwright/test devDep`** — add `@playwright/test@^1.60.0` to `frontend/package.json` `devDependencies`; from `frontend/`, run `pnpm install` to write the lock entry.
-- [ ] T002 Add scripts (`test:e2e`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:stack`, `test:e2e:stack:down`) to `frontend/package.json` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"package.json scripts (additions)"
-- [ ] T003 Run `pnpm exec playwright install chromium --with-deps` from `frontend/` to fetch the browser binary
-- [ ] T004 [P] Create the directory skeleton: `frontend/tests/e2e/`, `frontend/tests/e2e/fixtures/`, `frontend/tests/e2e/test-results/`
-- [ ] T005 [P] Append `frontend/tests/e2e/test-results/` and `frontend/test-results/` to `frontend/.gitignore`
-- [ ] T006 [P] Create `frontend/playwright.config.ts` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"playwright.config.ts (root config)" — Chromium-only `projects`, `webServer` wired to docker-compose.test.yaml, retries 0 locally / 1 on `CI`, baseURL `http://localhost:3000`, screenshot/video/trace `retain-on-failure`
+- [X] T002 Add scripts (`test:e2e`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:stack`, `test:e2e:stack:down`) to `frontend/package.json` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"package.json scripts (additions)"
+- [X] T003 Run `pnpm exec playwright install chromium --with-deps` from `frontend/` to fetch the browser binary
+- [X] T004 [P] Create the directory skeleton: `frontend/tests/e2e/`, `frontend/tests/e2e/fixtures/`, `frontend/tests/e2e/test-results/`
+- [X] T005 [P] Append `frontend/tests/e2e/test-results/` and `frontend/test-results/` to `frontend/.gitignore`
+- [X] T006 [P] Create `frontend/playwright.config.ts` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"playwright.config.ts (root config)" — Chromium-only `projects`, `webServer` wired to docker-compose.test.yaml, retries 0 locally / 1 on `CI`, baseURL `http://localhost:3000`, screenshot/video/trace `retain-on-failure`
 
 **Checkpoint**: After T006 `pnpm exec playwright test --list` should print "no tests found" cleanly (no syntax error on config).
 
