@@ -98,12 +98,12 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Independent test**: Run `pnpm exec playwright test buckets.spec.ts`. Three scenarios per [spec.md](spec.md) §US3.
 
-- [ ] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential.) **Note**: `seedBucket(opts)` was pulled forward into the Phase 4 (US2) commit because the repurposed scope-switching tests needed at least one bucket. T024 is now smaller than originally specified.
-- [ ] T025 [US3] Create `frontend/tests/e2e/buckets.spec.ts` with a `beforeEach` that logs in, seeds one tenant, one bucket, and one ObjectKey, capturing all three for assertions.
-- [ ] T026 [US3] Implement scenario "bucket list shows seeded bucket" in `buckets.spec.ts`: navigate to `/buckets` (scope=seeded tenant), assert a row matching the seeded bucket's `displayName` is visible.
-- [ ] T027 [US3] Implement scenario "bucket detail opens ObjectKeys panel" in `buckets.spec.ts`: click the bucket row, wait for the detail page, assert the ObjectKeys panel is visible and shows the seeded key's name.
-- [ ] T028 [US3] Implement scenario "ObjectKey detail renders policy editor" in `buckets.spec.ts`: click the ObjectKey row, assert the canonical resource name string appears AND the Cedar policy editor textarea is visible.
-- [ ] T029 [US3] Run `pnpm exec playwright test buckets.spec.ts` ten times consecutively; zero flake.
+- [X] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential.) **Note**: `seedBucket(opts)` was pulled forward into the Phase 4 (US2) commit because the repurposed scope-switching tests needed at least one bucket. T024 is now smaller than originally specified.
+- [X] T025 [US3] Create `frontend/tests/e2e/buckets.spec.ts` with a `beforeEach` that logs in, seeds one tenant, one bucket, and one ObjectKey, capturing all three for assertions.
+- [X] T026 [US3] Implement scenario "bucket list shows seeded bucket" in `buckets.spec.ts`: navigate to `/buckets` (scope=seeded tenant), assert a row matching the seeded bucket's `displayName` is visible.
+- [X] T027 [US3] Implement scenario "bucket detail opens ObjectKeys panel" in `buckets.spec.ts`: click the bucket row, wait for the detail page, assert the ObjectKeys panel is visible and shows the seeded key's name.
+- [X] T028 [US3] Implement scenario "ObjectKey detail renders policy editor" in `buckets.spec.ts`: click the ObjectKey row, assert the canonical resource name string appears AND the Cedar policy editor textarea is visible.
+- [~] T029 [US3] Run `pnpm exec playwright test buckets.spec.ts` ten times consecutively; zero flake. **DEFERRED to operator runtime** — requires full stack up. Static gates verified: tsc clean; playwright discovers 3 scenarios.
 
 **Checkpoint**: US3 done. Day-1 operator path covered.
 

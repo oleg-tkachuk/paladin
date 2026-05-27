@@ -26,6 +26,7 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
+import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
 
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName } from "./unique";
@@ -88,6 +89,10 @@ function tenantAdminClient() {
 
 function bucketAdminClient() {
   return createClient(BucketService, adminTransport());
+}
+
+function objectKeyAdminClient() {
+  return createClient(ObjectKeyService, adminTransport());
 }
 
 // ─── seeded entity shapes ──────────────────────────────────
@@ -198,4 +203,49 @@ export async function seedBucket(opts?: {
   return { backendId, bucketName, displayName };
 }
 
-// seedObjectKey arrives in Phase 5 (US3). Not needed by US1 or US2.
+// ─── object_key seeding ────────────────────────────────────
+
+export interface SeededObjectKey {
+  tenantId: string;
+  /** Bucket resource name: `storageBackends/{backend}/buckets/{name}`. */
+  bucket: string;
+  /** ObjectKey identifier — `e2e/<8-hex>`. */
+  objectKey: string;
+  displayName: string;
+}
+
+/**
+ * Create an ObjectKey under the given (tenant, bucket) via
+ * ObjectKeyService.CreateObjectKey. The key path is
+ * `e2e/<8-hex>` so concurrent tests don't collide on the
+ * (tenant_id, object_key) UNIQUE constraint.
+ */
+export async function seedObjectKey(opts: {
+  tenantId: string;
+  bucket: SeededBucket;
+  objectKeyPrefix?: string;
+}): Promise<SeededObjectKey> {
+  const objectKey = `e2e/${uniqueSlug(opts.objectKeyPrefix ?? "key").replace(/^[^-]+-/, "")}`;
+  const displayName = uniqueDisplayName("E2E Key");
+  const bucketResourceName = `storageBackends/${opts.bucket.backendId}/buckets/${opts.bucket.bucketName}`;
+  const client = objectKeyAdminClient();
+  await client.createObjectKey({
+    parent: `tenants/${opts.tenantId}`,
+    objectKey,
+    objectKeyResource: {
+      $typeName: "paladin.admin.v1.ObjectKey",
+      name: "",
+      tenantId: opts.tenantId,
+      objectKey,
+      displayName,
+      bucket: bucketResourceName,
+      cedarPolicy: "",
+    } as never,
+  });
+  return {
+    tenantId: opts.tenantId,
+    bucket: bucketResourceName,
+    objectKey,
+    displayName,
+  };
+}
