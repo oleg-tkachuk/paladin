@@ -20,6 +20,7 @@
 # (see specs/001-frontend-playwright-e2e research.md R-008).
 
 ARG NODE_VERSION=25
+ARG PNPM_VERSION=11.3.0
 
 # -----------------------------------------------------------------------------
 # Stage 1 — deps. Pinned to BUILDPLATFORM so a multi-arch run doesn't
@@ -27,21 +28,20 @@ ARG NODE_VERSION=25
 # node_modules are pure JS).
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS deps
+ARG PNPM_VERSION
 
 # libc6-compat keeps prebuilt addons (sharp, swc) loadable on Alpine's
-# musl. Corepack ships with node; `enable` activates the pnpm shim and
-# the `prepare --activate` call pins the version from package.json.
-RUN apk add --no-cache libc6-compat
+# musl. `node:${VERSION}-alpine` ships npm but NOT corepack since
+# upstream removed it from official images — install pnpm directly to
+# match the local-dev pin in package.json's `packageManager` field.
+RUN apk add --no-cache libc6-compat && \
+    npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /app
 
 # Copy lockfile + manifest first so this layer caches across source-
 # only changes. pnpm-workspace.yaml holds the `allowBuilds` security
 # gate (see frontend/pnpm-workspace.yaml).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Activate the package-manager pin from package.json's
-# `packageManager` field. corepack respects the version.
-RUN corepack enable && corepack prepare --activate
 
 # `--frozen-lockfile` is the CI-safe install: fails fast if
 # pnpm-lock.yaml is out of date instead of silently re-resolving.
@@ -52,9 +52,10 @@ RUN pnpm install --frozen-lockfile
 # via NEXT_PUBLIC_-prefixed env vars (Next inlines them into the bundle).
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS builder
+ARG PNPM_VERSION
 
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@${PNPM_VERSION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
