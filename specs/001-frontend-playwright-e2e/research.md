@@ -36,41 +36,49 @@ findings on the technology choices the plan makes.
 
 ## R-002 — Garage as the S3-compatible backend
 
-- **Decision**: `dxflrs/garage:v2.3.x` (single binary,
-  `--single-node` mode).
+- **Decision**: Consume the **cluster-shared** Garage deployed
+  by `gitops/specs/001-garage-object-storage`. The e2e
+  docker-compose stack does NOT bring up its own Garage
+  sidecar — it points the PALADIN backend at the cluster service.
 - **Rationale**:
-  - Single-container deployment, env-var bootstrap
-    (`GARAGE_DEFAULT_ACCESS_KEY`, `GARAGE_DEFAULT_SECRET_KEY`,
-    `GARAGE_DEFAULT_BUCKET`) — matches the deterministic
-    test-stack-init shape we want.
-  - Rust runtime → low memory footprint (~50 MB resident),
-    fast cold start (<2s).
-  - Implements every S3 operation PALADIN backend actually calls:
-    `PutObject`, `GetObject`, `HeadObject`, `DeleteObject`,
-    `ListObjects(V2)`, `CreateBucket`, `DeleteBucket`,
-    Sigv4 auth, **presigned URLs**, multipart upload (the
-    critical surface for PALADIN's capability tokens and admin
-    object operations).
-- **Alternatives considered**:
-  - **MinIO**: equally capable, broader installed base. Same
-    bootstrap shape. Rejected because Garage aligns with the
-    "lightweight self-hosted OSS-first" stack philosophy of
-    the broader gitops, and is materially lighter on
-    resources for an identical-feature surface.
-  - **SeaweedFS**: matches the local minikube overlay but
-    needs ~4 containers (master + volume + filer + s3) — eats
-    the 3-minute budget.
-  - **LocalStack S3**: AWS-flavoured emulation, JVM-based, ~6s
-    cold start. Overkill — we don't need AWS-specific
-    behaviours.
-- **Risks**:
-  - Garage is missing S3-level object versioning and
-    object/bucket tagging. **Verified safe**: PALADIN tracks
+  - Single source of truth: one Garage instance per cluster,
+    shared by every consumer (PALADIN control plane, e2e tests,
+    future tooling). Avoids drift between
+    test-fixture-version vs prod-version.
+  - Same credentials path as production: the
+    `garage-paladin-credentials` K8s Secret in the `paladin`
+    namespace, populated by the gitops addon. Operator
+    extracts via `kubectl get secret` and exports as
+    `PALADIN_E2E_S3_ACCESS_KEY` / `_SECRET_KEY` env vars before
+    `compose up`. Compose fails fast (`?:` required-var
+    gate) if either is missing.
+  - Local docker-compose can't directly resolve the
+    in-cluster DNS name. Operator runs `kubectl port-forward
+    -n garage svc/garage-s3 3900:3900` in a separate
+    terminal; the backend containers then reach Garage via
+    `host.docker.internal:3900` (overridable via
+    `PALADIN_E2E_S3_ENDPOINT`).
+- **What Garage gives us**:
+  - Implements every S3 operation PALADIN backend actually
+    calls: `PutObject`, `GetObject`, `HeadObject`,
+    `DeleteObject`, `ListObjects(V2)`, `CreateBucket`,
+    `DeleteBucket`, Sigv4 auth, **presigned URLs**, multipart
+    upload (the critical surface for PALADIN's capability tokens
+    and admin object operations).
+  - Object versioning / tagging at the S3 layer are **not**
+    implemented by Garage. Confirmed safe: PALADIN tracks
     versions in the `object_versions` Postgres table and
-    tags in `object_tags`. Neither is implemented via S3
-    API calls from the PALADIN backend. (Confirmed by
-    `rtk grep "PutObjectTagging\|GetObjectVersion" backend/`
-    returning zero hits in the storage adapter.)
+    tags in `object_tags`. Neither hits S3 API calls.
+- **Alternatives considered**:
+  - **Spin up Garage in the test-stack docker-compose**:
+    initial design. Rejected per operator directive — Garage
+    is a platform service, not a test-fixture. Bundling it
+    would mean two Garage deployments to keep in sync.
+  - **MinIO**: equally capable, broader installed base.
+    Wrong shape for "consume a cluster service" — MinIO
+    isn't what gitops deploys.
+  - **SeaweedFS**: matches the local minikube overlay today,
+    but gitops is migrating to Garage; we follow.
 
 ## R-003 — Database isolation strategy
 
@@ -145,14 +153,16 @@ findings on the technology choices the plan makes.
     background jobs (event dispatch, outbox flush, MCP tool
     calls) that the UI tests don't drive. **Drop them from
     the test stack** to save container startups.
-  - Net topology: `postgres`, `paladin-migrate` (one-shot),
-    `paladin-bootstrap` (one-shot), `paladin-api`, `paladin-admin`,
-    `garage`, `paladin-ui`. Seven services, but four of them are
-    near-instant (postgres ready in ~3s, migrate ~5s,
-    bootstrap ~2s, garage <2s). Backend planes are the
-    bottleneck at ~8s each.
-  - Total cold-start ~30s. Suite runs 6 tests × ~15s avg ≈
-    1.5 min with 4 workers. Combined: ~2 min wall-clock —
+  - Net topology: `postgres`, `migrate` (one-shot),
+    `bootstrap` (one-shot), `api`, `admin`, `ui`. Six
+    services in compose; Garage is an EXTERNAL prerequisite
+    (port-forwarded from the cluster — see R-002).
+  - Three near-instant containers (postgres ~3s, migrate
+    ~5s, bootstrap ~2s) + three longer-running (api ~8s,
+    admin ~8s, ui ~5s).
+  - Total cold-start ~25s (Garage is already up in the
+    cluster, no boot cost). Suite runs 6 tests × ~15s avg
+    ≈ 1.5 min with 4 workers. Combined: ~2 min wall-clock —
     comfortably under the 3-minute SC-002 budget.
 - **Alternative considered and rejected**:
   - Multi-process container via `supervisord` running api +

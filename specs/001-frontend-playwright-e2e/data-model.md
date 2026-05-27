@@ -16,7 +16,7 @@ Materialised by `docker-compose.test.yaml`.
 |---|---|---|---|
 | `compose_project` | string | `paladin-e2e` | Isolates the test stack's containers/volumes from the dev-loop stack in `backend/deploy/docker-compose.yaml`. |
 | `network` | string | `paladin-e2e-net` | Project-scoped Docker network. |
-| `services` | service[] | see below | Seven services: `postgres`, `migrate`, `bootstrap`, `api`, `admin`, `garage`, `ui`. |
+| `services` | service[] | see below | Six services: `postgres`, `migrate`, `bootstrap`, `api`, `admin`, `ui`. Garage is an **external** cluster-shared dependency (`gitops/specs/001-garage-object-storage`), not a docker-compose service — operator port-forwards it before `compose up`. |
 | `lifecycle` | enum | `up → ready → tests-run → down` | `up`/`down` via `docker compose -p paladin-e2e -f frontend/tests/e2e/docker-compose.test.yaml up/down`. `ready` is when all services pass their healthchecks. |
 | `cleanup_policy` | enum | `volumes-removed-on-down` | Ephemeral. Every CI/local run starts from zero. |
 
@@ -67,15 +67,14 @@ Materialised by `docker-compose.test.yaml`.
 | Healthcheck | `/system/health.json` on `:8090` |
 | Depends on | `bootstrap` success |
 
-### Service: `garage`
+### External dependency: Garage
 
 | Field | Value |
 |---|---|
-| Image | `dxflrs/garage:v2.3.0` |
-| Command | `garage server --single-node --default-bucket paladin-e2e` |
-| Env | `GARAGE_DEFAULT_ACCESS_KEY=e2e-key`, `GARAGE_DEFAULT_SECRET_KEY=e2e-secret`, `GARAGE_DEFAULT_BUCKET=paladin-e2e` |
-| Ports | `3900:3900` (S3 API), `3902:3902` (admin) |
-| Healthcheck | `curl -f http://localhost:3902/health` |
+| Source | `gitops/specs/001-garage-object-storage` — deployed once per cluster, shared across consumers. |
+| In-cluster endpoint | `http://garage-s3.garage.svc.cluster.local:3900` |
+| Local-docker access | `kubectl port-forward -n garage svc/garage-s3 3900:3900` then the test-stack backend reaches it via `http://host.docker.internal:3900` (`PALADIN_E2E_S3_ENDPOINT` env var) |
+| Credentials | K8s Secret `garage-paladin-credentials` in namespace `paladin`. Operator exports `accessKeyId` + `secretAccessKey` as `PALADIN_E2E_S3_ACCESS_KEY` + `PALADIN_E2E_S3_SECRET_KEY` before `compose up` — required (compose fails fast otherwise). |
 
 ### Service: `ui`
 

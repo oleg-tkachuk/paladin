@@ -1,13 +1,24 @@
 # PALADIN E2E test stack — Playwright suite runtime.
 #
 # Spec: specs/001-frontend-playwright-e2e/data-model.md §"Entity:
-# Test Stack". Seven services: postgres, migrate, bootstrap, api,
-# admin, garage, ui. The worker / mcp / ingest / dispatcher planes
-# are deliberately ABSENT — the Playwright tests never exercise
-# background jobs (event dispatch, outbox flush, MCP tool calls)
-# (R-006).
+# Test Stack". SIX services: postgres, migrate, bootstrap, api,
+# admin, ui. The worker / mcp / ingest / dispatcher planes are
+# deliberately ABSENT — the Playwright tests never exercise
+# background jobs (R-006).
+#
+# Storage backend: Garage is a SHARED cluster service from
+# gitops (`specs/001-garage-object-storage`), reachable in-
+# cluster at `http://garage-s3.garage.svc.cluster.local:3900`.
+# The test stack consumes it — does NOT bring up its own. For
+# docker-compose running on the operator's host, the Garage URL
+# isn't directly routable; the recommended path is
+# `kubectl port-forward -n garage svc/garage-s3 3900:3900` in a
+# separate terminal before running the suite, and the
+# PALADIN_E2E_S3_* env vars below default to localhost:3900.
+# Override per-environment as needed.
 #
 # Bring up:
+#   kubectl port-forward -n garage svc/garage-s3 3900:3900 &
 #   docker compose -p paladin-e2e \
 #       -f frontend/tests/e2e/docker-compose.test.yaml up --wait
 # Tear down (removes the tmpfs Postgres volume):
@@ -17,12 +28,24 @@
 # All env overrides use the PALADIN_ prefix + underscore→dot
 # translation (see backend/internal/config/config.go). The base
 # config file mounted into every backend container is the same
-# backend/configs/compose.yaml used by the dev-loop stack — keeping
-# one source of truth for everything that ISN'T e2e-specific.
+# backend/configs/compose.yaml used by the dev-loop stack —
+# keeping one source of truth for everything that ISN'T
+# e2e-specific.
 #
 # Credentials are dev-only and committed (per Clarification Q4 +
 # Constitution Principle V). The NEVER-in-prod marker lives both
-# here and in fixtures/credentials.ts.
+# here and in fixtures/credentials.ts. Garage credentials are
+# supplied by gitops's `garage-paladin-credentials` Secret — for
+# local docker-compose runs they MUST be exported as
+# PALADIN_E2E_S3_ACCESS_KEY + PALADIN_E2E_S3_SECRET_KEY before
+# `compose up`, e.g.:
+#
+#   export PALADIN_E2E_S3_ACCESS_KEY=$(kubectl -n paladin \
+#     get secret garage-paladin-credentials -o jsonpath='{.data.accessKeyId}' \
+#     | base64 -d)
+#   export PALADIN_E2E_S3_SECRET_KEY=$(kubectl -n paladin \
+#     get secret garage-paladin-credentials -o jsonpath='{.data.secretAccessKey}' \
+#     | base64 -d)
 
 x-paladin-base: &paladin-base
   image: registry.local/paladin/paladin:latest
@@ -34,12 +57,18 @@ x-paladin-base: &paladin-base
     PALADIN_BOOTSTRAP_ADMIN_SUBJECT: e2e-admin@local
     PALADIN_BOOTSTRAP_ADMIN_PASSWORD: e2e-not-a-secret-2026
     PALADIN_BOOTSTRAP_ADMIN_MIN_PASSWORD_LENGTH: "16"
-    # ── storage: point at Garage instead of SeaweedFS ────────
-    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: http://garage:3900
-    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: http://localhost:3900
-    PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: paladin-e2e
-    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: e2e-fixture-key
-    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: e2e-fixture-secret
+    # ── storage: cluster-shared Garage (gitops) ────────────
+    # Default endpoint assumes operator ran
+    # `kubectl port-forward -n garage svc/garage-s3 3900:3900`
+    # in a sibling terminal. host.docker.internal lets the
+    # in-compose backend reach the host's forwarded port.
+    # Override PALADIN_E2E_S3_* to point at a different Garage if
+    # running directly inside the cluster network.
+    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: ${PALADIN_E2E_S3_ENDPOINT:-http://host.docker.internal:3900}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:3900}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: ${PALADIN_E2E_S3_ACCESS_KEY:?Garage access key required — export from kubectl secret per file header}
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: ${PALADIN_E2E_S3_SECRET_KEY:?Garage secret key required — export from kubectl secret per file header}
     # ── postgres connection ──────────────────────────────────
     PALADIN_DATABASE_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
 
@@ -68,42 +97,6 @@ services:
       # non-default port to avoid colliding with the dev-loop
       # compose's 5433 OR a host postgres on 5432.
       - "5434:5432"
-
-  garage:
-    image: dxflrs/garage:v2.3.0
-    container_name: paladin-e2e-garage
-    environment:
-      # v2.3+ auto-bootstrap: --single-node + --default-bucket
-      # creates the bucket from the GARAGE_DEFAULT_* env vars on
-      # first boot, skipping the multi-step `garage layout` +
-      # `garage bucket create` dance.
-      GARAGE_DEFAULT_ACCESS_KEY: e2e-fixture-key
-      GARAGE_DEFAULT_SECRET_KEY: e2e-fixture-secret
-      GARAGE_DEFAULT_BUCKET: paladin-e2e
-    # Entrypoint override required: the image's default Cmd is
-    # `[/garage server]`, so a plain `command: [server,
-    # --single-node]` would resolve as the literal binary
-    # `server` and fail with "executable not found".
-    entrypoint: ["/garage"]
-    command: ["server", "--single-node", "--default-bucket"]
-    volumes:
-      - ./garage.toml:/etc/garage.toml:ro
-    tmpfs:
-      # Garage requires a metadata + data dir; tmpfs is fine
-      # since the test-stack DB is ephemeral anyway.
-      - /tmp/garage
-    ports:
-      - "3900:3900"  # S3 API
-      - "3902:3902"  # admin / health
-    healthcheck:
-      # Garage image is distroless — no shell, no wget/curl.
-      # Use the `garage` binary's own `status` subcommand
-      # (which talks to itself on 127.0.0.1:3901 RPC). Exits
-      # 0 when the single-node cluster is healthy.
-      test: ["CMD", "/garage", "status"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
 
   # One-shot: runs SQL migrations and exits 0. Subsequent
   # services gate on `service_completed_successfully` so they
@@ -141,8 +134,10 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-      garage:
-        condition: service_healthy
+      # Garage is an EXTERNAL prerequisite — operator must have
+      # `kubectl port-forward -n garage svc/garage-s3 3900:3900`
+      # (or equivalent) running before `compose up`. The PALADIN_E2E_S3_*
+      # env vars resolve to that endpoint via host.docker.internal.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
       interval: 3s

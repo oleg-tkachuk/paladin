@@ -15,6 +15,32 @@ One-page operator manual for running and extending the suite.
 - Latest PALADIN backend image present locally as
   `registry.local/paladin/paladin:latest` —
   build via `task -d backend build:image` if absent.
+- **Garage** reachable from the docker-compose network.
+  Garage is a cluster-shared service from gitops
+  (`specs/001-garage-object-storage`); the test stack
+  consumes it, does NOT bring up its own. Two paths to
+  reach it locally:
+  1. **kubectl port-forward** (recommended for laptop dev):
+     ```bash
+     kubectl port-forward -n garage svc/garage-s3 3900:3900 &
+     ```
+     The backend containers reach the host's forwarded port
+     via `host.docker.internal:3900`.
+  2. Inside the cluster: set `PALADIN_E2E_S3_ENDPOINT` to the
+     in-cluster service URL
+     (`http://garage-s3.garage.svc.cluster.local:3900`).
+- **Garage credentials** exported as env vars before
+  `compose up` — extract from the K8s Secret gitops
+  provisions:
+  ```bash
+  export PALADIN_E2E_S3_ACCESS_KEY=$(kubectl -n paladin \
+    get secret garage-paladin-credentials \
+    -o jsonpath='{.data.accessKeyId}' | base64 -d)
+  export PALADIN_E2E_S3_SECRET_KEY=$(kubectl -n paladin \
+    get secret garage-paladin-credentials \
+    -o jsonpath='{.data.secretAccessKey}' | base64 -d)
+  ```
+  Compose fails fast with a clear error if either is unset.
 
 ## First run
 
@@ -100,8 +126,10 @@ starts from zero.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `webServer` times out after 120s | PALADIN backend image not built locally | `task -d backend build:image` |
-| Garage container exits immediately | Port 3900/3902 already in use | `lsof -iTCP:3900 -sTCP:LISTEN`, kill the offender |
-| Postgres healthcheck never passes | Conflicting postgres on host port 5432 | Set `POSTGRES_HOST_PORT=5433` in `.env` next to compose file |
+| `compose up` errors `required variable PALADIN_E2E_S3_ACCESS_KEY is missing` | Garage credentials not exported from the kubectl Secret | Run the two `export PALADIN_E2E_S3_*` commands from the Prerequisites section |
+| Backend containers log `s3: dial tcp 3900: connection refused` | `kubectl port-forward` not running or stopped | Restart `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
+| Backend can reach Garage but every bucket op 403s | Wrong key/secret pair (e.g. extracted from a different cluster's Secret) | Re-extract from the current cluster context: `kubectl config current-context` then re-export PALADIN_E2E_S3_* |
+| Postgres healthcheck never passes | Conflicting postgres on host port 5432 | Bind to 5434 (already the default in compose.test.yaml) |
 | Tests pass locally, fail with "Idempotency-Key missing" on a Create | Frontend transport not loaded | Verify `src/lib/connect/transport.ts` import chain compiles; restart `pnpm run dev` |
 | Login form returns "user not found" | Bootstrap container didn't run | Check `docker compose -p paladin-e2e logs bootstrap`; bootstrap depends on migrate succeeding |
 | Test passes on first run, fails on second | Stale data in the shared DB | Run `pnpm run test:e2e:stack:down` then `:stack` — should never need this in steady state; if it does, the test isn't UUID-suffixing all unique fields |
