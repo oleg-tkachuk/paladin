@@ -133,10 +133,10 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Independent test**: Run `pnpm exec playwright test trash.spec.ts`. Two scenarios per [spec.md](spec.md) §US5. (The originally-planned "slug collision on restore" scenario was dropped during /speckit-analyze — it's unreachable in the current backend because the slug UNIQUE constraint applies across active AND trashed sets per migration 036. Will be added when the BACKLOG'd "partial UNIQUE" change lands.)
 
-- [ ] T035 [US5] Create `frontend/tests/e2e/trash.spec.ts` with `beforeEach` that logs in and seeds one tenant.
-- [ ] T036 [US5] Implement scenario "soft-delete moves tenant to trash" in `trash.spec.ts`: navigate to the seeded tenant's detail page, click delete (provide resource_version), confirm; navigate to `/trash`, assert the tenant appears there AND no longer appears on `/tenants`.
-- [ ] T037 [US5] Implement scenario "restore from trash" in `trash.spec.ts`: from `/trash`, click the restore action on the seeded tenant, confirm; assert the tenant reappears on `/tenants` within 2 s AND is removed from `/trash`.
-- [ ] T038 [US5] Run `pnpm exec playwright test trash.spec.ts` ten times consecutively; zero flake.
+- [X] T035 [US5] Create `frontend/tests/e2e/trash.spec.ts` with `beforeEach` that logs in and seeds one tenant.
+- [X] T036 [US5] Implement scenario "soft-delete moves tenant to trash" in `trash.spec.ts`: navigate to the seeded tenant's detail page, click delete (provide resource_version), confirm; navigate to `/trash`, assert the tenant appears there AND no longer appears on `/tenants`.
+- [X] T037 [US5] Implement scenario "restore from trash" in `trash.spec.ts`: from `/trash`, click the restore action on the seeded tenant, confirm; assert the tenant reappears on `/tenants` within 2 s AND is removed from `/trash`.
+- [~] T038 [US5] Run `pnpm exec playwright test trash.spec.ts` ten times consecutively; zero flake. **DEFERRED to operator runtime** — requires full stack up. Static gates verified: tsc clean; playwright discovers 2 scenarios.
 
 **Checkpoint**: US5 done. The full 5-story spec is shipped.
 
