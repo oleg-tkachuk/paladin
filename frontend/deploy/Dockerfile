@@ -2,8 +2,9 @@
 #
 # PALADIN UI container image — three stages:
 #
-#   1. deps    — installs npm dependencies from a clean lockfile on
-#                BUILDPLATFORM. Cached when package*.json don't change.
+#   1. deps    — installs pnpm dependencies from a clean lockfile on
+#                BUILDPLATFORM. Cached when package.json / lockfile
+#                don't change.
 #   2. builder — runs `next build` against the standalone output target
 #                so the runner image carries only the trimmed server.
 #   3. runner  — node:alpine with the standalone bundle, dropping perms
@@ -13,41 +14,52 @@
 # ConfigMap, never baked into the image. Build metadata (APP_VERSION /
 # GIT_COMMIT_HASH / BUILD_TIME) is threaded through as build-args from
 # Taskfile's metadata:write step.
+#
+# Package manager: pnpm. Version pinned to the `packageManager` field
+# in package.json (Corepack reads it). Mirrors the local-dev path
+# (see specs/001-frontend-playwright-e2e research.md R-008).
 
 ARG NODE_VERSION=25
-ARG NPM_VERSION=11.13.0
 
 # -----------------------------------------------------------------------------
 # Stage 1 — deps. Pinned to BUILDPLATFORM so a multi-arch run doesn't
-# re-fetch npm trees per arch (the resulting node_modules are pure JS).
+# re-fetch the pnpm content-addressable store per arch (the resulting
+# node_modules are pure JS).
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS deps
-ARG NPM_VERSION
 
-# libc6-compat keeps prebuilt addons (sharp, swc) loadable on Alpine's musl.
+# libc6-compat keeps prebuilt addons (sharp, swc) loadable on Alpine's
+# musl. Corepack ships with node; `enable` activates the pnpm shim and
+# the `prepare --activate` call pins the version from package.json.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g npm@${NPM_VERSION}
+# Copy lockfile + manifest first so this layer caches across source-
+# only changes. pnpm-workspace.yaml holds the `allowBuilds` security
+# gate (see frontend/pnpm-workspace.yaml).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Copy lockfiles first so this layer caches across source-only changes.
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# Activate the package-manager pin from package.json's
+# `packageManager` field. corepack respects the version.
+RUN corepack enable && corepack prepare --activate
+
+# `--frozen-lockfile` is the CI-safe install: fails fast if
+# pnpm-lock.yaml is out of date instead of silently re-resolving.
+RUN pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
 # Stage 2 — builder. Runs `next build` with build-time metadata baked in
 # via NEXT_PUBLIC_-prefixed env vars (Next inlines them into the bundle).
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS builder
-ARG NPM_VERSION
 
 WORKDIR /app
-RUN npm install -g npm@${NPM_VERSION}
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build-time metadata. `undefined` defaults keep the image buildable from
-# `docker build .` without Taskfile threading the values through.
+# Build-time metadata. `undefined` defaults keep the image buildable
+# from `docker build .` without Taskfile threading the values through.
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
@@ -57,7 +69,7 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     GIT_COMMIT_HASH=${GIT_COMMIT_HASH} \
     BUILD_TIME=${BUILD_TIME}
 
-RUN npm run build
+RUN pnpm run build
 
 # -----------------------------------------------------------------------------
 # Stage 3 — runner. Distroless-style minimal layout: only what the

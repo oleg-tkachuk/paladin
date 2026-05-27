@@ -5,7 +5,8 @@
 #
 # Keep:
 #   - source dirs (src/, public/, configs/)
-#   - lockfile + manifest (package.json, package-lock.json) for `npm ci`
+#   - lockfile + manifest (package.json, pnpm-lock.yaml,
+#     pnpm-workspace.yaml) for `pnpm install --frozen-lockfile`
 #   - build configs (next.config.ts, tsconfig.json, eslint.config.mjs,
 #     postcss.config.mjs, components.json, tailwind config)
 #   - codegen inputs (buf.gen.yaml, scripts/, tasks/)
