@@ -1,0 +1,15 @@
+# pnpm workspace + build allowlist.
+#
+# `allowBuilds` is a pnpm 11.x security feature — packages with native
+# postinstall scripts are blocked by default until the operator opts in.
+# All four below were already in the dep tree under npm and worked
+# without issue. Keeping them enabled preserves prior behaviour:
+#   - @bufbuild/buf:  the buf CLI binary used by `pnpm run generate`
+#   - msw:            transitive (mock service worker; not used directly)
+#   - sharp:          Next.js image optimization native bindings
+#   - unrs-resolver:  module resolver native bindings
+allowBuilds:
+  '@bufbuild/buf': true
+  msw: true
+  sharp: true
+  unrs-resolver: true

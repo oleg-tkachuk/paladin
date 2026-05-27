@@ -1093,6 +1093,46 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Architecture (post-review 2026-05)
 
+### Cross-tenant scope switcher (ListMyMemberships + SwitchTenant)
+
+- **Status:** Aspirational
+- **Reason:** Today's UI ties an operator session to exactly one
+  tenant — the `tenant` claim on their JWT (`frontend/src/
+  context/ScopeContext.tsx:23–29` calls this out: *"the 1:1
+  user-tenant model means switching tenants requires a different
+  login"*). The `<ScopePicker>` shows the tenant as read-only
+  metadata; backend + bucket are the only selectable axes.
+  Platform-admin operators routinely need to inspect or operate
+  on multiple tenants. Today they handle this by logging out and
+  back in with a per-tenant credential, which is slow and burns
+  audit-log noise per switch.
+- **Definition of Done:**
+  - New IAM RPC `ListMyMemberships() returns
+    (repeated Membership { tenant_id, tenant_slug, roles[] })`
+    — returns every tenant the caller's subject has a row in.
+  - New IAM RPC `SwitchTenant(target_tenant_id) returns
+    (TokenPair)` — mints a fresh access + refresh pair scoped
+    to `target_tenant_id`. Authz: caller MUST be a member of
+    the target tenant (i.e. ListMyMemberships includes it).
+  - `<ScopePicker>` tenant row becomes interactive; selecting a
+    different tenant calls SwitchTenant, swaps the cached
+    tokens via the existing tokenStore, and triggers
+    `AuthContext.refreshTenant()` so every downstream consumer
+    sees the new scope.
+  - Frontend Playwright e2e suite's US2 reverts to its
+    original "Tenant scope switching" wording (the
+    backend/bucket-scoped tests added in this branch remain
+    as a complementary regression guard for the picker
+    plumbing).
+  - Audit-log Action recorded for every SwitchTenant call so
+    operator session-scope changes are observable.
+- **Blockers:** Cedar policy decision — does a SwitchTenant on
+  an existing platform-admin require fresh consent for the
+  target tenant, or is platform-admin transitive across all
+  tenants? Settle before implementing; today's bootstrap
+  bakes a per-tenant `platform.admin` row, which suggests
+  per-tenant consent is the intent.
+
 ### Table-backed audit outbox for crash-durability
 
 - **Status:** Aspirational
@@ -1234,21 +1274,6 @@ the same commit. Treat this file like a runtime invariant.
     collector the cluster runs.
   - Dashboards committed under `deploy/grafana/`.
 - **Blockers:** collector choice (Tempo? Honeycomb? Datadog?).
-
-### Frontend Playwright suite
-
-- **Status:** Aspirational
-- **Reason:** UI regressions today are caught by manual smoke
-  testing on minikube. The login / auth-gate / tenant-switch /
-  bucket-browser flows are stable enough for E2E coverage.
-- **Definition of Done:**
-  - `frontend/tests/` with Playwright config and CI workflow.
-  - Coverage: login, AuthGate redirect-with-?next, tenant scope
-    switcher, bucket list & object key open, capability create
-    + revoke, tenant restore from trash.
-  - CI runs against a docker-compose stack of the backend +
-    Postgres + a fake S3 (minio).
-- **Blockers:** none.
 
 ### SealedSecrets for prod-class clusters
 

@@ -35,29 +35,34 @@ import {
 /**
  * Idempotency-Key auto-injection.
  *
- * Backend enforces an `Idempotency-Key` header on every Create* RPC
- * (see backend internal/middleware/idempotency.go,
- * RequireOnCreate=true on all three planes). A missing header gets
- * rejected with InvalidArgument before the handler runs. To keep
- * call sites unaware of this, the transport auto-injects a fresh
- * UUID on any RPC whose method name starts with `Create`, unless the
- * caller already set one (e.g. an explicit retry that wants to
- * collapse onto the original key).
+ * Backend enforces an `Idempotency-Key` header on every
+ * mutation-shaped RPC (see backend
+ * `internal/middleware/idempotency.go`, RequireOnCreate=true on
+ * all three planes). The server-side matcher recognises method
+ * names with prefix `Create` (AIP-canonical: CreateTenant,
+ * CreateBucket, …) AND `Issue` (the token/credential variant:
+ * CapabilityService.Issue). A missing header gets rejected with
+ * InvalidArgument before the handler runs. To keep call sites
+ * unaware of this, the transport auto-injects a fresh UUID on
+ * any RPC whose method name starts with either prefix, unless
+ * the caller already set one (e.g. an explicit retry that wants
+ * to collapse onto the original key).
  *
- * Why UUID v4 (crypto.randomUUID) and not v7: v7 needs an extra dep
- * and the embedded timestamp gives the server nothing useful here —
- * the key is opaque to the server. v4's 122-bit space is more than
- * enough collision-resistance.
+ * Why UUID v4 (crypto.randomUUID) and not v7: v7 needs an extra
+ * dep and the embedded timestamp gives the server nothing useful
+ * here — the key is opaque to the server. v4's 122-bit space is
+ * more than enough collision-resistance.
  *
- * Scope: only Create*. List/Get/Update/Delete are either idempotent
- * by definition (reads) or already keyed by their resource ID
- * (updates / deletes carry the ID). The gate on the server
- * deliberately matches the same Create* shape, so the two sides
- * agree without an explicit allowlist.
+ * Scope: only Create* / Issue*. List/Get/Update/Delete are
+ * either idempotent by definition (reads) or already keyed by
+ * their resource ID (updates/deletes carry the ID). The two
+ * sides MUST stay in sync — if the server adds a new prefix
+ * (e.g. "Submit*"), this matcher needs the same update.
  */
 const idempotencyInterceptor: Interceptor = (next) => async (req) => {
+  const name = req.method.name;
   if (
-    req.method.name.startsWith("Create") &&
+    (name.startsWith("Create") || name.startsWith("Issue")) &&
     !req.header.has("Idempotency-Key")
   ) {
     req.header.set("Idempotency-Key", crypto.randomUUID());

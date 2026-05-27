@@ -19,30 +19,48 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
-// TestIsCreateMethod pins the Connect-procedure-name parser used by
-// RequireOnCreate. The risky cases are:
-//   - service-prefix containing "Create" (must NOT match — we scope to
-//     the trailing method segment),
-//   - empty / malformed input (defensive).
-func TestIsCreateMethod(t *testing.T) {
+// TestIsMutationMethod pins the Connect-procedure-name parser
+// used by RequireOnCreate (the field is named for historical
+// reasons; matches both Create AND Issue prefixes). The risky
+// cases are:
+//   - service-prefix containing "Create" or "Issue" (must NOT
+//     match — we scope to the trailing method segment, otherwise
+//     a hypothetical CreateOrderHistoryService/ListOrders or
+//     IssueTrackerService/ListIssues would be force-gated),
+//   - empty / malformed input (defensive),
+//   - non-mutation verbs (Update/Delete/Get/List) — these have
+//     their own deduplication shape (resource_version for OCC,
+//     idempotent-by-construction for reads) and don't go through
+//     the Idempotency-Key gate.
+func TestIsMutationMethod(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
 		want bool
 	}{
-		{"create rpc", "/paladin.admin.v1.TenantService/CreateTenant", true},
+		// Create-prefixed: covered.
+		{"create tenant", "/paladin.admin.v1.TenantService/CreateTenant", true},
 		{"create bucket", "/paladin.admin.v1.BucketService/CreateBucket", true},
-		{"list is not create", "/paladin.admin.v1.TenantService/ListTenants", false},
-		{"update is not create", "/paladin.admin.v1.TenantService/UpdateTenant", false},
+		// Issue-prefixed: the Capability variant added to make the
+		// CapabilityService.Issue double-submit observable via
+		// FR-008.
+		{"issue capability", "/paladin.admin.v1.CapabilityService/Issue", true},
+		{"issue (composed verb)", "/paladin.admin.v1.SomeService/IssueToken", true},
+		// Negatives.
+		{"list is not mutation", "/paladin.admin.v1.TenantService/ListTenants", false},
+		{"update is not mutation", "/paladin.admin.v1.TenantService/UpdateTenant", false},
+		{"delete is not mutation", "/paladin.admin.v1.TenantService/DeleteTenant", false},
 		{"service prefix containing create", "/paladin.admin.v1.CreateOrderHistoryService/ListOrders", false},
+		{"service prefix containing issue", "/paladin.admin.v1.IssueTrackerService/ListIssues", false},
+		// Defensive.
 		{"empty", "", false},
 		{"no slash", "Create", false},
 		{"trailing slash", "/svc/", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isCreateMethod(tc.in); got != tc.want {
-				t.Fatalf("isCreateMethod(%q) = %v, want %v", tc.in, got, tc.want)
+			if got := isMutationMethod(tc.in); got != tc.want {
+				t.Fatalf("isMutationMethod(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
 	}
