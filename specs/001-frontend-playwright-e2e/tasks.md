@@ -92,7 +92,7 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Independent test**: Run `npx playwright test buckets.spec.ts`. Three scenarios per [spec.md](spec.md) §US3.
 
-- [ ] T024 [P] [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedBucket(opts)` and `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". The bucket uses the default backend ID from the test-stack chart config; ObjectKey gets a `e2e/${randomHex(8)}` key path.
+- [ ] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedBucket(opts)` and `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". The bucket uses the default backend ID from the test-stack chart config; ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential to avoid edit-race during agent runs.)
 - [ ] T025 [US3] Create `frontend/tests/e2e/buckets.spec.ts` with a `beforeEach` that logs in, seeds one tenant, one bucket, and one ObjectKey, capturing all three for assertions.
 - [ ] T026 [US3] Implement scenario "bucket list shows seeded bucket" in `buckets.spec.ts`: navigate to `/buckets` (scope=seeded tenant), assert a row matching the seeded bucket's `displayName` is visible.
 - [ ] T027 [US3] Implement scenario "bucket detail opens ObjectKeys panel" in `buckets.spec.ts`: click the bucket row, wait for the detail page, assert the ObjectKeys panel is visible and shows the seeded key's name.
@@ -111,7 +111,15 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 - [ ] T030 [US4] Create `frontend/tests/e2e/capabilities.spec.ts` with `beforeEach` that logs in and seeds one tenant.
 - [ ] T031 [US4] Implement scenario "single submit creates one capability" in `capabilities.spec.ts`: navigate to `/capabilities` (scoped), fill the form, submit ONCE, assert exactly one row appears within 2 s.
-- [ ] T032 [US4] Implement scenario "double-submit collapses (idempotency contract — FR-008)" in `capabilities.spec.ts`: open the form, click submit twice in rapid succession (use `Promise.all([page.click(), page.click()])` to maximise race), wait for both responses, assert the capability list shows **exactly 1 row, not 2**. Comment in code MUST reference FR-008 and the middleware reflective-replay implementation in `backend/internal/middleware/idempotency.go`.
+- [ ] T032 [US4] Implement scenario "double-submit collapses (idempotency contract — FR-008)" in `capabilities.spec.ts` as a **two-layer assertion**, because UI-only double-click testing silently passes when the submit button defensively disables after the first click. Both layers MUST be present:
+
+    **Layer A (UI defensive UX)**: Click submit once, assert the submit button becomes `disabled` within 100 ms (or the form transitions away). This guards against accidental UI double-submit.
+
+    **Layer B (network idempotency)**: Capture the `Idempotency-Key` from the first submit via `page.waitForRequest('**/CreateCapability')`. Then issue a SECOND `CreateCapability` request directly from the page context using the same key — either via `page.evaluate(async (k) => fetch('/api/rpc/admin/...', { method: 'POST', headers: { 'Idempotency-Key': k, ... }, body: ... }), capturedKey)`, or via a test-level Connect client with the captured key in request headers.
+
+    After both layers complete, assert the capabilities list shows **exactly 1 row, not 2**. The two-layer split exists because the network-level assertion is the **only** observable hook for the middleware's reflective replay (`reconstructResponse` in `backend/internal/middleware/idempotency.go`) — without Layer B, setting `RequireOnCreate: false` would NOT make this test fail, defeating the entire purpose.
+
+    Code comments MUST reference FR-008, both layers, and the implementation file.
 - [ ] T033 [US4] Implement scenario "revoke flips state without removing row" in `capabilities.spec.ts`: create a capability, click revoke + confirm in the dialog, assert the row stays in the table but its status column shows "revoked".
 - [ ] T034 [US4] Run `npx playwright test capabilities.spec.ts` ten times consecutively; zero flake. Critical for FR-008 — if T032 flakes under retries, the test is wrong (the contract is deterministic).
 
@@ -123,13 +131,12 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch any regression to the soft-delete + restore round-trip — the foundation of the "oops, I deleted that" recovery flow.
 
-**Independent test**: Run `npx playwright test trash.spec.ts`. Three scenarios per [spec.md](spec.md) §US5.
+**Independent test**: Run `npx playwright test trash.spec.ts`. Two scenarios per [spec.md](spec.md) §US5. (The originally-planned "slug collision on restore" scenario was dropped during /speckit-analyze — it's unreachable in the current backend because the slug UNIQUE constraint applies across active AND trashed sets per migration 036. Will be added when the BACKLOG'd "partial UNIQUE" change lands.)
 
 - [ ] T035 [US5] Create `frontend/tests/e2e/trash.spec.ts` with `beforeEach` that logs in and seeds one tenant.
 - [ ] T036 [US5] Implement scenario "soft-delete moves tenant to trash" in `trash.spec.ts`: navigate to the seeded tenant's detail page, click delete (provide resource_version), confirm; navigate to `/trash`, assert the tenant appears there AND no longer appears on `/tenants`.
 - [ ] T037 [US5] Implement scenario "restore from trash" in `trash.spec.ts`: from `/trash`, click the restore action on the seeded tenant, confirm; assert the tenant reappears on `/tenants` within 2 s AND is removed from `/trash`.
-- [ ] T038 [US5] Implement scenario "slug collision on restore surfaces clear error" in `trash.spec.ts`: after soft-deleting the seeded tenant, use a second `seedTenant({ slugPrefix: "<same as the deleted slug>" })` to create an active tenant with the colliding slug, attempt to restore the trashed one, assert a visible "slug collision" error message appears AND the tenant remains in `/trash` (not half-restored).
-- [ ] T039 [US5] Run `npx playwright test trash.spec.ts` ten times consecutively; zero flake.
+- [ ] T038 [US5] Run `npx playwright test trash.spec.ts` ten times consecutively; zero flake.
 
 **Checkpoint**: US5 done. The full 5-story spec is shipped.
 
@@ -139,10 +146,11 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Purpose**: Documentation, sign-off verification per SC-003 + SC-004, and removal of the closed BACKLOG entry per Constitution III.
 
-- [ ] T040 [P] Create `frontend/tests/e2e/README.md` derived from [quickstart.md](quickstart.md) — operator manual stripped down to the parts needed for daily test-running (prereqs, run, debug, troubleshoot). Cross-link to the spec for design rationale.
-- [ ] T041 Verify SC-003 (zero flake across 10 consecutive runs of the FULL suite): from `frontend/`, run `for i in {1..10}; do npm run test:e2e || { echo "FLAKED on run $i"; break; }; done`. All 10 must pass. If any run fails, fix the offending test before sign-off — do NOT add a retry to mask flake.
+- [ ] T039 [P] Create `frontend/tests/e2e/README.md` derived from [quickstart.md](quickstart.md) — operator manual stripped down to the parts needed for daily test-running (prereqs, run, debug, troubleshoot). Cross-link to the spec for design rationale.
+- [ ] T040 [P] Verify FR-007 (TypeScript conventions): from `frontend/`, run `npm run lint` and `npx tsc --noEmit`. Both MUST exit zero. If a Playwright-specific eslint rule needs adjusting (e.g. `@typescript-eslint/no-floating-promises` on intentionally-awaited locator chains), add a focused override in `frontend/eslint.config.*` with a justification comment — do NOT silence rules globally.
+- [ ] T041 Verify SC-002 + SC-003 (each run <3 min wall-clock AND zero flake across 10 consecutive runs of the FULL suite): from `frontend/`, run `for i in {1..10}; do time npm run test:e2e || { echo "FLAKED on run $i"; break; }; done`. All 10 must pass AND each run's `real` time must be <3m00s. If any run fails OR exceeds 3 minutes, fix the offending test before sign-off — do NOT add a retry to mask flake or raise SC-002.
 - [ ] T042 Verify SC-004 (regression coverage) by dry-running the five intentional-break scenarios in [quickstart.md](quickstart.md) §"Verifying the regression-coverage promise". Each break must produce a clear named test failure in the expected spec file. Revert each break immediately after verification.
-- [ ] T043 Delete the "Frontend Playwright suite" entry from `BACKLOG.md` (lines 1238–1248, the existing Aspirational record) in the SAME commit that closes this feature, per Constitution III ("closed BACKLOG entries are deleted, git history is the audit trail").
+- [ ] T043 Delete the "Frontend Playwright suite" entry from `BACKLOG.md` (the existing Aspirational record) in the SAME commit that closes this feature, per Constitution III ("closed BACKLOG entries are deleted, git history is the audit trail").
 
 **Checkpoint**: Feature signed off. BACKLOG cleaned. Suite is the new regression guard for the operator-facing UI.
 
@@ -154,13 +162,13 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 T001 ──► T002 ──► T003 ──► T006
            │
            ├─► T004 [P] ─┐
-           │             ├─► T007 ──► T012 ──► (every US phase) ──► T040
+           │             ├─► T007 ──► T012 ──► (every US phase) ──► T039 / T040 [P]
            ├─► T005 [P] ─┘                       │
            │                                     ├─► T013–T018 (US1, P1) ─┐
            │                                     ├─► T019–T023 (US2, P1) ─┤
            │                                     ├─► T024–T029 (US3, P2) ─┤
            │                                     ├─► T030–T034 (US4, P2) ─┤
-           │                                     └─► T035–T039 (US5, P3) ─┤
+           │                                     └─► T035–T038 (US5, P3) ─┤
            │                                                              ▼
            │                                                            T041 ──► T042 ──► T043
            │
@@ -184,7 +192,9 @@ Within Phase 1 (Setup), tasks T004, T005, T006 are `[P]` after T003 completes (d
 
 Within Phase 2 (Foundational), the fixture files split cleanly: T008 (credentials), T009 (unique), T010 (auth) can all be authored in parallel after T007 lands. T011 (seed.ts) depends on T008+T010 (uses the admin credential to fetch the Bearer token) — sequential after both.
 
-Across phases 3–7 (user stories), once Phase 2 completes, ALL FIVE stories can be implemented in parallel. Each story's `*.spec.ts` file is independent; the only shared mutation point is `fixtures/seed.ts`, and T024 (extension for US3) is a clean append.
+Across phases 3–7 (user stories), once Phase 2 completes, ALL FIVE stories can be implemented in parallel **at the spec-file level**. Each story's `*.spec.ts` file is independent. The only shared mutation point is `fixtures/seed.ts`: T024 (additive extension for US3) is sequential after T011, not parallel — see C5 note inside T024.
+
+Phase 8 has two `[P]` tasks (T039 README + T040 lint check) that are independent and can run concurrently after the user-story phases land.
 
 Example: split US1 and US4 between two agents in parallel after Phase 2 lands:
 
@@ -206,7 +216,7 @@ T030 → T031 → T032 → T033 → T034
 
 **Idempotency-test placement.** Despite being in Phase 6 (US4), the idempotency contract assertion (T032) is the highest-value test in the entire suite from a "guards work that just shipped on develop" perspective. If implementing out-of-priority-order is acceptable, US4 can immediately follow US1 — the foundational tasks support it directly.
 
-**Sign-off ritual.** T041 (10× consecutive runs) and T042 (regression-coverage dry-run) are the final gates. Skipping either makes the SC-003/SC-004 acceptance criteria unverified — the feature is not shippable.
+**Sign-off ritual.** T040 (lint/tsc), T041 (10× consecutive runs + per-run <3 min), and T042 (regression-coverage dry-run) are the final gates. Skipping any of them leaves a Success Criterion unverified — the feature is not shippable.
 
 ---
 
@@ -218,11 +228,11 @@ T030 → T031 → T032 → T033 → T034
 | 2. Foundational | T007–T012 (6) | — | T008, T009, T010 |
 | 3. US1 (P1) MVP | T013–T018 (6) | US1 | none (single file) |
 | 4. US2 (P1) | T019–T023 (5) | US2 | none |
-| 5. US3 (P2) | T024–T029 (6) | US3 | T024 |
+| 5. US3 (P2) | T024–T029 (6) | US3 | none (T024 reverted from [P] per C5) |
 | 6. US4 (P2) | T030–T034 (5) | US4 | none |
-| 7. US5 (P3) | T035–T039 (5) | US5 | none |
-| 8. Polish | T040–T043 (4) | — | T040 |
-| **Total** | **43 tasks** | 5 stories | ~9 [P] |
+| 7. US5 (P3) | T035–T038 (4) | US5 | none (slug-collision scenario dropped per C1) |
+| 8. Polish | T039–T043 (5) | — | T039, T040 |
+| **Total** | **43 tasks** | 5 stories | ~8 [P] |
 
 **Independent test criteria per story** (matches SC-001):
 
@@ -241,7 +251,7 @@ T030 → T031 → T032 → T033 → T034
 Self-check — every task above strictly follows `- [ ] T<NNN> [P?] [Story?] description with file path`:
 
 - ✅ Checkbox prefix on every task (43/43).
-- ✅ Sequential IDs T001–T043 (no gaps, no duplicates).
-- ✅ `[P]` only where the task is genuinely parallel-safe (different file, no incomplete-task dependency).
+- ✅ Sequential IDs T001–T043 (no gaps, no duplicates — post-analyze renumbering: US5 lost one scenario, Polish gained the lint task, net 43).
+- ✅ `[P]` only where the task is genuinely parallel-safe (different file, no incomplete-task dependency). T024 explicitly NOT [P] per C5 remediation.
 - ✅ `[USN]` ONLY on tasks under Phase 3–7. Setup/Foundational/Polish carry NO story label.
 - ✅ File path explicit in every task (no "create the model" without naming the model and its directory).

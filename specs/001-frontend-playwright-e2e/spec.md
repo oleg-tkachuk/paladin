@@ -204,11 +204,14 @@ from trash, assert it reappears in the active tenant list.
 2. **Given** the tenant sits in `/trash`, **When** the
    operator clicks restore, **Then** the tenant reappears in
    `/tenants` within 2 seconds and is removed from `/trash`.
-3. **Given** the operator attempts to restore a tenant whose
-   slug now collides with an active one (rare but possible
-   after a slug rename), **When** the restore RPC fires,
-   **Then** the UI surfaces a clear "slug collision" error
-   without leaving the tenant in a half-restored state.
+
+*Note*: a "slug collision on restore" scenario was initially
+planned but is unreachable in the current backend — the slug
+UNIQUE constraint applies across active **and** trashed sets
+(see comment in `backend/migrations/036_soft_delete_tenants.sql`),
+so a colliding slug is caught at CREATE or RENAME time, never
+at RESTORE. The scenario will be added when the BACKLOG'd
+"partial UNIQUE on active rows only" change lands.
 
 ---
 
@@ -278,7 +281,9 @@ from trash, assert it reappears in the active tenant list.
 
 - **Test stack**: The composable runtime that supports the
   E2E suite — backend service, Postgres, S3-compatible object
-  store, frontend dev server. Independent of production
+  store, Next.js frontend in production-mode bundle (`next
+  start`, not `next dev` — HMR is a documented flake source
+  for E2E suites). Independent of production
   infrastructure; spun up per-CI-run or per-local-`run` and
   torn down afterward.
 - **Seeded admin**: A known-credentials user provisioned at

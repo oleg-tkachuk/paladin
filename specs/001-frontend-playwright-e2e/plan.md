@@ -10,7 +10,8 @@ Add a Playwright 1.60.0 (Chromium-only) test suite under
 `frontend/tests/e2e/` that exercises the operator-critical UI
 journeys end-to-end against a self-contained docker-compose
 stack: Postgres 16 + PALADIN backend + Garage v2.3 (S3) + Next.js
-frontend dev server. Six tests across five user stories.
+frontend in production-mode bundle (`next start`). Six tests
+across five user stories.
 Suite is locally runnable only in v1; CI integration is
 deferred. Database isolation via shared Postgres +
 UUID-suffixed per-test fixtures. Seeded admin uses a fixed
