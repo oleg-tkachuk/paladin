@@ -27,14 +27,16 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Purpose**: Install Playwright + Chromium and create the directory skeleton. No tests run yet — these tasks just make the stack ready.
 
-- [ ] T001 Add `@playwright/test@^1.60.0` to `frontend/package.json` `devDependencies` and run `npm install` from `frontend/`
-- [ ] T002 Add npm scripts (`test:e2e`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:stack`, `test:e2e:stack:down`) to `frontend/package.json` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"package.json scripts (additions)"
-- [ ] T003 Run `npx playwright install chromium --with-deps` from `frontend/` to fetch the browser binary
+- [ ] T001 Setup `frontend/` package manager + Playwright. Per Constitution II (single-scope commits), ship as **two sequential commits in this order**:
+    1. **`build(frontend): migrate package manager from npm to pnpm`** (R-008, Clarification Q6) — (a) `corepack enable && corepack prepare pnpm@11.3.0 --activate`; (b) delete `frontend/package-lock.json`; (c) add `"packageManager": "pnpm@11.3.0"` to `frontend/package.json`; (d) from `frontend/`, run `pnpm install` — generates `pnpm-lock.yaml`; (e) sanity-check `pnpm run dev / lint / build` paths still resolve (pnpm scripts mirror npm's). **Workspace-wide tool swap** — call it out explicitly in the commit message because the change reaches beyond the e2e folder.
+    2. **`build(frontend): add @playwright/test devDep`** — add `@playwright/test@^1.60.0` to `frontend/package.json` `devDependencies`; from `frontend/`, run `pnpm install` to write the lock entry.
+- [ ] T002 Add scripts (`test:e2e`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:stack`, `test:e2e:stack:down`) to `frontend/package.json` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"package.json scripts (additions)"
+- [ ] T003 Run `pnpm exec playwright install chromium --with-deps` from `frontend/` to fetch the browser binary
 - [ ] T004 [P] Create the directory skeleton: `frontend/tests/e2e/`, `frontend/tests/e2e/fixtures/`, `frontend/tests/e2e/test-results/`
 - [ ] T005 [P] Append `frontend/tests/e2e/test-results/` and `frontend/test-results/` to `frontend/.gitignore`
 - [ ] T006 [P] Create `frontend/playwright.config.ts` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"playwright.config.ts (root config)" — Chromium-only `projects`, `webServer` wired to docker-compose.test.yaml, retries 0 locally / 1 on `CI`, baseURL `http://localhost:3000`, screenshot/video/trace `retain-on-failure`
 
-**Checkpoint**: After T006 `npx playwright test --list` should print "no tests found" cleanly (no syntax error on config).
+**Checkpoint**: After T006 `pnpm exec playwright test --list` should print "no tests found" cleanly (no syntax error on config).
 
 ---
 
@@ -47,7 +49,7 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 - [ ] T009 [P] Create `frontend/tests/e2e/fixtures/unique.ts` exporting `uniqueSlug(prefix)` and `uniqueDisplayName(prefix)` (8-hex-char UUID suffix) per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/unique.ts`"
 - [ ] T010 [P] Create `frontend/tests/e2e/fixtures/auth.ts` exporting `loginAsAdmin(page)` and `logout(page)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/auth.ts`". `loginAsAdmin` MUST drive the real `/login` form (FR-003) and assert the post-login URL is NOT `/login`.
 - [ ] T011 Create `frontend/tests/e2e/fixtures/seed.ts` with the `seedTenant(opts)` helper per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". Use the generated Connect clients from `frontend/src/gen/`; cache the platform-admin Bearer token in module scope after the first IAM Login. `seedBucket` and `seedObjectKey` ship later in US3's phase (they're not needed for US1/US2).
-- [ ] T012 Verify the test-stack boots end-to-end: from `frontend/`, run `npm run test:e2e:stack` and confirm every service reaches `healthy` within 60s. Tear down with `npm run test:e2e:stack:down`. No tests yet — this is a smoke-check the compose file works in isolation.
+- [ ] T012 Verify the test-stack boots end-to-end: from `frontend/`, run `pnpm run test:e2e:stack` and confirm every service reaches `healthy` within 60s. Tear down with `pnpm run test:e2e:stack:down`. No tests yet — this is a smoke-check the compose file works in isolation.
 
 **Checkpoint**: After T012 the stack is provably runnable. User-story phases can now proceed in parallel (each `*.spec.ts` lives in its own file, no inter-test dependencies).
 
@@ -57,14 +59,14 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch any regression to the AuthGate's deep-link → redirect → bounce-back contract — the highest-risk surface in the application.
 
-**Independent test**: Run `npx playwright test auth.spec.ts` against a fresh stack. The four scenarios in [spec.md](spec.md) §US1 must all pass; intentionally breaking the `useEffect` in `frontend/src/components/AuthGate.tsx` must fail at least one scenario (per [quickstart.md](quickstart.md) SC-004 dry-run).
+**Independent test**: Run `pnpm exec playwright test auth.spec.ts` against a fresh stack. The four scenarios in [spec.md](spec.md) §US1 must all pass; intentionally breaking the `useEffect` in `frontend/src/components/AuthGate.tsx` must fail at least one scenario (per [quickstart.md](quickstart.md) SC-004 dry-run).
 
 - [ ] T013 [US1] Create `frontend/tests/e2e/auth.spec.ts` with the file-level imports (`@playwright/test`, `./fixtures/credentials`) and a `describe("US1 — Login + AuthGate")` block. No `beforeEach` here — each scenario starts from a fresh context.
 - [ ] T014 [US1] Implement scenario "deep-link redirect" in `auth.spec.ts`: navigate to `/tenants` with a fresh `browser.newContext()`, assert URL becomes `/login?next=%2Ftenants` and the email input is visible.
 - [ ] T015 [US1] Implement scenario "post-login bounces back to next" in `auth.spec.ts`: from `/login?next=/tenants`, submit the form with `SEEDED_ADMIN` credentials, assert URL becomes `/tenants` and at least one tenant row (or empty-state message) is visible within 2 s.
 - [ ] T016 [US1] Implement scenario "default landing on no `next`" in `auth.spec.ts`: navigate to `/login` directly, submit, assert landing on a non-`/login` URL (loop prevention).
 - [ ] T017 [US1] Implement scenario "invalid credentials" in `auth.spec.ts`: submit `/login` with a wrong password, assert an error message appears in the form, URL stays on `/login`, and `page.context().cookies()` contains no session cookie.
-- [ ] T018 [US1] Run `npx playwright test auth.spec.ts` ten times consecutively (`for i in {1..10}; do npx playwright test auth.spec.ts || break; done`); zero flake (SC-003 partial verification for US1).
+- [ ] T018 [US1] Run `pnpm exec playwright test auth.spec.ts` ten times consecutively (`for i in {1..10}; do pnpm exec playwright test auth.spec.ts || break; done`); zero flake (SC-003 partial verification for US1).
 
 **Checkpoint**: US1 done. MVP slice is shippable as-is — the most failure-prone UI contract has a regression guard.
 
@@ -74,13 +76,13 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch any regression where switching scope from the topbar fails to re-fetch data on the next page navigation (the cross-tenant data-leak hazard).
 
-**Independent test**: Run `npx playwright test scope.spec.ts`. Three scenarios cover scope picker, navigation rescope, and reload persistence per [spec.md](spec.md) §US2.
+**Independent test**: Run `pnpm exec playwright test scope.spec.ts`. Three scenarios cover scope picker, navigation rescope, and reload persistence per [spec.md](spec.md) §US2.
 
 - [ ] T019 [US2] Create `frontend/tests/e2e/scope.spec.ts` with a `beforeEach` that calls `loginAsAdmin(page)` then `seedTenant({ slugPrefix: "acme" })` and `seedTenant({ slugPrefix: "globex" })` — captures both tenant IDs in test-scoped state.
 - [ ] T020 [US2] Implement scenario "scope picker reflects selection" in `scope.spec.ts`: open the scope picker in the topbar, click the seeded "Globex" entry, assert the topbar indicator now reads the Globex display name.
 - [ ] T021 [US2] Implement scenario "navigation rescopes data fetch" in `scope.spec.ts`: with scope=Acme, navigate to `/buckets`, count rows; switch scope to Globex, navigate to `/buckets`, assert the row set differs (no Acme bucket leaks into Globex view).
 - [ ] T022 [US2] Implement scenario "reload persists scope" in `scope.spec.ts`: switch scope to Globex, call `page.reload()`, assert the topbar indicator still reads Globex AND the next API call (intercepted via `page.waitForRequest`) carries Globex's tenant_id.
-- [ ] T023 [US2] Run `npx playwright test scope.spec.ts` ten times consecutively; zero flake.
+- [ ] T023 [US2] Run `pnpm exec playwright test scope.spec.ts` ten times consecutively; zero flake.
 
 **Checkpoint**: US2 done. Combined US1+US2 is the operator-critical P1 surface, fully guarded.
 
@@ -90,14 +92,14 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch any regression in the most common day-1 operator path: `/buckets → bucket detail → ObjectKeys panel → ObjectKey detail`.
 
-**Independent test**: Run `npx playwright test buckets.spec.ts`. Three scenarios per [spec.md](spec.md) §US3.
+**Independent test**: Run `pnpm exec playwright test buckets.spec.ts`. Three scenarios per [spec.md](spec.md) §US3.
 
 - [ ] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedBucket(opts)` and `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". The bucket uses the default backend ID from the test-stack chart config; ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential to avoid edit-race during agent runs.)
 - [ ] T025 [US3] Create `frontend/tests/e2e/buckets.spec.ts` with a `beforeEach` that logs in, seeds one tenant, one bucket, and one ObjectKey, capturing all three for assertions.
 - [ ] T026 [US3] Implement scenario "bucket list shows seeded bucket" in `buckets.spec.ts`: navigate to `/buckets` (scope=seeded tenant), assert a row matching the seeded bucket's `displayName` is visible.
 - [ ] T027 [US3] Implement scenario "bucket detail opens ObjectKeys panel" in `buckets.spec.ts`: click the bucket row, wait for the detail page, assert the ObjectKeys panel is visible and shows the seeded key's name.
 - [ ] T028 [US3] Implement scenario "ObjectKey detail renders policy editor" in `buckets.spec.ts`: click the ObjectKey row, assert the canonical resource name string appears AND the Cedar policy editor textarea is visible.
-- [ ] T029 [US3] Run `npx playwright test buckets.spec.ts` ten times consecutively; zero flake.
+- [ ] T029 [US3] Run `pnpm exec playwright test buckets.spec.ts` ten times consecutively; zero flake.
 
 **Checkpoint**: US3 done. Day-1 operator path covered.
 
@@ -107,7 +109,7 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch (a) regressions in the capability create/revoke UI, AND (b) any regression to the middleware-level Idempotency-Key memoize+replay (FR-008 — the single most important guard for the work that shipped on develop today).
 
-**Independent test**: Run `npx playwright test capabilities.spec.ts`. Three scenarios per [spec.md](spec.md) §US4, with the double-submit collapse being the critical assertion.
+**Independent test**: Run `pnpm exec playwright test capabilities.spec.ts`. Three scenarios per [spec.md](spec.md) §US4, with the double-submit collapse being the critical assertion.
 
 - [ ] T030 [US4] Create `frontend/tests/e2e/capabilities.spec.ts` with `beforeEach` that logs in and seeds one tenant.
 - [ ] T031 [US4] Implement scenario "single submit creates one capability" in `capabilities.spec.ts`: navigate to `/capabilities` (scoped), fill the form, submit ONCE, assert exactly one row appears within 2 s.
@@ -121,7 +123,7 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
     Code comments MUST reference FR-008, both layers, and the implementation file.
 - [ ] T033 [US4] Implement scenario "revoke flips state without removing row" in `capabilities.spec.ts`: create a capability, click revoke + confirm in the dialog, assert the row stays in the table but its status column shows "revoked".
-- [ ] T034 [US4] Run `npx playwright test capabilities.spec.ts` ten times consecutively; zero flake. Critical for FR-008 — if T032 flakes under retries, the test is wrong (the contract is deterministic).
+- [ ] T034 [US4] Run `pnpm exec playwright test capabilities.spec.ts` ten times consecutively; zero flake. Critical for FR-008 — if T032 flakes under retries, the test is wrong (the contract is deterministic).
 
 **Checkpoint**: US4 done. The idempotency layer that shipped today is now guarded by automated regression coverage.
 
@@ -131,12 +133,12 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Story goal**: Catch any regression to the soft-delete + restore round-trip — the foundation of the "oops, I deleted that" recovery flow.
 
-**Independent test**: Run `npx playwright test trash.spec.ts`. Two scenarios per [spec.md](spec.md) §US5. (The originally-planned "slug collision on restore" scenario was dropped during /speckit-analyze — it's unreachable in the current backend because the slug UNIQUE constraint applies across active AND trashed sets per migration 036. Will be added when the BACKLOG'd "partial UNIQUE" change lands.)
+**Independent test**: Run `pnpm exec playwright test trash.spec.ts`. Two scenarios per [spec.md](spec.md) §US5. (The originally-planned "slug collision on restore" scenario was dropped during /speckit-analyze — it's unreachable in the current backend because the slug UNIQUE constraint applies across active AND trashed sets per migration 036. Will be added when the BACKLOG'd "partial UNIQUE" change lands.)
 
 - [ ] T035 [US5] Create `frontend/tests/e2e/trash.spec.ts` with `beforeEach` that logs in and seeds one tenant.
 - [ ] T036 [US5] Implement scenario "soft-delete moves tenant to trash" in `trash.spec.ts`: navigate to the seeded tenant's detail page, click delete (provide resource_version), confirm; navigate to `/trash`, assert the tenant appears there AND no longer appears on `/tenants`.
 - [ ] T037 [US5] Implement scenario "restore from trash" in `trash.spec.ts`: from `/trash`, click the restore action on the seeded tenant, confirm; assert the tenant reappears on `/tenants` within 2 s AND is removed from `/trash`.
-- [ ] T038 [US5] Run `npx playwright test trash.spec.ts` ten times consecutively; zero flake.
+- [ ] T038 [US5] Run `pnpm exec playwright test trash.spec.ts` ten times consecutively; zero flake.
 
 **Checkpoint**: US5 done. The full 5-story spec is shipped.
 
@@ -147,8 +149,8 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 **Purpose**: Documentation, sign-off verification per SC-003 + SC-004, and removal of the closed BACKLOG entry per Constitution III.
 
 - [ ] T039 [P] Create `frontend/tests/e2e/README.md` derived from [quickstart.md](quickstart.md) — operator manual stripped down to the parts needed for daily test-running (prereqs, run, debug, troubleshoot). Cross-link to the spec for design rationale.
-- [ ] T040 [P] Verify FR-007 (TypeScript conventions): from `frontend/`, run `npm run lint` and `npx tsc --noEmit`. Both MUST exit zero. If a Playwright-specific eslint rule needs adjusting (e.g. `@typescript-eslint/no-floating-promises` on intentionally-awaited locator chains), add a focused override in `frontend/eslint.config.*` with a justification comment — do NOT silence rules globally.
-- [ ] T041 Verify SC-002 + SC-003 (each run <3 min wall-clock AND zero flake across 10 consecutive runs of the FULL suite): from `frontend/`, run `for i in {1..10}; do time npm run test:e2e || { echo "FLAKED on run $i"; break; }; done`. All 10 must pass AND each run's `real` time must be <3m00s. If any run fails OR exceeds 3 minutes, fix the offending test before sign-off — do NOT add a retry to mask flake or raise SC-002.
+- [ ] T040 [P] Verify FR-007 (TypeScript conventions): from `frontend/`, run `pnpm run lint` and `pnpm exec tsc --noEmit`. Both MUST exit zero. If a Playwright-specific eslint rule needs adjusting (e.g. `@typescript-eslint/no-floating-promises` on intentionally-awaited locator chains), add a focused override in `frontend/eslint.config.*` with a justification comment — do NOT silence rules globally.
+- [ ] T041 Verify SC-002 + SC-003 (each run <3 min wall-clock AND zero flake across 10 consecutive runs of the FULL suite): from `frontend/`, run `for i in {1..10}; do time pnpm run test:e2e || { echo "FLAKED on run $i"; break; }; done`. All 10 must pass AND each run's `real` time must be <3m00s. If any run fails OR exceeds 3 minutes, fix the offending test before sign-off — do NOT add a retry to mask flake or raise SC-002.
 - [ ] T042 Verify SC-004 (regression coverage) by dry-running the five intentional-break scenarios in [quickstart.md](quickstart.md) §"Verifying the regression-coverage promise". Each break must produce a clear named test failure in the expected spec file. Revert each break immediately after verification.
 - [ ] T043 Delete the "Frontend Playwright suite" entry from `BACKLOG.md` (the existing Aspirational record) in the SAME commit that closes this feature, per Constitution III ("closed BACKLOG entries are deleted, git history is the audit trail").
 
@@ -238,11 +240,11 @@ T030 → T031 → T032 → T033 → T034
 
 | Story | Independent test |
 |---|---|
-| US1 | `npx playwright test auth.spec.ts` passes 10×; breaking `AuthGate.tsx`'s `useEffect` makes it fail. |
-| US2 | `npx playwright test scope.spec.ts` passes 10×; commenting `ScopeContext.setScope` makes it fail. |
-| US3 | `npx playwright test buckets.spec.ts` passes 10×; removing the bucket row click handler makes it fail. |
-| US4 | `npx playwright test capabilities.spec.ts` passes 10×; setting `RequireOnCreate: false` makes T032 fail. |
-| US5 | `npx playwright test trash.spec.ts` passes 10×; commenting `RestoreTenant` button handler makes it fail. |
+| US1 | `pnpm exec playwright test auth.spec.ts` passes 10×; breaking `AuthGate.tsx`'s `useEffect` makes it fail. |
+| US2 | `pnpm exec playwright test scope.spec.ts` passes 10×; commenting `ScopeContext.setScope` makes it fail. |
+| US3 | `pnpm exec playwright test buckets.spec.ts` passes 10×; removing the bucket row click handler makes it fail. |
+| US4 | `pnpm exec playwright test capabilities.spec.ts` passes 10×; setting `RequireOnCreate: false` makes T032 fail. |
+| US5 | `pnpm exec playwright test trash.spec.ts` passes 10×; commenting `RestoreTenant` button handler makes it fail. |
 
 ---
 

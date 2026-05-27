@@ -34,6 +34,13 @@ guard — captured as a dedicated test in US4.
     reused; the test fixtures call the same generated clients
     the application uses
 
+**Package manager**: `pnpm@^11.3.0` (Clarification Q6 + R-008).
+This feature ships the `frontend/` migration from npm to pnpm
+in the same commit train as the Playwright dep adoption —
+T001 + T001a perform the lockfile migration before
+`@playwright/test` is installed. Backend tooling is
+unaffected.
+
 **Storage**: Postgres 16 (ephemeral per docker-compose run).
 Shared across all tests; per-test fixtures distinguish via
 UUID-suffixed identifiers. Garage `dxflrs/garage:v2.3.x` as
@@ -145,7 +152,10 @@ README, no cross-package coupling.
 
 See [research.md](research.md). Highlights:
   - Playwright 1.60.0 confirmed latest stable via
-    `npm view @playwright/test version`.
+    `npm view @playwright/test version` (npm CLI used only
+    for the registry query — the project uses pnpm).
+  - pnpm 11.3.0 confirmed latest stable via
+    `npm view pnpm version`.
   - Garage v2.3.0+ confirmed via official docs; supports every
     S3 op PALADIN backend actually calls (Sigv4, presigned URLs,
     multipart upload). Tag/version S3 ops are missing but

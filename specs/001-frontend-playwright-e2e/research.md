@@ -176,3 +176,50 @@ findings on the technology choices the plan makes.
   - The `--ci` retry policy is forward-compatible with the
     future CI integration without changing the local
     contract.
+
+## R-008 — Package manager: pnpm
+
+- **Decision**: `pnpm@^11.3.0` (latest stable). Replaces npm
+  for the `frontend/` workspace. `packageManager` field in
+  `package.json` pins the version; `package-lock.json` is
+  removed and `pnpm-lock.yaml` checked in.
+- **Rationale**:
+  - Strict dependency resolution: pnpm refuses to resolve
+    imports for packages not declared in `package.json`,
+    catching accidental phantom-dependency imports that
+    npm's flat node_modules silently allows. Particularly
+    valuable given Playwright pulls in deep dev trees.
+  - Content-addressable store on disk: subsequent installs
+    across worktrees / branches share the global store,
+    ~3× faster cold install vs npm. Material on the CI
+    runner when the test stack's frontend container
+    builds.
+  - Workspaces are first-class — leaves room for a future
+    multi-package frontend refactor without retooling.
+- **Alternatives considered**:
+  - **Stay on npm**: zero migration cost, but every CI run
+    re-resolves the dependency tree from scratch + retains
+    the phantom-dep risk.
+  - **yarn**: equivalent feature surface to pnpm but slower
+    in benchmarks and the project's other tooling
+    (Taskfile, lefthook) doesn't reference yarn anywhere.
+  - **bun**: too aggressive a runtime swap for a Next.js 16
+    workspace targeting node:22 in prod. Not on the
+    LATEST_STABLE GA track yet for our use case.
+- **Migration steps** (executed in T001 + new T001a):
+  1. `corepack enable && corepack prepare pnpm@11.3.0 --activate`
+  2. Delete `frontend/package-lock.json`.
+  3. Run `pnpm install` from `frontend/` — generates
+     `pnpm-lock.yaml`.
+  4. Add `"packageManager": "pnpm@11.3.0"` to
+     `frontend/package.json`.
+  5. Verify `frontend/.npmrc` (if any) doesn't conflict
+     with pnpm defaults; add `strict-peer-dependencies=false`
+     if existing peer-dep complaints surface.
+- **Scope warning**: This decision changes the dev tool for
+  the entire `frontend/` workspace, not just the e2e
+  subfolder. The migration ships in T001 because it's a
+  Setup prerequisite for installing `@playwright/test` via
+  pnpm. Per Constitution V (Local-Dev Parity), no overlay
+  change needed — pnpm is a dev-time tool, not a runtime
+  artifact.

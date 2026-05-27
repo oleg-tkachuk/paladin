@@ -7,7 +7,10 @@ One-page operator manual for running and extending the suite.
 - Docker Desktop (or equivalent — Colima, Rancher Desktop)
   with ≥ 4 CPU / 6 GB RAM available to containers.
 - Node.js 22+ (matches `frontend/package.json` engines).
-- `pnpm` or `npm` (project uses npm by default).
+- `pnpm` `^11.3.0` (project's package manager — pinned via the
+  `packageManager` field in `frontend/package.json`). Easiest
+  install path: `corepack enable && corepack prepare
+  pnpm@11.3.0 --activate` (no separate `npm i -g pnpm` needed).
 - 16 GB RAM developer-class machine (per SC-002).
 - Latest PALADIN backend image present locally as
   `registry.local/paladin/paladin:latest` —
@@ -20,12 +23,12 @@ One-page operator manual for running and extending the suite.
 cd frontend
 
 # One-time install of Playwright + browser binaries.
-npm install
-npx playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 
 # Run the full suite. webServer config brings up the test
 # stack automatically; tear-down happens on Playwright exit.
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 Expected: ~2 minutes wall-clock on an M1+ machine, 6 tests
@@ -37,24 +40,24 @@ flake — pass 10× in a row before sign-off).
 ```bash
 # Bring up the stack in a separate terminal so subsequent
 # Playwright runs reuse it (cuts startup from ~30s to ~2s).
-npm run test:e2e:stack
+pnpm run test:e2e:stack
 
 # In another terminal:
-npx playwright test capabilities.spec.ts --headed
+pnpm exec playwright test capabilities.spec.ts --headed
 
 # Debug mode (Playwright Inspector — step through, edit
 # locators interactively).
-npx playwright test capabilities.spec.ts --debug
+pnpm exec playwright test capabilities.spec.ts --debug
 ```
 
 ## Inspecting a failure
 
 ```bash
 # HTML report is generated under tests/e2e/test-results/html-report.
-npx playwright show-report tests/e2e/test-results/html-report
+pnpm exec playwright show-report tests/e2e/test-results/html-report
 
 # Or open the per-failure trace directly:
-npx playwright show-trace \
+pnpm exec playwright show-trace \
   tests/e2e/test-results/<failed-test-dir>/trace.zip
 ```
 
@@ -65,7 +68,7 @@ without re-running.
 ## Tearing down
 
 ```bash
-npm run test:e2e:stack:down
+pnpm run test:e2e:stack:down
 ```
 
 Removes containers + the tmpfs Postgres volume. Next run
@@ -99,9 +102,9 @@ starts from zero.
 | `webServer` times out after 120s | PALADIN backend image not built locally | `task -d backend build:image` |
 | Garage container exits immediately | Port 3900/3902 already in use | `lsof -iTCP:3900 -sTCP:LISTEN`, kill the offender |
 | Postgres healthcheck never passes | Conflicting postgres on host port 5432 | Set `POSTGRES_HOST_PORT=5433` in `.env` next to compose file |
-| Tests pass locally, fail with "Idempotency-Key missing" on a Create | Frontend transport not loaded | Verify `src/lib/connect/transport.ts` import chain compiles; restart `npm run dev` |
+| Tests pass locally, fail with "Idempotency-Key missing" on a Create | Frontend transport not loaded | Verify `src/lib/connect/transport.ts` import chain compiles; restart `pnpm run dev` |
 | Login form returns "user not found" | Bootstrap container didn't run | Check `docker compose -p paladin-e2e logs bootstrap`; bootstrap depends on migrate succeeding |
-| Test passes on first run, fails on second | Stale data in the shared DB | Run `npm run test:e2e:stack:down` then `:stack` — should never need this in steady state; if it does, the test isn't UUID-suffixing all unique fields |
+| Test passes on first run, fails on second | Stale data in the shared DB | Run `pnpm run test:e2e:stack:down` then `:stack` — should never need this in steady state; if it does, the test isn't UUID-suffixing all unique fields |
 
 ## Verifying the regression-coverage promise (SC-004)
 
