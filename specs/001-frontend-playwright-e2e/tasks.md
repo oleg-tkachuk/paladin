@@ -72,19 +72,23 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 ---
 
-## Phase 4: User Story 2 — Tenant scope switching (P1)
+## Phase 4: User Story 2 — Backend + bucket scope switching (P1)
 
-**Story goal**: Catch any regression where switching scope from the topbar fails to re-fetch data on the next page navigation (the cross-tenant data-leak hazard).
+> **Re-scoped during /speckit-implement.** Original "Tenant scope switching" wording assumed a cross-tenant picker that doesn't exist in the current UI (`ScopeContext.tsx:23–29`: *"the 1:1 user-tenant model means switching tenants requires a different login"*). Spec.md §US2 rewritten + BACKLOG entry "Cross-tenant scope switcher" added. Tests now exercise the scope axes the UI ACTUALLY exposes today (backend + bucket).
 
-**Independent test**: Run `pnpm exec playwright test scope.spec.ts`. Three scenarios cover scope picker, navigation rescope, and reload persistence per [spec.md](spec.md) §US2.
+**Story goal**: Catch any regression where opening the scope picker, selecting a different bucket, or reloading the page silently drops the operator's working scope.
 
-- [ ] T019 [US2] Create `frontend/tests/e2e/scope.spec.ts` with a `beforeEach` that calls `loginAsAdmin(page)` then `seedTenant({ slugPrefix: "acme" })` and `seedTenant({ slugPrefix: "globex" })` — captures both tenant IDs in test-scoped state.
-- [ ] T020 [US2] Implement scenario "scope picker reflects selection" in `scope.spec.ts`: open the scope picker in the topbar, click the seeded "Globex" entry, assert the topbar indicator now reads the Globex display name.
-- [ ] T021 [US2] Implement scenario "navigation rescopes data fetch" in `scope.spec.ts`: with scope=Acme, navigate to `/buckets`, count rows; switch scope to Globex, navigate to `/buckets`, assert the row set differs (no Acme bucket leaks into Globex view).
-- [ ] T022 [US2] Implement scenario "reload persists scope" in `scope.spec.ts`: switch scope to Globex, call `page.reload()`, assert the topbar indicator still reads Globex AND the next API call (intercepted via `page.waitForRequest`) carries Globex's tenant_id.
-- [ ] T023 [US2] Run `pnpm exec playwright test scope.spec.ts` ten times consecutively; zero flake.
+**Independent test**: Run `pnpm exec playwright test scope.spec.ts`. Three scenarios cover picker open + bucket selection + reload persistence per [spec.md](spec.md) §US2.
 
-**Checkpoint**: US2 done. Combined US1+US2 is the operator-critical P1 surface, fully guarded.
+- [X] T019 [US2] Create `frontend/tests/e2e/scope.spec.ts` with per-test seed: `loginAsAdmin(page)` then `seedBucket()` (under the default `primary` backend). No `beforeEach` block — each test does its own seed so they share no state.
+- [X] T020 [US2] Implement scenario "picker opens with Backends + Buckets sections" — click the trigger (matched by `aria-label /^Scope picker —/`), assert both section headings render.
+- [X] T021 [US2] Implement scenario "selecting a bucket updates the topbar breadcrumb" — open picker, click the seeded bucket row, assert the trigger's `aria-label` embeds the seeded bucket name.
+- [X] T022 [US2] Implement scenario "reload preserves the selected scope" — select bucket, `page.reload()`, re-resolve the trigger and assert the bucket name is still in `aria-label`. Catches a regression where `safeRead()` in `ScopeContext` skips the localStorage hydration.
+- [~] T023 [US2] Run `pnpm exec playwright test scope.spec.ts` ten times consecutively; zero flake. **DEFERRED to operator runtime** alongside T018 — requires the full stack up. Static gates verified: tsc clean; playwright discovers all 3 scenarios.
+
+**Auxiliary**: `seedBucket()` helper pulled forward from US3's T024 into `fixtures/seed.ts` during this phase — US2 needs at least one bucket present for the picker rows to render.
+
+**Checkpoint**: US2 done. Combined US1+US2 is the operator-critical P1 surface (within the bounds of what the current UI exposes), fully guarded.
 
 ---
 
@@ -94,7 +98,7 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Independent test**: Run `pnpm exec playwright test buckets.spec.ts`. Three scenarios per [spec.md](spec.md) §US3.
 
-- [ ] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedBucket(opts)` and `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". The bucket uses the default backend ID from the test-stack chart config; ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential to avoid edit-race during agent runs.)
+- [ ] T024 [US3] Extend `frontend/tests/e2e/fixtures/seed.ts` with `seedObjectKey(opts)` per [contracts/fixtures-api.md](contracts/fixtures-api.md) §"`fixtures/seed.ts`". ObjectKey gets a `e2e/${randomHex(8)}` key path. (Not [P] — modifies the same file as T011, additive but sequential.) **Note**: `seedBucket(opts)` was pulled forward into the Phase 4 (US2) commit because the repurposed scope-switching tests needed at least one bucket. T024 is now smaller than originally specified.
 - [ ] T025 [US3] Create `frontend/tests/e2e/buckets.spec.ts` with a `beforeEach` that logs in, seeds one tenant, one bucket, and one ObjectKey, capturing all three for assertions.
 - [ ] T026 [US3] Implement scenario "bucket list shows seeded bucket" in `buckets.spec.ts`: navigate to `/buckets` (scope=seeded tenant), assert a row matching the seeded bucket's `displayName` is visible.
 - [ ] T027 [US3] Implement scenario "bucket detail opens ObjectKeys panel" in `buckets.spec.ts`: click the bucket row, wait for the detail page, assert the ObjectKeys panel is visible and shows the seeded key's name.

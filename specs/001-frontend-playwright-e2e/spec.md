@@ -73,40 +73,54 @@ dependency on any other story.
 
 ---
 
-### User Story 2 — Tenant scope switching (Priority: P1)
+### User Story 2 — Backend + bucket scope switching (Priority: P1)
 
-A platform-admin operator selects a different tenant from the
-scope selector in the top bar. Every subsequent navigation — to
-Buckets, ObjectKeys, Users, Capabilities — fetches data under
-the newly-selected tenant scope. The scope persists across
-page navigation within the same browser tab and survives a
-reload.
+> **Spec history**: This story originally read "Tenant scope
+> switching." During /speckit-implement Phase 4 it became clear
+> the current UI does NOT support tenant switching — the
+> tenant field on `<ScopePicker>` is read-only because of the
+> 1:1 user-tenant model (see `frontend/src/context/
+> ScopeContext.tsx:23–29`). Cross-tenant switching is a
+> planned backend feature (`ListMyMemberships +
+> SwitchTenant`); a BACKLOG entry tracks it in PALADIN's
+> `BACKLOG.md`. This story is therefore re-scoped to the
+> scope-axis the UI ACTUALLY exposes today: backend + bucket
+> selection.
 
-**Why this priority**: This is the central UX abstraction for
-platform operators (who manage many tenants from one console).
-A regression here causes cross-tenant data leakage at the UI
-layer even if the backend is correct — the operator sees rows
-that don't belong to the tenant they think they're viewing.
+An operator picks a different backend or bucket from the
+`<ScopePicker>` popover in the topbar. The topbar breadcrumb
+reflects the new selection immediately. The choice persists
+in localStorage and survives a browser reload — operators
+should not have to re-select their working scope every time
+they refresh.
 
-**Independent Test**: Log in with platform-admin, switch the
-scope twice, navigate to two different pages, assert the data
-matches the currently-selected scope. Does not depend on US1
-beyond a valid session.
+**Why this priority**: The scope picker is the central UX
+abstraction for navigating storage hierarchies. A regression
+here (picker doesn't update, localStorage isn't read on
+mount, navigation drops the scope) makes the UI feel broken
+even when every backend RPC is healthy.
+
+**Independent Test**: Log in, open the scope picker, select a
+seeded bucket, verify the topbar reflects it; reload the
+page, verify the scope is still selected.
 
 **Acceptance Scenarios**:
 
-1. **Given** the operator is logged in as platform-admin with
-   two seeded tenants (Acme, Globex), **When** they select
-   "Globex" from the scope picker, **Then** the indicator in
-   the top bar reflects "Globex" and the next API call carries
-   the Globex tenant id.
-2. **Given** the operator is viewing `/buckets` scoped to Acme,
-   **When** they switch scope to Globex and stay on `/buckets`,
-   **Then** the bucket list refetches and shows Globex's
-   buckets (not Acme's).
-3. **Given** the operator has switched scope and refreshes the
-   page, **When** the page rehydrates, **Then** the selected
-   scope persists and the data fetched matches.
+1. **Given** the operator is logged in with at least one
+   bucket visible in the picker, **When** they click the
+   scope-picker trigger in the topbar, **Then** the popover
+   opens and the Backends + Buckets sections render with the
+   current selection highlighted.
+2. **Given** the picker is open and the current bucket is
+   "Any bucket", **When** they click a specific seeded
+   bucket, **Then** the popover closes AND the topbar
+   breadcrumb's bucket segment updates from the muted-italic
+   "any" to the selected bucket's name.
+3. **Given** the operator has selected a specific bucket,
+   **When** they reload the page, **Then** the topbar
+   breadcrumb still shows the selected bucket (the
+   `setScope` write to localStorage round-trips through the
+   `safeRead` hydration in `ScopeContext`).
 
 ---
 

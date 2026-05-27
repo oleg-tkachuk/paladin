@@ -25,6 +25,7 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
+import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName } from "./unique";
@@ -65,20 +66,28 @@ async function getAdminToken(): Promise<string> {
   return access;
 }
 
-function adminClient() {
-  return createClient(
-    TenantService,
-    createConnectTransport({
-      baseUrl: ADMIN_URL,
-      interceptors: [
-        (next) => async (req) => {
-          const token = await getAdminToken();
-          req.header.set("Authorization", `Bearer ${token}`);
-          return next(req);
-        },
-      ],
-    }),
-  );
+// Shared admin transport: one createConnectTransport call per
+// helper would force a new fetch pool on every seed call. We
+// build it once and reuse across TenantService / BucketService.
+function adminTransport() {
+  return createConnectTransport({
+    baseUrl: ADMIN_URL,
+    interceptors: [
+      (next) => async (req) => {
+        const token = await getAdminToken();
+        req.header.set("Authorization", `Bearer ${token}`);
+        return next(req);
+      },
+    ],
+  });
+}
+
+function tenantAdminClient() {
+  return createClient(TenantService, adminTransport());
+}
+
+function bucketAdminClient() {
+  return createClient(BucketService, adminTransport());
 }
 
 // ─── seeded entity shapes ──────────────────────────────────
@@ -106,7 +115,7 @@ export async function seedTenant(opts?: {
 }): Promise<SeededTenant> {
   const slug = uniqueSlug(opts?.slugPrefix ?? "acme");
   const displayName = uniqueDisplayName(opts?.displayNamePrefix ?? "Acme E2E");
-  const client = adminClient();
+  const client = tenantAdminClient();
   const res = await client.createTenant({
     tenantId: "", // server-generated UUIDv7
     tenant: {
@@ -135,5 +144,58 @@ export async function seedTenant(opts?: {
   };
 }
 
-// seedBucket / seedObjectKey arrive in Phase 5 (US3) — see
-// tasks.md T024. They're not used by US1 or US2.
+// ─── bucket seeding ────────────────────────────────────────
+//
+// Originally planned for US3 (tasks.md T024) but pulled
+// forward into Phase 2 because US2's repurposed scenarios
+// (backend/bucket scope switching) need at least one bucket
+// to exist for the picker to render selectable items.
+
+export interface SeededBucket {
+  /** Backend ID this bucket lives in (e.g. "primary"). */
+  backendId: string;
+  /** Physical bucket name. UUID-suffixed via uniqueSlug. */
+  bucketName: string;
+  /** Human-facing display name. UUID-suffixed. */
+  displayName: string;
+}
+
+/**
+ * Create a bucket via BucketService.CreateBucket under the
+ * given backend. Defaults to the chart-default `primary`
+ * backend the bootstrap container provisions.
+ *
+ * Note `provisionOnBackend: false` — for the e2e suite we
+ * don't actually need the bucket to exist on the Garage
+ * side. Every scope-picker test asserts metadata, not S3
+ * I/O. Skipping provision shaves ~1s per seedBucket call.
+ */
+export async function seedBucket(opts?: {
+  backendId?: string;
+  bucketNamePrefix?: string;
+  displayNamePrefix?: string;
+}): Promise<SeededBucket> {
+  const backendId = opts?.backendId ?? "primary";
+  const bucketName = uniqueSlug(opts?.bucketNamePrefix ?? "e2e-bucket");
+  const displayName = uniqueDisplayName(
+    opts?.displayNamePrefix ?? "E2E Bucket",
+  );
+  const client = bucketAdminClient();
+  await client.createBucket({
+    parent: `storageBackends/${backendId}`,
+    bucketName,
+    bucket: {
+      $typeName: "paladin.admin.v1.Bucket",
+      backendId,
+      bucketName,
+      displayName,
+      region: "",
+      labels: {},
+      cedarPolicy: "",
+    } as never,
+    provisionOnBackend: false,
+  });
+  return { backendId, bucketName, displayName };
+}
+
+// seedObjectKey arrives in Phase 5 (US3). Not needed by US1 or US2.
