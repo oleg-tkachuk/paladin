@@ -25,7 +25,6 @@ config:
     signing_key: "<prod-signing-key-from-sealed-secret>"
 
   security:
-    trust_tenant_id_from_request: false
     log_sensitive: false
 
   storage:

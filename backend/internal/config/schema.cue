@@ -165,9 +165,12 @@ auth: {
 }
 
 security: {
-  trust_tenant_id_from_request: bool | *true
-  reject_tenant_mismatch:       bool | *true
-  log_sensitive:                bool | *false
+  // trust_tenant_id_from_request removed in the post-2026-05 audit —
+  // was declared but never read; the X-Tenant-Id Login hint was
+  // always password-gated regardless of the flag. See types.go.Security
+  // for the longer rationale.
+  reject_tenant_mismatch: bool | *true
+  log_sensitive:          bool | *false
   // RLS is not configurable — see types.go.Security. The runtime
   // always installs the BeforeAcquire hook because migration 023
   // makes RLS unavoidable at the DB layer.

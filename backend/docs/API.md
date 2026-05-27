@@ -98,7 +98,7 @@ The `ObjectFilter` message supports:
 
 - **Tenant Isolation**: Every request must include `tenant_id` as a proto field (validated as UUID).
 - **Admin Key**: `Authorization: Bearer <admin-key>` for system-level access.
-- **Header fallback**: `X-Tenant-Id` header trusted when `Security.TrustTenantIDFromRequest` is enabled.
+- **Tenant hint**: `X-Tenant-Id` may be set on `AuthService.Login` to disambiguate when a subject is registered in multiple tenants. The header is a hint only — password verification still gates the request, and the JWT's `tenant` claim is what every other RPC trusts.
 - **RBAC**: Handled at the service layer via `domain.Policy` interface.
 
 ## Validation

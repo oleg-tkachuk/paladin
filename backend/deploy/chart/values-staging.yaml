@@ -21,9 +21,6 @@ config:
     issuer: "https://paladin.staging.example/"
     signing_key: "<staging-signing-key>"
 
-  security:
-    trust_tenant_id_from_request: false
-
   storage:
     backends:
       primary:

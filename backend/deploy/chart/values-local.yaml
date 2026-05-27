@@ -13,7 +13,6 @@
 #   - debug logging and gin debug mode
 #   - hard-coded auth.signing_key + issuer for dev convenience
 #   - SeaweedFS dummy_* static keys
-#   - Trust X-Tenant-Id header from request (no JWT round-trip needed)
 #   - image.pullPolicy: Always (registry.local rebuilds same tag)
 #   - cert-manager off, reuse cluster-wide `traefik-tls` Secret
 #   - Traefik hosts pointing at *.paladin.local
@@ -39,9 +38,6 @@ config:
     # 32-byte dev placeholder. Production rotates via signing_key_secret
     # in a env overlay; local accepts the literal for convenience.
     signing_key: "dev-secret-change-me-32-bytes-min"
-
-  security:
-    trust_tenant_id_from_request: true
 
   storage:
     backends:

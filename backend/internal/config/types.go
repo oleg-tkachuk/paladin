@@ -255,9 +255,16 @@ type Auth struct {
 }
 
 type Security struct {
-	TrustTenantIDFromRequest bool `yaml:"trust_tenant_id_from_request" json:"trust_tenant_id_from_request"`
-	RejectTenantMismatch     bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
-	LogSensitive             bool `yaml:"log_sensitive" json:"log_sensitive"`
+	// trust_tenant_id_from_request used to live here but was dead code —
+	// the field was declared but never read anywhere in the Go tree, and
+	// the only consumer of the X-Tenant-Id header (AuthService.Login)
+	// uses it unconditionally as a tenant-disambiguation hint while
+	// still requiring a valid password. Removed in the post-2026-05
+	// security audit. Operators relying on it for trust-bypass were
+	// never actually getting that behaviour — Login was always
+	// password-gated.
+	RejectTenantMismatch bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
+	LogSensitive         bool `yaml:"log_sensitive" json:"log_sensitive"`
 
 	// RLS is intentionally not configurable here. Migration 023
 	// enables per-table policies unconditionally; the runtime always
