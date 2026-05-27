@@ -58,3 +58,9 @@
   knows not to drop it.
 - BACKLOG.md "Frontend Playwright suite" entry should be removed
   in the closing commit per Constitution Principle III.
+- **2026-05-27 clarification pass complete (5/5 questions):**
+  - Q1: Browser engines → Chromium only
+  - Q2: CI integration → deferred (locally runnable only in v1)
+  - Q3: DB isolation → shared Postgres, UUID-suffixed fixtures
+  - Q4: Admin credential → fixed dev-only with NEVER-in-prod comment
+  - Q5: S3 backend → Garage (`dxflrs/garage`)

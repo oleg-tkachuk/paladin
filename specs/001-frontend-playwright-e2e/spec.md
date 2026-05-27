@@ -8,6 +8,16 @@
 
 **Input**: User description: "Frontend Playwright E2E test suite for the PALADIN admin UI — automated regression coverage for the critical operator journeys (login, AuthGate, tenant scope switching, bucket browsing, capability lifecycle, tenant restore from trash). Replaces today's manual smoke testing on minikube. Must be reliable, fast, and authored in the same TypeScript flavour as the application."
 
+## Clarifications
+
+### Session 2026-05-27
+
+- Q: Which browser engines should the suite run against? → A: Chromium only. Cross-engine coverage adds little for an internal admin tool serving developer-class operators and triples CI cost. Firefox/WebKit can be added later if a real cross-browser bug surfaces.
+- Q: Should the suite integrate with a specific CI platform for artifact upload? → A: No — CI integration is explicitly deferred. v1 is locally runnable only; Playwright's failure artifacts (screenshot, video, trace) land in a known local directory (`frontend/tests/e2e/test-results/`). When CI lands later, the artifact path will already exist and only the upload step will need wiring.
+- Q: How are tests isolated from each other at the database layer? → A: Shared Postgres for the entire run; each test seeds its own fixtures (`seedTenant()`, etc.) with UUID-suffixed identifiers (e.g. `slug: "acme-" + crypto.randomUUID().slice(0,8)`) to avoid uniqueness collisions without per-test schema churn. Cheap and fast — keeps the 3-min budget intact.
+- Q: How is the seeded admin credential delivered to the test stack? → A: Fixed dev-only credential hardcoded in the test stack config (e.g. `e2e-admin / e2e-not-a-secret-2026`). Mirrors the `local-dev-admin-pw-*` pattern already used in `gitops` overlays. MUST carry an inline `NEVER true in prod` comment per Constitution Principle V. Tradeoff: weaker than per-run-generated, but keeps bootstrap deterministic and lets a debugging operator log in manually when a test fails.
+- Q: Which S3-compatible backend powers the test stack? → A: **Garage** (`dxflrs/garage:v2.3.0` or later). Single binary, env-var bootstrap (`GARAGE_DEFAULT_ACCESS_KEY/SECRET_KEY/BUCKET`), Rust runtime, fast startup. Supports every S3 operation PALADIN backend actually calls: PutObject, GetObject, ListObjects, HeadObject, CreateBucket, Sigv4 + presigned URLs, multipart upload. Garage's "missing" features (object versioning, tagging at the S3 layer) don't matter because PALADIN tracks those in Postgres (`object_versions`, `object_tags` tables), not via S3 API calls. Aligned with the lightweight-OSS philosophy of the broader gitops stack.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The user stories below are ordered by operator-journey criticality.
@@ -227,24 +237,34 @@ from trash, assert it reappears in the active tenant list.
   (US1 deserves multiple — happy path, no-next default,
   invalid-credentials negative).
 - **FR-002**: Each test MUST be independent — failure or
-  success of one test MUST NOT affect any other. Tests
-  share fixtures (helper code) but not runtime state.
+  success of one test MUST NOT affect any other. Tests share
+  the same Postgres instance for the run, but seeded data is
+  unique-per-test via UUID-suffixed identifiers
+  (`seedTenant()` helpers append a random suffix to slugs,
+  display names, and any other unique field). No test reads
+  data created by another.
 - **FR-003**: Tests MUST drive the browser through the real
   UI surfaces (form submission, button clicks, navigation)
   rather than bypassing the UI via direct API calls. The one
   exception: per-test seed data MAY be created via Connect-RPC
   calls in `test.beforeEach` to keep setup fast.
 - **FR-004**: The seeded admin user MUST be provisioned by
-  the test stack's bootstrap step (not hand-rolled per test).
-  Tests log in via the real `/login` form using these
-  credentials, exercising the full JWT + AuthGate chain.
+  the test stack's bootstrap step (not hand-rolled per test)
+  with a **fixed dev-only credential** hardcoded in the test
+  stack config. The credential MUST carry an inline `NEVER
+  true in prod` comment per Constitution Principle V. Tests
+  log in via the real `/login` form using these credentials,
+  exercising the full JWT + AuthGate chain.
 - **FR-005**: The test stack MUST be runnable locally via
   a single command. Local CI parity is critical — anything
   that runs in CI runs identically on the developer's laptop.
-- **FR-006**: On test failure, the artifact bundle (screenshot,
-  video, trace) MUST be uploaded to the CI run for offline
-  debugging. Local runs MUST also produce these artifacts in
-  a known location.
+- **FR-006**: On test failure, Playwright MUST produce the
+  artifact bundle (screenshot, video, trace) in a known local
+  directory (`frontend/tests/e2e/test-results/`). CI integration
+  for uploading these artifacts is **explicitly out of scope
+  for v1** — the suite is locally runnable only. Once CI lands
+  in a follow-up, the upload step plugs into the existing
+  artifact path without touching test code.
 - **FR-007**: The suite MUST be authored in TypeScript using
   the same lint/format conventions as the application code
   (matching `frontend/src/`'s tsconfig + eslint).
@@ -278,10 +298,12 @@ from trash, assert it reappears in the active tenant list.
 - **SC-001**: The suite covers at least the 6 user-story
   test cases (US1 may contribute multiple; US2–US5 contribute
   at least one each).
-- **SC-002**: A full run of the suite, including stack
-  bootstrap, completes in under **3 minutes** on the standard
-  CI runner. Local runs may be slightly faster (warm caches).
-- **SC-003**: Across **10 consecutive CI runs**, zero tests
+- **SC-002**: A full local run of the suite — Chromium engine
+  only, including stack bootstrap — completes in under **3
+  minutes** on a developer-class machine (M1+/Ryzen 5+ class,
+  16 GB RAM). CI runner targeting is deferred along with the
+  rest of CI integration (see FR-006).
+- **SC-003**: Across **10 consecutive local runs**, zero tests
   show flaky behaviour (no test passes-then-fails-then-passes
   pattern without an intervening code change). Measured by
   running the suite 10× in a row immediately after first
@@ -305,9 +327,11 @@ from trash, assert it reappears in the active tenant list.
   may need to run multiple containers — adding ~10s to
   startup but not changing the test surface. Confirmed by
   inspection of `cmd/server` subcommands during planning.
-- A fake S3 backend (MinIO or SeaweedFS) is sufficient — the
-  E2E tests do not exercise object content semantics, only
-  the control-plane RPCs around buckets and ObjectKeys.
+- The test stack uses **Garage** (`dxflrs/garage`) as the
+  S3-compatible backend (see Clarifications Q5). It supports
+  every S3 op PALADIN backend actually calls; tag/version S3
+  operations PALADIN would otherwise miss are not actually called
+  by PALADIN (they're tracked in Postgres tables instead).
 - The test stack uses a clean, ephemeral Postgres per run —
   no shared schema state across CI invocations. Migration
   cost (running the full `goose up`) is acceptable inside the
@@ -316,9 +340,11 @@ from trash, assert it reappears in the active tenant list.
   acceptable masking for genuinely transient infrastructure
   hiccups (e.g. backend cold-start race). True flakiness in
   test code itself is forbidden — see SC-003.
-- The seeded admin's password is short-lived and per-run
-  generated or fixed-but-non-secret (e.g. published in the
-  README); this is not a production credential.
+- The seeded admin's password is a fixed dev-only credential
+  hardcoded in the test stack config with a `NEVER true in
+  prod` comment (see Clarifications Q4). This is not a
+  production credential and MUST NEVER be reused on a real
+  cluster.
 - Mobile-first responsive testing is **out of scope** for v1.
   If desktop coverage proves insufficient, a separate spec
   will address mobile.
