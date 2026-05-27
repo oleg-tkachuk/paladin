@@ -1,0 +1,198 @@
+# PALADIN E2E test stack — Playwright suite runtime.
+#
+# Spec: specs/001-frontend-playwright-e2e/data-model.md §"Entity:
+# Test Stack". Seven services: postgres, migrate, bootstrap, api,
+# admin, garage, ui. The worker / mcp / ingest / dispatcher planes
+# are deliberately ABSENT — the Playwright tests never exercise
+# background jobs (event dispatch, outbox flush, MCP tool calls)
+# (R-006).
+#
+# Bring up:
+#   docker compose -p paladin-e2e \
+#       -f frontend/tests/e2e/docker-compose.test.yaml up --wait
+# Tear down (removes the tmpfs Postgres volume):
+#   docker compose -p paladin-e2e \
+#       -f frontend/tests/e2e/docker-compose.test.yaml down -v
+#
+# All env overrides use the PALADIN_ prefix + underscore→dot
+# translation (see backend/internal/config/config.go). The base
+# config file mounted into every backend container is the same
+# backend/configs/compose.yaml used by the dev-loop stack — keeping
+# one source of truth for everything that ISN'T e2e-specific.
+#
+# Credentials are dev-only and committed (per Clarification Q4 +
+# Constitution Principle V). The NEVER-in-prod marker lives both
+# here and in fixtures/credentials.ts.
+
+x-paladin-base: &paladin-base
+  image: registry.local/paladin/paladin:latest
+  volumes:
+    - ../../../backend/configs:/app/configs:ro
+  environment:
+    # ── bootstrap admin (fixture credential) ─────────────────
+    # NEVER true in prod. Mirrors fixtures/credentials.ts.
+    PALADIN_BOOTSTRAP_ADMIN_SUBJECT: e2e-admin@local
+    PALADIN_BOOTSTRAP_ADMIN_PASSWORD: e2e-not-a-secret-2026
+    PALADIN_BOOTSTRAP_ADMIN_MIN_PASSWORD_LENGTH: "16"
+    # ── storage: point at Garage instead of SeaweedFS ────────
+    PALADIN_STORAGE_BACKENDS_PRIMARY_ENDPOINT: http://garage:3900
+    PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT: http://localhost:3900
+    PALADIN_STORAGE_BACKENDS_PRIMARY_BUCKET: paladin-e2e
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_ACCESS_KEY: e2e-fixture-key
+    PALADIN_STORAGE_BACKENDS_PRIMARY_AUTH_SECRET_KEY: e2e-fixture-secret
+    # ── postgres connection ──────────────────────────────────
+    PALADIN_DATABASE_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: paladin-e2e-postgres
+    environment:
+      POSTGRES_DB: paladin
+      POSTGRES_USER: paladin
+      POSTGRES_PASSWORD: paladin
+    # Postgres on tmpfs: every test run starts from zero. The
+    # shared-DB-with-UUID-suffixed-fixtures isolation strategy
+    # (R-003) lives ABOVE this layer — the entire DB is fresh
+    # on every `compose up`, and tests collide-resist within
+    # the run via uniqueSlug() helpers.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paladin -d paladin"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      # Exposed for ad-hoc debugging from the host. Bind to a
+      # non-default port to avoid colliding with the dev-loop
+      # compose's 5433 OR a host postgres on 5432.
+      - "5434:5432"
+
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: paladin-e2e-garage
+    environment:
+      # v2.3+ auto-bootstrap: --single-node + --default-bucket
+      # creates the bucket from the GARAGE_DEFAULT_* env vars on
+      # first boot, skipping the multi-step `garage layout` +
+      # `garage bucket create` dance.
+      GARAGE_DEFAULT_ACCESS_KEY: e2e-fixture-key
+      GARAGE_DEFAULT_SECRET_KEY: e2e-fixture-secret
+      GARAGE_DEFAULT_BUCKET: paladin-e2e
+    # Entrypoint override required: the image's default Cmd is
+    # `[/garage server]`, so a plain `command: [server,
+    # --single-node]` would resolve as the literal binary
+    # `server` and fail with "executable not found".
+    entrypoint: ["/garage"]
+    command: ["server", "--single-node", "--default-bucket"]
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+    tmpfs:
+      # Garage requires a metadata + data dir; tmpfs is fine
+      # since the test-stack DB is ephemeral anyway.
+      - /tmp/garage
+    ports:
+      - "3900:3900"  # S3 API
+      - "3902:3902"  # admin / health
+    healthcheck:
+      # Garage image is distroless — no shell, no wget/curl.
+      # Use the `garage` binary's own `status` subcommand
+      # (which talks to itself on 127.0.0.1:3901 RPC). Exits
+      # 0 when the single-node cluster is healthy.
+      test: ["CMD", "/garage", "status"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: runs SQL migrations and exits 0. Subsequent
+  # services gate on `service_completed_successfully` so they
+  # never see a half-migrated schema.
+  migrate:
+    <<: *paladin-base
+    container_name: paladin-e2e-migrate
+    restart: "no"
+    command: ["migrate", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-shot: provisions the platform admin user (subject =
+  # e2e-admin@local, password = e2e-not-a-secret-2026 from env
+  # vars). Idempotent — safe to re-run.
+  bootstrap:
+    <<: *paladin-base
+    container_name: paladin-e2e-bootstrap
+    restart: "no"
+    command: ["bootstrap", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *paladin-base
+    container_name: paladin-e2e-api
+    init: true
+    restart: on-failure
+    command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8080:8080"  # data
+      - "8085:8085"  # iam
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      garage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  admin:
+    <<: *paladin-base
+    container_name: paladin-e2e-admin
+    init: true
+    restart: on-failure
+    command: ["serve", "admin", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8090:8090"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/readyz || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ui:
+    # Reuse the locally-built UI image; the dev-loop pipeline
+    # rebuilds `:latest` in place on every code change, so the
+    # test stack always picks up the operator's WIP.
+    image: registry.local/paladin/paladin-ui:latest
+    container_name: paladin-e2e-ui
+    init: true
+    restart: on-failure
+    environment:
+      # BFF reaches the planes via container DNS. The browser
+      # only ever talks to the BFF on :3000.
+      PALADIN_BACKEND_URLS_DATA: http://api:8080
+      PALADIN_BACKEND_URLS_IAM: http://api:8085
+      PALADIN_BACKEND_URLS_ADMIN: http://admin:8090
+      # `next start` (production-mode bundle) per
+      # Clarification Q3. NOT `next dev` — HMR is a documented
+      # flake source for E2E suites.
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
