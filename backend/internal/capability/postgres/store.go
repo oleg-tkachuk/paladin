@@ -43,6 +43,24 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 }
 
 // Insert implements capability.Store.
+//
+// RLS handling: migration 023 enables row-level security on
+// capability_records keyed on the session GUC `paladin.tenant_id`. The
+// pool's BeforeAcquire hook (see internal/store/postgres/rls.go) sets
+// that GUC from the request's JWT — which is correct for in-tenant
+// flows but wrong when a platform-admin issues a capability for a
+// DIFFERENT tenant (the JWT carries the platform tenant, the row
+// carries the target tenant, RLS rejects with 42501).
+//
+// Fix: wrap the INSERT in a transaction that `SET LOCAL paladin.tenant_id`
+// to the row's tenant_id. This is safe for every caller because the
+// GUC value matches the row being inserted by construction. Mirrors
+// the `SET LOCAL paladin.governance_bypass = true` pattern used in the
+// object hard-delete adapter (see store/postgres/adapters/object.go).
+//
+// The SET LOCAL scope dies with the transaction, so the connection's
+// pool-level GUC (set by BeforeAcquire) is restored automatically on
+// release without an explicit reset.
 func (s *Store) Insert(ctx context.Context, c capability.Capability) error {
 	principalPayload, err := json.Marshal(c.Subject)
 	if err != nil {
@@ -72,7 +90,25 @@ INSERT INTO capability_records (
 	if !c.NotBefore.IsZero() {
 		nbf = &c.NotBefore
 	}
-	if _, err := s.pool.Exec(ctx, stmt,
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("capability/postgres: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Align the session GUC with the row's tenant_id so the
+	// capability_records RLS policy (migration 023) admits the
+	// INSERT regardless of the caller's JWT tenant. See the doc
+	// comment above for the cross-tenant platform-admin case.
+	if _, err := tx.Exec(
+		ctx,
+		`SELECT set_config('paladin.tenant_id', $1, true)`,
+		c.Subject.TenantID.String(),
+	); err != nil {
+		return fmt.Errorf("capability/postgres: set tenant GUC: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, stmt,
 		c.ID,
 		c.Subject.TenantID,
 		c.Issuer,
@@ -89,6 +125,9 @@ INSERT INTO capability_records (
 		"", // created_by populated by callers that have a richer principal context
 	); err != nil {
 		return fmt.Errorf("capability/postgres: insert: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("capability/postgres: commit: %w", err)
 	}
 	return nil
 }
