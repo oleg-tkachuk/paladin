@@ -61,12 +61,12 @@ This is a **web-application** layout (per [plan.md](plan.md) §"Structure Decisi
 
 **Independent test**: Run `pnpm exec playwright test auth.spec.ts` against a fresh stack. The four scenarios in [spec.md](spec.md) §US1 must all pass; intentionally breaking the `useEffect` in `frontend/src/components/AuthGate.tsx` must fail at least one scenario (per [quickstart.md](quickstart.md) SC-004 dry-run).
 
-- [ ] T013 [US1] Create `frontend/tests/e2e/auth.spec.ts` with the file-level imports (`@playwright/test`, `./fixtures/credentials`) and a `describe("US1 — Login + AuthGate")` block. No `beforeEach` here — each scenario starts from a fresh context.
-- [ ] T014 [US1] Implement scenario "deep-link redirect" in `auth.spec.ts`: navigate to `/tenants` with a fresh `browser.newContext()`, assert URL becomes `/login?next=%2Ftenants` and the email input is visible.
-- [ ] T015 [US1] Implement scenario "post-login bounces back to next" in `auth.spec.ts`: from `/login?next=/tenants`, submit the form with `SEEDED_ADMIN` credentials, assert URL becomes `/tenants` and at least one tenant row (or empty-state message) is visible within 2 s.
-- [ ] T016 [US1] Implement scenario "default landing on no `next`" in `auth.spec.ts`: navigate to `/login` directly, submit, assert landing on a non-`/login` URL (loop prevention).
-- [ ] T017 [US1] Implement scenario "invalid credentials" in `auth.spec.ts`: submit `/login` with a wrong password, assert an error message appears in the form, URL stays on `/login`, and `page.context().cookies()` contains no session cookie.
-- [ ] T018 [US1] Run `pnpm exec playwright test auth.spec.ts` ten times consecutively (`for i in {1..10}; do pnpm exec playwright test auth.spec.ts || break; done`); zero flake (SC-003 partial verification for US1).
+- [X] T013 [US1] Create `frontend/tests/e2e/auth.spec.ts` with the file-level imports (`@playwright/test`, `./fixtures/credentials`) and a `describe("US1 — Login + AuthGate")` block. No `beforeEach` here — each scenario starts from a fresh context.
+- [X] T014 [US1] Implement scenario "deep-link redirect" in `auth.spec.ts`: navigate to `/tenants` with a fresh `browser.newContext()`, assert URL becomes `/login?next=%2Ftenants` and the email input is visible.
+- [X] T015 [US1] Implement scenario "post-login bounces back to next" in `auth.spec.ts`: from `/login?next=/tenants`, submit the form with `SEEDED_ADMIN` credentials, assert URL becomes `/tenants` and at least one tenant row (or empty-state message) is visible within 2 s.
+- [X] T016 [US1] Implement scenario "default landing on no `next`" in `auth.spec.ts`: navigate to `/login` directly, submit, assert landing on a non-`/login` URL (loop prevention).
+- [X] T017 [US1] Implement scenario "invalid credentials" in `auth.spec.ts`: submit `/login` with a wrong password, assert an error message appears in the form, URL stays on `/login`, and `page.context().cookies()` contains no session cookie.
+- [~] T018 [US1] Run `pnpm exec playwright test auth.spec.ts` ten times consecutively (`for i in {1..10}; do pnpm exec playwright test auth.spec.ts || break; done`); zero flake (SC-003 partial verification for US1). **DEFERRED to operator runtime** alongside T012 — requires the full stack up (PALADIN images built locally + Garage port-forwarded). Static gates verified during SDD impl: TypeScript `pnpm exec tsc --noEmit` exits clean; `pnpm exec playwright test --list auth.spec.ts` discovers all four scenarios with valid syntax.
 
 **Checkpoint**: US1 done. MVP slice is shippable as-is — the most failure-prone UI contract has a regression guard.
 
