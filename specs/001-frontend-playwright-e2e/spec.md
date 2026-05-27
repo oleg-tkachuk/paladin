@@ -19,6 +19,7 @@
 - Q: Which S3-compatible backend powers the test stack? → A: **Garage** (`dxflrs/garage:v2.3.0` or later). Single binary, env-var bootstrap (`GARAGE_DEFAULT_ACCESS_KEY/SECRET_KEY/BUCKET`), Rust runtime, fast startup. Supports every S3 operation PALADIN backend actually calls: PutObject, GetObject, ListObjects, HeadObject, CreateBucket, Sigv4 + presigned URLs, multipart upload. Garage's "missing" features (object versioning, tagging at the S3 layer) don't matter because PALADIN tracks those in Postgres (`object_versions`, `object_tags` tables), not via S3 API calls. Aligned with the lightweight-OSS philosophy of the broader gitops stack.
 - Q: Which package manager? → A: **pnpm** (`^11.3.0`). Adopting pnpm requires migrating the frontend from `package-lock.json` → `pnpm-lock.yaml` and pinning the package manager via the `"packageManager": "pnpm@11.3.0"` field in `package.json`. Rationale: faster install (~3× cold), strict dependency resolution (avoids accidental phantom-dep imports — relevant because Playwright pulls in deep dev trees), better disk usage via content-addressable store. The migration touches `frontend/` only; backend tooling stays unchanged. Implies a new Setup task to perform the lockfile migration in the same commit train as the Playwright dep adoption.
 - Q: Garage in the test stack — sidecar container or external dependency? → A: **External cluster service.** Garage is deployed by gitops (`specs/001-garage-object-storage`) as a platform service shared across consumers — the test stack consumes it via `kubectl port-forward` (laptop dev) or in-cluster DNS (CI-on-cluster). The Garage container previously planned for docker-compose.test.yaml is removed. Credentials come from the K8s Secret `garage-paladin-credentials` that gitops provisions; the compose file requires `PALADIN_E2E_S3_ACCESS_KEY` + `PALADIN_E2E_S3_SECRET_KEY` env vars (gated via `?:` fail-fast) so missing creds produce a clear error instead of a runtime S3 failure.
+- Q: Does the idempotency gate cover `CapabilityService.Issue`? → A: **Now yes — extended during /speckit-implement Phase 6.** US4's premise (double-submit of CreateCapability collapses via the middleware) initially didn't hold: the RPC is named `Issue`, not `Create*`, so neither the backend matcher (`isMutationMethod`) nor the frontend transport interceptor recognised it. Option C ships a two-place extension: `isMutationMethod` and the transport matcher now accept BOTH `Create*` and `Issue*` prefixes (with explicit comments noting the policy expansion). The change is symmetric — server enforces, client auto-injects, the contract holds end-to-end. Future mutation-shaped verbs (e.g. `Submit*`) would need an analogous two-place update; documented inline.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -288,10 +289,14 @@ at RESTORE. The scenario will be added when the BACKLOG'd
   the same lint/format conventions as the application code
   (matching `frontend/src/`'s tsconfig + eslint).
 - **FR-008**: At least one test MUST explicitly assert the
-  idempotency contract: double-submitting a Create form
-  yields exactly one resource row, not two. This is the only
-  observable surface where the recently-shipped middleware
-  memoize-and-replay can regress silently.
+  idempotency contract: double-submitting a mutation-shaped
+  request (Create* / Issue*) with the same `Idempotency-Key`
+  yields exactly one resource row, not two. US4 implements
+  this against `CapabilityService.Issue` (the motivating
+  case for extending the gate to cover `Issue*` — see
+  Clarifications Q8). This is the only observable surface
+  where the recently-shipped middleware memoize-and-replay
+  can regress silently.
 
 ### Key Entities
 

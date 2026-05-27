@@ -3,9 +3,14 @@
 // Two responsibilities, both at the Connect interceptor layer:
 //
 //  1. **Enforcement.** When RequireOnCreate=true, every RPC whose
-//     method name's trailing segment starts with `Create` MUST carry
-//     an `Idempotency-Key` header. Missing → CodeInvalidArgument
-//     before the handler runs.
+//     method name's trailing segment starts with `Create` OR
+//     `Issue` MUST carry an `Idempotency-Key` header. Missing →
+//     CodeInvalidArgument before the handler runs. The Create-vs-
+//     Issue split is policy: Create matches AIP-canonical resource
+//     creations (CreateTenant, CreateBucket, …); Issue matches the
+//     token/credential variant (CapabilityService.Issue and
+//     similar) — semantically identical double-submit hazard,
+//     different domain noun.
 //
 //  2. **Memoize / replay.** When the header IS present, the first
 //     request executes the handler normally, the serialized response
@@ -75,7 +80,11 @@ type IdempotencyConfig struct {
 	// enforcement AND memoize. Use for internal seeding RPCs whose
 	// upsert semantics already give idempotency.
 	SkipMethods map[string]bool
-	// RequireOnCreate rejects Create* RPCs that omit the header.
+	// RequireOnCreate rejects mutation-shaped RPCs that omit the
+	// header. Matches method names with prefix `Create` (the AIP
+	// canonical) AND `Issue` (the token/credential variant —
+	// CapabilityService.Issue is the motivating case). Field name
+	// is historical; see isMutationMethod() for the exact policy.
 	// Default false to keep the constructor drop-in safe; flip when
 	// clients are guaranteed to inject (admin UI BFF does this via
 	// a transport interceptor; programmatic clients must opt in).
@@ -109,7 +118,7 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		}
 		key := req.Header().Get(idempotencyHeader)
 		if key == "" {
-			if i.cfg.RequireOnCreate && isCreateMethod(method) {
+			if i.cfg.RequireOnCreate && isMutationMethod(method) {
 				return nil, connect.NewError(connect.CodeInvalidArgument,
 					errors.New("idempotency: missing Idempotency-Key header"))
 			}
@@ -248,13 +257,29 @@ func reconstructResponse(respType reflect.Type, body []byte) (connect.AnyRespons
 	return anyResp, nil
 }
 
-// isCreateMethod reports whether the Connect procedure name
-// corresponds to a resource-creating RPC. Scoped to the trailing
-// method segment so a hypothetical service whose name contains
-// "Create" (e.g. `CreateOrderHistoryService/ListOrders`) is NOT
-// caught. Connect procedure strings are always
-// `/<package>.<Service>/<Method>` per the spec.
-func isCreateMethod(procedure string) bool {
+// isMutationMethod reports whether the Connect procedure name
+// corresponds to a resource-creating RPC that benefits from the
+// Idempotency-Key contract. Scoped to the trailing method
+// segment so a hypothetical service whose name contains
+// "Create" or "Issue" (e.g. `CreateOrderHistoryService/ListOrders`
+// or `IssueTrackerService/ListIssues`) is NOT caught — only
+// METHODS whose name starts with one of the recognised prefixes.
+//
+// Connect procedure strings are always `/<package>.<Service>/
+// <Method>` per the spec.
+//
+// Recognised prefixes:
+//   - "Create" — the canonical AIP-style verb. CreateTenant,
+//     CreateBucket, CreateObjectKey, CreateUser, …
+//   - "Issue"  — the token/credential variant. CapabilityService.
+//     Issue, an IAM ApiKeyService.IssueKey (if added), etc.
+//     Logically these are creates with a different domain noun,
+//     and double-submit hazards are identical.
+//
+// Adding a new prefix here is a deliberate policy expansion —
+// document the reasoning inline so the next reader doesn't add
+// "Submit" or "Post" without thinking through the semantic.
+func isMutationMethod(procedure string) bool {
 	if procedure == "" {
 		return false
 	}
@@ -262,5 +287,7 @@ func isCreateMethod(procedure string) bool {
 	if idx < 0 || idx == len(procedure)-1 {
 		return false
 	}
-	return strings.HasPrefix(procedure[idx+1:], "Create")
+	method := procedure[idx+1:]
+	return strings.HasPrefix(method, "Create") ||
+		strings.HasPrefix(method, "Issue")
 }

@@ -27,6 +27,10 @@ import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
+import {
+  CapabilityService,
+  PrincipalKind,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName } from "./unique";
@@ -93,6 +97,38 @@ function bucketAdminClient() {
 
 function objectKeyAdminClient() {
   return createClient(ObjectKeyService, adminTransport());
+}
+
+/**
+ * Like adminTransport() but with an extra interceptor that
+ * forces a CUSTOM Idempotency-Key on every outbound request.
+ * Used by US4's double-submit test to fire two Issue calls
+ * with the same key and observe the middleware reflective
+ * replay collapse them.
+ */
+function adminTransportWithKey(key: string) {
+  return createConnectTransport({
+    baseUrl: ADMIN_URL,
+    interceptors: [
+      (next) => async (req) => {
+        const token = await getAdminToken();
+        req.header.set("Authorization", `Bearer ${token}`);
+        // Override any auto-injected key with the test's.
+        req.header.set("Idempotency-Key", key);
+        return next(req);
+      },
+    ],
+  });
+}
+
+function capabilityAdminClient(opts?: { idempotencyKey?: string }) {
+  if (opts?.idempotencyKey) {
+    return createClient(
+      CapabilityService,
+      adminTransportWithKey(opts.idempotencyKey),
+    );
+  }
+  return createClient(CapabilityService, adminTransport());
 }
 
 // ─── seeded entity shapes ──────────────────────────────────
@@ -248,4 +284,66 @@ export async function seedObjectKey(opts: {
     objectKey,
     displayName,
   };
+}
+
+// ─── capability seeding ────────────────────────────────────
+
+export interface SeededCapability {
+  /** Server-minted capability ID (UUID). */
+  id: string;
+  tenantId: string;
+  /** Subject the capability was issued to (e.g. `e2e-agent-<hex>`). */
+  subject: string;
+}
+
+/**
+ * Issue a capability token via CapabilityService.Issue. Minimal
+ * caveats — single op `get`, empty prefixes, finite small budget.
+ * The actual caveat shape doesn't matter for US4's tests; we
+ * only care that the row materialises in `/capabilities`.
+ *
+ * `opts.idempotencyKey` is the FR-008 hook: when set, the Issue
+ * RPC is fired with that exact header value, exercising the
+ * middleware's reflective replay path. Two calls with the same
+ * key MUST return the same capability ID (the second call hits
+ * the cached response).
+ */
+export async function seedCapability(opts: {
+  tenantId: string;
+  subjectPrefix?: string;
+  idempotencyKey?: string;
+}): Promise<SeededCapability> {
+  const subject = uniqueSlug(opts.subjectPrefix ?? "e2e-agent");
+  const client = capabilityAdminClient({
+    idempotencyKey: opts.idempotencyKey,
+  });
+  const res = await client.issue({
+    subject: {
+      $typeName: "paladin.admin.v1.CapabilityPrincipal",
+      kind: PrincipalKind.AGENT,
+      tenantId: opts.tenantId,
+      subject,
+    } as never,
+    audience: ["paladin-data"],
+    caveats: {
+      $typeName: "paladin.admin.v1.CapabilityCaveats",
+      ops: ["get"],
+      resourcePrefixes: [],
+      resourceUris: [],
+      maxRequests: BigInt(100),
+      maxBudgetAmount: BigInt(0),
+      unitCode: "",
+      allowTaintedRead: false,
+      idempotencyKeyRequired: false,
+      sourceIpCidr: [],
+    } as never,
+    ttlSeconds: BigInt(900),
+  });
+  const id = (res as { capability?: { id?: string } }).capability?.id;
+  if (!id) {
+    throw new Error(
+      `seedCapability: server returned no capability id — got ${JSON.stringify(res)}`,
+    );
+  }
+  return { id, tenantId: opts.tenantId, subject };
 }
