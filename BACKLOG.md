@@ -1275,21 +1275,6 @@ the same commit. Treat this file like a runtime invariant.
   - Dashboards committed under `deploy/grafana/`.
 - **Blockers:** collector choice (Tempo? Honeycomb? Datadog?).
 
-### Frontend Playwright suite
-
-- **Status:** Aspirational
-- **Reason:** UI regressions today are caught by manual smoke
-  testing on minikube. The login / auth-gate / tenant-switch /
-  bucket-browser flows are stable enough for E2E coverage.
-- **Definition of Done:**
-  - `frontend/tests/` with Playwright config and CI workflow.
-  - Coverage: login, AuthGate redirect-with-?next, tenant scope
-    switcher, bucket list & object key open, capability create
-    + revoke, tenant restore from trash.
-  - CI runs against a docker-compose stack of the backend +
-    Postgres + a fake S3 (minio).
-- **Blockers:** none.
-
 ### SealedSecrets for prod-class clusters
 
 - **Status:** Aspirational
