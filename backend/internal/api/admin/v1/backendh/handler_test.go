@@ -44,7 +44,7 @@ func ctxWithRoles(roles ...string) context.Context {
 }
 
 func TestCreateBackendRequiresPlatformAdmin(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "")
 	_, err := h.CreateBackend(ctxWithRoles("tenant.admin"), admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
 	})
@@ -57,7 +57,7 @@ func TestCreateBackendRequiresPlatformAdmin(t *testing.T) {
 }
 
 func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
-	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}) // nil engine → role-only path
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{}, "") // nil engine → role-only path
 	out, err := h.CreateBackend(ctxWithRoles("platform.admin"), admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
 	})
@@ -71,7 +71,7 @@ func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
 
 func TestGetBackendRedactsSecretForNonPlatformAdmin(t *testing.T) {
 	repo := redactingRepo{}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 	out, err := h.GetBackend(ctxWithRoles("tenant.admin"), "primary")
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestGetBackendRedactsSecretForNonPlatformAdmin(t *testing.T) {
 
 func TestGetBackendUnredactedForPlatformAdmin(t *testing.T) {
 	repo := redactingRepo{}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 	out, err := h.GetBackend(ctxWithRoles("platform.admin"), "primary")
 	if err != nil {
 		t.Fatal(err)

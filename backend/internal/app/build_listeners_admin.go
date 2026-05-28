@@ -41,7 +41,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
 	opH := wire.ProvideOperationHandler(repos, polEngine)
 	policyH := wire.ProvidePolicyHandler(polEngine, deps.PolStore)
-	backendH := wire.ProvideBackendV2Handler(repos, polEngine)
+	backendH := wire.ProvideBackendV2Handler(repos, polEngine, cfg)
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)

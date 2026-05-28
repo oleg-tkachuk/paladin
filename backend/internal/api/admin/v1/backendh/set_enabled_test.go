@@ -43,7 +43,7 @@ func (r *stateBackendRepo) Get(_ context.Context, _ string) (admindomain.Storage
 
 func TestSetBackendEnabled_FlipsState(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 
 	out, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "primary", false, 1)
 	if err != nil {
@@ -59,7 +59,7 @@ func TestSetBackendEnabled_FlipsState(t *testing.T) {
 
 func TestSetBackendEnabled_IdempotentNoOp(t *testing.T) {
 	repo := &stateBackendRepo{enabled: false, rv: 5}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 
 	// Disabling an already-disabled backend succeeds (no-op semantics).
 	out, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "primary", false, 5)
@@ -73,7 +73,7 @@ func TestSetBackendEnabled_IdempotentNoOp(t *testing.T) {
 
 func TestSetBackendEnabled_VersionMismatchAborts(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1, mismatch: true}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 
 	_, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "primary", false, 99)
 	if connect.CodeOf(err) != connect.CodeAborted {
@@ -83,7 +83,7 @@ func TestSetBackendEnabled_VersionMismatchAborts(t *testing.T) {
 
 func TestSetBackendEnabled_NotFound(t *testing.T) {
 	repo := &stateBackendRepo{notFound: true}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 
 	_, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "ghost", false, 1)
 	if connect.CodeOf(err) != connect.CodeNotFound {
@@ -91,9 +91,32 @@ func TestSetBackendEnabled_NotFound(t *testing.T) {
 	}
 }
 
+func TestSetBackendEnabled_DefaultBackendGuard(t *testing.T) {
+	repo := &stateBackendRepo{enabled: true, rv: 1}
+	// Construct the handler with "primary" as the configured default.
+	h := NewHandler(repo, allowAuthorizer{}, "primary")
+
+	// Disabling the default backend is refused (FR-006).
+	_, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "primary", false, 1)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("disable default: got %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+	if repo.setEnabledHit != 0 {
+		t.Error("repo.SetEnabled must not be reached when the default guard fires")
+	}
+
+	// Enabling the default backend is fine; disabling a NON-default is fine.
+	if _, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "primary", true, 1); err != nil {
+		t.Errorf("enabling default should be allowed: %v", err)
+	}
+	if _, err := h.SetBackendEnabled(ctxWithRoles("platform.admin"), "secondary", false, 1); err != nil {
+		t.Errorf("disabling non-default should be allowed: %v", err)
+	}
+}
+
 func TestSetBackendEnabled_RequiresPlatformAdmin(t *testing.T) {
 	repo := &stateBackendRepo{enabled: true, rv: 1}
-	h := NewHandler(repo, allowAuthorizer{})
+	h := NewHandler(repo, allowAuthorizer{}, "")
 
 	_, err := h.SetBackendEnabled(ctxWithRoles("tenant.admin"), "primary", false, 1)
 	if connect.CodeOf(err) != connect.CodePermissionDenied {

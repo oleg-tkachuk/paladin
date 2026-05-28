@@ -34,13 +34,17 @@ const (
 type Handler struct {
 	repo   admindomain.BackendRepository
 	policy cedar.Authorizer
+	// defaultBackendID is the configured storage.default_backend. Disabling
+	// it is refused (FR-006) — new buckets without an explicit backend
+	// resolve to it, so turning it off would break platform-wide creation.
+	defaultBackendID string
 }
 
-func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer) *Handler {
+func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer, defaultBackendID string) *Handler {
 	if policyEngine == nil {
 		panic("backendh: policy authorizer is required")
 	}
-	return &Handler{repo: r, policy: policyEngine}
+	return &Handler{repo: r, policy: policyEngine, defaultBackendID: defaultBackendID}
 }
 
 // authorize runs Cedar against the StorageBackend resource (`r.BackendID` is
@@ -173,6 +177,11 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	}
 	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
 		return nil, err
+	}
+	// Guard: never disable the configured default backend (FR-006).
+	if !enabled && backendID == h.defaultBackendID {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot disable the configured default backend %q", backendID))
 	}
 	if err := h.repo.SetEnabled(ctx, backendID, enabled, expectedVersion); err != nil {
 		if errors.Is(err, admindomain.ErrVersionMismatch) {

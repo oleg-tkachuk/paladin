@@ -108,12 +108,12 @@ Setup/Foundational/Polish carry no story label.
 
 **Independent test**: Disabling the configured default is refused with a clear reason; a stale `resource_version` is refused as a conflict.
 
-- [ ] T022 [US4] Wire the configured default-backend id into the `backendh.Handler` constructor (`NewHandler`) and its construction site in `backend/internal/app/build_deps.go` (pass `config.Storage.DefaultBackend`).
-- [ ] T023 [US4] Add the default-backend guard branch to `SetBackendEnabled` in `backend/internal/api/admin/v1/backendh/handler.go`: if `!enabled && backendID == h.defaultBackendID` → `CodeFailedPrecondition` ("cannot disable the configured default backend") before calling the repo (FR-006).
-- [ ] T024 [US4] Handler test: disabling the default backend → `CodeFailedPrecondition` with a constraint-naming message; backend stays enabled (SC-003).
-- [ ] T025 [US4] Handler test: `SetBackendEnabled` with a stale `resource_version` → `CodeAborted`, no overwrite (FR-004, SC-004).
-- [ ] T026 [US4] Handler test: a non-platform-admin caller → `CodePermissionDenied` (FR-005).
-- [ ] T027 [US4] Ensure `backend/internal/api/connectshim/coverage_test.go` and `mapping_test.go` pass for `SetBackendEnabled` (gate markers present; `enabled` field mapped or justified in `skipFields`). Run `go test ./internal/api/connectshim/...`.
+- [X] T022 [US4] Wire the configured default-backend id into the `backendh.Handler` constructor (`NewHandler`) and its construction site in `backend/internal/app/build_deps.go` (pass `config.Storage.DefaultBackend`).
+- [X] T023 [US4] Add the default-backend guard branch to `SetBackendEnabled` in `backend/internal/api/admin/v1/backendh/handler.go`: if `!enabled && backendID == h.defaultBackendID` → `CodeFailedPrecondition` ("cannot disable the configured default backend") before calling the repo (FR-006).
+- [X] T024 [US4] Handler test: disabling the default backend → `CodeFailedPrecondition` with a constraint-naming message; backend stays enabled (SC-003).
+- [X] T025 [US4] Handler test: `SetBackendEnabled` with a stale `resource_version` → `CodeAborted`, no overwrite (FR-004, SC-004).
+- [X] T026 [US4] Handler test: a non-platform-admin caller → `CodePermissionDenied` (FR-005).
+- [X] T027 [US4] Ensure `backend/internal/api/connectshim/coverage_test.go` and `mapping_test.go` pass for `SetBackendEnabled` (gate markers present; `enabled` field mapped or justified in `skipFields`). Run `go test ./internal/api/connectshim/...`.
 
 **Checkpoint**: Guards enforced. Ship `feat(admin)` (guards).
 

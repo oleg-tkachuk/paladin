@@ -279,8 +279,8 @@ func tenantSlugLookup(tr tenant.Repository) func(ctx context.Context, tenantID u
 	}
 }
 
-func ProvideBackendV2Handler(repos Repos, pe *policy.Engine) *backendh.Handler {
-	return backendh.NewHandler(repos.BackendV2, pe)
+func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, cfg config.Config) *backendh.Handler {
+	return backendh.NewHandler(repos.BackendV2, pe, cfg.Storage.DefaultBackend)
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {
