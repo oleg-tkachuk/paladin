@@ -1296,3 +1296,33 @@ the same commit. Treat this file like a runtime invariant.
 ## Documentation
 
 _(no documentation items currently deferred)_
+
+---
+
+## Testing / E2E
+
+### Frontend Playwright suite — runtime sign-off (SC-002 / SC-003 / SC-004)
+
+- **Status:** Blocked
+- **Reason:** The Playwright E2E suite (`specs/001-frontend-playwright-e2e`)
+  is authored and passes all static gates (`tsc --noEmit` clean, all
+  scenarios discovered), but the runtime verification tasks
+  (T012, T018, T023, T029, T034, T038, T041, T042) were deferred during
+  `/speckit-implement`: the PALADIN backend / UI containers
+  (`registry.local/paladin/paladin:latest`,
+  `:paladin-ui:latest`) were not buildable/reachable from
+  the impl host's Docker daemon, so the test-stack never booted.
+- **Definition of Done:**
+  - Build the PALADIN images locally (`task -d backend build:image` or
+    equivalent) and port-forward the external Garage with
+    `PALADIN_E2E_S3_ACCESS_KEY/_SECRET_KEY` set.
+  - T012: `pnpm run test:e2e:stack` reaches `healthy` on all six
+    compose services within 60 s.
+  - SC-003: each `*.spec.ts` passes 10× consecutively with zero flake.
+  - SC-002: the full suite run completes in <3 min wall-clock.
+  - SC-004: the five intentional-break dry-runs from quickstart each
+    produce a clear named failure in the expected spec file.
+  - Flip T012/T018/T023/T029/T034/T038/T041/T042 from `[~]` to `[X]`
+    and delete this entry in the same commit.
+- **Blockers:** local availability of the PALADIN backend + UI container
+  images and a reachable Garage endpoint.

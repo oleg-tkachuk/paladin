@@ -8,10 +8,12 @@
 
 Add a Playwright 1.60.0 (Chromium-only) test suite under
 `frontend/tests/e2e/` that exercises the operator-critical UI
-journeys end-to-end against a self-contained docker-compose
-stack: Postgres 16 + PALADIN backend + Garage v2.3 (S3) + Next.js
-frontend in production-mode bundle (`next start`). Six tests
-across five user stories.
+journeys end-to-end against a docker-compose stack: Postgres 16
++ PALADIN backend + Next.js frontend in production-mode bundle
+(`next start`). The S3 backend (Garage v2.3) is an **external,
+cluster-shared** dependency (Clarification Q7) — consumed via
+`kubectl port-forward`, not bundled into the compose file. Six+
+test cases across five user stories.
 Suite is locally runnable only in v1; CI integration is
 deferred. Database isolation via shared Postgres +
 UUID-suffixed per-test fixtures. Seeded admin uses a fixed
@@ -44,7 +46,10 @@ unaffected.
 **Storage**: Postgres 16 (ephemeral per docker-compose run).
 Shared across all tests; per-test fixtures distinguish via
 UUID-suffixed identifiers. Garage `dxflrs/garage:v2.3.x` as
-the S3-compatible blob backend.
+the S3-compatible blob backend — deployed externally by
+gitops and consumed via port-forward (Clarification Q7); the
+compose file requires `PALADIN_E2E_S3_ACCESS_KEY/_SECRET_KEY` via a
+`?:` fail-fast gate rather than running its own Garage container.
 
 **Testing**: Playwright. `frontend/tests/e2e/` for tests,
 `frontend/tests/e2e/fixtures/` for seed helpers,
@@ -126,7 +131,7 @@ frontend/
         │   ├── auth.ts                       # loginAsAdmin() page-driving helper
         │   └── unique.ts                     # uniqueSlug(), uniqueDisplayName() — UUID-suffixed
         ├── auth.spec.ts                      # US1 — login + AuthGate redirect
-        ├── scope.spec.ts                     # US2 — tenant scope switching
+        ├── scope.spec.ts                     # US2 — backend + bucket scope switching
         ├── buckets.spec.ts                   # US3 — bucket list & object key open
         ├── capabilities.spec.ts              # US4 — capability create + revoke + idempotency
         ├── trash.spec.ts                     # US5 — tenant restore from trash
