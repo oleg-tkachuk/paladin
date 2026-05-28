@@ -95,6 +95,29 @@ func (s *BackendServer) DeleteBackend(ctx context.Context, req *connect.Request[
 	return connect.NewResponse(&pb.DeleteBackendResponse{}), nil
 }
 
+func (s *BackendServer) SetBackendEnabled(ctx context.Context, req *connect.Request[pb.SetBackendEnabledRequest]) (*connect.Response[pb.StorageBackend], error) {
+	id, err := backendIDFromName(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// OCC contract: a state flip must carry the current version. Unlike
+	// DeleteBackend there is no force escape — rv=0 is rejected so the
+	// flip can never silently clobber a concurrent change.
+	if rv == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version required"))
+	}
+	out, err := s.H.SetBackendEnabled(ctx, id, req.Msg.GetEnabled(), rv)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(backendToProto(out)), nil
+}
+
 func (s *BackendServer) RotateCredentials(ctx context.Context, req *connect.Request[pb.RotateCredentialsRequest]) (*connect.Response[pb.StorageBackend], error) {
 	id, err := backendIDFromName(req.Msg.GetName())
 	if err != nil {

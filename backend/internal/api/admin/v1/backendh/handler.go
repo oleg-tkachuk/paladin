@@ -157,6 +157,39 @@ func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBacken
 	return &got, nil
 }
 
+// ─── SetBackendEnabled ───────────────────────────────────────────────────────
+
+// SetBackendEnabled flips the backend's enable/disable state. It is a
+// Set* mutation (not Create*), so it is OCC-guarded via expectedVersion
+// rather than an idempotency key, and is naturally idempotent: setting
+// the state a backend already has succeeds as a no-op (the repo UPDATE
+// still matches the row; the bump_rv trigger advances resource_version).
+//
+// The default-backend guard (refuse disabling the configured default)
+// is added in a follow-up so the constructor can carry the default id.
+func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
+	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+		return nil, err
+	}
+	if err := h.repo.SetEnabled(ctx, backendID, enabled, expectedVersion); err != nil {
+		if errors.Is(err, admindomain.ErrVersionMismatch) {
+			return nil, connect.NewError(connect.CodeAborted, err)
+		}
+		if errors.Is(err, admindomain.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	got, err := h.repo.Get(ctx, backendID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &got, nil
+}
+
 func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, _ time.Duration) (*admindomain.StorageBackend, error) {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
