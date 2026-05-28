@@ -134,9 +134,9 @@ Setup/Foundational/Polish carry no story label.
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T030 [P] Add a BACKLOG.md entry (Status `Aspirational` / Reason / DoD / Blockers) covering the deferred scope: read-only **drain** mode, richer lifecycle states (draining/maintenance/error), and bulk enable/disable (Constitution III, research D7). Ship as `docs(backlog)`.
-- [ ] T031 [P] Backend gates: `go vet ./...` and `go test ./...` from `backend/` exit zero.
-- [ ] T032 Dry-run the 6 verification checks in [quickstart.md](quickstart.md) §"Verify the guarantee" against a local stack; confirm each behaves as specified.
+- [X] T030 [P] Add a BACKLOG.md entry (Status `Aspirational` / Reason / DoD / Blockers) covering the deferred scope: read-only **drain** mode, richer lifecycle states (draining/maintenance/error), and bulk enable/disable (Constitution III, research D7). Ship as `docs(backlog)`.
+- [X] T031 [P] Backend gates: `go vet ./...` and `go test ./...` from `backend/` exit zero.
+- [~] T032 Dry-run the 6 verification checks in [quickstart.md](quickstart.md) §"Verify the guarantee" against a local stack; confirm each behaves as specified. **DEFERRED to operator runtime** — the quickstart dry-run + the backend-disabled.spec.ts Playwright spec need the full e2e stack (locally-built PALADIN images + port-forwarded Garage), unavailable on this host (same constraint as feature 001). Static gates verified: go vet clean, 501 unit tests pass, 6 feature-002 integration tests pass against testcontainers Postgres, tsc + eslint clean, playwright --list discovers the spec.
 
 **Checkpoint**: Feature signed off.
 

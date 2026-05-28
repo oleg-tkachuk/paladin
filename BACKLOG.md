@@ -1299,6 +1299,31 @@ _(no documentation items currently deferred)_
 
 ---
 
+## Storage backends
+
+### Backend states beyond enable/disable (drain, maintenance, bulk)
+
+- **Status:** Aspirational
+- **Reason:** Feature 002 (`specs/002-backend-enable-disable`) shipped a
+  two-value `enabled` flag with strict reject semantics: a disabled
+  backend refuses ALL PALADIN-mediated ops. Three richer behaviours were
+  deliberately scoped out to keep v1 small and unambiguous.
+- **Definition of Done:**
+  - **Read-only drain mode** — a distinct backend state that blocks
+    writes / presign-PUT / multipart-init but still allows reads /
+    presign-GET, so an operator can migrate data off a backend before
+    fully disabling it. Needs a tri-state (or separate column) on
+    `storage_backends` and a split in the resolver gate
+    (`object.MapResolveErr`) by operation class.
+  - **Richer lifecycle states** — draining / maintenance / error;
+    e.g. auto-set `error` when `TestBackend` fails, surfaced in the UI.
+  - **Bulk enable/disable** — toggle multiple backends in one action
+    (admin UI multi-select + a batch RPC or client-side fan-out).
+- **Blockers:** none technical; deferred purely for v1 scope. Drain mode
+  is the most-requested next step (data migration off a backend).
+
+---
+
 ## Testing / E2E
 
 ### Frontend Playwright suite — runtime sign-off (SC-002 / SC-003 / SC-004)
@@ -1326,3 +1351,22 @@ _(no documentation items currently deferred)_
     and delete this entry in the same commit.
 - **Blockers:** local availability of the PALADIN backend + UI container
   images and a reachable Garage endpoint.
+
+### Enable/disable backend — UI dry-run + Playwright runtime sign-off
+
+- **Status:** Blocked
+- **Reason:** Feature 002 (`specs/002-backend-enable-disable`) T032 — the
+  quickstart 6-check dry-run and the `frontend/tests/e2e/backend-disabled.spec.ts`
+  Playwright spec (SC-006/SC-007) — need the full e2e stack, which is the
+  same blocked resource as the 001 sign-off above (no locally-built PALADIN
+  images). Backend enforcement is fully proven without the stack: 501
+  unit tests, 6 integration tests against testcontainers Postgres
+  (resolver gate, CreateBucket refusal, OCC, default guard, reversibility,
+  bootstrap preservation).
+- **Definition of Done:**
+  - With the e2e stack up, run `pnpm exec playwright test backend-disabled.spec.ts`
+    and confirm the badge / non-selectable scope row / re-enable toggle pass.
+  - Walk the quickstart §"Verify the guarantee" 6 checks once.
+  - Flip T032 from `[~]` to `[X]` and delete this entry in the same commit.
+- **Blockers:** shares the PALADIN-image availability blocker with the 001
+  sign-off; resolve once and both can proceed.
