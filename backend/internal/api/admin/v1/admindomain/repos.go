@@ -44,6 +44,11 @@ type BucketRepository interface {
 	SetReplication(ctx context.Context, backendID, bucketName string, r BucketReplication, expectedVersion int64) error
 	SetConstraints(ctx context.Context, backendID, bucketName string, c BucketConstraints, expectedVersion int64) error
 	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+	// BackendEnabled reports whether the named storage backend is enabled.
+	// Returns ErrNotFound when the backend id is unknown. Used by
+	// CreateBucket to refuse binding a bucket to a disabled backend
+	// (feature 002) — the object-path gate covers everything else.
+	BackendEnabled(ctx context.Context, backendID string) (bool, error)
 
 	// ─── outbox / reconciler ────────────────────────────────────────────
 	// ListPendingProvisions returns up to `limit` rows that need the

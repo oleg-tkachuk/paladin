@@ -25,6 +25,19 @@ func NewBucketRepoV2(q *sqlc.Queries) *BucketRepoV2 { return &BucketRepoV2{q: q}
 
 var _ admindomain.BucketRepository = (*BucketRepoV2)(nil)
 
+// BackendEnabled reports the enabled state of a storage backend.
+// Returns ErrNotFound when the backend id is unknown.
+func (r *BucketRepoV2) BackendEnabled(ctx context.Context, backendID string) (bool, error) {
+	row, err := r.q.GetStorageBackendV2(ctx, backendID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, admindomain.ErrNotFound
+		}
+		return false, fmt.Errorf("backend enabled lookup: %w", err)
+	}
+	return row.Enabled, nil
+}
+
 func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 	constraints, _ := json.Marshal(b.Constraints)
 	if string(constraints) == "null" {

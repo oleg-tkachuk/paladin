@@ -11,9 +11,15 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/bucketh"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/tests/integration/pgharness"
@@ -86,6 +92,116 @@ func TestBackendSetEnabled_NotFound(t *testing.T) {
 	err := repo.SetEnabled(context.Background(), "does-not-exist", false, 1)
 	if !errors.Is(err, admindomain.ErrNotFound) {
 		t.Fatalf("missing backend: err=%v, want ErrNotFound", err)
+	}
+}
+
+// TestBackendDisabled_ResolverGate proves the data-plane chokepoint:
+// once a backend is disabled, the bucket resolver (LookupBucket /
+// LookupBucketMeta) — through which EVERY object/presign/multipart/copy
+// op resolves its bucket before touching the object store — returns
+// object.ErrBackendDisabled. Because the resolver fails first, no S3
+// call can be reached (SC-001). Re-enabling restores resolution.
+func TestBackendDisabled_ResolverGate(t *testing.T) {
+	h := pgharness.Setup(t)
+	repo := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	ctx := context.Background()
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "gate-tenant")
+	seedBackend(t, h.PoolMigrate, "gate-be")
+	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "gate-be", "gate-bucket", "docs")
+
+	// Enabled by default → resolution succeeds.
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs"); err != nil {
+		t.Fatalf("enabled LookupBucket: %v", err)
+	}
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs"); err != nil {
+		t.Fatalf("enabled LookupBucketMeta: %v", err)
+	}
+
+	// Disable the backend.
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	cur, _ := be.Get(ctx, "gate-be")
+	if err := be.SetEnabled(ctx, "gate-be", false, cur.ResourceVersion); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+
+	// Both resolver paths now refuse with the sentinel — the gate every
+	// object op funnels through.
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs"); !errors.Is(err, object.ErrBackendDisabled) {
+		t.Errorf("disabled LookupBucket: err=%v, want ErrBackendDisabled", err)
+	}
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs"); !errors.Is(err, object.ErrBackendDisabled) {
+		t.Errorf("disabled LookupBucketMeta: err=%v, want ErrBackendDisabled", err)
+	}
+
+	// Re-enable → resolution works again (reversible, no data touched).
+	cur, _ = be.Get(ctx, "gate-be")
+	if err := be.SetEnabled(ctx, "gate-be", true, cur.ResourceVersion); err != nil {
+		t.Fatalf("re-enable: %v", err)
+	}
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs"); err != nil {
+		t.Errorf("re-enabled LookupBucket: %v", err)
+	}
+}
+
+// TestBackendDisabled_CreateBucketRefused covers the one admin-plane op
+// that does not flow through the object resolver: CreateBucket must
+// refuse binding a bucket to a disabled backend (FailedPrecondition).
+func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
+	h := pgharness.Setup(t)
+	q := sqlc.New(h.PoolMigrate)
+	handler := bucketh.NewHandler(adapters.NewBucketRepoV2(q), nil, allowAll{})
+	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "tester", Roles: []string{"platform.admin"},
+	})
+
+	seedBackend(t, h.PoolMigrate, "cb-be")
+	be := adapters.NewBackendRepoV2(q)
+	cur, _ := be.Get(ctx, "cb-be")
+	if err := be.SetEnabled(ctx, "cb-be", false, cur.ResourceVersion); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+
+	_, err := handler.CreateBucket(ctx, bucketh.CreateBucketInput{
+		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "nope"},
+	})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("create bucket on disabled backend: got %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+
+	// Re-enable → CreateBucket succeeds.
+	cur, _ = be.Get(ctx, "cb-be")
+	if err := be.SetEnabled(ctx, "cb-be", true, cur.ResourceVersion); err != nil {
+		t.Fatalf("re-enable: %v", err)
+	}
+	if _, err := handler.CreateBucket(ctx, bucketh.CreateBucketInput{
+		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "ok-bucket"},
+	}); err != nil {
+		t.Fatalf("create bucket on enabled backend: %v", err)
+	}
+}
+
+// allowAll is a permissive cedar.Authorizer stub so the integration test
+// exercises the disabled-backend gate, not the policy layer.
+type allowAll struct{}
+
+func (allowAll) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	return cedar.DecisionAllow, nil
+}
+
+func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, objectKey string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+        INSERT INTO buckets (backend_id, bucket_name) VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+    `, backendID, bucketName); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+        INSERT INTO object_keys (tenant_id, object_key, backend_id, bucket_name)
+        VALUES ($1, $2, $3, $4)
+    `, tenantID, objectKey, backendID, bucketName); err != nil {
+		t.Fatalf("seed object_key: %v", err)
 	}
 }
 

@@ -75,6 +75,30 @@ type BucketMeta struct {
 	ObjectLockEnabled bool
 }
 
+// ErrBackendDisabled is returned by the bucket-resolution path
+// (LookupBucket / LookupBucketMeta) when the resolved storage backend
+// has been disabled (feature 002). It is the single chokepoint that
+// guarantees a disabled backend processes NO PALADIN-mediated operation:
+// every object/presign/multipart/copy path resolves its bucket through
+// the resolver first, so none can reach the object store. Handlers map
+// it to CodeFailedPrecondition via mapResolveErr.
+//
+// NOTE: this cannot revoke presigned URLs already issued — those hit the
+// object store directly, bypassing PALADIN, and expire on their own TTL.
+// Disabling only blocks issuance of NEW presigns and PALADIN-mediated ops.
+var ErrBackendDisabled = errors.New("storage backend is disabled")
+
+// mapResolveErr maps a bucket-resolution error to the right Connect code:
+// a disabled backend is FailedPrecondition (the resource exists but is
+// not in a state that permits the op); anything else is treated as
+// NotFound (the historical behaviour for an unresolved object key).
+func MapResolveErr(err error) error {
+	if errors.Is(err, ErrBackendDisabled) {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewError(connect.CodeNotFound, err)
+}
+
 type CompletionMode uint8
 
 const (
@@ -418,7 +442,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	//     migration 005 / startup backfill this case is impossible.
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 
 	// 3. Generate UUIDv7 for object_id; default key = <object_id> under tenant prefix.
@@ -551,7 +575,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// Materialize authoritative values via HEAD against the object's bucket.
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 	etag, size, checksum, seq, err := h.storage.Head(ctx, bucket, tenantID, obj.ObjectKey, obj.Key)
 	if err != nil {
@@ -817,7 +841,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 	}
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 	if ttl <= 0 {
 		ttl = h.presign.DefaultTTL
@@ -965,7 +989,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// Permanent: remove from storage backend first, then drop the row.
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return MapResolveErr(err)
 	}
 	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage delete: %w", err))
@@ -1140,11 +1164,11 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 
 	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 	dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 
 	// Insert the destination row up-front so the FK to object_keys is

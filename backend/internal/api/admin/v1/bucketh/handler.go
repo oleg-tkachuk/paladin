@@ -160,6 +160,20 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
+	// Refuse binding a bucket to a disabled backend (feature 002). The
+	// object-path resolver gate covers reads/writes; this is the one
+	// admin-plane op that does not go through that resolver, so it gets
+	// its own pre-check before the row is persisted.
+	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
+	case errors.Is(err, admindomain.ErrNotFound):
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("backend %q does not exist", in.Bucket.BackendID))
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	case !enabled:
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
+	}
 	// Outbox model: the DB row is the source of truth. When the caller
 	// asked us to create the physical bucket too, we mark the row
 	// 'pending' and let the reconciler worker drive the backend

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -163,7 +164,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, object.MapResolveErr(err)
 	}
 
 	storageUploadID, err := h.storage.InitiateMultipart(ctx, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
@@ -204,7 +205,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if bucket == "" {
 		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
 		if err != nil {
-			return connect.NewError(connect.CodeNotFound, err)
+			return object.MapResolveErr(err)
 		}
 	}
 	etag, size, err := h.storage.CompleteMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, args.Parts)
@@ -261,7 +262,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if bucket == "" {
 		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
 		if err != nil {
-			return connect.NewError(connect.CodeNotFound, err)
+			return object.MapResolveErr(err)
 		}
 	}
 	if err := h.storage.AbortMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key); err != nil {
@@ -314,7 +315,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if bucket == "" {
 		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey)
 		if err != nil {
-			return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+			return "", nil, time.Time{}, object.MapResolveErr(err)
 		}
 	}
 	if ttl <= 0 {

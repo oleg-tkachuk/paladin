@@ -144,7 +144,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, MapResolveErr(err)
 	}
 	writer, err := deps.Sink.Open(ctx, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -86,7 +87,7 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	}
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
 	// Capability budget burn — gates issuance for over-budget callers
 	// before we hand them a usable presigned URL. No-op when the
@@ -132,7 +133,7 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 	}
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
@@ -161,7 +162,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	}
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err

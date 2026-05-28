@@ -210,13 +210,25 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
 func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error) {
-	const q = `SELECT bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`
-	var bucket string
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket); err != nil {
+	// JOIN storage_backends so a disabled backend is refused at the single
+	// resolution chokepoint (feature 002) — zero extra round trip.
+	const q = `
+		SELECT ok.bucket_name, sb.enabled
+		FROM object_keys ok
+		JOIN storage_backends sb ON sb.id = ok.backend_id
+		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
+	var (
+		bucket  string
+		enabled bool
+	)
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled); err != nil {
 		if isNoRows(err) {
 			return "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
 		return "", fmt.Errorf("lookup bucket: %w", err)
+	}
+	if !enabled {
+		return "", object.ErrBackendDisabled
 	}
 	return bucket, nil
 }
@@ -238,12 +250,15 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 // This lets a tenant turn versioning on for one namespace within a
 // shared bucket without touching the bucket's global config.
 func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.BucketMeta, error) {
+	// JOIN storage_backends so a disabled backend is refused here too —
+	// the resolution chokepoint covers every promote/delete/version path.
 	const q = `
 		SELECT b.backend_id, b.bucket_name,
 		       COALESCE(bk.versioning_enabled, false),
 		       COALESCE(bk.object_lock_enabled, false),
-		       b.constraints
+		       b.constraints, sb.enabled
 		FROM object_keys b
+		JOIN storage_backends sb ON sb.id = b.backend_id
 		LEFT JOIN buckets bk
 		  ON bk.backend_id = b.backend_id AND bk.bucket_name = b.bucket_name
 		WHERE b.tenant_id = $1 AND b.object_key = $2
@@ -251,15 +266,19 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 	var (
 		meta            object.BucketMeta
 		constraintsJSON []byte
+		enabled         bool
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
-		&constraintsJSON,
+		&constraintsJSON, &enabled,
 	); err != nil {
 		if isNoRows(err) {
 			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
 		}
 		return object.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
+	}
+	if !enabled {
+		return object.BucketMeta{}, object.ErrBackendDisabled
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v
