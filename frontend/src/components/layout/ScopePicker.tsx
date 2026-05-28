@@ -213,20 +213,42 @@ export const ScopePicker: React.FC = () => {
                   </>
                 ),
               },
-              ...backends.map((b) => ({
-                key: b,
-                searchValue: b,
-                isActive: backendId === b,
-                onSelect: () => setBackend(b),
-                render: () => (
-                  <>
-                    <ServerStackIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 truncate font-mono text-sm">
-                      {b}
-                    </span>
-                  </>
-                ),
-              })),
+              ...backendRows.map((row) => {
+                const id = row.backendId;
+                // Disabled backends (feature 002) are shown with a badge
+                // and are NOT selectable as a working scope — selecting one
+                // would only lead to FailedPrecondition on the next op.
+                const disabled = !row.enabled;
+                return {
+                  key: id,
+                  searchValue: id,
+                  isActive: backendId === id,
+                  onSelect: disabled ? () => {} : () => setBackend(id),
+                  render: () => (
+                    <>
+                      <ServerStackIcon
+                        className={cn(
+                          "size-4 shrink-0 text-muted-foreground",
+                          disabled && "opacity-50",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "flex-1 truncate font-mono text-sm",
+                          disabled && "text-muted-foreground line-through",
+                        )}
+                      >
+                        {id}
+                      </span>
+                      {disabled && (
+                        <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                          Disabled
+                        </span>
+                      )}
+                    </>
+                  ),
+                };
+              }),
             ]}
             footerItems={[
               {

@@ -92,11 +92,11 @@ Setup/Foundational/Polish carry no story label.
 
 **Independent test**: With one enabled + one disabled backend seeded, the `/storage-backends` page and scope picker show the badge + inactive controls; toggling reflects the change.
 
-- [ ] T018 [US3] In `frontend/src/hooks/useBackends.ts`: surface `enabled` on returned rows; add `setBackendEnabled(backendId, enabled, resourceVersion)` calling `BackendService.SetBackendEnabled`, with refresh after success.
-- [ ] T019 [US3] In `frontend/src/components/layout/ScopePicker.tsx`: render a "Disabled" badge on disabled backends, make them non-selectable, and render scope-dependent downstream controls inactive when the selected/hovered backend is disabled (FR-009).
-- [ ] T020 [US3] In `frontend/src/app/storage-backends/page.tsx`: add an enable/disable toggle per backend (platform-admin), passing the current `resource_version`; on a `CodeFailedPrecondition` from any mid-session op, show a clear "Backend is disabled" toast instead of a raw error (FR-010, FR-011).
-- [ ] T021a [P] [US3] Add a component/Playwright test under `frontend/tests/` asserting: a seeded disabled backend renders the "Disabled" badge, is non-selectable in `ScopePicker`, and downstream scope-dependent controls are inactive; and that toggling enable/disable updates the displayed state (SC-006, SC-007).
-- [ ] T021 [US3] Run `pnpm run lint` and `pnpm exec tsc --noEmit` from `frontend/`; both exit zero (FR-007 conventions). Ship `feat(frontend)`.
+- [X] T018 [US3] In `frontend/src/hooks/useBackends.ts`: surface `enabled` on returned rows; add `setBackendEnabled(backendId, enabled, resourceVersion)` calling `BackendService.SetBackendEnabled`, with refresh after success.
+- [X] T019 [US3] In `frontend/src/components/layout/ScopePicker.tsx`: render a "Disabled" badge on disabled backends, make them non-selectable, and render scope-dependent downstream controls inactive when the selected/hovered backend is disabled (FR-009).
+- [X] T020 [US3] In `frontend/src/app/storage-backends/page.tsx`: add an enable/disable toggle per backend (platform-admin), passing the current `resource_version`; on a `CodeFailedPrecondition` from any mid-session op, show a clear "Backend is disabled" toast instead of a raw error (FR-010, FR-011).
+- [X] T021a [P] [US3] Add a component/Playwright test under `frontend/tests/` asserting: a seeded disabled backend renders the "Disabled" badge, is non-selectable in `ScopePicker`, and downstream scope-dependent controls are inactive; and that toggling enable/disable updates the displayed state (SC-006, SC-007).
+- [X] T021 [US3] Run `pnpm run lint` and `pnpm exec tsc --noEmit` from `frontend/`; both exit zero (FR-007 conventions). Ship `feat(frontend)`.
 
 **Checkpoint**: Operator surface complete.
 

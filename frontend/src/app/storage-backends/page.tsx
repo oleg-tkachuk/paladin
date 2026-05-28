@@ -74,10 +74,45 @@ const KIND_LABELS: Record<number, string> = {
 };
 
 export default function StorageBackendsPage() {
-  const { backends, loading, fetchBackends, createBackend } = useBackends();
+  const { backends, loading, fetchBackends, createBackend, setBackendEnabled } =
+    useBackends();
   const { showNotification } = useNotification();
 
   const [search, setSearch] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // handleToggle flips a backend's enabled state. The server refuses to
+  // disable the configured default backend (FailedPrecondition) and a
+  // stale resource_version (Aborted) — both surface as a clear toast
+  // rather than a raw error.
+  const handleToggle = async (
+    backendId: string,
+    nextEnabled: boolean,
+    resourceVersion: string,
+  ) => {
+    try {
+      setTogglingId(backendId);
+      await setBackendEnabled(backendId, nextEnabled, resourceVersion);
+      showNotification({
+        type: "success",
+        title: nextEnabled ? "Backend enabled" : "Backend disabled",
+        message: backendId,
+      });
+    } catch (err) {
+      showNotification({
+        type: "error",
+        title: "Could not change backend state",
+        message:
+          err instanceof ConnectError
+            ? err.rawMessage
+            : err instanceof Error
+              ? err.message
+              : String(err),
+      });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -219,20 +254,21 @@ export default function StorageBackendsPage() {
               <TableHead className="hidden md:table-cell">Kind</TableHead>
               <TableHead className="hidden md:table-cell">Region</TableHead>
               <TableHead className="hidden lg:table-cell">Endpoint</TableHead>
+              <TableHead className="w-[160px] text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && backends.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={5} className="py-3">
+                  <TableCell colSpan={6} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-48 text-center">
+                <TableCell colSpan={6} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -297,6 +333,34 @@ export default function StorageBackendsPage() {
                       >
                         {b.endpoint || "—"}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Badge
+                          variant={b.enabled ? "outline" : "destructive"}
+                          className={T.labelTight}
+                        >
+                          {b.enabled ? "Enabled" : "Disabled"}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={togglingId === b.backendId}
+                          onClick={() =>
+                            void handleToggle(
+                              b.backendId,
+                              !b.enabled,
+                              b.resourceVersion,
+                            )
+                          }
+                        >
+                          {togglingId === b.backendId
+                            ? "…"
+                            : b.enabled
+                              ? "Disable"
+                              : "Enable"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

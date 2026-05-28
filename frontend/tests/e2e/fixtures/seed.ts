@@ -25,6 +25,8 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
+import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
+import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
 import {
@@ -93,6 +95,47 @@ function tenantAdminClient() {
 
 function bucketAdminClient() {
   return createClient(BucketService, adminTransport());
+}
+
+function backendAdminClient() {
+  return createClient(BackendService, adminTransport());
+}
+
+export interface SeededBackend {
+  backendId: string;
+  resourceVersion: string;
+}
+
+/**
+ * Create a storage backend and immediately disable it (feature 002).
+ * Used by the disabled-backend UI test to assert the "Disabled" badge,
+ * non-selectable scope row, and enable toggle. The backend is registered
+ * with provision skipped (no real S3 bucket needed) then flipped off via
+ * SetBackendEnabled. UUID-suffixed id avoids collisions across tests.
+ */
+export async function seedDisabledBackend(opts?: {
+  idPrefix?: string;
+}): Promise<SeededBackend> {
+  const client = backendAdminClient();
+  const backendId = uniqueSlug(opts?.idPrefix ?? "disabled-be");
+  const created = await client.createBackend({
+    backendId,
+    backend: {
+      backendId,
+      displayName: uniqueDisplayName("Disabled BE"),
+      kind: StorageKind.S3_COMPATIBLE,
+      endpoint: "http://garage.invalid:3900",
+      region: "us-east-1",
+      forcePathStyle: true,
+      credentialsSecretRef: "e2e://disabled-backend-never-used",
+    },
+  });
+  const disabled = await client.setBackendEnabled({
+    name: `storageBackends/${backendId}`,
+    enabled: false,
+    resourceVersion: created.resourceVersion,
+  });
+  return { backendId, resourceVersion: disabled.resourceVersion };
 }
 
 function objectKeyAdminClient() {

@@ -95,10 +95,57 @@ export function useBackends(autoFetch: boolean = true) {
     [bumpRefresh],
   );
 
+  // setBackendEnabled — flips a backend's enable/disable state via
+  // BackendService.SetBackendEnabled. OCC-guarded: pass the backend's
+  // current resourceVersion. The server refuses to disable the configured
+  // default backend (FailedPrecondition) and rejects a stale version
+  // (Aborted) — callers should surface err.rawMessage to the operator.
+  const setBackendEnabled = useCallback(
+    async (
+      backendId: string,
+      enabled: boolean,
+      resourceVersion: string,
+    ): Promise<StorageBackend> => {
+      try {
+        setError(null);
+        const updated = await backendClient.setBackendEnabled({
+          name: `storageBackends/${backendId}`,
+          enabled,
+          resourceVersion,
+        });
+        setBackends((prev) =>
+          prev.map((b) => (b.backendId === backendId ? updated : b)),
+        );
+        bumpRefresh("backends");
+        return updated;
+      } catch (err) {
+        const msg =
+          err instanceof ConnectError
+            ? err.rawMessage
+            : "Failed to change backend state";
+        setError(msg);
+        throw err;
+      }
+    },
+    [bumpRefresh],
+  );
+
   const refreshSignal = useRefreshSignal("backends");
   useEffect(() => {
+    // Fetch-on-mount / on-refresh: this is a deliberate sync with an
+    // external system (the BackendService list), not derived state.
+    // fetchBackends toggles loading internally; the set-state-in-effect
+    // rule is a false positive for this data-loading pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (autoFetch) void fetchBackends();
   }, [autoFetch, fetchBackends, refreshSignal]);
 
-  return { backends, loading, error, fetchBackends, createBackend };
+  return {
+    backends,
+    loading,
+    error,
+    fetchBackends,
+    createBackend,
+    setBackendEnabled,
+  };
 }
