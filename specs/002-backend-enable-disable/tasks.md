@@ -49,7 +49,7 @@ Setup/Foundational/Polish carry no story label.
 - [ ] T005 In `backend/internal/store/postgres/queries/storage_backends_v2.sql`: add `enabled` to the SELECT lists of `GetStorageBackendV2` and `ListStorageBackends`; add a new `SetStorageBackendEnabled :execrows` query (`UPDATE … SET enabled=$enabled WHERE id=$id AND (expected_version=0 OR resource_version=expected_version)`) per [contracts/backend-service.md](contracts/backend-service.md) §3. **Do NOT** add `enabled` to `UpsertStorageBackendV2` (bootstrap must not manage it — research D4).
 - [ ] T006 Run `sqlc generate` from `backend/`; verify the generated `enabled` column + `SetStorageBackendEnabled` method land in `backend/internal/store/postgres/sqlc/`.
 - [ ] T007 Add `Enabled bool` to the `admindomain.StorageBackend` struct in `backend/internal/api/admin/v1/admindomain/types.go`.
-- [ ] T008 In `backend/internal/store/postgres/adapters/admin_backend.go`: map `row.Enabled` in `Get` and `List`; add `SetEnabled(ctx, backendID string, enabled bool, expectedVersion int64) error` returning `ErrVersionMismatch` on 0 rows and `ErrNotFound` when the id is absent.
+- [ ] T008 In `backend/internal/store/postgres/adapters/admin_backend.go`: map `row.Enabled` in `Get` and `List`; add `SetEnabled(ctx, backendID string, enabled bool, expectedVersion int64) error` returning `ErrVersionMismatch` on 0 rows and `ErrNotFound` when the id is absent. Also map `Enabled` in the domain→proto conversion for the existing `GetBackend`/`ListBackends` responses (so `mapping_test` T027 sees field 16 populated), wherever `admindomain.StorageBackend` → `paladin.admin.v1.StorageBackend` is built (connectshim admin mapping) — FR-008.
 - [ ] T009 [P] Repo test in `backend/internal/store/postgres/adapters/admin_backend_test.go`: `SetEnabled` flips state and bumps `resource_version`; stale version → `ErrVersionMismatch`; `Get`/`List` round-trip `enabled`.
 
 **Checkpoint**: Data layer can read and OCC-update `enabled`. Ship as `feat(store)`.
@@ -65,7 +65,7 @@ Setup/Foundational/Polish carry no story label.
 - [ ] T010 [US1] Implement `SetBackendEnabled(ctx, backendID, enabled, expectedVersion)` in `backend/internal/api/admin/v1/backendh/handler.go`: `requireRole(rolePlatformAdmin)` → `h.authorize(ctx, actionManageBackend, backendID)` → `h.repo.SetEnabled(...)` → `h.repo.Get(...)`; map `ErrVersionMismatch`→`CodeAborted`, `ErrNotFound`→`CodeNotFound`; emit audit `backend.set_enabled` (FR-013). Mirrors `UpdateBackend` (handler.go:140). (Default-backend guard is added in US4/T023.)
 - [ ] T011 [US1] Wire the `SetBackendEnabled` shim method in the admin connectshim so the RPC is reachable (decode `SetBackendEnabledRequest`, call handler, encode `StorageBackend`) in `backend/internal/api/connectshim/` admin wiring.
 - [ ] T012 [US1] Add `ErrBackendDisabled` sentinel in `backend/internal/api/v1/object/handler.go` and JOIN `storage_backends.enabled` into the resolver SQL in `backend/internal/store/postgres/adapters/object.go` (`LookupBucket` and `LookupBucketMeta`); return `ErrBackendDisabled` when the resolved backend is disabled (research D1, data-model §resolution-join). Keep `LookupBucket`'s `(string, error)` signature.
-- [ ] T013 [US1] Add a shared `mapResolveErr(err)` helper in `backend/internal/api/v1/object/handler.go` mapping `ErrBackendDisabled`→`CodeFailedPrecondition`, not-found→`CodeNotFound`, else `CodeInternal`; apply it at every `LookupBucket`/`LookupBucketMeta` call site (lines ~419, 552, 818, 966, 1141 + presign + multipart paths). Add a comment at the presign path noting the already-issued-URL limitation (research D6).
+- [ ] T013 [US1] Add a shared `mapResolveErr(err)` helper in `backend/internal/api/v1/object/handler.go` mapping `ErrBackendDisabled`→`CodeFailedPrecondition`, not-found→`CodeNotFound`, else `CodeInternal`; apply it at every `LookupBucket`/`LookupBucketMeta` call site (lines ~419, 552, 818, 966, 1141 + presign + multipart paths). Before wiring, grep `backend/internal/api/v1/object/` and the presign/multipart handlers to CONFIRM every presign-GET, presign-PUT, and multipart-initiate/upload-part/complete path resolves the backend via `LookupBucket`/`LookupBucketMeta`; if any path resolves the bucket by another route, add the `ErrBackendDisabled` check there too — the FR-002/SC-001 "all ops" guarantee depends on no resolution path bypassing the gate. Add a comment at the presign path noting the already-issued-URL limitation (research D6).
 - [ ] T014 [US1] Add an explicit disabled-backend pre-check in `CreateBucket` (`backend/internal/api/admin/v1/bucketh/handler.go`, after backend_id validation ~line 160): fetch the backend, reject with `CodeFailedPrecondition` if disabled, before persisting the bucket row.
 - [ ] T015 [US1] Handler test in `backend/internal/api/admin/v1/backendh/handler_test.go`: `SetBackendEnabled` enable+disable persists and returns bumped `resource_version`; setting the current state is an idempotent OK no-op (FR-003).
 - [ ] T016 [US1] Gate test (object handler test + bucketh test) asserting a disabled backend rejects upload, download, head, copy, list, presign GET, presign PUT, multipart-initiate, and create-bucket — each with `CodeFailedPrecondition` AND a mock storage that records ZERO S3 invocations (FR-002, SC-001).
@@ -95,6 +95,7 @@ Setup/Foundational/Polish carry no story label.
 - [ ] T018 [US3] In `frontend/src/hooks/useBackends.ts`: surface `enabled` on returned rows; add `setBackendEnabled(backendId, enabled, resourceVersion)` calling `BackendService.SetBackendEnabled`, with refresh after success.
 - [ ] T019 [US3] In `frontend/src/components/layout/ScopePicker.tsx`: render a "Disabled" badge on disabled backends, make them non-selectable, and render scope-dependent downstream controls inactive when the selected/hovered backend is disabled (FR-009).
 - [ ] T020 [US3] In `frontend/src/app/storage-backends/page.tsx`: add an enable/disable toggle per backend (platform-admin), passing the current `resource_version`; on a `CodeFailedPrecondition` from any mid-session op, show a clear "Backend is disabled" toast instead of a raw error (FR-010, FR-011).
+- [ ] T021a [P] [US3] Add a component/Playwright test under `frontend/tests/` asserting: a seeded disabled backend renders the "Disabled" badge, is non-selectable in `ScopePicker`, and downstream scope-dependent controls are inactive; and that toggling enable/disable updates the displayed state (SC-006, SC-007).
 - [ ] T021 [US3] Run `pnpm run lint` and `pnpm exec tsc --noEmit` from `frontend/`; both exit zero (FR-007 conventions). Ship `feat(frontend)`.
 
 **Checkpoint**: Operator surface complete.
@@ -190,11 +191,11 @@ T001,T002 ─► T003 ─► T004 ─► T005 ─► T006 ─► T007 ─► T00
 | 2. Foundational (store) | T004–T009 (6) | — | T009 |
 | 3. US1 (P1) MVP | T010–T016 (7) | US1 | none |
 | 4. US2 (P1) | T017 (1) | US2 | none |
-| 5. US3 (P2) | T018–T021 (4) | US3 | (vs US4) |
+| 5. US3 (P2) | T018–T021a (5) | US3 | T021a (vs US4) |
 | 6. US4 (P2) | T022–T027 (6) | US4 | (vs US3) |
 | 7. US5 (P3) | T028–T029 (2) | US5 | none |
 | 8. Polish | T030–T032 (3) | — | T030, T031 |
-| **Total** | **32 tasks** | 5 stories | ~5 [P] |
+| **Total** | **33 tasks** | 5 stories | ~6 [P] |
 
 **Independent test criteria per story** (matches SC-001…SC-007):
 
