@@ -31,7 +31,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash,
+       cedar_policy, cedar_policy_hash, enabled,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE id = $1;
@@ -46,7 +46,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash,
+       cedar_policy, cedar_policy_hash, enabled,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE (sqlc.narg('after_id')::text IS NULL
@@ -69,6 +69,17 @@ SET display_name            = COALESCE(sqlc.narg('display_name'), display_name),
     events_queue_url        = COALESCE(sqlc.narg('events_queue_url'), events_queue_url),
     events_poll_interval_ms = COALESCE(sqlc.narg('events_poll_interval_ms'), events_poll_interval_ms),
     cedar_policy            = COALESCE(sqlc.narg('cedar_policy'), cedar_policy)
+WHERE id = sqlc.arg('id')
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: SetStorageBackendEnabled :execrows
+-- Flip the enable/disable state. OCC via resource_version (the
+-- trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
+-- enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
+-- config-mirror must never touch this operator-managed column.
+UPDATE storage_backends
+SET enabled = sqlc.arg('enabled')
 WHERE id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);

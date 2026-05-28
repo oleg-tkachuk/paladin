@@ -433,6 +433,7 @@ type StorageBackend struct {
 	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
 	ResourceVersion      int64              `json:"resource_version"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Enabled              bool               `json:"enabled"`
 }
 
 type Tenant struct {

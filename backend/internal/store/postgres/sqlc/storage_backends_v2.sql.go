@@ -44,7 +44,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash,
+       cedar_policy, cedar_policy_hash, enabled,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE id = $1
@@ -67,6 +67,7 @@ type GetStorageBackendV2Row struct {
 	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
 	CedarPolicy          string             `json:"cedar_policy"`
 	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
+	Enabled              bool               `json:"enabled"`
 	ResourceVersion      int64              `json:"resource_version"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -92,6 +93,7 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 		&i.EventsPollIntervalMs,
 		&i.CedarPolicy,
 		&i.CedarPolicyHash,
+		&i.Enabled,
 		&i.ResourceVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -104,7 +106,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash,
+       cedar_policy, cedar_policy_hash, enabled,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE ($1::text IS NULL
@@ -130,6 +132,7 @@ type ListStorageBackendsRow struct {
 	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
 	CedarPolicy          string             `json:"cedar_policy"`
 	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
+	Enabled              bool               `json:"enabled"`
 	ResourceVersion      int64              `json:"resource_version"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -166,6 +169,7 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 			&i.EventsPollIntervalMs,
 			&i.CedarPolicy,
 			&i.CedarPolicyHash,
+			&i.Enabled,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -188,6 +192,26 @@ WHERE id = $1
 
 func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string) (int64, error) {
 	result, err := q.db.Exec(ctx, rotateStorageBackendCredentials, iD, credentialsSecretRef)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setStorageBackendEnabled = `-- name: SetStorageBackendEnabled :execrows
+UPDATE storage_backends
+SET enabled = $1
+WHERE id = $2
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
+`
+
+// Flip the enable/disable state. OCC via resource_version (the
+// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
+// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
+// config-mirror must never touch this operator-managed column.
+func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageBackendEnabled, enabled, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}

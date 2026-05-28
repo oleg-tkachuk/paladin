@@ -352,6 +352,11 @@ type Querier interface {
 	SetBucketReplication(ctx context.Context, backendID string, bucketName string, replicationEnabled bool, replicationDestination string, replicationFilter string, expectedVersion int64) (int64, error)
 	SetBucketVersioning(ctx context.Context, backendID string, bucketName string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, objectID pgtype.UUID, currentVersionID pgtype.UUID) error
+	// Flip the enable/disable state. OCC via resource_version (the
+	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
+	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
+	// config-mirror must never touch this operator-managed column.
+	SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error)
 	// Tenant aggregate budget queries.
 	//
 	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical

@@ -69,6 +69,7 @@ func (r *BackendRepoV2) Get(ctx context.Context, backendID string) (admindomain.
 			PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 		},
 		CedarPolicy:     row.CedarPolicy,
+		Enabled:         row.Enabled,
 		ResourceVersion: row.ResourceVersion,
 		CreatedAt:       timeFrom(row.CreatedAt),
 		UpdatedAt:       timeFrom(row.UpdatedAt),
@@ -112,6 +113,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 				PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 			},
 			CedarPolicy:     row.CedarPolicy,
+			Enabled:         row.Enabled,
 			ResourceVersion: row.ResourceVersion,
 			CreatedAt:       timeFrom(row.CreatedAt),
 			UpdatedAt:       timeFrom(row.UpdatedAt),
@@ -185,6 +187,26 @@ func (r *BackendRepoV2) Update(ctx context.Context, b admindomain.StorageBackend
 		return fmt.Errorf("update backend: %w", err)
 	}
 	if rows == 0 {
+		return admindomain.ErrVersionMismatch
+	}
+	return nil
+}
+
+// SetEnabled flips the backend's enable/disable state under OCC. Returns
+// ErrNotFound when the id is absent and ErrVersionMismatch when the
+// resource_version no longer matches (0 rows affected).
+func (r *BackendRepoV2) SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error {
+	rows, err := r.q.SetStorageBackendEnabled(ctx, enabled, backendID, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("set backend enabled: %w", err)
+	}
+	if rows == 0 {
+		// Distinguish "no such backend" from "version mismatch": a
+		// missing row is ErrNotFound; an existing row whose version
+		// moved on is ErrVersionMismatch.
+		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
+			return admindomain.ErrNotFound
+		}
 		return admindomain.ErrVersionMismatch
 	}
 	return nil

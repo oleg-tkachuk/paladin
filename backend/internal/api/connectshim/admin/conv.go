@@ -74,6 +74,7 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		Sse:                  sseToProto(b.SSE),
 		Events:               eventsToProto(b.Events),
 		CedarPolicy:          b.CedarPolicy,
+		Enabled:              b.Enabled,
 		ResourceVersion:      resourceVersion(b.ResourceVersion),
 		CreatedAt:            tsProto(b.CreatedAt),
 		UpdatedAt:            tsProto(b.UpdatedAt),

@@ -24,6 +24,7 @@ type BackendRepository interface {
 	Get(ctx context.Context, backendID string) (StorageBackend, error)
 	List(ctx context.Context, pageSize int32, afterID string) ([]StorageBackend, string, error)
 	Update(ctx context.Context, b StorageBackend, expectedVersion int64, mask []string) error
+	SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error
 	RotateCredentials(ctx context.Context, backendID, secretRef string) error
 	Delete(ctx context.Context, backendID string, expectedVersion int64, force bool) error
 }

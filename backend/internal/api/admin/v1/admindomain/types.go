@@ -23,9 +23,13 @@ type StorageBackend struct {
 	SSE                  ServerSideEncryption
 	Events               EventSourceConfig
 	CedarPolicy          string
-	ResourceVersion      int64
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	// Enabled is the durable enable/disable state. false → the backend
+	// rejects every PALADIN-mediated operation that resolves to it. Operator
+	// managed via SetBackendEnabled; never mirrored from static config.
+	Enabled         bool
+	ResourceVersion int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type ServerSideEncryption struct {
