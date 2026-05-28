@@ -127,6 +127,13 @@ func EnsureBackends(ctx context.Context, cfg config.Storage, deps BackendDeps) e
 // backend into the admindomain shape used by the repo. Auth/credentials
 // are intentionally dropped — the S3 adapter reads them straight from
 // the yaml, never via the DB.
+//
+// NOTE (feature 002): `Enabled` is intentionally NOT set here. The
+// enable/disable state is operator-managed via SetBackendEnabled, never
+// mirrored from static config — config has no `enabled` key. Leaving it
+// out (here + in equalForBootstrap + in the UpsertStorageBackendV2
+// ON CONFLICT set) is what guarantees a disabled backend stays disabled
+// across restarts (FR-012 / SC-005).
 func domainBackendFromYAML(id string, b config.StorageBackend) v1admindomain.StorageBackend {
 	return v1admindomain.StorageBackend{
 		BackendID:      id,

@@ -125,8 +125,8 @@ Setup/Foundational/Polish carry no story label.
 
 **Independent test**: Disable a backend, run `EnsureBackends`, assert still disabled and `resource_version` unchanged.
 
-- [ ] T028 [US5] Verify (and comment-guard) that `EnsureBackends`, `domainBackendFromYAML`, and `equalForBootstrap` in `backend/internal/bootstrap/backends.go` do NOT reference `enabled` (research D4). Add a one-line comment noting `enabled` is intentionally operator-managed, not config-mirrored. No behavioral code change expected.
-- [ ] T029 [US5] Bootstrap test in `backend/internal/bootstrap/backends_test.go`: seed a backend, set `enabled=false` directly, run `EnsureBackends` with matching YAML, assert the row is still disabled and `resource_version` is unchanged (FR-012, SC-005). Ship `test(bootstrap)`.
+- [X] T028 [US5] Verify (and comment-guard) that `EnsureBackends`, `domainBackendFromYAML`, and `equalForBootstrap` in `backend/internal/bootstrap/backends.go` do NOT reference `enabled` (research D4). Add a one-line comment noting `enabled` is intentionally operator-managed, not config-mirrored. No behavioral code change expected.
+- [X] T029 [US5] Bootstrap test in `backend/internal/bootstrap/backends_test.go`: seed a backend, set `enabled=false` directly, run `EnsureBackends` with matching YAML, assert the row is still disabled and `resource_version` is unchanged (FR-012, SC-005). Ship `test(bootstrap)`.
 
 **Checkpoint**: Restart durability proven.
 
