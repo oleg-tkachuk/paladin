@@ -976,6 +976,28 @@ traefik:
   # `{name: "<middleware-name>", namespace: "<ns>"}` — namespace is
   # optional (defaults to release namespace).
   middlewares: []
+  # Backend TLS — the planes terminate TLS at the pod, so Traefik must
+  # dial them over HTTPS via a ServersTransport (see
+  # serverstransport.yaml). insecureSkipVerify because the pod cert is
+  # signed by the in-cluster mTLS CA; serverName defaults to the first
+  # host when left empty.
+  backendTLS:
+    enabled: true
+    insecureSkipVerify: true
+    serverName: ""
+  # Connect-RPC plane routing. iam + admin are dispatched by
+  # procedure-prefix; everything else falls through to data. Each rule
+  # is gated by its backing role (deployments.api / deployments.admin)
+  # so a disabled role never leaves an orphaned route.
+  planes:
+    iam:
+      pathPrefix: /paladin.iam.v1.
+      port: 8085   # served by the api role
+    admin:
+      pathPrefix: /paladin.admin.v1.
+      port: 8090   # served by the admin role
+    data:
+      port: 8080   # api role bare-Host fallthrough
 
 # ─── TLS via cert-manager ──────────────────────────────────────────────────
 tls:

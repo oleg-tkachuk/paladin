@@ -1,0 +1,26 @@
+{{/*
+ServersTransport — makes Traefik dial the PALADIN backend planes over HTTPS.
+The planes terminate TLS at the pod (config.api.server.{data,iam}.tls);
+without this, Traefik speaks plain HTTP and the backend answers 400
+("Client sent an HTTP request to an HTTPS server") before the auth chain.
+
+insecureSkipVerify because the pod cert is signed by the in-cluster mTLS
+CA, which isn't in Traefik's default trust store; identity is already
+validated at the pod-network layer (service mesh). serverName defaults
+to the first configured host (SNI the backend cert is issued for).
+
+Renders only alongside the IngressRoute (same enable conditions) and
+only when backend TLS is on.
+*/}}
+{{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) .Values.traefik.backendTLS.enabled -}}
+{{- $serverName := .Values.traefik.backendTLS.serverName | default (first .Values.traefik.hosts) -}}
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ printf "%s-backend-tls" (include "chart.fullname" .) }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  insecureSkipVerify: {{ .Values.traefik.backendTLS.insecureSkipVerify }}
+  serverName: {{ $serverName | quote }}
+{{- end }}

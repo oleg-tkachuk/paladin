@@ -1,20 +1,36 @@
 {{/*
-IngressRoute — Traefik CRD that the api role exposes its data + iam
-Connect listeners through. Same shape as acme's core-api IngressRoute
-so routing is uniform across consumer-shipped services.
+IngressRoute — Traefik CRD that fronts the PALADIN backend Connect-RPC
+planes. One hostname, three plane rules dispatched by procedure-prefix:
+
+  /paladin.iam.v1.<Service>/<Method>    → api role,   iam port   (8085)
+  /paladin.admin.v1.<Service>/<Method>  → admin role, admin port (8090)
+  anything else (incl. /livez, /readyz, /paladin.data.v1.*)
+                                    → api role,   data port  (8080)
+
+Each plane rule renders only when its backing role Deployment is
+enabled (deployments.<role>.enabled), so routing tracks the deployed
+topology — a disabled role leaves no orphaned route pointing at a
+Service that was never created (which would make Traefik log
+"kubernetes service not found" on a loop).
 
 Renders only when Traefik is enabled AND at least one host is
 configured. routes:[] fails Traefik CRD validation; we skip emission
 when traefik.hosts is empty — the right behaviour when an operator
 hasn't picked an env overlay yet.
 
-Targets the api Service's data port (8080) by default. Admin / worker /
-mcp / dispatcher / ingest get NO public ingress — operators expose them
-behind mTLS / VPN / bastion via a separate IngressRoute in the env
-overlay.
+When traefik.backendTLS.enabled, each backend is dialled over HTTPS via
+the ServersTransport in serverstransport.yaml — the planes terminate
+TLS at the pod (config.api.server.{data,iam}.tls), so plain-HTTP from
+Traefik would get a 400 before the auth chain.
 */}}
 {{- if and .Values.traefik.enabled (gt (len .Values.traefik.hosts) 0) -}}
 {{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $adminFullname := include "chart.roleFullname" (dict "ctx" . "role" "admin") -}}
+{{- $apiEnabled := (index .Values.deployments "api").enabled -}}
+{{- $adminEnabled := (index .Values.deployments "admin").enabled -}}
+{{- $planes := .Values.traefik.planes -}}
+{{- $bt := .Values.traefik.backendTLS -}}
+{{- $stName := printf "%s-backend-tls" (include "chart.fullname" .) -}}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -29,13 +45,20 @@ spec:
   entryPoints:
     {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
   routes:
-    {{- range .Values.traefik.hosts }}
+    {{- range $host := .Values.traefik.hosts }}
+    {{- if $apiEnabled }}
+    # iam plane — higher priority than the bare-Host fallthrough below
+    # (Traefik orders rules by match-string length).
     - kind: Rule
-      match: Host(`{{ . }}`)
+      match: Host(`{{ $host }}`) && PathPrefix(`{{ $planes.iam.pathPrefix }}`)
       services:
         - kind: Service
           name: {{ $apiFullname }}
-          port: 8080
+          port: {{ $planes.iam.port }}
+          {{- if $bt.enabled }}
+          scheme: https
+          serversTransport: {{ $stName }}
+          {{- end }}
       {{- with $.Values.traefik.middlewares }}
       middlewares:
         {{- range . }}
@@ -45,6 +68,51 @@ spec:
           {{- end }}
         {{- end }}
       {{- end }}
+    {{- end }}
+    {{- if $adminEnabled }}
+    # admin plane
+    - kind: Rule
+      match: Host(`{{ $host }}`) && PathPrefix(`{{ $planes.admin.pathPrefix }}`)
+      services:
+        - kind: Service
+          name: {{ $adminFullname }}
+          port: {{ $planes.admin.port }}
+          {{- if $bt.enabled }}
+          scheme: https
+          serversTransport: {{ $stName }}
+          {{- end }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if $apiEnabled }}
+    # data plane — bare-Host fallthrough for everything else.
+    - kind: Rule
+      match: Host(`{{ $host }}`)
+      services:
+        - kind: Service
+          name: {{ $apiFullname }}
+          port: {{ $planes.data.port }}
+          {{- if $bt.enabled }}
+          scheme: https
+          serversTransport: {{ $stName }}
+          {{- end }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
     {{- end }}
   {{- if .Values.tls.enabled }}
   tls:
