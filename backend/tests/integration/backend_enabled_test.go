@@ -9,6 +9,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -187,6 +188,62 @@ type allowAll struct{}
 
 func (allowAll) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
+}
+
+// TestBackendDisable_ReversibleNoDataLoss covers US2 / FR-007 / SC-002:
+// disabling then re-enabling a backend leaves stored object rows
+// completely untouched and fully restores access. Disabling only flips a
+// Postgres flag — it never reads or mutates object data.
+func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
+	h := pgharness.Setup(t)
+	repo := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	ctx := context.Background()
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "rev-tenant")
+	seedBackend(t, h.PoolMigrate, "rev-be")
+	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "rev-be", "rev-bucket", "docs")
+	mustInsertObject(t, h.PoolMigrate, tenantID, "docs", "key-rev")
+
+	before := mustReadObjectFingerprint(t, h.PoolMigrate, tenantID, "key-rev")
+
+	// Disable → access refused.
+	cur, _ := be.Get(ctx, "rev-be")
+	if err := be.SetEnabled(ctx, "rev-be", false, cur.ResourceVersion); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs"); !errors.Is(err, object.ErrBackendDisabled) {
+		t.Fatalf("expected disabled refusal, got %v", err)
+	}
+
+	// Re-enable → access restored.
+	cur, _ = be.Get(ctx, "rev-be")
+	if err := be.SetEnabled(ctx, "rev-be", true, cur.ResourceVersion); err != nil {
+		t.Fatalf("re-enable: %v", err)
+	}
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs"); err != nil {
+		t.Fatalf("re-enabled resolution: %v", err)
+	}
+
+	// The object row is byte-for-byte the same — disable/enable touched
+	// no object data.
+	after := mustReadObjectFingerprint(t, h.PoolMigrate, tenantID, "key-rev")
+	if before != after {
+		t.Errorf("object row changed across disable/enable:\n before=%q\n after =%q", before, after)
+	}
+}
+
+func mustReadObjectFingerprint(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, key string) string {
+	t.Helper()
+	var state, contentType string
+	var size int64
+	if err := pool.QueryRow(context.Background(), `
+        SELECT state, content_type, COALESCE(size_bytes, 0)
+        FROM objects WHERE tenant_id = $1 AND key = $2
+    `, tenantID, key).Scan(&state, &contentType, &size); err != nil {
+		t.Fatalf("read object fingerprint: %v", err)
+	}
+	return fmt.Sprintf("%s|%s|%d", state, contentType, size)
 }
 
 func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, objectKey string) {

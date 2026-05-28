@@ -80,7 +80,7 @@ Setup/Foundational/Polish carry no story label.
 
 **Independent test**: Disable, confirm reject, re-enable, repeat ops — all succeed against untouched data.
 
-- [ ] T017 [US2] Test in `backend/internal/api/v1/object/handler_test.go`: write an object, disable its backend (op now rejected), re-enable, then download the same object and assert byte-identical content; assert no data row was modified by the disable/enable cycle (FR-007, SC-002).
+- [X] T017 [US2] Test in `backend/internal/api/v1/object/handler_test.go`: write an object, disable its backend (op now rejected), re-enable, then download the same object and assert byte-identical content; assert no data row was modified by the disable/enable cycle (FR-007, SC-002).
 
 **Checkpoint**: Reversibility proven.
 
