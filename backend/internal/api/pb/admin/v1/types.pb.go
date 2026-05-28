@@ -255,8 +255,13 @@ type StorageBackend struct {
 	ResourceVersion string                 `protobuf:"bytes,13,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Durable enable/disable state. true → backend serves PALADIN requests.
+	// false → every PALADIN-mediated operation resolving to this backend is
+	// refused (FailedPrecondition) before any object-store call. Operator
+	// managed via SetBackendEnabled; NOT mirrored from static config.
+	Enabled       bool `protobuf:"varint,16,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StorageBackend) Reset() {
@@ -392,6 +397,13 @@ func (x *StorageBackend) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *StorageBackend) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
 }
 
 type ServerSideEncryption struct {
@@ -2267,7 +2279,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\x85\x05\n" +
+	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\x9f\x05\n" +
 	"\x0eStorageBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2287,7 +2299,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"X\n" +
+	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x18\n" +
+	"\aenabled\x18\x10 \x01(\bR\aenabled\"X\n" +
 	"\x14ServerSideEncryption\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xbd\x01\n" +

@@ -33,9 +33,9 @@ Setup/Foundational/Polish carry no story label.
 
 **Purpose**: The additive proto surface every downstream layer depends on.
 
-- [ ] T001 Add `bool enabled = 16;` to the `StorageBackend` message in `backend/proto/paladin/admin/v1/types.proto` (next free field number is 16; do not renumber existing fields).
-- [ ] T002 Add `rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend);` to `BackendService` and define `SetBackendEnabledRequest{ backend_id, enabled, resource_version }` (with buf.validate min_len on `backend_id` + `resource_version`) in `backend/proto/paladin/admin/v1/backend_service.proto` per [contracts/backend-service.md](contracts/backend-service.md) §1.
-- [ ] T003 Run `buf generate` from `backend/`; verify regenerated Go stubs and `frontend/src/gen/paladin/admin/v1/backend_service_pb.ts` carry the new field + RPC. Commit codegen with T001/T002 as `feat(proto)`.
+- [X] T001 Add `bool enabled = 16;` to the `StorageBackend` message in `backend/proto/paladin/admin/v1/types.proto` (next free field number is 16; do not renumber existing fields).
+- [X] T002 Add `rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend);` to `BackendService` and define `SetBackendEnabledRequest{ backend_id, enabled, resource_version }` (with buf.validate min_len on `backend_id` + `resource_version`) in `backend/proto/paladin/admin/v1/backend_service.proto` per [contracts/backend-service.md](contracts/backend-service.md) §1.
+- [X] T003 Run `buf generate` from `backend/`; verify regenerated Go stubs and `frontend/src/gen/paladin/admin/v1/backend_service_pb.ts` carry the new field + RPC. Commit codegen with T001/T002 as `feat(proto)`.
 
 **Checkpoint**: Proto compiles; generated clients expose `enabled` + `setBackendEnabled`.
 

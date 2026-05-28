@@ -34,6 +34,11 @@ message StorageBackend {
   string resource_version = 13;
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
+  // Durable enable/disable state. true → backend serves PALADIN requests.
+  // false → every PALADIN-mediated operation resolving to this backend is
+  // refused (FailedPrecondition) before any object-store call. Operator
+  // managed via SetBackendEnabled; NOT mirrored from static config.
+  bool enabled = 16;
 }
 
 enum StorageKind {

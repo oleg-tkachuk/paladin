@@ -5,12 +5,13 @@
 package paladinadminv1connect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	v1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are
@@ -54,6 +55,9 @@ const (
 	// BackendServiceTestBackendProcedure is the fully-qualified name of the BackendService's
 	// TestBackend RPC.
 	BackendServiceTestBackendProcedure = "/paladin.admin.v1.BackendService/TestBackend"
+	// BackendServiceSetBackendEnabledProcedure is the fully-qualified name of the BackendService's
+	// SetBackendEnabled RPC.
+	BackendServiceSetBackendEnabledProcedure = "/paladin.admin.v1.BackendService/SetBackendEnabled"
 )
 
 // BackendServiceClient is a client for the paladin.admin.v1.BackendService service.
@@ -68,6 +72,11 @@ type BackendServiceClient interface {
 	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error)
 	// TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
 	TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error)
+	// SetBackendEnabled flips the backend's enabled state. Idempotent
+	// (setting the current state is a no-op success). OCC-guarded via
+	// resource_version. Disabling the configured default backend is
+	// refused (FailedPrecondition).
+	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
 }
 
 // NewBackendServiceClient constructs a client for the paladin.admin.v1.BackendService service. By
@@ -123,6 +132,12 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
 			connect.WithClientOptions(opts...),
 		),
+		setBackendEnabled: connect.NewClient[v1.SetBackendEnabledRequest, v1.StorageBackend](
+			httpClient,
+			baseURL+BackendServiceSetBackendEnabledProcedure,
+			connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -135,6 +150,7 @@ type backendServiceClient struct {
 	listBackends      *connect.Client[v1.ListBackendsRequest, v1.ListBackendsResponse]
 	rotateCredentials *connect.Client[v1.RotateCredentialsRequest, v1.StorageBackend]
 	testBackend       *connect.Client[v1.TestBackendRequest, v1.TestBackendResponse]
+	setBackendEnabled *connect.Client[v1.SetBackendEnabledRequest, v1.StorageBackend]
 }
 
 // CreateBackend calls paladin.admin.v1.BackendService.CreateBackend.
@@ -172,6 +188,11 @@ func (c *backendServiceClient) TestBackend(ctx context.Context, req *connect.Req
 	return c.testBackend.CallUnary(ctx, req)
 }
 
+// SetBackendEnabled calls paladin.admin.v1.BackendService.SetBackendEnabled.
+func (c *backendServiceClient) SetBackendEnabled(ctx context.Context, req *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error) {
+	return c.setBackendEnabled.CallUnary(ctx, req)
+}
+
 // BackendServiceHandler is an implementation of the paladin.admin.v1.BackendService service.
 type BackendServiceHandler interface {
 	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
@@ -184,6 +205,11 @@ type BackendServiceHandler interface {
 	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error)
 	// TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
 	TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error)
+	// SetBackendEnabled flips the backend's enabled state. Idempotent
+	// (setting the current state is a no-op success). OCC-guarded via
+	// resource_version. Disabling the configured default backend is
+	// refused (FailedPrecondition).
+	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
 }
 
 // NewBackendServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -235,6 +261,12 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
 		connect.WithHandlerOptions(opts...),
 	)
+	backendServiceSetBackendEnabledHandler := connect.NewUnaryHandler(
+		BackendServiceSetBackendEnabledProcedure,
+		svc.SetBackendEnabled,
+		connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.BackendService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BackendServiceCreateBackendProcedure:
@@ -251,6 +283,8 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 			backendServiceRotateCredentialsHandler.ServeHTTP(w, r)
 		case BackendServiceTestBackendProcedure:
 			backendServiceTestBackendHandler.ServeHTTP(w, r)
+		case BackendServiceSetBackendEnabledProcedure:
+			backendServiceSetBackendEnabledHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -286,4 +320,8 @@ func (UnimplementedBackendServiceHandler) RotateCredentials(context.Context, *co
 
 func (UnimplementedBackendServiceHandler) TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.TestBackend is not implemented"))
+}
+
+func (UnimplementedBackendServiceHandler) SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendEnabled is not implemented"))
 }

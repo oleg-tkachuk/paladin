@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/backend_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
@@ -16,29 +24,40 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/backend_service.proto.
  */
-export const file_paladin_admin_v1_backend_service: GenFile = /*@__PURE__*/
-  fileDesc("CiJvY3AvYWRtaW4vdjEvYmFja2VuZF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEiagoUQ3JlYXRlQmFja2VuZFJlcXVlc3QSGwoKYmFja2VuZF9pZBgBIAEoCUIHukgEcgIQARI1CgdiYWNrZW5kGAIgASgLMhwub2NwLmFkbWluLnYxLlN0b3JhZ2VCYWNrZW5kQga6SAPIAQEiKgoRR2V0QmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKvAQoUVXBkYXRlQmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEi0KB2JhY2tlbmQYBCABKAsyHC5vY3AuYWRtaW4udjEuU3RvcmFnZUJhY2tlbmQiVgoURGVsZXRlQmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhcKFURlbGV0ZUJhY2tlbmRSZXNwb25zZSJPChNMaXN0QmFja2VuZHNSZXF1ZXN0EigKBHBhZ2UYASABKAsyGi5vY3AuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCSJxChRMaXN0QmFja2VuZHNSZXNwb25zZRIuCghiYWNrZW5kcxgBIAMoCzIcLm9jcC5hZG1pbi52MS5TdG9yYWdlQmFja2VuZBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoYUm90YXRlQ3JlZGVudGlhbHNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESHwoObmV3X3NlY3JldF9yZWYYAiABKAlCB7pIBHICEAESFAoMZ3JhY2VfcGVyaW9kGAMgASgJIisKElRlc3RCYWNrZW5kUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlMKE1Rlc3RCYWNrZW5kUmVzcG9uc2USEQoJcmVhY2hhYmxlGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSEgoKbGF0ZW5jeV9tcxgDIAEoBTLjBAoOQmFja2VuZFNlcnZpY2USUQoNQ3JlYXRlQmFja2VuZBIiLm9jcC5hZG1pbi52MS5DcmVhdGVCYWNrZW5kUmVxdWVzdBocLm9jcC5hZG1pbi52MS5TdG9yYWdlQmFja2VuZBJLCgpHZXRCYWNrZW5kEh8ub2NwLmFkbWluLnYxLkdldEJhY2tlbmRSZXF1ZXN0Ghwub2NwLmFkbWluLnYxLlN0b3JhZ2VCYWNrZW5kElEKDVVwZGF0ZUJhY2tlbmQSIi5vY3AuYWRtaW4udjEuVXBkYXRlQmFja2VuZFJlcXVlc3QaHC5vY3AuYWRtaW4udjEuU3RvcmFnZUJhY2tlbmQSWAoNRGVsZXRlQmFja2VuZBIiLm9jcC5hZG1pbi52MS5EZWxldGVCYWNrZW5kUmVxdWVzdBojLm9jcC5hZG1pbi52MS5EZWxldGVCYWNrZW5kUmVzcG9uc2USVQoMTGlzdEJhY2tlbmRzEiEub2NwLmFkbWluLnYxLkxpc3RCYWNrZW5kc1JlcXVlc3QaIi5vY3AuYWRtaW4udjEuTGlzdEJhY2tlbmRzUmVzcG9uc2USWQoRUm90YXRlQ3JlZGVudGlhbHMSJi5vY3AuYWRtaW4udjEuUm90YXRlQ3JlZGVudGlhbHNSZXF1ZXN0Ghwub2NwLmFkbWluLnYxLlN0b3JhZ2VCYWNrZW5kElIKC1Rlc3RCYWNrZW5kEiAub2NwLmFkbWluLnYxLlRlc3RCYWNrZW5kUmVxdWVzdBohLm9jcC5hZG1pbi52MS5UZXN0QmFja2VuZFJlc3BvbnNlQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_admin_v1_types, file_paladin_common_v1_pagination]);
+export const file_paladin_admin_v1_backend_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiJvY3AvYWRtaW4vdjEvYmFja2VuZF9zZXJ2aWNlLnByb3RvEgxvY3AuYWRtaW4udjEiagoUQ3JlYXRlQmFja2VuZFJlcXVlc3QSGwoKYmFja2VuZF9pZBgBIAEoCUIHukgEcgIQARI1CgdiYWNrZW5kGAIgASgLMhwub2NwLmFkbWluLnYxLlN0b3JhZ2VCYWNrZW5kQga6SAPIAQEiKgoRR2V0QmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKvAQoUVXBkYXRlQmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEi0KB2JhY2tlbmQYBCABKAsyHC5vY3AuYWRtaW4udjEuU3RvcmFnZUJhY2tlbmQiVgoURGVsZXRlQmFja2VuZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhcKFURlbGV0ZUJhY2tlbmRSZXNwb25zZSJPChNMaXN0QmFja2VuZHNSZXF1ZXN0EigKBHBhZ2UYASABKAsyGi5vY3AuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCSJxChRMaXN0QmFja2VuZHNSZXNwb25zZRIuCghiYWNrZW5kcxgBIAMoCzIcLm9jcC5hZG1pbi52MS5TdG9yYWdlQmFja2VuZBIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiaAoYUm90YXRlQ3JlZGVudGlhbHNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESHwoObmV3X3NlY3JldF9yZWYYAiABKAlCB7pIBHICEAESFAoMZ3JhY2VfcGVyaW9kGAMgASgJIisKElRlc3RCYWNrZW5kUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlMKE1Rlc3RCYWNrZW5kUmVzcG9uc2USEQoJcmVhY2hhYmxlGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSEgoKbGF0ZW5jeV9tcxgDIAEoBSJlChhTZXRCYWNrZW5kRW5hYmxlZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIPCgdlbmFibGVkGAIgASgIEiEKEHJlc291cmNlX3ZlcnNpb24YAyABKAlCB7pIBHICEAEyvgUKDkJhY2tlbmRTZXJ2aWNlElEKDUNyZWF0ZUJhY2tlbmQSIi5vY3AuYWRtaW4udjEuQ3JlYXRlQmFja2VuZFJlcXVlc3QaHC5vY3AuYWRtaW4udjEuU3RvcmFnZUJhY2tlbmQSSwoKR2V0QmFja2VuZBIfLm9jcC5hZG1pbi52MS5HZXRCYWNrZW5kUmVxdWVzdBocLm9jcC5hZG1pbi52MS5TdG9yYWdlQmFja2VuZBJRCg1VcGRhdGVCYWNrZW5kEiIub2NwLmFkbWluLnYxLlVwZGF0ZUJhY2tlbmRSZXF1ZXN0Ghwub2NwLmFkbWluLnYxLlN0b3JhZ2VCYWNrZW5kElgKDURlbGV0ZUJhY2tlbmQSIi5vY3AuYWRtaW4udjEuRGVsZXRlQmFja2VuZFJlcXVlc3QaIy5vY3AuYWRtaW4udjEuRGVsZXRlQmFja2VuZFJlc3BvbnNlElUKDExpc3RCYWNrZW5kcxIhLm9jcC5hZG1pbi52MS5MaXN0QmFja2VuZHNSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkxpc3RCYWNrZW5kc1Jlc3BvbnNlElkKEVJvdGF0ZUNyZWRlbnRpYWxzEiYub2NwLmFkbWluLnYxLlJvdGF0ZUNyZWRlbnRpYWxzUmVxdWVzdBocLm9jcC5hZG1pbi52MS5TdG9yYWdlQmFja2VuZBJSCgtUZXN0QmFja2VuZBIgLm9jcC5hZG1pbi52MS5UZXN0QmFja2VuZFJlcXVlc3QaIS5vY3AuYWRtaW4udjEuVGVzdEJhY2tlbmRSZXNwb25zZRJZChFTZXRCYWNrZW5kRW5hYmxlZBImLm9jcC5hZG1pbi52MS5TZXRCYWNrZW5kRW5hYmxlZFJlcXVlc3QaHC5vY3AuYWRtaW4udjEuU3RvcmFnZUJhY2tlbmRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_admin_v1_types,
+      file_paladin_common_v1_pagination,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.CreateBackendRequest
  */
-export type CreateBackendRequest = Message<"paladin.admin.v1.CreateBackendRequest"> & {
-  /**
-   * @generated from field: string backend_id = 1;
-   */
-  backendId: string;
+export type CreateBackendRequest =
+  Message<"paladin.admin.v1.CreateBackendRequest"> & {
+    /**
+     * @generated from field: string backend_id = 1;
+     */
+    backendId: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.StorageBackend backend = 2;
-   */
-  backend?: StorageBackend | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.StorageBackend backend = 2;
+     */
+    backend?: StorageBackend | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CreateBackendRequest.
  * Use `create(CreateBackendRequestSchema)` to create a new message.
  */
-export const CreateBackendRequestSchema: GenMessage<CreateBackendRequest> = /*@__PURE__*/
+export const CreateBackendRequestSchema: GenMessage<CreateBackendRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 0);
 
 /**
@@ -55,158 +74,170 @@ export type GetBackendRequest = Message<"paladin.admin.v1.GetBackendRequest"> & 
  * Describes the message paladin.admin.v1.GetBackendRequest.
  * Use `create(GetBackendRequestSchema)` to create a new message.
  */
-export const GetBackendRequestSchema: GenMessage<GetBackendRequest> = /*@__PURE__*/
+export const GetBackendRequestSchema: GenMessage<GetBackendRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.UpdateBackendRequest
  */
-export type UpdateBackendRequest = Message<"paladin.admin.v1.UpdateBackendRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type UpdateBackendRequest =
+  Message<"paladin.admin.v1.UpdateBackendRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: google.protobuf.FieldMask update_mask = 3;
-   */
-  updateMask?: FieldMask | undefined;
+    /**
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 
-  /**
-   * @generated from field: paladin.admin.v1.StorageBackend backend = 4;
-   */
-  backend?: StorageBackend | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.StorageBackend backend = 4;
+     */
+    backend?: StorageBackend | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.UpdateBackendRequest.
  * Use `create(UpdateBackendRequestSchema)` to create a new message.
  */
-export const UpdateBackendRequestSchema: GenMessage<UpdateBackendRequest> = /*@__PURE__*/
+export const UpdateBackendRequestSchema: GenMessage<UpdateBackendRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.DeleteBackendRequest
  */
-export type DeleteBackendRequest = Message<"paladin.admin.v1.DeleteBackendRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteBackendRequest =
+  Message<"paladin.admin.v1.DeleteBackendRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * Refuse delete when buckets still reference the backend.
-   *
-   * @generated from field: bool force = 3;
-   */
-  force: boolean;
-};
+    /**
+     * Refuse delete when buckets still reference the backend.
+     *
+     * @generated from field: bool force = 3;
+     */
+    force: boolean;
+  };
 
 /**
  * Describes the message paladin.admin.v1.DeleteBackendRequest.
  * Use `create(DeleteBackendRequestSchema)` to create a new message.
  */
-export const DeleteBackendRequestSchema: GenMessage<DeleteBackendRequest> = /*@__PURE__*/
+export const DeleteBackendRequestSchema: GenMessage<DeleteBackendRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.DeleteBackendResponse
  */
-export type DeleteBackendResponse = Message<"paladin.admin.v1.DeleteBackendResponse"> & {
-};
+export type DeleteBackendResponse =
+  Message<"paladin.admin.v1.DeleteBackendResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.DeleteBackendResponse.
  * Use `create(DeleteBackendResponseSchema)` to create a new message.
  */
-export const DeleteBackendResponseSchema: GenMessage<DeleteBackendResponse> = /*@__PURE__*/
+export const DeleteBackendResponseSchema: GenMessage<DeleteBackendResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.ListBackendsRequest
  */
-export type ListBackendsRequest = Message<"paladin.admin.v1.ListBackendsRequest"> & {
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 1;
-   */
-  page?: PageRequest | undefined;
+export type ListBackendsRequest =
+  Message<"paladin.admin.v1.ListBackendsRequest"> & {
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
 
-  /**
-   * CEL over StorageBackend
-   *
-   * @generated from field: string filter = 2;
-   */
-  filter: string;
-};
+    /**
+     * CEL over StorageBackend
+     *
+     * @generated from field: string filter = 2;
+     */
+    filter: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListBackendsRequest.
  * Use `create(ListBackendsRequestSchema)` to create a new message.
  */
-export const ListBackendsRequestSchema: GenMessage<ListBackendsRequest> = /*@__PURE__*/
+export const ListBackendsRequestSchema: GenMessage<ListBackendsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.ListBackendsResponse
  */
-export type ListBackendsResponse = Message<"paladin.admin.v1.ListBackendsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.StorageBackend backends = 1;
-   */
-  backends: StorageBackend[];
+export type ListBackendsResponse =
+  Message<"paladin.admin.v1.ListBackendsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.StorageBackend backends = 1;
+     */
+    backends: StorageBackend[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListBackendsResponse.
  * Use `create(ListBackendsResponseSchema)` to create a new message.
  */
-export const ListBackendsResponseSchema: GenMessage<ListBackendsResponse> = /*@__PURE__*/
+export const ListBackendsResponseSchema: GenMessage<ListBackendsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.RotateCredentialsRequest
  */
-export type RotateCredentialsRequest = Message<"paladin.admin.v1.RotateCredentialsRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type RotateCredentialsRequest =
+  Message<"paladin.admin.v1.RotateCredentialsRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string new_secret_ref = 2;
-   */
-  newSecretRef: string;
+    /**
+     * @generated from field: string new_secret_ref = 2;
+     */
+    newSecretRef: string;
 
-  /**
-   * After this period the old secret is removed from cache.
-   *
-   * duration as RFC3339-style or "30m"
-   *
-   * @generated from field: string grace_period = 3;
-   */
-  gracePeriod: string;
-};
+    /**
+     * After this period the old secret is removed from cache.
+     *
+     * duration as RFC3339-style or "30m"
+     *
+     * @generated from field: string grace_period = 3;
+     */
+    gracePeriod: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.RotateCredentialsRequest.
  * Use `create(RotateCredentialsRequestSchema)` to create a new message.
  */
-export const RotateCredentialsRequestSchema: GenMessage<RotateCredentialsRequest> = /*@__PURE__*/
+export const RotateCredentialsRequestSchema: GenMessage<RotateCredentialsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 7);
 
 /**
@@ -223,35 +254,71 @@ export type TestBackendRequest = Message<"paladin.admin.v1.TestBackendRequest"> 
  * Describes the message paladin.admin.v1.TestBackendRequest.
  * Use `create(TestBackendRequestSchema)` to create a new message.
  */
-export const TestBackendRequestSchema: GenMessage<TestBackendRequest> = /*@__PURE__*/
+export const TestBackendRequestSchema: GenMessage<TestBackendRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.TestBackendResponse
  */
-export type TestBackendResponse = Message<"paladin.admin.v1.TestBackendResponse"> & {
-  /**
-   * @generated from field: bool reachable = 1;
-   */
-  reachable: boolean;
+export type TestBackendResponse =
+  Message<"paladin.admin.v1.TestBackendResponse"> & {
+    /**
+     * @generated from field: bool reachable = 1;
+     */
+    reachable: boolean;
 
-  /**
-   * @generated from field: string error_message = 2;
-   */
-  errorMessage: string;
+    /**
+     * @generated from field: string error_message = 2;
+     */
+    errorMessage: string;
 
-  /**
-   * @generated from field: int32 latency_ms = 3;
-   */
-  latencyMs: number;
-};
+    /**
+     * @generated from field: int32 latency_ms = 3;
+     */
+    latencyMs: number;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TestBackendResponse.
  * Use `create(TestBackendResponseSchema)` to create a new message.
  */
-export const TestBackendResponseSchema: GenMessage<TestBackendResponse> = /*@__PURE__*/
+export const TestBackendResponseSchema: GenMessage<TestBackendResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_backend_service, 9);
+
+/**
+ * @generated from message paladin.admin.v1.SetBackendEnabledRequest
+ */
+export type SetBackendEnabledRequest =
+  Message<"paladin.admin.v1.SetBackendEnabledRequest"> & {
+    /**
+     * "storageBackends/{backend_id}"
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: bool enabled = 2;
+     */
+    enabled: boolean;
+
+    /**
+     * OCC, required
+     *
+     * @generated from field: string resource_version = 3;
+     */
+    resourceVersion: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.SetBackendEnabledRequest.
+ * Use `create(SetBackendEnabledRequestSchema)` to create a new message.
+ */
+export const SetBackendEnabledRequestSchema: GenMessage<SetBackendEnabledRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_backend_service, 10);
 
 /**
  * BackendService manages physical storage backends. Exclusive to platform
@@ -267,7 +334,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof CreateBackendRequestSchema;
     output: typeof StorageBackendSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BackendService.GetBackend
    */
@@ -275,7 +342,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof GetBackendRequestSchema;
     output: typeof StorageBackendSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BackendService.UpdateBackend
    */
@@ -283,7 +350,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof UpdateBackendRequestSchema;
     output: typeof StorageBackendSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BackendService.DeleteBackend
    */
@@ -291,7 +358,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof DeleteBackendRequestSchema;
     output: typeof DeleteBackendResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.BackendService.ListBackends
    */
@@ -299,7 +366,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof ListBackendsRequestSchema;
     output: typeof ListBackendsResponseSchema;
-  },
+  };
   /**
    * RotateCredentials swaps the credentials_secret_ref. The previous secret
    * remains valid for `grace_period` so in-flight presigns don't break.
@@ -310,7 +377,7 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof RotateCredentialsRequestSchema;
     output: typeof StorageBackendSchema;
-  },
+  };
   /**
    * TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
    *
@@ -320,7 +387,18 @@ export const BackendService: GenService<{
     methodKind: "unary";
     input: typeof TestBackendRequestSchema;
     output: typeof TestBackendResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_backend_service, 0);
-
+  };
+  /**
+   * SetBackendEnabled flips the backend's enabled state. Idempotent
+   * (setting the current state is a no-op success). OCC-guarded via
+   * resource_version. Disabling the configured default backend is
+   * refused (FailedPrecondition).
+   *
+   * @generated from rpc paladin.admin.v1.BackendService.SetBackendEnabled
+   */
+  setBackendEnabled: {
+    methodKind: "unary";
+    input: typeof SetBackendEnabledRequestSchema;
+    output: typeof StorageBackendSchema;
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_backend_service, 0);

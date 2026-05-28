@@ -24,6 +24,12 @@ service BackendService {
 
   // TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
   rpc TestBackend(TestBackendRequest) returns (TestBackendResponse);
+
+  // SetBackendEnabled flips the backend's enabled state. Idempotent
+  // (setting the current state is a no-op success). OCC-guarded via
+  // resource_version. Disabling the configured default backend is
+  // refused (FailedPrecondition).
+  rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend);
 }
 
 message CreateBackendRequest {
@@ -76,4 +82,10 @@ message TestBackendResponse {
   bool reachable = 1;
   string error_message = 2;
   int32 latency_ms = 3;
+}
+
+message SetBackendEnabledRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
+  bool enabled = 2;
+  string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
 }
