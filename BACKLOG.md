@@ -1349,24 +1349,14 @@ _(no documentation items currently deferred)_
     produce a clear named failure in the expected spec file.
   - Flip T012/T018/T023/T029/T034/T038/T041/T042 from `[~]` to `[X]`
     and delete this entry in the same commit.
-- **Blockers:** local availability of the PALADIN backend + UI container
-  images and a reachable Garage endpoint.
-
-### Enable/disable backend — UI dry-run + Playwright runtime sign-off
-
-- **Status:** Blocked
-- **Reason:** Feature 002 (`specs/002-backend-enable-disable`) T032 — the
-  quickstart 6-check dry-run and the `frontend/tests/e2e/backend-disabled.spec.ts`
-  Playwright spec (SC-006/SC-007) — need the full e2e stack, which is the
-  same blocked resource as the 001 sign-off above (no locally-built PALADIN
-  images). Backend enforcement is fully proven without the stack: 501
-  unit tests, 6 integration tests against testcontainers Postgres
-  (resolver gate, CreateBucket refusal, OCC, default guard, reversibility,
-  bootstrap preservation).
-- **Definition of Done:**
-  - With the e2e stack up, run `pnpm exec playwright test backend-disabled.spec.ts`
-    and confirm the badge / non-selectable scope row / re-enable toggle pass.
-  - Walk the quickstart §"Verify the guarantee" 6 checks once.
-  - Flip T032 from `[~]` to `[X]` and delete this entry in the same commit.
-- **Blockers:** shares the PALADIN-image availability blocker with the 001
-  sign-off; resolve once and both can proceed.
+- **Blockers:** ~~PALADIN image availability + reachable S3~~ — RESOLVED
+  during feature 002's T032 sign-off. The images build locally
+  (`docker build -f {backend,frontend}/deploy/Dockerfile`), a local
+  Garage v2.3 at `:3900` supplies S3, and four never-before-run stack
+  bugs were fixed (dup `bootstrap.admin` password+secret; distroless
+  `wget` healthchecks; UI BFF env-var name mismatch `PALADIN_BACKEND_URLS_*`
+  → `PALADIN_{DATA,IAM,ADMIN}_URL`; e2e seed transport missing
+  `Idempotency-Key`). The stack now boots and `backend-disabled.spec.ts`
+  passes against it. Remaining 001 work is purely running its own five
+  specs 10× for the flake/timing budget (SC-002/SC-003) and the
+  intentional-break dry-runs (SC-004) — no longer infra-blocked.
