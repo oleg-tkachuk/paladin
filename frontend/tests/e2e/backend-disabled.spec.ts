@@ -39,6 +39,10 @@ test.describe("US3 — disabled backends in the UI", () => {
     await loginAsAdmin(page);
     const be = await seedDisabledBackend();
 
+    // The ScopePicker fetched backends on mount (at login), before the
+    // seed ran — reload so its list includes the freshly-seeded backend.
+    await page.reload();
+
     const trigger = page.getByRole("button", { name: /^Scope picker —/ });
     await trigger.click();
 

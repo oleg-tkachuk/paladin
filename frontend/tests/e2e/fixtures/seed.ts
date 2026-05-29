@@ -83,6 +83,14 @@ function adminTransport() {
       (next) => async (req) => {
         const token = await getAdminToken();
         req.header.set("Authorization", `Bearer ${token}`);
+        // Create* RPCs are gated by the idempotency middleware
+        // (RequireOnCreate=true). The production transport
+        // (src/lib/connect/transport.ts) auto-injects a UUID; the
+        // seed transport must do the same or every Create* seed
+        // fails with "missing Idempotency-Key header".
+        if (!req.header.has("Idempotency-Key")) {
+          req.header.set("Idempotency-Key", crypto.randomUUID());
+        }
         return next(req);
       },
     ],
