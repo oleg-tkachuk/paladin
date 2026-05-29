@@ -105,9 +105,8 @@ bootstrap:
     tenant_slug: "platform"
     tenant_display_name: "Platform"
     roles: ["platform.admin"]
-    password_secret:
-      name: ""        # empty → resolver reads inline below
-      key: ""
+    # Inline dev-only password (NEVER true in prod). Do NOT also set
+    # password_secret — config validation rejects specifying both.
     password: "smoke-admin-password-change-me"
     min_password_length: 8
     force_reset: false

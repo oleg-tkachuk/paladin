@@ -134,15 +134,14 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-      # Garage is an EXTERNAL prerequisite — operator must have
-      # `kubectl port-forward -n garage svc/garage-s3 3900:3900`
-      # (or equivalent) running before `compose up`. The PALADIN_E2E_S3_*
-      # env vars resolve to that endpoint via host.docker.internal.
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
+      # Garage is an EXTERNAL prerequisite — operator must have an
+      # S3-compatible endpoint reachable at PALADIN_E2E_S3_ENDPOINT
+      # (default host.docker.internal:3900) before `compose up`.
+    # NOTE: the PALADIN backend image is distroless (no shell / wget), so a
+    # CMD-SHELL HTTP probe can't run in-container. The plane is ready
+    # within ~1s of "plane listening"; downstream services gate on
+    # service_started and the suite's own readiness waits cover the gap.
+    # /readyz is verified from the host instead (see run instructions).
 
   admin:
     <<: *paladin-base
@@ -155,11 +154,7 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/readyz || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
+    # Distroless image — no in-container HTTP probe possible (see api).
 
   ui:
     # Reuse the locally-built UI image; the dev-loop pipeline
@@ -171,10 +166,12 @@ services:
     restart: on-failure
     environment:
       # BFF reaches the planes via container DNS. The browser
-      # only ever talks to the BFF on :3000.
-      PALADIN_BACKEND_URLS_DATA: http://api:8080
-      PALADIN_BACKEND_URLS_IAM: http://api:8085
-      PALADIN_BACKEND_URLS_ADMIN: http://admin:8090
+      # only ever talks to the BFF on :3000. Var names MUST match
+      # what the BFF reads (src/lib/auth/bff.ts + api/rpc route):
+      # PALADIN_DATA_URL / PALADIN_IAM_URL / PALADIN_ADMIN_URL.
+      PALADIN_DATA_URL: http://api:8080
+      PALADIN_IAM_URL: http://api:8085
+      PALADIN_ADMIN_URL: http://admin:8090
       # `next start` (production-mode bundle) per
       # Clarification Q3. NOT `next dev` — HMR is a documented
       # flake source for E2E suites.
@@ -182,10 +179,13 @@ services:
     ports:
       - "3000:3000"
     depends_on:
+      # api/admin are distroless and carry no healthcheck (see above),
+      # so gate on service_started; the ui's own healthcheck + the
+      # suite's readiness waits absorb the sub-second startup gap.
       api:
-        condition: service_healthy
+        condition: service_started
       admin:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 3s
