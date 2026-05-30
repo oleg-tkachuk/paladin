@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import React from "react";
-import { Geist, Geist_Mono } from "next/font/google";
+// Self-hosted Geist via the `geist` npm package — the font binaries ship
+// inside the package, so the build does NOT reach out to fonts.googleapis
+// (unlike `next/font/google`, which fetches at build time). Same fonts
+// and the same `--font-geist-sans` / `--font-geist-mono` CSS variables,
+// fully air-gap-buildable.
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { NotificationProvider } from "@/components/ui/Notification";
@@ -9,18 +15,6 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { yamlConfig } from "@/config";
 import "./globals.css";
-
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "PALADIN — Paladin",
@@ -35,7 +29,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark`}
+      className={`${GeistSans.variable} ${GeistMono.variable} dark`}
       suppressHydrationWarning
     >
       <head>
