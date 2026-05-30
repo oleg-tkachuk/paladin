@@ -25,11 +25,16 @@ service BackendService {
 }
 
 message SetBackendEnabledRequest {
-  string backend_id       = 1 [(buf.validate.field).string.min_len = 1];
+  string name             = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
   bool   enabled          = 2;
   string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
 }
 // Response is the updated StorageBackend (carries new enabled + bumped resource_version).
+//
+// Field-naming note: the request targets the resource by `name` (the
+// canonical `storageBackends/{backend_id}` form) to match the existing
+// BackendService convention used by Get/Update/Delete/Rotate/Test.
+// The shim parses backend_id out of name before calling the handler.
 ```
 
 `resource_version` is **required** (min_len=1) so the OCC check is never
