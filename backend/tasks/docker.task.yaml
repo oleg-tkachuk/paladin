@@ -77,7 +77,12 @@ tasks:
     internal: true
     cmds:
       - cmd: |-
-          docker build \
+          # --load: required when the active buildx builder uses the
+          # docker-container driver (e.g. the project's `lean` builder).
+          # Without it the build result stays in BuildKit's cache and the
+          # downstream `docker push` fails with "tag does not exist".
+          # No-op when the legacy docker driver is active.
+          docker buildx build --load \
             --network=host \
             --tag {{.IMAGE}}:{{.TAG}} \
             --file {{.DOCKERFILE}} \
