@@ -835,6 +835,74 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
+### Frontend unit-test suite (Vitest)
+
+- **Status:** Deferred
+- **Reason:** the frontend has zero unit tests — coverage is six
+  Playwright e2e specs only. Logic-dense code (CSV parsing in
+  `CsvImportDialog.tsx` ~390 LOC, Cedar/CEL validation hooks,
+  `RefreshContext` bump semantics, `useUrlState` serialization) has no
+  fast feedback; every regression must be caught by a full browser run.
+- **Definition of Done:**
+  - Vitest wired into `frontend/` (`pnpm test`), added to the frontend
+    job in `.github/workflows/test.yml` and a lefthook pre-push hook.
+  - First wave of tests: CSV parser edge cases (quoted cells, embedded
+    newlines, delimiters), validation hooks, `RefreshContext`,
+    `useUrlState` round-trips.
+  - ≥60 % statement coverage on `src/hooks/` and `src/lib/`.
+- **Blockers:** none.
+
+### Runtime validation (Zod) for JSON.parse sites
+
+- **Status:** Deferred
+- **Reason:** ~18 `JSON.parse(...)` call sites cast results with `as`
+  and trust the shape — including user-controlled inputs: localStorage,
+  URL params (`src/hooks/useUrlState.ts`), pasted JSON on the
+  capabilities page and the policy test-suite editor. A malformed or
+  hostile payload becomes a runtime TypeError (or worse, silently wrong
+  state) instead of a handled validation error. Zod is already a
+  dependency (runtime config validation in `src/config.ts`).
+- **Definition of Done:**
+  - Each `JSON.parse` of non-self-authored data goes through a Zod
+    schema with `safeParse` + a user-visible error path.
+  - A small `parseJson(schema, raw)` helper in `src/lib/` so new call
+    sites don't regress.
+- **Blockers:** none.
+
+### Data-hook error contract: pick one (state vs. throw)
+
+- **Status:** Deferred
+- **Reason:** ~15 data hooks (`useTenants`, `useObject`, …) both set an
+  `error` state **and** re-throw; callers must handle two channels and
+  do so inconsistently (some toast, some swallow, some rely on the
+  throw). Fragile — NotFound-vs-error special-casing is duplicated per
+  caller.
+- **Definition of Done:** one documented contract (recommended:
+  state-only for queries, throw-only for imperative mutations) applied
+  to all hooks; callers updated; convention noted in a comment on the
+  first hook or a small README in `src/hooks/`.
+- **Blockers:** none — pairs naturally with the Vitest entry above
+  (tests pin the chosen contract) and with any TanStack Query adoption,
+  which would subsume it.
+
+### Oversized component refactor (ObjectDetailView and friends)
+
+- **Status:** Deferred
+- **Reason:** `ObjectDetailView.tsx` (~711 LOC),
+  `ObjectVersionsTab.tsx` (~394 LOC) and `CsvImportDialog.tsx`
+  (~391 LOC) each mix layout, data wiring and business rules in one
+  file; `ObjectsFilterBar` takes 13 parallel value/onChange props.
+  Review and change cost grows with every feature touching them.
+- **Definition of Done:**
+  - `ObjectDetailView` split into header / specs / tabs subcomponents,
+    each ≤300 LOC, no behaviour change (e2e suite green).
+  - CSV parsing extracted from `CsvImportDialog` into a pure function
+    in `src/lib/` (unit-testable — see Vitest entry).
+  - `ObjectsFilterBar` props collapsed into a single `FilterState`
+    object + `onChange`.
+- **Blockers:** none — schedule alongside feature work in those areas
+  to avoid pure-churn PRs.
+
 ### react-hooks v6 rules re-promotion (set-state-in-effect et al.)
 
 - **Status:** Deferred
@@ -1313,6 +1381,78 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Architecture (post-review 2026-06)
+
+_Context: full-codebase architecture audit on 2026-06-11 (backend,
+frontend, infra). Items the audit surfaced that aren't already covered
+elsewhere in this file. Handler-level tracing/metrics intentionally has
+no entry here — it is the existing "OpenTelemetry baseline" item._
+
+### Centralized error → Connect-code mapping + typed store errors
+
+- **Status:** Deferred
+- **Reason:** handlers map domain/DB errors to Connect codes ad hoc —
+  some wrap with `connect.NewError(...)` inline, some let the
+  interceptor default; the same failure (e.g. version mismatch) can
+  surface as `InvalidArgument` in one RPC and `FailedPrecondition` in
+  another, and a few call sites match on `.Error()` strings instead of
+  `errors.Is` against typed sentinels.
+- **Definition of Done:**
+  - Typed sentinel errors (`ErrNotFound`, `ErrVersionMismatch`,
+    `ErrAlreadyExists`, …) defined once in the store/domain layer.
+  - A single mapping function in `internal/api/apiutil` (with tests)
+    translating sentinels → Connect codes; all handlers and connectshim
+    adapters route errors through it.
+  - No `.Error()` substring matching remains
+    (`grep -rn '\.Error() ==' internal/` is empty).
+- **Blockers:** none — mechanical refactor, no proto change.
+
+### ListObjects CEL filter pushdown to SQL
+
+- **Status:** Deferred
+- **Reason:** `ListObjects` CEL filters evaluate in-process after the
+  page fetch (`internal/filter/cel/evaluator.go`) — SELECT-then-filter
+  degrades linearly with tenant size. The AuditLog pushdown extractor
+  (`internal/filter/cel/auditpushdown.go`) already proves the
+  translate-to-WHERE approach on this codebase.
+- **Definition of Done:**
+  - Common predicates (key equality/prefix, status, timestamps)
+    extracted into SQL WHERE via the pushdown pattern; residual CEL
+    stays as post-filter so semantics are unchanged.
+  - Pagination remains correct when pushdown trims the page
+    (no short-page artifacts).
+  - Bench on a ≥100k-object tenant documenting the win.
+- **Blockers:** none — prior art exists in-tree.
+
+### Idempotency middleware: replace reflection with generics
+
+- **Status:** Deferred
+- **Reason:** replay in
+  `internal/middleware/idempotency.go` reconstructs
+  `*connect.Response[T]` via a reflection-based runtime type registry —
+  works, but trades compile-time safety for runtime magic and is the
+  hardest-to-debug spot in the middleware chain.
+- **Definition of Done:** response-type registration is compile-time
+  checked (type-parameterized registry or generated registration), the
+  reflection path is gone, and the existing idempotency tests
+  (cache hit/miss, replay, TTL) pass unchanged.
+- **Blockers:** none — internal refactor, wire format unchanged.
+
+### connectshim proto ↔ struct converters: generate instead of hand-write
+
+- **Status:** Aspirational
+- **Reason:** every `internal/api/connectshim/*/​*_server.go` carries
+  ~50–100 lines of hand-written `xFromProto` / `xToProto` mapping;
+  consistency drifts one field at a time as messages grow.
+- **Definition of Done:** converters emitted by a small protoc/buf
+  plugin (or go:generate tool) from the proto descriptors; hand-written
+  mapping bodies deleted; `task gen:all` regenerates them and the
+  lefthook freshness check covers the output.
+- **Blockers:** tooling spike — decide plugin vs. go:generate template
+  before committing to either.
+
+---
+
 ## CI / Delivery pipeline
 
 _Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)
@@ -1380,11 +1520,80 @@ of the pipeline._
 - **Blockers:** repo admin access; do after the first green runs of
   `test.yml` / `security.yml` on a PR.
 
+### Frontend base image: Node 25 (odd/non-LTS major)
+
+- **Status:** Deferred
+- **Reason:** `frontend/deploy/Dockerfile` (`ARG NODE_VERSION=25`) and
+  the CI frontend job build on Node 25 — an odd-numbered major that
+  never enters LTS and stops getting security patches months after
+  Node 26 ships. Either drop to the active LTS (24) or accept the
+  upgrade treadmill explicitly.
+- **Definition of Done:** one decision applied in both places
+  (Dockerfile ARG + `node-version` in `test.yml`): pin to `24`-LTS,
+  **or** keep 25 with a dated comment in the Dockerfile committing to
+  bump to 26 when it goes current.
+- **Blockers:** none — verify `next build` is clean on the chosen
+  major before switching.
+
+### Base image digest pinning
+
+- **Status:** Aspirational
+- **Reason:** both Dockerfiles pin tags
+  (`golang:1.26.0-alpine`, `node:25-alpine`,
+  `gcr.io/distroless/static:nonroot`) but not digests; a tag is
+  mutable, so builds aren't bit-reproducible and a registry-side tag
+  move goes unnoticed.
+- **Definition of Done:** `FROM image:tag@sha256:…` in both
+  Dockerfiles plus a documented bump procedure (or Renovate/dependabot
+  config that updates the digests automatically — manual digest pins
+  without automation rot).
+- **Blockers:** decide on the update automation first; digest pins
+  without it trade staleness for reproducibility.
+
+### Taskfile `metadata:write` duplication
+
+- **Status:** Deferred
+- **Reason:** `backend/Taskfile.yaml` and `frontend/Taskfile.yaml`
+  carry near-identical `metadata:write` tasks (copy-paste, already
+  diverged in comments); a fix in one silently misses the other.
+- **Definition of Done:** single shared definition under
+  `tasks/` included from both halves, or an explicit comment in both
+  files stating why they intentionally diverge.
+- **Blockers:** none — 30-minute cleanup.
+
 ---
 
 ## Documentation
 
-_(no documentation items currently deferred)_
+### Constitution check not wired into the plan template
+
+- **Status:** Deferred
+- **Reason:** `.specify/templates/plan-template.md`'s
+  `## Constitution Check` section still reads
+  `[Gates determined based on constitution file]` — the 7 principles
+  of `.specify/memory/constitution.md` (v1.0.0) are not expanded into
+  an actual checklist, so `/speckit-plan` runs don't mechanically gate
+  on them. The constitution's own sync-impact header flags this as
+  pending.
+- **Definition of Done:** the template lists all 7 principles as
+  explicit pass/fail gates; the constitution header's "templates
+  requiring updates" note is cleared in the same commit.
+- **Blockers:** none.
+
+### Dev-tooling assumptions not written down
+
+- **Status:** Deferred
+- **Reason:** two implicit assumptions bite newcomers silently:
+  (1) the lefthook gitleaks hook no-ops when `gitleaks` isn't on PATH
+  (CI now backstops it, but the local behaviour is invisible);
+  (2) the e2e/dev docker-compose Postgres credentials
+  (`POSTGRES_PASSWORD: paladin`) are dev-only by design but carry no
+  comment saying so.
+- **Definition of Done:** README "local setup" section lists gitleaks
+  (and other optional hook tools) with install commands; a one-line
+  `# dev-only credentials — never reused outside compose` comment on
+  the compose service.
+- **Blockers:** none.
 
 ---
 
