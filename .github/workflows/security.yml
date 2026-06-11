@@ -1,0 +1,52 @@
+name: Security
+
+# Security gate for PRs and main/develop pushes:
+# - gitleaks: full-history secret scan (same tool as the lefthook
+#   pre-commit hook, which only sees staged files and only runs when
+#   gitleaks is installed locally — CI is the backstop).
+# - trivy: filesystem scan of lockfiles / manifests for known-vulnerable
+#   dependencies. Image scanning (after docker build) is deferred —
+#   tracked in BACKLOG.md ("CI image vulnerability scanning").
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history scan
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

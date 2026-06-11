@@ -1,0 +1,94 @@
+name: Test
+
+# PR verification gate. Mirrors the lefthook pre-commit / pre-push
+# commands (go vet, go test, buf lint, eslint, tsc) so the same checks
+# that run locally are enforced for every PR and push to main/develop.
+# golangci-lint is configured (backend/.golangci.yaml) but the codebase
+# does not pass it yet — enabling it here is tracked in BACKLOG.md
+# ("golangci-lint CI gate").
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: gofmt check
+        run: |
+          out="$(gofmt -l . | grep -v -E '^(internal/store/postgres/sqlc|internal/generated)/' || true)"
+          if [ -n "$out" ]; then
+            echo "ERROR: gofmt needed on:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1
+
+      - name: buf lint
+        uses: bufbuild/buf-action@v1
+        with:
+          input: backend
+          lint: true
+          format: false
+          breaking: false
+          push: false
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        # Version comes from frontend/package.json "packageManager".
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches NODE_VERSION in frontend/deploy/Dockerfile.
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint
+        run: pnpm run lint
+
+      - name: TypeScript
+        run: pnpm exec tsc --noEmit
