@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -12,6 +12,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useStats } from "@/context/StatsContext";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -290,13 +291,10 @@ export default function HealthPage() {
     }
   }, []);
 
-  useEffect(() => {
-    refresh();
-    // Auto-refresh every 15s — short enough that a degrading dep
-    // shows up quickly, long enough that the page isn't a hot loop.
-    const id = setInterval(refresh, 15_000);
-    return () => clearInterval(id);
-  }, [refresh]);
+  // Auto-refresh every 15s — short enough that a degrading dep shows
+  // up quickly, long enough that the page isn't a hot loop. Paused
+  // while the tab is hidden.
+  useVisiblePolling(refresh, 15_000);
 
   const orderedRoles = useMemo(() => {
     if (!data) return [];

@@ -57,10 +57,17 @@ export function useSidebarCounts() {
     };
 
     poll();
-    const interval = setInterval(poll, 30_000);
+    // Tick only while the tab is visible; one catch-up poll on return
+    // so badges are fresh without a 30s background loop.
+    const tick = () => {
+      if (!document.hidden) poll();
+    };
+    const interval = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, [objectKey]);
 

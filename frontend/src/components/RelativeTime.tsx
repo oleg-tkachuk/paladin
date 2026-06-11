@@ -49,6 +49,11 @@ const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ["second", 1],
 ];
 
+// Module-level: locale config never changes, and constructing
+// Intl.RelativeTimeFormat reads locale data — too costly to repeat on
+// every render of every table row.
+const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
 function relativeFormat(d: Date, now: Date): string {
   const diffSecondsRaw = (d.getTime() - now.getTime()) / 1000;
   const absSec = Math.abs(diffSecondsRaw);
@@ -58,8 +63,7 @@ function relativeFormat(d: Date, now: Date): string {
     if (absSec >= sec || unit === "second") {
       const value = Math.round(diffSecondsRaw / sec);
       // Intl.RelativeTimeFormat handles plural + sign + locale.
-      const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-      return rtf.format(value, unit) || `${sign * Math.round(absSec)} ${unit}`;
+      return RTF.format(value, unit) || `${sign * Math.round(absSec)} ${unit}`;
     }
   }
   return "just now";
@@ -85,11 +89,25 @@ export function RelativeTime({
   const d = toDate(ts);
   const [, setTick] = useState(0);
 
+  // Depend on the epoch value, not the Date object — toDate() returns
+  // a fresh object every render, which used to tear down and re-arm
+  // the interval on each parent re-render.
+  const dMs = d ? d.getTime() : null;
   useEffect(() => {
-    if (absolute || !d) return;
-    const id = setInterval(() => setTick((t) => t + 1), refreshMs);
-    return () => clearInterval(id);
-  }, [d, refreshMs, absolute]);
+    if (absolute || dMs === null) return;
+    // Skip re-render ticks while the tab is hidden (tables mount many
+    // instances of this component); one catch-up tick on return keeps
+    // the displayed text honest.
+    const tick = () => {
+      if (!document.hidden) setTick((t) => t + 1);
+    };
+    const id = setInterval(tick, refreshMs);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [dMs, refreshMs, absolute]);
 
   if (!d) {
     return (

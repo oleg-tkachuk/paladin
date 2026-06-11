@@ -4,10 +4,10 @@ import React, {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import { systemClient } from "@/lib/connect/client";
 import type { VersionInfo, HealthInfo } from "@/lib/connect/system";
 
@@ -56,11 +56,9 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchStats]);
+  // Polls only while the tab is visible — a backgrounded operator tab
+  // shouldn't keep a 10s RPC loop alive.
+  useVisiblePolling(fetchStats, POLL_INTERVAL);
 
   return (
     <StatsContext.Provider

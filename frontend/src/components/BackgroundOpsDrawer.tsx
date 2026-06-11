@@ -9,7 +9,7 @@
 // SSE/WebSocket dependency — keeps the auth surface unchanged and
 // matches the existing useSidebarCounts pattern.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
@@ -19,6 +19,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { adminOperationClient } from "@/lib/connect/client";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status,
@@ -85,12 +86,10 @@ export function BackgroundOpsDrawer() {
     }
   }, []);
 
-  useEffect(() => {
-    void fetchOps();
-    const interval = open ? POLL_OPEN_MS : POLL_CLOSED_MS;
-    const id = setInterval(fetchOps, interval);
-    return () => clearInterval(id);
-  }, [open, fetchOps]);
+  // Polls only while the tab is visible: with the Sheet open this loop
+  // runs every 2s — leaving it alive in a backgrounded tab piles up
+  // pointless listOperations calls indefinitely.
+  useVisiblePolling(fetchOps, open ? POLL_OPEN_MS : POLL_CLOSED_MS);
 
   const triggerLabel = useMemo(() => {
     if (summary.inProgress > 0) return `${summary.inProgress} running`;
