@@ -43,6 +43,9 @@ backend/tests/api/security/reports/
 .claude/
 .claude/*
 
+# Hypothesis (Python property-based testing) runtime cache
+.hypothesis/
+
 # seed-fixture binary
 backend/seed-fixture
 backend/cmd/seed-fixture/main.go.bak
