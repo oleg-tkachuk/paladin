@@ -835,6 +835,26 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
+### react-hooks v6 rules re-promotion (set-state-in-effect et al.)
+
+- **Status:** Deferred
+- **Reason:** the react-hooks plugin v6 bump promoted
+  `set-state-in-effect`, `immutability`, and
+  `preserve-manual-memoization` to `error`; ~48 pre-existing hits
+  (mostly the fetch-in-`useEffect` pattern every data hook uses, e.g.
+  `useStats.ts`, `useTenants.ts`) predate the bump. Demoted to `warn`
+  in `frontend/eslint.config.mjs` on 2026-06-11 so `eslint .` could
+  become a CI gate without a 48-site refactor in the same change.
+- **Definition of Done:**
+  - Refactor the data hooks off synchronous setState-in-effect (the
+    idiomatic fix is moving fetch state into a small
+    `useSyncExternalStore`-style store or adopting a query library —
+    one decision, applied uniformly).
+  - `npx eslint .` reports zero warnings for the three rules.
+  - Delete the three `"warn"` overrides in `eslint.config.mjs`.
+- **Blockers:** none — mechanical but wide; bundle with any future
+  data-fetching refactor (e.g. if TanStack Query is adopted).
+
 ### Slug-rename history redirect
 
 - **Status:** Deferred
@@ -1290,6 +1310,75 @@ the same commit. Treat this file like a runtime invariant.
   - Bootstrap docs walk through `kubeseal --raw`.
 - **Blockers:** decision between SealedSecrets vs external-secrets
   with Vault.
+
+---
+
+## CI / Delivery pipeline
+
+_Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)
+mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
+gitleaks, trivy-fs). The items below are the deliberately deferred rest
+of the pipeline._
+
+### golangci-lint CI gate
+
+- **Status:** Deferred
+- **Reason:** `backend/.golangci.yaml` (v2, broad linter set) exists but
+  the codebase has never been run through it — a local run on
+  2026-06-11 reported style findings across ~245 files (mostly
+  `nlreturn`, `goconst`, `wastedassign`). Enabling it in `test.yml`
+  today would make every PR red; lefthook only runs `go vet`.
+- **Definition of Done:**
+  - Decide which linters in `.golangci.yaml` are actually wanted
+    (trim the config) or fix the findings wholesale (`--fix` +
+    manual pass), in dedicated commits with no behaviour changes.
+  - `golangci-lint run ./...` exits 0 from `backend/`.
+  - Add a `golangci-lint` step to the backend job in
+    `.github/workflows/test.yml` and a matching lefthook pre-push hook.
+- **Blockers:** none — pure effort/scope decision.
+
+### Playwright e2e suite wired into CI
+
+- **Status:** Deferred
+- **Reason:** the e2e compose stack now boots locally (see "Frontend
+  Playwright suite — runtime sign-off" under Testing / E2E), but the
+  suite has not yet earned its flake budget (SC-002/SC-003), so gating
+  PRs on it would block merges on known-unstable signal.
+- **Definition of Done:**
+  - Runtime sign-off entry above is closed (suite passes 10×
+    consecutively, <3 min wall-clock).
+  - `.github/workflows/e2e.yml` builds both images, boots
+    `tests/e2e/docker-compose.test.yaml`, runs `pnpm run test:e2e`,
+    and uploads the Playwright report as an artifact on failure.
+  - Workflow is required for merge alongside `test` / `security`.
+- **Blockers:** [[Frontend Playwright suite runtime sign-off]] —
+  SC-002/SC-003/SC-004 must pass locally first.
+
+### Image vulnerability scanning in CI
+
+- **Status:** Deferred
+- **Reason:** `security.yml` scans the filesystem (lockfiles/manifests)
+  only; scanning the built OCI images (distroless Go + node:25-alpine
+  runner) requires building both images in CI, which we don't do yet
+  outside release.
+- **Definition of Done:** a workflow (or a job in `e2e.yml`, which
+  already needs the images) runs `trivy image` with
+  `severity: HIGH,CRITICAL` + `ignore-unfixed` against both freshly
+  built images and fails the run on findings.
+- **Blockers:** CI image build step (shared with the e2e entry above).
+
+### Branch protection on `main` and `develop`
+
+- **Status:** Deferred
+- **Reason:** workflows alone don't gate merges; branch protection is a
+  repo-settings change (GitHub admin), not a code change, so it can't
+  land via a commit.
+- **Definition of Done:** `main` (and `develop`) require the `backend`,
+  `frontend`, `gitleaks`, and `trivy-fs` checks to pass before merge;
+  force-pushes disabled. One-time setup via repo Settings → Branches or
+  `gh api repos/:owner/:repo/branches/main/protection`.
+- **Blockers:** repo admin access; do after the first green runs of
+  `test.yml` / `security.yml` on a PR.
 
 ---
 
