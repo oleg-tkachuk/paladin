@@ -74,19 +74,24 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operation.Operati
 
 	resp := BatchRestoreResponse{Total: len(args.ObjectIDs)}
 
+	// One batched read for existence checks (DELETED rows included —
+	// the query has no state filter). Missing ids land in the failure
+	// list below, same contract as the old per-id FindByName loop.
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup: %w", err)
+	}
+
 	for _, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		// FindByName lookups DELETED rows too (no state filter on the
-		// repo method). If the row is fully missing the lookup errors
-		// and we record a "not found" failure.
-		if _, err := e.Objects.FindByName(ctx, args.TenantID, args.ObjectKey, objectID.String()); err != nil {
+		if _, found := byID[objectID]; !found {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchRestoreFailure{
 				ObjectID: objectID.String(),
-				Reason:   fmt.Sprintf("not found: %v", err),
+				Reason:   "not found",
 			})
 			continue
 		}

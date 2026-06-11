@@ -41,7 +41,7 @@ func (*fakeObjectRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, 
 func (*fakeObjectRepo) CountObjects(context.Context, CountObjectsArgs) (int64, bool, error) {
 	panic("not used")
 }
-func (*fakeObjectRepo) BucketCompletionMode(context.Context, uuid.UUID, string) (CompletionMode, error) {
+func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Object, error) {
 	panic("not used")
 }
 func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string) (string, error) {

@@ -74,6 +74,16 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 
 	resp := BatchDeleteResponse{Total: len(args.ObjectIDs)}
 
+	// Read phase is one batched query: each row's CURRENT
+	// ResourceVersion feeds the optimistic-concurrency check in
+	// SoftDelete. Ids missing from the result are reported per-id
+	// below — same contract as the old per-id lookup, minus the N
+	// sequential round-trips.
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup: %w", err)
+	}
+
 	for _, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			// Worker shutting down — surface as a partial success.
@@ -83,15 +93,12 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 			return nil, err
 		}
 
-		// Look up the row to get its current ResourceVersion. Without
-		// this we'd have to pass 0 and skip the version check —
-		// works, but loses the optimistic-concurrency safety net.
-		obj, err := e.Objects.FindByName(ctx, args.TenantID, args.ObjectKey, objectID.String())
-		if err != nil {
+		obj, found := byID[objectID]
+		if !found {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchDeleteFailure{
 				ObjectID: objectID.String(),
-				Reason:   fmt.Sprintf("not found: %v", err),
+				Reason:   "not found",
 			})
 			continue
 		}

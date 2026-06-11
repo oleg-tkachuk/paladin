@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
@@ -60,6 +61,25 @@ func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, objectK
 		return object.Object{}, fmt.Errorf("parse object_id: %w", err)
 	}
 	return r.getByID(ctx, tenantID, id)
+}
+
+func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]object.Object, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	pgIDs := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIDs[i] = pgUUID(id)
+	}
+	rows, err := r.q.GetObjectsByIDs(ctx, pgUUID(tenantID), pgIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get objects by ids: %w", err)
+	}
+	out := make([]object.Object, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, objectFromSQLC(row.Object))
+	}
+	return out, nil
 }
 
 func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (object.Object, error) {
@@ -256,7 +276,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		SELECT b.backend_id, b.bucket_name,
 		       COALESCE(bk.versioning_enabled, false),
 		       COALESCE(bk.object_lock_enabled, false),
-		       b.constraints, sb.enabled
+		       b.constraints, sb.enabled, sb.events_enabled
 		FROM object_keys b
 		JOIN storage_backends sb ON sb.id = b.backend_id
 		LEFT JOIN buckets bk
@@ -270,7 +290,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
-		&constraintsJSON, &enabled,
+		&constraintsJSON, &enabled, &meta.EventsEnabled,
 	); err != nil {
 		if isNoRows(err) {
 			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
@@ -331,29 +351,6 @@ func (r *ObjectRepo) HardDeleteWithBypass(ctx context.Context, tenantID, objectI
 		return object.ErrVersionMismatch
 	}
 	return tx.Commit(ctx)
-}
-
-// BucketCompletionMode reads the storage backend tied to the objectKey and
-// returns Implicit when events are enabled on that backend, otherwise
-// Explicit. Unknown objectKey → Unspecified + error.
-func (r *ObjectRepo) BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.CompletionMode, error) {
-	const q = `
-		SELECT sb.events_enabled
-		FROM object_keys b
-		JOIN storage_backends sb ON sb.id = b.backend_id
-		WHERE b.tenant_id = $1 AND b.object_key = $2
-	`
-	var eventsEnabled bool
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&eventsEnabled); err != nil {
-		if isNoRows(err) {
-			return object.CompletionModeUnspecified, fmt.Errorf("objectKey %q not found", objectKey)
-		}
-		return object.CompletionModeUnspecified, fmt.Errorf("objectKey completion mode: %w", err)
-	}
-	if eventsEnabled {
-		return object.CompletionModeImplicit, nil
-	}
-	return object.CompletionModeExplicit, nil
 }
 
 // HardDelete removes the row. expectedVersion=0 disables the OCC guard.

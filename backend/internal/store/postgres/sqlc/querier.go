@@ -113,6 +113,10 @@ type Querier interface {
 	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (GetObjectKeyRow, error)
 	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
 	GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (ObjectVersion, error)
+	// Batch lookup for batch-operation executors: one round-trip for the
+	// whole id list instead of one GetObject per id (a 1000-object batch
+	// used to issue 1000 sequential SELECTs before any state mutation).
+	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	GetRefreshToken(ctx context.Context, jti pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)

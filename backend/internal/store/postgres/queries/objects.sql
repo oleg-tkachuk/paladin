@@ -16,6 +16,14 @@ SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1 AND object_id = $2;
 
+-- name: GetObjectsByIDs :many
+-- Batch lookup for batch-operation executors: one round-trip for the
+-- whole id list instead of one GetObject per id (a 1000-object batch
+-- used to issue 1000 sequential SELECTs before any state mutation).
+SELECT sqlc.embed(objects)
+FROM objects
+WHERE tenant_id = $1 AND object_id = ANY($2::uuid[]);
+
 -- name: LookupObjectByID :one
 -- Reads an object by id alone. Used by background workers (reconciler,
 -- replicator) that don't carry a tenant context. Joins object_keys to

@@ -109,11 +109,27 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 		presignTTL = 15 * time.Minute
 	}
 
+	// One batched read replaces a per-id FindByName round-trip inside
+	// copyOne; missing ids surface as per-row "not found" failures.
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup: %w", err)
+	}
+
 	for _, srcID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if err := e.copyOne(ctx, args, srcID, srcBucket, dstBucket, presignTTL); err != nil {
+		src, found := byID[srcID]
+		if !found {
+			resp.Failed++
+			resp.Failures = append(resp.Failures, BatchCopyFailure{
+				ObjectID: srcID.String(),
+				Reason:   "not found",
+			})
+			continue
+		}
+		if err := e.copyOne(ctx, args, src, srcBucket, dstBucket, presignTTL); err != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchCopyFailure{
 				ObjectID: srcID.String(),
@@ -138,14 +154,10 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 func (e *BatchCopyExecutor) copyOne(
 	ctx context.Context,
 	args batch.BatchCopyArgs,
-	srcID uuid.UUID,
+	src object.Object,
 	srcBucket, dstBucket string,
 	presignTTL time.Duration,
 ) error {
-	src, err := e.Objects.FindByName(ctx, args.TenantID, args.SrcObjectKey, srcID.String())
-	if err != nil {
-		return fmt.Errorf("not found: %w", err)
-	}
 	if src.State != statemachine.StateAvailable {
 		return fmt.Errorf("source state %s; cannot copy", src.State)
 	}

@@ -73,6 +73,10 @@ type BucketMeta struct {
 	BucketName        string
 	VersioningEnabled bool
 	ObjectLockEnabled bool
+	// EventsEnabled mirrors storage_backends.events_enabled; drives the
+	// upload CompletionMode (implicit via bucket events vs explicit
+	// CompleteUpload call) without a second lookup on the upload path.
+	EventsEnabled bool
 }
 
 // ErrBackendDisabled is returned by the bucket-resolution path
@@ -154,11 +158,15 @@ type PresignGetArgs struct {
 type Repository interface {
 	CreateObject(ctx context.Context, args CreateObjectArgs) (Object, error)
 	FindByName(ctx context.Context, tenantID uuid.UUID, objectKey, objectID string) (Object, error)
+	// FindByIDs returns the rows for the given ids in a single query.
+	// Missing ids are simply absent from the result — callers diff
+	// against their input to report per-id not-found. Exists so batch
+	// executors don't issue one FindByName round-trip per id.
+	FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]Object, error)
 	FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (Object, error)
 	UpdateMetadata(ctx context.Context, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
-	BucketCompletionMode(ctx context.Context, tenantID uuid.UUID, objectKey string) (CompletionMode, error)
 	// LookupBucket returns the physical S3 bucket for a tenant's ObjectKey.
 	// Cheap lookup (covered by idx_object_keys_bucket_routing). Empty
 	// string means the row exists but no bucket has been bound — the
@@ -430,20 +438,22 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
 
-	// 2. Determine completion mode from objectKey's storage backend.
-	completion, err := h.repo.BucketCompletionMode(ctx, tenantID, in.ObjectKey)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
-	}
-
-	// 2a. Resolve the physical S3 bucket the ObjectKey is bound to.
-	//     Empty string means "row exists but bucket_name is NULL" — the
-	//     storage adapter will fall back to its configured default. After
-	//     migration 005 / startup backfill this case is impossible.
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, in.ObjectKey)
+	// 2. Resolve bucket binding + completion mode in ONE lookup —
+	//    LookupBucketMeta joins the same object_keys × storage_backends
+	//    rows the old BucketCompletionMode + LookupBucket pair each
+	//    queried separately, and keeps the disabled-backend chokepoint.
+	//    Empty BucketName means "row exists but bucket_name is NULL" —
+	//    the storage adapter falls back to its configured default; after
+	//    migration 005 / startup backfill this case is impossible.
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
+	completion := CompletionModeExplicit
+	if meta.EventsEnabled {
+		completion = CompletionModeImplicit
+	}
+	bucket := meta.BucketName
 
 	// 3. Generate UUIDv7 for object_id; default key = <object_id> under tenant prefix.
 	objectID := uuid.Must(uuid.NewV7())

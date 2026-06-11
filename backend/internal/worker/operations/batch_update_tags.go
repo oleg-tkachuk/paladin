@@ -67,17 +67,24 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 
 	resp := BatchUpdateTagsResponse{Total: len(args.ObjectIDs)}
 
+	// One batched read supplies each row's ResourceVersion for the OCC
+	// check in UpdateMetadata; per-id not-found reporting is preserved.
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup: %w", err)
+	}
+
 	for _, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		obj, err := e.Objects.FindByName(ctx, args.TenantID, args.ObjectKey, objectID.String())
-		if err != nil {
+		obj, found := byID[objectID]
+		if !found {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchUpdateTagsFailure{
 				ObjectID: objectID.String(),
-				Reason:   fmt.Sprintf("not found: %v", err),
+				Reason:   "not found",
 			})
 			continue
 		}

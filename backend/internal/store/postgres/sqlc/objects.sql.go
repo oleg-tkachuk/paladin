@@ -119,6 +119,64 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 	return i, err
 }
 
+const getObjectsByIDs = `-- name: GetObjectsByIDs :many
+SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
+FROM objects
+WHERE tenant_id = $1 AND object_id = ANY($2::uuid[])
+`
+
+type GetObjectsByIDsRow struct {
+	Object Object `json:"object"`
+}
+
+// Batch lookup for batch-operation executors: one round-trip for the
+// whole id list instead of one GetObject per id (a 1000-object batch
+// used to issue 1000 sequential SELECTs before any state mutation).
+func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getObjectsByIDs, tenantID, column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetObjectsByIDsRow
+	for rows.Next() {
+		var i GetObjectsByIDsRow
+		if err := rows.Scan(
+			&i.Object.ObjectID,
+			&i.Object.TenantID,
+			&i.Object.ObjectKey,
+			&i.Object.Key,
+			&i.Object.State,
+			&i.Object.ContentType,
+			&i.Object.SizeBytes,
+			&i.Object.Etag,
+			&i.Object.ChecksumAlgorithm,
+			&i.Object.Checksum,
+			&i.Object.Sequencer,
+			&i.Object.Metadata,
+			&i.Object.Tags,
+			&i.Object.ExternalRef,
+			&i.Object.ResourceVersion,
+			&i.Object.CreatedAt,
+			&i.Object.UpdatedAt,
+			&i.Object.CommittedAt,
+			&i.Object.TerminatedAt,
+			&i.Object.PresignExpiresAt,
+			&i.Object.CurrentVersionID,
+			&i.Object.LockMode,
+			&i.Object.LockRetainUntil,
+			&i.Object.LegalHold,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hardDeleteObject = `-- name: HardDeleteObject :execrows
 DELETE FROM objects
 WHERE tenant_id = $1 AND object_id = $2
