@@ -32,7 +32,9 @@ func TestTenantRateLimiter_Eviction(t *testing.T) {
 	rl.GetLimiter("tenant2")
 	time.Sleep(10 * time.Millisecond)
 
+	rl.mu.RLock()
 	assert.Len(t, rl.visitors, 2)
+	rl.mu.RUnlock()
 
 	// This should evict tenant1 (oldest access)
 	rl.GetLimiter("tenant3")
@@ -53,7 +55,10 @@ func TestTenantRateLimiter_Cleanup(t *testing.T) {
 	rl := NewTenantRateLimiter(rate.Limit(10), 20, 100, 50*time.Millisecond, 10*time.Millisecond)
 
 	rl.GetLimiter("tenant1")
+	// The cleanup goroutine ticks every 10ms — guard the read.
+	rl.mu.RLock()
 	assert.Len(t, rl.visitors, 1)
+	rl.mu.RUnlock()
 
 	// Wait for cleanup
 	time.Sleep(150 * time.Millisecond)
@@ -61,6 +66,41 @@ func TestTenantRateLimiter_Cleanup(t *testing.T) {
 	rl.mu.RLock()
 	assert.Empty(t, rl.visitors, "limiter should be cleaned up after TTL")
 	rl.mu.RUnlock()
+}
+
+// TestTenantRateLimiter_ConcurrentAccess exercises the hot read path
+// against concurrent eviction-by-insert. Run with -race: the old
+// RUnlock→Lock upgrade pattern made lastAccess updates land on entries
+// already evicted from the map, skewing LRU order. With atomic
+// timestamps the only shared mutable state outside the lock is the
+// atomic itself.
+func TestTenantRateLimiter_ConcurrentAccess(t *testing.T) {
+	rl := NewTenantRateLimiter(rate.Limit(1000), 1000, 4, time.Minute, time.Minute)
+
+	done := make(chan struct{})
+	for g := 0; g < 8; g++ {
+		go func(g int) {
+			defer func() { done <- struct{}{} }()
+			tenants := []string{"a", "b", "c", "d", "e", "f"}
+			for i := 0; i < 500; i++ {
+				l := rl.GetLimiter(tenants[(g+i)%len(tenants)])
+				if l == nil {
+					t.Error("GetLimiter returned nil")
+					return
+				}
+			}
+		}(g)
+	}
+	for g := 0; g < 8; g++ {
+		<-done
+	}
+
+	rl.mu.RLock()
+	n := len(rl.visitors)
+	rl.mu.RUnlock()
+	if n > 4 {
+		t.Errorf("visitors above maxEntries: %d > 4", n)
+	}
 }
 
 func TestTenantRateLimiter_Stats(t *testing.T) {

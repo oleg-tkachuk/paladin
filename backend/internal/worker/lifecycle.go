@@ -16,7 +16,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	celpkg "github.com/google/cel-go/cel"
@@ -286,6 +285,3 @@ func coalesceMap(m map[string]string) map[string]string {
 	}
 	return map[string]string{}
 }
-
-// silence unused `fmt` when no diagnostics surface in dev
-var _ = fmt.Sprintf

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -13,10 +14,18 @@ type RateLimiterConfig struct {
 	Burst int
 }
 
-// rateLimiterEntry tracks a limiter and its last access time
+// rateLimiterEntry tracks a limiter and its last access time.
+// lastAccess is atomic (UnixNano) so the hot path can bump it without
+// upgrading to the write lock — the old RUnlock→Lock upgrade opened a
+// window where a concurrent eviction made the bump land on an entry
+// that was no longer in the map, skewing LRU decisions under load.
 type rateLimiterEntry struct {
 	limiter    *rate.Limiter
-	lastAccess time.Time
+	lastAccess atomic.Int64
+}
+
+func (e *rateLimiterEntry) touch() {
+	e.lastAccess.Store(time.Now().UnixNano())
 }
 
 // TenantRateLimiter manages rate limiters per tenant with memory bounds.
@@ -47,19 +56,15 @@ func NewTenantRateLimiter(r rate.Limit, b int, maxEntries int, cleanupTTL, clean
 
 // GetLimiter returns or creates a limiter for a given tenant.
 func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
-	// Try read lock first for common case
+	// Hot path: read lock only; the access timestamp is atomic so no
+	// lock upgrade is needed.
 	rl.mu.RLock()
 	entry, exists := rl.visitors[tenantID]
+	rl.mu.RUnlock()
 	if exists {
-		rl.mu.RUnlock()
-		// Update last access (write lock needed)
-		rl.mu.Lock()
-		entry.lastAccess = time.Now()
-		rl.mu.Unlock()
-
+		entry.touch()
 		return entry.limiter
 	}
-	rl.mu.RUnlock()
 
 	// Need to create new limiter
 	rl.mu.Lock()
@@ -67,8 +72,7 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 
 	// Double-check after acquiring write lock
 	if entry, exists = rl.visitors[tenantID]; exists {
-		entry.lastAccess = time.Now()
-
+		entry.touch()
 		return entry.limiter
 	}
 
@@ -79,9 +83,9 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 
 	// Create new limiter
 	entry = &rateLimiterEntry{
-		limiter:    rate.NewLimiter(rl.rate, rl.burst),
-		lastAccess: time.Now(),
+		limiter: rate.NewLimiter(rl.rate, rl.burst),
 	}
+	entry.touch()
 	rl.visitors[tenantID] = entry
 
 	return entry.limiter
@@ -90,12 +94,13 @@ func (rl *TenantRateLimiter) GetLimiter(tenantID string) *rate.Limiter {
 // evictOldest removes the least recently used limiter
 func (rl *TenantRateLimiter) evictOldest() {
 	var oldestTenant string
-	var oldestTime time.Time
+	var oldestNanos int64
 
 	for tenantID, entry := range rl.visitors {
-		if oldestTenant == "" || entry.lastAccess.Before(oldestTime) {
+		nanos := entry.lastAccess.Load()
+		if oldestTenant == "" || nanos < oldestNanos {
 			oldestTenant = tenantID
-			oldestTime = entry.lastAccess
+			oldestNanos = nanos
 		}
 	}
 
@@ -119,9 +124,9 @@ func (rl *TenantRateLimiter) cleanup() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	cutoff := time.Now().Add(-rl.cleanupTTL)
+	cutoff := time.Now().Add(-rl.cleanupTTL).UnixNano()
 	for tenantID, entry := range rl.visitors {
-		if entry.lastAccess.Before(cutoff) {
+		if entry.lastAccess.Load() < cutoff {
 			delete(rl.visitors, tenantID)
 		}
 	}
