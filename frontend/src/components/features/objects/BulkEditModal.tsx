@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 interface BulkEditModalProps {
   isOpen: boolean;
   selectedCount: number;
@@ -10,6 +17,9 @@ interface BulkEditModalProps {
   isProcessing: boolean;
 }
 
+// Built on the shadcn/Radix Dialog so the overlay carries the full
+// dialog contract (role="dialog", aria-modal, focus trap, Escape and
+// overlay-click to close) — the previous hand-rolled div had none.
 export function BulkEditModal({
   isOpen,
   selectedCount,
@@ -19,36 +29,33 @@ export function BulkEditModal({
   onClose,
   isProcessing,
 }: BulkEditModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-      <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-md"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-lg bg-[#0A0C10] rounded-[32px] border border-white/10 shadow-2xl p-8 space-y-6 overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-lg bg-[#0A0C10] rounded-[32px] border border-white/10 shadow-2xl p-8 gap-6 overflow-hidden"
+      >
         <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500" />
         <div className="space-y-2">
-          <h3 className="text-xl font-bold text-white uppercase tracking-tight">
+          <DialogTitle className="text-xl font-bold text-white uppercase tracking-tight">
             Bulk Label Synchronization
-          </h3>
-          <p className="text-xs text-slate-500 font-medium">
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 font-medium">
             Updating {selectedCount} resources simultaneously.
-          </p>
+          </DialogDescription>
         </div>
 
         <div className="space-y-4">
           <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
             New Object Tags
+            <textarea
+              autoFocus
+              className="mt-2 w-full h-32 bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-sm font-mono focus:border-indigo-500/50 outline-none transition-all resize-none normal-case tracking-normal font-normal"
+              placeholder="key:value, key2:value2..."
+              value={labels}
+              onChange={(e) => onLabelsChange(e.target.value)}
+            />
           </label>
-          <textarea
-            autoFocus
-            className="w-full h-32 bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-sm font-mono focus:border-indigo-500/50 outline-none transition-all resize-none"
-            placeholder="key:value, key2:value2..."
-            value={labels}
-            onChange={(e) => onLabelsChange(e.target.value)}
-          />
           <p className="text-xs text-slate-600 italic">
             Example: environment:production, department:engineering
           </p>
@@ -69,7 +76,7 @@ export function BulkEditModal({
             Abort
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

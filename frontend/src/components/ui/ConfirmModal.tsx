@@ -5,6 +5,12 @@ import {
   ExclamationTriangleIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 interface ConfirmModalProps {
@@ -19,6 +25,10 @@ interface ConfirmModalProps {
   loading?: boolean;
 }
 
+// Built on the Radix AlertDialog primitive so confirmation prompts get
+// the full dialog contract for free: role="alertdialog", aria wiring,
+// focus trap, Escape-to-cancel, scroll lock. The previous hand-rolled
+// div overlay had none of those.
 export function ConfirmModal({
   isOpen,
   onClose,
@@ -30,8 +40,6 @@ export function ConfirmModal({
   cancelText = "Cancel",
   loading = false,
 }: ConfirmModalProps) {
-  if (!isOpen) return null;
-
   const handleConfirm = async () => {
     await onConfirm();
     onClose();
@@ -40,12 +48,8 @@ export function ConfirmModal({
   const isDanger = type === "danger";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-sm bg-[#0A0C10] rounded-[2rem] border border-white/10 shadow-2xl p-8 space-y-6 overflow-hidden animate-fade-in">
+    <AlertDialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
+      <AlertDialogContent className="max-w-sm bg-[#0A0C10] rounded-[2rem] border border-white/10 shadow-2xl p-8 gap-6">
         <div className="flex flex-col items-center text-center space-y-4">
           <div
             className={cn(
@@ -62,10 +66,12 @@ export function ConfirmModal({
             )}
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">{title}</h3>
-            <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+            <AlertDialogTitle className="text-lg font-bold text-white">
+              {title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-slate-400 mt-2 leading-relaxed">
               {message}
-            </p>
+            </AlertDialogDescription>
           </div>
         </div>
         <div className="flex gap-3">
@@ -89,7 +95,7 @@ export function ConfirmModal({
             {loading ? "Processing..." : confirmText}
           </button>
         </div>
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
