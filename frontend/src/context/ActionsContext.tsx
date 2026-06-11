@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import { useNotification } from "@/components/ui/Notification";
@@ -102,19 +103,30 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
     [actions, showNotification, undoLastAction],
   );
 
+  // Memoized: an inline object literal here hands every consumer a
+  // fresh reference on each provider render, re-rendering all their
+  // subtrees even when nothing they read has changed.
+  const value = useMemo(
+    () => ({
+      registerAction,
+      unregisterAction,
+      actions,
+      executeAction,
+      undoLastAction,
+      canUndo: undoStack.length > 0,
+    }),
+    [
+      registerAction,
+      unregisterAction,
+      actions,
+      executeAction,
+      undoLastAction,
+      undoStack.length,
+    ],
+  );
+
   return (
-    <ActionsContext.Provider
-      value={{
-        registerAction,
-        unregisterAction,
-        actions,
-        executeAction,
-        undoLastAction,
-        canUndo: undoStack.length > 0,
-      }}
-    >
-      {children}
-    </ActionsContext.Provider>
+    <ActionsContext.Provider value={value}>{children}</ActionsContext.Provider>
   );
 }
 

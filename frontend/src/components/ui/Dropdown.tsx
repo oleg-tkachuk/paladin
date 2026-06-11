@@ -89,12 +89,17 @@ export const Dropdown = ({
       };
 
       updateCoords();
-      window.addEventListener("scroll", updateCoords, true);
-      window.addEventListener("resize", updateCoords);
+      // passive: updateCoords only reads layout — never preventDefault —
+      // so the browser shouldn't block scrolling on this listener.
+      window.addEventListener("scroll", updateCoords, {
+        capture: true,
+        passive: true,
+      });
+      window.addEventListener("resize", updateCoords, { passive: true });
 
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
-        window.removeEventListener("scroll", updateCoords, true);
+        window.removeEventListener("scroll", updateCoords, { capture: true });
         window.removeEventListener("resize", updateCoords);
       };
     }

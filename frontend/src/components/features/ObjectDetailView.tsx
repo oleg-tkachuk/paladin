@@ -156,11 +156,13 @@ export function ObjectDetailView({
   >(null);
   const [isConfirming, setIsConfirming] = React.useState(false);
 
-  React.useEffect(() => {
-    if (object?.tags) {
-      setEditingLabels({ ...object.tags });
-    }
-  }, [object]);
+  // editingLabels is seeded in startEditing (not synced reactively from
+  // `object`): a background refetch mid-edit used to re-run a sync
+  // effect and silently wipe the user's unsaved label changes.
+  const startEditing = () => {
+    setEditingLabels(object?.tags ? { ...object.tags } : {});
+    setIsEditing(true);
+  };
 
   const handleSaveLabels = async () => {
     try {
@@ -326,11 +328,7 @@ export function ObjectDetailView({
         description={object.key}
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(true)}
-            >
+            <Button variant="outline" size="sm" onClick={startEditing}>
               <PencilSquareIcon className="size-4" />
               <span className="hidden sm:inline">Edit Metadata</span>
             </Button>
@@ -426,10 +424,9 @@ export function ObjectDetailView({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setIsEditing(!isEditing);
-                      if (!isEditing) setEditingLabels({ ...object.tags });
-                    }}
+                    onClick={() =>
+                      isEditing ? setIsEditing(false) : startEditing()
+                    }
                   >
                     {isEditing ? "Cancel" : "Edit"}
                   </Button>

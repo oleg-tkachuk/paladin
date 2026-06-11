@@ -173,7 +173,11 @@ export default function UploadPage() {
         setSelectedObjectKey(res.objectKeys[0].objectKey);
       }
     });
-  }, [fetchObjectKeys, selectedObjectKey]);
+    // Intent: fetch once on mount, auto-select if nothing is chosen.
+    // selectedObjectKey is read inside only as a guard — keeping it in
+    // the deps re-fired this fetch on every dropdown selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchObjectKeys]);
 
   const handleAddTag = useCallback(() => {
     if (!tagInput.includes(":")) return;
@@ -448,8 +452,11 @@ export default function UploadPage() {
             </div>
             <Separator />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {queue.map((item, idx) => (
-                <QueueRow key={`${item.file.name}-${idx}`} item={item} />
+              {queue.map((item) => (
+                // Stable id, not name+index: new uploads are PREPENDED,
+                // so an index-based key shifted every existing row and
+                // remounted them (visible progress-bar flicker).
+                <QueueRow key={item.id} item={item} />
               ))}
             </div>
           </div>

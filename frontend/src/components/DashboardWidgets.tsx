@@ -62,23 +62,24 @@ function RecentActivityWidget() {
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    let cancelled = false;
+    // Abort the RPC itself on unmount (the dashboard is the landing
+    // page — fast navigation away used to leave it in flight), not
+    // just suppress the setState.
+    const controller = new AbortController();
     (async () => {
       try {
-        const res = await auditClient.listAuditLog({
-          page: { pageSize: 5, pageToken: "" },
-          filter: "",
-        });
-        if (!cancelled) setRows(res.entries);
+        const res = await auditClient.listAuditLog(
+          { page: { pageSize: 5, pageToken: "" }, filter: "" },
+          { signal: controller.signal },
+        );
+        setRows(res.entries);
       } catch {
-        // silent — widget hides itself
+        // silent — widget hides itself (covers aborts too)
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
   return (
     <Card>
@@ -139,24 +140,24 @@ function FailedOpsWidget() {
   const [ops, setOps] = useState<Operation[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
-        const res = await adminOperationClient.listOperations({
-          page: { pageSize: 5, pageToken: "" },
-          filter: "error_message != null",
-        });
-        if (!cancelled)
-          setOps(res.operations.filter((o) => !!opError(o)).slice(0, 5));
+        const res = await adminOperationClient.listOperations(
+          {
+            page: { pageSize: 5, pageToken: "" },
+            filter: "error_message != null",
+          },
+          { signal: controller.signal },
+        );
+        setOps(res.operations.filter((o) => !!opError(o)).slice(0, 5));
       } catch {
-        /* silent */
+        /* silent (covers aborts too) */
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
   return (
     <Card
@@ -216,26 +217,27 @@ function BudgetAlertsWidget() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
-        const res = await tenantBudgetClient.summarize({
-          thresholdPct: BUDGET_ALERT_THRESHOLD,
-          unlimitedOnly: false,
-          excludeInactive: true,
-          limit: BUDGET_ALERT_LIMIT,
-        });
-        if (!cancelled) setRows(res.summaries);
+        const res = await tenantBudgetClient.summarize(
+          {
+            thresholdPct: BUDGET_ALERT_THRESHOLD,
+            unlimitedOnly: false,
+            excludeInactive: true,
+            limit: BUDGET_ALERT_LIMIT,
+          },
+          { signal: controller.signal },
+        );
+        setRows(res.summaries);
       } catch (err) {
-        if (!cancelled)
+        if (!controller.signal.aborted)
           setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
 
   const overCap = useMemo(
