@@ -197,21 +197,17 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 			// Transient DB errors should not crash the worker; back off
 			// and retry once the cluster recovers.
 			l.cfg.Logger.Warn("claim failed; backing off", zap.Error(err))
-			select {
-			case <-ctx.Done():
+			if !sleepCtx(ctx, l.cfg.PollInterval) {
 				return ctx.Err()
-			case <-time.After(l.cfg.PollInterval):
-				continue
 			}
+			continue
 		}
 		if !ok {
 			// Someone else is leader. Sleep and try again at PollInterval.
-			select {
-			case <-ctx.Done():
+			if !sleepCtx(ctx, l.cfg.PollInterval) {
 				return ctx.Err()
-			case <-time.After(l.cfg.PollInterval):
-				continue
 			}
+			continue
 		}
 
 		l.cfg.Logger.Info("acquired lease",
@@ -220,11 +216,15 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 			zap.Time("expires_at", exp),
 		)
 
-		// We are leader. Run the work in a child context that hard-deadlines
-		// at expires_at; the renewer extends the deadline as it succeeds.
-		workCtx, cancelWork := context.WithDeadline(ctx, exp)
+		// We are leader. Run the work in a child context that the
+		// renewer cancels the moment it can no longer prove we hold the
+		// lease: either two consecutive renewals failed, or the last
+		// confirmed expires_at passed without a successful renewal. On
+		// healthy renewals the in-process deadline moves forward with
+		// each claim, so the worker no longer self-terminates every TTL.
+		workCtx, cancelWork := context.WithCancel(ctx)
 		renewerDone := make(chan struct{})
-		go l.renewer(workCtx, cancelWork, renewerDone)
+		go l.renewer(workCtx, cancelWork, exp, renewerDone)
 
 		err = do(workCtx, gen)
 
@@ -246,17 +246,33 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 	}
 }
 
-// renewer keeps expires_at fresh. On any persistent failure it cancels the
-// work context so the worker stops cleanly and another pod can take over.
-func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, done chan<- struct{}) {
+// renewer keeps expires_at fresh and enforces the lease deadline
+// in-process: work is cancelled when renewals persistently fail or when
+// the last DB-confirmed expires_at passes. Each successful renewal
+// pushes the in-process deadline forward to the new expires_at.
+func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, initialExp time.Time, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(l.cfg.RenewInterval)
 	defer ticker.Stop()
+	// expiry mirrors the DB lease deadline. It only ever fires if
+	// renewals stopped landing — a healthy renewer resets it before
+	// each confirmed expires_at arrives.
+	expiry := time.NewTimer(time.Until(initialExp))
+	defer expiry.Stop()
 
 	consecutive := 0
 	for {
 		select {
 		case <-workCtx.Done():
+			return
+		case <-expiry.C:
+			// The last confirmed expires_at passed without a successful
+			// renewal. We can no longer prove leadership; stop the work
+			// so another pod can take over.
+			l.cfg.Logger.Warn("lease deadline passed without renewal; stopping work",
+				zap.String("name", l.cfg.Name),
+			)
+			cancelWork()
 			return
 		case <-ticker.C:
 			// Renewal uses the parent (still-live on shutdown only briefly)
@@ -284,11 +300,33 @@ func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, 
 				continue
 			}
 			consecutive = 0
-			// Successful renew: extend the work context's deadline by
-			// switching to a new child. Cheap; older one is released by
-			// our cancelWork call below.
-			_ = exp // deadline-extension is documented but not enforced in this minimal cut; workCtx already tracks the most recent claim's expiry on next loop. See BACKLOG.
+			// Successful renew: push the in-process deadline forward to
+			// the freshly confirmed expires_at.
+			if !expiry.Stop() {
+				// Timer already fired between selects; drain so Reset
+				// arms cleanly. (The <-expiry.C arm would have won the
+				// next select and cancelled work — this renewal beat it.)
+				select {
+				case <-expiry.C:
+				default:
+				}
+			}
+			expiry.Reset(time.Until(exp))
 		}
+	}
+}
+
+// sleepCtx waits d or until ctx is done, whichever first, with a
+// stoppable timer (time.After can't be stopped and would strand the
+// timer until it fires). Returns false if ctx ended the wait.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
 	}
 }
 
