@@ -137,9 +137,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (
 	if d.Outbox == nil {
 		return 0, errors.New("dispatcher: no outbox writer")
 	}
-	subs, _, err := d.Store.List(ctx, admindomain.ListEventSubscriptionsArgs{PageSize: 1000})
+	tenantUUID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return 0, fmt.Errorf("dispatch: invalid tenant id %q: %w", tenantID, err)
+	}
+	subs, _, err := d.Store.List(ctx, admindomain.ListEventSubscriptionsArgs{
+		TenantID: tenantUUID,
+		PageSize: 1000,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("list subscriptions: %w", err)
+	}
+	if len(subs) == 1000 {
+		// Single-page fan-out: a tenant at the cap means later
+		// subscriptions silently miss events. Surface it loudly.
+		d.log().Warn("subscription fan-out hit the single-page cap; events may be dropped for this tenant",
+			zap.String("tenant_id", tenantID),
+		)
 	}
 	payload, err := json.Marshal(evt)
 	if err != nil {
@@ -148,9 +162,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (
 	queued := 0
 	for _, sub := range subs {
 		if sub.Disabled {
-			continue
-		}
-		if sub.TenantID.String() != tenantID {
 			continue
 		}
 		if sub.CELFilter != "" && sub.CELFilter != evt.Type {
@@ -292,9 +303,14 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)
 		}
 		if attempt < maxAttempts {
+			// Stoppable timer, not time.After: with MaxBackoff up to
+			// 1h, a ctx cancellation mid-backoff must release the timer
+			// immediately instead of stranding it until it fires.
+			timer := time.NewTimer(backoff)
 			select {
-			case <-time.After(backoff):
+			case <-timer.C:
 			case <-ctx.Done():
+				timer.Stop()
 				return lastStatus, ctx.Err()
 			}
 			backoff *= 2
@@ -384,9 +400,11 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if processed == 0 {
+			timer := time.NewTimer(poll)
 			select {
-			case <-time.After(poll):
+			case <-timer.C:
 			case <-ctx.Done():
+				timer.Stop()
 				return ctx.Err()
 			}
 		}

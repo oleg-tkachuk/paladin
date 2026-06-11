@@ -21,10 +21,24 @@ import (
 
 type fakeStore struct {
 	subs []admindomain.EventSubscription
+	// lastListArgs records the most recent List call so tests can
+	// assert the producer scopes the query (tenant filter) instead of
+	// fetching everything and filtering in-process.
+	lastListArgs admindomain.ListEventSubscriptionsArgs
 }
 
-func (f *fakeStore) List(_ context.Context, _ admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	return f.subs, "", nil
+func (f *fakeStore) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	f.lastListArgs = args
+	if args.TenantID == uuid.Nil {
+		return f.subs, "", nil
+	}
+	var out []admindomain.EventSubscription
+	for _, s := range f.subs {
+		if s.TenantID == args.TenantID {
+			out = append(out, s)
+		}
+	}
+	return out, "", nil
 }
 
 func (f *fakeStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
@@ -103,6 +117,59 @@ func TestDispatchWritesOutbox(t *testing.T) {
 	}
 	if len(rows[0].EventPayload) == 0 {
 		t.Error("event payload is empty")
+	}
+}
+
+// TestDispatchScopesListToTenant pins the fan-out query shape: the
+// producer must push the tenant filter into the store query (SQL
+// WHERE) rather than listing every tenant's subscriptions and
+// filtering in-process — at scale the unscoped form both leaks work
+// across tenants and silently truncates past the page cap.
+func TestDispatchScopesListToTenant(t *testing.T) {
+	tenantID := uuid.Must(uuid.NewV7())
+	otherTenant := uuid.Must(uuid.NewV7())
+	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
+	store := &fakeStore{
+		subs: []admindomain.EventSubscription{
+			{
+				SubscriptionID: uuid.Must(uuid.NewV7()),
+				TenantID:       tenantID,
+				SinkKind:       "http",
+				SinkConfig:     cfg,
+			},
+			{
+				SubscriptionID: uuid.Must(uuid.NewV7()),
+				TenantID:       otherTenant,
+				SinkKind:       "http",
+				SinkConfig:     cfg,
+			},
+		},
+	}
+	out := &fakeOutbox{}
+	d := &Dispatcher{Store: store, Outbox: out}
+	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "object.created"})
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if store.lastListArgs.TenantID != tenantID {
+		t.Errorf("List args.TenantID: got %s want %s (tenant filter must be pushed into the query)",
+			store.lastListArgs.TenantID, tenantID)
+	}
+	if n != 1 {
+		t.Errorf("queued: got %d want 1 (only this tenant's sub)", n)
+	}
+	if got := len(out.snapshot()); got != 1 {
+		t.Errorf("outbox writes: got %d want 1", got)
+	}
+}
+
+// TestDispatchRejectsInvalidTenantID — Dispatch parses the tenant id
+// for the SQL filter; garbage must fail loudly, not fan out to
+// nothing.
+func TestDispatchRejectsInvalidTenantID(t *testing.T) {
+	d := &Dispatcher{Store: &fakeStore{}, Outbox: &fakeOutbox{}}
+	if _, err := d.Dispatch(context.Background(), "not-a-uuid", Event{Type: "object.created"}); err == nil {
+		t.Fatal("expected error for invalid tenant id")
 	}
 }
 
