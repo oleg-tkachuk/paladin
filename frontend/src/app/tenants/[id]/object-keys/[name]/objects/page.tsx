@@ -141,6 +141,9 @@ function ObjectKeyObjectsContent() {
     searchParams.get("status") || undefined,
   );
   const [search, setSearch] = useState(searchParams.get("search") || "");
+  // Trails `search` by 300ms (see the debounce effect below); feeds
+  // the CEL filter so list refetches don't fire per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [recursive, setRecursive] = useState(
     searchParams.get("recursive") === "true",
   );
@@ -183,10 +186,26 @@ function ObjectKeyObjectsContent() {
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    if (value.length > 2 || value === "") {
-      syncToUrl({ search: value || undefined });
-    }
   };
+
+  // Debounce the expensive consequences of typing: the visible input
+  // updates per keystroke, but the CEL filter (one list RPC per
+  // change) and the router.replace URL sync follow 300ms after typing
+  // stops. Without this every character ≥3 fired a fetch + a history
+  // replacement.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedSearch(search);
+      if (search.length > 2 || search === "") {
+        syncToUrl({ search: search || undefined });
+      }
+    }, 300);
+    return () => clearTimeout(id);
+    // syncToUrl's identity changes whenever searchParams changes (its
+    // own router.replace included) — depending on it would re-arm the
+    // timer after every sync. Typing is the only intended trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const handleRecursiveChange = (value: boolean) => {
     setRecursive(value);
@@ -195,8 +214,8 @@ function ObjectKeyObjectsContent() {
 
   const filterParts: string[] = [];
   if (status) filterParts.push(`state == '${status}'`);
-  if (search.length > 2)
-    filterParts.push(`key.contains('${search.replace(/'/g, "\\'")}')`);
+  if (debouncedSearch.length > 2)
+    filterParts.push(`key.contains('${debouncedSearch.replace(/'/g, "\\'")}')`);
   const filter = filterParts.join(" && ");
 
   const {
