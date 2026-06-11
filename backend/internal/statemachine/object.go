@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -199,9 +200,10 @@ var (
 	ErrNotFound = errors.New("statemachine: object not found or wrong state")
 )
 
-// isNoRows checks the pgx-specific no-rows error.
+// isNoRows checks the pgx-specific no-rows error. errors.Is (not a
+// string compare) so wrapped sentinels — fmt.Errorf("...: %w",
+// pgx.ErrNoRows) — still classify as no-rows instead of surfacing as
+// false errors that re-queue the object forever.
 func isNoRows(err error) bool {
-	// pgx returns pgx.ErrNoRows (a sentinel). Avoid importing pgx here to
-	// keep this package lean; the caller controls the import surface.
-	return err != nil && err.Error() == "no rows in result set"
+	return errors.Is(err, pgx.ErrNoRows)
 }
