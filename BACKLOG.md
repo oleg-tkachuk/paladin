@@ -1438,6 +1438,27 @@ no entry here — it is the existing "OpenTelemetry baseline" item._
   (cache hit/miss, replay, TTL) pass unchanged.
 - **Blockers:** none — internal refactor, wire format unchanged.
 
+### Unit seams for lease renewer + batch-copy compensation paths
+
+- **Status:** Deferred
+- **Reason:** the 2026-06 audit named five untested complex functions;
+  three got tests with the fixes (dispatcher tenant scoping, statemachine
+  no-rows classification, rate-limiter concurrency). The remaining two —
+  `lease.renewer` (two failed renewals must cancel work; expiry timer
+  must fire without renewal) and `BatchCopyExecutor.copyOne`'s
+  double-failure compensation (MarkFailed failing after CopyObject
+  failed) — call straight into `*pgxpool.Pool` / storage clients, and
+  the lease package deliberately leaves SQL paths to the integration
+  suite. Unit-testing them means introducing a claim/release interface
+  seam, which is a design decision, not a mechanical add.
+- **Definition of Done:**
+  - A narrow `leaseStore` interface (claim / release) behind `Lease`,
+    with the pgx implementation unchanged; renewer tests cover the
+    consecutive-failure cancel and the expiry-without-renewal cancel.
+  - A copyOne test with faked Objects/Storage exercising the
+    compensation branch where MarkFailed also fails.
+- **Blockers:** none — agree on the seam shape first.
+
 ### connectshim proto ↔ struct converters: generate instead of hand-write
 
 - **Status:** Aspirational
