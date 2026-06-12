@@ -11,6 +11,7 @@ import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import type { DescService } from "@bufbuild/protobuf";
 
 import { RPC_API_PREFIX, RPC_PLANE_PREFIXES, type Plane } from "@/constants";
+import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
 
 // admin plane services
 import { ObjectKeyService } from "@/gen/paladin/admin/v1/object_key_service_pb";
@@ -200,6 +201,25 @@ async function handler(req: Request) {
   }
 
   const authHeader = req.headers.get("Authorization");
+
+  // Audience gate: refuse to forward a token whose `aud` doesn't match the
+  // plane it's aimed at. The BFF is otherwise an open proxy to internal,
+  // cluster-only planes; without this a caller could tunnel a data-audience
+  // token to the admin plane. The backend re-verifies the signature and
+  // audience — this is the BFF's defense-in-depth half (and a clean 403
+  // instead of a confusing downstream error). Absent token → anonymous
+  // flow (e.g. iam AuthService.Login), let the backend decide.
+  if (!tokenMatchesPlane(authHeader, plane)) {
+    console.warn(`[RPC Bridge] token audience mismatch for plane=${plane}`);
+    return new Response(
+      JSON.stringify({
+        code: "permission_denied",
+        message: "token audience does not match the requested plane",
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const contextValues = createContextValues().set(authKey, authHeader);
 
   const incomingBody = req.body
