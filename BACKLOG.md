@@ -286,6 +286,291 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Production-readiness audit (2026-06-12)
+
+_Full security / data-integrity / ops sweep. BLOCKER items 1–7 are
+being fixed in this work stream (delete this section's entries as each
+lands). The HIGH/MEDIUM items below stay here until scheduled._
+
+### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
+
+- **Status:** Open
+- **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
+  transition has already committed
+  (`internal/worker/event_dispatcher.go` ~133;
+  `internal/api/v1/object/handler.go` dispatchEvent call site). A crash
+  between the state commit and `Outbox.Insert` loses the event
+  permanently — the classic dual-write problem. For implicit-mode
+  buckets (S3 events off) the webhook is the only notification channel,
+  so this is silent under-delivery.
+- **Definition of Done:** outbox rows written in the SAME tx as the
+  state transition (pass `pgx.Tx` into the dispatch path), or a
+  trigger/LISTEN-NOTIFY transactional-outbox pattern. Crash between
+  commit and fan-out can no longer drop an event.
+- **Blockers:** touches the promote/complete transaction boundary —
+  coordinate with the statemachine package.
+
+### [HIGH] Idempotency-key purger never wired; ON CONFLICT returns stale response
+
+- **Status:** Open
+- **Reason:** `PurgeExpiredIdempotencyKeys` exists in the sqlc layer but
+  no job in `internal/app/build_jobs.go` calls it — the table grows
+  unbounded and the hot `GetIdempotencyKey` unique-index bloats.
+  Separately, `PutIdempotencyKey` uses `ON CONFLICT DO NOTHING`, so a
+  retried Create after TTL expiry keeps the stale row and the caller
+  sees an expired response.
+- **Definition of Done:** an `IdempotencyKeyPurger` job wired in
+  `build_jobs.go` on a configurable interval; `PutIdempotencyKey`
+  switched to `ON CONFLICT … DO UPDATE` so post-TTL retries overwrite.
+- **Blockers:** none.
+
+### [HIGH] Abandoned multipart uploads never aborted on the storage backend
+
+- **Status:** Open
+- **Reason:** `InitiateMultipartUpload` opens an S3 multipart session;
+  if the client never Completes/Aborts, the parts accrue storage
+  charges forever. The reconciler `MarkFailed`s the PENDING object but
+  never calls `storage.AbortMultipart`
+  (`internal/api/v1/multipart/handler.go`; no reaper in
+  `internal/app/build_jobs.go`).
+- **Definition of Done:** an `AbandonedMultipartReaper` job that lists
+  `multipart_uploads` older than a TTL, calls `storage.AbortMultipart`,
+  then `MarkFailed` + `DeleteSession`. Document the S3 bucket-lifecycle
+  `AbortIncompleteMultipartUpload` backstop.
+- **Blockers:** none.
+
+### [HIGH] ListObjects CEL: a fully-filtered page returns next="" (silent truncation)
+
+- **Status:** Open
+- **Reason:** `internal/store/postgres/adapters/object.go` ListObjects
+  filters CEL post-fetch and derives the page token from the FILTERED
+  slice. When a full DB page (`len(rows)==pageSize`) is entirely
+  filtered out, `len(out)==0` → `next=""` and the caller stops
+  paginating before reaching matching rows further on.
+- **Definition of Done:** page token derived from the last FETCHED DB
+  row id, not the last matching one; when a full page filters to empty,
+  return a non-empty cursor so the caller continues. (Pairs with the
+  existing "ListObjects CEL filter pushdown" item — pushdown removes
+  the post-filter and fixes this too.)
+- **Blockers:** none — see [[ListObjects CEL filter pushdown to SQL]].
+
+### [HIGH] IAM plane has no audit interceptor
+
+- **Status:** Open
+- **Reason:** the admin plane stack includes `AuditWithMirror`; the IAM
+  stack (`internal/app/build_listeners_api.go` iamOpts ~201) does not.
+  Login, CreateUser, CreateApiKey, RefreshToken leave no server-side
+  audit trail — a credential-misuse breach is invisible. Blocks SOC 2 /
+  ISO 27001 / PCI.
+- **Definition of Done:** `AuditWithMirror(..., AudienceIAM, ...)` added
+  to iamOpts (after the permissive interceptor so failed/anonymous
+  logins are still logged); an integration test asserts a Login emits
+  an audit row.
+- **Blockers:** none.
+
+### [HIGH] Presign TTL unbounded when MaxTTL unconfigured
+
+- **Status:** Open
+- **Reason:** `internal/api/v1/presign/handler.go` resolveTTL only
+  clamps when `cfg.MaxTTL > 0`; the field has no default, so an omitted
+  config yields zero → no clamp → a caller can mint a 10-year presigned
+  URL that PALADIN cannot revoke. `DefaultTTL==0` is also ambiguous across
+  SDKs.
+- **Definition of Done:** hard safety ceiling (e.g. 7d) + sane default
+  (1h) applied in wiring; config validation rejects `max_ttl==0` in
+  non-dev. Unit test covers the clamp.
+- **Blockers:** none.
+
+### [HIGH] Login rate-limiter: spoofable key, unbounded map, gaps
+
+- **Status:** Open
+- **Reason:** `internal/middleware/login_ratelimit.go` keys per-IP off
+  the raw first `X-Forwarded-For` hop (spoofable unless the ingress
+  overwrites it) and ignores the configured `RealIPHeader`; the
+  `buckets` map never evicts emptied entries (OOM via rotating
+  subjects/IPs); and only `Login` is limited — `RefreshToken` /
+  `ExchangeAudience` are not.
+- **Definition of Done:** use the configured real-IP header; periodic
+  sweep or bounded-LRU for `buckets`; rate-limit `RefreshToken` too.
+- **Blockers:** ingress must be documented to overwrite (not append)
+  the real-IP header.
+
+### [HIGH] Unbounded server-side caches: CEL programs and JWKS refresh
+
+- **Status:** Open
+- **Reason:** the CEL `Evaluator` cache
+  (`internal/filter/cel/evaluator.go`) is an unbounded `sync.Map` keyed
+  on the filter expression — an authenticated tenant exhausts memory
+  with ever-varying filters. The JWKS verifier
+  (`internal/auth/jwks.go`) force-refreshes synchronously on every
+  unknown `kid` with no debounce or singleflight — a `kid`-spray DoSes
+  the verifier once a federated IdP is enabled.
+- **Definition of Done:** bounded LRU for compiled CEL programs;
+  min-refresh-interval + singleflight on JWKS refresh.
+- **Blockers:** JWKS half only bites once [[Federated IdP via JWKS]]
+  ships, but fix alongside it.
+
+### [HIGH] Frontend liveness probe targets SSR `/` (restart storms)
+
+- **Status:** Open
+- **Reason:** `frontend/deploy/chart/values.yaml` livenessProbe hits
+  `/` — a full SSR render that calls the backend. When the backend/DB
+  degrades, the probe times out and kubelet restart-loops the UI pod
+  into the same broken environment, so the UI can't even serve static
+  pages during an incident.
+- **Definition of Done:** a trivial `/api/health/live` route returning
+  200 on process-alive only; liveness points at it; readiness keeps the
+  dependency-checking endpoint.
+- **Blockers:** none.
+
+### [HIGH] No HTTP security headers (CSP / HSTS / XFO / nosniff)
+
+- **Status:** Open
+- **Reason:** `frontend/next.config.ts` defines no `headers()`; the
+  Traefik IngressRoute adds no security-headers middleware. XSS in any
+  rich field (policy editor, YAML viewer, display names) can hit
+  same-origin BFF routes; clickjacking and MIME-sniffing are open.
+- **Definition of Done:** `headers()` emitting CSP (start
+  `default-src 'self'`), HSTS, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Blockers:** CSP needs a pass over inline-style/script usage.
+
+### [HIGH] Multi-replica BFF breaks RefreshToken single-flight
+
+- **Status:** Open
+- **Reason:** `frontend/src/lib/auth/bff.ts` dedups in-flight token
+  rotations in a process-global `Map`; prod runs `replicaCount: 3`, so
+  parallel requests across replicas each call IAM RefreshToken and all
+  but one get `token already consumed` → spurious 401s.
+- **Definition of Done:** Traefik session affinity to pin a browser
+  session to one replica (low-effort), or a Redis-backed distributed
+  lock (correct). Pick one and wire it.
+- **Blockers:** infra decision (sticky vs Redis).
+
+### [HIGH] MCP role: single replica, no PDB, no prod override
+
+- **Status:** Open
+- **Reason:** `backend/deploy/chart/values.yaml` sets `mcp.replicas: 1`
+  and the PDB template only renders for multi-replica; `values-prod`
+  doesn't override MCP. A node drain takes MCP fully offline.
+- **Definition of Done:** `mcp.replicas: 2` (or `minReplicas: 2`) in
+  `values-prod.yaml`, or a documented, graceful 503 during drain.
+- **Blockers:** none.
+
+### [MEDIUM] Pool sizing × replicas likely exceeds Postgres max_connections
+
+- **Status:** Open
+- **Reason:** `pool.max_conns: 20` per role × prod replica counts
+  (~200 conns) against CNPG default `max_connections=100` →
+  "too many clients" 502s during upgrades. No PgBouncer.
+- **Definition of Done:** PgBouncer in front of CNPG with low per-pod
+  pools, OR raised CNPG `max_connections`, OR reduced prod `max_conns`;
+  the math documented in `values-prod.yaml`.
+- **Blockers:** infra decision.
+
+### [MEDIUM] No CSRF defense on BFF POST routes beyond SameSite=Strict
+
+- **Status:** Open
+- **Reason:** `/api/auth/*` and `/api/rpc/*` POST handlers do no Origin
+  check / CSRF token. SameSite=Strict covers most cases but not
+  related-subdomain or older-browser vectors on a control plane.
+- **Definition of Done:** Origin-header allowlist check (or CSRF token)
+  on BFF auth + rpc POSTs.
+- **Blockers:** none.
+
+### [MEDIUM] `/system/health.json` unauthenticated on every plane
+
+- **Status:** Open
+- **Reason:** `internal/health/health.go` mounts the snapshot endpoint
+  without auth on all planes (incl. MCP, reachable by agents); it
+  discloses component tree, role, subsystem and Postgres reachability.
+  `/livez`/`/readyz`/`/startupz` correctly stay open.
+- **Definition of Done:** `/system/health.json` behind a bearer/header
+  check or restricted to in-cluster CIDR; probe endpoints unchanged.
+- **Blockers:** none.
+
+### [MEDIUM] Ingest dedup store uses the RLS pool, not the BYPASSRLS pool
+
+- **Status:** Open
+- **Reason:** `cmd/server/serve_ingest.go` wires `Dedup` to the runtime
+  (NOBYPASSRLS) pool while the handler/SM use BYPASSRLS. Latent: if
+  `ingest_events` is ever brought under RLS, dedup silently fails →
+  every event re-processes.
+- **Definition of Done:** `Dedup` wired from the same BYPASSRLS pool as
+  the ingest handler.
+- **Blockers:** none.
+
+### [MEDIUM] CompleteObject HEAD→promote sequencer race drifts quota
+
+- **Status:** Open
+- **Reason:** between `storage.Head` and `PromoteToAvailable`, an
+  implicit-mode event can promote independently; depending on sequencer
+  ordering the RPC may overwrite the event's etag/size and the
+  quota-charged values diverge (reconciled nightly, so bounded).
+- **Definition of Done:** decide whether HEAD-path promotion should
+  defer to an already-promoted row; document the quota-drift bound if
+  accepted as-is.
+- **Blockers:** none — low impact.
+
+### [MEDIUM] Tenant hard-delete: RESTRICT blocks, CASCADE kills in-flight, S3 orphaned
+
+- **Status:** Open
+- **Reason:** `objects→object_keys→tenants` are `ON DELETE RESTRICT` so
+  force-delete fails generically (`CodeInternal`) when objects exist,
+  while sibling tables `ON DELETE CASCADE` (event_deliveries, api_tokens,
+  …) get wiped mid-flight; no path purges the tenant's S3 bytes.
+- **Definition of Done:** pre-check live objects → `FailedPrecondition`
+  with actionable text; a documented tenant S3-sweep before/after
+  deletion.
+- **Blockers:** none.
+
+### [MEDIUM] AsyncWriter DropOnFull=false can hang shutdown
+
+- **Status:** Open
+- **Reason:** `internal/audit/async_writer.go` `Insert` blocks on an
+  open channel; after `Run` exits on shutdown nothing drains it, so
+  late audit goroutines block forever (process hang once the buffer
+  fills).
+- **Definition of Done:** `Insert` selects on `w.done` alongside the
+  send and returns `ErrClosed` (or drops) once stopped.
+- **Blockers:** none.
+
+### [MEDIUM] Migrations 004/006 take ACCESS EXCLUSIVE locks (no CONCURRENTLY)
+
+- **Status:** Open
+- **Reason:** `migrations/004_*` and `006_*` ALTER `objects` in-tx
+  without `CONCURRENTLY`; against a prod-size table that's minutes of
+  full read/write lock at pod-startup migration time, plus a
+  version-skew window if a pod rolls mid-migration.
+- **Definition of Done:** split add-column/backfill/validate phases or
+  run these out-of-band in a maintenance window; document the deploy
+  ordering (migrate job gates rollout).
+- **Blockers:** historical migrations — needs a forward-only plan.
+
+### [MEDIUM] `/config` page dev-token override + `paladin_token` localStorage slot
+
+- **Status:** Open
+- **Reason:** `frontend/src/app/config/page.tsx` lets any authed user
+  write a raw JWT to `localStorage.paladin_token`; currently unused by
+  transports but a latent privilege-escalation path if re-read.
+- **Definition of Done:** remove the dev-token card (or gate on
+  `NODE_ENV==='development'`); drop `paladin_token` from `STORAGE_KEYS`.
+- **Blockers:** none — partially handled with the layout devToken fix.
+
+### [MEDIUM] `composeKey` has no path-traversal guard (defense-in-depth)
+
+- **Status:** Open
+- **Reason:** `internal/storage/s3adapter/s3.go` composeKey concatenates
+  `tenant/objectKey/key` directly; inputs are server-generated today
+  (no confirmed exploit) but a future user-controlled key would escape
+  the tenant prefix.
+- **Definition of Done:** assert no `..`/leading-slash segments in
+  composeKey; reject otherwise.
+- **Blockers:** none.
+
+---
+
 ## Security
 
 ### RLS — coverage of cross-tenant tables
