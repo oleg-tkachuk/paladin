@@ -209,6 +209,26 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// ── Ingest webhook must be authenticated outside dev ────────────
+	// The HMAC check is skipped when SharedSecret is empty (publisher
+	// signs with ""). That's fine on a laptop, but in staging/prod an
+	// unauthenticated receiver lets anyone who reaches the ingest port
+	// forge PROMOTE events — and the ingest plane runs on a BYPASSRLS
+	// pool, so a forged event mutates object state at the highest
+	// privilege level. Fail fast rather than boot a wide-open receiver.
+	if c.Ingest.Enabled && c.Ingest.Driver == "webhook" {
+		devEnv := c.App.Env == "" || c.App.Env == "local" ||
+			c.App.Env == "dev" || c.App.Env == "development"
+		noSecret := c.Ingest.Webhook.SharedSecret == "" &&
+			c.Ingest.Webhook.SharedSecretRef.Name == ""
+		if !devEnv && noSecret {
+			return fmt.Errorf(
+				"ingest.webhook: shared_secret or shared_secret_ref is required when app.env=%q "+
+					"(an unauthenticated webhook receiver lets anyone forge object events)",
+				c.App.Env)
+		}
+	}
+
 	return nil
 }
 

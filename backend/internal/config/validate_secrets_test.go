@@ -90,3 +90,35 @@ func TestValidate_SecretMutex_StorageSessionToken(t *testing.T) {
 	c.Storage.Backends["primary"] = b
 	mustReject(t, c, "session_token and session_token_secret")
 }
+
+// Ingest webhook auth: an unauthenticated receiver is rejected in
+// staging/prod (forged PROMOTE events run with BYPASSRLS) but tolerated
+// in dev where the publisher signs with the empty secret.
+func TestValidate_IngestWebhook_RequiresSecretInProd(t *testing.T) {
+	c := minimalValidConfig()
+	c.App.Env = "prod"
+	c.Ingest.Enabled = true
+	c.Ingest.Driver = "webhook"
+	mustReject(t, c, "ingest.webhook: shared_secret or shared_secret_ref is required")
+}
+
+func TestValidate_IngestWebhook_SecretRefSatisfiesProd(t *testing.T) {
+	c := minimalValidConfig()
+	c.App.Env = "prod"
+	c.Ingest.Enabled = true
+	c.Ingest.Driver = "webhook"
+	c.Ingest.Webhook.SharedSecretRef = SecretRef{Name: "ingest-hmac", Key: "secret"}
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() with shared_secret_ref set: want nil, got %v", err)
+	}
+}
+
+func TestValidate_IngestWebhook_DevToleratesNoSecret(t *testing.T) {
+	c := minimalValidConfig()
+	c.App.Env = "local"
+	c.Ingest.Enabled = true
+	c.Ingest.Driver = "webhook"
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() in local env without secret: want nil, got %v", err)
+	}
+}
