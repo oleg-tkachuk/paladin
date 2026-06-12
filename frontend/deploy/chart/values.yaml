@@ -113,6 +113,10 @@ terminationGracePeriodSeconds: 30
 service:
   type: ClusterIP
   port: 3000
+  # Enable Traefik cookie session affinity. MUST be true whenever the UI
+  # runs more than one replica (see the annotation rationale in
+  # templates/service.yaml). Off by default for single-replica dev.
+  stickySessions: false
 
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
 # PALADIN UI fronted by Traefik (consistent with acme's IngressRoute
@@ -149,16 +153,20 @@ resources:
     cpu: 500m
     memory: 512Mi
 
+# Liveness hits a trivial process-alive route (no backend/DB calls) so a
+# backend outage can't restart-storm the UI. Readiness uses the
+# dependency-aware aggregator so the pod is pulled from the LB when its
+# upstreams are down, without being killed.
 livenessProbe:
   httpGet:
-    path: /
+    path: /api/health/live
     port: 3000
   initialDelaySeconds: 30
   periodSeconds: 30
 
 readinessProbe:
   httpGet:
-    path: /
+    path: /api/health/all
     port: 3000
   initialDelaySeconds: 15
   periodSeconds: 15

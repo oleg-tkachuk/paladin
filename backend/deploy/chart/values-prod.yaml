@@ -11,6 +11,24 @@ config:
   app:
     env: prod
 
+  # Postgres connection-pool sizing vs CNPG max_connections (default
+  # 100). Per-pod pool × total pods must stay under it, leaving headroom
+  # for the migrate + bootstrap jobs.
+  #
+  #   Steady-state pods: api 3 + admin 2 + worker 3 + dispatcher 2
+  #   + mcp 2 = 12 → 12 × 6 = 72 connections (fits, ~28 headroom).
+  #
+  # WARNING: under HPA burst (api → maxReplicas 12) this exceeds 100 and
+  # new connections fail with "too many clients". The real fix is
+  # PgBouncer in front of CNPG (tracked in BACKLOG: "Pool sizing ×
+  # replicas"); until then either keep api maxReplicas modest or raise
+  # CNPG max_connections to ≥300 in the cluster spec.
+  datastores:
+    postgres:
+      pool:
+        max_conns: 6
+        min_conns: 1
+
   logger:
     level: info
 
@@ -87,6 +105,12 @@ deployments:
   worker:
     replicas: 3
   dispatcher:
+    replicas: 2
+  # MCP must be ≥2 in prod: the base chart defaults it to 1, which
+  # renders no PodDisruptionBudget, so a routine node drain takes the
+  # whole MCP plane offline. Two replicas earn it a PDB and survive
+  # single-node maintenance.
+  mcp:
     replicas: 2
 
 # PDB: minAvailable: 2 means a single-zone failure leaves at least

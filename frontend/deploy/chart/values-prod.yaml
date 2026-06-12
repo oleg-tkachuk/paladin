@@ -5,6 +5,11 @@
 
 replicaCount: 3
 
+# Multi-replica BFF needs session affinity so token-rotation dedup works
+# (see templates/service.yaml). Required because replicaCount > 1.
+service:
+  stickySessions: true
+
 resources:
   requests:
     cpu: 300m
