@@ -205,7 +205,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			"ExchangeAudience",
 		),
 		apiTokIAM,
-		middleware.NewLoginRateLimiter(),
+		middleware.NewLoginRateLimiter(cfg.API.Server.IAM.RealIPHeader),
+		// Audit IAM mutations (Login, CreateUser, CreateApiKey,
+		// RefreshToken, …). Placed after the permissive interceptor so
+		// anonymous/failed Login attempts are still recorded — a
+		// credential-misuse breach must leave a server-side trail
+		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
+		middleware.AuditWithMirror(deps.AsyncAudit, auth.AudienceIAM, false, nil),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
 	)

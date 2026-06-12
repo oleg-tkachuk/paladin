@@ -10,8 +10,9 @@ import (
 	"connectrpc.com/connect"
 )
 
-// LoginRateLimiter is a Connect interceptor that throttles AuthService.Login
-// with two layered sliding-windows:
+// LoginRateLimiter is a Connect interceptor that throttles credential-
+// bearing IAM RPCs (Login + RefreshToken) with two layered sliding
+// windows:
 //
 //  1. Per-IP cap (`PerIPMax` / `Window`) — fires first; defends against
 //     enumeration attacks where the attacker varies `subject` to dodge the
@@ -24,26 +25,48 @@ import (
 // Successful logins are NOT exempted — bots would otherwise game the limit
 // by occasionally guessing right.
 //
-// Targets the Login procedure path only; all other RPCs pass through.
+// Memory is bounded two ways: an opportunistic sweep drops emptied buckets
+// once per window, and a hard maxKeys cap rejects new keys (fail-closed)
+// if the map ever blows past it — so a botnet rotating subjects/IPs can't
+// OOM the IAM pod.
 type LoginRateLimiter struct {
 	PerSubjectMax int
 	PerIPMax      int
 	Window        time.Duration
-	Procedure     string // default "/paladin.iam.v1.AuthService/Login"
+	procedures    map[string]struct{}
+	realIPHeader  string
+	maxKeys       int
 
-	mu      sync.Mutex
-	buckets map[string][]time.Time
-	now     func() time.Time
+	mu        sync.Mutex
+	buckets   map[string][]time.Time
+	lastSweep time.Time
+	now       func() time.Time
 }
 
 // NewLoginRateLimiter constructs a limiter with sensible defaults:
-// 10 attempts/min per (subject, IP), 60 attempts/min per IP.
-func NewLoginRateLimiter() *LoginRateLimiter {
+// 10 attempts/min per (subject, IP), 60 attempts/min per IP. realIPHeader
+// names the header the ingress writes the client IP into (it MUST
+// overwrite, not append — otherwise a client can spoof the per-IP key);
+// empty falls back to the first X-Forwarded-For hop. procedures lists the
+// RPC paths to throttle; empty defaults to Login + RefreshToken.
+func NewLoginRateLimiter(realIPHeader string, procedures ...string) *LoginRateLimiter {
+	if len(procedures) == 0 {
+		procedures = []string{
+			"/paladin.iam.v1.AuthService/Login",
+			"/paladin.iam.v1.AuthService/RefreshToken",
+		}
+	}
+	procSet := make(map[string]struct{}, len(procedures))
+	for _, p := range procedures {
+		procSet[p] = struct{}{}
+	}
 	return &LoginRateLimiter{
 		PerSubjectMax: 10,
 		PerIPMax:      60,
 		Window:        1 * time.Minute,
-		Procedure:     "/paladin.iam.v1.AuthService/Login",
+		procedures:    procSet,
+		realIPHeader:  realIPHeader,
+		maxKeys:       100_000,
 		buckets:       map[string][]time.Time{},
 		now:           time.Now,
 	}
@@ -51,13 +74,13 @@ func NewLoginRateLimiter() *LoginRateLimiter {
 
 func (l *LoginRateLimiter) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if req.Spec().Procedure != l.Procedure {
+		if _, throttled := l.procedures[req.Spec().Procedure]; !throttled {
 			return next(ctx, req)
 		}
 		subject, ip := l.coords(req)
 		if !l.admit(subject, ip) {
 			return nil, connect.NewError(connect.CodeResourceExhausted,
-				errors.New("too many login attempts; try again later"))
+				errors.New("too many attempts; try again later"))
 		}
 		return next(ctx, req)
 	}
@@ -72,15 +95,20 @@ func (l *LoginRateLimiter) WrapStreamingHandler(next connect.StreamingHandlerFun
 }
 
 // coords extracts (subject, ip). Subject from the proto body; IP from the
-// first X-Forwarded-For hop. Both empty when unset — the limiter still
-// works (e.g. throttles "ip=” all unidentified clients").
+// configured real-IP header (first hop), or X-Forwarded-For if unset. Both
+// empty when absent — the limiter still throttles unidentified clients
+// under the shared "ip=" bucket.
 func (l *LoginRateLimiter) coords(req connect.AnyRequest) (string, string) {
 	type subjectGetter interface{ GetSubject() string }
 	subject := ""
 	if m, ok := req.Any().(subjectGetter); ok {
 		subject = m.GetSubject()
 	}
-	ip := firstFwdedIP(req.Header().Get("X-Forwarded-For"))
+	header := l.realIPHeader
+	if header == "" {
+		header = "X-Forwarded-For"
+	}
+	ip := firstFwdedIP(req.Header().Get(header))
 	return subject, ip
 }
 
@@ -106,6 +134,20 @@ func (l *LoginRateLimiter) admit(subject, ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	l.sweepLocked(cutoff, now)
+
+	// maxKeys backstop: if the map is saturated and these are brand-new
+	// keys, fail closed rather than grow unbounded. Existing keys still
+	// admit/reject normally so legitimate repeat clients aren't harmed.
+	// maxKeys<=0 disables the backstop (used by unit tests).
+	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
+		_, haveIP := l.buckets[ipKey]
+		_, haveSubject := l.buckets[subjectKey]
+		if !haveIP && !haveSubject {
+			return false
+		}
+	}
+
 	// Per-IP gate first — coarsest layer, also the cheapest to reject on.
 	if !l.checkLocked(ipKey, cutoff, l.PerIPMax) {
 		return false
@@ -119,6 +161,27 @@ func (l *LoginRateLimiter) admit(subject, ip string) bool {
 	l.buckets[ipKey] = append(l.buckets[ipKey], now)
 	l.buckets[subjectKey] = append(l.buckets[subjectKey], now)
 	return true
+}
+
+// sweepLocked drops buckets that hold no in-window timestamps. Runs at
+// most once per Window so the cost is amortised. Caller holds l.mu.
+func (l *LoginRateLimiter) sweepLocked(cutoff, now time.Time) {
+	if now.Sub(l.lastSweep) < l.Window {
+		return
+	}
+	l.lastSweep = now
+	for key, ts := range l.buckets {
+		fresh := false
+		for _, t := range ts {
+			if t.After(cutoff) {
+				fresh = true
+				break
+			}
+		}
+		if !fresh {
+			delete(l.buckets, key)
+		}
+	}
 }
 
 // checkLocked reports whether `key` has capacity under `max`, trimming

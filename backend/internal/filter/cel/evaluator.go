@@ -181,14 +181,27 @@ func CompileFirstError(schema *Schema, expr string) error {
 	return nil
 }
 
-// Evaluator compiles and caches CEL programs per schema+expression.
+// maxCELCacheEntries bounds the compiled-program cache. Each distinct
+// (schema, expr) a tenant submits compiles to a few-KB program; without
+// a cap an authenticated caller exhausts memory with ever-varying filter
+// strings. A few thousand entries dwarfs any real workload's distinct
+// filter set, so eviction effectively never fires in practice — it's a
+// safety ceiling, not a hot-path tuning knob.
+const maxCELCacheEntries = 4096
+
+// Evaluator compiles and caches CEL programs per schema+expression. The
+// cache is size-bounded: at capacity a new compile evicts an arbitrary
+// existing entry (Go map range order). Strict LRU isn't worth the
+// complexity for a compile cache — the goal is bounding memory, and at
+// this cap a re-compile after a rare eviction is cheap.
 type Evaluator struct {
-	cache sync.Map // key = schema.Name + "\x00" + expr; val = cel.Program
+	mu    sync.Mutex
+	cache map[string]cel.Program // key = schema.Name + "\x00" + expr
 }
 
 // NewEvaluator returns an Evaluator with empty cache.
 func NewEvaluator() *Evaluator {
-	return &Evaluator{}
+	return &Evaluator{cache: make(map[string]cel.Program)}
 }
 
 // Compile returns a cached Program or compiles a new one for expr under schema.
@@ -198,9 +211,13 @@ func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
 		return alwaysTrueProgram, nil
 	}
 	key := schema.Name + "\x00" + expr
-	if v, ok := e.cache.Load(key); ok {
-		return v.(cel.Program), nil
+
+	e.mu.Lock()
+	if prog, ok := e.cache[key]; ok {
+		e.mu.Unlock()
+		return prog, nil
 	}
+	e.mu.Unlock()
 
 	env, err := buildEnv(schema)
 	if err != nil {
@@ -217,7 +234,18 @@ func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cel: program: %w", err)
 	}
-	e.cache.Store(key, prog)
+
+	e.mu.Lock()
+	if len(e.cache) >= maxCELCacheEntries {
+		// Evict one arbitrary entry to make room. Range yields a
+		// pseudo-random key; deleting during range is safe in Go.
+		for k := range e.cache {
+			delete(e.cache, k)
+			break
+		}
+	}
+	e.cache[key] = prog
+	e.mu.Unlock()
 	return prog, nil
 }
 

@@ -115,3 +115,65 @@ func TestFirstFwdedIP(t *testing.T) {
 		}
 	}
 }
+
+func TestLoginRateLimiterProcedureSelection(t *testing.T) {
+	l := NewLoginRateLimiter("")
+	for _, p := range []string{
+		"/paladin.iam.v1.AuthService/Login",
+		"/paladin.iam.v1.AuthService/RefreshToken",
+	} {
+		if _, ok := l.procedures[p]; !ok {
+			t.Errorf("default procedures should include %s", p)
+		}
+	}
+	if _, ok := l.procedures["/paladin.iam.v1.AuthService/ExchangeAudience"]; ok {
+		t.Error("ExchangeAudience should not be throttled by default")
+	}
+}
+
+func TestLoginRateLimiterMaxKeysBackstop(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	l := &LoginRateLimiter{
+		PerSubjectMax: 1000,
+		PerIPMax:      1000,
+		Window:        time.Minute,
+		maxKeys:       4, // tiny cap: fills after 2 distinct IPs (ip + subject key each)
+		buckets:       map[string][]time.Time{},
+		now:           func() time.Time { return t0 },
+	}
+	// Two distinct IPs → 4 keys, hitting the cap.
+	_ = l.admit("a", "1.1.1.1")
+	_ = l.admit("b", "2.2.2.2")
+	// A brand-new IP must be rejected by the backstop, not grow the map.
+	if l.admit("c", "3.3.3.3") {
+		t.Error("new key past maxKeys should be rejected")
+	}
+	// An existing IP still admits (not a new key).
+	if !l.admit("a", "1.1.1.1") {
+		t.Error("existing key should still admit under its own cap")
+	}
+}
+
+func TestLoginRateLimiterSweepEvictsIdle(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cur := t0
+	l := &LoginRateLimiter{
+		PerSubjectMax: 100,
+		PerIPMax:      100,
+		Window:        30 * time.Second,
+		maxKeys:       100_000,
+		buckets:       map[string][]time.Time{},
+		now:           func() time.Time { return cur },
+	}
+	_ = l.admit("alice", "1.1.1.1") // 2 keys
+	if len(l.buckets) == 0 {
+		t.Fatal("expected buckets after admit")
+	}
+	// Roll past the window + sweep interval, then a fresh admit triggers
+	// the sweep which drops alice's now-stale buckets.
+	cur = t0.Add(61 * time.Second)
+	_ = l.admit("bob", "2.2.2.2")
+	if _, ok := l.buckets["i:1.1.1.1"]; ok {
+		t.Error("stale alice IP bucket should have been swept")
+	}
+}

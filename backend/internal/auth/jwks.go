@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // JWKSVerifier validates JWTs against a remote JWK Set. The set is fetched
@@ -33,10 +35,20 @@ type JWKSVerifier struct {
 	Leeway           time.Duration
 	Now              func() time.Time
 
+	// MinRefreshInterval rate-limits forced refreshes on cache miss. An
+	// unauthenticated attacker can spray tokens with novel `kid` headers;
+	// without this each miss triggers a synchronous outbound fetch,
+	// DoSing the verifier and the IdP. Defaults to 30s.
+	MinRefreshInterval time.Duration
+
 	mu         sync.RWMutex
 	keys       map[string]any // kid → *rsa.PublicKey | *ecdsa.PublicKey
 	loadedAt   time.Time
 	refreshErr error
+
+	// sf collapses concurrent miss-driven refreshes into one outbound
+	// fetch — a kid-spray of N parallel requests does 1 HTTP GET, not N.
+	sf singleflight.Group
 }
 
 // NewJWKSVerifier constructs a verifier. Call Start(ctx) before serving
@@ -118,20 +130,43 @@ func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, er
 }
 
 // keyFor returns the cached public key for kid; on miss it forces one
-// refresh before reporting absence.
+// refresh before reporting absence. The forced refresh is debounced
+// (MinRefreshInterval) and singleflighted so a flood of unknown-kid
+// requests can't turn into an outbound-fetch storm.
 func (v *JWKSVerifier) keyFor(ctx context.Context, kid string) (any, error) {
 	v.mu.RLock()
 	if k, ok := v.keys[kid]; ok {
 		v.mu.RUnlock()
 		return k, nil
 	}
+	loadedAt := v.loadedAt
 	v.mu.RUnlock()
 
-	// Forced refresh on miss — typical when an IdP rotates and a new kid
-	// shows up before our scheduled tick.
-	if err := v.refresh(ctx); err != nil {
+	minRefresh := v.MinRefreshInterval
+	if minRefresh <= 0 {
+		minRefresh = 30 * time.Second
+	}
+	// Debounce: if we refreshed very recently, the kid is genuinely
+	// unknown — don't hammer the IdP on every spray request.
+	if !loadedAt.IsZero() && v.Now().Sub(loadedAt) < minRefresh {
+		return nil, fmt.Errorf("jwks: unknown kid %q", kid)
+	}
+
+	// Singleflight the refresh: concurrent misses share one fetch.
+	if _, err, _ := v.sf.Do("refresh", func() (any, error) {
+		// Re-check under the flight: another goroutine may have just
+		// refreshed (and may have moved loadedAt forward).
+		v.mu.RLock()
+		recent := !v.loadedAt.IsZero() && v.Now().Sub(v.loadedAt) < minRefresh
+		v.mu.RUnlock()
+		if recent {
+			return nil, nil
+		}
+		return nil, v.refresh(ctx)
+	}); err != nil {
 		return nil, fmt.Errorf("jwks: refresh on miss: %w", err)
 	}
+
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	if k, ok := v.keys[kid]; ok {

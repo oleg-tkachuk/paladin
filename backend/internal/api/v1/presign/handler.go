@@ -27,6 +27,16 @@ type Config struct {
 	DefaultMaxSize int64
 }
 
+// Safety bounds applied when Config leaves TTLs unset. A presigned URL
+// bypasses PALADIN and hits S3 directly, so it cannot be revoked before it
+// expires — an unbounded MaxTTL (the zero value) would let a caller mint
+// effectively permanent links. These ceilings are the last line of
+// defense; operators tune the real values via config.
+const (
+	fallbackDefaultTTL = 1 * time.Hour
+	fallbackMaxTTL     = 7 * 24 * time.Hour
+)
+
 type Storage interface {
 	PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
 	PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
@@ -49,6 +59,16 @@ type Handler struct {
 }
 
 func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg Config) *Handler {
+	if cfg.MaxTTL <= 0 {
+		cfg.MaxTTL = fallbackMaxTTL
+	}
+	if cfg.DefaultTTL <= 0 {
+		cfg.DefaultTTL = fallbackDefaultTTL
+	}
+	// A default above the ceiling makes no sense — clamp it.
+	if cfg.DefaultTTL > cfg.MaxTTL {
+		cfg.DefaultTTL = cfg.MaxTTL
+	}
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 
@@ -171,10 +191,11 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 }
 
 func (h *Handler) resolveTTL(requested time.Duration) time.Duration {
+	// MaxTTL is always > 0 after NewHandler normalisation.
 	if requested <= 0 {
 		return h.cfg.DefaultTTL
 	}
-	if h.cfg.MaxTTL > 0 && requested > h.cfg.MaxTTL {
+	if requested > h.cfg.MaxTTL {
 		return h.cfg.MaxTTL
 	}
 	return requested
