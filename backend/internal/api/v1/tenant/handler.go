@@ -469,6 +469,11 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 			// in the trash" instead of treating it as success.
 			return connect.NewError(connect.CodeFailedPrecondition, err)
 		}
+		if errors.Is(err, ErrTenantHasChildren) {
+			// force-delete blocked by the RESTRICT FK — actionable text
+			// instead of an opaque Internal error.
+			return connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	h.dispatchEvent(ctx, tenantID, op,
@@ -654,3 +659,10 @@ var ErrNotTrashed = errors.New("tenant is not in trash")
 // tenant_default_bindings raises 23503; the adapter maps it here.
 var ErrDefaultBindingBucketMissing = errors.New(
 	"default binding bucket does not exist on the chosen backend")
+
+// ErrTenantHasChildren — Repository.HardDelete returns this when the
+// tenant still owns object_keys / objects (the FK is ON DELETE RESTRICT).
+// Surfaced as FAILED_PRECONDITION with actionable text rather than a raw
+// Postgres FK-violation string mapped to Internal.
+var ErrTenantHasChildren = errors.New(
+	"tenant still has object keys or objects; delete them before hard-deleting the tenant")

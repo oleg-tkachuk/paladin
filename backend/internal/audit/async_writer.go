@@ -129,6 +129,8 @@ func (w *AsyncWriter) Insert(_ context.Context, e admindomain.AuditEntry) error 
 		select {
 		case w.in <- e:
 			return nil
+		case <-w.done:
+			return ErrClosed
 		default:
 			w.dropsMu.Lock()
 			w.drops++
@@ -139,9 +141,15 @@ func (w *AsyncWriter) Insert(_ context.Context, e admindomain.AuditEntry) error 
 	// Back-pressure: block on send. The audit interceptor calls
 	// Insert from a deferred goroutine so the request has already
 	// returned — blocking here only delays the audit row, not the
-	// caller's response.
-	w.in <- e
-	return nil
+	// caller's response. Also select on w.done: once Run has exited
+	// nothing drains w.in, so a late Insert would otherwise block
+	// forever (a goroutine leak / shutdown hang once the buffer fills).
+	select {
+	case w.in <- e:
+		return nil
+	case <-w.done:
+		return ErrClosed
+	}
 }
 
 // Run is the flush loop. Pulls entries off the channel, accumulates
@@ -258,7 +266,8 @@ func (w *AsyncWriter) flushBatch(ctx context.Context, batch []admindomain.AuditE
 // silently-wrong runtime.
 var _ middleware.AuditWriter = (*AsyncWriter)(nil)
 
-// ErrClosed is returned by Insert after Run has exited. Today no
-// caller checks for it (Insert always returns nil), but reserved for
-// future symmetry if we tighten the contract.
+// ErrClosed is returned by Insert when Run has already exited (shutdown)
+// — the entry could not be enqueued. Callers (the audit interceptor)
+// already ignore Insert's error, so this just unblocks a late writer
+// instead of leaking the goroutine.
 var ErrClosed = errors.New("audit: writer closed")

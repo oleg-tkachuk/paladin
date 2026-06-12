@@ -206,6 +206,13 @@ func (r *TenantRepo) SoftDelete(ctx context.Context, tenantID uuid.UUID, expecte
 func (r *TenantRepo) HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
 	rows, err := r.q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
+		// FK RESTRICT from object_keys/objects → the tenant still owns
+		// data. Map to a typed sentinel so the handler returns a clear
+		// FailedPrecondition instead of a generic Internal error.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return tenant.ErrTenantHasChildren
+		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
 	}
 	if rows == 0 {

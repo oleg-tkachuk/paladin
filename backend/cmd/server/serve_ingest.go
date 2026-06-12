@@ -100,8 +100,12 @@ var serveIngestCmd = &cobra.Command{
 		worker := &eventingest.Worker{
 			Driver:  driver,
 			Handler: handler,
-			Dedup:   &eventingest.PgxDedupStore{Q: db.Queries},
-			Logger:  l.Named("ingest.worker"),
+			// Dedup shares the ingest (BYPASSRLS) queries, not the runtime
+			// RLS pool: ingest events carry no tenant GUC, so on the RLS
+			// pool a future RLS policy on ingest_events would silently make
+			// every dedup check miss and re-process every event.
+			Dedup:  &eventingest.PgxDedupStore{Q: ingestQueries},
+			Logger: l.Named("ingest.worker"),
 		}
 
 		// Reaper runs alongside the worker — keeps the dedup table
