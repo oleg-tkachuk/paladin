@@ -173,9 +173,15 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 		}
 		out = append(out, o)
 	}
+	// Page token advances by the last FETCHED row's id, NOT the last
+	// matching one. Deriving it from `out` truncated the listing when a
+	// full DB page was entirely CEL-filtered (len(out)==0 → empty token →
+	// caller stops, missing matches further on) and re-scanned the
+	// filtered rows on the next page. A full page (len(rows)==pageSize)
+	// means more may exist; a short page means the keyset is exhausted.
 	var next string
-	if int32(len(rows)) == pageSize && len(out) > 0 {
-		next = out[len(out)-1].ObjectID.String()
+	if int32(len(rows)) == pageSize && len(rows) > 0 {
+		next = uuid.UUID(rows[len(rows)-1].Object.ObjectID.Bytes).String()
 	}
 	return out, next, nil
 }

@@ -248,3 +248,57 @@ func (p *AuditLogPurger) log() *zap.Logger {
 	}
 	return zap.NewNop()
 }
+
+// IdempotencyKeyPurger drops idempotency_keys rows past their expires_at.
+// Without it the table grows unbounded and the hot GetIdempotencyKey
+// unique-index bloats. The query is self-bounding (batched DELETE by
+// expires_at < now()); the purger loops until a sweep returns 0.
+type IdempotencyKeyPurger struct {
+	Purger   IdempotencyPurgerRepo
+	Interval time.Duration
+	Logger   *zap.Logger
+}
+
+// IdempotencyPurgerRepo is the narrow seam over the sqlc query.
+type IdempotencyPurgerRepo interface {
+	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
+}
+
+func (p *IdempotencyKeyPurger) Run(ctx context.Context) error {
+	if p.Interval <= 0 {
+		p.Interval = 1 * time.Hour
+	}
+	t := time.NewTicker(p.Interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			// Drain the backlog in batches; the query caps each DELETE.
+			for {
+				n, err := p.Purger.PurgeExpiredIdempotencyKeys(ctx)
+				if err != nil {
+					p.log().Warn("failed to purge idempotency keys", zap.Error(err))
+					break
+				}
+				if n > 0 {
+					p.log().Info("purged idempotency keys", zap.Int64("rows", n))
+				}
+				if n < 10000 { // less than the query's batch cap → drained
+					break
+				}
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+			}
+		}
+	}
+}
+
+func (p *IdempotencyKeyPurger) log() *zap.Logger {
+	if p.Logger != nil {
+		return p.Logger
+	}
+	return zap.NewNop()
+}

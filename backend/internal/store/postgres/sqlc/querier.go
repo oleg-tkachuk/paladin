@@ -246,6 +246,12 @@ type Querier interface {
 	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
+	// Sessions whose client never Completed/Aborted, past the cooling-off
+	// window. Joins objects + object_keys to materialise everything
+	// AbortMultipart needs (bucket, tenant, storage upload id, key) so the
+	// reaper aborts the S3-side session (which otherwise accrues part-storage
+	// charges forever) in one round-trip per row. Bounded by batch_size.
+	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
 	// an empty/NULL cursor on the first page, and a bare `id > NULL`
 	// evaluates to NULL → zero rows (the same trap that bit
@@ -338,6 +344,12 @@ type Querier interface {
 	// idx_operations_terminal_done_at (added in migration 008) so the planner
 	// never scans the live PENDING/RUNNING tail.
 	PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error)
+	// DO UPDATE (not DO NOTHING) so a retried Create after the prior row's
+	// TTL lapsed overwrites the stale response. With DO NOTHING the expired
+	// row kept the unique-index slot, GetIdempotencyKey filtered it out as
+	// expired, but the new response never landed — the caller saw a stale
+	// (expired) result on the next replay. Overwriting only when the stored
+	// row is already expired preserves replay semantics for live keys.
 	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
 	RecordMultipartPart(ctx context.Context, uploadID string, partNumber int32, sizeBytes int64, etag string, checksum *string) error
 	// Symmetric refund on the per-capability counter. Same floor rule.

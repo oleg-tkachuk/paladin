@@ -7,9 +7,20 @@ WHERE tenant_id = $1 AND method = $2 AND key = $3
   AND expires_at > now();
 
 -- name: PutIdempotencyKey :exec
+-- DO UPDATE (not DO NOTHING) so a retried Create after the prior row's
+-- TTL lapsed overwrites the stale response. With DO NOTHING the expired
+-- row kept the unique-index slot, GetIdempotencyKey filtered it out as
+-- expired, but the new response never landed — the caller saw a stale
+-- (expired) result on the next replay. Overwriting only when the stored
+-- row is already expired preserves replay semantics for live keys.
 INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tenant_id, method, key) DO NOTHING;
+ON CONFLICT (tenant_id, method, key) DO UPDATE
+  SET response     = EXCLUDED.response,
+      response_sha = EXCLUDED.response_sha,
+      created_at   = now(),
+      expires_at   = EXCLUDED.expires_at
+  WHERE idempotency_keys.expires_at <= now();
 
 -- name: PurgeExpiredIdempotencyKeys :execrows
 -- Bounded batch (10k). Worker loops until result is 0.

@@ -107,6 +107,30 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
+	// Idempotency-key purger — always on (the table grows on every
+	// idempotent Create regardless of other housekeeping toggles). Rows
+	// self-expire via expires_at; this reclaims them so the unique index
+	// stays lean.
+	out = append(out, &worker.IdempotencyKeyPurger{
+		Purger:   db.Queries,
+		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
+		Logger:   l.Named("idempotency-purger"),
+	})
+
+	// Abandoned-multipart reaper — aborts S3 multipart sessions whose
+	// client never Completed/Aborted (otherwise part bytes are billed
+	// forever). 0 disables it.
+	if cfg.Worker.Jobs.Housekeeping.MultipartTTL > 0 {
+		out = append(out, &worker.MultipartReaper{
+			Q:         db.Queries,
+			Storage:   deps.S3,
+			TTL:       cfg.Worker.Jobs.Housekeeping.MultipartTTL,
+			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
+			BatchSize: cfg.Worker.Jobs.Housekeeping.HardDeleteBatchSize,
+			Logger:    l.Named("multipart-reaper"),
+		})
+	}
+
 	// Lifecycle hard-deleter — closes the loop on soft-delete by
 	// reclaiming the S3 bytes after the cooling-off window. 0 keeps
 	// rows DELETED forever (audit-friendly, dev default); a non-zero

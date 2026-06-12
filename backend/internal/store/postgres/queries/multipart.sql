@@ -14,6 +14,22 @@ WHERE upload_id = $1;
 DELETE FROM multipart_uploads
 WHERE upload_id = $1;
 
+-- name: ListStaleMultipartUploads :many
+-- Sessions whose client never Completed/Aborted, past the cooling-off
+-- window. Joins objects + object_keys to materialise everything
+-- AbortMultipart needs (bucket, tenant, storage upload id, key) so the
+-- reaper aborts the S3-side session (which otherwise accrues part-storage
+-- charges forever) in one round-trip per row. Bounded by batch_size.
+SELECT m.upload_id, m.storage_upload_id,
+       o.object_id, o.tenant_id, o.object_key, o.key,
+       k.bucket_name
+FROM multipart_uploads m
+JOIN objects o      ON o.object_id = m.object_id
+JOIN object_keys k  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
+WHERE m.created_at < $1
+ORDER BY m.created_at
+LIMIT sqlc.arg('batch_size');
+
 -- name: RecordMultipartPart :exec
 INSERT INTO multipart_parts (upload_id, part_number, size_bytes, etag, checksum)
 VALUES ($1, $2, $3, $4, $5)
