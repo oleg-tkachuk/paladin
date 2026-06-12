@@ -86,14 +86,36 @@ SET state         = 'AVAILABLE',
 WHERE tenant_id = $1 AND object_id = $2
   AND state = 'DELETED';
 
+-- name: GetObjectLockState :one
+-- Lock columns for one object, so the delete handler can return a clear
+-- "locked" error instead of a bare version-mismatch when the SQL guard
+-- on HardDeleteObject zeroes the rowcount.
+SELECT lock_mode, lock_retain_until, legal_hold
+FROM objects
+WHERE tenant_id = $1 AND object_id = $2;
+
 -- name: HardDeleteObject :execrows
 -- Removes the row outright. Caller is responsible for first deleting the
 -- object from the storage backend (S3 DeleteObject). Allowed from any
 -- state. expected_version=0 skips the OCC guard.
+--
+-- Object-lock guard mirrors enforce_object_version_lock() on
+-- object_versions (the trigger only covers that table, NOT objects).
+-- legal_hold and active COMPLIANCE locks are absolute; an active
+-- GOVERNANCE lock is honoured unless the session sets
+-- paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
+-- path does not). A locked row matches 0 rows here, so the caller must
+-- pre-check to distinguish "locked" from "version mismatch".
 DELETE FROM objects
 WHERE tenant_id = $1 AND object_id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
-       OR resource_version = sqlc.arg('expected_version')::bigint);
+       OR resource_version = sqlc.arg('expected_version')::bigint)
+  AND NOT legal_hold
+  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now())
+  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now()
+           AND NOT COALESCE(current_setting('paladin.governance_bypass', true)::boolean, false));
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the
@@ -110,6 +132,15 @@ JOIN object_keys k
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
+  -- Never purge a locked object: legal hold or an active COMPLIANCE /
+  -- GOVERNANCE retention window. The worker has no governance-bypass,
+  -- so governance locks are honoured here too. Locked rows are simply
+  -- skipped until the lock lapses, then become eligible normally.
+  AND NOT o.legal_hold
+  AND NOT (o.lock_mode = 'COMPLIANCE' AND o.lock_retain_until IS NOT NULL
+           AND o.lock_retain_until > now())
+  AND NOT (o.lock_mode = 'GOVERNANCE' AND o.lock_retain_until IS NOT NULL
+           AND o.lock_retain_until > now())
 ORDER BY o.terminated_at
 LIMIT sqlc.arg('batch_size');
 
@@ -123,7 +154,14 @@ LIMIT sqlc.arg('batch_size');
 DELETE FROM objects
 WHERE object_id = $1
   AND state = 'DELETED'
-  AND resource_version = sqlc.arg('expected_version')::bigint;
+  AND resource_version = sqlc.arg('expected_version')::bigint
+  -- Same lock guard as ListHardDeletable: a lock applied after the row
+  -- was listed but before the worker deletes still blocks the purge.
+  AND NOT legal_hold
+  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now())
+  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now());
 
 -- name: CheckLiveCollision :one
 -- True when a non-DELETED row already exists at (tenant, object_key, key).

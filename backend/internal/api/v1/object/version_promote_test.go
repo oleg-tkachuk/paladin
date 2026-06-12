@@ -44,6 +44,9 @@ func (*fakeObjectRepo) CountObjects(context.Context, CountObjectsArgs) (int64, b
 func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Object, error) {
 	panic("not used")
 }
+func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLock, error) {
+	panic("not used")
+}
 func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string) (string, error) {
 	panic("not used")
 }

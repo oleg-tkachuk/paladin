@@ -119,6 +119,28 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, objectID 
 	return i, err
 }
 
+const getObjectLockState = `-- name: GetObjectLockState :one
+SELECT lock_mode, lock_retain_until, legal_hold
+FROM objects
+WHERE tenant_id = $1 AND object_id = $2
+`
+
+type GetObjectLockStateRow struct {
+	LockMode        string             `json:"lock_mode"`
+	LockRetainUntil pgtype.Timestamptz `json:"lock_retain_until"`
+	LegalHold       bool               `json:"legal_hold"`
+}
+
+// Lock columns for one object, so the delete handler can return a clear
+// "locked" error instead of a bare version-mismatch when the SQL guard
+// on HardDeleteObject zeroes the rowcount.
+func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectLockStateRow, error) {
+	row := q.db.QueryRow(ctx, getObjectLockState, tenantID, objectID)
+	var i GetObjectLockStateRow
+	err := row.Scan(&i.LockMode, &i.LockRetainUntil, &i.LegalHold)
+	return i, err
+}
+
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
 SELECT objects.object_id, objects.tenant_id, objects.object_key, objects.key, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.current_version_id, objects.lock_mode, objects.lock_retain_until, objects.legal_hold
 FROM objects
@@ -182,11 +204,25 @@ DELETE FROM objects
 WHERE tenant_id = $1 AND object_id = $2
   AND ($3::bigint = 0
        OR resource_version = $3::bigint)
+  AND NOT legal_hold
+  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now())
+  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now()
+           AND NOT COALESCE(current_setting('paladin.governance_bypass', true)::boolean, false))
 `
 
 // Removes the row outright. Caller is responsible for first deleting the
 // object from the storage backend (S3 DeleteObject). Allowed from any
 // state. expected_version=0 skips the OCC guard.
+//
+// Object-lock guard mirrors enforce_object_version_lock() on
+// object_versions (the trigger only covers that table, NOT objects).
+// legal_hold and active COMPLIANCE locks are absolute; an active
+// GOVERNANCE lock is honoured unless the session sets
+// paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
+// path does not). A locked row matches 0 rows here, so the caller must
+// pre-check to distinguish "locked" from "version mismatch".
 func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, hardDeleteObject, tenantID, objectID, expectedVersion)
 	if err != nil {
@@ -200,6 +236,13 @@ DELETE FROM objects
 WHERE object_id = $1
   AND state = 'DELETED'
   AND resource_version = $2::bigint
+  -- Same lock guard as ListHardDeletable: a lock applied after the row
+  -- was listed but before the worker deletes still blocks the purge.
+  AND NOT legal_hold
+  AND NOT (lock_mode = 'COMPLIANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now())
+  AND NOT (lock_mode = 'GOVERNANCE' AND lock_retain_until IS NOT NULL
+           AND lock_retain_until > now())
 `
 
 // Defence-in-depth variant of HardDeleteObject for the worker path.
@@ -225,6 +268,15 @@ JOIN object_keys k
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
+  -- Never purge a locked object: legal hold or an active COMPLIANCE /
+  -- GOVERNANCE retention window. The worker has no governance-bypass,
+  -- so governance locks are honoured here too. Locked rows are simply
+  -- skipped until the lock lapses, then become eligible normally.
+  AND NOT o.legal_hold
+  AND NOT (o.lock_mode = 'COMPLIANCE' AND o.lock_retain_until IS NOT NULL
+           AND o.lock_retain_until > now())
+  AND NOT (o.lock_mode = 'GOVERNANCE' AND o.lock_retain_until IS NOT NULL
+           AND o.lock_retain_until > now())
 ORDER BY o.terminated_at
 LIMIT $2
 `

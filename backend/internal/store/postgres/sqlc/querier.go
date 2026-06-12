@@ -111,6 +111,10 @@ type Querier interface {
 	GetMultipartUpload(ctx context.Context, uploadID string) (GetMultipartUploadRow, error)
 	GetObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectRow, error)
 	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (GetObjectKeyRow, error)
+	// Lock columns for one object, so the delete handler can return a clear
+	// "locked" error instead of a bare version-mismatch when the SQL guard
+	// on HardDeleteObject zeroes the rowcount.
+	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (GetObjectLockStateRow, error)
 	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
 	GetObjectVersion(ctx context.Context, versionID pgtype.UUID) (ObjectVersion, error)
 	// Batch lookup for batch-operation executors: one round-trip for the
@@ -135,6 +139,14 @@ type Querier interface {
 	// Removes the row outright. Caller is responsible for first deleting the
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.
+	//
+	// Object-lock guard mirrors enforce_object_version_lock() on
+	// object_versions (the trigger only covers that table, NOT objects).
+	// legal_hold and active COMPLIANCE locks are absolute; an active
+	// GOVERNANCE lock is honoured unless the session sets
+	// paladin.governance_bypass=true (HardDeleteWithBypass does, the plain RPC
+	// path does not). A locked row matches 0 rows here, so the caller must
+	// pre-check to distinguish "locked" from "version mismatch".
 	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, expectedVersion int64) (int64, error)
 	// Defence-in-depth variant of HardDeleteObject for the worker path.
 	// Re-asserts state='DELETED' AND resource_version=$2 in the WHERE

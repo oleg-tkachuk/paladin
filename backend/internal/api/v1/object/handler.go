@@ -79,6 +79,42 @@ type BucketMeta struct {
 	EventsEnabled bool
 }
 
+// ObjectLock is the object row's lock state (object-level, distinct from
+// the per-version locks the object_versions trigger enforces).
+type ObjectLock struct {
+	Mode        string // "", "GOVERNANCE", or "COMPLIANCE"
+	RetainUntil *time.Time
+	LegalHold   bool
+}
+
+// Active reports whether the lock blocks deletion right now. governanceBypass
+// only relaxes a GOVERNANCE retention window; legal hold and COMPLIANCE are
+// absolute. Mirrors enforce_object_version_lock() and the HardDelete SQL guard.
+func (l ObjectLock) Active(now time.Time, governanceBypass bool) bool {
+	if l.LegalHold {
+		return true
+	}
+	retained := l.RetainUntil != nil && l.RetainUntil.After(now)
+	if l.Mode == "COMPLIANCE" && retained {
+		return true
+	}
+	if l.Mode == "GOVERNANCE" && retained && !governanceBypass {
+		return true
+	}
+	return false
+}
+
+// Reason renders a human error fragment for an active lock.
+func (l ObjectLock) Reason() string {
+	if l.LegalHold {
+		return "object is under legal hold"
+	}
+	if l.RetainUntil != nil {
+		return fmt.Sprintf("%s retention lock active until %s", l.Mode, l.RetainUntil.Format(time.RFC3339))
+	}
+	return "object is locked"
+}
+
 // ErrBackendDisabled is returned by the bucket-resolution path
 // (LookupBucket / LookupBucketMeta) when the resolved storage backend
 // has been disabled (feature 002). It is the single chokepoint that
@@ -176,9 +212,14 @@ type Repository interface {
 	// versioning / lock decisions on the hot path. Implementations should
 	// satisfy this with a single query — handlers call it on every promote.
 	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (BucketMeta, error)
+	// ObjectLock returns the object row's lock state so the delete path
+	// can refuse (and report) a locked object before touching storage.
+	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
 	// HardDelete removes the row outright; caller is responsible for
 	// having already deleted the storage-side object. expectedVersion=0
-	// skips OCC. Returns ErrVersionMismatch if no rows affected.
+	// skips OCC. Returns ErrVersionMismatch if no rows affected. The SQL
+	// also refuses locked rows (legal hold / active COMPLIANCE; active
+	// GOVERNANCE unless the bypass variant set the session GUC).
 	HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
 	// HardDeleteWithBypass performs the same delete as HardDelete but inside
 	// a transaction that sets `SET LOCAL paladin.governance_bypass = true`, which
@@ -996,14 +1037,19 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			})
 		return nil
 	}
-	// Permanent: remove from storage backend first, then drop the row.
+	// Permanent delete. Ordering matters: drop the DB row FIRST, then
+	// the storage bytes. The old order (S3 then DB) could delete the
+	// bytes and then fail the DB delete, leaving a live row pointing at
+	// nothing — and with the object-lock SQL guard it would even delete
+	// a locked object's bytes while the row (correctly) survived. DB
+	// first means a failed/blocked delete never touches storage; the
+	// only residual failure mode is an orphaned object in S3 (a
+	// reclaimable cost leak), never a live row with missing bytes.
 	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
 	if err != nil {
 		return MapResolveErr(err)
 	}
-	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage delete: %w", err))
-	}
+
 	deleteFn := h.repo.HardDelete
 	if bypassGovernance {
 		if !principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin") {
@@ -1012,11 +1058,37 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		}
 		deleteFn = h.repo.HardDeleteWithBypass
 	}
+
+	// Lock pre-check for a clear error. The HardDelete SQL is the
+	// non-bypassable safety net (it refuses locked rows even if this
+	// check is wrong); this just turns a would-be 0-row "version
+	// mismatch" into an accurate FailedPrecondition.
+	if lock, lerr := h.repo.ObjectLock(ctx, tenantID, objectID); lerr == nil {
+		if lock.Active(time.Now(), bypassGovernance) {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("cannot delete: %s", lock.Reason()))
+		}
+	}
+
 	if err := deleteFn(ctx, tenantID, objectID, rv); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
 		return connect.NewError(connect.CodeInternal, err)
+	}
+	// DB row is gone. Now remove the bytes; a failure here orphans the
+	// object in S3 but cannot resurrect a dangling row. Log loudly so a
+	// sweeper / operator can reclaim it.
+	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
+		if h.log != nil {
+			h.log.Error("permanent delete: DB row removed but storage delete failed; object orphaned in S3",
+				zap.String("tenant_id", tenantID.String()),
+				zap.String("object_key", objectKey),
+				zap.String("key", obj.Key),
+				zap.String("bucket", bucket),
+				zap.Error(err),
+			)
+		}
 	}
 	h.dispatchEvent(ctx, tenantID, "paladin.object.deleted",
 		objectResourceName(tenantID, obj.ObjectKey, obj.Key),

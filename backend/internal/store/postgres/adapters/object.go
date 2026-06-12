@@ -63,6 +63,20 @@ func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, objectK
 	return r.getByID(ctx, tenantID, id)
 }
 
+func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (object.ObjectLock, error) {
+	row, err := r.q.GetObjectLockState(ctx, pgUUID(tenantID), pgUUID(objectID))
+	if err != nil {
+		// No-rows is unexpected here — the delete path already resolved
+		// the object via FindByName — so surface it as a plain error.
+		return object.ObjectLock{}, fmt.Errorf("get object lock state: %w", err)
+	}
+	return object.ObjectLock{
+		Mode:        row.LockMode,
+		RetainUntil: timePtr(row.LockRetainUntil),
+		LegalHold:   row.LegalHold,
+	}, nil
+}
+
 func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]object.Object, error) {
 	if len(ids) == 0 {
 		return nil, nil
