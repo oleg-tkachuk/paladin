@@ -39,8 +39,40 @@ const PUBLIC_PREFIXES = [
   "/robots.txt",
 ];
 
+// Methods that mutate state and therefore need CSRF protection. Safe
+// methods (GET/HEAD/OPTIONS) are exempt.
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // CSRF defense: a state-changing request to any API route must come
+  // from our own origin. The session cookie is SameSite=Strict, but
+  // that alone doesn't cover related-subdomain or older-browser vectors
+  // on a control plane — so we also require the Origin header (sent by
+  // browsers on all cross-origin and same-origin POSTs) to match the
+  // request host. Non-browser callers (no Origin) are allowed through;
+  // they don't carry the ambient cookie a CSRF attack relies on.
+  if (pathname.startsWith("/api/") && UNSAFE_METHODS.has(req.method)) {
+    const origin = req.headers.get("origin");
+    if (origin) {
+      let originHost = "";
+      try {
+        originHost = new URL(origin).host;
+      } catch {
+        originHost = "";
+      }
+      if (originHost !== req.nextUrl.host) {
+        return NextResponse.json(
+          {
+            code: "permission_denied",
+            message: "cross-origin request rejected",
+          },
+          { status: 403 },
+        );
+      }
+    }
+  }
 
   if (
     PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))
