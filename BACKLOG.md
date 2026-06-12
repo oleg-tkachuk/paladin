@@ -288,9 +288,12 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Production-readiness audit (2026-06-12)
 
-_Full security / data-integrity / ops sweep. BLOCKER items 1–7 are
-being fixed in this work stream (delete this section's entries as each
-lands). The HIGH/MEDIUM items below stay here until scheduled._
+_Full security / data-integrity / ops sweep. The 7 BLOCKER findings
+were fixed in this work stream (dead Next middleware, BFF audience
+gate, devToken meta-tag removal, ingest-webhook auth fail-fast,
+object-lock guard on hard-delete, permanent-delete DB→S3 ordering,
+Postgres sslmode=require) — see git history. The HIGH/MEDIUM items
+below remain open until scheduled._
 
 ### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
 
@@ -457,6 +460,20 @@ lands). The HIGH/MEDIUM items below stay here until scheduled._
 - **Definition of Done:** `mcp.replicas: 2` (or `minReplicas: 2`) in
   `values-prod.yaml`, or a documented, graceful 503 during drain.
 - **Blockers:** none.
+
+### [MEDIUM] Postgres TLS: upgrade sslmode=require → verify-full
+
+- **Status:** Open
+- **Reason:** the chart now defaults to `sslmode=require` (traffic is
+  encrypted), but `require` does not authenticate the server cert — a
+  MITM with a forged cert is still possible. `verify-full` closes that
+  but needs the CNPG CA mounted into the pods and `sslrootcert=` in the
+  DSN.
+- **Definition of Done:** CNPG CA secret mounted; both DSNs use
+  `sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca.crt` (or equivalent);
+  verified against a live CNPG cluster.
+- **Blockers:** none — incremental hardening over the shipped
+  `require` default.
 
 ### [MEDIUM] Pool sizing × replicas likely exceeds Postgres max_connections
 
