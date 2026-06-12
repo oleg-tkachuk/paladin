@@ -13,7 +13,6 @@ import { NotificationProvider } from "@/components/ui/Notification";
 import { AuthProvider } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { yamlConfig } from "@/config";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,14 +31,6 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable} dark`}
       suppressHydrationWarning
     >
-      <head>
-        {/* Dev-only fallback JWT injected from configs/config.yaml. React
-            HTML-escapes attributes, so there's no XSS surface here. */}
-        <meta
-          name="paladin-dev-token"
-          content={yamlConfig.runtimeConfig.public.auth.devToken}
-        />
-      </head>
       <body className="bg-background text-foreground font-sans min-h-screen selection:bg-primary/30">
         {/*
           Provider stack order:

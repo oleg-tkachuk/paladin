@@ -41,6 +41,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 const TOKEN_STORAGE_KEY = STORAGE_KEYS.authToken;
 
+// The manual bearer-token override is a debug-only affordance. Gated to
+// non-production builds so a prod operator can never paste a raw JWT into
+// localStorage (a latent privilege-escalation slot). NODE_ENV is inlined
+// at build time, so the card and its localStorage reads are tree-shaken
+// out of the production bundle entirely.
+const DEV_TOKEN_MANAGER = process.env.NODE_ENV !== "production";
+
 // /config used to render the raw control-plane YAML, but admin/v1.
 // SystemService.GetConfig hasn't landed yet — useConfig is a stub
 // returning null, which the previous version of this page surfaced
@@ -84,9 +91,9 @@ export default function ConfigPage() {
     });
   };
 
-  // ── dev-token manager (unchanged) ───────────────────────────────────
+  // ── dev-token manager (non-production builds only) ──────────────────
   const [token, setToken] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
+    if (!DEV_TOKEN_MANAGER || typeof window === "undefined") return "";
     return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
   });
   const [savedVersion, setSavedVersion] = useState(0);
@@ -236,54 +243,58 @@ export default function ConfigPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Bearer token manager ─────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-3 px-6">
-          <div className="flex size-9 items-center justify-center rounded-md bg-chart-3/15 text-chart-3 ring-1 ring-chart-3/30">
-            <KeyIcon className="size-5" />
-          </div>
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <CardTitle className="text-base">Developer bearer token</CardTitle>
-            <CardDescription>
-              Stored locally as{" "}
-              <code className="rounded bg-muted px-1 font-mono text-foreground">
-                paladin_token
-              </code>{" "}
-              and sent as{" "}
-              <code className="rounded bg-muted px-1 font-mono text-foreground">
-                Authorization: Bearer …
-              </code>{" "}
-              on every RPC. The signed-in session normally supplies this for you
-              — only set it manually for debug flows.
-            </CardDescription>
-          </div>
-          <Badge
-            variant={hasStoredToken ? "success" : "warning"}
-            className="font-normal"
-          >
-            {hasStoredToken ? "Stored" : "Not set"}
-          </Badge>
-        </CardHeader>
-        <Separator />
-        <CardContent className="px-6">
-          <Label htmlFor="paladin-token" className="sr-only">
-            Bearer token
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              id="paladin-token"
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="eyJhbGciOi…"
-              className="flex-1 font-mono text-xs"
-            />
-            <Button onClick={saveToken} variant="outline">
-              {token.trim() ? "Save" : "Clear"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* ─── Bearer token manager (dev builds only) ───────────────── */}
+      {DEV_TOKEN_MANAGER && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-3 px-6">
+            <div className="flex size-9 items-center justify-center rounded-md bg-chart-3/15 text-chart-3 ring-1 ring-chart-3/30">
+              <KeyIcon className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <CardTitle className="text-base">
+                Developer bearer token
+              </CardTitle>
+              <CardDescription>
+                Stored locally as{" "}
+                <code className="rounded bg-muted px-1 font-mono text-foreground">
+                  paladin_token
+                </code>{" "}
+                and sent as{" "}
+                <code className="rounded bg-muted px-1 font-mono text-foreground">
+                  Authorization: Bearer …
+                </code>{" "}
+                on every RPC. The signed-in session normally supplies this for
+                you — only set it manually for debug flows.
+              </CardDescription>
+            </div>
+            <Badge
+              variant={hasStoredToken ? "success" : "warning"}
+              className="font-normal"
+            >
+              {hasStoredToken ? "Stored" : "Not set"}
+            </Badge>
+          </CardHeader>
+          <Separator />
+          <CardContent className="px-6">
+            <Label htmlFor="paladin-token" className="sr-only">
+              Bearer token
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="paladin-token"
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="eyJhbGciOi…"
+                className="flex-1 font-mono text-xs"
+              />
+              <Button onClick={saveToken} variant="outline">
+                {token.trim() ? "Save" : "Clear"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Raw config (admin/v1.SystemService.GetConfig) ───────── */}
       <Card>
