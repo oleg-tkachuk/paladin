@@ -625,12 +625,19 @@ config:
 
   datastores:
     postgres:
-      dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
+      # sslmode=require: encrypt all app↔DB traffic. CNPG serves TLS by
+      # default, so this works out of the box for every in-cluster
+      # overlay (dev/staging/prod). `require` encrypts but does not
+      # verify the server cert; upgrading to verify-full (mount the CNPG
+      # CA + sslrootcert=) is tracked in BACKLOG. An environment that
+      # genuinely can't do TLS must override this back to disable
+      # explicitly — secure is the default.
+      dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=require"
       password_secret:
         name: paladin-postgresql-app-user
         key: password
         namespace: database
-      migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
+      migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=require"
       migrate_password_secret:
         name: paladin-postgresql-migrate-user
         key: password
