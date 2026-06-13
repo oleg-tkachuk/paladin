@@ -110,21 +110,22 @@ tasks:
             vfile="{{.OVERLAY}}"; echo "[orbstack] using overlay: $vfile"
           fi
           vflag=""; [ -n "$vfile" ] && vflag="--values $vfile"
-          # Disable Helm plugins for this invocation: a v4-targeted helm-diff
-          # plugin (platformHooks) stalls helm v4's before-hook-creation
-          # delete-wait, hanging the install forever. The deploy needs no
-          # plugins — point HELM_PLUGINS at an empty dir.
-          noplugins="${TMPDIR:-/tmp}/paladin-helm-noplugins"; mkdir -p "$noplugins"
+          # helm v4's default 'watcher' wait engine hangs on this chart's
+          # before-hook-creation hook deletions ("waiting for resources to be
+          # deleted" never returns). Use the legacy (v3) wait strategy. On
+          # helm v3 --wait is a plain bool, so only append =legacy for v4.
+          waitflag="--wait"
+          case "$(helm version --short 2>/dev/null)" in v4.*) waitflag="--wait=legacy" ;; esac
           # OrbStack has no in-cluster registry → install from the chart dir.
           # image.tag=latest matches build-local; pullPolicy=IfNotPresent
           # uses the shared Docker store (nothing serves registry.local).
-          HELM_PLUGINS="$noplugins" helm upgrade --install {{.PROJECT_NAME}} {{.CHART_DIR}} \
+          helm upgrade --install {{.PROJECT_NAME}} {{.CHART_DIR}} \
             --kube-context {{.KUBE_CONTEXT}} \
             --namespace {{.K8S_NAMESPACE}} --create-namespace \
             --set image.tag=latest \
             --set image.pullPolicy=IfNotPresent \
             $vflag \
-            --wait --timeout 5m
+            $waitflag --timeout 5m
 
   # ─── Local stack (Docker Compose) ────────────────────────────────────────
 
