@@ -54,6 +54,11 @@ tasks:
       - task: metadata:write
       - task: docker:deploy
 
+  deploy-orbstack:
+    desc: "Build into OrbStack's shared Docker store + direct helm install (no registry)"
+    cmds:
+      - task: docker:deploy-orbstack
+
   metadata:write:
     desc: "Bump APP_VERSION and write GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
     internal: true

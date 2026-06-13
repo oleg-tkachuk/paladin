@@ -1,11 +1,14 @@
 version: "3"
 
-# Image + Helm chart deploy flow. The single `deploy` entry point
-# builds, pushes to the OCI registry, and packages + pushes the Helm
-# chart. The previous `deploy-local` flow (load straight into the
-# Minikube Docker daemon, skip chart packaging) was removed — every
-# cluster install goes through the registry now, so there's only one
-# code path to maintain.
+# Image + Helm chart deploy flow. The `deploy` entry point builds,
+# pushes to the OCI registry, and packages + pushes the Helm chart —
+# the path every registry-backed cluster (minikube, cloud) uses.
+#
+# `build-local` is the exception for OrbStack: its Kubernetes shares the
+# host Docker image store, so a local `docker build` (no push) is enough
+# for Pods to see the tag (imagePullPolicy: IfNotPresent). It builds the
+# image only; the chart is installed straight from the chart dir by the
+# gitops `task orbstack:paladin` orchestrator (which owns the env values).
 
 vars:
   TAG: latest
@@ -54,6 +57,61 @@ tasks:
       - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
       - task: ":core:banner"
         vars: { MESSAGE: "[OCI] pushed image + chart {{._APP_VER}}" }
+
+  build-local:
+    desc: "Build the image into the local Docker store (no push) — for OrbStack's shared image store"
+    deps: [":core:tools:build"]
+    vars:
+      IMAGE: "{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}"
+      _VER:    { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
+      _COMMIT: { sh: "git rev-parse --short HEAD" }
+      _TIME:   { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "[local] building {{.PROJECT_NAME}} {{._VER}} into the Docker image store (no push)" }
+      - task: _docker:build
+        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._VER}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
+      # Alias the numeric tag as :latest. No registry push: OrbStack k8s
+      # shares the host Docker image store, so both tags are visible to
+      # Pods directly. The local/orbstack values overlay pins
+      # image.tag=latest, so :latest must exist for the install to resolve.
+      - docker tag {{.IMAGE}}:{{._VER}} {{.IMAGE}}:latest
+      - task: ":core:banner"
+        vars: { MESSAGE: "[local] built {{.IMAGE}}:{{._VER}} (+ :latest)" }
+
+  deploy-orbstack:
+    desc: "Build into the local Docker store + helm upgrade --install to OrbStack (no registry)"
+    deps: [":core:tools:build"]
+    vars:
+      KUBE_CONTEXT: '{{.KUBE_CONTEXT | default "orbstack"}}'
+      # Optional extra Helm values file (e.g. a gitops env overlay).
+      # Empty ⇒ chart defaults, which are a runnable single-node baseline.
+      VALUES: '{{.VALUES | default ""}}'
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed"
+      - sh: kubectl config get-contexts -o name | grep -qx "{{.KUBE_CONTEXT | default `orbstack`}}"
+        msg: "no '{{.KUBE_CONTEXT | default `orbstack`}}' kube context — enable Kubernetes in OrbStack"
+    cmds:
+      - task: build-local
+      - task: ":core:banner"
+        vars: { MESSAGE: "[orbstack] helm upgrade --install {{.PROJECT_NAME}} -> ns {{.K8S_NAMESPACE}}" }
+      - cmd: |-
+          set -euo pipefail
+          # OrbStack has no in-cluster registry, so the chart installs
+          # straight from the chart dir (not the oci:// path ArgoCD uses).
+          # image.tag=latest matches build-local's :latest in the shared
+          # Docker store; pullPolicy=IfNotPresent stops the kubelet trying
+          # to pull registry.local (nothing serves it on OrbStack).
+          vflag=""
+          [ -n "{{.VALUES}}" ] && vflag="--values {{.VALUES}}"
+          helm upgrade --install {{.PROJECT_NAME}} {{.CHART_DIR}} \
+            --kube-context {{.KUBE_CONTEXT}} \
+            --namespace {{.K8S_NAMESPACE}} --create-namespace \
+            --set image.tag=latest \
+            --set image.pullPolicy=IfNotPresent \
+            $vflag \
+            --wait --timeout 5m
 
   # ─── Local stack (Docker Compose) ────────────────────────────────────────
 

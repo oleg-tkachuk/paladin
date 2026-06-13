@@ -58,6 +58,17 @@ tasks:
       - task: backend:deploy
       - task: frontend:deploy
 
+  deploy-orbstack:
+    desc: |
+      Build both halves into OrbStack's shared Docker store and helm
+      install them directly (no OCI registry — OrbStack k8s reads the
+      host image store). Sequential: backend first, then UI. Override
+      the target context with KUBE_CONTEXT=, or pass richer Helm values
+      per half via `task backend:deploy-orbstack VALUES=...`.
+    cmds:
+      - task: backend:deploy-orbstack
+      - task: frontend:deploy-orbstack
+
   e2e-up:
     desc: Bring the whole compose stack up (backend planes + UI).
     cmds:
