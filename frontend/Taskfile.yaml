@@ -22,19 +22,35 @@ vars:
   # images live; the Helm chart's values.yaml and the ArgoCD overlay
   # both pin this prefix, so the push path here MUST match or Pods
   # ImagePullBackOff with a 404.
-  OCI_REGISTRY: registry.local
+  # OCI Registry — derived from GLOBAL_REGISTRY (single source of truth
+  # in the root Taskfile; threaded via the deploy fan-out, or defaulting
+  # to registry.local for a standalone `cd frontend && task deploy`).
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  OCI_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
   IMAGE_NAMESPACE: paladin
-  CHART_REPO: oci://registry.local/charts
+  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY | default "registry.local"}}/charts'
 
 # Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
 # pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
 # the repo root. ROOT is forwarded for the few tasks that emit absolute
-# paths in messages.
+# paths in messages. `svc:` is the shared image+chart push chain
+# (tasks/_service.task.yaml, version.sh-stamped) used by `deploy`.
 includes:
   core:   { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   docker: { taskfile: tasks/docker.task.yaml, vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   k8s:    { taskfile: tasks/k8s.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   node:   { taskfile: tasks/node.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  svc:
+    taskfile: ../tasks/_service.task.yaml
+    dir: .
+    vars:
+      PROJECT_NAME: paladin-ui
+      IMAGE_NAMESPACE: paladin
+      DOCKERFILE: ./deploy/Dockerfile
+      BUILD_CONTEXT: .
+      CHART_DIR: ./deploy/chart
+      K8S_NAMESPACE: paladin
+      GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"
 
 tasks:
   default:
@@ -51,8 +67,11 @@ tasks:
   deploy:
     desc: "Build, tag, and push image + Helm chart to the OCI registry"
     cmds:
+      # Refresh deploy/info.env from version.sh for the orbstack path;
+      # the registry image+chart push is the shared version.sh-stamped
+      # chain (svc:deploy).
       - task: metadata:write
-      - task: docker:deploy
+      - task: svc:deploy
 
   deploy-orbstack:
     desc: "Build into OrbStack's shared Docker store + direct helm install (no registry)"
@@ -60,35 +79,24 @@ tasks:
       - task: docker:deploy-orbstack
 
   metadata:write:
-    desc: "Bump APP_VERSION and write GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
+    desc: "Write APP_VERSION (from version.sh) + GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
     internal: true
     cmds:
       - cmd: |-
           set -euo pipefail
-          # Ensure the file exists so the awk below has something to read.
           mkdir -p "$(dirname '{{.DEPLOY_INFO_ENV_FILE}}')"
-          touch '{{.DEPLOY_INFO_ENV_FILE}}'
-
-          # Read current APP_VERSION (default 0.1.0 if missing/blank).
-          current=$(awk -F= '$1=="APP_VERSION"{print $2; exit}' '{{.DEPLOY_INFO_ENV_FILE}}')
-          : "${current:=0.1.0}"
-
-          # Bump patch component. Pure-awk so this is portable across
-          # macOS BSD coreutils and Linux GNU coreutils — the previous
-          # `sed -i ''` form silently broke Linux CI.
-          next=$(printf '%s\n' "$current" | awk -F. -v OFS=. '{$NF += 1; print}')
-
-          # Rewrite the entire file in one shot — five keys, deterministic
-          # order, no in-place editing tricks.
+          # Single version source — tasks/version.sh. info.env is a
+          # generated convenience for the orbstack path that reads it;
+          # version.sh is the source of truth (no stateful patch-bump).
+          ver="$(bash "$(git rev-parse --show-toplevel)/tasks/version.sh")"
           {
-            printf 'APP_VERSION=%s\n'      "$next"
+            printf 'APP_VERSION=%s\n'      "$ver"
             printf 'GIT_COMMIT_HASH=%s\n'  "$(git rev-parse --short HEAD)"
             printf 'BUILD_TIME=%s\n'       "$(TZ='{{.TIMEZONE}}' date +%Y-%m-%dT%H:%M:%S%z)"
             printf 'OCI_REGISTRY=%s\n'     '{{.OCI_REGISTRY}}'
             printf 'PROJECT_NAME=%s\n'     '{{.PROJECT_NAME}}'
           } > '{{.DEPLOY_INFO_ENV_FILE}}'
-
-          printf 'INFO: %s: bumped %s → %s\n' '{{.PROJECT_NAME}}' "$current" "$next"
+          printf 'INFO: %s: version %s\n' '{{.PROJECT_NAME}}' "$ver"
 
   # ─── Node / dev workflow ─────────────────────────────────────────────────
   dev:

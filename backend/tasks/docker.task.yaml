@@ -16,47 +16,11 @@ vars:
 tasks:
   # ─── Public entry points ─────────────────────────────────────────────────
 
-  deploy:
-    desc: "Build, push image (TAG + :latest), package and push the Helm chart"
-    deps: [":core:tools:build"]
-    vars:
-      IMAGE: "{{.OCI_REGISTRY}}/{{.IMAGE_NAMESPACE}}/{{.PROJECT_NAME}}"
-      _TAG_AUTO: { sh: "awk -F= '$1==\"APP_VERSION\"{print $2; exit}' {{.DEPLOY_INFO_ENV_FILE}}" }
-      _TAG: '{{.TAG | default ._TAG_AUTO}}'
-      _COMMIT: { sh: "git rev-parse --short HEAD" }
-      _TIME:   { sh: "TZ={{.TIMEZONE}} date +%Y-%m-%dT%H:%M:%S%z" }
-      # Helm rejects non-SemVer chart versions (e.g. literal "latest").
-      # Chart packaging — and the chart's appVersion — always use the
-      # auto-bumped numeric version, never the literal "latest". A
-      # chart with appVersion=latest would lie about what's pinned;
-      # consumers reading the chart manifest expect a real version
-      # they can correlate to a release.
-      _CHART_VER: '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
-      _APP_VER:   '{{if eq ._TAG "latest"}}{{._TAG_AUTO}}{{else}}{{._TAG}}{{end}}'
-    cmds:
-      - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] building {{.PROJECT_NAME}} {{._APP_VER}} (chart {{._CHART_VER}})" }
-      # Build with the numeric version as the primary tag — the
-      # Helm chart's templates default image.tag to .Chart.AppVersion
-      # (which is _APP_VER), so the image MUST exist under that
-      # numeric tag in the registry or Pods can't pull. APP_VERSION
-      # build-arg also threads the numeric into -ldflags so the
-      # binary reports a real version on /healthz.
-      - task: _docker:build
-        vars: { IMAGE: "{{.IMAGE}}", TAG: "{{._APP_VER}}", COMMIT: "{{._COMMIT}}", TIME: "{{._TIME}}" }
-      # Push the numeric tag, then alias as :latest so consumers
-      # pinning `:latest` keep working. Order matters: a fresh host
-      # without `:latest` cached must have the numeric pushed first
-      # so the docker tag step has a source to mirror from.
-      - docker push {{.IMAGE}}:{{._APP_VER}}
-      - docker tag  {{.IMAGE}}:{{._APP_VER}} {{.IMAGE}}:latest
-      - docker push {{.IMAGE}}:latest
-      # Helm chart — package, push, clean up the tarball.
-      - helm package {{.CHART_DIR}} --version {{._CHART_VER}} --app-version {{._APP_VER}}
-      - helm push {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz {{.CHART_REPO}}
-      - rm -f {{.PROJECT_NAME}}-{{._CHART_VER}}.tgz
-      - task: ":core:banner"
-        vars: { MESSAGE: "[OCI] pushed image + chart {{._APP_VER}}" }
+  # NOTE: the registry image+chart push moved to the shared, version.sh-
+  # stamped chain in tasks/_service.task.yaml (`svc:deploy`, invoked by
+  # the top-level `task deploy`). This file keeps only the no-registry
+  # OrbStack path (build-local + deploy-orbstack) and the compose stack,
+  # which legitimately read deploy/info.env.
 
   build-local:
     desc: "Build the image into the local Docker store (no push) — for OrbStack's shared image store"

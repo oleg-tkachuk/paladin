@@ -14,23 +14,27 @@ vars:
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
 
-  # OCI Registry — image pushes land at
-  # OCI_REGISTRY/IMAGE_NAMESPACE/PROJECT_NAME:TAG; Helm chart pushes
-  # land at CHART_REPO/PROJECT_NAME:CHART_VERSION (separate /charts
-  # path under the same registry, so they don't collide).
+  # OCI Registry — derived from GLOBAL_REGISTRY, the single source of
+  # truth in the root Taskfile (threaded here via the deploy fan-out, or
+  # defaulting to registry.local for a standalone `cd backend && task
+  # deploy`). Image pushes land at OCI_REGISTRY/IMAGE_NAMESPACE/
+  # PROJECT_NAME:VERSION; Helm chart pushes at CHART_REPO/PROJECT_NAME
+  # :VERSION (separate /charts path, no collision).
   #
-  # IMAGE_NAMESPACE is the registry sub-path under which all PALADIN
-  # images live; the Helm chart's values.yaml and the ArgoCD overlay
-  # both pin this prefix, so the push path here MUST match or Pods
+  # IMAGE_NAMESPACE is the registry sub-path under which all PALADIN images
+  # live; the Helm chart's values.yaml and the ArgoCD overlay both pin
+  # this prefix, so the push path here MUST match or Pods
   # ImagePullBackOff with a 404.
-  OCI_REGISTRY: registry.local
+  GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  OCI_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
   IMAGE_NAMESPACE: paladin
-  CHART_REPO: oci://registry.local/charts
+  CHART_REPO: 'oci://{{.GLOBAL_REGISTRY | default "registry.local"}}/charts'
 
 # Each include shares the parent Taskfile's vars (PROJECT_NAME etc.) and
 # pins `dir: .` so relative paths inside the sub-Taskfiles resolve from
 # the repo root. ROOT is forwarded for the few tasks that emit absolute
-# paths in messages.
+# paths in messages. `svc:` is the shared image+chart push chain
+# (tasks/_service.task.yaml, version.sh-stamped) used by `deploy`.
 includes:
   core: { taskfile: tasks/_core.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   chart: { taskfile: tasks/chart.task.yaml,  vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
@@ -39,6 +43,17 @@ includes:
   gen:    { taskfile: tasks/gen.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   k8s:    { taskfile: tasks/k8s.task.yaml,    vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
   auth:   { taskfile: tasks/auth.task.yaml,   vars: { ROOT: "{{.USER_WORKING_DIR}}" }, dir: . }
+  svc:
+    taskfile: ../tasks/_service.task.yaml
+    dir: .
+    vars:
+      PROJECT_NAME: paladin
+      IMAGE_NAMESPACE: paladin
+      DOCKERFILE: ./deploy/Dockerfile
+      BUILD_CONTEXT: .
+      CHART_DIR: ./deploy/chart
+      K8S_NAMESPACE: paladin
+      GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}"
 
 tasks:
   default:
@@ -59,8 +74,12 @@ tasks:
       # without the multi-doc separator bug (see tasks/chart.task.yaml).
       # Catching this here means a regression can never escape to OCI.
       - task: chart:verify
+      # Refresh deploy/info.env from version.sh so the compose / orbstack
+      # paths (which read it) reflect the same version the registry push
+      # uses. The registry image+chart push itself is the shared chain,
+      # version-stamped by tasks/version.sh — no info.env dependency.
       - task: metadata:write
-      - task: docker:deploy
+      - task: svc:deploy
 
   deploy-orbstack:
     desc: "Build into OrbStack's shared Docker store + direct helm install (no registry)"
@@ -68,33 +87,23 @@ tasks:
       - task: docker:deploy-orbstack
 
   metadata:write:
-    desc: "Bump APP_VERSION and write GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
+    desc: "Write APP_VERSION (from version.sh) + GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
     internal: true
     cmds:
       - cmd: |-
           set -euo pipefail
-          # Ensure the file exists so the awk below has something to read.
           mkdir -p "$(dirname '{{.DEPLOY_INFO_ENV_FILE}}')"
-          touch '{{.DEPLOY_INFO_ENV_FILE}}'
-
-          # Read current APP_VERSION (default 0.1.0 if missing/blank).
-          current=$(awk -F= '$1=="APP_VERSION"{print $2; exit}' '{{.DEPLOY_INFO_ENV_FILE}}')
-          : "${current:=0.1.0}"
-
-          # Bump patch component. Pure-awk so this is portable across
-          # macOS BSD coreutils and Linux GNU coreutils — the previous
-          # `sed -i ''` form silently broke Linux CI.
-          next=$(printf '%s\n' "$current" | awk -F. -v OFS=. '{$NF += 1; print}')
-
-          # Rewrite the entire file in one shot — three keys, deterministic
-          # order, no in-place editing tricks.
+          # Single version source — tasks/version.sh. info.env is now a
+          # generated convenience for the compose / orbstack paths that
+          # read it via --env-file / awk; version.sh is the source of
+          # truth (no more stateful patch-bump in a tracked-ish file).
+          ver="$(bash "$(git rev-parse --show-toplevel)/tasks/version.sh")"
           {
-            printf 'APP_VERSION=%s\n'      "$next"
+            printf 'APP_VERSION=%s\n'      "$ver"
             printf 'GIT_COMMIT_HASH=%s\n'  "$(git rev-parse --short HEAD)"
             printf 'BUILD_TIME=%s\n'       "$(TZ='{{.TIMEZONE}}' date +%Y-%m-%dT%H:%M:%S%z)"
           } > '{{.DEPLOY_INFO_ENV_FILE}}'
-
-          printf 'INFO: %s: bumped %s → %s\n' '{{.PROJECT_NAME}}' "$current" "$next"
+          printf 'INFO: %s: version %s\n' '{{.PROJECT_NAME}}' "$ver"
 
   # ─── Local stack ─────────────────────────────────────────────────────────
   up:
