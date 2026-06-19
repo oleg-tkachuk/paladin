@@ -65,6 +65,14 @@ tasks:
             --build-arg BUILD_TIME="{{._TIME}}" \
             .
       - docker push {{._IMAGE}}:{{._VERSION}}
+      # Trim the shared `lean` BuildKit cache to the keep floor after each
+      # build. --keep-storage only reclaims ABOVE 8GB, so the working set
+      # is never evicted — this just stops per-session cache growth from
+      # filling the disk. Fast no-op when already under the floor. Run
+      # `task images:gc` for an explicit reclaim after heavy sessions.
+      - cmd: |-
+          docker buildx prune --builder lean --keep-storage=8GB -f >/dev/null 2>&1 \
+            || docker buildx prune --keep-storage=8GB -f >/dev/null 2>&1 || true
       # Helm chart — package + push under the same numeric version, then
       # drop the tarball.
       - cmd: |-

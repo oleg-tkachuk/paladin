@@ -74,6 +74,29 @@ tasks:
       - task: backend:generate
       - task: frontend:generate
 
+  # ─── disk reclaim ─────────────────────────────────────────────────────────
+  images:gc:
+    desc: "Reclaim BuildKit + docker disk (run after heavy build bursts)"
+    vars:
+      BUILDER: '{{.BUILDER | default "lean"}}'
+      KEEP_STORAGE: '{{.KEEP_STORAGE | default "8GB"}}'
+    cmds:
+      # The shared `lean` buildx builder (docker-container driver) keeps a
+      # SEPARATE cache that `docker builder prune` does NOT touch. A long
+      # build session can outpace BuildKit's idle GC and balloon it to
+      # tens of GB → host/OrbStack disk fills (we hit exactly this during
+      # the deploy work). Prune it explicitly to the keep floor
+      # (--keep-storage only trims ABOVE the floor, so the working set
+      # survives), then drop dangling images. Falls back to the active
+      # builder when `lean` is absent.
+      - cmd: |-
+          set -euo pipefail
+          echo ">>> [images] pruning builder '{{.BUILDER}}' cache to {{.KEEP_STORAGE}}"
+          docker buildx prune --builder "{{.BUILDER}}" --keep-storage="{{.KEEP_STORAGE}}" -f 2>/dev/null || \
+            docker buildx prune --keep-storage="{{.KEEP_STORAGE}}" -f
+          docker image prune -af >/dev/null 2>&1 || true
+          docker system df 2>/dev/null | head -5 || true
+
   # ─── deploy — fan-out to per-component `task deploy` ──────────────────────
   # Each component's `task deploy` (backend/, frontend/) owns its own
   # test/lint gate, then runs the shared image+chart push chain
