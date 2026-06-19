@@ -189,13 +189,13 @@ func (w *AsyncWriter) Run(ctx context.Context) error {
 			drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			w.drain(drainCtx, &batch)
 			cancel()
-			close(w.done)
+			w.stopOnce.Do(func() { close(w.done) })
 			return nil
 
 		case e, ok := <-w.in:
 			if !ok {
 				flush()
-				close(w.done)
+				w.stopOnce.Do(func() { close(w.done) })
 				return nil
 			}
 			batch = append(batch, e)

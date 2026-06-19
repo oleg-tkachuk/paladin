@@ -148,9 +148,15 @@ func TestLoginRateLimiterMaxKeysBackstop(t *testing.T) {
 	if l.admit("c", "3.3.3.3") {
 		t.Error("new key past maxKeys should be rejected")
 	}
-	// An existing IP still admits (not a new key).
+	// An existing IP+subject pair still admits (no new bucket created).
 	if !l.admit("a", "1.1.1.1") {
 		t.Error("existing key should still admit under its own cap")
+	}
+	// A known IP with a NEW subject must be rejected at the cap — admitting
+	// would mint a new subjectKey bucket and grow the map past maxKeys
+	// (the credential-stuffing memory-exhaustion vector).
+	if l.admit("z", "1.1.1.1") {
+		t.Error("new subject on an existing IP must be rejected at the cap")
 	}
 }
 

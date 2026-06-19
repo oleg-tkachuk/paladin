@@ -136,14 +136,17 @@ func (l *LoginRateLimiter) admit(subject, ip string) bool {
 
 	l.sweepLocked(cutoff, now)
 
-	// maxKeys backstop: if the map is saturated and these are brand-new
-	// keys, fail closed rather than grow unbounded. Existing keys still
-	// admit/reject normally so legitimate repeat clients aren't harmed.
-	// maxKeys<=0 disables the backstop (used by unit tests).
+	// maxKeys backstop: at saturation, admit only when BOTH keys already
+	// exist — otherwise admitting would create the missing bucket below
+	// (checkLocked writes l.buckets[key]) and grow the map past the cap.
+	// Rejecting when EITHER key is new closes the memory-exhaustion vector
+	// where one known IP rotates subjects to mint unbounded subjectKeys.
+	// Fail-closed at the cap is acceptable; legitimate repeat clients
+	// (both keys present) are unaffected. maxKeys<=0 disables it (tests).
 	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
 		_, haveIP := l.buckets[ipKey]
 		_, haveSubject := l.buckets[subjectKey]
-		if !haveIP && !haveSubject {
+		if !haveIP || !haveSubject {
 			return false
 		}
 	}

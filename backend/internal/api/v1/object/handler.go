@@ -1063,11 +1063,20 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// non-bypassable safety net (it refuses locked rows even if this
 	// check is wrong); this just turns a would-be 0-row "version
 	// mismatch" into an accurate FailedPrecondition.
-	if lock, lerr := h.repo.ObjectLock(ctx, tenantID, objectID); lerr == nil {
-		if lock.Active(time.Now(), bypassGovernance) {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("cannot delete: %s", lock.Reason()))
+	if lock, lerr := h.repo.ObjectLock(ctx, tenantID, objectID); lerr != nil {
+		// FindByName already resolved this object, so a lock-state read
+		// error is a genuine DB fault, not a missing row. Log it rather
+		// than silently swallow — the HardDelete SQL guard still enforces
+		// the lock, so we proceed and let it (and the version check)
+		// decide; the caller may see CodeAborted instead of a precise
+		// lock reason, which the log explains.
+		if h.log != nil {
+			h.log.Warn("object lock pre-check failed; relying on SQL guard",
+				zap.String("object_id", objectID.String()), zap.Error(lerr))
 		}
+	} else if lock.Active(time.Now(), bypassGovernance) {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot delete: %s", lock.Reason()))
 	}
 
 	if err := deleteFn(ctx, tenantID, objectID, rv); err != nil {

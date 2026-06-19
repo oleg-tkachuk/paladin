@@ -249,6 +249,12 @@ func (p *AuditLogPurger) log() *zap.Logger {
 	return zap.NewNop()
 }
 
+// idempotencyPurgeBatch MUST match the LIMIT in the
+// PurgeExpiredIdempotencyKeys query (internal/store/postgres/queries/
+// idempotency.sql). The drain loop uses it to decide "a full batch came
+// back → there may be more". If the SQL LIMIT changes, change this too.
+const idempotencyPurgeBatch = 10000
+
 // IdempotencyKeyPurger drops idempotency_keys rows past their expires_at.
 // Without it the table grows unbounded and the hot GetIdempotencyKey
 // unique-index bloats. The query is self-bounding (batched DELETE by
@@ -285,7 +291,7 @@ func (p *IdempotencyKeyPurger) Run(ctx context.Context) error {
 				if n > 0 {
 					p.log().Info("purged idempotency keys", zap.Int64("rows", n))
 				}
-				if n < 10000 { // less than the query's batch cap → drained
+				if n < idempotencyPurgeBatch { // short batch → drained
 					break
 				}
 				if ctx.Err() != nil {
