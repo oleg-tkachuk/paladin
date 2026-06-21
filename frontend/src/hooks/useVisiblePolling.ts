@@ -20,18 +20,22 @@ export function useVisiblePolling(fn: () => void, intervalMs: number) {
   });
 
   useEffect(() => {
-    fnRef.current();
-    const tick = () => {
-      if (!document.hidden) fnRef.current();
+    // `alive` guards every invocation so a tick that was already queued
+    // (interval or visibilitychange) can't call fn after unmount — e.g.
+    // a fast route transition between the effect committing and a poll
+    // firing. Without it the consumer's fetch resolves into setState on
+    // a dead component (wasted work + a brief flash on re-mount).
+    let alive = true;
+    const run = () => {
+      if (alive && !document.hidden) fnRef.current();
     };
-    const id = setInterval(tick, intervalMs);
-    const onVisibilityChange = () => {
-      if (!document.hidden) fnRef.current();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    run(); // initial fetch (skipped if the tab is already hidden)
+    const id = setInterval(run, intervalMs);
+    document.addEventListener("visibilitychange", run);
     return () => {
+      alive = false;
       clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("visibilitychange", run);
     };
   }, [intervalMs]);
 }

@@ -8,7 +8,7 @@
 // (filters, bulk operations, multipart upload state, copy/move
 // dialog, saved views) carries over verbatim.
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -188,6 +188,17 @@ function ObjectKeyObjectsContent() {
     setSearch(value);
   };
 
+  // Latest syncToUrl in a ref so the debounce always calls the current
+  // one (it closes over the live searchParams) WITHOUT re-arming the
+  // timer on every searchParams change. Depending on syncToUrl directly
+  // would reset the debounce after each sync; capturing it in the effect
+  // would call a stale copy that drops a concurrent filter change made
+  // during the 300ms window.
+  const syncToUrlRef = useRef(syncToUrl);
+  useEffect(() => {
+    syncToUrlRef.current = syncToUrl;
+  });
+
   // Debounce the expensive consequences of typing: the visible input
   // updates per keystroke, but the CEL filter (one list RPC per
   // change) and the router.replace URL sync follow 300ms after typing
@@ -197,14 +208,10 @@ function ObjectKeyObjectsContent() {
     const id = setTimeout(() => {
       setDebouncedSearch(search);
       if (search.length > 2 || search === "") {
-        syncToUrl({ search: search || undefined });
+        syncToUrlRef.current({ search: search || undefined });
       }
     }, 300);
     return () => clearTimeout(id);
-    // syncToUrl's identity changes whenever searchParams changes (its
-    // own router.replace included) — depending on it would re-arm the
-    // timer after every sync. Typing is the only intended trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   const handleRecursiveChange = (value: boolean) => {
