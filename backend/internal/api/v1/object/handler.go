@@ -1409,3 +1409,12 @@ func mapCreateErr(err error) error {
 // ErrVersionMismatch is returned by Repository implementations when an
 // optimistic-concurrency update fails (resource_version did not match).
 var ErrVersionMismatch = errors.New("resource_version mismatch")
+
+// Register this package's sentinels with the central error→Connect-code
+// mapper so callers can route through apiutil.MapError for a consistent
+// code instead of a hand-written per-handler if/else. errors.Is-based
+// matching, so the existing local checks keep working unchanged.
+func init() {
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition)
+}
