@@ -298,34 +298,6 @@ shutdown, composeKey guard). The entries that remain below were kept
 open deliberately — each notes why._
 
 
-### RLS — coverage of cross-tenant tables
-
-- **Status:** Open
-- **Reason:** Migration 023 landed RLS on every directly-tenant-keyed
-  table (`objects`, `object_tags`, `quotas`, `event_subscriptions`,
-  `capability_records`, `api_tokens`, `multipart_uploads`,
-  `multipart_parts`, `capability_usage`). `cfg.Security.EnableRLS=true`
-  installs the BeforeAcquire / AfterRelease hooks on the pool that
-  set `paladin.tenant_id` per acquisition.
-  Out of scope for this slice (intentional, by table category):
-    - `tenants`, `storage_backends`, `buckets`, `object_keys` —
-      platform-admin reads cross-tenant.
-    - `audit_log` — security/compliance reads cross-tenant.
-    - `users`, `refresh_tokens`, `api_keys` (legacy iam) — login flow
-      runs before tenant context is established.
-    - `capability_revocations` — denylist must be visible to all
-      tenants.
-    - `operations` — workers consume across tenants.
-- **Definition of Done:**
-  - Decision per table on whether stricter policies are wanted (e.g.
-    `audit_log` filter to writer's tenant on INSERT, free read on
-    SELECT for compliance roles).
-  - Integration tests that prove cross-tenant SELECT under
-    `paladin_app` returns zero rows when GUC is set to a different
-    tenant. (Today's test suite is unit-level; an integration
-    harness against a real Postgres fixture is needed.)
-- **Blockers:** none.
-
 ### Federated IdP via JWKS
 
 - **Status:** Deferred
