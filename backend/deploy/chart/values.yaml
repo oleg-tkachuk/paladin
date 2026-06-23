@@ -1018,6 +1018,21 @@ tls:
   # the local cluster).
   existingSecret: ""
 
+# ─── Postgres server-cert verification (sslmode=verify-full) ───────────────
+#
+# `secretName` names a Secret holding the CNPG cluster's CA under key
+# `ca.crt`. When set, every role pod mounts it read-only at `mountPath`
+# and the DSN must use `sslmode=verify-full&sslrootcert=<mountPath>/ca.crt`
+# (see values-prod.yaml). Empty (the default) → no CA mount; the base
+# DSN stays `sslmode=require` (encrypt without authenticating the server),
+# which works dev/local where the CA isn't provisioned. CNPG publishes
+# the CA as `<cluster>-ca` in the database namespace; replicate/sync it
+# into the PALADIN namespace (ExternalSecret / kubectl) so the pods can mount
+# it cross-namespace mounts aren't allowed.
+postgresCa:
+  secretName: ""
+  mountPath: /etc/paladin/pg-ca
+
 # ─── RBAC for K8sSecretResolver ────────────────────────────────────────────
 #
 # The resolver issues exactly one verb (GET) per referenced secret name.

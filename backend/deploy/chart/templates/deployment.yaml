@@ -96,6 +96,11 @@ spec:
             - name: config
               mountPath: /app/configs
               readOnly: true
+            {{- if $.Values.postgresCa.secretName }}
+            - name: pg-ca
+              mountPath: {{ $.Values.postgresCa.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- with default $defaults.volumeMounts $spec.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -103,6 +108,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "chart.fullname" $ }}-config
+        {{- if $.Values.postgresCa.secretName }}
+        - name: pg-ca
+          secret:
+            secretName: {{ $.Values.postgresCa.secretName }}
+        {{- end }}
         {{- with default $defaults.volumes $spec.volumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
