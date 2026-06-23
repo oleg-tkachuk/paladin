@@ -224,7 +224,7 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 		// each claim, so the worker no longer self-terminates every TTL.
 		workCtx, cancelWork := context.WithCancel(ctx)
 		renewerDone := make(chan struct{})
-		go l.renewer(workCtx, cancelWork, exp, renewerDone)
+		go l.renewer(workCtx, cancelWork, exp, renewerDone, l.claim)
 
 		err = do(workCtx, gen)
 
@@ -250,7 +250,12 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 // in-process: work is cancelled when renewals persistently fail or when
 // the last DB-confirmed expires_at passes. Each successful renewal
 // pushes the in-process deadline forward to the new expires_at.
-func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, initialExp time.Time, done chan<- struct{}) {
+// claimFunc is the renewer's only dependency on the DB — extracted as a
+// parameter so the renewer's deadline/failure logic is unit-testable
+// with a fake (the pgx-backed l.claim is passed in production).
+type claimFunc func(ctx context.Context) (int64, time.Time, bool, error)
+
+func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, initialExp time.Time, done chan<- struct{}, claim claimFunc) {
 	defer close(done)
 	ticker := time.NewTicker(l.cfg.RenewInterval)
 	defer ticker.Stop()
@@ -279,7 +284,7 @@ func (l *Lease) renewer(workCtx context.Context, cancelWork context.CancelFunc, 
 			// pool; bound it with a short timeout so a stuck DB doesn't
 			// pin the goroutine.
 			renewCtx, cancel := context.WithTimeout(workCtx, l.cfg.RenewInterval/2)
-			_, exp, ok, err := l.claim(renewCtx)
+			_, exp, ok, err := claim(renewCtx)
 			cancel()
 			if err != nil || !ok {
 				consecutive++

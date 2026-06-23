@@ -11,7 +11,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
 // BatchDeleteExecutor implements the BatchDelete operation type.
@@ -30,7 +29,7 @@ import (
 // list. Callers retry with a fresh BatchDelete if needed.
 type BatchDeleteExecutor struct {
 	Objects     object.Repository
-	Transitions *statemachine.Transitioner
+	Transitions Transitioner
 }
 
 // BatchDeleteResponse is what we marshal into operation.Response on

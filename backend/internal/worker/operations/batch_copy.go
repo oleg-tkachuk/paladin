@@ -49,7 +49,7 @@ import (
 type BatchCopyExecutor struct {
 	Objects     object.Repository
 	Storage     object.Storage
-	Transitions *statemachine.Transitioner
+	Transitions Transitioner
 
 	// PresignDefaultTTL pins the destination row's presign_expires_at.
 	// Wired from the same cfg.Limits.Presign.DefaultTTL the data plane

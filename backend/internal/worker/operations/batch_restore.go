@@ -11,7 +11,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/operation"
-	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 )
 
 // BatchRestoreExecutor implements the BatchRestoreObjects operation type.
@@ -38,7 +37,7 @@ import (
 // otherwise see in their list-deleted UI.
 type BatchRestoreExecutor struct {
 	Objects     object.Repository
-	Transitions *statemachine.Transitioner
+	Transitions Transitioner
 }
 
 // BatchRestoreResponse mirrors the BatchDelete shape.
