@@ -1,10 +1,10 @@
 # ADR-0003: Transactional event outbox
 
 - **Status:** Accepted — implemented for the entire data-plane object
-  lifecycle (promote, soft-delete, restore, update, permanent-delete) as
-  of 2026-06. The admin-plane lifecycle events, the event-ingest promote
-  path, and the testcontainers crash-window test are the remaining
-  follow-ups (see "Status" at the end).
+  lifecycle (promote, soft-delete, restore, update, permanent-delete,
+  copy) AND the event-ingest promote path, with a testcontainers
+  crash-window test, as of 2026-06. The admin-plane lifecycle events are
+  the only remaining follow-up (see "Status" at the end).
 - **Context:** `event_deliveries` is the durable webhook outbox. Today the
   producer writes outbox rows AFTER the state transition has already
   committed: a handler calls `h.sm.PromoteToAvailable(...)` (its own
@@ -90,11 +90,22 @@ Landed:
 - Unit tests: `DispatchTx` writes one row per matching sub on the tx
   (not the pool), skips disabled subs, and a nil-Outbox dispatcher works.
 
+- The event-ingest promote path now also enqueues `paladin.object.uploaded`
+  on the promote tx: `eventingest.PromoteHandler` gained a producer-only
+  `worker.Dispatcher` (bound to the ingest BYPASSRLS queries), so an
+  explicit-mode storage event notifies webhook subscribers exactly like an
+  implicit-mode CompleteObject does. The `changed` guard keeps emission
+  exactly-once across the two producers. Same for the synchronous
+  server-side CopyObject promote.
+- Integration test: `internal/integration/outbox_crash_test.go`
+  (`-tags=integration`, testcontainers Postgres) asserts the invariant on
+  a live DB for both seams — the statemachine (`PromoteToAvailableInTx`)
+  and the repo (`RunInTx` + `HardDeleteTx`): a committed transition carries
+  its outbox row, and a dispatch error rolls back BOTH the state change and
+  the already-inserted outbox row (no committed-but-unenqueued window).
+
 Follow-up (tracked in BACKLOG):
-- The admin-plane lifecycle events (tenant/bucket/objectKey/quota) and the
-  event-ingest promote path still use best-effort `Dispatch` — they need
-  the same seam applied in their handlers.
-- A testcontainers integration test asserting the crash window (commit
-  state, kill before fan-out → row present after recovery) and rollback
-  (dispatch error → no state change, no outbox row). Covers the
-  statemachine and repo seams uniformly.
+- The admin-plane lifecycle events (tenant/bucket/objectKey/quota) still
+  use best-effort `Dispatch` — they need the same seam applied in their
+  handlers. Lower stakes than the data-plane object webhooks (control-plane
+  mutations are rare), so deliberately separate.

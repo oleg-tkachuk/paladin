@@ -15,6 +15,11 @@ tasks:
     cmds:
       - go test ./...
 
+  integration:
+    desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
+    cmds:
+      - go test -tags=integration -count=1 ./internal/integration/...
+
   coverage:
     desc: "Run unit tests with coverage; HTML report → coverage/cover.html"
     cmds:

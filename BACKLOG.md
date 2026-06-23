@@ -299,7 +299,7 @@ open deliberately — each notes why._
 
 ### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
 
-- **Status:** Data plane DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — all five object lifecycle events (promote / soft-delete / restore via the statemachine seam; update / permanent-delete via the `ObjectRepo.RunInTx` + `*Tx` repo seam) write their events atomically with the mutation. Remaining: admin-plane lifecycle events (tenant/bucket/objectKey/quota), the event-ingest promote path, and a testcontainers crash-window test
+- **Status:** Data plane + ingest DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — every object lifecycle event (promote / soft-delete / restore / update / permanent-delete / copy via the statemachine + `ObjectRepo.RunInTx` seams, and the storage-event ingest promote via a producer-only dispatcher) writes its event atomically with the mutation, proven by `internal/integration/outbox_crash_test.go` (testcontainers, `-tags=integration`). Remaining: only the admin-plane lifecycle events (tenant/bucket/objectKey/quota) still use best-effort `Dispatch` — lower stakes (control-plane mutations are rare) and the admin V2 repos are queries-only (need a pool/transactor injection), so kept separate
 - **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
   transition has already committed
   (`internal/worker/event_dispatcher.go` ~133;
