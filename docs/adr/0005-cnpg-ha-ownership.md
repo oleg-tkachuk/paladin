@@ -1,0 +1,39 @@
+# ADR-0005: CNPG Postgres HA ownership & verify-full TLS
+
+- **Status:** Accepted
+- **Context:** The BACKLOG item "CNPG HA replicas in the PALADIN chart"
+  assumed the PALADIN Helm chart templates the CNPG `Cluster` and just needed
+  an `instances`/sync/PDB block exposed. On inspection that premise is
+  **false**: the PALADIN chart owns no `Cluster` resource, and every DSN
+  points cross-namespace at `paladin-postgresql-rw.database.svc.cluster.local`
+  (namespace `database`). The CNPG `Cluster` is owned by the sibling
+  **gitops** repo.
+
+## Decision
+
+1. **HA config lives in gitops, not the PALADIN chart.** Postgres HA
+   (`instances`, `minSyncReplicas`/`maxSyncReplicas`, synchronous quorum,
+   the Cluster's PodDisruptionBudget, anti-affinity /
+   topologySpreadConstraints) is set on the CNPG `Cluster` spec in
+   gitops. Adding a competing `Cluster` template to the PALADIN chart would
+   create two owners for the same database — rejected. Recommended prod
+   spec: **3 instances, `minSyncReplicas: 1`, `maxSyncReplicas: 1`**
+   (sync quorum), a PDB with `minAvailable: 2`, and zone spread.
+
+2. **App-side TLS is verify-full in prod** (this *is* in the PALADIN chart).
+   The chart defaults to `sslmode=require` (encrypt only); the prod
+   overlay upgrades to `verify-full` to authenticate the server cert,
+   mounting the CNPG CA via the new `postgresCa.{secretName,mountPath}`
+   value (`/etc/paladin/pg-ca/ca.crt`). The CNPG `<cluster>-ca` secret must be
+   synced into the PALADIN namespace (cross-namespace secret mounts aren't
+   allowed).
+
+## Consequences
+
+- The PALADIN chart's responsibility for Postgres is the **client** posture
+  (pool sizing, timeouts, TLS verification, CA mount) — not the cluster
+  topology. The BACKLOG entry is corrected to reflect this split.
+- HA changes are reviewed and rolled out in gitops; PALADIN only needs the
+  `-rw`/`-ro` service DNS to stay stable.
+- Open (separate item): PgBouncer in front of CNPG for HPA-burst pool
+  headroom — also a gitops / cluster concern.

@@ -299,7 +299,7 @@ open deliberately — each notes why._
 
 ### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
 
-- **Status:** Open
+- **Status:** Open — design accepted in [ADR-0003](docs/adr/0003-transactional-outbox.md); implementation pending
 - **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
   transition has already committed
   (`internal/worker/event_dispatcher.go` ~133;
@@ -323,20 +323,6 @@ open deliberately — each notes why._
   focused PR — bolting it onto a large fix batch would risk the core
   write path for less safety than doing it properly. The
   at-least-once-minus-crash-window behaviour stands until then.
-
-### [MEDIUM] Postgres TLS: upgrade sslmode=require → verify-full
-
-- **Status:** Open
-- **Reason:** the chart now defaults to `sslmode=require` (traffic is
-  encrypted), but `require` does not authenticate the server cert — a
-  MITM with a forged cert is still possible. `verify-full` closes that
-  but needs the CNPG CA mounted into the pods and `sslrootcert=` in the
-  DSN.
-- **Definition of Done:** CNPG CA secret mounted; both DSNs use
-  `sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca.crt` (or equivalent);
-  verified against a live CNPG cluster.
-- **Blockers:** none — incremental hardening over the shipped
-  `require` default.
 
 ### [MEDIUM] Pool sizing × replicas — PgBouncer for HPA-burst headroom
 
@@ -939,23 +925,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Frontend unit-test suite (Vitest)
-
-- **Status:** Deferred
-- **Reason:** the frontend has zero unit tests — coverage is six
-  Playwright e2e specs only. Logic-dense code (CSV parsing in
-  `CsvImportDialog.tsx` ~390 LOC, Cedar/CEL validation hooks,
-  `RefreshContext` bump semantics, `useUrlState` serialization) has no
-  fast feedback; every regression must be caught by a full browser run.
-- **Definition of Done:**
-  - Vitest wired into `frontend/` (`pnpm test`), added to the frontend
-    job in `.github/workflows/test.yml` and a lefthook pre-push hook.
-  - First wave of tests: CSV parser edge cases (quoted cells, embedded
-    newlines, delimiters), validation hooks, `RefreshContext`,
-    `useUrlState` round-trips.
-  - ≥60 % statement coverage on `src/hooks/` and `src/lib/`.
-- **Blockers:** none.
-
 ### Runtime validation (Zod) for JSON.parse sites
 
 - **Status:** Deferred
@@ -1327,7 +1296,7 @@ open deliberately — each notes why._
 
 ### Table-backed audit outbox for crash-durability
 
-- **Status:** Aspirational
+- **Status:** Aspirational — design in [ADR-0004](docs/adr/0004-table-backed-audit-outbox.md); coupled to ADR-0003's tx seam
 - **Reason:** `internal/audit/async_writer.go` removes Postgres-Insert
   latency from the mutating-RPC path but in-flight entries are lost
   on `kill -9` / pod eviction (bounded to ~one MaxBatch worth, but
@@ -1351,7 +1320,7 @@ open deliberately — each notes why._
 
 ### CNPG HA replicas in the PALADIN chart
 
-- **Status:** Aspirational
+- **Status:** Resolved-as-out-of-scope — see [ADR-0005](docs/adr/0005-cnpg-ha-ownership.md). The PALADIN chart does NOT own the CNPG `Cluster` (it lives in gitops); HA config belongs there. The chart's verify-full TLS half shipped. The original premise below ("chart already templates cluster.yaml") was incorrect.
 - **Reason:** Minikube runs a single-instance CNPG `Cluster` and the
   PALADIN chart accepts that as the default. Production-class deploys
   need ≥2 replicas with synchronous quorum, a PodDisruptionBudget,
@@ -1453,7 +1422,7 @@ open deliberately — each notes why._
 
 ### OpenTelemetry baseline (traces + metrics + logs)
 
-- **Status:** Aspirational
+- **Status:** Partially done — traces + RED metrics shipped ([ADR-0001](docs/adr/0001-otel-observability-baseline.md): otelconnect + otelpgx). Remaining: committed Grafana dashboards under deploy/grafana/ and log↔trace correlation.
 - **Reason:** Today the only structured signal is access logs.
   Cross-plane debugging — "this presign call took 1.4 s, why?" —
   needs OTel spans across HTTP → Connect handler → sqlc → S3
@@ -1491,77 +1460,6 @@ _Context: full-codebase architecture audit on 2026-06-11 (backend,
 frontend, infra). Items the audit surfaced that aren't already covered
 elsewhere in this file. Handler-level tracing/metrics intentionally has
 no entry here — it is the existing "OpenTelemetry baseline" item._
-
-### Centralized error → Connect-code mapping + typed store errors
-
-- **Status:** Deferred
-- **Reason:** handlers map domain/DB errors to Connect codes ad hoc —
-  some wrap with `connect.NewError(...)` inline, some let the
-  interceptor default; the same failure (e.g. version mismatch) can
-  surface as `InvalidArgument` in one RPC and `FailedPrecondition` in
-  another, and a few call sites match on `.Error()` strings instead of
-  `errors.Is` against typed sentinels.
-- **Definition of Done:**
-  - Typed sentinel errors (`ErrNotFound`, `ErrVersionMismatch`,
-    `ErrAlreadyExists`, …) defined once in the store/domain layer.
-  - A single mapping function in `internal/api/apiutil` (with tests)
-    translating sentinels → Connect codes; all handlers and connectshim
-    adapters route errors through it.
-  - No `.Error()` substring matching remains
-    (`grep -rn '\.Error() ==' internal/` is empty).
-- **Blockers:** none — mechanical refactor, no proto change.
-
-### ListObjects CEL filter pushdown to SQL
-
-- **Status:** Deferred
-- **Reason:** `ListObjects` CEL filters evaluate in-process after the
-  page fetch (`internal/filter/cel/evaluator.go`) — SELECT-then-filter
-  degrades linearly with tenant size. The AuditLog pushdown extractor
-  (`internal/filter/cel/auditpushdown.go`) already proves the
-  translate-to-WHERE approach on this codebase.
-- **Definition of Done:**
-  - Common predicates (key equality/prefix, status, timestamps)
-    extracted into SQL WHERE via the pushdown pattern; residual CEL
-    stays as post-filter so semantics are unchanged.
-  - Pagination remains correct when pushdown trims the page
-    (no short-page artifacts).
-  - Bench on a ≥100k-object tenant documenting the win.
-- **Blockers:** none — prior art exists in-tree.
-
-### Idempotency middleware: replace reflection with generics
-
-- **Status:** Deferred
-- **Reason:** replay in
-  `internal/middleware/idempotency.go` reconstructs
-  `*connect.Response[T]` via a reflection-based runtime type registry —
-  works, but trades compile-time safety for runtime magic and is the
-  hardest-to-debug spot in the middleware chain.
-- **Definition of Done:** response-type registration is compile-time
-  checked (type-parameterized registry or generated registration), the
-  reflection path is gone, and the existing idempotency tests
-  (cache hit/miss, replay, TTL) pass unchanged.
-- **Blockers:** none — internal refactor, wire format unchanged.
-
-### Unit seams for lease renewer + batch-copy compensation paths
-
-- **Status:** Deferred
-- **Reason:** the 2026-06 audit named five untested complex functions;
-  three got tests with the fixes (dispatcher tenant scoping, statemachine
-  no-rows classification, rate-limiter concurrency). The remaining two —
-  `lease.renewer` (two failed renewals must cancel work; expiry timer
-  must fire without renewal) and `BatchCopyExecutor.copyOne`'s
-  double-failure compensation (MarkFailed failing after CopyObject
-  failed) — call straight into `*pgxpool.Pool` / storage clients, and
-  the lease package deliberately leaves SQL paths to the integration
-  suite. Unit-testing them means introducing a claim/release interface
-  seam, which is a design decision, not a mechanical add.
-- **Definition of Done:**
-  - A narrow `leaseStore` interface (claim / release) behind `Lease`,
-    with the pgx implementation unchanged; renewer tests cover the
-    consecutive-failure cancel and the expiry-without-renewal cancel.
-  - A copyOne test with faked Objects/Storage exercising the
-    compensation branch where MarkFailed also fails.
-- **Blockers:** none — agree on the seam shape first.
 
 ### connectshim proto ↔ struct converters: generate instead of hand-write
 

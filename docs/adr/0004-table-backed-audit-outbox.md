@@ -1,0 +1,47 @@
+# ADR-0004: Crash-durable (table-backed) audit outbox
+
+- **Status:** Proposed (design + plan; not yet implemented)
+- **Context:** `internal/audit/async_writer.go` makes the audit interceptor
+  cheap by enqueueing entries to a bounded in-memory channel and flushing
+  them to Postgres in a background batch. The trade-off is durability:
+  queued-but-not-yet-flushed entries are lost on an abrupt process kill
+  (worst case ~one batch, ~32 rows / ~200ms). For SOC 2 / ISO 27001 the
+  audit trail must survive a crash.
+
+## Decision
+
+Persist audit entries durably at write time, then project to the queryable
+`audit_log` asynchronously — the same transactional-outbox shape as
+ADR-0003, applied to audit.
+
+Two viable forms; pick (A) unless the synchronous insert latency proves
+unacceptable under load:
+
+- **(A) Synchronous durable insert in the request tx.** The audit
+  interceptor writes the row inside (or right after) the handler's own
+  transaction. Durable immediately; removes the AsyncWriter entirely. Cost:
+  one extra insert on the response path (mitigated — it's a single indexed
+  append, and most mutating RPCs already hold a tx).
+- **(B) Durable staging table + projector.** Interceptor appends to a
+  lean `audit_outbox` table (cheap unlogged-or-logged append), a projector
+  worker moves rows into `audit_log` and deletes them. Keeps the response
+  path append-only; adds a table + reaper.
+
+## Implementation plan (form A)
+
+1. Drop `AsyncWriter`; the audit interceptor calls the repo insert
+   directly (it already returns fast for an indexed append).
+2. Where the handler runs in a tx, write the audit row on that tx so it
+   commits/rolls back atomically with the operation; otherwise a
+   standalone insert (still durable).
+3. Keep the bounded-buffer behaviour only as an optional write-behind for
+   read-only audit (`recordReads`) where loss is acceptable.
+
+## Consequences
+
+- No audit loss on crash; the "shutdown drain" + `ErrClosed` machinery in
+  AsyncWriter goes away.
+- Couples to ADR-0003's tx-threading work (same seam), so the two are best
+  done together or back-to-back.
+- Benchmark gate before committing to (A): p99 of the mutating RPCs with
+  the synchronous insert must stay within budget; if not, fall back to (B).
