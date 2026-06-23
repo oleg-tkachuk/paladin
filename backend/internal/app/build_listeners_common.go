@@ -97,10 +97,11 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 		Func:     func(ctx context.Context) error { return db.Ping(ctx) },
 	}
 	return &health.Handler{
-		Logger:       l.Named("health"),
-		LogSuccesses: cfg.LogProbes,
-		Ready:        []health.Check{dbPing},
-		Startup:      []health.Check{dbPing},
+		Logger:        l.Named("health"),
+		LogSuccesses:  cfg.LogProbes,
+		SnapshotToken: cfg.HealthSnapshotToken,
+		Ready:         []health.Check{dbPing},
+		Startup:       []health.Check{dbPing},
 	}
 }
 

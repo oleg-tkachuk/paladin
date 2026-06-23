@@ -23,9 +23,11 @@ package health
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -116,6 +118,13 @@ type Handler struct {
 	// fan-out aggregator can attribute components without having to
 	// pass the role label per request.
 	role string
+
+	// SnapshotToken, when non-empty, gates GET /system/health.json: the
+	// caller must present it as `Authorization: Bearer <token>` or
+	// `X-Health-Token: <token>`. Empty (default) leaves the snapshot open
+	// — dev parity. The kubelet probe endpoints are never gated. Compared
+	// in constant time. See config.Runtime.HealthSnapshotToken.
+	SnapshotToken string
 
 	// Startup checks run on /startupz. Typically a superset of Ready
 	// during bootstrap (e.g. migrations applied + first DB ping). Once
@@ -379,6 +388,13 @@ func (h *Handler) WithRole(role string) *Handler {
 // kubelet probes. The BFF's /api/health/all fans out to this endpoint
 // across the four roles and returns the merged result to the UI.
 func (h *Handler) serveSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !h.snapshotAuthorized(r) {
+		// 401 with a WWW-Authenticate hint; no body so an unauthorized
+		// caller learns nothing about the component tree.
+		w.Header().Set("WWW-Authenticate", `Bearer realm="health"`)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	role := h.role
 	if role == "" {
 		role = "unknown"
@@ -394,6 +410,22 @@ func (h *Handler) serveSnapshot(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 	_ = json.NewEncoder(w).Encode(snap)
+}
+
+// snapshotAuthorized reports whether the request may read the snapshot.
+// Open when SnapshotToken is empty (dev). Otherwise the token must arrive
+// as `Authorization: Bearer <token>` or `X-Health-Token: <token>`, compared
+// in constant time so a timing oracle can't recover it byte-by-byte.
+func (h *Handler) snapshotAuthorized(r *http.Request) bool {
+	want := h.SnapshotToken
+	if want == "" {
+		return true
+	}
+	got := r.Header.Get("X-Health-Token")
+	if got == "" {
+		got = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 func (h *Handler) respond(w http.ResponseWriter, r *http.Request, code int, status string, failures []failure) {

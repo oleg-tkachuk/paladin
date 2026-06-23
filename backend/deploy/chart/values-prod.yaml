@@ -18,18 +18,22 @@ config:
   app:
     env: prod
 
-  # Postgres connection-pool sizing vs CNPG max_connections (default
-  # 100). Per-pod pool × total pods must stay under it, leaving headroom
-  # for the migrate + bootstrap jobs.
+  # Postgres connection budget vs CNPG max_connections. Ownership of the
+  # durable headroom fix (max_connections / PgBouncer) is gitops's, not
+  # this chart — see docs/adr/0007-postgres-connection-headroom.md (and
+  # ADR-0005 for the same CNPG-ownership boundary).
   #
-  #   Steady-state pods: api 3 + admin 2 + worker 3 + dispatcher 2
-  #   + mcp 2 = 12 → 12 × 6 = 72 connections (fits, ~28 headroom).
+  #   per-pod pool.max_conns = 6
+  #   steady-state pods: api 3 + admin 2 + worker 3 + dispatcher 2 + mcp 2
+  #     = 12 pods → 72 conns; + migrate/bootstrap hook Jobs (transient).
+  #   non-api steady-state floor (admin+worker+dispatcher+mcp = 9 pods)
+  #     = 54 conns; api scales on top via HPA.
   #
-  # WARNING: under HPA burst (api → maxReplicas 12) this exceeds 100 and
-  # new connections fail with "too many clients". The real fix is
-  # PgBouncer in front of CNPG (tracked in BACKLOG: "Pool sizing ×
-  # replicas"); until then either keep api maxReplicas modest or raise
-  # CNPG max_connections to ≥300 in the cluster spec.
+  # Budget contract: api.maxReplicas × 6 + 54 + job headroom must stay
+  # under the cluster's max_connections. At the default 100, api.maxReplicas
+  # must stay ≤ ~7. The recommended prod posture is gitops raising CNPG
+  # max_connections to ≥300 (or fronting it with PgBouncer), which lifts the
+  # HPA ceiling out of this budget entirely — see ADR-0007.
   datastores:
     postgres:
       pool:
@@ -42,6 +46,14 @@ config:
       # cover the cluster service DNS, so the host below validates.
       dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
       migrate_dsn: "postgres://paladin_migrate@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
+
+  runtime:
+    # Gates /system/health.json (component tree + subsystem + Postgres
+    # reachability). MUST come from a SealedSecret / ExternalSecret — same
+    # posture as signing_key. The frontend BFF aggregator receives the same
+    # value via PALADIN_HEALTH_SNAPSHOT_TOKEN (frontend chart). Empty would
+    # leave the snapshot open; never do that in prod.
+    health_snapshot_token: "<prod-health-token-from-sealed-secret>"
 
   logger:
     level: info

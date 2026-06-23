@@ -89,6 +89,13 @@ type Component = {
   critical: boolean;
 };
 
+// Shared secret gating /system/health.json on the backends. When set
+// (prod), the backends reject an unauthenticated snapshot fetch with 401;
+// we forward it as X-Health-Token. Unset (dev) → backends leave the
+// endpoint open and the header is simply absent. Mirrors
+// config.Runtime.HealthSnapshotToken on the backend side.
+const HEALTH_TOKEN = process.env.PALADIN_HEALTH_SNAPSHOT_TOKEN || "";
+
 async function fetchSnapshot(role: string, baseUrl: string): Promise<Snapshot> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -96,6 +103,7 @@ async function fetchSnapshot(role: string, baseUrl: string): Promise<Snapshot> {
     const res = await fetch(`${baseUrl}/system/health.json`, {
       signal: ctrl.signal,
       cache: "no-store",
+      headers: HEALTH_TOKEN ? { "X-Health-Token": HEALTH_TOKEN } : undefined,
     });
     // 200 = healthy/degraded; 503 = draining (still has body) — both carry
     // the per-component snapshot. Network/parse errors fall through to the

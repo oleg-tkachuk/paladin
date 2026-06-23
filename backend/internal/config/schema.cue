@@ -47,9 +47,11 @@ otel: {
 // the per-service blocks (api / admin / worker). Renamed from
 // `server` to disambiguate from `api.server` / `admin.server`.
 runtime: {
-  mode:             "debug" | "test" | *"release"
-  shutdown_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
-  log_probes:       bool | *false
+  mode:                  "debug" | "test" | *"release"
+  shutdown_timeout:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"20s"
+  log_probes:            bool | *false
+  // Shared secret gating /system/health.json. Empty → open (dev).
+  health_snapshot_token: string | *""
 }
 
 // API role — the binary started by `serve api`. Hosts the data and

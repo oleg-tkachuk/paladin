@@ -137,6 +137,17 @@ func (t *Transitioner) promote(
 	sequencer string,
 	source Source,
 ) (changed bool, err error) {
+	// Two promote regimes, split by whether the caller carries a sequencer:
+	//
+	//   - sequencer == '' (HEAD-driven: CompleteObject RPC, CopyObject, the
+	//     reconciler): a *first* promote only. It matches PENDING rows. An
+	//     already-AVAILABLE row is left untouched (changed=false) — so a
+	//     storage event that promoted the row first keeps its authoritative
+	//     etag/size, and a duplicate RPC can't re-charge quota or overwrite
+	//     values the nightly accounting already counted (the HEAD→promote
+	//     race this closes).
+	//   - sequencer != '' (storage event): may also UPDATE an AVAILABLE row,
+	//     but only with a strictly newer sequencer (stale events are no-ops).
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -146,8 +157,11 @@ func (t *Transitioner) promote(
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END
          WHERE object_id = $1
-           AND state IN ('PENDING', 'AVAILABLE')
-           AND ($5 = '' OR sequencer IS NULL OR $5 > sequencer)
+           AND (
+                ($5 = '' AND state = 'PENDING')
+                OR ($5 <> '' AND state IN ('PENDING', 'AVAILABLE')
+                    AND (sequencer IS NULL OR $5 > sequencer))
+           )
         RETURNING state
     `
 	var newState string

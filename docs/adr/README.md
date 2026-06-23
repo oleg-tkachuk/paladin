@@ -12,10 +12,11 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 |-----|-------|--------|
 | [0001](0001-otel-observability-baseline.md) | OpenTelemetry observability baseline | Accepted |
 | [0002](0002-api-error-connect-mapping.md) | Centralized error → Connect-code mapping | Accepted |
-| [0003](0003-transactional-outbox.md) | Transactional event outbox | Proposed |
-| [0004](0004-table-backed-audit-outbox.md) | Crash-durable (table-backed) audit outbox | Proposed |
+| [0003](0003-transactional-outbox.md) | Transactional event outbox | Accepted |
+| [0004](0004-table-backed-audit-outbox.md) | Crash-durable (table-backed) audit outbox | Accepted |
 | [0005](0005-cnpg-ha-ownership.md) | CNPG Postgres HA ownership & verify-full TLS | Accepted |
 | [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Accepted |
+| [0007](0007-postgres-connection-headroom.md) | Postgres connection headroom & pooling ownership | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

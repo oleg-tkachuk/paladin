@@ -55,6 +55,16 @@ extraEnv: []
 # - name: NODE_TLS_REJECT_UNAUTHORIZED
 #   value: "0"
 
+# healthSnapshotTokenSecret — shared secret the BFF /api/health/all
+# aggregator forwards to each backend's /system/health.json (must match the
+# backends' runtime.health_snapshot_token). Unset (default) → the backends
+# leave the snapshot open and no header is sent (dev). In prod, point this
+# at the same SealedSecret the backend chart's health token comes from.
+# healthSnapshotTokenSecret:
+#   name: paladin-health-token
+#   key: token
+healthSnapshotTokenSecret: {}
+
 image:
   # Registry host overridden per env. Local default points at the
   # dev-cluster registry; envs other than local flip via

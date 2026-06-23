@@ -339,6 +339,64 @@ func TestOutboxCrashWindow(t *testing.T) {
 	})
 }
 
+func objectEtag(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) string {
+	t.Helper()
+	var e *string
+	if err := pool.QueryRow(ctx, `SELECT etag FROM objects WHERE object_id = $1`, id).Scan(&e); err != nil {
+		t.Fatalf("read etag: %v", err)
+	}
+	if e == nil {
+		return ""
+	}
+	return *e
+}
+
+// TestPromoteSequencerRace covers the HEAD→promote race fix: an empty-
+// sequencer (RPC/HEAD/copy) promote is a first-promote only — it must not
+// overwrite an already-AVAILABLE row that a storage event promoted first,
+// nor re-fire on a second call (which would double-charge quota).
+func TestPromoteSequencerRace(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	sm := statemachine.New(pool)
+
+	t.Run("empty-sequencer promote defers to event-promoted row", func(t *testing.T) {
+		id := seedPendingObject(t, ctx, pool, f)
+		// Storage event promotes first, with authoritative etag + sequencer.
+		changed, err := sm.PromoteToAvailable(ctx, id, "evt-etag", 100, "", "s100", statemachine.SourceEvent)
+		if err != nil || !changed {
+			t.Fatalf("event promote: changed=%v err=%v", changed, err)
+		}
+		// RPC HEAD path (empty sequencer) arrives late with a different etag.
+		changed, err = sm.PromoteToAvailable(ctx, id, "rpc-etag", 200, "", "", statemachine.SourceRPC)
+		if err != nil {
+			t.Fatalf("rpc promote: %v", err)
+		}
+		if changed {
+			t.Fatal("rpc promote re-touched an already-AVAILABLE row (would re-charge quota)")
+		}
+		if got := objectEtag(t, ctx, pool, id); got != "evt-etag" {
+			t.Fatalf("etag = %q, want evt-etag (event value preserved)", got)
+		}
+	})
+
+	t.Run("double empty-sequencer promote charges once", func(t *testing.T) {
+		id := seedPendingObject(t, ctx, pool, f)
+		changed, err := sm.PromoteToAvailable(ctx, id, "rpc-etag", 10, "", "", statemachine.SourceRPC)
+		if err != nil || !changed {
+			t.Fatalf("first promote: changed=%v err=%v", changed, err)
+		}
+		changed, err = sm.PromoteToAvailable(ctx, id, "rpc-etag", 10, "", "", statemachine.SourceRPC)
+		if err != nil {
+			t.Fatalf("second promote: %v", err)
+		}
+		if changed {
+			t.Fatal("second promote returned changed=true (would double-charge quota)")
+		}
+	})
+}
+
 func bucketExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, backendID, bucketName string) bool {
 	t.Helper()
 	var exists bool

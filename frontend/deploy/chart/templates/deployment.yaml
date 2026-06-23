@@ -81,6 +81,20 @@ spec:
             - name: PALADIN_DISPATCHER_URL
               value: {{ .Values.backend.urls.dispatcher | quote }}
             {{- /*
+              PALADIN_HEALTH_SNAPSHOT_TOKEN — shared secret the BFF /api/health/all
+              aggregator forwards (as X-Health-Token) to each backend's
+              /system/health.json. Must match the backends'
+              runtime.health_snapshot_token. Omitted when unset (dev): the
+              backends leave the snapshot open and the header is absent.
+            */}}
+            {{- with .Values.healthSnapshotTokenSecret }}
+            - name: PALADIN_HEALTH_SNAPSHOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}
+                  key: {{ .key }}
+            {{- end }}
+            {{- /*
               extraEnv — operator extension point for env vars the chart
               doesn't model first-class. Common dev-cluster use: injecting
               NODE_TLS_REJECT_UNAUTHORIZED=0 so the BFF's outbound fetch
