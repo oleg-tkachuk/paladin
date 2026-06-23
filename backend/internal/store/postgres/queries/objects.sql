@@ -175,14 +175,21 @@ SELECT EXISTS(
 )::boolean AS exists;
 
 -- name: ListObjects :many
--- CEL filter is applied by the caller post-load. Keyset page uses object_id
--- (UUIDv7) which is monotonic-by-time.
+-- The full CEL filter is still applied by the caller post-load; the
+-- `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
+-- extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
+-- non-matching rows before they cross the wire instead of fetching the
+-- whole namespace and filtering in Go. The post-load CEL pass stays
+-- authoritative, so over-fetching (a hint that's absent) only costs
+-- throughput, never correctness. `substr` is escaped for LIKE by the
+-- adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
 SELECT sqlc.embed(objects)
 FROM objects
 WHERE tenant_id = $1
   AND object_key = $2
   AND (sqlc.narg('state')::object_state IS NULL OR state = sqlc.narg('state')::object_state)
   AND (sqlc.narg('prefix')::text IS NULL OR key LIKE sqlc.narg('prefix')::text || '%')
+  AND (sqlc.narg('substr')::text IS NULL OR key LIKE '%' || sqlc.narg('substr')::text || '%')
   AND (sqlc.narg('after_id')::uuid IS NULL OR object_id > sqlc.narg('after_id')::uuid)
 ORDER BY object_id
 LIMIT sqlc.arg('page_size');

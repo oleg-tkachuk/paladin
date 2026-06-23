@@ -332,23 +332,31 @@ WHERE tenant_id = $1
   AND object_key = $2
   AND ($3::object_state IS NULL OR state = $3::object_state)
   AND ($4::text IS NULL OR key LIKE $4::text || '%')
-  AND ($5::uuid IS NULL OR object_id > $5::uuid)
+  AND ($5::text IS NULL OR key LIKE '%' || $5::text || '%')
+  AND ($6::uuid IS NULL OR object_id > $6::uuid)
 ORDER BY object_id
-LIMIT $6
+LIMIT $7
 `
 
 type ListObjectsRow struct {
 	Object Object `json:"object"`
 }
 
-// CEL filter is applied by the caller post-load. Keyset page uses object_id
-// (UUIDv7) which is monotonic-by-time.
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+// The full CEL filter is still applied by the caller post-load; the
+// `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
+// extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
+// non-matching rows before they cross the wire instead of fetching the
+// whole namespace and filtering in Go. The post-load CEL pass stays
+// authoritative, so over-fetching (a hint that's absent) only costs
+// throughput, never correctness. `substr` is escaped for LIKE by the
+// adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
+func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		tenantID,
 		objectKey,
 		state,
 		prefix,
+		substr,
 		afterID,
 		pageSize,
 	)

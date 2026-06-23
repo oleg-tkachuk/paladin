@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -148,11 +149,41 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArg
 		}
 		afterID = id
 	}
+
+	// Pushdown: extract the SQL-expressible subset of the CEL filter
+	// (state equality, key prefix/substring) and let Postgres narrow the
+	// scan instead of streaming the whole namespace into Go. The full
+	// CompiledCEL is still evaluated per row below, so an unrecognised
+	// or partially-pushed filter only over-fetches — it never drops a
+	// matching row. A pushdown parse error is non-fatal (the CompiledCEL
+	// path already validated the same expression).
+	var state sqlc.NullObjectState
+	var prefix, substr *string
+	if args.Filter != "" {
+		if pd, perr := cel.ExtractObjectPushdown(args.Filter); perr == nil {
+			if pd.StateEq != "" {
+				state = sqlc.NullObjectState{ObjectState: sqlc.ObjectState(pd.StateEq), Valid: true}
+			}
+			// Only push a key literal when it has no LIKE metacharacters
+			// (%, _, \). Otherwise the SQL LIKE would interpret them as
+			// wildcards and broaden the scan; since the CompiledCEL pass
+			// is authoritative that's still correct, but skipping keeps
+			// the hint precise without an ESCAPE clause.
+			if p, ok := likeLiteral(pd.KeyPrefix); ok {
+				prefix = &p
+			}
+			if s, ok := likeLiteral(pd.KeyContains); ok {
+				substr = &s
+			}
+		}
+	}
+
 	rows, err := r.q.ListObjects(ctx,
 		pgUUID(args.TenantID),
 		args.ObjectKey,
-		sqlc.NullObjectState{}, // no state filter from handler yet
-		nil,                    // prefix
+		state,
+		prefix,
+		substr,
 		pgUUID(afterID),
 		pageSize,
 	)
@@ -214,7 +245,8 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 			pgUUID(args.TenantID),
 			args.ObjectKey,
 			sqlc.NullObjectState{},
-			nil,
+			nil, // prefix
+			nil, // substr (CountObjectsArgs carries no raw filter to push down)
 			pgUUID(afterID),
 			pageSize,
 		)
@@ -434,6 +466,20 @@ func objectFromSQLC(o sqlc.Object) object.Object {
 
 // celVars surfaces a flat map of attributes CEL programs can reference. Keep
 // the list stable — changes ripple out to every user-defined filter.
+// likeLiteral returns (s, true) when s is a non-empty pushdownable LIKE
+// literal — i.e. contains no LIKE metacharacter (%, _, \) that would be
+// reinterpreted as a wildcard. Empty or metachar-bearing literals return
+// ok=false so the caller leaves the predicate to the in-memory CEL pass.
+func likeLiteral(s string) (string, bool) {
+	if s == "" {
+		return "", false
+	}
+	if strings.ContainsAny(s, `%_\`) {
+		return "", false
+	}
+	return s, true
+}
+
 func celVars(o object.Object) map[string]any {
 	return map[string]any{
 		"key":          o.Key,

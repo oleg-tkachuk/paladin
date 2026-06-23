@@ -287,8 +287,12 @@ type ListObjectsArgs struct {
 	PageSize    int32
 	PageToken   string
 	CompiledCEL cel.Program // pre-compiled; nil = no filter
-	OrderBy     string
-	SortDesc    bool
+	// Filter is the raw CEL expression, kept alongside CompiledCEL so the
+	// adapter can extract SQL pushdown predicates (state/key) from it. The
+	// CompiledCEL remains authoritative as a post-load pass.
+	Filter   string
+	OrderBy  string
+	SortDesc bool
 }
 
 // CountObjectsArgs carries the inputs for Repository.CountObjects. When
@@ -719,6 +723,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 		PageSize:    in.PageSize,
 		PageToken:   in.PageToken,
 		CompiledCEL: prog,
+		Filter:      in.Filter,
 		OrderBy:     in.OrderBy,
 		SortDesc:    in.SortDesc,
 	})

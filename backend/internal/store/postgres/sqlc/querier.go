@@ -234,9 +234,15 @@ type Querier interface {
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, version_id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ObjectVersion, error)
-	// CEL filter is applied by the caller post-load. Keyset page uses object_id
-	// (UUIDv7) which is monotonic-by-time.
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	// The full CEL filter is still applied by the caller post-load; the
+	// `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
+	// extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
+	// non-matching rows before they cross the wire instead of fetching the
+	// whole namespace and filtering in Go. The post-load CEL pass stays
+	// authoritative, so over-fetching (a hint that's absent) only costs
+	// throughput, never correctness. `substr` is escaped for LIKE by the
+	// adapter. Keyset page uses object_id (UUIDv7) which is monotonic-by-time.
+	ListObjects(ctx context.Context, tenantID pgtype.UUID, objectKey string, state NullObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state NullOperationState, afterID pgtype.UUID, pageSize int32) ([]ListOperationsRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
