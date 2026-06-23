@@ -42,10 +42,9 @@ func runListeners(
 	db := deps.DB
 
 	started := &atomic.Bool{}
-	// deps.BackgroundJobs carries the AsyncAudit flusher (and any
-	// future listener-side goroutines). Without this slice, the
-	// audit wrapper's Insert would block forever on the channel
-	// because no goroutine is reading it.
+	// deps.BackgroundJobs carries listener-side goroutines. Empty today
+	// (the audit writer is synchronous + durable — ADR-0004); kept wired
+	// so future listener-scoped jobs flow through the same slot.
 	container := app.NewContainer(version, commit, buildTime, cfg, l, listeners, db, nil, deps.BackgroundJobs, started).
 		WithHealth(healthH)
 

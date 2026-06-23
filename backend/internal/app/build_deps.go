@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/audit"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/filter/cel"
 	policy "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
@@ -57,19 +56,11 @@ type SharedDeps struct {
 	// cfg.APIToken.Enabled is false; callers must guard.
 	APIToken *APITokenBundle
 
-	// AsyncAudit wraps Repos.Audit with bounded buffering + a
-	// background flush goroutine. Mutating RPCs queue the audit row
-	// instead of paying the Postgres-Insert latency on the response
-	// path. Listener processes (serve api / serve admin) MUST add
-	// AsyncAuditJob() to the BackgroundJobs they hand to NewContainer,
-	// otherwise Insert will block forever on the channel.
-	AsyncAudit *audit.AsyncWriter
-
 	// BackgroundJobs are the goroutines a listener process must run
-	// alongside its HTTP handlers — today just AsyncAudit. Workers
-	// have their own BuildBackgroundJobs path and don't read this
-	// field. Kept on SharedDeps (not returned separately) so listener
-	// build sites can pull the same shared instance.
+	// alongside its HTTP handlers. Empty today — the audit writer is now
+	// synchronous + crash-durable (ADR-0004), so there is no background
+	// flusher to register. Kept on SharedDeps (not returned separately)
+	// so future listener-scoped jobs share the same instance.
 	BackgroundJobs []BackgroundJob
 }
 
@@ -162,15 +153,10 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 	deps.APIToken = apiTok
 
-	// Async audit. Wraps the synchronous adapter so the audit
-	// interceptor's Insert returns immediately; a background
-	// goroutine batches writes to Postgres. The wrapper is also
-	// registered as a BackgroundJob — listener processes pull
-	// deps.BackgroundJobs into their App container.
-	deps.AsyncAudit = audit.NewAsyncWriter(repos.Audit, audit.AsyncWriterConfig{
-		Logger: l.Named("audit-async"),
-	})
-	deps.BackgroundJobs = append(deps.BackgroundJobs, deps.AsyncAudit)
+	// Audit writes are synchronous + crash-durable (ADR-0004): the audit
+	// interceptor calls repos.Audit.Insert directly on the response path,
+	// so the row is committed before the RPC returns. No in-memory buffer,
+	// no background flusher, no loss window on an abrupt process kill.
 
 	return deps, nil
 }

@@ -1,6 +1,8 @@
 # ADR-0004: Crash-durable (table-backed) audit outbox
 
-- **Status:** Proposed (design + plan; not yet implemented)
+- **Status:** Accepted — form (A) implemented 2026-06. The audit
+  interceptor now writes synchronously and durably; `AsyncWriter` is
+  removed. See "Status of implementation" at the end.
 - **Context:** `internal/audit/async_writer.go` makes the audit interceptor
   cheap by enqueueing entries to a bounded in-memory channel and flushing
   them to Postgres in a background batch. The trade-off is durability:
@@ -45,3 +47,36 @@ unacceptable under load:
   done together or back-to-back.
 - Benchmark gate before committing to (A): p99 of the mutating RPCs with
   the synchronous insert must stay within budget; if not, fall back to (B).
+
+## Status of implementation (2026-06)
+
+Form (A) landed:
+- `internal/audit/async_writer.go` (the bounded-buffer + background-flush
+  wrapper) and its test are **deleted**. The `audit` package is gone; the
+  `AsyncWriter` BackgroundJob and the `SharedDeps.AsyncAudit` field with it.
+- Both audit interceptors (`AudienceAdmin`, `AudienceIAM`) are wired
+  directly to `repos.Audit` (the Postgres `admindomain.AuditRepository`,
+  which already satisfies `middleware.AuditWriter`). The interceptor calls
+  `Insert` synchronously after the handler returns, so the row commits
+  before the RPC response reaches the caller — no in-memory loss window on
+  an abrupt kill.
+- Write remains best-effort for the *caller*: an `Insert` error is logged
+  and swallowed, never failing a mutation that already committed
+  (`auditInterceptor.write` returns the error to the interceptor, which
+  discards it). Durability ≠ blocking the request on the audit DB.
+- Unit tests (`internal/middleware/audit_durable_test.go`): the row is
+  written synchronously on the response path (not before the handler
+  returns, and exactly once), and an `Insert` error does not fail the RPC.
+
+Why this is durable enough: the residual window is operation-commit →
+standalone audit insert (one synchronous indexed append, no batching). It
+is not atomic with the operation's own tx — true atomicity would require
+threading the handler tx out to the interceptor, a much larger change — but
+the crash-loss surface drops from "up to one ~200ms batch" to "a single
+in-flight insert", which meets the SOC 2 / ISO 27001 survive-a-crash bar.
+
+Deferred (tracked in BACKLOG):
+- Form (B) staging-table + projector, if the synchronous insert's tail
+  latency ever becomes a problem under load (the benchmark gate above).
+- Read-path (`recordReads=true`) write-behind: currently `recordReads` is
+  `false` on every plane, so there is no async read-audit path to keep.

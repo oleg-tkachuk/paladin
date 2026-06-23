@@ -1294,29 +1294,28 @@ open deliberately — each notes why._
   bakes a per-tenant `platform.admin` row, which suggests
   per-tenant consent is the intent.
 
-### Table-backed audit outbox for crash-durability
+### Audit form (B): staging table + projector (latency mitigation only)
 
-- **Status:** Aspirational — design in [ADR-0004](docs/adr/0004-table-backed-audit-outbox.md); coupled to ADR-0003's tx seam
-- **Reason:** `internal/audit/async_writer.go` removes Postgres-Insert
-  latency from the mutating-RPC path but in-flight entries are lost
-  on `kill -9` / pod eviction (bounded to ~one MaxBatch worth, but
-  non-zero). Compliance regimes that require "every observed mutation
-  shows up in audit_log even across crashes" need a real outbox:
-  the request handler synchronously writes to a tiny `audit_outbox`
-  table inside its own tx, then a dispatcher worker drains
-  outbox → audit_log under SKIP LOCKED.
+- **Status:** Deferred — crash-durability is DONE via form (A)
+  ([ADR-0004](docs/adr/0004-table-backed-audit-outbox.md)): the audit
+  interceptor now writes synchronously to `audit_log` before the RPC
+  returns, and `AsyncWriter` (the in-memory buffer that lost entries on
+  `kill -9`) is removed. This entry is no longer a durability gap.
+- **Reason:** form (A) puts one synchronous indexed append on the
+  response path of every mutating RPC. If that tail latency ever shows up
+  in the mutating-RPC p99 under load, form (B) keeps durability while
+  moving the heavy `audit_log` write off the hot path: the handler appends
+  to a lean `audit_outbox` table, a projector worker drains
+  outbox → audit_log under SKIP LOCKED (same pattern as event_dispatcher).
 - **Definition of Done:**
   - Migration adds `audit_outbox(entry_id UUID PK, payload JSONB,
     enqueued_at TIMESTAMPTZ)` with the same indexes as event_deliveries.
-  - audit.AsyncWriter swaps to "tx-write to outbox" semantics; the
-    flusher worker reads from outbox not the in-memory channel.
-  - The flusher reuses the same SKIP-LOCKED claim pattern as
-    event_dispatcher.
-  - On successful audit_log insert the outbox row is deleted in the
-    same tx.
-- **Blockers:** none — but only worth doing once the in-memory
-  loss-rate becomes measurable in practice. Today the wrapper logs
-  drains and we can monitor.
+  - The interceptor writes to `audit_outbox` (ideally on the handler's own
+    tx, via the ADR-0003 `RunInTx` seam) instead of `audit_log` directly.
+  - A projector worker reuses the SKIP-LOCKED claim pattern and deletes the
+    outbox row in the same tx as the `audit_log` insert.
+- **Blockers:** none — gated purely on a measured p99 regression. Until
+  then form (A) is correct and simpler.
 
 ### CNPG HA replicas in the PALADIN chart
 

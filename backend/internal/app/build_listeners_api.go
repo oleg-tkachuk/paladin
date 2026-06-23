@@ -225,7 +225,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// anonymous/failed Login attempts are still recorded — a
 		// credential-misuse breach must leave a server-side trail
 		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
-		middleware.AuditWithMirror(deps.AsyncAudit, auth.AudienceIAM, false, nil),
+		// Synchronous + crash-durable (ADR-0004): the row commits before
+		// the RPC returns, so a kill can't drop a credential-misuse trail.
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		idempotencyInterceptor,
 	)
