@@ -79,7 +79,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		))
 		// Bucket-provision outbox worker — drives the second half of
 		// CreateBucket(provision_on_backend=true). Same S3 client + cadence.
-		out = append(out, worker.NewBucketReconciler(
+		bucketRec := worker.NewBucketReconciler(
 			adapters.NewBucketRepoV2(db.Queries, deps.Pool),
 			deps.S3,
 			worker.BucketReconcilerConfig{
@@ -87,7 +87,18 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				BatchSize: int32(cfg.Worker.Jobs.Reconciler.BatchSize),
 			},
 			l.Named("bucket-reconciler"),
-		))
+		)
+		// Producer-only dispatcher (ADR-0003): on the terminal row removal
+		// the reconciler enqueues paladin.bucket.deleted on the same tx. Bound to
+		// the worker pool; the dispatcher pod drains event_deliveries, so no
+		// NATS pool here (enqueue never opens a socket).
+		bucketRec.SetEventProducer(&worker.Dispatcher{
+			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(db.Queries)),
+			Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
+			Logger:      l.Named("bucket-reconciler-events"),
+			MaxAttempts: 3,
+		})
+		out = append(out, bucketRec)
 	}
 
 	if cfg.Worker.Jobs.Housekeeping.AuditLogTTL > 0 {

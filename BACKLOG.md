@@ -297,21 +297,6 @@ sticky sessions, ingest dedup pool, tenant-delete precheck, AsyncWriter
 shutdown, composeKey guard). The entries that remain below were kept
 open deliberately — each notes why._
 
-### Bucket-reconciler terminal `paladin.bucket.deleted` event
-
-- **Status:** Open — small follow-on from [ADR-0003](docs/adr/0003-transactional-outbox.md)
-  (now fully implemented: every producer writes its outbox rows in the
-  producing tx, proven by `internal/integration/outbox_crash_test.go`).
-- **Reason:** outbox-mode bucket delete fires `paladin.bucket.deleting` when the
-  row flips to `deleting`; the bucket-reconciler worker then drives the S3
-  `DeleteBucket` and removes the row, but does NOT emit a terminal
-  `paladin.bucket.deleted` on completion. Subscribers can't observe the bucket
-  actually going away in outbox mode (only the immediate-delete path emits
-  `.deleted`).
-- **Definition of Done:** the reconciler enqueues `paladin.bucket.deleted` in the
-  same tx as the final row removal (reuse `BucketRepoV2.RunInTx` + a
-  producer-only dispatcher, exactly like the ingest promote path).
-- **Blockers:** none — isolated to `worker.BucketReconciler`.
 
 ### [MEDIUM] Pool sizing × replicas — PgBouncer for HPA-burst headroom
 

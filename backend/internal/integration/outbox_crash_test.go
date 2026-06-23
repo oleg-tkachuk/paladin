@@ -272,4 +272,80 @@ func TestOutboxCrashWindow(t *testing.T) {
 			t.Fatalf("outbox rows = %d, want %d (unchanged — rolled back)", n, before)
 		}
 	})
+
+	// ── bucket reconciler seam: terminal delete + event commit together ──
+	// The BucketReconciler removes the row and enqueues paladin.bucket.deleted on
+	// one tx (RunInTx + GetTx + DeleteTx + DispatchTx). Exercise that exact
+	// seam against a standalone bucket owned by the fixture tenant.
+	bucketRepo := adapters.NewBucketRepoV2(q, pool)
+	seedOwnedBucket := func(t *testing.T) (string, string) {
+		t.Helper()
+		be := "be2-" + uuid.NewString()[:8]
+		bn := "bkt2-" + uuid.NewString()[:8]
+		mustExec(t, ctx, pool, `INSERT INTO storage_backends (id, kind) VALUES ($1, 's3-compatible')`, be)
+		mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, bucket_name, owner_tenant_id) VALUES ($1, $2, $3)`, be, bn, f.tenantID)
+		return be, bn
+	}
+
+	t.Run("bucket terminal delete commits row removal and outbox atomically", func(t *testing.T) {
+		be, bn := seedOwnedBucket(t)
+		err := bucketRepo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+			b, e := bucketRepo.GetTx(ctx, tx, be, bn)
+			if e != nil {
+				return e
+			}
+			if e := bucketRepo.DeleteTx(ctx, tx, be, bn, 0); e != nil {
+				return e
+			}
+			_, e = disp.DispatchTx(ctx, tx, b.OwnerTenantID.String(), worker.Event{
+				Type: "paladin.bucket.deleted", At: time.Now().UTC(), TenantID: b.OwnerTenantID.String(), ResourceName: "r",
+			})
+			return e
+		})
+		if err != nil {
+			t.Fatalf("bucket terminal delete: %v", err)
+		}
+		if bucketExists(t, ctx, pool, be, bn) {
+			t.Fatal("bucket row still present, want deleted")
+		}
+		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != 1 {
+			t.Fatalf("outbox rows = %d, want 1", n)
+		}
+	})
+
+	t.Run("dispatch error rolls back bucket terminal delete and outbox", func(t *testing.T) {
+		be, bn := seedOwnedBucket(t)
+		before := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted")
+		err := bucketRepo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+			if e := bucketRepo.DeleteTx(ctx, tx, be, bn, 0); e != nil {
+				return e
+			}
+			if _, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), worker.Event{
+				Type: "paladin.bucket.deleted", At: time.Now().UTC(), TenantID: f.tenantID.String(), ResourceName: "r",
+			}); e != nil {
+				return e
+			}
+			return errors.New("boom: simulated dispatch failure")
+		})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !bucketExists(t, ctx, pool, be, bn) {
+			t.Fatal("bucket row removed despite rollback")
+		}
+		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != before {
+			t.Fatalf("outbox rows = %d, want %d (unchanged — rolled back)", n, before)
+		}
+	})
+}
+
+func bucketExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, backendID, bucketName string) bool {
+	t.Helper()
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM buckets WHERE backend_id = $1 AND bucket_name = $2)`,
+		backendID, bucketName).Scan(&exists); err != nil {
+		t.Fatalf("bucket exists: %v", err)
+	}
+	return exists
 }

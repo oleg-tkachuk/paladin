@@ -112,9 +112,11 @@ Landed:
   + `RunInTx`; the bucket/quota handlers hold a local `Repository` interface
   (domain interface + the `*Tx` methods) so `admindomain` stays pgx-free.
   Bucket/quota read the owner tenant_id back on the tx (the fan-out target
-  lives only on the stored row). `paladin.bucket.deleting` still fires `.deleting`
-  (the reconciler later removes the row); the reconciler emitting a terminal
-  `.deleted` on completion remains a separate BACKLOG item.
+  lives only on the stored row). Outbox-mode bucket delete fires `.deleting`
+  when the row flips, and the `worker.BucketReconciler` enqueues the terminal
+  `paladin.bucket.deleted` in the same tx as the final row removal (after the
+  backend `DeleteBucket` confirms) — a producer-only `Dispatcher` bound to
+  the worker pool, mirroring the ingest seam.
 
 No remaining follow-up — the dual-write crash window is closed for every
 producer.

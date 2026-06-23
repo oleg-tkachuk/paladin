@@ -25,9 +25,11 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -51,13 +53,24 @@ type BucketProvisionRepo interface {
 
 	// Delete-side outbox.
 	ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error)
-	// Delete physically removes the row. Called from the worker AFTER
-	// the backend confirms the bucket is gone. expectedVersion=0 here:
-	// the OCC was already enforced when the handler flipped the row to
-	// 'deleting'; an intervening UPDATE is a bug we want to surface, not
-	// race against.
-	Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error
+	// Terminal removal + paladin.bucket.deleted, atomic (ADR-0003). Called
+	// AFTER the backend confirms the bucket is gone. GetTx resolves the
+	// owner tenant_id (the fan-out target lives only on the row); DeleteTx
+	// removes the row; the closure enqueues the event — all on one tx via
+	// RunInTx. expectedVersion=0: the OCC was enforced when the handler
+	// flipped the row to 'deleting'; an intervening UPDATE is a bug to
+	// surface, not race against.
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	GetTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Bucket, error)
+	DeleteTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error
 	MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
+}
+
+// BucketEventProducer is the outbox fan-out seam the reconciler uses to
+// enqueue the terminal paladin.bucket.deleted on the row-removal tx. nil-safe:
+// an unwired reconciler just removes the row. *Dispatcher implements it.
+type BucketEventProducer interface {
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt Event) (int, error)
 }
 
 type BucketReconcilerConfig struct {
@@ -71,11 +84,17 @@ type BucketReconcilerConfig struct {
 }
 
 type BucketReconciler struct {
-	repo BucketProvisionRepo
-	prov BucketProvisioner
-	cfg  BucketReconcilerConfig
-	log  *zap.Logger
+	repo   BucketProvisionRepo
+	prov   BucketProvisioner
+	cfg    BucketReconcilerConfig
+	events BucketEventProducer // nil-safe
+	log    *zap.Logger
 }
+
+// SetEventProducer attaches the optional outbox producer so the terminal
+// row removal also enqueues paladin.bucket.deleted in the same tx (ADR-0003).
+// nil-safe / opt-in — same contract as the handlers' SetEventProducer.
+func (r *BucketReconciler) SetEventProducer(p BucketEventProducer) { r.events = p }
 
 // NewBucketReconciler wires the worker with sensible defaults. The
 // caller passes the same Provisioner used by the handler so behavior
@@ -230,17 +249,53 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		return
 	}
 
-	// Backend confirms the bucket is gone — drop the row. expectedVersion
-	// is 0 because the OCC check was enforced at MarkDeleting time; the
-	// row hasn't been touched since (UpdateBucket et al. would refuse a
-	// 'deleting' row in a future hardening pass, but right now nothing
-	// guards it — keeping expectedVersion=0 means the worker doesn't
-	// fight an admin who forced through an UPDATE during the delete).
-	if err := r.repo.Delete(ctx, row.BackendID, row.BucketName, 0); err != nil {
-		log.Warn("backend deleted but row delete failed", zap.Error(err))
+	// Backend confirms the bucket is gone — drop the row AND enqueue the
+	// terminal paladin.bucket.deleted in one tx (ADR-0003), so a subscriber sees
+	// the bucket actually disappear (the handler only fired `.deleting` when
+	// the row flipped). expectedVersion is 0 because the OCC check was
+	// enforced at MarkDeleting time; the row hasn't been touched since.
+	if err := r.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		// Read the owner (fan-out target) on the tx before removing the row.
+		// A missing row means a concurrent replica already finished — treat
+		// as done, no event.
+		b, gErr := r.repo.GetTx(ctx, tx, row.BackendID, row.BucketName)
+		if errors.Is(gErr, admindomain.ErrNotFound) {
+			return nil
+		}
+		if gErr != nil {
+			return gErr
+		}
+		if dErr := r.repo.DeleteTx(ctx, tx, row.BackendID, row.BucketName, 0); dErr != nil {
+			return dErr
+		}
+		return r.emitBucketDeleted(ctx, tx, b)
+	}); err != nil {
+		log.Warn("backend deleted but row delete/event failed", zap.Error(err))
 		return
 	}
 	log.Info("bucket deleted")
+}
+
+// emitBucketDeleted enqueues the terminal paladin.bucket.deleted on the row-
+// removal tx. nil-safe (no producer → no-op). Mirrors the handler's
+// immediate-delete payload; mode "outbox" marks the async completion.
+func (r *BucketReconciler) emitBucketDeleted(ctx context.Context, tx pgx.Tx, b admindomain.Bucket) error {
+	if r.events == nil {
+		return nil
+	}
+	_, err := r.events.DispatchTx(ctx, tx, b.OwnerTenantID.String(), Event{
+		Type:         "paladin.bucket.deleted",
+		At:           time.Now().UTC(),
+		TenantID:     b.OwnerTenantID.String(),
+		ResourceName: fmt.Sprintf("tenants/%s/buckets/%s/%s", b.OwnerTenantID, b.BackendID, b.BucketName),
+		Payload: map[string]any{
+			"tenant_id":   b.OwnerTenantID.String(),
+			"backend_id":  b.BackendID,
+			"bucket_name": b.BucketName,
+			"mode":        "outbox",
+		},
+	})
+	return err
 }
 
 // isTerminalDeletionError mirrors isTerminalProvisionError for the
