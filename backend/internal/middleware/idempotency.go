@@ -20,19 +20,21 @@
 //     retries (network flake, client double-click) onto a single
 //     resource.
 //
-// Replay is implemented via a runtime type registry. On the first
-// successful response for a given method we capture two things:
-//   - reflect.Type of the *connect.Response[T] wrapper, and
-//   - the proto-message factory needed to materialize a fresh *T
-//     from the cached bytes.
+// Replay reconstructs the cached *connect.Response[T] two ways:
 //
-// On replay we reflectively allocate a new *Response[T], unmarshal
-// the cached bytes into a fresh *T, set the wrapper's exported `Msg`
-// field, and return it. The reflectively-constructed value
-// satisfies connect.AnyResponse because the `internalOnly()` marker
-// is a method on `*Response[_]` — method sets are type-defined, not
-// instance-defined, so any *Response[T] (regardless of how it was
-// allocated) implements the interface.
+//   - Preferred: a type-parameterized factory registered per method via
+//     RegisterResponseFactory[T]. It builds the response with
+//     connect.NewResponse[T] — pure generics, no Go reflection and no
+//     dependency on connect-go's internal struct layout.
+//
+//   - Fallback (any method without a registered factory): a runtime
+//     reflect.Type registry auto-populated from the first response. This
+//     keeps every method working without a registration sweep; methods
+//     migrate to the generic path incrementally by adding one
+//     RegisterResponseFactory[T] call at wiring time.
+//
+// Both produce a value that satisfies connect.AnyResponse because the
+// interface method set is defined on *Response[_] at the type level.
 //
 // Cold-start path: the FIRST request for any (method) tuple is
 // always a cache miss because the type registry is empty for that
@@ -62,6 +64,40 @@ import (
 )
 
 const idempotencyHeader = "Idempotency-Key"
+
+// responseFactory builds a fresh AnyResponse from cached proto bytes.
+type responseFactory func(body []byte) (connect.AnyResponse, error)
+
+// protoPtr constrains PT to "*T that is a proto.Message" so the generic
+// factory can allocate new(T) and treat it as a proto message.
+type protoPtr[T any] interface {
+	*T
+	proto.Message
+}
+
+// responseFactories maps a Connect procedure → its generic reconstructor.
+// Process-wide (registration is a one-time wiring concern, not per
+// interceptor instance).
+var responseFactories sync.Map // method string → responseFactory
+
+// RegisterResponseFactory registers the generic, reflection-free replay
+// path for one memoizable method. Call once at wiring time, e.g.:
+//
+//	RegisterResponseFactory[adminv1.CreateTenantResponse](
+//	    adminv1connect.TenantServiceCreateTenantProcedure)
+//
+// On replay the interceptor allocates a fresh *T, unmarshals the cached
+// bytes into it, and wraps it with connect.NewResponse[T] — no Go
+// reflection, no reliance on the Response struct's field names.
+func RegisterResponseFactory[T any, PT protoPtr[T]](method string) {
+	responseFactories.Store(method, responseFactory(func(body []byte) (connect.AnyResponse, error) {
+		msg := PT(new(T))
+		if err := proto.Unmarshal(body, msg); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse[T](msg), nil
+	}))
+}
 
 // IdempotencyStore persists and returns cached responses.
 type IdempotencyStore interface {
@@ -148,14 +184,19 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		// risk regardless of this cache.
 		cached, _, found, err := i.store.Get(ctx, tenantID, method, key)
 		if err == nil && found {
-			if respType, ok := i.respTypes.Load(method); ok {
-				replay, rerr := reconstructResponse(respType.(reflect.Type), cached)
-				if rerr == nil {
+			// Preferred: generic factory (no reflection).
+			if f, ok := responseFactories.Load(method); ok {
+				if replay, rerr := f.(responseFactory)(cached); rerr == nil {
 					return replay, nil
 				}
-				// Reconstruction failure is suspicious (proto schema
-				// drift, corrupt cache). Fall through to next()
-				// rather than fail the request.
+				// Reconstruction failure (proto drift / corrupt cache) →
+				// fall through to next() rather than fail the request.
+			} else if respType, ok := i.respTypes.Load(method); ok {
+				// Fallback: reflection registry auto-populated on a prior
+				// cache miss for an unregistered method.
+				if replay, rerr := reconstructResponse(respType.(reflect.Type), cached); rerr == nil {
+					return replay, nil
+				}
 			}
 		}
 
