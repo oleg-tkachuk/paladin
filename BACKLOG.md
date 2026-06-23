@@ -299,7 +299,7 @@ open deliberately — each notes why._
 
 ### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
 
-- **Status:** Statemachine paths DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — promote / soft-delete / restore write their events atomically with the transition. Remaining: the repo-based events (updated via UpdateMetadata, permanent-delete via HardDelete), admin-plane lifecycle events, the ingest promote path, and a testcontainers crash-window test
+- **Status:** Data plane DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — all five object lifecycle events (promote / soft-delete / restore via the statemachine seam; update / permanent-delete via the `ObjectRepo.RunInTx` + `*Tx` repo seam) write their events atomically with the mutation. Remaining: admin-plane lifecycle events (tenant/bucket/objectKey/quota), the event-ingest promote path, and a testcontainers crash-window test
 - **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
   transition has already committed
   (`internal/worker/event_dispatcher.go` ~133;

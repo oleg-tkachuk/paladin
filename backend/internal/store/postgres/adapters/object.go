@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -106,6 +107,17 @@ func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, objectK
 }
 
 func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args object.UpdateMetadataArgs) (object.Object, error) {
+	return r.updateMetadata(ctx, r.q, args)
+}
+
+// UpdateMetadataTx runs UpdateMetadata on the caller's transaction so the
+// handler can write the paladin.object.updated outbox rows atomically with the
+// row update — closing the dual-write crash window (ADR-0003).
+func (r *ObjectRepo) UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args object.UpdateMetadataArgs) (object.Object, error) {
+	return r.updateMetadata(ctx, r.q.WithTx(tx), args)
+}
+
+func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args object.UpdateMetadataArgs) (object.Object, error) {
 	var metadata, tags []byte
 	var extRef *string
 	for _, field := range args.UpdatedFields {
@@ -119,7 +131,7 @@ func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args object.UpdateMetad
 			extRef = &e
 		}
 	}
-	rows, err := r.q.UpdateObjectMetadata(ctx,
+	rows, err := q.UpdateObjectMetadata(ctx,
 		pgUUID(args.TenantID),
 		pgUUID(args.ObjectID),
 		metadata,
@@ -133,7 +145,7 @@ func (r *ObjectRepo) UpdateMetadata(ctx context.Context, args object.UpdateMetad
 	if rows == 0 {
 		return object.Object{}, object.ErrVersionMismatch
 	}
-	return r.getByID(ctx, args.TenantID, args.ObjectID)
+	return r.getByIDWith(ctx, q, args.TenantID, args.ObjectID)
 }
 
 func (r *ObjectRepo) ListObjects(ctx context.Context, args object.ListObjectsArgs) ([]object.Object, string, error) {
@@ -386,29 +398,57 @@ func readBoolOverride(raw []byte, key string) (bool, bool) {
 // enforce_object_version_lock trigger on object_versions reads this GUC.
 //
 // Compliance-mode rows still raise — by design.
-func (r *ObjectRepo) HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+// RunInTx runs fn inside a single transaction on the repo's pool. Event-
+// producing handlers use it to write a lifecycle mutation and its outbox
+// rows atomically (ADR-0003): fn does the repo write via the *Tx methods
+// and the dispatch on the same tx; an error from either rolls back both.
+func (r *ObjectRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *ObjectRepo) HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+	return r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		return r.HardDeleteWithBypassTx(ctx, tx, tenantID, objectID, expectedVersion)
+	})
+}
+
+// HardDeleteWithBypassTx performs the bypass delete on the caller's tx,
+// setting the governance-bypass GUC on that same tx (so the object_versions
+// trigger permits removal of GOVERNANCE-locked rows). Used by the permanent-
+// delete handler to enqueue paladin.object.deleted atomically (ADR-0003).
+func (r *ObjectRepo) HardDeleteWithBypassTx(ctx context.Context, tx pgx.Tx, tenantID, objectID uuid.UUID, expectedVersion int64) error {
 	if _, err := tx.Exec(ctx, "SET LOCAL paladin.governance_bypass = 'true'"); err != nil {
 		return fmt.Errorf("set bypass GUC: %w", err)
 	}
-	rows, err := r.q.WithTx(tx).HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
-	if err != nil {
+	if err := hardDeleteObject(ctx, r.q.WithTx(tx), tenantID, objectID, expectedVersion); err != nil {
 		return fmt.Errorf("hard delete (bypass): %w", err)
 	}
-	if rows == 0 {
-		return object.ErrVersionMismatch
-	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // HardDelete removes the row. expectedVersion=0 disables the OCC guard.
 // ErrVersionMismatch when no rows match (either gone or version drift).
 func (r *ObjectRepo) HardDelete(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error {
-	rows, err := r.q.HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
+	return hardDeleteObject(ctx, r.q, tenantID, objectID, expectedVersion)
+}
+
+// HardDeleteTx runs HardDelete on the caller's tx so the permanent-delete
+// handler can enqueue paladin.object.deleted atomically with the row removal
+// (ADR-0003). The DELETE keeps its non-bypassable lock guard.
+func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+	return hardDeleteObject(ctx, r.q.WithTx(tx), tenantID, objectID, expectedVersion)
+}
+
+func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID, expectedVersion int64) error {
+	rows, err := q.HardDeleteObject(ctx, pgUUID(tenantID), pgUUID(objectID), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("hard delete: %w", err)
 	}
@@ -428,7 +468,11 @@ func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, obje
 }
 
 func (r *ObjectRepo) getByID(ctx context.Context, tenantID, objectID uuid.UUID) (object.Object, error) {
-	row, err := r.q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
+	return r.getByIDWith(ctx, r.q, tenantID, objectID)
+}
+
+func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID) (object.Object, error) {
+	row, err := q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
 	if err != nil {
 		return object.Object{}, err
 	}

@@ -207,6 +207,10 @@ type Repository interface {
 	FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]Object, error)
 	FindByPath(ctx context.Context, tenantID uuid.UUID, objectKey, key string) (Object, error)
 	UpdateMetadata(ctx context.Context, args UpdateMetadataArgs) (Object, error)
+	// UpdateMetadataTx runs UpdateMetadata on tx so the handler can write
+	// the paladin.object.updated outbox rows atomically with the row update
+	// (ADR-0003). RunInTx supplies the tx.
+	UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
 	// LookupBucket returns the physical S3 bucket for a tenant's ObjectKey.
@@ -232,6 +236,16 @@ type Repository interface {
 	// the object_versions trigger reads to permit removal of GOVERNANCE-locked
 	// rows. COMPLIANCE-locked rows are still rejected by the trigger.
 	HardDeleteWithBypass(ctx context.Context, tenantID, objectID uuid.UUID, expectedVersion int64) error
+	// HardDeleteTx / HardDeleteWithBypassTx run the permanent delete on the
+	// caller's tx so the handler can enqueue paladin.object.deleted atomically
+	// with the row removal (ADR-0003). The bypass variant sets the governance
+	// GUC on that same tx. RunInTx supplies the tx.
+	HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, objectID uuid.UUID, expectedVersion int64) error
+	HardDeleteWithBypassTx(ctx context.Context, tx pgx.Tx, tenantID, objectID uuid.UUID, expectedVersion int64) error
+	// RunInTx runs fn in one transaction on the repo's pool — the seam the
+	// update / permanent-delete handlers use to write the mutation and its
+	// outbox rows atomically.
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
 	// LiveCollision reports whether a non-DELETED row already occupies
 	// (tenant, object_key, key); used to refuse RestoreObject when the
 	// slot has been reused by a fresh upload.
@@ -993,15 +1007,34 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	}, cedar.ActionUpdateObject, 0, ""); err != nil {
 		return nil, err
 	}
-	obj, err := h.repo.UpdateMetadata(ctx, UpdateMetadataArgs{
-		TenantID:        tenantID,
-		ObjectID:        objectID,
-		ResourceVersion: in.ResourceVersion,
-		UpdatedFields:   in.UpdatedFields,
-		Metadata:        in.Metadata,
-		Tags:            in.Tags,
-		ContentType:     in.ContentType,
-		ExternalRef:     in.ExternalRef,
+	// Update + paladin.object.updated fan-out in one tx (ADR-0003): a dispatch
+	// failure rolls back the metadata change, so the client's at-least-once
+	// retry re-applies both rather than silently dropping the event.
+	var obj Object
+	err = h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var uerr error
+		obj, uerr = h.repo.UpdateMetadataTx(ctx, tx, UpdateMetadataArgs{
+			TenantID:        tenantID,
+			ObjectID:        objectID,
+			ResourceVersion: in.ResourceVersion,
+			UpdatedFields:   in.UpdatedFields,
+			Metadata:        in.Metadata,
+			Tags:            in.Tags,
+			ContentType:     in.ContentType,
+			ExternalRef:     in.ExternalRef,
+		})
+		if uerr != nil {
+			return uerr
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.updated",
+			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			map[string]any{
+				"tenant_id":      tenantID.String(),
+				"object_key":     obj.ObjectKey,
+				"key":            obj.Key,
+				"object_id":      obj.ObjectID.String(),
+				"updated_fields": in.UpdatedFields,
+			})
 	})
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
@@ -1009,15 +1042,6 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.object.updated",
-		objectResourceName(tenantID, obj.ObjectKey, obj.Key),
-		map[string]any{
-			"tenant_id":      tenantID.String(),
-			"object_key":     obj.ObjectKey,
-			"key":            obj.Key,
-			"object_id":      obj.ObjectID.String(),
-			"updated_fields": in.UpdatedFields,
-		})
 	return &obj, nil
 }
 
@@ -1096,13 +1120,13 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		return MapResolveErr(err)
 	}
 
-	deleteFn := h.repo.HardDelete
+	deleteFn := h.repo.HardDeleteTx
 	if bypassGovernance {
 		if !principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin") {
 			return connect.NewError(connect.CodePermissionDenied,
 				errors.New("bypass_governance_retention requires role lock.governance.bypass or platform.admin"))
 		}
-		deleteFn = h.repo.HardDeleteWithBypass
+		deleteFn = h.repo.HardDeleteWithBypassTx
 	}
 
 	// Lock pre-check for a clear error. The HardDelete SQL is the
@@ -1125,15 +1149,36 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			fmt.Errorf("cannot delete: %s", lock.Reason()))
 	}
 
-	if err := deleteFn(ctx, tenantID, objectID, rv); err != nil {
+	// Row removal + paladin.object.deleted fan-out in one tx (ADR-0003): the
+	// event is enqueued atomically with the DELETE, so a crash between the
+	// two can no longer drop the notification. The S3 byte-removal stays
+	// AFTER commit (S3 is non-transactional, and the DB-then-S3 ordering
+	// must hold — see the block comment above): once the row is gone the
+	// bytes are safe to reclaim, and a failure there only orphans an
+	// object, never resurrects a dangling row.
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if derr := deleteFn(ctx, tx, tenantID, objectID, rv); derr != nil {
+			return derr
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
+			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			map[string]any{
+				"tenant_id":         tenantID.String(),
+				"object_key":        obj.ObjectKey,
+				"key":               obj.Key,
+				"object_id":         obj.ObjectID.String(),
+				"mode":              "permanent",
+				"bypass_governance": bypassGovernance,
+			})
+	}); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	// DB row is gone. Now remove the bytes; a failure here orphans the
-	// object in S3 but cannot resurrect a dangling row. Log loudly so a
-	// sweeper / operator can reclaim it.
+	// DB row is gone (and the event is enqueued). Now remove the bytes; a
+	// failure here orphans the object in S3 but cannot resurrect a dangling
+	// row. Log loudly so a sweeper / operator can reclaim it.
 	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
 		if h.log != nil {
 			h.log.Error("permanent delete: DB row removed but storage delete failed; object orphaned in S3",
@@ -1145,16 +1190,6 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			)
 		}
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.object.deleted",
-		objectResourceName(tenantID, obj.ObjectKey, obj.Key),
-		map[string]any{
-			"tenant_id":         tenantID.String(),
-			"object_key":        obj.ObjectKey,
-			"key":               obj.Key,
-			"object_id":         obj.ObjectID.String(),
-			"mode":              "permanent",
-			"bypass_governance": bypassGovernance,
-		})
 	return nil
 }
 

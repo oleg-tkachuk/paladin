@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/batch"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
@@ -52,6 +53,18 @@ func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string) (objec
 }
 func (*copyFakeRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error { panic("unused") }
 func (*copyFakeRepo) HardDeleteWithBypass(context.Context, uuid.UUID, uuid.UUID, int64) error {
+	panic("unused")
+}
+func (*copyFakeRepo) UpdateMetadataTx(context.Context, pgx.Tx, object.UpdateMetadataArgs) (object.Object, error) {
+	panic("unused")
+}
+func (*copyFakeRepo) HardDeleteTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	panic("unused")
+}
+func (*copyFakeRepo) HardDeleteWithBypassTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	panic("unused")
+}
+func (*copyFakeRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) error) error {
 	panic("unused")
 }
 func (*copyFakeRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {

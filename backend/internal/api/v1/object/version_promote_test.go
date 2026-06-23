@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // fakeObjectRepo is a minimal Repository stand-in that only implements the
@@ -54,6 +55,18 @@ func (*fakeObjectRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) 
 	panic("not used")
 }
 func (*fakeObjectRepo) HardDeleteWithBypass(context.Context, uuid.UUID, uuid.UUID, int64) error {
+	panic("not used")
+}
+func (*fakeObjectRepo) UpdateMetadataTx(context.Context, pgx.Tx, UpdateMetadataArgs) (Object, error) {
+	panic("not used")
+}
+func (*fakeObjectRepo) HardDeleteTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	panic("not used")
+}
+func (*fakeObjectRepo) HardDeleteWithBypassTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	panic("not used")
+}
+func (*fakeObjectRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) error) error {
 	panic("not used")
 }
 func (*fakeObjectRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {

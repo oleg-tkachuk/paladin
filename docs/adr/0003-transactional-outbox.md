@@ -1,8 +1,10 @@
 # ADR-0003: Transactional event outbox
 
-- **Status:** Accepted — implemented for the promote path (2026-06);
-  remaining lifecycle events + the testcontainers crash-window test are
-  follow-up (see "Status" at the end).
+- **Status:** Accepted — implemented for the entire data-plane object
+  lifecycle (promote, soft-delete, restore, update, permanent-delete) as
+  of 2026-06. The admin-plane lifecycle events, the event-ingest promote
+  path, and the testcontainers crash-window test are the remaining
+  follow-ups (see "Status" at the end).
 - **Context:** `event_deliveries` is the durable webhook outbox. Today the
   producer writes outbox rows AFTER the state transition has already
   committed: a handler calls `h.sm.PromoteToAvailable(...)` (its own
@@ -65,24 +67,34 @@ Landed:
 - `SoftDeleteInTx` / `RestoreInTx` orchestrators (sharing a
   `transitionInTx(do, after)` helper) cover the AVAILABLE→DELETED and
   DELETED→AVAILABLE transitions the same way.
-- All three statemachine-driven object events are now transactional:
+- All five data-plane object events are now transactional:
   - `object.CompleteObject` → `paladin.object.uploaded` (promote)
   - `object.DeleteObject` (soft) → `paladin.object.deleted`
   - `object.RestoreObject` → `paladin.object.restored`
+  - `object.UpdateObject` → `paladin.object.updated`
+  - `object.DeleteObject` (permanent) → `paladin.object.deleted`
   via a shared `Handler.dispatchEventTx` helper. A dispatch error rolls
   the transition back (the client's at-least-once retry re-runs both).
   Version-history / quota / capability-charge stay post-commit (separate
   concerns; a hiccup there must not roll back a delivered event).
+- The two **repo-based** mutations (`UpdateMetadata`, `HardDelete` /
+  `HardDeleteWithBypass`) gained a repo-level seam rather than the
+  statemachine orchestrator: `ObjectRepo.RunInTx(fn)` opens one tx on the
+  pool, and `UpdateMetadataTx` / `HardDeleteTx` / `HardDeleteWithBypassTx`
+  run the mutation on that tx (the bypass variant sets
+  `SET LOCAL paladin.governance_bypass` on the same tx). The handler does the
+  mutation + `dispatchEventTx` inside the closure. For permanent delete
+  the S3 byte-removal stays **after** commit (S3 is non-transactional and
+  the DB-then-S3 ordering must hold): the event is enqueued atomically
+  with the row removal, then the bytes are reclaimed best-effort.
 - Unit tests: `DispatchTx` writes one row per matching sub on the tx
   (not the pool), skips disabled subs, and a nil-Outbox dispatcher works.
 
 Follow-up (tracked in BACKLOG):
-- The two **repo-based** mutations still use best-effort `Dispatch`:
-  `paladin.object.updated` (UpdateMetadata) and the permanent-delete
-  `paladin.object.deleted` (HardDelete + the post-commit S3 delete). They
-  need a repo-level tx seam rather than the statemachine orchestrator —
-  separate change. Same for the admin-plane lifecycle events
-  (tenant/bucket/objectKey/quota) and the event-ingest promote path.
+- The admin-plane lifecycle events (tenant/bucket/objectKey/quota) and the
+  event-ingest promote path still use best-effort `Dispatch` — they need
+  the same seam applied in their handlers.
 - A testcontainers integration test asserting the crash window (commit
   state, kill before fan-out → row present after recovery) and rollback
-  (dispatch error → no state change, no outbox row).
+  (dispatch error → no state change, no outbox row). Covers the
+  statemachine and repo seams uniformly.
