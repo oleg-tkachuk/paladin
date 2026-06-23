@@ -32,7 +32,7 @@ import (
 
 // startPostgres boots a throwaway Postgres, applies the full goose schema,
 // and returns a live pool. The cleanup terminates the container.
-func startPostgres(t *testing.T) *pgxpool.Pool {
+func startPostgres(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
@@ -120,7 +120,7 @@ func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f 
 	return id
 }
 
-func mustExec(t *testing.T, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {
+func mustExec(t testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, sql, args...); err != nil {
 		t.Fatalf("exec %q: %v", sql, err)

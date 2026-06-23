@@ -361,21 +361,25 @@ open deliberately — each notes why._
   (hourly or daily depending on idempotency-key TTL distribution).
 - **Blockers:** same as audit_log.
 
-### AuditLog CEL pushdown — production benchmark
+### AuditLog: `action text_pattern_ops` prefix index
 
-- **Status:** Deferred
-- **Reason:** Pushdown extractor + dynamic-WHERE adapter shipped
-  (`internal/filter/cel/auditpushdown.go`,
-  `internal/store/postgres/adapters/admin_audit.go`). What's missing
-  is the production-shaped benchmark proving the speedup is real:
-  unit tests cover translation correctness but not Postgres latency
-  on a representative dataset.
-- **Definition of Done:**
-  - Bench harness that seeds ≥1M audit rows in testcontainers PG.
-  - Compare ListAuditLog with + without pushdown for a representative
-    filter (action.startsWith + at >= range). Document ≥10× p50
-    speedup or drop the claim.
-- **Blockers:** none — bench plumbing only.
+- **Status:** Open — surfaced by the pushdown benchmark
+  (`internal/integration/audit_bench_test.go`, `task test:bench`).
+- **Reason:** The CEL-pushdown production benchmark (formerly tracked here)
+  is **done**: it seeds 1M rows and measures the `action.startsWith + at >=`
+  filter with vs without pushdown. Finding — the "≥10× p50 latency" claim is
+  **dropped**; on this shape latency is within noise because `audit_log` has
+  no index on `action`, so the prefix is a filter (not a range) under both
+  paths. Pushdown still wins ~20× on bytes/allocations shipped into Go (only
+  the matching page crosses the wire) plus an avoided per-row CEL eval — but
+  the *latency* win needs a dedicated index.
+- **Definition of Done:** add a `(action text_pattern_ops, at DESC)` index
+  (or a partial index per high-volume action class), re-run `task test:bench`,
+  and confirm the newest-N-by-prefix query drops to an index range scan.
+  Validate the planner actually picks it for the `ORDER BY at DESC LIMIT`
+  shape (may need a composite or a rewrite) before claiming the win.
+- **Blockers:** none — but gated on a real query-planning measurement, which
+  the bench now provides.
 
 ### Per-row Cedar filtering in ListObjects
 

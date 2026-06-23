@@ -20,6 +20,11 @@ tasks:
     cmds:
       - go test -tags=integration -count=1 ./internal/integration/...
 
+  bench:
+    desc: "Run Postgres-backed benchmarks (needs Docker; seeds ~1M rows)"
+    cmds:
+      - go test -tags=integration -run='^$' -bench=. -benchtime=20x -timeout=600s ./internal/integration/...
+
   coverage:
     desc: "Run unit tests with coverage; HTML report → coverage/cover.html"
     cmds:
