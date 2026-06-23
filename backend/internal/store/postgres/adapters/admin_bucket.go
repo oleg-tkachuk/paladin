@@ -12,18 +12,39 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 type BucketRepoV2 struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
-func NewBucketRepoV2(q *sqlc.Queries) *BucketRepoV2 { return &BucketRepoV2{q: q} }
+func NewBucketRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *BucketRepoV2 {
+	return &BucketRepoV2{q: q, pool: pool}
+}
 
 var _ admindomain.BucketRepository = (*BucketRepoV2)(nil)
+
+// RunInTx runs fn in one transaction — the ADR-0003 seam the bucket handler
+// uses to write a lifecycle mutation and its outbox rows atomically.
+func (r *BucketRepoV2) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("bucket: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("bucket: commit tx: %w", err)
+	}
+	return nil
+}
 
 // BackendEnabled reports the enabled state of a storage backend.
 // Returns ErrNotFound when the backend id is unknown.
@@ -39,6 +60,15 @@ func (r *BucketRepoV2) BackendEnabled(ctx context.Context, backendID string) (bo
 }
 
 func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
+	return r.createWith(ctx, r.q, b)
+}
+
+// CreateTx runs Create on the caller's tx (ADR-0003).
+func (r *BucketRepoV2) CreateTx(ctx context.Context, tx pgx.Tx, b admindomain.Bucket) error {
+	return r.createWith(ctx, r.q.WithTx(tx), b)
+}
+
+func (r *BucketRepoV2) createWith(ctx context.Context, q *sqlc.Queries, b admindomain.Bucket) error {
 	constraints, _ := json.Marshal(b.Constraints)
 	if string(constraints) == "null" {
 		constraints = []byte("{}")
@@ -50,7 +80,7 @@ func (r *BucketRepoV2) Create(ctx context.Context, b admindomain.Bucket) error {
 		// 'ready' rows.
 		state = admindomain.BucketProvisionStateReady
 	}
-	if err := r.q.CreateBucketV2(ctx,
+	if err := q.CreateBucketV2(ctx,
 		b.BackendID,
 		b.BucketName,
 		strPtr(b.DisplayName),
@@ -133,7 +163,16 @@ func (r *BucketRepoV2) MarkProvisionFailed(ctx context.Context, backendID, bucke
 // ─── outbox / delete path ──────────────────────────────────────────────────
 
 func (r *BucketRepoV2) MarkDeleting(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
-	rows, err := r.q.MarkBucketDeleting(ctx, backendID, bucketName, expectedVersion)
+	return r.markDeletingWith(ctx, r.q, backendID, bucketName, expectedVersion)
+}
+
+// MarkDeletingTx runs MarkDeleting on the caller's tx (ADR-0003).
+func (r *BucketRepoV2) MarkDeletingTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error {
+	return r.markDeletingWith(ctx, r.q.WithTx(tx), backendID, bucketName, expectedVersion)
+}
+
+func (r *BucketRepoV2) markDeletingWith(ctx context.Context, q *sqlc.Queries, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := q.MarkBucketDeleting(ctx, backendID, bucketName, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -184,7 +223,17 @@ func (r *BucketRepoV2) MarkDeletionFailed(ctx context.Context, backendID, bucket
 }
 
 func (r *BucketRepoV2) Get(ctx context.Context, backendID, bucketName string) (admindomain.Bucket, error) {
-	row, err := r.q.GetBucketV2(ctx, backendID, bucketName)
+	return r.getWith(ctx, r.q, backendID, bucketName)
+}
+
+// GetTx reads a bucket on the caller's tx so the handler can resolve the
+// owner tenant_id (the fan-out target) inside the mutation tx (ADR-0003).
+func (r *BucketRepoV2) GetTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Bucket, error) {
+	return r.getWith(ctx, r.q.WithTx(tx), backendID, bucketName)
+}
+
+func (r *BucketRepoV2) getWith(ctx context.Context, q *sqlc.Queries, backendID, bucketName string) (admindomain.Bucket, error) {
+	row, err := q.GetBucketV2(ctx, backendID, bucketName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return admindomain.Bucket{}, admindomain.ErrNotFound
@@ -250,6 +299,15 @@ func (r *BucketRepoV2) ListAccessible(ctx context.Context, tenantID uuid.UUID, p
 }
 
 func (r *BucketRepoV2) UpdateBasic(ctx context.Context, b admindomain.Bucket, expectedVersion int64, mask []string) error {
+	return r.updateBasicWith(ctx, r.q, b, expectedVersion, mask)
+}
+
+// UpdateBasicTx runs UpdateBasic on the caller's tx (ADR-0003).
+func (r *BucketRepoV2) UpdateBasicTx(ctx context.Context, tx pgx.Tx, b admindomain.Bucket, expectedVersion int64, mask []string) error {
+	return r.updateBasicWith(ctx, r.q.WithTx(tx), b, expectedVersion, mask)
+}
+
+func (r *BucketRepoV2) updateBasicWith(ctx context.Context, q *sqlc.Queries, b admindomain.Bucket, expectedVersion int64, mask []string) error {
 	has := func(f string) bool { return slices.Contains(mask, f) }
 	var displayName *string
 	var labels []byte
@@ -264,7 +322,7 @@ func (r *BucketRepoV2) UpdateBasic(ctx context.Context, b admindomain.Bucket, ex
 	if has("owner_tenant_id") {
 		ownerID = pgUUIDOptional(b.OwnerTenantID)
 	}
-	rows, err := r.q.UpdateBucketBasic(ctx, b.BackendID, b.BucketName, displayName, labels, ownerID, expectedVersion)
+	rows, err := q.UpdateBucketBasic(ctx, b.BackendID, b.BucketName, displayName, labels, ownerID, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -344,7 +402,16 @@ func (r *BucketRepoV2) SetConstraints(ctx context.Context, backendID, bucketName
 }
 
 func (r *BucketRepoV2) Delete(ctx context.Context, backendID, bucketName string, expectedVersion int64) error {
-	rows, err := r.q.DeleteBucketV2(ctx, backendID, bucketName, expectedVersion)
+	return r.deleteWith(ctx, r.q, backendID, bucketName, expectedVersion)
+}
+
+// DeleteTx runs Delete on the caller's tx (ADR-0003).
+func (r *BucketRepoV2) DeleteTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error {
+	return r.deleteWith(ctx, r.q.WithTx(tx), backendID, bucketName, expectedVersion)
+}
+
+func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendID, bucketName string, expectedVersion int64) error {
+	rows, err := q.DeleteBucketV2(ctx, backendID, bucketName, expectedVersion)
 	if err != nil {
 		return err
 	}

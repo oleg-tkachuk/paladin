@@ -287,11 +287,17 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bu
 	// admindomain.Provisioner satisfied by the same s3 adapter that backs
 	// storage.Provisioner. We need a small interface adapter — bucketh.Provisioner
 	// has the same shape, so just type-cast/wrap.
-	return bucketh.NewHandler(repos.BucketV2, &bucketProvisionerAdapter{storage.Provisioner}, pe)
+	// The concrete BucketRepoV2 satisfies bucketh.Repository (domain
+	// interface + ADR-0003 tx seam); Repos.BucketV2 is the pgx-free domain
+	// type, so assert to the wider local interface here.
+	return bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), &bucketProvisionerAdapter{storage.Provisioner}, pe)
 }
 
 func ProvideQuotaHandler(repos Repos, pe *policy.Engine) *quotah.Handler {
-	return quotah.NewHandler(repos.Quota, pe)
+	// The concrete QuotaRepoV2 satisfies quotah.Repository (the domain
+	// interface + the ADR-0003 tx seam). Repos.Quota is typed as the
+	// pgx-free domain interface, so assert to the wider local one here.
+	return quotah.NewHandler(repos.Quota.(quotah.Repository), pe)
 }
 func ProvideAuditHandler(repos Repos, pe *policy.Engine) *audith.Handler {
 	return audith.NewHandler(repos.Audit, pe)

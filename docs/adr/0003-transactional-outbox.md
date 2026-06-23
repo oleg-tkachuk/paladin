@@ -1,10 +1,11 @@
 # ADR-0003: Transactional event outbox
 
-- **Status:** Accepted — implemented for the entire data-plane object
-  lifecycle (promote, soft-delete, restore, update, permanent-delete,
-  copy) AND the event-ingest promote path, with a testcontainers
-  crash-window test, as of 2026-06. The admin-plane lifecycle events are
-  the only remaining follow-up (see "Status" at the end).
+- **Status:** Accepted — fully implemented (2026-06). Every lifecycle
+  event across the data plane (promote, soft-delete, restore, update,
+  permanent-delete, copy), the event-ingest promote path, AND the
+  admin plane (tenant, object_key, bucket, quota) now writes its outbox
+  rows in the producing transaction. A testcontainers crash-window test
+  asserts the invariant on real Postgres. No remaining follow-up.
 - **Context:** `event_deliveries` is the durable webhook outbox. Today the
   producer writes outbox rows AFTER the state transition has already
   committed: a handler calls `h.sm.PromoteToAvailable(...)` (its own
@@ -104,8 +105,16 @@ Landed:
   its outbox row, and a dispatch error rolls back BOTH the state change and
   the already-inserted outbox row (no committed-but-unenqueued window).
 
-Follow-up (tracked in BACKLOG):
-- The admin-plane lifecycle events (tenant/bucket/objectKey/quota) still
-  use best-effort `Dispatch` — they need the same seam applied in their
-  handlers. Lower stakes than the data-plane object webhooks (control-plane
-  mutations are rare), so deliberately separate.
+- The admin-plane lifecycle events (tenant created/updated/trashed/
+  restored/purged, object_key created/updated/deleted, bucket created/
+  updated/deleted/deleting, quota set) now go through the same seam. The
+  two query-only admin repos (`BucketRepoV2`, `QuotaRepoV2`) gained a pool
+  + `RunInTx`; the bucket/quota handlers hold a local `Repository` interface
+  (domain interface + the `*Tx` methods) so `admindomain` stays pgx-free.
+  Bucket/quota read the owner tenant_id back on the tx (the fan-out target
+  lives only on the stored row). `paladin.bucket.deleting` still fires `.deleting`
+  (the reconciler later removes the row); the reconciler emitting a terminal
+  `.deleted` on completion remains a separate BACKLOG item.
+
+No remaining follow-up — the dual-write crash window is closed for every
+producer.

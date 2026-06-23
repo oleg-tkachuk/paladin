@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -25,6 +26,22 @@ import (
 // outbox + Postgres. *worker.Dispatcher implements it.
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+	// DispatchTx fans the event out on the caller's tx so the outbox rows
+	// commit atomically with the bucket mutation (ADR-0003).
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+}
+
+// Repository is the admindomain BucketRepository plus the ADR-0003 tx seam
+// (RunInTx + *Tx mutations + GetTx for the in-tx owner read). Kept local so
+// admindomain stays pgx-free; the concrete adapter satisfies both.
+type Repository interface {
+	admindomain.BucketRepository
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	CreateTx(ctx context.Context, tx pgx.Tx, b admindomain.Bucket) error
+	UpdateBasicTx(ctx context.Context, tx pgx.Tx, b admindomain.Bucket, expectedVersion int64, mask []string) error
+	GetTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Bucket, error)
+	DeleteTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error
+	MarkDeletingTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error
 }
 
 // Cedar action names — must match policies/schema.cedarschema.
@@ -41,7 +58,7 @@ type Provisioner interface {
 }
 
 type Handler struct {
-	repo        admindomain.BucketRepository
+	repo        Repository
 	provisioner Provisioner
 	policy      cedar.Authorizer
 
@@ -49,7 +66,7 @@ type Handler struct {
 	log    *zap.Logger
 }
 
-func NewHandler(r admindomain.BucketRepository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
+func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
 		panic("bucketh: policy authorizer is required")
 	}
@@ -106,6 +123,28 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 		zap.String("tenant_id", tenantID.String()),
 		zap.Int("subscriptions_matched", queued),
 	)
+}
+
+// dispatchEventTx fans the event out on the caller's tx so the outbox rows
+// commit atomically with the bucket mutation (ADR-0003). Returns the error
+// so the caller rolls back; nil-safe.
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
 }
 
 // bucketResourceName is the canonical resource string subscribers
@@ -191,30 +230,37 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		// pre-existing bucket). Row is immediately authoritative.
 		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
 	}
-	if err := h.repo.Create(ctx, in.Bucket); err != nil {
-		// Translate the typed ErrConflict the repo raises for FK /
-		// unique violations into FailedPrecondition so clients (UI,
-		// SDKs) see a readable message instead of "internal: SQLSTATE
-		// 23503". The repo's wrapped error already names the missing
-		// backend or duplicate bucket.
+	// Create + paladin.bucket.created in one tx (ADR-0003). The event needs the
+	// stored row (owner tenant_id, provision_state), so GetTx reads it back
+	// on the same tx; `got` is reused for the response.
+	var got admindomain.Bucket
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.CreateTx(ctx, tx, in.Bucket); e != nil {
+			return e
+		}
+		var e error
+		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.created",
+			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
+			map[string]any{
+				"tenant_id":       got.OwnerTenantID.String(),
+				"backend_id":      got.BackendID,
+				"bucket_name":     got.BucketName,
+				"region":          got.Region,
+				"provision_state": string(got.ProvisionState),
+			})
+	}); err != nil {
+		// Translate the typed ErrConflict the repo raises for FK / unique
+		// violations into FailedPrecondition so clients see a readable
+		// message instead of "internal: SQLSTATE 23503".
 		if errors.Is(err, admindomain.ErrConflict) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	got, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	h.dispatchEvent(ctx, got.OwnerTenantID, "paladin.bucket.created",
-		bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
-		map[string]any{
-			"tenant_id":       got.OwnerTenantID.String(),
-			"backend_id":      got.BackendID,
-			"bucket_name":     got.BucketName,
-			"region":          got.Region,
-			"provision_state": string(got.ProvisionState),
-		})
 	return &got, nil
 }
 
@@ -284,24 +330,32 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
-	if err := h.repo.UpdateBasic(ctx, in.Bucket, in.ExpectedVersion, in.UpdateMask); err != nil {
+	// Update + paladin.bucket.updated in one tx (ADR-0003). GetTx reads the
+	// post-update row back on the same tx (resource_version, owner).
+	var got admindomain.Bucket
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.UpdateBasicTx(ctx, tx, in.Bucket, in.ExpectedVersion, in.UpdateMask); e != nil {
+			return e
+		}
+		var e error
+		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.updated",
+			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
+			map[string]any{
+				"tenant_id":        got.OwnerTenantID.String(),
+				"backend_id":       got.BackendID,
+				"bucket_name":      got.BucketName,
+				"resource_version": got.ResourceVersion,
+				// We don't ship UpdateMask: the field-mask is a connect-shim
+				// concern and downstream consumers can diff against their
+				// cached snapshot if they care which scalar moved.
+			})
+	}); err != nil {
 		return nil, mapVersion(err)
 	}
-	got, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	h.dispatchEvent(ctx, got.OwnerTenantID, "paladin.bucket.updated",
-		bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
-		map[string]any{
-			"tenant_id":        got.OwnerTenantID.String(),
-			"backend_id":       got.BackendID,
-			"bucket_name":      got.BucketName,
-			"resource_version": got.ResourceVersion,
-			// We don't ship UpdateMask: the field-mask is a connect-shim
-			// concern and downstream consumers can diff against their
-			// cached snapshot if they care which scalar moved.
-		})
 	return &got, nil
 }
 
@@ -423,12 +477,19 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 		// Snapshot the row before deletion so we can attach owner
 		// tenant_id to the event payload — repo.Delete leaves us
 		// without that context.
+		// Snapshot before delete (pre-tx read) for the event's owner
+		// tenant_id; the delete + paladin.bucket.deleted commit in one tx
+		// (ADR-0003). When the pre-read failed we skip the event but still
+		// run the OCC-guarded delete.
 		preDelete, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
-		if err := h.repo.Delete(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
-			return mapVersion(err)
-		}
-		if getErr == nil {
-			h.dispatchEvent(ctx, preDelete.OwnerTenantID, "paladin.bucket.deleted",
+		if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+			if e := h.repo.DeleteTx(ctx, tx, in.BackendID, in.BucketName, in.ExpectedVersion); e != nil {
+				return e
+			}
+			if getErr != nil {
+				return nil
+			}
+			return h.dispatchEventTx(ctx, tx, preDelete.OwnerTenantID, "paladin.bucket.deleted",
 				bucketResourceName(preDelete.OwnerTenantID, preDelete.BackendID, preDelete.BucketName),
 				map[string]any{
 					"tenant_id":   preDelete.OwnerTenantID.String(),
@@ -436,21 +497,26 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 					"bucket_name": preDelete.BucketName,
 					"mode":        "immediate",
 				})
+		}); err != nil {
+			return mapVersion(err)
 		}
 		return nil
 	}
+	// Outbox-mode delete fires a `.deleting` (not `.deleted`) event because
+	// the bucket isn't actually gone yet — the reconciler worker drives the
+	// physical S3 DeleteBucket and only THEN does the row disappear.
+	// Subscribers that want the terminal state can listen for `.deleted`
+	// once the worker emits it (BACKLOG — reconciler doesn't yet emit
+	// per-row events on completion). Mark + event commit in one tx (ADR-0003).
 	preMark, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
-	if err := h.repo.MarkDeleting(ctx, in.BackendID, in.BucketName, in.ExpectedVersion); err != nil {
-		return mapVersion(err)
-	}
-	// Outbox-mode delete fires a `.deleting` (not `.deleted`) event
-	// because the bucket isn't actually gone yet — the reconciler
-	// worker drives the physical S3 DeleteBucket and only THEN does
-	// the row disappear. Subscribers that want the terminal state
-	// can listen for `.deleted` once the worker emits it (BACKLOG —
-	// reconciler doesn't yet emit per-row events on completion).
-	if getErr == nil {
-		h.dispatchEvent(ctx, preMark.OwnerTenantID, "paladin.bucket.deleting",
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.MarkDeletingTx(ctx, tx, in.BackendID, in.BucketName, in.ExpectedVersion); e != nil {
+			return e
+		}
+		if getErr != nil {
+			return nil
+		}
+		return h.dispatchEventTx(ctx, tx, preMark.OwnerTenantID, "paladin.bucket.deleting",
 			bucketResourceName(preMark.OwnerTenantID, preMark.BackendID, preMark.BucketName),
 			map[string]any{
 				"tenant_id":   preMark.OwnerTenantID.String(),
@@ -458,6 +524,8 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 				"bucket_name": preMark.BucketName,
 				"mode":        "outbox",
 			})
+	}); err != nil {
+		return mapVersion(err)
 	}
 	return nil
 }

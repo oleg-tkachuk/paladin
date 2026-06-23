@@ -297,32 +297,21 @@ sticky sessions, ingest dedup pool, tenant-delete precheck, AsyncWriter
 shutdown, composeKey guard). The entries that remain below were kept
 open deliberately — each notes why._
 
-### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
+### Bucket-reconciler terminal `paladin.bucket.deleted` event
 
-- **Status:** Data plane + ingest DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — every object lifecycle event (promote / soft-delete / restore / update / permanent-delete / copy via the statemachine + `ObjectRepo.RunInTx` seams, and the storage-event ingest promote via a producer-only dispatcher) writes its event atomically with the mutation, proven by `internal/integration/outbox_crash_test.go` (testcontainers, `-tags=integration`). Remaining: only the admin-plane lifecycle events (tenant/bucket/objectKey/quota) still use best-effort `Dispatch` — lower stakes (control-plane mutations are rare) and the admin V2 repos are queries-only (need a pool/transactor injection), so kept separate
-- **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
-  transition has already committed
-  (`internal/worker/event_dispatcher.go` ~133;
-  `internal/api/v1/object/handler.go` dispatchEvent call site). A crash
-  between the state commit and `Outbox.Insert` loses the event
-  permanently — the classic dual-write problem. For implicit-mode
-  buckets (S3 events off) the webhook is the only notification channel,
-  so this is silent under-delivery.
-- **Definition of Done:** outbox rows written in the SAME tx as the
-  state transition (pass `pgx.Tx` into the dispatch path), or a
-  trigger/LISTEN-NOTIFY transactional-outbox pattern. Crash between
-  commit and fan-out can no longer drop an event.
-- **Blockers:** touches the promote/complete transaction boundary —
-  coordinate with the statemachine package.
-- **Assessment (2026-06-12):** kept open deliberately. Every statemachine
-  transition currently opens+commits its own transaction internally and
-  the dispatcher owns a separate pool; making the outbox write atomic
-  with the state change means restructuring both APIs to thread a shared
-  `pgx.Tx` through the hot write path of every object mutation, plus
-  Postgres integration tests for the rollback semantics. That is its own
-  focused PR — bolting it onto a large fix batch would risk the core
-  write path for less safety than doing it properly. The
-  at-least-once-minus-crash-window behaviour stands until then.
+- **Status:** Open — small follow-on from [ADR-0003](docs/adr/0003-transactional-outbox.md)
+  (now fully implemented: every producer writes its outbox rows in the
+  producing tx, proven by `internal/integration/outbox_crash_test.go`).
+- **Reason:** outbox-mode bucket delete fires `paladin.bucket.deleting` when the
+  row flips to `deleting`; the bucket-reconciler worker then drives the S3
+  `DeleteBucket` and removes the row, but does NOT emit a terminal
+  `paladin.bucket.deleted` on completion. Subscribers can't observe the bucket
+  actually going away in outbox mode (only the immediate-delete path emits
+  `.deleted`).
+- **Definition of Done:** the reconciler enqueues `paladin.bucket.deleted` in the
+  same tx as the final row removal (reuse `BucketRepoV2.RunInTx` + a
+  producer-only dispatcher, exactly like the ingest promote path).
+- **Blockers:** none — isolated to `worker.BucketReconciler`.
 
 ### [MEDIUM] Pool sizing × replicas — PgBouncer for HPA-burst headroom
 

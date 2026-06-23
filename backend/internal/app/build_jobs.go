@@ -80,7 +80,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// Bucket-provision outbox worker — drives the second half of
 		// CreateBucket(provision_on_backend=true). Same S3 client + cadence.
 		out = append(out, worker.NewBucketReconciler(
-			adapters.NewBucketRepoV2(db.Queries),
+			adapters.NewBucketRepoV2(db.Queries, deps.Pool),
 			deps.S3,
 			worker.BucketReconcilerConfig{
 				Interval:  cfg.Worker.Jobs.Reconciler.Interval,

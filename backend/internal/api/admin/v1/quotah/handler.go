@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -22,17 +23,32 @@ import (
 // objectkeyh — narrow interface, *worker.Dispatcher implements it.
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+	// DispatchTx fans the event out on the caller's tx so the outbox rows
+	// commit atomically with the quota upsert (ADR-0003).
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+}
+
+// Repository is the admindomain QuotaRepository plus the ADR-0003 tx seam
+// (RunInTx + *Tx upserts). Kept local so admindomain stays pgx-free; the
+// concrete adapter satisfies both. RunInTx supplies the tx; the *Tx methods
+// run the upsert (and the owner-tenant read for bucket scope) on it.
+type Repository interface {
+	admindomain.QuotaRepository
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	UpsertTenantTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error
+	UpsertBucketTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error
+	GetBucketTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Quota, error)
 }
 
 type Handler struct {
-	repo   admindomain.QuotaRepository
+	repo   Repository
 	policy cedar.Authorizer
 
 	events EventProducer
 	log    *zap.Logger
 }
 
-func NewHandler(r admindomain.QuotaRepository, policy cedar.Authorizer) *Handler {
+func NewHandler(r Repository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("quotah: policy authorizer is required")
 	}
@@ -79,6 +95,29 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 		zap.String("event_type", eventType),
 		zap.Int("subscriptions_matched", queued),
 	)
+}
+
+// dispatchEventTx fans the event out on the caller's tx so the outbox rows
+// commit atomically with the quota upsert (ADR-0003). Returns the error so
+// the caller rolls back; nil-safe (and skips a Nil tenant, same as
+// dispatchEvent).
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil || tenantID == uuid.Nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
 }
 
 // authorize gates a quota RPC against Cedar. The Resource carries the
@@ -169,46 +208,61 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 			errors.New("exactly one of tenant_id or (backend_id, bucket_name) must be set"))
 	}
 	if tenantScope {
-		if err := h.repo.UpsertTenant(ctx, q); err != nil {
+		// Upsert + paladin.quota.set in one tx (ADR-0003). The event payload is
+		// the caps we just wrote (== q), so no in-tx read-back is needed;
+		// the full row is fetched post-commit for the response.
+		if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+			if e := h.repo.UpsertTenantTx(ctx, tx, q); e != nil {
+				return e
+			}
+			return h.dispatchEventTx(ctx, tx, q.TenantID, "paladin.quota.set",
+				fmt.Sprintf("tenants/%s/quota", q.TenantID),
+				map[string]any{
+					"tenant_id":           q.TenantID.String(),
+					"scope":               "tenant",
+					"max_total_bytes":     q.MaxTotalBytes,
+					"max_object_count":    q.MaxObjectCount,
+					"max_bytes_per_day":   q.MaxBytesPerDay,
+					"max_objects_per_day": q.MaxObjectsPerDay,
+				})
+		}); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		got, err := h.repo.GetTenant(ctx, q.TenantID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		h.dispatchEvent(ctx, got.TenantID, "paladin.quota.set",
-			fmt.Sprintf("tenants/%s/quota", got.TenantID),
+		return &got, nil
+	}
+	// Bucket scope: the fan-out target is the bucket's owner tenant_id,
+	// which only the stored row carries — so the upsert + the owner read-
+	// back + the event all run on one tx (ADR-0003). `got` is reused for
+	// the response.
+	var got admindomain.Quota
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.UpsertBucketTx(ctx, tx, q); e != nil {
+			return e
+		}
+		var e error
+		got, e = h.repo.GetBucketTx(ctx, tx, q.BackendID, q.BucketName)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, got.TenantID, "paladin.quota.set",
+			fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.TenantID, got.BackendID, got.BucketName),
 			map[string]any{
 				"tenant_id":           got.TenantID.String(),
-				"scope":               "tenant",
+				"scope":               "bucket",
+				"backend_id":          got.BackendID,
+				"bucket_name":         got.BucketName,
 				"max_total_bytes":     got.MaxTotalBytes,
 				"max_object_count":    got.MaxObjectCount,
 				"max_bytes_per_day":   got.MaxBytesPerDay,
 				"max_objects_per_day": got.MaxObjectsPerDay,
 			})
-		return &got, nil
-	}
-	if err := h.repo.UpsertBucket(ctx, q); err != nil {
+	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	got, err := h.repo.GetBucket(ctx, q.BackendID, q.BucketName)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	// Bucket-scoped quotas inherit the bucket's owner tenant_id for
-	// the fan-out target. The repo stamps it onto the loaded row.
-	h.dispatchEvent(ctx, got.TenantID, "paladin.quota.set",
-		fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.TenantID, got.BackendID, got.BucketName),
-		map[string]any{
-			"tenant_id":           got.TenantID.String(),
-			"scope":               "bucket",
-			"backend_id":          got.BackendID,
-			"bucket_name":         got.BucketName,
-			"max_total_bytes":     got.MaxTotalBytes,
-			"max_object_count":    got.MaxObjectCount,
-			"max_bytes_per_day":   got.MaxBytesPerDay,
-			"max_objects_per_day": got.MaxObjectsPerDay,
-		})
 	return &got, nil
 }
 

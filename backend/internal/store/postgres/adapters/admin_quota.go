@@ -3,28 +3,59 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 type QuotaRepoV2 struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
-func NewQuotaRepoV2(q *sqlc.Queries) *QuotaRepoV2 { return &QuotaRepoV2{q: q} }
+func NewQuotaRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *QuotaRepoV2 {
+	return &QuotaRepoV2{q: q, pool: pool}
+}
 
 var _ admindomain.QuotaRepository = (*QuotaRepoV2)(nil)
 
+// RunInTx runs fn in one transaction — the ADR-0003 seam the quota handler
+// uses to write the upsert and its paladin.quota.set outbox rows atomically.
+func (r *QuotaRepoV2) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("quota: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("quota: commit tx: %w", err)
+	}
+	return nil
+}
+
 func (r *QuotaRepoV2) UpsertTenant(ctx context.Context, q admindomain.Quota) error {
+	return upsertTenantQuota(ctx, r.q, q)
+}
+
+// UpsertTenantTx runs UpsertTenant on the caller's tx (ADR-0003).
+func (r *QuotaRepoV2) UpsertTenantTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error {
+	return upsertTenantQuota(ctx, r.q.WithTx(tx), q)
+}
+
+func upsertTenantQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quota) error {
 	if q.QuotaID == uuid.Nil {
 		q.QuotaID = uuid.Must(uuid.NewV7())
 	}
-	return r.q.UpsertTenantQuota(ctx,
+	return qq.UpsertTenantQuota(ctx,
 		pgUUID(q.QuotaID),
 		pgUUID(q.TenantID),
 		q.MaxTotalBytes,
@@ -35,10 +66,19 @@ func (r *QuotaRepoV2) UpsertTenant(ctx context.Context, q admindomain.Quota) err
 }
 
 func (r *QuotaRepoV2) UpsertBucket(ctx context.Context, q admindomain.Quota) error {
+	return upsertBucketQuota(ctx, r.q, q)
+}
+
+// UpsertBucketTx runs UpsertBucket on the caller's tx (ADR-0003).
+func (r *QuotaRepoV2) UpsertBucketTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error {
+	return upsertBucketQuota(ctx, r.q.WithTx(tx), q)
+}
+
+func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quota) error {
 	if q.QuotaID == uuid.Nil {
 		q.QuotaID = uuid.Must(uuid.NewV7())
 	}
-	return r.q.UpsertBucketQuota(ctx,
+	return qq.UpsertBucketQuota(ctx,
 		pgUUID(q.QuotaID),
 		strPtr(q.BackendID),
 		strPtr(q.BucketName),
@@ -61,7 +101,17 @@ func (r *QuotaRepoV2) GetTenant(ctx context.Context, tenantID uuid.UUID) (admind
 }
 
 func (r *QuotaRepoV2) GetBucket(ctx context.Context, backendID, bucketName string) (admindomain.Quota, error) {
-	row, err := r.q.GetBucketQuota(ctx, &backendID, &bucketName)
+	return getBucketQuota(ctx, r.q, backendID, bucketName)
+}
+
+// GetBucketTx reads the bucket quota on the caller's tx so the handler can
+// resolve the owner tenant_id (the fan-out target) inside the upsert tx.
+func (r *QuotaRepoV2) GetBucketTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Quota, error) {
+	return getBucketQuota(ctx, r.q.WithTx(tx), backendID, bucketName)
+}
+
+func getBucketQuota(ctx context.Context, qq *sqlc.Queries, backendID, bucketName string) (admindomain.Quota, error) {
+	row, err := qq.GetBucketQuota(ctx, &backendID, &bucketName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return admindomain.Quota{}, admindomain.ErrNotFound
