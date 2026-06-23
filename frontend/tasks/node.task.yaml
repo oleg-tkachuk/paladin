@@ -30,6 +30,14 @@ tasks:
         vars: { MESSAGE: "next build" }
       - npm run build
 
+  test:
+    desc: "Run the Vitest unit suite (vitest run)"
+    deps: [":core:tools:basic"]
+    cmds:
+      - task: ":core:banner"
+        vars: { MESSAGE: "vitest run" }
+      - npm test
+
   lint:
     desc: "Run ESLint over src/"
     deps: [":core:tools:basic"]

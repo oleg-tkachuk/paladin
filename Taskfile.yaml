@@ -58,9 +58,10 @@ tasks:
 
   # another-service-style aggregate fan-outs over the real per-component tasks.
   test:
-    desc: Run unit tests for every backend component.
+    desc: Run unit tests for both halves (Go + Vitest).
     cmds:
       - task: backend:test
+      - task: frontend:node:test
 
   lint:
     desc: Lint both halves (golangci-lint + eslint).

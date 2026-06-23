@@ -14,7 +14,9 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:stack": "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml up",
-    "test:e2e:stack:down": "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v"
+    "test:e2e:stack:down": "docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@connectrpc/connect": "^2.1.2",
@@ -52,6 +54,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
