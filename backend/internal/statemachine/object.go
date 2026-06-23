@@ -184,6 +184,21 @@ func (t *Transitioner) MarkFailed(ctx context.Context, objectID uuid.UUID, reaso
 // resourceVersion is the row version the caller last saw; pass 0 to skip
 // the check (use with care — prefer surfacing to the client).
 func (t *Transitioner) SoftDelete(ctx context.Context, objectID uuid.UUID, resourceVersion int64) error {
+	return t.softDelete(ctx, t.pool, objectID, resourceVersion)
+}
+
+// SoftDeleteInTx soft-deletes AND runs onDeleted in ONE tx so the caller
+// can write its outbox rows atomically with the DELETED transition
+// (ADR-0003). onDeleted runs only after a successful delete; any error
+// from it (or the commit) rolls back both. ErrConflict (0 rows) is
+// returned before onDeleted runs.
+func (t *Transitioner) SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error {
+	return t.transitionInTx(ctx, func(exec dbExec) error {
+		return t.softDelete(ctx, exec, objectID, resourceVersion)
+	}, onDeleted)
+}
+
+func (t *Transitioner) softDelete(ctx context.Context, exec dbExec, objectID uuid.UUID, resourceVersion int64) error {
 	const q = `
         UPDATE objects
            SET state = 'DELETED',
@@ -192,7 +207,7 @@ func (t *Transitioner) SoftDelete(ctx context.Context, objectID uuid.UUID, resou
            AND state = 'AVAILABLE'
            AND ($2 = 0 OR resource_version = $2)
     `
-	tag, err := t.pool.Exec(ctx, q, objectID, resourceVersion)
+	tag, err := exec.Exec(ctx, q, objectID, resourceVersion)
 	if err != nil {
 		return fmt.Errorf("sm: soft delete: %w", err)
 	}
@@ -204,18 +219,56 @@ func (t *Transitioner) SoftDelete(ctx context.Context, objectID uuid.UUID, resou
 
 // Restore moves DELETED → AVAILABLE.
 func (t *Transitioner) Restore(ctx context.Context, objectID uuid.UUID) error {
+	return t.restore(ctx, t.pool, objectID)
+}
+
+// RestoreInTx restores AND runs onRestored in ONE tx (ADR-0003), same
+// contract as SoftDeleteInTx. ErrNotFound (0 rows) is returned before
+// onRestored runs.
+func (t *Transitioner) RestoreInTx(ctx context.Context, objectID uuid.UUID, onRestored func(ctx context.Context, tx pgx.Tx) error) error {
+	return t.transitionInTx(ctx, func(exec dbExec) error {
+		return t.restore(ctx, exec, objectID)
+	}, onRestored)
+}
+
+func (t *Transitioner) restore(ctx context.Context, exec dbExec, objectID uuid.UUID) error {
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
                terminated_at = NULL
          WHERE object_id = $1 AND state = 'DELETED'
     `
-	tag, err := t.pool.Exec(ctx, q, objectID)
+	tag, err := exec.Exec(ctx, q, objectID)
 	if err != nil {
 		return fmt.Errorf("sm: restore: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// transitionInTx runs a single-statement transition `do` then `after`
+// (the outbox fan-out) in one transaction. If `do` errors (incl. the
+// ErrConflict / ErrNotFound 0-row sentinels) the tx rolls back and
+// `after` never runs; if `after` errors, both roll back. Shared by the
+// SoftDeleteInTx / RestoreInTx orchestrators.
+func (t *Transitioner) transitionInTx(ctx context.Context, do func(exec dbExec) error, after func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("sm: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := do(tx); err != nil {
+		return err
+	}
+	if after != nil {
+		if err := after(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("sm: commit tx: %w", err)
 	}
 	return nil
 }

@@ -354,6 +354,30 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
+// dispatchEventTx fans the lifecycle event out on the caller's tx so the
+// outbox rows commit atomically with the state transition (ADR-0003). An
+// error propagates to the caller, which rolls the transition back — the
+// client's at-least-once retry re-runs both. Used by the transactional
+// promote / soft-delete / restore paths.
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
+}
+
 // dispatchEvent fans out an object lifecycle event. Best-effort:
 // the lifecycle write already committed by the time we get here.
 func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
@@ -658,22 +682,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// re-emits — consistent, never half-done. Payload is built from the
 	// pre-promote read + the authoritative inputs (which are exactly the
 	// post-promote etag/size), so no in-tx re-read is needed.
-	actor := ""
-	if p, perr := auth.PrincipalFromContext(ctx); perr == nil {
-		actor = p.Subject
-	}
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
-			if h.events == nil {
-				return nil
-			}
-			_, derr := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
-				Type:         "paladin.object.uploaded",
-				At:           time.Now().UTC(),
-				TenantID:     tenantID.String(),
-				ResourceName: objectResourceName(tenantID, obj.ObjectKey, obj.Key),
-				ActorSubject: actor,
-				Payload: map[string]any{
+			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
+				objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+				map[string]any{
 					"tenant_id":    tenantID.String(),
 					"object_key":   obj.ObjectKey,
 					"key":          obj.Key,
@@ -681,9 +694,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 					"size_bytes":   size,
 					"etag":         etag,
 					"content_type": obj.ContentType,
-				},
-			})
-			return derr
+				})
 		})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -1048,24 +1059,28 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if !permanent {
-		if err := h.sm.SoftDelete(ctx, objectID, rv); err != nil {
+		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
+		// the event is atomic with the AVAILABLE→DELETED flip.
+		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
+			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
+				objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+				map[string]any{
+					"tenant_id":  tenantID.String(),
+					"object_key": obj.ObjectKey,
+					"key":        obj.Key,
+					"object_id":  obj.ObjectID.String(),
+					"mode":       "soft",
+				})
+		})
+		if err != nil {
 			if errors.Is(err, statemachine.ErrConflict) {
 				return connect.NewError(connect.CodeAborted, err)
 			}
 			return connect.NewError(connect.CodeInternal, err)
 		}
-		// Best-effort delete-marker write; failure here does not undo the
-		// state transition (the object is still soft-deleted).
+		// Best-effort delete-marker write; post-commit, separate concern —
+		// a marker hiccup must not undo a delivered delete event.
 		_ = h.versions.OnSoftDelete(ctx, obj)
-		h.dispatchEvent(ctx, tenantID, "paladin.object.deleted",
-			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
-			map[string]any{
-				"tenant_id":  tenantID.String(),
-				"object_key": obj.ObjectKey,
-				"key":        obj.Key,
-				"object_id":  obj.ObjectID.String(),
-				"mode":       "soft",
-			})
 		return nil
 	}
 	// Permanent delete. Ordering matters: drop the DB row FIRST, then
@@ -1211,21 +1226,25 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	if err := h.versions.UnsetDeleteMarkerCurrent(ctx, obj); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("restore version pointer: %w", err))
 	}
-	if err := h.sm.Restore(ctx, objectID); err != nil {
+	// Restore + paladin.object.restored fan-out in one tx (ADR-0003). Resource
+	// identity (object_key/key/object_id) is unchanged by restore, so the
+	// payload is built from the pre-restore `obj`.
+	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.restored",
+			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			map[string]any{
+				"tenant_id":  tenantID.String(),
+				"object_key": obj.ObjectKey,
+				"key":        obj.Key,
+				"object_id":  obj.ObjectID.String(),
+			})
+	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	fresh, err := h.repo.FindByName(ctx, tenantID, objectKey, objectIDStr)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.object.restored",
-		objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
-		map[string]any{
-			"tenant_id":  tenantID.String(),
-			"object_key": fresh.ObjectKey,
-			"key":        fresh.Key,
-			"object_id":  fresh.ObjectID.String(),
-		})
 	return &fresh, nil
 }
 

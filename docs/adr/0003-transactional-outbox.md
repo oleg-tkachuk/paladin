@@ -62,18 +62,27 @@ Landed:
 - `worker.Dispatcher.DispatchTx(ctx, tx, tenantID, evt)` + shared
   `dispatch(insert)` + `insertOutboxRow(exec, row)` so the fan-out writes
   on the caller's tx.
-- `object.CompleteObject` promote path now uses `PromoteToAvailableInTx`
-  with a closure that calls `DispatchTx` — the `paladin.object.uploaded` rows
-  are atomic with the PENDING→AVAILABLE flip. A dispatch error rolls the
-  promote back (the client's at-least-once retry re-promotes + re-emits).
+- `SoftDeleteInTx` / `RestoreInTx` orchestrators (sharing a
+  `transitionInTx(do, after)` helper) cover the AVAILABLE→DELETED and
+  DELETED→AVAILABLE transitions the same way.
+- All three statemachine-driven object events are now transactional:
+  - `object.CompleteObject` → `paladin.object.uploaded` (promote)
+  - `object.DeleteObject` (soft) → `paladin.object.deleted`
+  - `object.RestoreObject` → `paladin.object.restored`
+  via a shared `Handler.dispatchEventTx` helper. A dispatch error rolls
+  the transition back (the client's at-least-once retry re-runs both).
   Version-history / quota / capability-charge stay post-commit (separate
   concerns; a hiccup there must not roll back a delivered event).
 - Unit tests: `DispatchTx` writes one row per matching sub on the tx
   (not the pool), skips disabled subs, and a nil-Outbox dispatcher works.
 
 Follow-up (tracked in BACKLOG):
-- Apply the same tx flow to the other lifecycle events (updated / deleted
-  / restored) and the event-ingest promote path.
+- The two **repo-based** mutations still use best-effort `Dispatch`:
+  `paladin.object.updated` (UpdateMetadata) and the permanent-delete
+  `paladin.object.deleted` (HardDelete + the post-commit S3 delete). They
+  need a repo-level tx seam rather than the statemachine orchestrator —
+  separate change. Same for the admin-plane lifecycle events
+  (tenant/bucket/objectKey/quota) and the event-ingest promote path.
 - A testcontainers integration test asserting the crash window (commit
   state, kill before fan-out → row present after recovery) and rollback
   (dispatch error → no state change, no outbox row).
