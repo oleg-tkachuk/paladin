@@ -6,7 +6,9 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	admindomain "github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	connectdata "github.com/oleg-tkachuk/paladin/internal/api/connectshim/data"
@@ -189,7 +191,18 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		RequireOnCreate: true,
 	})
 
+	// OTel: one span per RPC, named from the procedure, plus RED metrics
+	// (rpc duration / count) on every call. First in each chain so the
+	// span wraps auth + the handler. No-op spans when OTel is disabled
+	// (global providers are noops). Only errors on invalid options, which
+	// we don't pass — a failure here is a wiring bug, so fail fast.
+	otelInt, err := otelconnect.NewInterceptor()
+	if err != nil {
+		l.Fatal("otelconnect interceptor", zap.Error(err))
+	}
+
 	dataOpts := connect.WithInterceptors(
+		otelInt,
 		auth.Interceptor(verifierData),
 		auth.RequireAudience(auth.AudienceData),
 		capData,
@@ -199,6 +212,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		idempotencyInterceptor,
 	)
 	iamOpts := connect.WithInterceptors(
+		otelInt,
 		auth.NewPermissiveInterceptor(verifierIAM,
 			"Login",
 			"RefreshToken",

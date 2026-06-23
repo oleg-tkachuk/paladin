@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -53,6 +54,13 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Opti
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool config parse: %w", err)
 	}
+
+	// pgx query tracer → OTel spans (one span per query, with the SQL as
+	// the span name). Uses the global TracerProvider, which is a no-op
+	// when OTel is disabled (InitOTel not called), so this is a cheap
+	// unconditional install — the DB layer doesn't need to know whether
+	// tracing is on.
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
 	if cfg.Password != "" {
 		poolCfg.ConnConfig.Password = cfg.Password

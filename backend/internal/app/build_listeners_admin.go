@@ -6,7 +6,9 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
@@ -129,7 +131,13 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}
 
+	otelInt, err := otelconnect.NewInterceptor()
+	if err != nil {
+		l.Fatal("otelconnect interceptor", zap.Error(err))
+	}
+
 	adminOpts := connect.WithInterceptors(
+		otelInt,
 		auth.Interceptor(verifierAdmin),
 		auth.RequireAudience(auth.AudienceAdmin),
 		capAdmin,
