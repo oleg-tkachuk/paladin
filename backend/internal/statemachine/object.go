@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,6 +57,15 @@ func New(pool *pgxpool.Pool) *Transitioner {
 	return &Transitioner{pool: pool}
 }
 
+// dbExec is the subset of *pgxpool.Pool / pgx.Tx the transition queries
+// use. Lets a transition run either on the pool (auto-commit) or inside
+// a caller-supplied transaction (atomic with the caller's other writes,
+// e.g. the event outbox — see PromoteToAvailableInTx).
+type dbExec interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // PromoteToAvailable attempts the PENDING → AVAILABLE transition for
 // object_id. Safe under races: stale sequencers or state mismatches are
 // silently dropped (returned changed=false) rather than raising an error.
@@ -72,10 +82,61 @@ func (t *Transitioner) PromoteToAvailable(
 	sequencer string,
 	source Source,
 ) (changed bool, err error) {
-	// Guard:
-	//   - only promote when currently PENDING (or already AVAILABLE with
-	//     older sequencer — let the newer event through).
-	//   - sequencer must be > stored sequencer OR stored is NULL.
+	return t.promote(ctx, t.pool, objectID, etag, sizeBytes, checksum, sequencer, source)
+}
+
+// PromoteToAvailableInTx promotes AND runs onPromoted inside ONE
+// transaction, so the caller (an event-producing handler) can write its
+// outbox rows atomically with the state change — closing the dual-write
+// crash window (ADR-0003). onPromoted runs ONLY when the promotion
+// actually changed state (changed=true); any error from it, or from the
+// commit, rolls back BOTH the state change and the outbox writes. When
+// the promote is a no-op (stale event / already promoted) the tx commits
+// with no side effects and onPromoted is skipped.
+func (t *Transitioner) PromoteToAvailableInTx(
+	ctx context.Context,
+	objectID uuid.UUID,
+	etag string,
+	sizeBytes int64,
+	checksum string,
+	sequencer string,
+	source Source,
+	onPromoted func(ctx context.Context, tx pgx.Tx) error,
+) (changed bool, err error) {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("sm: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op once committed
+
+	changed, err = t.promote(ctx, tx, objectID, etag, sizeBytes, checksum, sequencer, source)
+	if err != nil {
+		return false, err
+	}
+	if changed && onPromoted != nil {
+		if err := onPromoted(ctx, tx); err != nil {
+			return false, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("sm: commit tx: %w", err)
+	}
+	return changed, nil
+}
+
+// promote runs the PENDING → AVAILABLE guarded update on `exec` (pool or
+// tx). Stale sequencers / state mismatches return changed=false (no-op),
+// never an error.
+func (t *Transitioner) promote(
+	ctx context.Context,
+	exec dbExec,
+	objectID uuid.UUID,
+	etag string,
+	sizeBytes int64,
+	checksum string,
+	sequencer string,
+	source Source,
+) (changed bool, err error) {
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -90,17 +151,13 @@ func (t *Transitioner) PromoteToAvailable(
         RETURNING state
     `
 	var newState string
-	err = t.pool.QueryRow(ctx, q, objectID, etag, sizeBytes, checksum, sequencer).Scan(&newState)
+	err = exec.QueryRow(ctx, q, objectID, etag, sizeBytes, checksum, sequencer).Scan(&newState)
 	if err != nil {
-		// sql.ErrNoRows → guard didn't match → not changed, not an error.
-		// pgx reports pgx.ErrNoRows; map it.
 		if isNoRows(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("sm: promote: %w", err)
 	}
-	// Metric hook: source label lets us alert when SourceReconciler
-	// dominates (implicit events pipeline broken).
 	metricTransitionsTotal.WithLabelValues(string(source), "AVAILABLE").Inc()
 	return true, nil
 }

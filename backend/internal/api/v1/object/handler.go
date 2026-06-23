@@ -21,6 +21,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
@@ -50,6 +51,11 @@ import (
 // drop anyway.
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+	// DispatchTx writes the outbox rows on the caller's transaction so the
+	// fan-out is atomic with the state change (ADR-0003). Used by the
+	// promote path; the other lifecycle events still use best-effort
+	// Dispatch until they adopt the same tx flow.
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
 }
 
 // Storage abstracts S3 / GCS / MinIO. Keep this interface intentionally
@@ -642,7 +648,43 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 			errors.New("etag mismatch"))
 	}
 
-	changed, err := h.sm.PromoteToAvailable(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC)
+	// Promote + outbox fan-out run in ONE transaction (ADR-0003): the
+	// `paladin.object.uploaded` rows are written atomically with the
+	// PENDING→AVAILABLE flip, so a crash can no longer leave the object
+	// AVAILABLE with the event lost (the only notification channel for
+	// implicit-mode buckets). The dispatch runs inside onPromoted, which
+	// fires only on the real transition; a dispatch error rolls the
+	// promote back so the client's at-least-once retry re-promotes and
+	// re-emits — consistent, never half-done. Payload is built from the
+	// pre-promote read + the authoritative inputs (which are exactly the
+	// post-promote etag/size), so no in-tx re-read is needed.
+	actor := ""
+	if p, perr := auth.PrincipalFromContext(ctx); perr == nil {
+		actor = p.Subject
+	}
+	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
+		func(ctx context.Context, tx pgx.Tx) error {
+			if h.events == nil {
+				return nil
+			}
+			_, derr := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+				Type:         "paladin.object.uploaded",
+				At:           time.Now().UTC(),
+				TenantID:     tenantID.String(),
+				ResourceName: objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+				ActorSubject: actor,
+				Payload: map[string]any{
+					"tenant_id":    tenantID.String(),
+					"object_key":   obj.ObjectKey,
+					"key":          obj.Key,
+					"object_id":    obj.ObjectID.String(),
+					"size_bytes":   size,
+					"etag":         etag,
+					"content_type": obj.ContentType,
+				},
+			})
+			return derr
+		})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -650,32 +692,16 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	// Record a version row only on the actual transition — retried completes
-	// land here as `changed=false` and must NOT double-write history.
+	// Version history + quota + capability charge fire only on the real
+	// transition (retries land changed=false). These remain post-commit:
+	// they're separate concerns from the event-atomicity guarantee and a
+	// version/quota hiccup must not roll back a delivered event.
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
 		h.touchQuota(ctx, fresh)
-		// Capability burn fires only on the actual transition;
-		// idempotent retries (changed=false) are free so callers
-		// implementing at-least-once delivery aren't double-charged.
 		if err := auth.ChargeRequest(ctx); err != nil {
 			return nil, err
 		}
-		// Fan out the lifecycle event ONLY on the real transition.
-		// Idempotent retries skip dispatch (`changed=false` path)
-		// for the same reason charges skip — at-least-once callers
-		// would otherwise see duplicate events.
-		h.dispatchEvent(ctx, tenantID, "paladin.object.uploaded",
-			objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
-			map[string]any{
-				"tenant_id":    tenantID.String(),
-				"object_key":   fresh.ObjectKey,
-				"key":          fresh.Key,
-				"object_id":    fresh.ObjectID.String(),
-				"size_bytes":   fresh.SizeBytes,
-				"etag":         fresh.ETag,
-				"content_type": fresh.ContentType,
-			})
 	}
 	return &fresh, nil
 }

@@ -50,6 +50,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -131,11 +132,29 @@ type Dispatcher struct {
 // for telemetry should keep doing so — the semantic shift is from
 // "delivered" to "queued".
 func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (int, error) {
-	if d.Store == nil {
-		return 0, errors.New("dispatcher: no subscription store")
-	}
 	if d.Outbox == nil {
 		return 0, errors.New("dispatcher: no outbox writer")
+	}
+	return d.dispatch(ctx, tenantID, evt, d.Outbox.Insert)
+}
+
+// DispatchTx is the transactional variant: it writes the outbox rows on
+// the caller's transaction `tx` instead of the pool, so the fan-out is
+// atomic with whatever state change the caller is committing (ADR-0003 —
+// closes the dual-write crash window). The caller owns the tx lifecycle
+// (begin/commit/rollback); DispatchTx only INSERTs.
+func (d *Dispatcher) DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt Event) (int, error) {
+	return d.dispatch(ctx, tenantID, evt, func(ctx context.Context, row OutboxRow) error {
+		return insertOutboxRow(ctx, tx, row)
+	})
+}
+
+// dispatch is the shared fan-out: resolve subscriptions, filter-match,
+// and call `insert` once per match. `insert` is either the pool-backed
+// OutboxWriter.Insert (Dispatch) or a tx-bound insert (DispatchTx).
+func (d *Dispatcher) dispatch(ctx context.Context, tenantID string, evt Event, insert func(context.Context, OutboxRow) error) (int, error) {
+	if d.Store == nil {
+		return 0, errors.New("dispatcher: no subscription store")
 	}
 	tenantUUID, err := uuid.Parse(tenantID)
 	if err != nil {
@@ -175,7 +194,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (
 			EventAt:        evt.At,
 			EventPayload:   payload,
 		}
-		if err := d.Outbox.Insert(ctx, row); err != nil {
+		if err := insert(ctx, row); err != nil {
 			d.log().Warn("failed to insert outbox row",
 				zap.String("subscription_id", sub.SubscriptionID.String()),
 				zap.String("event_type", evt.Type),
@@ -348,12 +367,24 @@ func (w PgxOutboxWriter) Insert(ctx context.Context, row OutboxRow) error {
 	if w.Pool == nil {
 		return errors.New("outbox writer: nil pool")
 	}
-	const q = `
-		INSERT INTO event_deliveries (
-			id, tenant_id, subscription_id, event_type, event_at, event_payload
-		) VALUES ($1, $2, $3, $4, $5, $6)
-	`
-	_, err := w.Pool.Exec(ctx, q,
+	return insertOutboxRow(ctx, w.Pool, row)
+}
+
+// outboxExecer is the Exec subset shared by *pgxpool.Pool and pgx.Tx, so
+// one INSERT helper serves both the pool-backed writer and the
+// transactional DispatchTx path.
+type outboxExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+const insertOutboxSQL = `
+	INSERT INTO event_deliveries (
+		id, tenant_id, subscription_id, event_type, event_at, event_payload
+	) VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+func insertOutboxRow(ctx context.Context, exec outboxExecer, row OutboxRow) error {
+	_, err := exec.Exec(ctx, insertOutboxSQL,
 		row.ID, row.TenantID, row.SubscriptionID, row.EventType, row.EventAt, row.EventPayload,
 	)
 	return err

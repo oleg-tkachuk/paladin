@@ -299,7 +299,7 @@ open deliberately — each notes why._
 
 ### [HIGH] Outbox write is not in the producing transaction (event loss on crash)
 
-- **Status:** Open — design accepted in [ADR-0003](docs/adr/0003-transactional-outbox.md); implementation pending
+- **Status:** Promote path DONE ([ADR-0003](docs/adr/0003-transactional-outbox.md)) — CompleteObject writes paladin.object.uploaded atomically with the PENDING→AVAILABLE flip. Remaining: the other lifecycle events (updated/deleted/restored) + ingest promote path + a testcontainers crash-window test
 - **Reason:** `Dispatcher.Dispatch` writes outbox rows AFTER the state
   transition has already committed
   (`internal/worker/event_dispatcher.go` ~133;

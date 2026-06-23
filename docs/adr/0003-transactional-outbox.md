@@ -1,6 +1,8 @@
 # ADR-0003: Transactional event outbox
 
-- **Status:** Proposed (design + plan; not yet implemented)
+- **Status:** Accepted — implemented for the promote path (2026-06);
+  remaining lifecycle events + the testcontainers crash-window test are
+  follow-up (see "Status" at the end).
 - **Context:** `event_deliveries` is the durable webhook outbox. Today the
   producer writes outbox rows AFTER the state transition has already
   committed: a handler calls `h.sm.PromoteToAvailable(...)` (its own
@@ -50,3 +52,28 @@ SKIP LOCKED) — only the *enqueue* becomes transactional.
   couples event semantics to table triggers and is harder to evolve than
   an explicit tx-threaded insert, though it remains a viable fallback if
   threading the tx proves too invasive.
+
+## Status of implementation (2026-06)
+
+Landed:
+- `statemachine.Transitioner.PromoteToAvailableInTx(…, onPromoted func(ctx,
+  pgx.Tx) error)` — promote + callback in one tx; promote core refactored
+  to run on a `dbExec` (pool **or** tx).
+- `worker.Dispatcher.DispatchTx(ctx, tx, tenantID, evt)` + shared
+  `dispatch(insert)` + `insertOutboxRow(exec, row)` so the fan-out writes
+  on the caller's tx.
+- `object.CompleteObject` promote path now uses `PromoteToAvailableInTx`
+  with a closure that calls `DispatchTx` — the `paladin.object.uploaded` rows
+  are atomic with the PENDING→AVAILABLE flip. A dispatch error rolls the
+  promote back (the client's at-least-once retry re-promotes + re-emits).
+  Version-history / quota / capability-charge stay post-commit (separate
+  concerns; a hiccup there must not roll back a delivered event).
+- Unit tests: `DispatchTx` writes one row per matching sub on the tx
+  (not the pool), skips disabled subs, and a nil-Outbox dispatcher works.
+
+Follow-up (tracked in BACKLOG):
+- Apply the same tx flow to the other lifecycle events (updated / deleted
+  / restored) and the event-ingest promote path.
+- A testcontainers integration test asserting the crash window (commit
+  state, kill before fan-out → row present after recovery) and rollback
+  (dispatch error → no state change, no outbox row).
