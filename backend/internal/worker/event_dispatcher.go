@@ -76,6 +76,27 @@ type SubscriptionStore interface {
 	Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error)
 }
 
+// RepoSubscriptionStore adapts an EventSubscriptionRepository to the
+// SubscriptionStore read seam (List + Get). Shared by every producer plane
+// (api / admin / ingest) so the fan-out reads subscriptions the same way
+// regardless of which pool/queries the repo is bound to.
+type RepoSubscriptionStore struct {
+	Repo admindomain.EventSubscriptionRepository
+}
+
+// NewRepoSubscriptionStore wraps repo as a SubscriptionStore.
+func NewRepoSubscriptionStore(repo admindomain.EventSubscriptionRepository) RepoSubscriptionStore {
+	return RepoSubscriptionStore{Repo: repo}
+}
+
+func (s RepoSubscriptionStore) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
+	return s.Repo.List(ctx, args)
+}
+
+func (s RepoSubscriptionStore) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
+	return s.Repo.Get(ctx, id)
+}
+
 // OutboxWriter is the producer-side write seam. Implemented by a thin
 // wrapper around *pgxpool.Pool in production; tests substitute a fake.
 type OutboxWriter interface {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // ObjectLookup is the slice of *sqlc.Queries the handler uses to
@@ -39,9 +41,18 @@ type ObjectLookup interface {
 // where a presign was issued and the client uploaded before the
 // objects-row was committed; reconciler + sequencer guard win
 // the race anyway.
+// EventProducer is the outbox fan-out seam. nil-safe: when the handler is
+// wired without one (e.g. a deployment that doesn't deliver webhooks), the
+// promote still happens — it just enqueues no `paladin.object.uploaded` rows.
+// Only the tx variant is needed: the event is written on the promote tx.
+type EventProducer interface {
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+}
+
 type PromoteHandler struct {
 	Lookup       ObjectLookup
 	Transitioner *statemachine.Transitioner
+	Events       EventProducer
 	Logger       *zap.Logger
 }
 
@@ -98,7 +109,16 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 
 	switch ev.Type {
 	case EventTypeUploaded:
-		changed, err := h.Transitioner.PromoteToAvailable(
+		// Promote + paladin.object.uploaded fan-out in one tx (ADR-0003). In
+		// explicit-mode buckets the storage event is what drives the
+		// promote, so without this the webhook subscribers would never see
+		// the upload — PALADIN is their unified notification channel. The
+		// `changed` guard keeps it exactly-once across producers: an
+		// implicit-mode CompleteObject already fired the event, so a later
+		// storage event for the same object promotes to a no-op and emits
+		// nothing. A dispatch error rolls the promote back; the worker's
+		// at-least-once redelivery re-runs both.
+		changed, err := h.Transitioner.PromoteToAvailableInTx(
 			ctx,
 			objectID,
 			ev.SubjectFields.Etag,
@@ -106,6 +126,9 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			"", // checksum: storage events typically don't carry it
 			ev.SubjectFields.Sequencer,
 			statemachine.SourceEvent,
+			func(ctx context.Context, tx pgx.Tx) error {
+				return h.emitUploaded(ctx, tx, ev, objectID)
+			},
 		)
 		if err != nil {
 			return fmt.Errorf("promote object: %w", err)
@@ -133,6 +156,33 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		logger.Debug("unknown event type; nothing to do")
 		return nil
 	}
+}
+
+// emitUploaded enqueues the paladin.object.uploaded outbox rows on the promote
+// tx. nil-safe: no producer wired → no-op. Mirrors the data-plane
+// CompleteObject payload so subscribers can't tell which producer promoted
+// the object; the `source: storage_event` discriminator is the only tell.
+func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEvent, objectID uuid.UUID) error {
+	if h.Events == nil {
+		return nil
+	}
+	_, err := h.Events.DispatchTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
+		Type:         string(EventTypeUploaded),
+		At:           time.Now().UTC(),
+		TenantID:     ev.SubjectFields.TenantID,
+		ResourceName: fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", ev.SubjectFields.TenantID, ev.SubjectFields.ObjectKey, ev.SubjectFields.Key),
+		Payload: map[string]any{
+			"tenant_id":    ev.SubjectFields.TenantID,
+			"object_key":   ev.SubjectFields.ObjectKey,
+			"key":          ev.SubjectFields.Key,
+			"object_id":    objectID.String(),
+			"size_bytes":   ev.SubjectFields.SizeBytes,
+			"etag":         ev.SubjectFields.Etag,
+			"source":       "storage_event",
+			"event_source": ev.Source,
+		},
+	})
+	return err
 }
 
 func (h *PromoteHandler) log() *zap.Logger {

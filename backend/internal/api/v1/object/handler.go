@@ -1378,8 +1378,32 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
 	}
-	changed, err := h.sm.PromoteToAvailable(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
-		src.Checksum, "", statemachine.SourceRPC)
+	// Promote + paladin.object.uploaded fan-out in one tx (ADR-0003): the
+	// copy materialises a brand-new object, so subscribers see the same
+	// `paladin.object.uploaded` they'd get from a normal CompleteObject path.
+	// The payload's `source` discriminator lets a consumer that cares
+	// about origin route copies vs direct uploads. Built from the known
+	// inputs (== the post-promote row) so the event can be enqueued inside
+	// the promote tx without a read. A dispatch error rolls the promote
+	// back; the client's at-least-once retry re-runs both.
+	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
+		src.Checksum, "", statemachine.SourceRPC,
+		func(ctx context.Context, tx pgx.Tx) error {
+			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
+				objectResourceName(tenantID, in.DestObjectKey, destKey),
+				map[string]any{
+					"tenant_id":         tenantID.String(),
+					"object_key":        in.DestObjectKey,
+					"key":               destKey,
+					"object_id":         dst.ObjectID.String(),
+					"size_bytes":        src.SizeBytes,
+					"etag":              src.ETag,
+					"content_type":      src.ContentType,
+					"source":            "copy",
+					"source_object_key": in.SourceObjectKey,
+					"source_object_id":  in.SourceObjectID,
+				})
+		})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1390,25 +1414,6 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if changed {
 		_ = h.versions.OnPromote(ctx, fresh)
 		h.touchQuota(ctx, fresh)
-		// Copy materialises a brand-new object, so subscribers see
-		// the same `paladin.object.uploaded` they'd get from a normal
-		// CompleteObject path. The payload's `source` discriminator
-		// lets a consumer that cares about origin route copies vs
-		// direct uploads.
-		h.dispatchEvent(ctx, tenantID, "paladin.object.uploaded",
-			objectResourceName(tenantID, fresh.ObjectKey, fresh.Key),
-			map[string]any{
-				"tenant_id":         tenantID.String(),
-				"object_key":        fresh.ObjectKey,
-				"key":               fresh.Key,
-				"object_id":         fresh.ObjectID.String(),
-				"size_bytes":        fresh.SizeBytes,
-				"etag":              fresh.ETag,
-				"content_type":      fresh.ContentType,
-				"source":            "copy",
-				"source_object_key": in.SourceObjectKey,
-				"source_object_id":  in.SourceObjectID,
-			})
 	}
 	return &fresh, nil
 }

@@ -7,10 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/capabilityh"
@@ -63,7 +61,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// dials on first use — admin pods that never see a NATS Test
 	// pay nothing.
 	dispatcher := &worker.Dispatcher{
-		Store:       eventSubStoreAdapter{r: repos.EventSub},
+		Store:       worker.NewRepoSubscriptionStore(repos.EventSub),
 		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
 		NATS:        worker.NewNatsConnPool(l.Named("nats-pool")),
 		Logger:      l.Named("event-dispatcher"),
@@ -295,20 +293,4 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 		TLS:    cfg.Admin.Server.TLS,
 	}
 	return listener, healthH, nil
-}
-
-// eventSubStoreAdapter exposes admindomain.EventSubscriptionRepository
-// under the worker.SubscriptionStore interface (List + Get). List feeds
-// the producer-side fan-out; Get is the dispatcher pod's per-row sink
-// lookup at delivery time.
-type eventSubStoreAdapter struct {
-	r admindomain.EventSubscriptionRepository
-}
-
-func (a eventSubStoreAdapter) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	return a.r.List(ctx, args)
-}
-
-func (a eventSubStoreAdapter) Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
-	return a.r.Get(ctx, id)
 }

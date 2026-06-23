@@ -16,6 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
 // serveIngestCmd runs the storage-event consumer plane. Subscribes to
@@ -60,6 +61,7 @@ var serveIngestCmd = &cobra.Command{
 		// is actually RLS denying the SELECT.
 		ingestQueries := db.Queries
 		ingestSM := deps.SM
+		ingestPool := deps.Pool
 		if cfg.Datastores.Postgres.MigrateDSN != "" {
 			pool, err := newDispatcherPool(
 				ctx,
@@ -73,6 +75,7 @@ var serveIngestCmd = &cobra.Command{
 			defer pool.Close()
 			ingestQueries = sqlc.New(pool)
 			ingestSM = statemachine.New(pool)
+			ingestPool = pool
 		} else {
 			l.Warn("ingest: MigrateDSN not set; using runtime pool — " +
 				"RLS will gate the lookup and PROMOTE will silently no-op " +
@@ -85,9 +88,24 @@ var serveIngestCmd = &cobra.Command{
 		// statemachine.Transitioner already lives on SharedDeps but
 		// we replace it with one bound to ingestQueries so PROMOTE
 		// flows through the same BYPASSRLS pool.
+		// Producer-only dispatcher: enqueues paladin.object.uploaded outbox
+		// rows on the promote tx (ADR-0003) so an explicit-mode storage
+		// event notifies webhook subscribers just like a CompleteObject
+		// RPC does. Bound to the ingest (BYPASSRLS) queries so the sub
+		// fan-out isn't RLS-gated. The separate `serve dispatcher` pod
+		// drains event_deliveries and does the actual delivery, so NATS
+		// stays nil here — enqueue never opens a socket.
+		ingestDispatcher := &worker.Dispatcher{
+			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(ingestQueries)),
+			Outbox:      worker.PgxOutboxWriter{Pool: ingestPool},
+			Logger:      l.Named("ingest-event-dispatcher"),
+			MaxAttempts: 3,
+		}
+
 		handler := &eventingest.PromoteHandler{
 			Lookup:       ingestQueries,
 			Transitioner: ingestSM,
+			Events:       ingestDispatcher,
 			Logger:       l.Named("ingest.handler"),
 		}
 
