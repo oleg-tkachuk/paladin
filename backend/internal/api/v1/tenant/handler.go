@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
@@ -37,6 +38,9 @@ import (
 // directly with no adapter.
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+	// DispatchTx fans the event out on the caller's tx so the outbox rows
+	// commit atomically with the tenant mutation (ADR-0003).
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
 }
 
 // Use apiutil.RolePlatformAdmin as the canonical role string ("platform.admin").
@@ -109,6 +113,17 @@ type Repository interface {
 	// for that tenant. Returns the renamed Tenant (with the new
 	// resource_version). ErrVersionMismatch on OCC failure.
 	Rename(ctx context.Context, args RenameTenantSlugArgs) (Tenant, error)
+
+	// RunInTx + the *Tx mutation variants are the ADR-0003 seam: the
+	// handler runs a mutation and its outbox fan-out on one tx so a crash
+	// can't leave a committed change without its event. RunInTx supplies
+	// the tx; the *Tx methods run the mutation on it.
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	CreateTx(ctx context.Context, tx pgx.Tx, args CreateTenantArgs) error
+	UpdateTx(ctx context.Context, tx pgx.Tx, args UpdateTenantArgs) (Tenant, error)
+	SoftDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
+	HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
+	RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (Tenant, error)
 }
 
 // RenameTenantSlugArgs is the input shape for Repository.Rename and
@@ -212,6 +227,29 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 	)
 }
 
+// dispatchEventTx fans the event out on the caller's tx so the outbox rows
+// commit atomically with the tenant mutation (ADR-0003). Unlike
+// dispatchEvent, an error here is RETURNED so the caller rolls the mutation
+// back — the client's at-least-once retry re-runs both. nil-safe.
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
+}
+
 // authorize evaluates Cedar against the Tenant resource.
 func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
@@ -285,8 +323,22 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.InheritedCedarPolicy == "" {
 		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID, args.Slug)
 	}
-	t, err := h.repo.Create(ctx, args)
-	if err != nil {
+	// Create + paladin.tenant.created in one tx (ADR-0003). The event payload
+	// is built from args (== the inserted row), so the row can be enqueued
+	// without a read-back inside the tx; the full row is fetched post-commit
+	// for the response.
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.CreateTx(ctx, tx, args); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, args.TenantID, "paladin.tenant.created",
+			fmt.Sprintf("tenants/%s", args.TenantID),
+			map[string]any{
+				"tenant_id":    args.TenantID.String(),
+				"slug":         args.Slug,
+				"display_name": args.DisplayName,
+			})
+	}); err != nil {
 		switch {
 		case errors.Is(err, ErrTenantIDConflict),
 			errors.Is(err, ErrSlugConflict),
@@ -298,13 +350,10 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
 		}
 	}
-	h.dispatchEvent(ctx, t.TenantID, "paladin.tenant.created",
-		fmt.Sprintf("tenants/%s", t.TenantID),
-		map[string]any{
-			"tenant_id":    t.TenantID.String(),
-			"slug":         t.Slug,
-			"display_name": t.DisplayName,
-		})
+	t, err := h.repo.Get(ctx, args.TenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: read back: %w", err))
+	}
 	return &t, nil
 }
 
@@ -404,8 +453,27 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		}
 		args.DisplayName = &trimmed
 	}
-	t, err := h.repo.Update(ctx, args)
-	if err != nil {
+	// Update + paladin.tenant.updated in one tx (ADR-0003). The event needs the
+	// post-update row (resource_version), so UpdateTx reads it back on the
+	// same tx. Snapshot semantics: subscribers diff against their cached
+	// state; we don't ship a `fields_changed` list (the FieldMask lives
+	// upstream of the handler).
+	var t Tenant
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		t, e = h.repo.UpdateTx(ctx, tx, args)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, t.TenantID, "paladin.tenant.updated",
+			fmt.Sprintf("tenants/%s", t.TenantID),
+			map[string]any{
+				"tenant_id":        t.TenantID.String(),
+				"slug":             t.Slug,
+				"display_name":     t.DisplayName,
+				"resource_version": t.ResourceVersion,
+			})
+	}); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err)
 		}
@@ -414,19 +482,6 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	// Snapshot of the post-update state — subscribers can diff against
-	// the previous state they cached. We don't ship a `fields_changed`
-	// list because the FieldMask the caller passed lives upstream of
-	// the handler and would tie the event payload to a connect-shim
-	// detail; downstream consumers can derive the diff themselves.
-	h.dispatchEvent(ctx, t.TenantID, "paladin.tenant.updated",
-		fmt.Sprintf("tenants/%s", t.TenantID),
-		map[string]any{
-			"tenant_id":        t.TenantID.String(),
-			"slug":             t.Slug,
-			"display_name":     t.DisplayName,
-			"resource_version": t.ResourceVersion,
-		})
 	return &t, nil
 }
 
@@ -445,18 +500,30 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return err
 	}
-	var (
-		op  = "paladin.tenant.deleted"
-		err error
-	)
+	op := "paladin.tenant.trashed"
 	if force {
-		err = h.repo.HardDelete(ctx, tenantID, expectedVersion)
 		op = "paladin.tenant.purged"
-	} else {
-		err = h.repo.SoftDelete(ctx, tenantID, expectedVersion)
-		op = "paladin.tenant.trashed"
 	}
-	if err != nil {
+	// Delete + lifecycle event in one tx (ADR-0003). force → hard delete +
+	// purged; otherwise soft delete + trashed.
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		if force {
+			e = h.repo.HardDeleteTx(ctx, tx, tenantID, expectedVersion)
+		} else {
+			e = h.repo.SoftDeleteTx(ctx, tx, tenantID, expectedVersion)
+		}
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, op,
+			fmt.Sprintf("tenants/%s", tenantID),
+			map[string]any{
+				"tenant_id":        tenantID.String(),
+				"resource_version": expectedVersion,
+				"force":            force,
+			})
+	}); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return connect.NewError(connect.CodeAborted, err)
 		}
@@ -476,13 +543,6 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, op,
-		fmt.Sprintf("tenants/%s", tenantID),
-		map[string]any{
-			"tenant_id":        tenantID.String(),
-			"resource_version": expectedVersion,
-			"force":            force,
-		})
 	return nil
 }
 
@@ -497,8 +557,22 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return nil, err
 	}
-	t, err := h.repo.Restore(ctx, tenantID)
-	if err != nil {
+	// Restore + paladin.tenant.restored in one tx (ADR-0003).
+	var t Tenant
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		t, e = h.repo.RestoreTx(ctx, tx, tenantID)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.restored",
+			fmt.Sprintf("tenants/%s", tenantID),
+			map[string]any{
+				"tenant_id":    tenantID.String(),
+				"slug":         t.Slug,
+				"display_name": t.DisplayName,
+			})
+	}); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
 		}
@@ -510,13 +584,6 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.tenant.restored",
-		fmt.Sprintf("tenants/%s", tenantID),
-		map[string]any{
-			"tenant_id":    tenantID.String(),
-			"slug":         t.Slug,
-			"display_name": t.DisplayName,
-		})
 	return &t, nil
 }
 
@@ -542,17 +609,22 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	}
 	// expectedVersion=0 — the row is already trashed and OCC was
 	// enforced at SoftDelete time. Purge is monotonically destructive.
-	if err := h.repo.HardDelete(ctx, tenantID, 0); err != nil {
+	// Delete + paladin.tenant.purged in one tx (ADR-0003).
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.HardDeleteTx(ctx, tx, tenantID, 0); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.purged",
+			fmt.Sprintf("tenants/%s", tenantID),
+			map[string]any{
+				"tenant_id": tenantID.String(),
+			})
+	}); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return connect.NewError(connect.CodeNotFound, err)
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	h.dispatchEvent(ctx, tenantID, "paladin.tenant.purged",
-		fmt.Sprintf("tenants/%s", tenantID),
-		map[string]any{
-			"tenant_id": tenantID.String(),
-		})
 	return nil
 }
 

@@ -32,7 +32,41 @@ func NewTenantRepo(q *sqlc.Queries, pool *pgxpool.Pool) *TenantRepo {
 
 var _ tenant.Repository = (*TenantRepo)(nil)
 
+// RunInTx runs fn in one transaction on the repo's pool — the seam an
+// event-producing handler uses to write a tenant mutation and its outbox
+// rows atomically (ADR-0003). The *Tx mutation methods run on the same tx.
+func (r *TenantRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("tenant: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("tenant: commit tx: %w", err)
+	}
+	return nil
+}
+
 func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (tenant.Tenant, error) {
+	// The tenant insert + the optional default-binding insert already need
+	// one tx; RunInTx provides it. A binding FK violation rolls the tenant
+	// back too — better to surface the error than half-commit.
+	if err := r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		return r.CreateTx(ctx, tx, args)
+	}); err != nil {
+		return tenant.Tenant{}, err
+	}
+	return r.Get(ctx, args.TenantID)
+}
+
+// CreateTx inserts the tenant (+ optional default binding) on the caller's
+// tx so an event-producing handler can write the paladin.tenant.created outbox
+// rows atomically with the row (ADR-0003). Typed UNIQUE/FK sentinels are
+// preserved.
+func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.CreateTenantArgs) error {
 	// tenants.labels is JSONB NOT NULL DEFAULT '{}'. The INSERT binds it
 	// explicitly, so a nil []byte becomes SQL NULL and violates the
 	// constraint. Normalize to an empty JSON object.
@@ -40,18 +74,6 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 	if len(labels) == 0 {
 		labels = []byte("{}")
 	}
-
-	// One tx covers the tenant insert + the optional default-binding
-	// insert so a tenant never lands without its operator-chosen
-	// (backend, bucket) when one was supplied. If the binding INSERT
-	// trips the bucket FK (operator typo, race with bucket delete),
-	// the tenant is rolled back too — better to surface the error to
-	// the operator than to half-commit.
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return tenant.Tenant{}, fmt.Errorf("create tenant: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := r.q.WithTx(tx)
 
 	if err := qtx.CreateTenant(ctx,
@@ -68,14 +90,14 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			switch pgErr.ConstraintName {
 			case schema.TenantsPK:
-				return tenant.Tenant{}, tenant.ErrTenantIDConflict
+				return tenant.ErrTenantIDConflict
 			case schema.TenantsSlugUnique:
-				return tenant.Tenant{}, tenant.ErrSlugConflict
+				return tenant.ErrSlugConflict
 			case schema.TenantsDisplayNameUnique:
-				return tenant.Tenant{}, tenant.ErrDisplayNameConflict
+				return tenant.ErrDisplayNameConflict
 			}
 		}
-		return tenant.Tenant{}, fmt.Errorf("create tenant: %w", err)
+		return fmt.Errorf("create tenant: %w", err)
 	}
 
 	// Optional default binding. The handler validates that backend +
@@ -95,16 +117,12 @@ func (r *TenantRepo) Create(ctx context.Context, args tenant.CreateTenantArgs) (
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" &&
 				pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
-				return tenant.Tenant{}, tenant.ErrDefaultBindingBucketMissing
+				return tenant.ErrDefaultBindingBucketMissing
 			}
-			return tenant.Tenant{}, fmt.Errorf("create tenant: bind default: %w", err)
+			return fmt.Errorf("create tenant: bind default: %w", err)
 		}
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return tenant.Tenant{}, fmt.Errorf("create tenant: commit: %w", err)
-	}
-	return r.Get(ctx, args.TenantID)
+	return nil
 }
 
 // actorFromContext extracts the caller subject for the audit-style
@@ -121,7 +139,11 @@ func actorFromContext(ctx context.Context) string {
 }
 
 func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
-	row, err := r.q.GetTenant(ctx, pgUUID(tenantID))
+	return r.getWith(ctx, r.q, tenantID)
+}
+
+func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenant.Tenant, error) {
+	row, err := q.GetTenant(ctx, pgUUID(tenantID))
 	if err != nil {
 		return tenant.Tenant{}, err
 	}
@@ -144,12 +166,22 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 }
 
 func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+	return r.updateWith(ctx, r.q, args)
+}
+
+// UpdateTx runs Update on the caller's tx (ADR-0003) so the handler can
+// enqueue paladin.tenant.updated atomically with the row update.
+func (r *TenantRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
+	return r.updateWith(ctx, r.q.WithTx(tx), args)
+}
+
+func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
 	var policyHash []byte
 	if args.InheritedCedarPolicy != nil {
 		sum := sha256.Sum256([]byte(*args.InheritedCedarPolicy))
 		policyHash = sum[:]
 	}
-	rows, err := r.q.UpdateTenant(ctx,
+	rows, err := q.UpdateTenant(ctx,
 		pgUUID(args.TenantID),
 		args.DisplayName,
 		args.Labels,
@@ -171,7 +203,7 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 	if rows == 0 {
 		return tenant.Tenant{}, tenant.ErrVersionMismatch
 	}
-	return r.Get(ctx, args.TenantID)
+	return r.getWith(ctx, q, args.TenantID)
 }
 
 // SoftDelete moves an active row to the trash. Returns ErrAlreadyDeleted
@@ -180,13 +212,22 @@ func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (
 // Distinguishing the two by re-reading the row is acceptable here —
 // soft-delete is a control-plane op, not on the hot path.
 func (r *TenantRepo) SoftDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
-	rows, err := r.q.SoftDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
+	return r.softDeleteWith(ctx, r.q, tenantID, expectedVersion)
+}
+
+// SoftDeleteTx runs SoftDelete on the caller's tx (ADR-0003).
+func (r *TenantRepo) SoftDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error {
+	return r.softDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion)
+}
+
+func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
+	rows, err := q.SoftDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("soft-delete tenant: %w", err)
 	}
 	if rows == 0 {
 		// Re-read to disambiguate.
-		t, gerr := r.Get(ctx, tenantID)
+		t, gerr := r.getWith(ctx, q, tenantID)
 		if errors.Is(gerr, pgx.ErrNoRows) {
 			return tenant.ErrNotFound
 		}
@@ -204,7 +245,16 @@ func (r *TenantRepo) SoftDelete(ctx context.Context, tenantID uuid.UUID, expecte
 // HardDelete physically removes the row. expected_version=0 means
 // "no OCC guard" (purge path); a non-zero value enforces match.
 func (r *TenantRepo) HardDelete(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) error {
-	rows, err := r.q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
+	return r.hardDeleteWith(ctx, r.q, tenantID, expectedVersion)
+}
+
+// HardDeleteTx runs HardDelete on the caller's tx (ADR-0003).
+func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error {
+	return r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion)
+}
+
+func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
+	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
 		// FK RESTRICT from object_keys/objects → the tenant still owns
 		// data. Map to a typed sentinel so the handler returns a clear
@@ -229,7 +279,16 @@ func (r *TenantRepo) HardDelete(ctx context.Context, tenantID uuid.UUID, expecte
 // slug/display_name UNIQUE collisions (a fresh tenant claimed the
 // handle while this one was trashed) to typed sentinels.
 func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenant.Tenant, error) {
-	rows, err := r.q.RestoreTenant(ctx, pgUUID(tenantID))
+	return r.restoreWith(ctx, r.q, tenantID)
+}
+
+// RestoreTx runs Restore on the caller's tx (ADR-0003).
+func (r *TenantRepo) RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (tenant.Tenant, error) {
+	return r.restoreWith(ctx, r.q.WithTx(tx), tenantID)
+}
+
+func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenant.Tenant, error) {
+	rows, err := q.RestoreTenant(ctx, pgUUID(tenantID))
 	if err != nil {
 		// UNIQUE violations can fire even on UPDATE-to-non-NULL paths
 		// if a concurrent restore raced; map them.
@@ -246,7 +305,7 @@ func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenant.Te
 	}
 	if rows == 0 {
 		// Re-read to distinguish missing vs active.
-		t, gerr := r.Get(ctx, tenantID)
+		t, gerr := r.getWith(ctx, q, tenantID)
 		if errors.Is(gerr, pgx.ErrNoRows) {
 			return tenant.Tenant{}, tenant.ErrNotFound
 		}
@@ -258,7 +317,7 @@ func (r *TenantRepo) Restore(ctx context.Context, tenantID uuid.UUID) (tenant.Te
 		}
 		return tenant.Tenant{}, tenant.ErrNotFound
 	}
-	return r.Get(ctx, tenantID)
+	return r.getWith(ctx, q, tenantID)
 }
 
 func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]tenant.Tenant, string, error) {

@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
@@ -27,6 +28,9 @@ import (
 // implements it. nil-safe via dispatchEvent's guard.
 type EventProducer interface {
 	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+	// DispatchTx fans the event out on the caller's tx so the outbox rows
+	// commit atomically with the object_key mutation (ADR-0003).
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
 }
 
 type ObjectKey struct {
@@ -90,6 +94,14 @@ type Repository interface {
 	// Rebind atomically swaps the (backend_id, bucket_name) target. DB
 	// trigger enforces tenancy on single-tenant buckets.
 	Rebind(ctx context.Context, tenantID uuid.UUID, objectKey, backendID, bucketName string, expectedVersion int64) error
+
+	// RunInTx + the *Tx variants are the ADR-0003 seam: mutation + outbox
+	// fan-out on one tx so a crash can't leave a committed change without
+	// its event.
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	CreateTx(ctx context.Context, tx pgx.Tx, args CreateObjectKeyArgs) (ObjectKey, error)
+	UpdateTx(ctx context.Context, tx pgx.Tx, args UpdateObjectKeyArgs) (ObjectKey, error)
+	DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, objectKey string, expectedVersion int64) error
 }
 
 type Handler struct {
@@ -147,6 +159,28 @@ func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventTy
 	)
 }
 
+// dispatchEventTx fans the event out on the caller's tx so the outbox rows
+// commit atomically with the object_key mutation (ADR-0003). Returns the
+// error (caller rolls back); nil-safe.
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     tenantID.String(),
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
+}
+
 // objectKeyResourceName — kept as the C-shape emitter for callers
 // that don't have (backend, bucket) in scope. Phase 1 prefers
 // CanonicalName when the full tuple is available (event payloads
@@ -184,21 +218,28 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.ObjectKey, args.BackendID, args.BucketName, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
-	b, err := h.repo.Create(ctx, args)
-	if err != nil {
+	// Create + paladin.object_key.created in one tx (ADR-0003).
+	var b ObjectKey
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		b, e = h.repo.CreateTx(ctx, tx, args)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.created",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+			map[string]any{
+				"tenant_id":    b.TenantID.String(),
+				"object_key":   b.ObjectKey,
+				"display_name": b.DisplayName,
+				"backend_id":   b.BackendID,
+				"bucket_name":  b.BucketName,
+			})
+	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create objectKey: %w", err))
 	}
-	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
-	apiutil.StashResource(ctx, canonical) // writes into the slot the audit mw installed
-	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.created",
-		canonical,
-		map[string]any{
-			"tenant_id":    b.TenantID.String(),
-			"object_key":   b.ObjectKey,
-			"display_name": b.DisplayName,
-			"backend_id":   b.BackendID,
-			"bucket_name":  b.BucketName,
-		})
+	// writes into the slot the audit mw installed
+	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey))
 	return &b, nil
 }
 
@@ -226,21 +267,28 @@ func (h *Handler) UpdateObjectKey(ctx context.Context, args UpdateObjectKeyArgs)
 	if err := h.authorize(ctx, principal, tenantID, args.ObjectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err
 	}
-	b, err := h.repo.Update(ctx, args)
-	if err != nil {
+	// Update + paladin.object_key.updated in one tx (ADR-0003). UpdateTx reads
+	// the post-update row back on the same tx (for resource_version).
+	var b ObjectKey
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		b, e = h.repo.UpdateTx(ctx, tx, args)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.object_key.updated",
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey),
+			map[string]any{
+				"tenant_id":        b.TenantID.String(),
+				"object_key":       b.ObjectKey,
+				"backend_id":       b.BackendID,
+				"bucket_name":      b.BucketName,
+				"resource_version": b.ResourceVersion,
+			})
+	}); err != nil {
 		return nil, mapVersionErr(err)
 	}
-	canonical := CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey)
-	apiutil.StashResource(ctx, canonical)
-	h.dispatchEvent(ctx, b.TenantID, "paladin.object_key.updated",
-		canonical,
-		map[string]any{
-			"tenant_id":        b.TenantID.String(),
-			"object_key":       b.ObjectKey,
-			"backend_id":       b.BackendID,
-			"bucket_name":      b.BucketName,
-			"resource_version": b.ResourceVersion,
-		})
+	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.ObjectKey))
 	return &b, nil
 }
 
@@ -257,21 +305,28 @@ func (h *Handler) DeleteObjectKey(ctx context.Context, objectKey string, expecte
 	// effort: if Get fails we fall back to the C-shape resource name —
 	// the delete itself still runs through the OCC guard below.
 	pre, getErr := h.repo.Get(ctx, tenantID, objectKey)
-	if err := h.repo.Delete(ctx, tenantID, objectKey, expectedVersion); err != nil {
-		return mapVersionErr(err)
-	}
 	resourceName := objectKeyResourceName(tenantID, objectKey)
 	if getErr == nil {
 		resourceName = CanonicalName(pre.BackendID, pre.BucketName, tenantID, objectKey)
 	}
+	// Delete + paladin.object_key.deleted in one tx (ADR-0003). The resource
+	// name comes from the pre-read above (best-effort; the OCC guard still
+	// runs inside the tx).
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.DeleteTx(ctx, tx, tenantID, objectKey, expectedVersion); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object_key.deleted",
+			resourceName,
+			map[string]any{
+				"tenant_id":        tenantID.String(),
+				"object_key":       objectKey,
+				"resource_version": expectedVersion,
+			})
+	}); err != nil {
+		return mapVersionErr(err)
+	}
 	apiutil.StashResource(ctx, resourceName)
-	h.dispatchEvent(ctx, tenantID, "paladin.object_key.deleted",
-		resourceName,
-		map[string]any{
-			"tenant_id":        tenantID.String(),
-			"object_key":       objectKey,
-			"resource_version": expectedVersion,
-		})
 	return nil
 }
 

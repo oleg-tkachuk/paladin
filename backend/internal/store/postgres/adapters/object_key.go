@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -28,7 +29,34 @@ func NewObjectKeyRepo(q *sqlc.Queries, pool *pgxpool.Pool) *ObjectKeyRepo {
 
 var _ objectkey.Repository = (*ObjectKeyRepo)(nil)
 
+// RunInTx runs fn in one transaction on the repo's pool — the ADR-0003 seam
+// the handler uses to write an object_key mutation and its outbox rows
+// atomically. The *Tx mutation methods run on the same tx.
+func (r *ObjectKeyRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("object_key: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("object_key: commit tx: %w", err)
+	}
+	return nil
+}
+
 func (r *ObjectKeyRepo) Create(ctx context.Context, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
+	return r.createWith(ctx, r.q, args)
+}
+
+// CreateTx runs Create on the caller's tx (ADR-0003).
+func (r *ObjectKeyRepo) CreateTx(ctx context.Context, tx pgx.Tx, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
+	return r.createWith(ctx, r.q.WithTx(tx), args)
+}
+
+func (r *ObjectKeyRepo) createWith(ctx context.Context, q *sqlc.Queries, args objectkey.CreateObjectKeyArgs) (objectkey.ObjectKey, error) {
 	// object_keys.lifecycle_rules is JSONB NOT NULL with default '[]'. The SQL
 	// INSERT binds this column explicitly, so a nil []byte would surface as
 	// NULL and violate the constraint. Normalize to an empty JSON array.
@@ -36,7 +64,7 @@ func (r *ObjectKeyRepo) Create(ctx context.Context, args objectkey.CreateObjectK
 	if len(rules) == 0 {
 		rules = []byte("[]")
 	}
-	if err := r.q.CreateObjectKey(ctx,
+	if err := q.CreateObjectKey(ctx,
 		pgUUID(args.TenantID),
 		args.ObjectKey,
 		strPtr(args.DisplayName),
@@ -47,11 +75,15 @@ func (r *ObjectKeyRepo) Create(ctx context.Context, args objectkey.CreateObjectK
 	); err != nil {
 		return objectkey.ObjectKey{}, fmt.Errorf("create objectKey: %w", err)
 	}
-	return r.Get(ctx, args.TenantID, args.ObjectKey)
+	return r.getWith(ctx, q, args.TenantID, args.ObjectKey)
 }
 
 func (r *ObjectKeyRepo) Get(ctx context.Context, tenantID uuid.UUID, objectKey string) (objectkey.ObjectKey, error) {
-	row, err := r.q.GetObjectKey(ctx, pgUUID(tenantID), objectKey)
+	return r.getWith(ctx, r.q, tenantID, objectKey)
+}
+
+func (r *ObjectKeyRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, objectKey string) (objectkey.ObjectKey, error) {
+	row, err := q.GetObjectKey(ctx, pgUUID(tenantID), objectKey)
 	if err != nil {
 		return objectkey.ObjectKey{}, err
 	}
@@ -59,12 +91,21 @@ func (r *ObjectKeyRepo) Get(ctx context.Context, tenantID uuid.UUID, objectKey s
 }
 
 func (r *ObjectKeyRepo) Update(ctx context.Context, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
+	return r.updateWith(ctx, r.q, args)
+}
+
+// UpdateTx runs Update on the caller's tx (ADR-0003).
+func (r *ObjectKeyRepo) UpdateTx(ctx context.Context, tx pgx.Tx, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
+	return r.updateWith(ctx, r.q.WithTx(tx), args)
+}
+
+func (r *ObjectKeyRepo) updateWith(ctx context.Context, q *sqlc.Queries, args objectkey.UpdateObjectKeyArgs) (objectkey.ObjectKey, error) {
 	var policyHash []byte
 	if args.CedarPolicy != nil {
 		sum := sha256.Sum256([]byte(*args.CedarPolicy))
 		policyHash = sum[:]
 	}
-	rows, err := r.q.UpdateObjectKey(ctx,
+	rows, err := q.UpdateObjectKey(ctx,
 		pgUUID(args.TenantID),
 		args.ObjectKey,
 		args.DisplayName,
@@ -79,11 +120,20 @@ func (r *ObjectKeyRepo) Update(ctx context.Context, args objectkey.UpdateObjectK
 	if rows == 0 {
 		return objectkey.ObjectKey{}, objectkey.ErrVersionMismatch
 	}
-	return r.Get(ctx, args.TenantID, args.ObjectKey)
+	return r.getWith(ctx, q, args.TenantID, args.ObjectKey)
 }
 
 func (r *ObjectKeyRepo) Delete(ctx context.Context, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
-	rows, err := r.q.DeleteObjectKey(ctx, pgUUID(tenantID), objectKey, expectedVersion)
+	return r.deleteWith(ctx, r.q, tenantID, objectKey, expectedVersion)
+}
+
+// DeleteTx runs Delete on the caller's tx (ADR-0003).
+func (r *ObjectKeyRepo) DeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
+	return r.deleteWith(ctx, r.q.WithTx(tx), tenantID, objectKey, expectedVersion)
+}
+
+func (r *ObjectKeyRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, objectKey string, expectedVersion int64) error {
+	rows, err := q.DeleteObjectKey(ctx, pgUUID(tenantID), objectKey, expectedVersion)
 	if err != nil {
 		// FK violation: objects.tenant_id_object_key_fkey still
 		// references this row. The constraint is ON DELETE RESTRICT
