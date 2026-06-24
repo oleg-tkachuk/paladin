@@ -12,6 +12,8 @@ import {
   messageDesc,
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -20,7 +22,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_mcp_inspect_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZvY3AvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIMb2NwLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IuIBChJNQ1BJbnNwZWN0UmVzcG9uc2USKgoIcHJvZmlsZXMYASADKAsyGC5vY3AuYWRtaW4udjEuTUNQUHJvZmlsZRITCgthbHdheXNfZGVueRgCIAMoCRIrCgx0b29sX2NhdGFsb2cYAyADKAsyFS5vY3AuYWRtaW4udjEuTUNQVG9vbBItCgl1cHN0cmVhbXMYBCABKAsyGi5vY3AuYWRtaW4udjEuTUNQVXBzdHJlYW1zEi8KCnRyYW5zcG9ydHMYBSABKAsyGy5vY3AuYWRtaW4udjEuTUNQVHJhbnNwb3J0cyJdCgpNQ1BQcm9maWxlEgwKBG5hbWUYASABKAkSDQoFdG9vbHMYAiADKAkSFAoMcmF3X3BhdHRlcm5zGAMgAygJEgwKBGRlbnkYBCADKAkSDgoGc291cmNlGAUgASgJImYKB01DUFRvb2wSDAoEbmFtZRgBIAEoCRIQCghhdWRpZW5jZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIVCg1jYXBhYmlsaXR5X29wGAQgASgJEg8KB211dGF0ZXMYBSABKAgiRAoMTUNQVXBzdHJlYW1zEhEKCWFkbWluX3VybBgBIAEoCRIQCghkYXRhX3VybBgCIAEoCRIPCgdpYW1fdXJsGAMgASgJIm0KDU1DUFRyYW5zcG9ydHMSLgoFc3RkaW8YASABKAsyHy5vY3AuYWRtaW4udjEuTUNQVHJhbnNwb3J0U3RkaW8SLAoEaHR0cBgCIAEoCzIeLm9jcC5hZG1pbi52MS5NQ1BUcmFuc3BvcnRIVFRQIjUKEU1DUFRyYW5zcG9ydFN0ZGlvEg8KB2VuYWJsZWQYASABKAgSDwoHcHJvZmlsZRgCIAEoCSJjChBNQ1BUcmFuc3BvcnRIVFRQEg8KB2VuYWJsZWQYASABKAgSDAoEYWRkchgCIAEoCRIPCgdwcm9maWxlGAMgASgJEh8KF3Nlc3Npb25fdGltZW91dF9zZWNvbmRzGAQgASgDMmEKEU1DUEluc3BlY3RTZXJ2aWNlEkwKB0luc3BlY3QSHy5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIC5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM",
+    "CiZvY3AvYWRtaW4vdjEvbWNwX2luc3BlY3Rfc2VydmljZS5wcm90bxIMb2NwLmFkbWluLnYxIhMKEU1DUEluc3BlY3RSZXF1ZXN0IhUKE0xpc3RTZXNzaW9uc1JlcXVlc3QiQgoUTGlzdFNlc3Npb25zUmVzcG9uc2USKgoIc2Vzc2lvbnMYASADKAsyGC5vY3AuYWRtaW4udjEuTUNQU2Vzc2lvbiK+AQoKTUNQU2Vzc2lvbhIKCgJpZBgBIAEoCRIVCg1hZ2VudF9zdWJqZWN0GAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWxhc3Rfc2VlbhgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPdG9vbF9jYWxsX2NvdW50GAUgASgDEhUKDXJlcXVlc3RfY291bnQYBiABKAMi4gEKEk1DUEluc3BlY3RSZXNwb25zZRIqCghwcm9maWxlcxgBIAMoCzIYLm9jcC5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEisKDHRvb2xfY2F0YWxvZxgDIAMoCzIVLm9jcC5hZG1pbi52MS5NQ1BUb29sEi0KCXVwc3RyZWFtcxgEIAEoCzIaLm9jcC5hZG1pbi52MS5NQ1BVcHN0cmVhbXMSLwoKdHJhbnNwb3J0cxgFIAEoCzIbLm9jcC5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzIl0KCk1DUFByb2ZpbGUSDAoEbmFtZRgBIAEoCRINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkiZgoHTUNQVG9vbBIMCgRuYW1lGAEgASgJEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCCJECgxNQ1BVcHN0cmVhbXMSEQoJYWRtaW5fdXJsGAEgASgJEhAKCGRhdGFfdXJsGAIgASgJEg8KB2lhbV91cmwYAyABKAkibQoNTUNQVHJhbnNwb3J0cxIuCgVzdGRpbxgBIAEoCzIfLm9jcC5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIsCgRodHRwGAIgASgLMh4ub2NwLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyuAEKEU1DUEluc3BlY3RTZXJ2aWNlEkwKB0luc3BlY3QSHy5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlcXVlc3QaIC5vY3AuYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlElUKDExpc3RTZXNzaW9ucxIhLm9jcC5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlQlJaUGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9hZG1pbi92MTtvY3BhZG1pbnYxYgZwcm90bzM",
+    [file_google_protobuf_timestamp],
   );
 
 /**
@@ -35,6 +38,86 @@ export type MCPInspectRequest = Message<"paladin.admin.v1.MCPInspectRequest"> & 
 export const MCPInspectRequestSchema: GenMessage<MCPInspectRequest> =
   /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_mcp_inspect_service, 0);
+
+/**
+ * @generated from message paladin.admin.v1.ListSessionsRequest
+ */
+export type ListSessionsRequest =
+  Message<"paladin.admin.v1.ListSessionsRequest"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.ListSessionsRequest.
+ * Use `create(ListSessionsRequestSchema)` to create a new message.
+ */
+export const ListSessionsRequestSchema: GenMessage<ListSessionsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 1);
+
+/**
+ * @generated from message paladin.admin.v1.ListSessionsResponse
+ */
+export type ListSessionsResponse =
+  Message<"paladin.admin.v1.ListSessionsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.MCPSession sessions = 1;
+     */
+    sessions: MCPSession[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListSessionsResponse.
+ * Use `create(ListSessionsResponseSchema)` to create a new message.
+ */
+export const ListSessionsResponseSchema: GenMessage<ListSessionsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 2);
+
+/**
+ * MCPSession mirrors internal/mcp.SessionInfo — one live streamable-HTTP
+ * session. agent_subject is best-effort (blank until the MCP server verifies
+ * the per-request JWT subject); counts are cumulative over the session life.
+ *
+ * @generated from message paladin.admin.v1.MCPSession
+ */
+export type MCPSession = Message<"paladin.admin.v1.MCPSession"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string agent_subject = 2;
+   */
+  agentSubject: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 3;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_seen = 4;
+   */
+  lastSeen?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int64 tool_call_count = 5;
+   */
+  toolCallCount: bigint;
+
+  /**
+   * @generated from field: int64 request_count = 6;
+   */
+  requestCount: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.MCPSession.
+ * Use `create(MCPSessionSchema)` to create a new message.
+ */
+export const MCPSessionSchema: GenMessage<MCPSession> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.MCPInspectResponse
@@ -90,7 +173,7 @@ export type MCPInspectResponse = Message<"paladin.admin.v1.MCPInspectResponse"> 
  */
 export const MCPInspectResponseSchema: GenMessage<MCPInspectResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 1);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.MCPProfile
@@ -142,7 +225,7 @@ export type MCPProfile = Message<"paladin.admin.v1.MCPProfile"> & {
  */
 export const MCPProfileSchema: GenMessage<MCPProfile> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 2);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.MCPTool
@@ -190,7 +273,7 @@ export type MCPTool = Message<"paladin.admin.v1.MCPTool"> & {
  */
 export const MCPToolSchema: GenMessage<MCPTool> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 3);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.MCPUpstreams
@@ -218,7 +301,7 @@ export type MCPUpstreams = Message<"paladin.admin.v1.MCPUpstreams"> & {
  */
 export const MCPUpstreamsSchema: GenMessage<MCPUpstreams> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 4);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransports
@@ -241,7 +324,7 @@ export type MCPTransports = Message<"paladin.admin.v1.MCPTransports"> & {
  */
 export const MCPTransportsSchema: GenMessage<MCPTransports> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 5);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportStdio
@@ -264,7 +347,7 @@ export type MCPTransportStdio = Message<"paladin.admin.v1.MCPTransportStdio"> & 
  */
 export const MCPTransportStdioSchema: GenMessage<MCPTransportStdio> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 6);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportHTTP
@@ -299,7 +382,7 @@ export type MCPTransportHTTP = Message<"paladin.admin.v1.MCPTransportHTTP"> & {
  */
 export const MCPTransportHTTPSchema: GenMessage<MCPTransportHTTP> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 7);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 10);
 
 /**
  * MCPInspectService — read-only operator visibility into the MCP
@@ -328,5 +411,20 @@ export const MCPInspectService: GenService<{
     methodKind: "unary";
     input: typeof MCPInspectRequestSchema;
     output: typeof MCPInspectResponseSchema;
+  };
+  /**
+   * ListSessions returns the live MCP streamable-HTTP sessions tracked by the
+   * bridge (id, agent, activity counts). Unlike Inspect (config-derived,
+   * stateless) this reflects live process state that lives in the MCP server,
+   * so the admin plane proxies the call to the MCP server's own /sessions
+   * endpoint. Returns an empty list when the MCP server is unconfigured or
+   * unreachable. Platform-admin only.
+   *
+   * @generated from rpc paladin.admin.v1.MCPInspectService.ListSessions
+   */
+  listSessions: {
+    methodKind: "unary";
+    input: typeof ListSessionsRequestSchema;
+    output: typeof ListSessionsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_mcp_inspect_service, 0);

@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { mcpInspectClient } from "@/lib/connect/client";
+import { MCPLiveSessions } from "@/components/features/mcp/MCPLiveSessions";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
@@ -575,40 +576,7 @@ export default function MCPInspectPage() {
               </dl>
             </Card>
 
-            {/*
-             * Sessions live-state — deferred. The streamable-HTTP transport
-             * keeps session state inside github.com/modelcontextprotocol/
-             * go-sdk/mcp.Server which doesn't expose an enumeration hook.
-             * Building this view requires either forking the SDK or
-             * wrapping its Server with a ServeHTTP-level middleware that
-             * tracks session_id from the X-Session-Id header. Tracked in
-             * BACKLOG.md under "MCP live sessions".
-             */}
-            <Card className="p-4 border-dashed">
-              <div className="flex items-center gap-2">
-                <ServerStackIcon className="size-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium">Live sessions</h3>
-                <Badge variant="outline" className={T.labelTight}>
-                  deferred
-                </Badge>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                The MCP SDK currently doesn&apos;t expose a session enumeration
-                hook on its streamable-HTTP server. Building a live session
-                table needs either a fork of{" "}
-                <code className={T.codeSmall}>modelcontextprotocol/go-sdk</code>{" "}
-                or a wrapping middleware that tracks session-id headers. Tracked
-                in BACKLOG. In the meantime, MCP tool calls are visible in the
-                audit log — filter by{" "}
-                <Link
-                  href="/audit?audience=paladin-mcp"
-                  className="text-primary hover:underline"
-                >
-                  audience=paladin-mcp
-                </Link>
-                .
-              </p>
-            </Card>
+            <MCPLiveSessions />
           </TabsContent>
         </Tabs>
       )}
