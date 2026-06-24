@@ -42,6 +42,9 @@ func (*fakeObjectRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, 
 func (*fakeObjectRepo) CountObjects(context.Context, CountObjectsArgs) (int64, bool, error) {
 	panic("not used")
 }
+func (*fakeObjectRepo) ListDistinctTags(context.Context, uuid.UUID, string) (map[string][]string, error) {
+	panic("not used")
+}
 func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Object, error) {
 	panic("not used")
 }

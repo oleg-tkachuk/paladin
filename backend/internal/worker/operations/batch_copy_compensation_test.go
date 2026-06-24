@@ -45,6 +45,9 @@ func (*copyFakeRepo) ListObjects(context.Context, object.ListObjectsArgs) ([]obj
 func (*copyFakeRepo) CountObjects(context.Context, object.CountObjectsArgs) (int64, bool, error) {
 	panic("unused")
 }
+func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string) (map[string][]string, error) {
+	panic("unused")
+}
 func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string) (string, error) {
 	panic("unused")
 }

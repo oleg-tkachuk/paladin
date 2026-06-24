@@ -23,6 +23,143 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ListDistinctTagsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Parent ObjectKey scope: "tenants/{tenant_id}/objectKeys/{object_key}".
+	// The tenant is enforced from the auth context; this narrows the distinct
+	// scan to one ObjectKey's objects.
+	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDistinctTagsRequest) Reset() {
+	*x = ListDistinctTagsRequest{}
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDistinctTagsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDistinctTagsRequest) ProtoMessage() {}
+
+func (x *ListDistinctTagsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDistinctTagsRequest.ProtoReflect.Descriptor instead.
+func (*ListDistinctTagsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ListDistinctTagsRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+type ListDistinctTagsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Tag key → the distinct values observed for that key across the scope,
+	// each value list sorted ascending.
+	Tags          map[string]*TagValues `protobuf:"bytes,1,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDistinctTagsResponse) Reset() {
+	*x = ListDistinctTagsResponse{}
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDistinctTagsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDistinctTagsResponse) ProtoMessage() {}
+
+func (x *ListDistinctTagsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDistinctTagsResponse.ProtoReflect.Descriptor instead.
+func (*ListDistinctTagsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListDistinctTagsResponse) GetTags() map[string]*TagValues {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+type TagValues struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []string               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TagValues) Reset() {
+	*x = TagValues{}
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TagValues) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TagValues) ProtoMessage() {}
+
+func (x *TagValues) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TagValues.ProtoReflect.Descriptor instead.
+func (*TagValues) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TagValues) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
 type GetObjectTagsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -32,7 +169,7 @@ type GetObjectTagsRequest struct {
 
 func (x *GetObjectTagsRequest) Reset() {
 	*x = GetObjectTagsRequest{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[0]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +181,7 @@ func (x *GetObjectTagsRequest) String() string {
 func (*GetObjectTagsRequest) ProtoMessage() {}
 
 func (x *GetObjectTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[0]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +194,7 @@ func (x *GetObjectTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectTagsRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectTagsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{0}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetObjectTagsRequest) GetName() string {
@@ -76,7 +213,7 @@ type GetObjectTagsResponse struct {
 
 func (x *GetObjectTagsResponse) Reset() {
 	*x = GetObjectTagsResponse{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[1]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -88,7 +225,7 @@ func (x *GetObjectTagsResponse) String() string {
 func (*GetObjectTagsResponse) ProtoMessage() {}
 
 func (x *GetObjectTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[1]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -101,7 +238,7 @@ func (x *GetObjectTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectTagsResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectTagsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{1}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetObjectTagsResponse) GetTags() map[string]string {
@@ -123,7 +260,7 @@ type PutObjectTagsRequest struct {
 
 func (x *PutObjectTagsRequest) Reset() {
 	*x = PutObjectTagsRequest{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[2]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -135,7 +272,7 @@ func (x *PutObjectTagsRequest) String() string {
 func (*PutObjectTagsRequest) ProtoMessage() {}
 
 func (x *PutObjectTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[2]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -148,7 +285,7 @@ func (x *PutObjectTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutObjectTagsRequest.ProtoReflect.Descriptor instead.
 func (*PutObjectTagsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{2}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PutObjectTagsRequest) GetName() string {
@@ -181,7 +318,7 @@ type PutObjectTagsResponse struct {
 
 func (x *PutObjectTagsResponse) Reset() {
 	*x = PutObjectTagsResponse{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[3]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +330,7 @@ func (x *PutObjectTagsResponse) String() string {
 func (*PutObjectTagsResponse) ProtoMessage() {}
 
 func (x *PutObjectTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[3]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +343,7 @@ func (x *PutObjectTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutObjectTagsResponse.ProtoReflect.Descriptor instead.
 func (*PutObjectTagsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{3}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PutObjectTagsResponse) GetTags() map[string]string {
@@ -228,7 +365,7 @@ type DeleteObjectTagsRequest struct {
 
 func (x *DeleteObjectTagsRequest) Reset() {
 	*x = DeleteObjectTagsRequest{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[4]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -240,7 +377,7 @@ func (x *DeleteObjectTagsRequest) String() string {
 func (*DeleteObjectTagsRequest) ProtoMessage() {}
 
 func (x *DeleteObjectTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[4]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -253,7 +390,7 @@ func (x *DeleteObjectTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectTagsRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectTagsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{4}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeleteObjectTagsRequest) GetName() string {
@@ -286,7 +423,7 @@ type DeleteObjectTagsResponse struct {
 
 func (x *DeleteObjectTagsResponse) Reset() {
 	*x = DeleteObjectTagsResponse{}
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[5]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -298,7 +435,7 @@ func (x *DeleteObjectTagsResponse) String() string {
 func (*DeleteObjectTagsResponse) ProtoMessage() {}
 
 func (x *DeleteObjectTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[5]
+	mi := &file_paladin_data_v1_object_tag_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -311,7 +448,7 @@ func (x *DeleteObjectTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectTagsResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectTagsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{5}
+	return file_paladin_data_v1_object_tag_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteObjectTagsResponse) GetTags() map[string]string {
@@ -325,7 +462,16 @@ var File_paladin_data_v1_object_tag_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/data/v1/object_tag_service.proto\x12\vocp.data.v1\x1a\x1bbuf/validate/validate.proto\"3\n" +
+	"$paladin/data/v1/object_tag_service.proto\x12\vocp.data.v1\x1a\x1bbuf/validate/validate.proto\":\n" +
+	"\x17ListDistinctTagsRequest\x12\x1f\n" +
+	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\"\xb0\x01\n" +
+	"\x18ListDistinctTagsResponse\x12C\n" +
+	"\x04tags\x18\x01 \x03(\v2/.paladin.data.v1.ListDistinctTagsResponse.TagsEntryR\x04tags\x1aO\n" +
+	"\tTagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.paladin.data.v1.TagValuesR\x05value:\x028\x01\"#\n" +
+	"\tTagValues\x12\x16\n" +
+	"\x06values\x18\x01 \x03(\tR\x06values\"3\n" +
 	"\x14GetObjectTagsRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x92\x01\n" +
 	"\x15GetObjectTagsResponse\x12@\n" +
@@ -353,11 +499,12 @@ const file_paladin_data_v1_object_tag_service_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2/.paladin.data.v1.DeleteObjectTagsResponse.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xa3\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\x84\x03\n" +
 	"\x10ObjectTagService\x12V\n" +
 	"\rGetObjectTags\x12!.paladin.data.v1.GetObjectTagsRequest\x1a\".paladin.data.v1.GetObjectTagsResponse\x12V\n" +
 	"\rPutObjectTags\x12!.paladin.data.v1.PutObjectTagsRequest\x1a\".paladin.data.v1.PutObjectTagsResponse\x12_\n" +
-	"\x10DeleteObjectTags\x12$.paladin.data.v1.DeleteObjectTagsRequest\x1a%.paladin.data.v1.DeleteObjectTagsResponseBPZNgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
+	"\x10DeleteObjectTags\x12$.paladin.data.v1.DeleteObjectTagsRequest\x1a%.paladin.data.v1.DeleteObjectTagsResponse\x12_\n" +
+	"\x10ListDistinctTags\x12$.paladin.data.v1.ListDistinctTagsRequest\x1a%.paladin.data.v1.ListDistinctTagsResponseBPZNgithub.com/oleg-tkachuk/paladin/internal/api/pb/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_tag_service_proto_rawDescOnce sync.Once
@@ -371,35 +518,43 @@ func file_paladin_data_v1_object_tag_service_proto_rawDescGZIP() []byte {
 	return file_paladin_data_v1_object_tag_service_proto_rawDescData
 }
 
-var file_paladin_data_v1_object_tag_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_paladin_data_v1_object_tag_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_paladin_data_v1_object_tag_service_proto_goTypes = []any{
-	(*GetObjectTagsRequest)(nil),     // 0: paladin.data.v1.GetObjectTagsRequest
-	(*GetObjectTagsResponse)(nil),    // 1: paladin.data.v1.GetObjectTagsResponse
-	(*PutObjectTagsRequest)(nil),     // 2: paladin.data.v1.PutObjectTagsRequest
-	(*PutObjectTagsResponse)(nil),    // 3: paladin.data.v1.PutObjectTagsResponse
-	(*DeleteObjectTagsRequest)(nil),  // 4: paladin.data.v1.DeleteObjectTagsRequest
-	(*DeleteObjectTagsResponse)(nil), // 5: paladin.data.v1.DeleteObjectTagsResponse
-	nil,                              // 6: paladin.data.v1.GetObjectTagsResponse.TagsEntry
-	nil,                              // 7: paladin.data.v1.PutObjectTagsRequest.TagsEntry
-	nil,                              // 8: paladin.data.v1.PutObjectTagsResponse.TagsEntry
-	nil,                              // 9: paladin.data.v1.DeleteObjectTagsResponse.TagsEntry
+	(*ListDistinctTagsRequest)(nil),  // 0: paladin.data.v1.ListDistinctTagsRequest
+	(*ListDistinctTagsResponse)(nil), // 1: paladin.data.v1.ListDistinctTagsResponse
+	(*TagValues)(nil),                // 2: paladin.data.v1.TagValues
+	(*GetObjectTagsRequest)(nil),     // 3: paladin.data.v1.GetObjectTagsRequest
+	(*GetObjectTagsResponse)(nil),    // 4: paladin.data.v1.GetObjectTagsResponse
+	(*PutObjectTagsRequest)(nil),     // 5: paladin.data.v1.PutObjectTagsRequest
+	(*PutObjectTagsResponse)(nil),    // 6: paladin.data.v1.PutObjectTagsResponse
+	(*DeleteObjectTagsRequest)(nil),  // 7: paladin.data.v1.DeleteObjectTagsRequest
+	(*DeleteObjectTagsResponse)(nil), // 8: paladin.data.v1.DeleteObjectTagsResponse
+	nil,                              // 9: paladin.data.v1.ListDistinctTagsResponse.TagsEntry
+	nil,                              // 10: paladin.data.v1.GetObjectTagsResponse.TagsEntry
+	nil,                              // 11: paladin.data.v1.PutObjectTagsRequest.TagsEntry
+	nil,                              // 12: paladin.data.v1.PutObjectTagsResponse.TagsEntry
+	nil,                              // 13: paladin.data.v1.DeleteObjectTagsResponse.TagsEntry
 }
 var file_paladin_data_v1_object_tag_service_proto_depIdxs = []int32{
-	6, // 0: paladin.data.v1.GetObjectTagsResponse.tags:type_name -> paladin.data.v1.GetObjectTagsResponse.TagsEntry
-	7, // 1: paladin.data.v1.PutObjectTagsRequest.tags:type_name -> paladin.data.v1.PutObjectTagsRequest.TagsEntry
-	8, // 2: paladin.data.v1.PutObjectTagsResponse.tags:type_name -> paladin.data.v1.PutObjectTagsResponse.TagsEntry
-	9, // 3: paladin.data.v1.DeleteObjectTagsResponse.tags:type_name -> paladin.data.v1.DeleteObjectTagsResponse.TagsEntry
-	0, // 4: paladin.data.v1.ObjectTagService.GetObjectTags:input_type -> paladin.data.v1.GetObjectTagsRequest
-	2, // 5: paladin.data.v1.ObjectTagService.PutObjectTags:input_type -> paladin.data.v1.PutObjectTagsRequest
-	4, // 6: paladin.data.v1.ObjectTagService.DeleteObjectTags:input_type -> paladin.data.v1.DeleteObjectTagsRequest
-	1, // 7: paladin.data.v1.ObjectTagService.GetObjectTags:output_type -> paladin.data.v1.GetObjectTagsResponse
-	3, // 8: paladin.data.v1.ObjectTagService.PutObjectTags:output_type -> paladin.data.v1.PutObjectTagsResponse
-	5, // 9: paladin.data.v1.ObjectTagService.DeleteObjectTags:output_type -> paladin.data.v1.DeleteObjectTagsResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	9,  // 0: paladin.data.v1.ListDistinctTagsResponse.tags:type_name -> paladin.data.v1.ListDistinctTagsResponse.TagsEntry
+	10, // 1: paladin.data.v1.GetObjectTagsResponse.tags:type_name -> paladin.data.v1.GetObjectTagsResponse.TagsEntry
+	11, // 2: paladin.data.v1.PutObjectTagsRequest.tags:type_name -> paladin.data.v1.PutObjectTagsRequest.TagsEntry
+	12, // 3: paladin.data.v1.PutObjectTagsResponse.tags:type_name -> paladin.data.v1.PutObjectTagsResponse.TagsEntry
+	13, // 4: paladin.data.v1.DeleteObjectTagsResponse.tags:type_name -> paladin.data.v1.DeleteObjectTagsResponse.TagsEntry
+	2,  // 5: paladin.data.v1.ListDistinctTagsResponse.TagsEntry.value:type_name -> paladin.data.v1.TagValues
+	3,  // 6: paladin.data.v1.ObjectTagService.GetObjectTags:input_type -> paladin.data.v1.GetObjectTagsRequest
+	5,  // 7: paladin.data.v1.ObjectTagService.PutObjectTags:input_type -> paladin.data.v1.PutObjectTagsRequest
+	7,  // 8: paladin.data.v1.ObjectTagService.DeleteObjectTags:input_type -> paladin.data.v1.DeleteObjectTagsRequest
+	0,  // 9: paladin.data.v1.ObjectTagService.ListDistinctTags:input_type -> paladin.data.v1.ListDistinctTagsRequest
+	4,  // 10: paladin.data.v1.ObjectTagService.GetObjectTags:output_type -> paladin.data.v1.GetObjectTagsResponse
+	6,  // 11: paladin.data.v1.ObjectTagService.PutObjectTags:output_type -> paladin.data.v1.PutObjectTagsResponse
+	8,  // 12: paladin.data.v1.ObjectTagService.DeleteObjectTags:output_type -> paladin.data.v1.DeleteObjectTagsResponse
+	1,  // 13: paladin.data.v1.ObjectTagService.ListDistinctTags:output_type -> paladin.data.v1.ListDistinctTagsResponse
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_object_tag_service_proto_init() }
@@ -413,7 +568,7 @@ func file_paladin_data_v1_object_tag_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_data_v1_object_tag_service_proto_rawDesc), len(file_paladin_data_v1_object_tag_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

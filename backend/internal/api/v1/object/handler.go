@@ -213,6 +213,10 @@ type Repository interface {
 	UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
+	// ListDistinctTags returns the distinct tag key→values across the
+	// ObjectKey's live (non-DELETED) objects, each value list sorted. Backs
+	// the tag-facet filter dropdown.
+	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, objectKey string) (map[string][]string, error)
 	// LookupBucket returns the physical S3 bucket for a tenant's ObjectKey.
 	// Cheap lookup (covered by idx_object_keys_bucket_routing). Empty
 	// string means the row exists but no bucket has been bound — the
@@ -829,6 +833,32 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &CountObjectsOutput{ApproximateCount: n, Exact: exact}, nil
+}
+
+// ─── ListDistinctTags ─────────────────────────────────────────────────────────
+
+// ListDistinctTags returns the distinct tag key→values across the ObjectKey's
+// live objects, for populating a tag-facet filter. Same auth contract as
+// ListObjects: an OpList capability caveat plus a single tenant+objectKey Cedar
+// check (no per-row authz — the result is an aggregate, not object data).
+func (h *Handler) ListDistinctTags(ctx context.Context, objectKey string) (map[string][]string, error) {
+	tenantID, principal, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, ObjectKey: objectKey,
+	}, cedar.ActionGetObject, 0, ""); err != nil {
+		return nil, err
+	}
+	tags, err := h.repo.ListDistinctTags(ctx, tenantID, objectKey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return tags, nil
 }
 
 // ─── Read RPCs ──────────────────────────────────────────────────────────────

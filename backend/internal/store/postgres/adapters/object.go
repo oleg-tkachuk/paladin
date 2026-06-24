@@ -289,6 +289,40 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args object.CountObjectsA
 	}
 }
 
+// ListDistinctTags returns each tag key present on the ObjectKey's live objects
+// with its distinct values, sorted in SQL. A single pass over the rows via
+// LATERAL jsonb_each_text; the per-ObjectKey scope bounds the scan, and
+// idx_objects_tags_gin covers tag predicates on the same table.
+func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, objectKey string) (map[string][]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT t.key, array_agg(DISTINCT t.value ORDER BY t.value)
+		   FROM objects o, LATERAL jsonb_each_text(o.tags) AS t(key, value)
+		  WHERE o.tenant_id  = $1
+		    AND o.object_key = $2
+		    AND o.state <> 'DELETED'
+		  GROUP BY t.key
+		  ORDER BY t.key`,
+		pgUUID(tenantID), objectKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list distinct tags: %w", err)
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var key string
+		var values []string
+		if err := rows.Scan(&key, &values); err != nil {
+			return nil, fmt.Errorf("scan distinct tag: %w", err)
+		}
+		out[key] = values
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate distinct tags: %w", err)
+	}
+	return out, nil
+}
+
 // LookupBucket returns the physical S3 bucket bound to a tenant's
 // ObjectKey. Hits idx_object_keys_bucket_routing. After migration 005
 // bucket_name is NOT NULL so a successful lookup always returns a

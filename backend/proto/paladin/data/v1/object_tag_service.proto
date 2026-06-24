@@ -13,6 +13,27 @@ service ObjectTagService {
   rpc GetObjectTags(GetObjectTagsRequest) returns (GetObjectTagsResponse);
   rpc PutObjectTags(PutObjectTagsRequest) returns (PutObjectTagsResponse);
   rpc DeleteObjectTags(DeleteObjectTagsRequest) returns (DeleteObjectTagsResponse);
+  // ListDistinctTags enumerates the distinct tag key→values present across an
+  // ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+  // whole tenant scope rather than only the objects on the current page.
+  rpc ListDistinctTags(ListDistinctTagsRequest) returns (ListDistinctTagsResponse);
+}
+
+message ListDistinctTagsRequest {
+  // Parent ObjectKey scope: "tenants/{tenant_id}/objectKeys/{object_key}".
+  // The tenant is enforced from the auth context; this narrows the distinct
+  // scan to one ObjectKey's objects.
+  string parent = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListDistinctTagsResponse {
+  // Tag key → the distinct values observed for that key across the scope,
+  // each value list sorted ascending.
+  map<string, TagValues> tags = 1;
+}
+
+message TagValues {
+  repeated string values = 1;
 }
 
 message GetObjectTagsRequest {

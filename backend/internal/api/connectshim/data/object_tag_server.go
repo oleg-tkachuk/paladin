@@ -97,4 +97,20 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	return connect.NewResponse(&pb.DeleteObjectTagsResponse{Tags: out.Tags}), nil
 }
 
+func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Request[pb.ListDistinctTagsRequest]) (*connect.Response[pb.ListDistinctTagsResponse], error) {
+	objectKey, err := objectKeyNameParts(ctx, req.Msg.GetParent())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	tags, err := s.H.ListDistinctTags(ctx, objectKey)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListDistinctTagsResponse{Tags: make(map[string]*pb.TagValues, len(tags))}
+	for k, vals := range tags {
+		out.Tags[k] = &pb.TagValues{Values: vals}
+	}
+	return connect.NewResponse(out), nil
+}
+
 var _ paladindatav1connect.ObjectTagServiceHandler = (*ObjectTagServer)(nil)

@@ -43,6 +43,9 @@ const (
 	// ObjectTagServiceDeleteObjectTagsProcedure is the fully-qualified name of the ObjectTagService's
 	// DeleteObjectTags RPC.
 	ObjectTagServiceDeleteObjectTagsProcedure = "/paladin.data.v1.ObjectTagService/DeleteObjectTags"
+	// ObjectTagServiceListDistinctTagsProcedure is the fully-qualified name of the ObjectTagService's
+	// ListDistinctTags RPC.
+	ObjectTagServiceListDistinctTagsProcedure = "/paladin.data.v1.ObjectTagService/ListDistinctTags"
 )
 
 // ObjectTagServiceClient is a client for the paladin.data.v1.ObjectTagService service.
@@ -50,6 +53,10 @@ type ObjectTagServiceClient interface {
 	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
+	// ListDistinctTags enumerates the distinct tag key→values present across an
+	// ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+	// whole tenant scope rather than only the objects on the current page.
+	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
 }
 
 // NewObjectTagServiceClient constructs a client for the paladin.data.v1.ObjectTagService service. By
@@ -81,6 +88,12 @@ func NewObjectTagServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
 			connect.WithClientOptions(opts...),
 		),
+		listDistinctTags: connect.NewClient[v1.ListDistinctTagsRequest, v1.ListDistinctTagsResponse](
+			httpClient,
+			baseURL+ObjectTagServiceListDistinctTagsProcedure,
+			connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -89,6 +102,7 @@ type objectTagServiceClient struct {
 	getObjectTags    *connect.Client[v1.GetObjectTagsRequest, v1.GetObjectTagsResponse]
 	putObjectTags    *connect.Client[v1.PutObjectTagsRequest, v1.PutObjectTagsResponse]
 	deleteObjectTags *connect.Client[v1.DeleteObjectTagsRequest, v1.DeleteObjectTagsResponse]
+	listDistinctTags *connect.Client[v1.ListDistinctTagsRequest, v1.ListDistinctTagsResponse]
 }
 
 // GetObjectTags calls paladin.data.v1.ObjectTagService.GetObjectTags.
@@ -106,11 +120,20 @@ func (c *objectTagServiceClient) DeleteObjectTags(ctx context.Context, req *conn
 	return c.deleteObjectTags.CallUnary(ctx, req)
 }
 
+// ListDistinctTags calls paladin.data.v1.ObjectTagService.ListDistinctTags.
+func (c *objectTagServiceClient) ListDistinctTags(ctx context.Context, req *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error) {
+	return c.listDistinctTags.CallUnary(ctx, req)
+}
+
 // ObjectTagServiceHandler is an implementation of the paladin.data.v1.ObjectTagService service.
 type ObjectTagServiceHandler interface {
 	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
 	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
 	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
+	// ListDistinctTags enumerates the distinct tag key→values present across an
+	// ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+	// whole tenant scope rather than only the objects on the current page.
+	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
 }
 
 // NewObjectTagServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -138,6 +161,12 @@ func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.Han
 		connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
 		connect.WithHandlerOptions(opts...),
 	)
+	objectTagServiceListDistinctTagsHandler := connect.NewUnaryHandler(
+		ObjectTagServiceListDistinctTagsProcedure,
+		svc.ListDistinctTags,
+		connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.data.v1.ObjectTagService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObjectTagServiceGetObjectTagsProcedure:
@@ -146,6 +175,8 @@ func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.Han
 			objectTagServicePutObjectTagsHandler.ServeHTTP(w, r)
 		case ObjectTagServiceDeleteObjectTagsProcedure:
 			objectTagServiceDeleteObjectTagsHandler.ServeHTTP(w, r)
+		case ObjectTagServiceListDistinctTagsProcedure:
+			objectTagServiceListDistinctTagsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -165,4 +196,8 @@ func (UnimplementedObjectTagServiceHandler) PutObjectTags(context.Context, *conn
 
 func (UnimplementedObjectTagServiceHandler) DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.DeleteObjectTags is not implemented"))
+}
+
+func (UnimplementedObjectTagServiceHandler) ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.ListDistinctTags is not implemented"))
 }
