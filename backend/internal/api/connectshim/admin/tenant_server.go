@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
@@ -280,6 +281,17 @@ func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Reques
 		return nil, err
 	}
 	return connect.NewResponse(tenantDomainToProto(t)), nil
+}
+
+func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *connect.Request[pb.ResolveRenamedSlugRequest]) (*connect.Response[pb.ResolveRenamedSlugResponse], error) {
+	newSlug, renamedAt, err := s.H.ResolveRenamedSlug(ctx, req.Msg.GetOldSlug())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.ResolveRenamedSlugResponse{
+		NewSlug:   newSlug,
+		RenamedAt: timestamppb.New(renamedAt),
+	}), nil
 }
 
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)

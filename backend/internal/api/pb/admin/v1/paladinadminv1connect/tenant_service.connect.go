@@ -60,6 +60,9 @@ const (
 	// TenantServiceRenameTenantSlugProcedure is the fully-qualified name of the TenantService's
 	// RenameTenantSlug RPC.
 	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
+	// TenantServiceResolveRenamedSlugProcedure is the fully-qualified name of the TenantService's
+	// ResolveRenamedSlug RPC.
+	TenantServiceResolveRenamedSlugProcedure = "/paladin.admin.v1.TenantService/ResolveRenamedSlug"
 )
 
 // TenantServiceClient is a client for the paladin.admin.v1.TenantService service.
@@ -92,6 +95,15 @@ type TenantServiceClient interface {
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
+	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
+	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
+	// is NOT platform-admin gated — it authorizes by READ access to the resolved
+	// target tenant, so an ordinary member of that tenant can follow a stale
+	// link. Every failure (no rename history, outside the grace window, or
+	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
+	// enumerate slug→tenant mappings.
+	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 }
 
 // NewTenantServiceClient constructs a client for the paladin.admin.v1.TenantService service. By
@@ -159,6 +171,12 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveRenamedSlug: connect.NewClient[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse](
+			httpClient,
+			baseURL+TenantServiceResolveRenamedSlugProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -173,6 +191,7 @@ type tenantServiceClient struct {
 	restoreTenant      *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
 	purgeTenant        *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
 	renameTenantSlug   *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
+	resolveRenamedSlug *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
 }
 
 // CreateTenant calls paladin.admin.v1.TenantService.CreateTenant.
@@ -220,6 +239,11 @@ func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *connect
 	return c.renameTenantSlug.CallUnary(ctx, req)
 }
 
+// ResolveRenamedSlug calls paladin.admin.v1.TenantService.ResolveRenamedSlug.
+func (c *tenantServiceClient) ResolveRenamedSlug(ctx context.Context, req *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {
+	return c.resolveRenamedSlug.CallUnary(ctx, req)
+}
+
 // TenantServiceHandler is an implementation of the paladin.admin.v1.TenantService service.
 type TenantServiceHandler interface {
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
@@ -250,6 +274,15 @@ type TenantServiceHandler interface {
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
 	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
+	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
+	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
+	// is NOT platform-admin gated — it authorizes by READ access to the resolved
+	// target tenant, so an ordinary member of that tenant can follow a stale
+	// link. Every failure (no rename history, outside the grace window, or
+	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
+	// enumerate slug→tenant mappings.
+	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
 }
 
 // NewTenantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -313,6 +346,12 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantServiceResolveRenamedSlugHandler := connect.NewUnaryHandler(
+		TenantServiceResolveRenamedSlugProcedure,
+		svc.ResolveRenamedSlug,
+		connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.TenantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TenantServiceCreateTenantProcedure:
@@ -333,6 +372,8 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 			tenantServicePurgeTenantHandler.ServeHTTP(w, r)
 		case TenantServiceRenameTenantSlugProcedure:
 			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
+		case TenantServiceResolveRenamedSlugProcedure:
+			tenantServiceResolveRenamedSlugHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -376,4 +417,8 @@ func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *connect.R
 
 func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RenameTenantSlug is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ResolveRenamedSlug is not implemented"))
 }

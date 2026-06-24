@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -77,5 +78,22 @@ func TestRenameRecordsSlugHistory(t *testing.T) {
 	}
 	if got := countHistory(); got != 1 {
 		t.Fatalf("history rows after no-op rename = %d, want 1", got)
+	}
+
+	// LookupRenamedSlug (backs ResolveRenamedSlug): "acme" resolves to the
+	// new slug within a generous window; an unknown slug and a zero-length
+	// window both miss.
+	res, found, err := repo.LookupRenamedSlug(ctx, "acme", time.Hour)
+	if err != nil {
+		t.Fatalf("LookupRenamedSlug: %v", err)
+	}
+	if !found || res.NewSlug != "acme-corp" || res.TenantID != id {
+		t.Fatalf("lookup acme = (%+v, found=%v), want acme-corp / %s", res, found, id)
+	}
+	if _, found, _ := repo.LookupRenamedSlug(ctx, "never-existed", time.Hour); found {
+		t.Errorf("lookup of unknown slug returned found=true")
+	}
+	if _, found, _ := repo.LookupRenamedSlug(ctx, "acme", time.Nanosecond); found {
+		t.Errorf("lookup with sub-window age returned found=true (grace window not enforced)")
 	}
 }

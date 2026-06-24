@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 
 import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
 import "paladin/admin/v1/types.proto";
 import "paladin/common/v1/pagination.proto";
 
@@ -43,6 +44,16 @@ service TenantService {
   // `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
   // the supplied resource_version. Returns the renamed Tenant.
   rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant);
+
+  // ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
+  // renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
+  // "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
+  // is NOT platform-admin gated — it authorizes by READ access to the resolved
+  // target tenant, so an ordinary member of that tenant can follow a stale
+  // link. Every failure (no rename history, outside the grace window, or
+  // read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
+  // enumerate slug→tenant mappings.
+  rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse);
 }
 
 message CreateTenantRequest {
@@ -133,4 +144,16 @@ message RenameTenantSlugRequest {
   // new_slug — kebab-case, validated by the same rules as
   // CreateTenantRequest.slug. Uniqueness enforced by the database.
   string new_slug = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message ResolveRenamedSlugRequest {
+  // old_slug — the slug that 404'd (the one in the stale bookmark).
+  string old_slug = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ResolveRenamedSlugResponse {
+  // new_slug — the slug the tenant uses now.
+  string new_slug = 1;
+  // renamed_at — when the rotation happened (for a "renamed N days ago" hint).
+  google.protobuf.Timestamp renamed_at = 2;
 }

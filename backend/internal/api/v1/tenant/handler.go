@@ -113,6 +113,11 @@ type Repository interface {
 	// for that tenant. Returns the renamed Tenant (with the new
 	// resource_version). ErrVersionMismatch on OCC failure.
 	Rename(ctx context.Context, args RenameTenantSlugArgs) (Tenant, error)
+	// LookupRenamedSlug finds the most recent rotation away FROM oldSlug
+	// within `window` (0 = unbounded), reading the tenant_slug_history table
+	// written by Rename. found=false when no matching rotation exists. Used
+	// by ResolveRenamedSlug to back a 404 "did you mean?" redirect.
+	LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (res RenamedSlug, found bool, err error)
 
 	// RunInTx + the *Tx mutation variants are the ADR-0003 seam: the
 	// handler runs a mutation and its outbox fan-out on one tx so a crash
@@ -132,6 +137,14 @@ type RenameTenantSlugArgs struct {
 	TenantID        uuid.UUID
 	NewSlug         string
 	ExpectedVersion int64
+}
+
+// RenamedSlug is one resolved rotation row from tenant_slug_history: the
+// tenant that owns the new slug, the new slug itself, and when it rotated.
+type RenamedSlug struct {
+	TenantID  uuid.UUID
+	NewSlug   string
+	RenamedAt time.Time
 }
 
 // ListTenantsArgs replaces the previous List(pageSize, afterID) so
@@ -431,6 +444,46 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 		return nil, connect.NewError(connect.CodeNotFound, lookupErr)
 	}
 	return &t, nil
+}
+
+// defaultRenameGraceWindow bounds how long after a rename the old slug still
+// resolves. A candidate config knob; 30d matches the BACKLOG default and a
+// typical bookmark-staleness horizon.
+const defaultRenameGraceWindow = 30 * 24 * time.Hour
+
+// ResolveRenamedSlug maps oldSlug → the slug its tenant uses now, for a 404
+// "did you mean?" redirect. Authorized by READ access to the RESOLVED target
+// tenant — so a member of that tenant (or a platform admin) can follow a stale
+// link, but nobody else. Every non-success outcome (no history, outside the
+// grace window, read-denied) collapses to NotFound, the same anti-enumeration
+// contract as GetTenantBySlug: the endpoint can't be used to map slugs to
+// tenants the caller has no access to.
+func (h *Handler) ResolveRenamedSlug(ctx context.Context, oldSlug string) (string, time.Time, error) {
+	res, found, lookupErr := h.repo.LookupRenamedSlug(ctx, oldSlug, defaultRenameGraceWindow)
+
+	// Run the auth dance regardless of the lookup outcome so existing-but-
+	// denied and missing are timing-indistinguishable. Authorize ReadTenant
+	// on the resolved tenant when present, else on the caller's own (a no-op
+	// query of ~the same cost).
+	target := res.TenantID
+	if !found || lookupErr != nil {
+		if ct, terr := auth.TenantFromContext(ctx); terr == nil {
+			target = ct
+		}
+	}
+	if _, perr := auth.PrincipalFromContext(ctx); perr != nil {
+		return "", time.Time{}, connect.NewError(connect.CodeUnauthenticated, perr)
+	}
+	if authErr := h.authorize(ctx, cedar.ActionReadTenant, target); authErr != nil {
+		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound)
+	}
+	if lookupErr != nil {
+		return "", time.Time{}, connect.NewError(connect.CodeInternal, lookupErr)
+	}
+	if !found {
+		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound)
+	}
+	return res.NewSlug, res.RenamedAt, nil
 }
 
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {

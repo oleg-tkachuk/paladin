@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -510,6 +511,38 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		return tenant.Tenant{}, fmt.Errorf("rename tenant: commit: %w", err)
 	}
 	return r.Get(ctx, args.TenantID)
+}
+
+// LookupRenamedSlug returns the most recent rotation away FROM oldSlug within
+// `window` (0 = unbounded), from the tenant_slug_history table Rename writes.
+// found=false (nil error) when no rotation matches — the resolver maps that to
+// NotFound. tenant_id is read as text to avoid pgx uuid-codec registration.
+func (r *TenantRepo) LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (tenant.RenamedSlug, bool, error) {
+	q := `SELECT tenant_id::text, new_slug, renamed_at
+	        FROM tenant_slug_history
+	       WHERE old_slug = $1`
+	args := []any{oldSlug}
+	if window > 0 {
+		q += ` AND renamed_at >= now() - make_interval(secs => $2)`
+		args = append(args, window.Seconds())
+	}
+	q += ` ORDER BY renamed_at DESC LIMIT 1`
+
+	var tidStr string
+	var res tenant.RenamedSlug
+	err := r.pool.QueryRow(ctx, q, args...).Scan(&tidStr, &res.NewSlug, &res.RenamedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenant.RenamedSlug{}, false, nil
+	}
+	if err != nil {
+		return tenant.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: %w", err)
+	}
+	tid, perr := uuid.Parse(tidStr)
+	if perr != nil {
+		return tenant.RenamedSlug{}, false, fmt.Errorf("lookup renamed slug: parse tenant_id: %w", perr)
+	}
+	res.TenantID = tid
+	return res, true, nil
 }
 
 // rewriteTenantSlugRefs replaces every `Tenant::"<oldSlug>"` literal
