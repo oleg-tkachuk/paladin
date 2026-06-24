@@ -129,7 +129,7 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	// 1) Decode the compact form. Failures here are malformed tokens.
 	cap, err := Decode(token)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidSignature, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
 	}
 
 	// 2) Issuer must be trusted. Defends against tokens from rogue
@@ -142,7 +142,7 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	// internal claim shape; the Decode result throws away header info).
 	kid, err := decodeKID(token)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidSignature, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
 	}
 	pub, err := v.cfg.Keys.PublicKey(ctx, kid)
 	if err != nil {

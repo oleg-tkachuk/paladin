@@ -187,7 +187,7 @@ func (e *BatchCopyExecutor) copyOne(
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).
 		if mfErr := e.Transitions.MarkFailed(ctx, dst.ObjectID, "batch copy storage failed"); mfErr != nil {
-			return fmt.Errorf("storage copy: %w (compensation also failed: %v)", err, mfErr)
+			return fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr)
 		}
 		return fmt.Errorf("storage copy: %w", err)
 	}

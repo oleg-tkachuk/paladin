@@ -2,6 +2,7 @@ package celh
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -84,7 +85,8 @@ func asConnectError(err error, target **connect.Error) bool {
 	if err == nil {
 		return false
 	}
-	if c, ok := err.(*connect.Error); ok {
+	var c *connect.Error
+	if errors.As(err, &c) {
 		*target = c
 		return true
 	}

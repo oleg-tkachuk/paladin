@@ -60,7 +60,7 @@ type seaweedFSWebhookPayload struct {
 func (s *SeaweedFSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	var p seaweedFSWebhookPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: seaweedfs json: %v", ErrUnrecognisedEvent, err)
+		return CloudEvent{}, fmt.Errorf("%w: seaweedfs json: %w", ErrUnrecognisedEvent, err)
 	}
 	if p.Key == "" {
 		return CloudEvent{}, ErrUnrecognisedEvent

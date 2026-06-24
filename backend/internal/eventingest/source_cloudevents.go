@@ -85,7 +85,7 @@ type cloudEventEnvelope struct {
 func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: cloudevents json: %v", ErrUnrecognisedEvent, err)
+		return CloudEvent{}, fmt.Errorf("%w: cloudevents json: %w", ErrUnrecognisedEvent, err)
 	}
 
 	// CE 1.0 mandates specversion + type + source + id. Reject

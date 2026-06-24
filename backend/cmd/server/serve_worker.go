@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -171,12 +172,12 @@ func hostname() string {
 	return "unknown"
 }
 
-// errorsIsCancelled wraps the canonical context cancellation errors. We
-// avoid pulling in errors.Is at every call site for readability — the
-// helper inlines the two classes worker code legitimately ignores.
+// errorsIsCancelled centralises the canonical context-cancellation classes
+// worker code legitimately ignores, so call sites read as one predicate
+// instead of two wrap-aware errors.Is checks.
 func errorsIsCancelled(err error) bool {
 	if err == nil {
 		return true
 	}
-	return err == context.Canceled || err == context.DeadlineExceeded
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }

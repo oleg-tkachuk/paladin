@@ -19,6 +19,7 @@ linters:
     - bodyclose # http.Response.Body not closed (leak)
     - dupword # duplicated words in comments/strings
     - durationcheck # time.Duration multiplication mistakes
+    - errorlint # == / type-assert on errors + %w wrapping correctness
     - gomoddirectives # go.mod replace/retract hygiene
     - goprintffuncname # printf-like funcs end in "f"
     - importas # consistent import aliases

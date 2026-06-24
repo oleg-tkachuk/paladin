@@ -87,7 +87,7 @@ type minioObject struct {
 func (s *MinIOSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	var env minioEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: minio json: %v", ErrUnrecognisedEvent, err)
+		return CloudEvent{}, fmt.Errorf("%w: minio json: %w", ErrUnrecognisedEvent, err)
 	}
 	if len(env.Records) == 0 {
 		return CloudEvent{}, ErrUnrecognisedEvent

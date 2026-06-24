@@ -69,7 +69,7 @@ func (s *SeaweedFSNATSSource) Name() string { return "seaweedfs_nats" }
 func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 	metadata, body, err := decodeNATSEnvelope(raw)
 	if err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %v", ErrUnrecognisedEvent, err)
+		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %w", ErrUnrecognisedEvent, err)
 	}
 	path := metadata["key"]
 	if path == "" {
@@ -81,7 +81,7 @@ func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 	hasOld, hasNew, err := scanFilerEventNotification(body)
 	if err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %v", ErrUnrecognisedEvent, err)
+		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %w", ErrUnrecognisedEvent, err)
 	}
 
 	evType, ok := seaweedFSNATSEventType(hasOld, hasNew)

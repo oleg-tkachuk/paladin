@@ -1297,8 +1297,12 @@ of the pipeline._
     deferring to the main parse error, policy `Validate` returning the error as
     a string *result*). Enabling it means 14 `//nolint` for zero bugs — not
     worth the noise. Leave OFF.
-  - Adopt the remaining bug-catchers one at a time: `errorlint` (~12),
-    `noctx` (~12), `contextcheck` (~8) — fix + add to `enable`.
+  - `errorlint` — DONE: 11 hits fixed (9× `%v`→`%w` to preserve the error
+    chain incl. multi-`%w` for the "compensation also failed" sites; `==` →
+    `errors.Is` in serve_worker; type-assert → `errors.As` in a celh test) and
+    added to `enable`.
+  - Adopt the remaining bug-catchers one at a time: `noctx` (~12),
+    `contextcheck` (~8) — fix + add to `enable`.
   - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
     `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
   - Resolve the remaining `//nolint:staticcheck` deprecation: pgx

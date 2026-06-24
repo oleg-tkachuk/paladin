@@ -1404,7 +1404,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		// promotes via HEAD against an object that the failed copy never wrote.
 		if mfErr := h.sm.MarkFailed(ctx, dst.ObjectID, "storage copy failed"); mfErr != nil {
 			return nil, connect.NewError(connect.CodeInternal,
-				fmt.Errorf("storage copy: %w (compensation also failed: %v)", err, mfErr))
+				fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
 	}
