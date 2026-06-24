@@ -114,6 +114,19 @@ pre-push:
       tags: [go, test]
       run: go test ./... -count=1
 
+    # Curated golangci set (see backend/.golangci.yaml). Skipped if the
+    # binary isn't installed locally so a fresh clone can still push; CI
+    # always runs it pinned.
+    backend-golangci:
+      root: backend/
+      tags: [go, lint]
+      run: |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint run ./...
+        else
+          echo "golangci-lint not installed; skipping (CI enforces it)"
+        fi
+
     # Gate against the multi-doc YAML separator bug — `{{- ... -}}`
     # whitespace strip can collapse the newline before `---`, gluing
     # the separator onto the previous line and silently dropping

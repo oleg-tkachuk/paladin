@@ -3,7 +3,6 @@ package middleware
 import (
 	"testing"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -31,5 +30,5 @@ func TestRegisterResponseFactoryReflectionFree(t *testing.T) {
 		t.Errorf("reconstructed message type = %T, want *emptypb.Empty", resp.Any())
 	}
 	// It must satisfy AnyResponse (compile-time-ish runtime check).
-	var _ connect.AnyResponse = resp
+	var _ = resp
 }

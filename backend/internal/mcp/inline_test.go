@@ -84,7 +84,9 @@ func TestInlineRoundTripper_UnknownHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	if _, err := tr.RoundTrip(req); err == nil {
+	resp, err := tr.RoundTrip(req)
+	if err == nil {
+		_ = resp.Body.Close()
 		t.Fatal("expected error for unknown host, got nil")
 	}
 }

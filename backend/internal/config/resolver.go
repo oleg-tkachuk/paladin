@@ -98,7 +98,7 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 				"contains SecretRef fields. Fix: set "+
 				"serviceAccount.automount: true in chart values, or "+
 				"replace *_secret fields with inline values, or remove "+
-				"SecretRef fields.",
+				"SecretRef fields",
 			r.tokenPath,
 		)
 	}

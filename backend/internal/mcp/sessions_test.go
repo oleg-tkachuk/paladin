@@ -38,11 +38,9 @@ func newTestRegistry(c *fakeClock) *SessionRegistry {
 func upstream(t *testing.T, mintID string) http.Handler {
 	t.Helper()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		buf := make([]byte, r.ContentLength)
+		// Drain the body to confirm the sniff in TrackSessions restored it.
 		if r.ContentLength > 0 {
-			if _, err := r.Body.Read(buf); err != nil && err.Error() != "EOF" {
-				// io.Read may return n>0 with EOF; tolerate it.
-			}
+			_, _ = r.Body.Read(make([]byte, r.ContentLength))
 		}
 		if r.Header.Get(mcpSessionIDHeader) == "" {
 			w.Header().Set(mcpSessionIDHeader, mintID)

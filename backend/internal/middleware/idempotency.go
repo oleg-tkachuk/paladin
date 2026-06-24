@@ -268,13 +268,13 @@ func marshalResponse(resp connect.AnyResponse) ([]byte, error) {
 // hard error here at startup-time of the first replay — easier to
 // catch than a silent miss.
 func reconstructResponse(respType reflect.Type, body []byte) (connect.AnyResponse, error) {
-	if respType.Kind() != reflect.Ptr {
+	if respType.Kind() != reflect.Pointer {
 		return nil, errors.New("idempotency: response type is not a pointer")
 	}
 	// Allocate a zero *Response[T].
 	respVal := reflect.New(respType.Elem())
 	msgField := respVal.Elem().FieldByName("Msg")
-	if !msgField.IsValid() || msgField.Kind() != reflect.Ptr {
+	if !msgField.IsValid() || msgField.Kind() != reflect.Pointer {
 		return nil, errors.New("idempotency: Response.Msg field missing or not a pointer")
 	}
 	// Allocate a zero T, unmarshal cached bytes into it, set Msg.

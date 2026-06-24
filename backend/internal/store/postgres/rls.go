@@ -43,6 +43,7 @@ const wipeTimeout = 2 * time.Second
 // Returns the modified config so the caller's NewWithConfig picks
 // it up. Caller passes a fresh pgxpool.Config.
 func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
+	//nolint:staticcheck // BeforeAcquire deprecated; migration to PrepareConn tracked in BACKLOG
 	cfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
 		tenantID, err := auth.TenantFromContext(ctx)
 		if err != nil || tenantID.String() == "" {

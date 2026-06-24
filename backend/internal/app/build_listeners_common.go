@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/http2/h2c" //nolint:staticcheck // deprecated; migration to http.Server.Protocols tracked in BACKLOG
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -23,7 +23,7 @@ import (
 // is the PALADIN default — the plane is fronted by an ingress that terminates TLS,
 // so h2c keeps the binary contract simple and lets the gateway handle ALPN.
 func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {
-	handler := h2c.NewHandler(mux, &http2.Server{})
+	handler := h2c.NewHandler(mux, &http2.Server{}) //nolint:staticcheck // deprecated; migration to http.Server.Protocols tracked in BACKLOG
 	return &http.Server{
 		Addr:              c.Addr,
 		Handler:           handler,

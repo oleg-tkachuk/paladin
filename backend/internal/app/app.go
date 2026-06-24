@@ -169,10 +169,7 @@ func (a *App) Run() error {
 	a.Started.Store(true)
 
 	// Block on the first listener error; clean shutdown comes via Shutdown.
-	select {
-	case err := <-errCh:
-		return err
-	}
+	return <-errCh
 }
 
 // WithHealth installs the probe registrar so Shutdown can flip /readyz

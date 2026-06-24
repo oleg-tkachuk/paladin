@@ -1,11 +1,11 @@
 name: Test
 
 # PR verification gate. Mirrors the lefthook pre-commit / pre-push
-# commands (go vet, go test, buf lint, eslint, tsc) so the same checks
-# that run locally are enforced for every PR and push to main/develop.
-# golangci-lint is configured (backend/.golangci.yaml) but the codebase
-# does not pass it yet — enabling it here is tracked in BACKLOG.md
-# ("golangci-lint CI gate").
+# commands (go vet, go test, golangci-lint, buf lint, eslint, tsc) so the same
+# checks that run locally are enforced for every PR and push to main/develop.
+# golangci-lint runs the curated set in backend/.golangci.yaml (the high-value
+# correctness/security linters; the noisy style + deferred bug-catchers are
+# tracked in BACKLOG under "golangci-lint follow-ups").
 
 on:
   pull_request:
@@ -48,6 +48,11 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      - name: golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          "$(go env GOPATH)/bin/golangci-lint" run ./...
 
       - name: go test
         run: go test ./... -count=1

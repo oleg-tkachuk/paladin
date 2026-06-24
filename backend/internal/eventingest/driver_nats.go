@@ -111,7 +111,7 @@ func (d *NATSDriver) Run(ctx context.Context, deliver func(context.Context, Clou
 	// Publish the live conn to the health probe + clear it on unwind.
 	d.connRef.Store(nc)
 	defer d.connRef.Store(nil)
-	defer nc.Drain() //nolint:errcheck — best-effort on shutdown
+	defer func() { _ = nc.Drain() }() // best-effort drain on shutdown
 
 	if d.JetStream {
 		return d.runJetStream(ctx, nc, deliver)

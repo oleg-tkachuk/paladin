@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
 )
 
 // Program is re-exported so callers outside this package don't need to import
@@ -280,7 +279,7 @@ func Match(prog cel.Program, row map[string]any) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cel: eval: %w", err)
 	}
-	b, ok := out.(ref.Val).Value().(bool)
+	b, ok := out.Value().(bool)
 	if !ok {
 		return false, fmt.Errorf("cel: expression did not yield bool")
 	}

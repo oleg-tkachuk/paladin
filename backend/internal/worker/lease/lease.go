@@ -127,28 +127,7 @@ func (l *Lease) claim(ctx context.Context) (int64, time.Time, bool, error) {
 	// hold it) or (it has expired). RETURNING gives us the post-write
 	// state directly. Using interval arithmetic on the server avoids
 	// clock-skew between app and DB.
-	const stmt = `
-INSERT INTO worker_leases AS w
-    (name, holder_id, holder_meta, acquired_at, renewed_at, expires_at, generation)
-VALUES
-    ($1, $2, $3::jsonb, NOW(), NOW(), NOW() + ($4::bigint || ' microseconds')::interval, 1)
-ON CONFLICT (name) DO UPDATE
-SET holder_id   = EXCLUDED.holder_id,
-    holder_meta = EXCLUDED.holder_meta,
-    acquired_at = CASE
-        WHEN w.holder_id = EXCLUDED.holder_id THEN w.acquired_at
-        ELSE NOW()
-    END,
-    renewed_at  = NOW(),
-    expires_at  = NOW() + ($4::bigint || ' microseconds')::interval,
-    generation  = CASE
-        WHEN w.holder_id = EXCLUDED.holder_id THEN w.generation
-        ELSE w.generation + 1
-    END
-WHERE  w.holder_id = EXCLUDED.holder_id
-   OR  w.expires_at < NOW()
-RETURNING generation, expires_at;
-`
+	const stmt = "\nINSERT INTO worker_leases AS w\n    (name, holder_id, holder_meta, acquired_at, renewed_at, expires_at, generation)\nVALUES\n    ($1, $2, $3::jsonb, NOW(), NOW() + ($4::bigint || ' microseconds')::interval, 1)\nON CONFLICT (name) DO UPDATE\nSET holder_id   = EXCLUDED.holder_id,\n    holder_meta = EXCLUDED.holder_meta,\n    acquired_at = CASE\n        WHEN w.holder_id = EXCLUDED.holder_id THEN w.acquired_at\n        ELSE NOW()\n    END,\n    renewed_at  = NOW(),\n    expires_at  = NOW() + ($4::bigint || ' microseconds')::interval,\n    generation  = CASE\n        WHEN w.holder_id = EXCLUDED.holder_id THEN w.generation\n        ELSE w.generation + 1\n    END\nWHERE  w.holder_id = EXCLUDED.holder_id\n   OR  w.expires_at < NOW()\nRETURNING generation,"
 
 	row := l.pool.QueryRow(ctx, stmt, l.cfg.Name, l.cfg.HolderID, meta, l.cfg.TTL.Microseconds())
 	var gen int64

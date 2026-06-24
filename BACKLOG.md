@@ -1300,22 +1300,33 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
-### golangci-lint CI gate
+### golangci-lint follow-ups (adopt deferred linters)
 
-- **Status:** Deferred
-- **Reason:** `backend/.golangci.yaml` (v2, broad linter set) exists but
-  the codebase has never been run through it — a local run on
-  2026-06-11 reported style findings across ~245 files (mostly
-  `nlreturn`, `goconst`, `wastedassign`). Enabling it in `test.yml`
-  today would make every PR red; lefthook only runs `go vet`.
-- **Definition of Done:**
-  - Decide which linters in `.golangci.yaml` are actually wanted
-    (trim the config) or fix the findings wholesale (`--fix` +
-    manual pass), in dedicated commits with no behaviour changes.
-  - `golangci-lint run ./...` exits 0 from `backend/`.
-  - Add a `golangci-lint` step to the backend job in
-    `.github/workflows/test.yml` and a matching lefthook pre-push hook.
-- **Blockers:** none — pure effort/scope decision.
+- **Status:** Deferred (the gate is LIVE; this is incremental adoption)
+- **Reason:** `golangci-lint run ./...` now exits 0 on a curated config and
+  runs in CI (`test.yml`) + lefthook pre-push. The config was trimmed to the
+  high-value correctness/security core (`standard` = errcheck/govet/
+  ineffassign/staticcheck, plus bodyclose/rowserrcheck/sqlclosecheck/
+  durationcheck/makezero/misspell/testifylint/…) and the genuine findings in
+  that set were fixed. Several valuable linters were deliberately left OFF
+  because each needs its own fix pass first — adopting them is the remaining
+  work.
+- **Definition of Done (remaining), each its own no-behaviour-change pass:**
+  - Re-enable `unused`: remove the ~9 dead funcs/fields it flags (the non-Tx
+    `dispatchEvent` twins superseded by the ADR-0003 tx-seam, a retired
+    `deliverHTTP`, an unused STS type, two test fields), then drop `unused`
+    from the `disable` list.
+  - Adopt the bug-catchers one at a time: `nilerr` (~14), `errorlint` (~12),
+    `noctx` (~12), `contextcheck` (~8) — each catches real issues; fix + add
+    to `enable`.
+  - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
+    `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
+  - Resolve the two `//nolint:staticcheck` deprecations: migrate
+    `h2c.NewHandler` → `http.Server.Protocols` and pgx `BeforeAcquire` →
+    `PrepareConn`, then drop the nolints.
+  - The pure-style linters (`nlreturn` ~1.5k, `goconst`, `predeclared`,
+    `nestif`, `dupl`, …) stay OFF by design — not worth the churn.
+- **Blockers:** none — incremental, each linter independently adoptable.
 
 ### Playwright e2e suite wired into CI
 

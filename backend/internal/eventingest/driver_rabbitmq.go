@@ -79,7 +79,7 @@ func (d *RabbitMQDriver) runOnce(
 	if err != nil {
 		return fmt.Errorf("amqp dial: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	connCloseCh := make(chan *amqp.Error, 1)
 	conn.NotifyClose(connCloseCh)
 
@@ -87,7 +87,7 @@ func (d *RabbitMQDriver) runOnce(
 	if err != nil {
 		return fmt.Errorf("amqp channel: %w", err)
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	prefetch := d.PrefetchCount
 	if prefetch <= 0 {

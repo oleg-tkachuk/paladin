@@ -22,7 +22,7 @@ func TestJWKSParserHandlesRSA(t *testing.T) {
 			"kty": "RSA",
 			"alg": "RS256",
 			"use": "sig",
-			"n":   enc.EncodeToString(priv.PublicKey.N.Bytes()),
+			"n":   enc.EncodeToString(priv.N.Bytes()),
 			"e":   enc.EncodeToString([]byte{0x01, 0x00, 0x01}), // 65537
 		}},
 	}
@@ -71,7 +71,7 @@ func TestJWKSVerifierUnknownKidForcesRefresh(t *testing.T) {
 			"kid": "k-fresh",
 			"kty": "RSA",
 			"use": "sig",
-			"n":   enc.EncodeToString(priv.PublicKey.N.Bytes()),
+			"n":   enc.EncodeToString(priv.N.Bytes()),
 			"e":   enc.EncodeToString([]byte{0x01, 0x00, 0x01}),
 		}},
 	}
