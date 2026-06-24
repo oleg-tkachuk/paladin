@@ -361,25 +361,23 @@ open deliberately — each notes why._
   (hourly or daily depending on idempotency-key TTL distribution).
 - **Blockers:** same as audit_log.
 
-### AuditLog: `action text_pattern_ops` prefix index
+### AuditLog action-prefix index: planner validation
 
-- **Status:** Open — surfaced by the pushdown benchmark
-  (`internal/integration/audit_bench_test.go`, `task test:bench`).
-- **Reason:** The CEL-pushdown production benchmark (formerly tracked here)
-  is **done**: it seeds 1M rows and measures the `action.startsWith + at >=`
-  filter with vs without pushdown. Finding — the "≥10× p50 latency" claim is
-  **dropped**; on this shape latency is within noise because `audit_log` has
-  no index on `action`, so the prefix is a filter (not a range) under both
-  paths. Pushdown still wins ~20× on bytes/allocations shipped into Go (only
-  the matching page crosses the wire) plus an avoided per-row CEL eval — but
-  the *latency* win needs a dedicated index.
-- **Definition of Done:** add a `(action text_pattern_ops, at DESC)` index
-  (or a partial index per high-volume action class), re-run `task test:bench`,
-  and confirm the newest-N-by-prefix query drops to an index range scan.
-  Validate the planner actually picks it for the `ORDER BY at DESC LIMIT`
-  shape (may need a composite or a rewrite) before claiming the win.
-- **Blockers:** none — but gated on a real query-planning measurement, which
-  the bench now provides.
+- **Status:** Deferred (index shipped; the bench measurement remains)
+- **Reason:** Migration 040 adds `idx_audit_log_action_at` =
+  `(action text_pattern_ops, at DESC)`, built CONCURRENTLY, so the
+  `action LIKE 'prefix%' ... ORDER BY at DESC LIMIT N` shape can range-scan
+  the action prefix instead of filtering every row (the gap the pushdown
+  benchmark surfaced). What is NOT yet done: confirming the *latency* win on
+  the 1M-row bench — the composite orders `at` per-action, so for a multi-value
+  prefix range the planner may still sort; that needs measuring under
+  testcontainers (`task test:bench`), not assumed.
+- **Definition of Done:**
+  - Re-run `task test:bench` against the new index and confirm
+    `EXPLAIN ANALYZE` shows an index range scan (and whether a partial index
+    per high-volume action class, or a query rewrite, beats the composite for
+    the `ORDER BY at DESC LIMIT` shape).
+- **Blockers:** none — gated only on running the (Docker-bound) bench.
 
 ### Per-row Cedar filtering in ListObjects
 
