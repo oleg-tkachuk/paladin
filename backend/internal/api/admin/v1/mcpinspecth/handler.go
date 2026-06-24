@@ -17,8 +17,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -99,26 +102,49 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 	if h.sessionsURL == "" {
 		return connect.NewResponse(out), nil
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.sessionsURL, nil)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	authz := req.Header().Get("Authorization")
+
+	// Fan out across every MCP replica: the registry is process-local, so a
+	// single LB'd query only sees one pod's sessions. Resolve the configured
+	// host to all its A-records (a headless Service returns one per pod) and
+	// query each directly, in parallel. A single-address host (ClusterIP / a
+	// bare IP) collapses to one query — the prior behaviour. A replica that
+	// errors or times out simply contributes nothing (graceful-degrade).
+	targets := h.sessionTargets(ctx)
+	merged := map[string]mcppkg.SessionInfo{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, u := range targets {
+		wg.Add(1)
+		go func(target string) {
+			defer wg.Done()
+			infos, err := h.fetchSessions(ctx, target, authz)
+			if err != nil {
+				return // unreachable / non-200 replica → skip
+			}
+			mu.Lock()
+			for _, s := range infos {
+				// Session ids are minted per pod, so collisions are unexpected;
+				// keep the freshest by last_seen if one ever occurs.
+				if prev, ok := merged[s.ID]; !ok || s.LastSeen.After(prev.LastSeen) {
+					merged[s.ID] = s
+				}
+			}
+			mu.Unlock()
+		}(u)
 	}
-	if authz := req.Header().Get("Authorization"); authz != "" {
-		httpReq.Header.Set("Authorization", authz)
+	wg.Wait()
+
+	infos := make([]mcppkg.SessionInfo, 0, len(merged))
+	for _, s := range merged {
+		infos = append(infos, s)
 	}
-	resp, err := h.httpClient.Do(httpReq)
-	if err != nil {
-		// MCP unreachable → empty (no sessions visible), per the design.
-		return connect.NewResponse(out), nil
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return connect.NewResponse(out), nil
-	}
-	var infos []mcppkg.SessionInfo
-	if err := json.NewDecoder(resp.Body).Decode(&infos); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode mcp sessions: %w", err))
-	}
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].StartedAt.Equal(infos[j].StartedAt) {
+			return infos[i].ID < infos[j].ID
+		}
+		return infos[i].StartedAt.Before(infos[j].StartedAt)
+	})
 	for _, s := range infos {
 		out.Sessions = append(out.Sessions, &adminv1.MCPSession{
 			Id:            s.ID,
@@ -130,6 +156,63 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 		})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// sessionTargets expands SessionsURL into one URL per resolved host address
+// (headless-Service fan-out). Falls back to the URL verbatim when the host is
+// a literal IP, is unresolvable, or resolves to a single address.
+func (h *Handler) sessionTargets(ctx context.Context) []string {
+	single := []string{h.sessionsURL}
+	u, err := url.Parse(h.sessionsURL)
+	if err != nil || u.Host == "" {
+		return single
+	}
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return single // already an IP — nothing to resolve
+	}
+	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+	if err != nil || len(addrs) <= 1 {
+		return single
+	}
+	port := u.Port()
+	targets := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		nu := *u
+		if port != "" {
+			nu.Host = net.JoinHostPort(a, port)
+		} else {
+			nu.Host = a
+		}
+		targets = append(targets, nu.String())
+	}
+	return targets
+}
+
+// fetchSessions GETs one replica's /sessions endpoint, forwarding the caller's
+// admin JWT, and decodes the SessionInfo array. Returns an error (caller skips
+// the replica) on transport failure or non-200.
+func (h *Handler) fetchSessions(ctx context.Context, target, authz string) ([]mcppkg.SessionInfo, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	if authz != "" {
+		httpReq.Header.Set("Authorization", authz)
+	}
+	resp, err := h.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mcp /sessions: status %d", resp.StatusCode)
+	}
+	var infos []mcppkg.SessionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&infos); err != nil {
+		return nil, err
+	}
+	return infos, nil
 }
 
 // Inspect returns the merged effective MCP configuration: profiles

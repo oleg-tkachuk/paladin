@@ -33,32 +33,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Live MCP sessions: multi-replica aggregation + agent_subject enrichment
-
-- **Status:** Deferred (the feature shipped; two refinements remain)
-- **Reason:** Live MCP session enumeration is now end-to-end: the
-  `mcp.SessionRegistry` + `TrackSessions` middleware feed a registry in
-  the MCP server; `mcp.SessionsHandler` exposes it as an admin-gated
-  `GET /sessions` (forwarded-JWT + platform-admin verified, no shared
-  secret); `MCPInspectService.ListSessions` proxies there (config
-  `PALADIN_MCP_HTTP_SESSIONS_URL`); and the `/mcp` page renders the live
-  table (`MCPLiveSessions`). Two refinements are left:
-- **Definition of Done (remaining):**
-  - Multi-replica aggregation: the registry is process-local, so
-    `ListSessions` reflects whichever MCP replica the proxy GET landed
-    on. With >1 MCP replica behind a Service, sessions on the other
-    replicas are invisible. Options: fan the proxy out to all replica
-    pods (headless Service + per-pod GET), or move to a shared store —
-    the latter reintroduces the staleness-after-restart problem the
-    in-memory design avoids, so fan-out is preferred.
-  - `agent_subject` enrichment: `serve_mcp` passes a nil subjectFn to
-    `TrackSessions`, so the column is blank. Populating it needs the
-    MCP server to verify the per-request `X-PALADIN-Token` JWT and stamp the
-    subject (and ideally agent_type / model) onto the session.
-- **Blockers:** none — both are additive refinements on a working
-  feature.
-
----
 
 ## Agentic plane / single-binary multi-mode migration
 
