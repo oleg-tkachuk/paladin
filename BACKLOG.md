@@ -1343,18 +1343,6 @@ of the pipeline._
 - **Blockers:** [[Frontend Playwright suite runtime sign-off]] —
   SC-002/SC-003/SC-004 must pass locally first.
 
-### Image vulnerability scanning in CI
-
-- **Status:** Deferred
-- **Reason:** `security.yml` scans the filesystem (lockfiles/manifests)
-  only; scanning the built OCI images (distroless Go + node:25-alpine
-  runner) requires building both images in CI, which we don't do yet
-  outside release.
-- **Definition of Done:** a workflow (or a job in `e2e.yml`, which
-  already needs the images) runs `trivy image` with
-  `severity: HIGH,CRITICAL` + `ignore-unfixed` against both freshly
-  built images and fails the run on findings.
-- **Blockers:** CI image build step (shared with the e2e entry above).
 
 ### Branch protection on `main` and `develop`
 
