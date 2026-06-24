@@ -834,23 +834,22 @@ open deliberately — each notes why._
 - **Blockers:** none — but it is wide and must ride the data-fetching
   refactor to avoid 40 scattered `eslint-disable` lines.
 
-### Remaining bucket sub-tabs (Replication / Versioning)
+### Remaining bucket sub-tab: Replication
 
-- **Status:** Deferred
-- **Reason:** Phase 5+ shipped real pages for the tenant-level
-  tab stubs (Quotas, Capabilities, M2M Tokens, Events
-  Subscriptions, Budget) and the bucket sub-tabs Policy + Object
-  Keys. Versioning and Replication remain stubs because they
-  need backend support that isn't there yet:
+- **Status:** Deferred (Versioning DONE; Replication blocked on the worker)
+- **Reason:** The Versioning sub-tab now ships: `BucketService.SetVersioning`
+  (role + Cedar + repo persist + Bucket.versioning on reads) was already real,
+  and the frontend tab wires the enable + keep-deletes-forever switches to it
+  (was a `BucketTabStub`). Replication stays a stub because the toggle would be
+  inert without the data-mover behind it.
 - **Definition of Done:**
-  - Replication tab: blocked on `BucketReplication` proto +
-    replicator worker (see Features →
-    "Replication: real `StorageReplicator` implementation").
-  - Versioning tab: depends on the Bucket proto exposing
-    versioning state with a real toggle handler (today the
-    field exists but the toggle handler and tests are stubs).
-- **Blockers:** Replication proto + worker for the Replication
-  tab; Versioning needs the toggle handler.
+  - Replication tab: blocked on a real replicator worker (see Features →
+    "Replication: real `StorageReplicator` implementation"). The
+    `BucketReplication` proto + `SetReplication` handler already exist, but
+    enabling the toggle without a worker that actually copies objects would
+    misrepresent the system state, so the tab stays stubbed until the worker
+    lands.
+- **Blockers:** the StorageReplicator worker.
 
 ### Multi-segment ObjectKey: event-ingest path disambiguation
 

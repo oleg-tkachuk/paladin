@@ -1,17 +1,111 @@
 "use client";
 
-import { BucketTabStub } from "../_BucketTabStub";
+// Bucket versioning tab — toggles the BucketVersioning state via
+// BucketService.SetVersioning. The backend persists it on the bucket row and
+// the object data-plane honours it (soft-deletes preserve prior versions); this
+// page is the operator switch + retention option.
+
+import { useState } from "react";
+
+import { ConnectError } from "@connectrpc/connect";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Label } from "@/components/ui/label";
+import { useNotification } from "@/components/ui/Notification";
+import { Switch } from "@/components/ui/switch";
+
+import { bucketClient } from "@/lib/connect/client";
+
+import { useBucket } from "../bucket-context";
 
 export default function BucketVersioningPage() {
+  const { bucket, setBucket } = useBucket();
+  const { showNotification } = useNotification();
+
+  const current = bucket.versioning;
+  const [enabled, setEnabled] = useState(current?.enabled ?? false);
+  const [keepDeletes, setKeepDeletes] = useState(
+    current?.keepDeletesForever ?? false,
+  );
+  const [saving, setSaving] = useState(false);
+
+  const dirty =
+    enabled !== (current?.enabled ?? false) ||
+    keepDeletes !== (current?.keepDeletesForever ?? false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await bucketClient.setVersioning({
+        name: bucket.name,
+        resourceVersion: bucket.resourceVersion,
+        versioning: { enabled, keepDeletesForever: enabled && keepDeletes },
+      });
+      setBucket(updated);
+      showNotification({ type: "success", title: "Versioning updated" });
+    } catch (e) {
+      showNotification({
+        type: "error",
+        title: "Save failed",
+        message:
+          e instanceof ConnectError
+            ? e.rawMessage
+            : "Failed to update versioning",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <BucketTabStub
-      title="Versioning"
-      description={
-        "Object-versioning toggle plus retention window. The backend " +
-        "currently exposes versioning state on the underlying S3 API " +
-        "only; once the BucketService surfaces it, this tab wires the " +
-        "switch + retention editor."
-      }
-    />
+    <Card className="max-w-2xl space-y-6 p-6">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Versioning</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          When enabled, overwrites and deletes preserve prior object versions
+          instead of replacing them in place.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label htmlFor="versioning-enabled" className="text-sm text-white">
+            Enable versioning
+          </Label>
+          <p className="text-xs text-slate-500">
+            Keeps a version history per object.
+          </p>
+        </div>
+        <Switch
+          id="versioning-enabled"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label htmlFor="keep-deletes" className="text-sm text-white">
+            Keep deletes forever
+          </Label>
+          <p className="text-xs text-slate-500">
+            Soft-deletes never reclaim storage; delete markers are retained.
+          </p>
+        </div>
+        <Switch
+          id="keep-deletes"
+          checked={enabled && keepDeletes}
+          disabled={!enabled}
+          onCheckedChange={setKeepDeletes}
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={!dirty || saving}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </Card>
   );
 }
