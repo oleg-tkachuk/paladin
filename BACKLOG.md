@@ -1300,35 +1300,6 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
-### Proto codegen drift-guard in CI
-
-- **Status:** Deferred (the reproducibility blocker itself is RESOLVED)
-- **Reason:** The `gen:proto` task now exists (`buf generate` →
-  `goimports -w internal/api/pb`) and every generated file under
-  `backend/internal/api/pb/` was normalized to that canonical style
-  in one mechanical commit, so a fresh `task gen:proto` is a no-op
-  and new RPCs touch only their own service's files. What is NOT yet
-  guarded: a contributor can still hand-edit or `--no-verify`-commit
-  a generated file and re-introduce drift, because nothing in CI
-  asserts the tree matches `task gen:proto` output.
-  The frontend has the SAME drift, NOT yet normalized: `frontend/src/gen`
-  has ~22 generated TS files committed in non-canonical (un-prettier'd)
-  form, so a no-op `npm run generate` re-churns them. `npm run generate`
-  is now reproducible (it appends `prettier --write src/gen`), and the
-  one file touched by the ListDistinctTags work was normalized, but the
-  rest were deliberately left alone to keep that feature's diff clean.
-- **Definition of Done:**
-  - A CI step (in `.github/workflows/test.yml`, near the gofmt check)
-    that runs `task gen:proto` on a clean checkout and fails if
-    `git diff --exit-code -- backend/internal/api/pb` is non-empty.
-  - A one-shot `npm run generate` to normalize the ~22 drifted
-    `frontend/src/gen` TS files (mechanical, formatting-only), plus a
-    matching CI guard (`git diff --exit-code -- frontend/src/gen`).
-  - Optionally mirror both as lefthook pre-push checks.
-- **Blockers:** none — additive CI step + a mechanical TS normalize.
-  Low priority now that both `gen:proto` and `npm run generate` are
-  reproducible and the canonical Go output is committed.
-
 ### golangci-lint CI gate
 
 - **Status:** Deferred

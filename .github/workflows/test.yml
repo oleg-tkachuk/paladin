@@ -61,6 +61,28 @@ jobs:
           breaking: false
           push: false
 
+      - name: Set up buf (for codegen)
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.71.0
+          github_token: ${{ github.token }}
+
+      - name: Proto codegen drift
+        # Regenerate with the go.mod-pinned plugins (so versions match the
+        # committed output) and fail if anything changed — catches a hand-edited
+        # or --no-verify-committed generated file. Mirrors `task gen:proto`.
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go
+          go install golang.org/x/tools/cmd/goimports@v0.46.0
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          buf generate
+          goimports -w internal/api/pb
+          if ! git diff --exit-code -- internal/api/pb; then
+            echo "ERROR: generated proto code is out of date. Run 'task gen:proto' and commit."
+            exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -86,6 +108,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Proto codegen drift
+        # Regenerate the TS Connect clients (buf generate + prettier, all
+        # pnpm-pinned) and fail if anything changed. Mirrors `npm run generate`.
+        run: |
+          pnpm run generate
+          if ! git diff --exit-code -- src/gen; then
+            echo "ERROR: generated TS client is out of date. Run 'npm run generate' and commit."
+            exit 1
+          fi
 
       - name: ESLint
         run: pnpm run lint
