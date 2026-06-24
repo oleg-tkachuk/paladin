@@ -39,6 +39,14 @@ message StorageBackend {
   // refused (FailedPrecondition) before any object-store call. Operator
   // managed via SetBackendEnabled; NOT mirrored from static config.
   bool enabled = 16;
+  // Grace-window state after a RotateCredentials with grace > 0: the prior
+  // credentials reference (redacted for non-platform-admin readers, same as
+  // credentials_secret_ref) and the instant until which it should be kept
+  // valid at the storage backend before it's safe to purge. Both empty/unset
+  // once the window elapses or after a grace=0 (instant) rotation. Lets the UI
+  // render "rotated — old key valid for another N".
+  string previous_credentials_secret_ref = 17;
+  google.protobuf.Timestamp previous_credentials_valid_until = 18;
 }
 
 enum StorageKind {

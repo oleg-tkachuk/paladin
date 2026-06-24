@@ -45,32 +45,35 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled,
+       previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE id = $1
 `
 
 type GetStorageBackendV2Row struct {
-	ID                   string             `json:"id"`
-	Kind                 string             `json:"kind"`
-	Endpoint             *string            `json:"endpoint"`
-	Region               *string            `json:"region"`
-	EventsEnabled        bool               `json:"events_enabled"`
-	EventsTarget         *string            `json:"events_target"`
-	DisplayName          *string            `json:"display_name"`
-	PublicEndpoint       *string            `json:"public_endpoint"`
-	ForcePathStyle       bool               `json:"force_path_style"`
-	CredentialsSecretRef *string            `json:"credentials_secret_ref"`
-	SseType              string             `json:"sse_type"`
-	SseKeyID             string             `json:"sse_key_id"`
-	EventsQueueUrl       string             `json:"events_queue_url"`
-	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
-	CedarPolicy          string             `json:"cedar_policy"`
-	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
-	Enabled              bool               `json:"enabled"`
-	ResourceVersion      int64              `json:"resource_version"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                            string             `json:"id"`
+	Kind                          string             `json:"kind"`
+	Endpoint                      *string            `json:"endpoint"`
+	Region                        *string            `json:"region"`
+	EventsEnabled                 bool               `json:"events_enabled"`
+	EventsTarget                  *string            `json:"events_target"`
+	DisplayName                   *string            `json:"display_name"`
+	PublicEndpoint                *string            `json:"public_endpoint"`
+	ForcePathStyle                bool               `json:"force_path_style"`
+	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
+	SseType                       string             `json:"sse_type"`
+	SseKeyID                      string             `json:"sse_key_id"`
+	EventsQueueUrl                string             `json:"events_queue_url"`
+	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
+	CedarPolicy                   string             `json:"cedar_policy"`
+	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
+	Enabled                       bool               `json:"enabled"`
+	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
+	ResourceVersion               int64              `json:"resource_version"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error) {
@@ -94,6 +97,8 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 		&i.CedarPolicy,
 		&i.CedarPolicyHash,
 		&i.Enabled,
+		&i.PreviousCredentialsSecretRef,
+		&i.PreviousCredentialsValidUntil,
 		&i.ResourceVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -107,6 +112,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled,
+       previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE ($1::text IS NULL
@@ -116,26 +122,28 @@ LIMIT $2::int
 `
 
 type ListStorageBackendsRow struct {
-	ID                   string             `json:"id"`
-	Kind                 string             `json:"kind"`
-	Endpoint             *string            `json:"endpoint"`
-	Region               *string            `json:"region"`
-	EventsEnabled        bool               `json:"events_enabled"`
-	EventsTarget         *string            `json:"events_target"`
-	DisplayName          *string            `json:"display_name"`
-	PublicEndpoint       *string            `json:"public_endpoint"`
-	ForcePathStyle       bool               `json:"force_path_style"`
-	CredentialsSecretRef *string            `json:"credentials_secret_ref"`
-	SseType              string             `json:"sse_type"`
-	SseKeyID             string             `json:"sse_key_id"`
-	EventsQueueUrl       string             `json:"events_queue_url"`
-	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
-	CedarPolicy          string             `json:"cedar_policy"`
-	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
-	Enabled              bool               `json:"enabled"`
-	ResourceVersion      int64              `json:"resource_version"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                            string             `json:"id"`
+	Kind                          string             `json:"kind"`
+	Endpoint                      *string            `json:"endpoint"`
+	Region                        *string            `json:"region"`
+	EventsEnabled                 bool               `json:"events_enabled"`
+	EventsTarget                  *string            `json:"events_target"`
+	DisplayName                   *string            `json:"display_name"`
+	PublicEndpoint                *string            `json:"public_endpoint"`
+	ForcePathStyle                bool               `json:"force_path_style"`
+	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
+	SseType                       string             `json:"sse_type"`
+	SseKeyID                      string             `json:"sse_key_id"`
+	EventsQueueUrl                string             `json:"events_queue_url"`
+	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
+	CedarPolicy                   string             `json:"cedar_policy"`
+	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
+	Enabled                       bool               `json:"enabled"`
+	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
+	ResourceVersion               int64              `json:"resource_version"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Cursor pagination. The IS-NULL guard is mandatory: callers may pass
@@ -170,6 +178,8 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 			&i.CedarPolicy,
 			&i.CedarPolicyHash,
 			&i.Enabled,
+			&i.PreviousCredentialsSecretRef,
+			&i.PreviousCredentialsValidUntil,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,

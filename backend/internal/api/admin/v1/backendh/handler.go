@@ -189,10 +189,14 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	// Tenant/bucket admins get a redacted view (no credentials_secret_ref).
+	// Tenant/bucket admins get a redacted view — both the active and the
+	// previous (grace-window) secret refs are secrets.
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !p.HasRole(rolePlatformAdmin) {
 		b.CredentialsSecretRef = "[REDACTED]"
+		if b.PreviousCredentialsSecretRef != "" {
+			b.PreviousCredentialsSecretRef = "[REDACTED]"
+		}
 	}
 	return &b, nil
 }
@@ -212,6 +216,9 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID stri
 	if !p.HasRole(rolePlatformAdmin) {
 		for i := range out {
 			out[i].CredentialsSecretRef = "[REDACTED]"
+			if out[i].PreviousCredentialsSecretRef != "" {
+				out[i].PreviousCredentialsSecretRef = "[REDACTED]"
+			}
 		}
 	}
 	return out, next, nil

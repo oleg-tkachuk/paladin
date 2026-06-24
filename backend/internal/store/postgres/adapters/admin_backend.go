@@ -119,11 +119,13 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 			QueueURL:     row.EventsQueueUrl,
 			PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 		},
-		CedarPolicy:     row.CedarPolicy,
-		Enabled:         row.Enabled,
-		ResourceVersion: row.ResourceVersion,
-		CreatedAt:       timeFrom(row.CreatedAt),
-		UpdatedAt:       timeFrom(row.UpdatedAt),
+		CedarPolicy:                   row.CedarPolicy,
+		Enabled:                       row.Enabled,
+		PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
+		PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
+		ResourceVersion:               row.ResourceVersion,
+		CreatedAt:                     timeFrom(row.CreatedAt),
+		UpdatedAt:                     timeFrom(row.UpdatedAt),
 	}
 }
 
@@ -163,11 +165,13 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 				QueueURL:     row.EventsQueueUrl,
 				PollInterval: time.Duration(row.EventsPollIntervalMs) * time.Millisecond,
 			},
-			CedarPolicy:     row.CedarPolicy,
-			Enabled:         row.Enabled,
-			ResourceVersion: row.ResourceVersion,
-			CreatedAt:       timeFrom(row.CreatedAt),
-			UpdatedAt:       timeFrom(row.UpdatedAt),
+			CedarPolicy:                   row.CedarPolicy,
+			Enabled:                       row.Enabled,
+			PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
+			PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
+			ResourceVersion:               row.ResourceVersion,
+			CreatedAt:                     timeFrom(row.CreatedAt),
+			UpdatedAt:                     timeFrom(row.UpdatedAt),
 		})
 	}
 	var next string

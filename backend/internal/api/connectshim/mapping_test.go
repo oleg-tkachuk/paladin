@@ -91,6 +91,16 @@ var skipFields = map[string]map[string]string{
 		"ObjectLock":     "wired via Bucket.Constraints; no top-level read needed",
 		"ProvisionState": "server-computed; not client-settable on update",
 	},
+	"CreateBackend": {
+		// Grace-window state is set only by RotateCredentials (with its own
+		// RPC), never on create/update — read-only on the StorageBackend.
+		"PreviousCredentialsSecretRef":  "set by RotateCredentials; not client-settable",
+		"PreviousCredentialsValidUntil": "set by RotateCredentials; not client-settable",
+	},
+	"UpdateBackend": {
+		"PreviousCredentialsSecretRef":  "set by RotateCredentials; not client-settable",
+		"PreviousCredentialsValidUntil": "set by RotateCredentials; not client-settable",
+	},
 	"CreateObjectKey": {
 		// completion_mode is derived from the bucket → backend
 		// events config (see proto comment on the field). Server

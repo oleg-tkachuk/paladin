@@ -259,9 +259,17 @@ type StorageBackend struct {
 	// false → every PALADIN-mediated operation resolving to this backend is
 	// refused (FailedPrecondition) before any object-store call. Operator
 	// managed via SetBackendEnabled; NOT mirrored from static config.
-	Enabled       bool `protobuf:"varint,16,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Enabled bool `protobuf:"varint,16,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Grace-window state after a RotateCredentials with grace > 0: the prior
+	// credentials reference (redacted for non-platform-admin readers, same as
+	// credentials_secret_ref) and the instant until which it should be kept
+	// valid at the storage backend before it's safe to purge. Both empty/unset
+	// once the window elapses or after a grace=0 (instant) rotation. Lets the UI
+	// render "rotated — old key valid for another N".
+	PreviousCredentialsSecretRef  string                 `protobuf:"bytes,17,opt,name=previous_credentials_secret_ref,json=previousCredentialsSecretRef,proto3" json:"previous_credentials_secret_ref,omitempty"`
+	PreviousCredentialsValidUntil *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=previous_credentials_valid_until,json=previousCredentialsValidUntil,proto3" json:"previous_credentials_valid_until,omitempty"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *StorageBackend) Reset() {
@@ -404,6 +412,20 @@ func (x *StorageBackend) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *StorageBackend) GetPreviousCredentialsSecretRef() string {
+	if x != nil {
+		return x.PreviousCredentialsSecretRef
+	}
+	return ""
+}
+
+func (x *StorageBackend) GetPreviousCredentialsValidUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PreviousCredentialsValidUntil
+	}
+	return nil
 }
 
 type ServerSideEncryption struct {
@@ -2279,7 +2301,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\x9f\x05\n" +
+	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\xcb\x06\n" +
 	"\x0eStorageBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2300,7 +2322,9 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x18\n" +
-	"\aenabled\x18\x10 \x01(\bR\aenabled\"X\n" +
+	"\aenabled\x18\x10 \x01(\bR\aenabled\x12E\n" +
+	"\x1fprevious_credentials_secret_ref\x18\x11 \x01(\tR\x1cpreviousCredentialsSecretRef\x12c\n" +
+	" previous_credentials_valid_until\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x1dpreviousCredentialsValidUntil\"X\n" +
 	"\x14ServerSideEncryption\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xbd\x01\n" +
@@ -2550,50 +2574,51 @@ var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	6,  // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
 	28, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
 	28, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 5: paladin.admin.v1.ServerSideEncryption.type:type_name -> paladin.admin.v1.SseType
-	2,  // 6: paladin.admin.v1.EventSourceConfig.target:type_name -> paladin.admin.v1.EventTarget
-	29, // 7: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
-	8,  // 8: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	9,  // 9: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
-	12, // 10: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
-	13, // 11: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
-	14, // 12: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
-	26, // 13: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
-	28, // 14: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	28, // 15: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	29, // 16: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
-	29, // 17: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
-	30, // 18: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
-	10, // 19: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
-	11, // 20: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
-	29, // 21: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
-	29, // 22: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
-	3,  // 23: paladin.admin.v1.ObjectLockConfig.default_mode:type_name -> paladin.admin.v1.ObjectLockMode
-	29, // 24: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
-	27, // 25: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
-	28, // 26: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	28, // 27: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
-	28, // 28: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
-	31, // 29: paladin.admin.v1.ObjectKey.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	8,  // 30: paladin.admin.v1.ObjectKey.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	28, // 31: paladin.admin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
-	28, // 32: paladin.admin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 33: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
-	28, // 34: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
-	28, // 35: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
-	28, // 36: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
-	21, // 37: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
-	28, // 38: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
-	28, // 39: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 40: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
-	23, // 41: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
-	24, // 42: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
-	25, // 43: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
-	44, // [44:44] is the sub-list for method output_type
-	44, // [44:44] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	28, // 5: paladin.admin.v1.StorageBackend.previous_credentials_valid_until:type_name -> google.protobuf.Timestamp
+	1,  // 6: paladin.admin.v1.ServerSideEncryption.type:type_name -> paladin.admin.v1.SseType
+	2,  // 7: paladin.admin.v1.EventSourceConfig.target:type_name -> paladin.admin.v1.EventTarget
+	29, // 8: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
+	8,  // 9: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	9,  // 10: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
+	12, // 11: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
+	13, // 12: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
+	14, // 13: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
+	26, // 14: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
+	28, // 15: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	28, // 16: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	29, // 17: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
+	29, // 18: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
+	30, // 19: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	10, // 20: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
+	11, // 21: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
+	29, // 22: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
+	29, // 23: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
+	3,  // 24: paladin.admin.v1.ObjectLockConfig.default_mode:type_name -> paladin.admin.v1.ObjectLockMode
+	29, // 25: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
+	27, // 26: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
+	28, // 27: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	28, // 28: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 29: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
+	31, // 30: paladin.admin.v1.ObjectKey.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	8,  // 31: paladin.admin.v1.ObjectKey.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	28, // 32: paladin.admin.v1.ObjectKey.created_at:type_name -> google.protobuf.Timestamp
+	28, // 33: paladin.admin.v1.ObjectKey.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 34: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
+	28, // 35: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 36: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
+	28, // 37: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
+	21, // 38: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
+	28, // 39: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
+	28, // 40: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 41: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
+	23, // 42: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
+	24, // 43: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
+	25, // 44: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
+	45, // [45:45] is the sub-list for method output_type
+	45, // [45:45] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_types_proto_init() }

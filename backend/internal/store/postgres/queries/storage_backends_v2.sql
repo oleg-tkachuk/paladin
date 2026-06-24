@@ -32,6 +32,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled,
+       previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE id = $1;
@@ -47,6 +48,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled,
+       previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
 WHERE (sqlc.narg('after_id')::text IS NULL

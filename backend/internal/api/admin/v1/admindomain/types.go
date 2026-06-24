@@ -20,9 +20,14 @@ type StorageBackend struct {
 	Region               string
 	ForcePathStyle       bool
 	CredentialsSecretRef string
-	SSE                  ServerSideEncryption
-	Events               EventSourceConfig
-	CedarPolicy          string
+	// PreviousCredentialsSecretRef + PreviousCredentialsValidUntil carry the
+	// grace-window state after RotateCredentials(grace>0): the prior secret ref
+	// and the instant it stays valid until. Empty/zero outside a window.
+	PreviousCredentialsSecretRef  string
+	PreviousCredentialsValidUntil time.Time
+	SSE                           ServerSideEncryption
+	Events                        EventSourceConfig
+	CedarPolicy                   string
 	// Enabled is the durable enable/disable state. false → the backend
 	// rejects every PALADIN-mediated operation that resolves to it. Operator
 	// managed via SetBackendEnabled; never mirrored from static config.

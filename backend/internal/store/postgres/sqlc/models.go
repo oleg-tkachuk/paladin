@@ -472,6 +472,14 @@ type TenantDefaultBinding struct {
 	SetBy      string             `json:"set_by"`
 }
 
+type TenantSlugHistory struct {
+	EntryID   int64              `json:"entry_id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	OldSlug   string             `json:"old_slug"`
+	NewSlug   string             `json:"new_slug"`
+	RenamedAt pgtype.Timestamptz `json:"renamed_at"`
+}
+
 type User struct {
 	UserID          pgtype.UUID        `json:"user_id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
