@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c" //nolint:staticcheck // deprecated; migration to http.Server.Protocols tracked in BACKLOG
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
@@ -23,10 +21,18 @@ import (
 // is the PALADIN default — the plane is fronted by an ingress that terminates TLS,
 // so h2c keeps the binary contract simple and lets the gateway handle ALPN.
 func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) *http.Server {
-	handler := h2c.NewHandler(mux, &http2.Server{}) //nolint:staticcheck // deprecated; migration to http.Server.Protocols tracked in BACKLOG
+	// HTTP/2 cleartext (h2c) via the stdlib Protocols API (Go 1.24+), replacing
+	// the deprecated golang.org/x/net/http2/h2c handler wrapper. The plane is
+	// fronted by an ingress that terminates TLS, so unencrypted H2 keeps the
+	// binary contract simple and lets the gateway handle ALPN. HTTP/1 stays on
+	// for health probes and non-gRPC clients.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
 	return &http.Server{
 		Addr:              c.Addr,
-		Handler:           handler,
+		Handler:           mux,
+		Protocols:         protocols,
 		ReadHeaderTimeout: c.ReadHeaderTimeout,
 		ReadTimeout:       c.ReadTimeout,
 		WriteTimeout:      c.WriteTimeout,

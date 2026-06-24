@@ -1319,9 +1319,12 @@ of the pipeline._
     to `enable`.
   - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
     `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
-  - Resolve the two `//nolint:staticcheck` deprecations: migrate
-    `h2c.NewHandler` → `http.Server.Protocols` and pgx `BeforeAcquire` →
-    `PrepareConn`, then drop the nolints.
+  - Resolve the remaining `//nolint:staticcheck` deprecation: pgx
+    `BeforeAcquire` → `PrepareConn`. NOT a simple swap — `PrepareConn` runs
+    once at connection creation, but `EnableRLS` sets the `app.current_tenant`
+    GUC *per acquire* (the tenant changes per request), so the RLS GUC plumbing
+    needs rethinking (e.g. `SET LOCAL` in the request tx) before the swap.
+    (`h2c.NewHandler` → `http.Server.Protocols` is DONE.)
   - The pure-style linters (`nlreturn` ~1.5k, `goconst`, `predeclared`,
     `nestif`, `dupl`, …) stay OFF by design — not worth the churn.
 - **Blockers:** none — incremental, each linter independently adoptable.
