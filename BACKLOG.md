@@ -1391,37 +1391,7 @@ of the pipeline._
 
 ## Documentation
 
-### Constitution check not wired into the plan template
 
-- **Status:** Deferred
-- **Reason:** `.specify/templates/plan-template.md`'s
-  `## Constitution Check` section still reads
-  `[Gates determined based on constitution file]` — the 7 principles
-  of `.specify/memory/constitution.md` (v1.0.0) are not expanded into
-  an actual checklist, so `/speckit-plan` runs don't mechanically gate
-  on them. The constitution's own sync-impact header flags this as
-  pending.
-- **Definition of Done:** the template lists all 7 principles as
-  explicit pass/fail gates; the constitution header's "templates
-  requiring updates" note is cleared in the same commit.
-- **Blockers:** none.
-
-### Dev-tooling assumptions not written down
-
-- **Status:** Deferred
-- **Reason:** two implicit assumptions bite newcomers silently:
-  (1) the lefthook gitleaks hook no-ops when `gitleaks` isn't on PATH
-  (CI now backstops it, but the local behaviour is invisible);
-  (2) the e2e/dev docker-compose Postgres credentials
-  (`POSTGRES_PASSWORD: paladin`) are dev-only by design but carry no
-  comment saying so.
-- **Definition of Done:** README "local setup" section lists gitleaks
-  (and other optional hook tools) with install commands; a one-line
-  `# dev-only credentials — never reused outside compose` comment on
-  the compose service.
-- **Blockers:** none.
-
----
 
 ## Storage backends
 

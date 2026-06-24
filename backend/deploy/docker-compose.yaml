@@ -44,6 +44,8 @@ services:
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
+      # dev-only credentials — local compose only, NEVER reused outside it
+      # (prod Postgres creds come from sealed secrets via the chart).
       POSTGRES_PASSWORD: paladin
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports:

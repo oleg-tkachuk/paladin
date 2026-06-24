@@ -36,6 +36,21 @@ task frontend:build
 
 `task --list-all` enumerates everything across both namespaces.
 
+### Optional local hook tools
+
+Git hooks run via [lefthook](https://github.com/evilmartians/lefthook). Some
+hook commands **no-op silently when their tool isn't on `PATH`** so a fresh
+clone can still commit/push — CI is the backstop, but install these to catch
+issues locally first:
+
+```bash
+# Secret scanning (lefthook pre-commit `gitleaks`; CI runs it regardless):
+brew install gitleaks            # or: go install github.com/gitleaks/gitleaks/v8@latest
+# Go import grouping + lint (pre-commit/pre-push):
+go install golang.org/x/tools/cmd/goimports@latest
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+```
+
 ## Per-project entry points
 
 - Backend — see [backend/README.md](backend/README.md) for Go module

@@ -79,6 +79,7 @@ services:
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
+      # dev-only credentials — e2e compose only, NEVER reused outside it.
       POSTGRES_PASSWORD: paladin
     # Postgres on tmpfs: every test run starts from zero. The
     # shared-DB-with-UUID-suffixed-fixtures isolation strategy
