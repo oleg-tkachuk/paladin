@@ -155,6 +155,15 @@ function ObjectKeyObjectsContent() {
   const [status, setStatus] = useState<string | undefined>(
     searchParams.get("status") || undefined,
   );
+  // Tag facet: a single "key=value" pair (URL param `tag`) that becomes a
+  // `tags['k'] == 'v'` clause in the CEL filter. The option list is derived
+  // client-side from the tags of loaded objects (see the accumulation effect
+  // below) — a server-side distinct-tags index would broaden it to the whole
+  // tenant, tracked in BACKLOG.
+  const [tagFilter, setTagFilter] = useState<string | undefined>(
+    searchParams.get("tag") || undefined,
+  );
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [search, setSearch] = useState(searchParams.get("search") || "");
   // Trails `search` by 300ms (see the debounce effect below); feeds
   // the CEL filter so list refetches don't fire per keystroke.
@@ -199,6 +208,11 @@ function ObjectKeyObjectsContent() {
     syncToUrl({ status: value });
   };
 
+  const handleTagChange = (value: string | undefined) => {
+    setTagFilter(value);
+    syncToUrl({ tag: value });
+  };
+
   const handleSearchChange = (value: string) => {
     setSearch(value);
   };
@@ -238,6 +252,16 @@ function ObjectKeyObjectsContent() {
   if (status) filterParts.push(`state == '${status}'`);
   if (debouncedSearch.length > 2)
     filterParts.push(`key.contains('${debouncedSearch.replace(/'/g, "\\'")}')`);
+  if (tagFilter) {
+    // Split on the FIRST '=' only — tag values may themselves contain '='.
+    const eq = tagFilter.indexOf("=");
+    if (eq > 0) {
+      const esc = (s: string) => s.replace(/'/g, "\\'");
+      const k = esc(tagFilter.slice(0, eq));
+      const v = esc(tagFilter.slice(eq + 1));
+      filterParts.push(`tags['${k}'] == '${v}'`);
+    }
+  }
   const filter = filterParts.join(" && ");
 
   const {
@@ -260,6 +284,27 @@ function ObjectKeyObjectsContent() {
     orderBy: sort.column || undefined,
     sortDirection: sort.direction,
   });
+
+  // Build the tag-facet option list from the tags of loaded objects. Union
+  // into prior state (never shrink) so applying a tag filter — which narrows
+  // `objects` to the matching rows — doesn't collapse the dropdown to the one
+  // selected pair. Scoped to this ObjectKey's page session; resets on remount.
+  useEffect(() => {
+    setTagOptions((prev) => {
+      const seen = new Set(prev);
+      let changed = false;
+      for (const o of objects) {
+        for (const [k, v] of Object.entries(o.tags ?? {})) {
+          const pair = `${k}=${v}`;
+          if (!seen.has(pair)) {
+            seen.add(pair);
+            changed = true;
+          }
+        }
+      }
+      return changed ? Array.from(seen).sort() : prev;
+    });
+  }, [objects]);
 
   const { showNotification } = useNotification();
 
@@ -679,6 +724,9 @@ function ObjectKeyObjectsContent() {
         onRecursiveChange={handleRecursiveChange}
         status={status}
         onStatusChange={handleStatusChange}
+        tag={tagFilter}
+        onTagChange={handleTagChange}
+        tagOptions={tagOptions}
         visibleColumns={visibleColumns}
         onToggleColumn={toggleColumn}
         savedViews={savedViews}

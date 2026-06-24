@@ -30,6 +30,11 @@ interface ObjectsFilterBarProps {
   onRecursiveChange: (value: boolean) => void;
   status: string | undefined;
   onStatusChange: (value: string | undefined) => void;
+  /** Selected tag facet as a "key=value" pair, or undefined for none. */
+  tag: string | undefined;
+  onTagChange: (value: string | undefined) => void;
+  /** Distinct "key=value" pairs seen across loaded objects. */
+  tagOptions: string[];
   visibleColumns: Set<string>;
   onToggleColumn: (col: string) => void;
   savedViews: SavedView[];
@@ -65,6 +70,9 @@ export function ObjectsFilterBar({
   onRecursiveChange,
   status,
   onStatusChange,
+  tag,
+  onTagChange,
+  tagOptions,
   visibleColumns,
   onToggleColumn,
   savedViews,
@@ -111,6 +119,20 @@ export function ObjectsFilterBar({
           value={status || "all"}
           onChange={(val) => onStatusChange(val === "all" ? undefined : val)}
         />
+
+        {tagOptions.length > 0 && (
+          <Select
+            options={[
+              { value: "all", label: "All Tags" },
+              ...tagOptions.map((t) => ({
+                value: t,
+                label: t.replace("=", ": "),
+              })),
+            ]}
+            value={tag || "all"}
+            onChange={(val) => onTagChange(val === "all" ? undefined : val)}
+          />
+        )}
 
         <Dropdown align="right" width="w-72">
           <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
