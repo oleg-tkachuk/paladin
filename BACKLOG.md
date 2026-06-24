@@ -877,28 +877,6 @@ open deliberately — each notes why._
     paths collide (e.g. `invoices` + `invoices/2026`).
 - **Blockers:** none — pure backend refactor, no proto change.
 
-### RotateCredentials: emit `paladin.backend.credentials_rotated` + expose window
-
-- **Status:** Core DONE — the grace-window dual-write shipped: migration 038
-  adds `previous_credentials_secret_ref` + `previous_credentials_valid_until`;
-  `RotateStorageBackendCredentials` stashes the prior ref with a now()+grace
-  horizon (0 = instant, clears the window); the handler threads
-  `grace_period` (connectshim parses the duration string) and the repo writes
-  it. Integration test
-  (`internal/integration/rotate_credentials_test.go`) asserts both the
-  grace>0 and grace=0 paths.
-- **Reason this remains:** two DoD bits need plumbing that doesn't exist yet:
-  (1) the `paladin.backend.credentials_rotated` event — `backendh.Handler` has no
-  EventProducer/outbox seam (unlike tenant/bucket/quota/object_key), so wiring
-  it means adding that seam to this handler; (2) surfacing
-  `previous_credentials_*` on `GetBackend` — needs the `StorageBackend` proto
-  + a buf regen.
-- **Definition of Done:**
-  - backendh gains the EventProducer + RunInTx seam and emits
-    `paladin.backend.credentials_rotated` atomically with the rotation (ADR-0003).
-  - `StorageBackend` proto carries the previous-ref + valid-until fields,
-    populated on reads so the UI can show the active rotation window.
-- **Blockers:** none — additive.
 
 ### TestBackend probe for dynamically-registered backends
 
