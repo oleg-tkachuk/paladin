@@ -29,7 +29,10 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center mb-4">
+      <div
+        aria-hidden="true"
+        className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center mb-4"
+      >
         <Icon className="w-8 h-8 text-slate-600" />
       </div>
       <p className="text-sm font-semibold text-slate-400">{title}</p>

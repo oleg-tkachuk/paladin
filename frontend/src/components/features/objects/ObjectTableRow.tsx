@@ -124,6 +124,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
+          aria-label={`Select object ${obj.key}`}
           className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-offset-0 focus:ring-indigo-600 focus:ring-opacity-50 cursor-pointer w-4 h-4"
           checked={isSelected}
           onChange={() => onToggleSelect(obj.objectId)}

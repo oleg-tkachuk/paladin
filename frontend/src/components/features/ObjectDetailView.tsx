@@ -241,7 +241,12 @@ export function ObjectDetailView({
   // ─── Loading ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div
+        className="space-y-6"
+        role="status"
+        aria-busy="true"
+        aria-label="Loading object details"
+      >
         <PageHeader
           title={
             <h1 className="flex items-center gap-3 truncate text-2xl font-semibold tracking-tight">
@@ -342,7 +347,11 @@ export function ObjectDetailView({
             </Button>
             <Dropdown align="right" width="w-56">
               <Dropdown.Trigger>
-                <Button variant="outline" size="icon-sm" aria-label="More">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Object actions"
+                >
                   <EllipsisHorizontalIcon className="size-4" />
                 </Button>
               </Dropdown.Trigger>
@@ -437,6 +446,7 @@ export function ObjectDetailView({
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
                       <Input
                         placeholder="TAG_KEY"
+                        aria-label="New tag key"
                         value={newLabelKey}
                         onChange={(e) =>
                           setNewLabelKey(e.target.value.toUpperCase())
@@ -445,6 +455,7 @@ export function ObjectDetailView({
                       />
                       <Input
                         placeholder="TAG_VALUE"
+                        aria-label="New tag value"
                         value={newLabelValue}
                         onChange={(e) => setNewLabelValue(e.target.value)}
                         className="font-mono text-xs"
