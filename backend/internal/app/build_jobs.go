@@ -128,6 +128,30 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		Logger:   l.Named("idempotency-purger"),
 	})
 
+	// Partition maintainer — pre-creates upcoming partitions and DROPs whole
+	// partitions past retention for the RANGE-partitioned tables (migrations
+	// 041 audit_log monthly, 042 idempotency_keys daily). This is the
+	// DROP-PARTITION payoff; the *Purger DELETEs above stay as the backstop
+	// for the DEFAULT partition. deps.Pool satisfies worker.PartitionDB.
+	//
+	// audit_log retention follows AuditLogTTL: a negative Retention disables
+	// dropping (TTL=0 means keep forever) while still keeping partitions
+	// pre-created ahead. idempotency_keys uses Retention=0 — an elapsed day's
+	// keys are all expired, so its partition is safe to drop immediately.
+	auditRetention := cfg.Worker.Jobs.Housekeeping.AuditLogTTL
+	if auditRetention <= 0 {
+		auditRetention = -1 // keep-forever: create-ahead, never drop
+	}
+	out = append(out, &worker.PartitionMaintainer{
+		DB: deps.Pool,
+		Specs: []worker.PartitionSpec{
+			{Table: "audit_log", Period: worker.PeriodMonthly, Retention: auditRetention, Ahead: 3},
+			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8},
+		},
+		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
+		Logger:   l.Named("partition-maintainer"),
+	})
+
 	// Abandoned-multipart reaper — aborts S3 multipart sessions whose
 	// client never Completed/Aborted (otherwise part bytes are billed
 	// forever). 0 disables it.
