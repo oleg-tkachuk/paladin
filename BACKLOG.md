@@ -1371,20 +1371,6 @@ of the pipeline._
 - **Blockers:** repo admin access; do after the first green runs of
   `test.yml` / `security.yml` on a PR.
 
-### Frontend base image: Node 25 (odd/non-LTS major)
-
-- **Status:** Deferred
-- **Reason:** `frontend/deploy/Dockerfile` (`ARG NODE_VERSION=25`) and
-  the CI frontend job build on Node 25 — an odd-numbered major that
-  never enters LTS and stops getting security patches months after
-  Node 26 ships. Either drop to the active LTS (24) or accept the
-  upgrade treadmill explicitly.
-- **Definition of Done:** one decision applied in both places
-  (Dockerfile ARG + `node-version` in `test.yml`): pin to `24`-LTS,
-  **or** keep 25 with a dated comment in the Dockerfile committing to
-  bump to 26 when it goes current.
-- **Blockers:** none — verify `next build` is clean on the chosen
-  major before switching.
 
 ### Base image digest pinning
 

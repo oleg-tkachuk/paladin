@@ -19,7 +19,7 @@
 # in package.json (Corepack reads it). Mirrors the local-dev path
 # (see specs/001-frontend-playwright-e2e research.md R-008).
 
-ARG NODE_VERSION=25
+ARG NODE_VERSION=24
 ARG PNPM_VERSION=11.3.0
 
 # -----------------------------------------------------------------------------
