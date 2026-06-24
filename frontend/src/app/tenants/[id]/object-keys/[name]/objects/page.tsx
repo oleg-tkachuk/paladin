@@ -26,6 +26,8 @@ import { useActions } from "@/context/ActionsContext";
 import { useObjects } from "@/hooks/useObjects";
 import { useNotification } from "@/components/ui/Notification";
 import { STORAGE_KEYS } from "@/constants";
+import { z } from "zod";
+import { safeParseJson } from "@/lib/parseJson";
 import { ObjectInspector } from "@/components/features/ObjectInspector";
 import { ObjectsFilterBar } from "@/components/features/objects/ObjectsFilterBar";
 import { BulkActionsToolbar } from "@/components/features/objects/BulkActionsToolbar";
@@ -79,6 +81,19 @@ interface SavedView {
   name: string;
   filters: ViewFilters;
 }
+
+// Runtime schema for the localStorage-persisted saved views. localStorage is
+// user-editable, so the read is validated (safeParseJson) instead of trusting
+// the shape via `as` — a corrupt entry falls back to [] rather than crashing
+// the effect with a TypeError on the next `.map`.
+const SavedViewSchema = z.object({
+  name: z.string(),
+  filters: z.object({
+    search: z.string().optional(),
+    status: z.string().optional(),
+    recursive: z.boolean().optional(),
+  }),
+});
 
 type SortDirection = "asc" | "desc" | null;
 interface SortState {
@@ -550,7 +565,7 @@ function ObjectKeyObjectsContent() {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.savedViews);
-    if (stored) setSavedViews(JSON.parse(stored));
+    setSavedViews(safeParseJson(z.array(SavedViewSchema), stored) ?? []);
   }, []);
 
   const saveView = () => {

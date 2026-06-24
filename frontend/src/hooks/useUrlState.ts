@@ -21,6 +21,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { z } from "zod";
+
+import { safeParseJson } from "@/lib/parseJson";
 
 export interface UseUrlStateOptions {
   /** Use router.push (browser-back-recoverable) instead of replace. */
@@ -104,15 +107,21 @@ export interface SavedView {
   createdAt: number;
 }
 
+// Validated on read — localStorage is user-editable, so a corrupt entry
+// yields [] rather than an `as`-blessed wrong shape.
+const SavedViewSchema = z.object({
+  name: z.string(),
+  query: z.string(),
+  createdAt: z.number(),
+});
+
 const SV_PREFIX = "paladin.savedviews.";
 
 export function loadSavedViews(pageKey: string): SavedView[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(SV_PREFIX + pageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SavedView[]) : [];
+    return safeParseJson(z.array(SavedViewSchema), raw) ?? [];
   } catch {
     return [];
   }

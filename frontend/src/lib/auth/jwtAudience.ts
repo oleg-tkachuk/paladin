@@ -1,4 +1,14 @@
+import { z } from "zod";
+
 import { AUDIENCES, type Plane } from "@/constants";
+import { safeParseJson } from "@/lib/parseJson";
+
+// `aud` per RFC 7519 is a string or string[]. Anything else (a hostile token
+// claiming `aud: { $ne: null }`, a number, …) fails validation → null →
+// treated as "no audience match", which fails the BFF forward closed.
+const JwtAudPayloadSchema = z.object({
+  aud: z.union([z.string(), z.array(z.string())]).optional(),
+});
 
 /**
  * Decodes a JWT's `aud` claim WITHOUT verifying the signature. The
@@ -19,12 +29,13 @@ function audiencesOf(bearer: string): Set<string> | null {
     // chars and padding first.
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-    const payload = JSON.parse(
+    const payload = safeParseJson(
+      JwtAudPayloadSchema,
       typeof atob === "function"
         ? atob(padded)
         : Buffer.from(padded, "base64").toString("utf8"),
-    ) as { aud?: string | string[] };
-    if (payload.aud == null) return null;
+    );
+    if (payload?.aud == null) return null;
     return new Set(Array.isArray(payload.aud) ? payload.aud : [payload.aud]);
   } catch {
     return null;

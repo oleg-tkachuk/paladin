@@ -30,7 +30,9 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { ConnectError } from "@connectrpc/connect";
+import { z } from "zod";
 
+import { safeParseJson } from "@/lib/parseJson";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +63,20 @@ export interface TestCase {
   resourceName: string;
   expected: "allow" | "deny" | "any";
 }
+
+// Runtime schema for the localStorage-persisted test suite. Validated on read
+// (safeParseJson) so a hand-edited / corrupt entry yields an empty suite
+// instead of feeding malformed cases into the simulate loop.
+const TestCaseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  principalSubject: z.string(),
+  principalTenantId: z.string(),
+  rolesText: z.string(),
+  action: z.string(),
+  resourceName: z.string(),
+  expected: z.enum(["allow", "deny", "any"]),
+});
 
 interface CaseResult {
   allowed: boolean;
@@ -127,11 +143,9 @@ export function TestSuite({
     let parsed: TestCase[] | null = null;
     try {
       const raw = window.localStorage.getItem(storageKey);
-      if (raw) {
-        const decoded = JSON.parse(raw) as TestCase[];
-        if (Array.isArray(decoded) && decoded.length > 0) {
-          parsed = decoded;
-        }
+      const decoded = safeParseJson(z.array(TestCaseSchema), raw);
+      if (decoded && decoded.length > 0) {
+        parsed = decoded;
       }
     } catch {
       // private mode / quota — fall through to empty suite

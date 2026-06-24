@@ -821,23 +821,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Runtime validation (Zod) for JSON.parse sites
-
-- **Status:** Deferred
-- **Reason:** ~18 `JSON.parse(...)` call sites cast results with `as`
-  and trust the shape — including user-controlled inputs: localStorage,
-  URL params (`src/hooks/useUrlState.ts`), pasted JSON on the
-  capabilities page and the policy test-suite editor. A malformed or
-  hostile payload becomes a runtime TypeError (or worse, silently wrong
-  state) instead of a handled validation error. Zod is already a
-  dependency (runtime config validation in `src/config.ts`).
-- **Definition of Done:**
-  - Each `JSON.parse` of non-self-authored data goes through a Zod
-    schema with `safeParse` + a user-visible error path.
-  - A small `parseJson(schema, raw)` helper in `src/lib/` so new call
-    sites don't regress.
-- **Blockers:** none.
-
 ### Data-hook error contract: pick one (state vs. throw)
 
 - **Status:** Deferred

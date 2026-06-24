@@ -14,6 +14,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
 
+import { z } from "zod";
+import { safeParseJson } from "@/lib/parseJson";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -720,14 +722,15 @@ export default function CapabilitiesPage() {
     if (!tenantId || hydratedRef.current) return;
     try {
       const raw = window.localStorage.getItem(lastBrowseKey);
-      if (raw) {
-        const saved = JSON.parse(raw) as {
-          kind?: string;
-          subject?: string;
-        };
-        if (saved.kind) setPrincipalKind(saved.kind);
-        if (saved.subject) setSubject(saved.subject);
-      }
+      const saved = safeParseJson(
+        z.object({
+          kind: z.string().optional(),
+          subject: z.string().optional(),
+        }),
+        raw,
+      );
+      if (saved?.kind) setPrincipalKind(saved.kind);
+      if (saved?.subject) setSubject(saved.subject);
     } catch {
       // localStorage can throw in private-mode / quota scenarios — fall
       // through to the default (empty subject) state.
