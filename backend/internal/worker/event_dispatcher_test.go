@@ -359,6 +359,82 @@ func TestDispatcher_NATSDelivery(t *testing.T) {
 	}
 }
 
+// TestDispatcher_NATSEventID asserts the CloudEvents `id` is the per-event
+// delivery id the drain loop stamps (Event.ID) — unique per event so
+// consumers can dedup — and validates the wider envelope (source, data).
+// The drain-loop stamping is simulated by setting Event.ID directly.
+func TestDispatcher_NATSEventID(t *testing.T) {
+	url := runEmbeddedNATS(t)
+
+	pc, err := nats.Connect(url, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect: %v", err)
+	}
+	defer pc.Close()
+	msgs := make(chan *nats.Msg, 2)
+	if _, err := pc.Subscribe("paladin.events.>", func(m *nats.Msg) { msgs <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	tenantID := uuid.Must(uuid.NewV7())
+	cfg, _ := json.Marshal(map[string]any{"url": url, "subject": "paladin.events.x"})
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool}
+	sub := admindomain.EventSubscription{
+		SubscriptionID: uuid.Must(uuid.NewV7()),
+		TenantID:       tenantID,
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+
+	id1, id2 := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{id1, id2} {
+		if _, err := d.deliverNATS(context.Background(), sub, Event{
+			Type:         "paladin.object.uploaded",
+			At:           time.Now().UTC(),
+			TenantID:     tenantID.String(),
+			ResourceName: "r",
+			Payload:      map[string]any{"k": "v"},
+			ID:           id, // drain loop stamps the event_deliveries row id
+		}); err != nil {
+			t.Fatalf("deliverNATS: %v", err)
+		}
+	}
+
+	seen := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		select {
+		case m := <-msgs:
+			var env cloudEventEnvelope
+			if err := json.Unmarshal(m.Data, &env); err != nil {
+				t.Fatalf("unmarshal envelope: %v", err)
+			}
+			if env.SpecVersion != "1.0" {
+				t.Errorf("specversion: %q", env.SpecVersion)
+			}
+			if env.Source == "" {
+				t.Error("envelope source is empty")
+			}
+			if env.Data["k"] != "v" {
+				t.Errorf("data: %v", env.Data)
+			}
+			seen[env.ID] = true
+		case <-time.After(2 * time.Second):
+			t.Fatal("nats: missing message")
+		}
+	}
+	if !seen[id1] || !seen[id2] {
+		t.Errorf("CloudEvents id was not the stamped delivery id; saw %v", seen)
+	}
+	if len(seen) != 2 {
+		t.Errorf("CloudEvents id not unique per event; saw %v", seen)
+	}
+}
+
 // TestDispatcher_NATSMissingConfig: malformed sink config / empty URL
 // surfaces as a delivery error with status=0 (matches HTTP transport
 // error semantics on the row).

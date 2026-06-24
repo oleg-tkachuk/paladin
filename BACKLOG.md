@@ -596,39 +596,26 @@ open deliberately — each notes why._
       validate the cardinality assumption holds for their
       tenant.
 
-### Event dispatcher: NATS sink (recommended first non-HTTP sink)
+### Event dispatcher: NATS sink — nkey / JWT auth
 
-- **Status:** Aspirational
-- **Reason:** Cloud-native customers and most agentic-platform stacks
-  (Letta / AutoGen / similar) already run NATS. Of the four broker
-  options, NATS has the smallest dependency footprint
-  (`nats-io/nats.go`, ~1MB), no SASL/SSL configuration ceremony, and
-  CloudEvents-friendly subject conventions. Wiring NATS first
-  validates that the outbox + dispatcher pattern handles non-HTTP
-  sinks cleanly before we touch heavier brokers.
+- **Status:** DONE except nkey/JWT auth. The NATS sink shipped:
+  `EventSink.NatsSink` proto, `internal/worker/sink_nats.go` (pooled client
+  + token auth + CloudEvents 1.0 envelope), `Dispatcher.deliverNATS`, the
+  dispatcher `nats:<server>` health check, and the frontend
+  `/event-subscriptions` NATS connector form. Tests cover the embedded-server
+  round-trip, connection reuse, missing-config error, and (2026-06)
+  CloudEvents `id` conformance — the envelope `id` is now the per-event
+  delivery-row id (unique, retry-stable) instead of the subscription id.
+- **Reason this remains:** `sink_nats.go` accepts a `token:` credentials_ref
+  scheme but returns "not yet wired" for `nkey:` / `jwt:` (the seed-file /
+  decentralized-auth flows). Token auth covers the common in-cluster case.
 - **Definition of Done:**
-  - Proto: extend `EventSink.oneof` with a `NatsSink` (URL, subject
-    pattern, optional credentials reference).
-  - `internal/worker/sink_nats.go` — connection-pooled client with
-    reconnect / publish / health-ping.
-  - `Dispatcher.deliverNATS` publishes a CloudEvents 1.0 envelope
-    (`specversion=1.0`, `type=paladin.<resource>.<action>`,
-    `source=paladin.local/...`, `data=<payload>`) to the configured
-    subject. JSON encoding for the MVP.
-  - Auth options: token, nkey, JWT/seed (all via SecretRef pattern;
-    no inline credentials in YAML).
-  - `cfg.Dispatcher.NATS.URL` (default empty = disabled), `MaxReconnect`,
-    `ReconnectWait` knobs.
-  - Health probe: dispatcher's `/system/health.json` gains a
-    "nats:<server>" subsystem check that reports broker connectivity
-    when at least one NATS sink is configured.
-  - Frontend `/events` connector template: prefilled subject pattern
-    + auth-field group for NATS sinks.
-  - Tests: outbox row → NATS publish round-trip via embedded server,
-    reconnect handling, envelope structure conformance.
-- **Trigger to do:** real customer ask, OR launch of an
-  agentic-platform integration that depends on NATS as its event
-  bus. Don't pre-build before either signal.
+  - `nkey:<secretRef>` resolves an nkey seed and connects with
+    `nats.Nkey(...)`.
+  - `jwt:<secretRef>` resolves a user JWT + seed (creds file) and connects
+    with `nats.UserCredentials(...)` / `nats.UserJWTAndSeed(...)`.
+  - A test per scheme against the embedded server with auth enabled.
+- **Blockers:** none — additive to the existing credentials_ref dispatcher.
 
 ### Event dispatcher: Kafka sink
 

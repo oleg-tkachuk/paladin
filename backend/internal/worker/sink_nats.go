@@ -254,11 +254,19 @@ func (d *Dispatcher) deliverNATS(ctx context.Context, sub admindomain.EventSubsc
 		return 0, errors.New("nats sink: missing subject")
 	}
 
+	// CloudEvents `id` MUST be unique per event for a given source so
+	// consumers can dedup. Prefer the delivery-row id (stamped by the drain
+	// loop, stable across retries); fall back to the subscription id only on
+	// the synchronous DeliverOne test path, which has no delivery row.
+	eventID := evt.ID
+	if eventID == "" {
+		eventID = sub.SubscriptionID.String()
+	}
 	envelope := cloudEventEnvelope{
 		SpecVersion:     "1.0",
 		Type:            evt.Type,
 		Source:          natsDefaultSource,
-		ID:              sub.SubscriptionID.String(),
+		ID:              eventID,
 		Time:            evt.At.UTC().Format(time.RFC3339Nano),
 		Subject:         evt.ResourceName,
 		TenantID:        evt.TenantID,

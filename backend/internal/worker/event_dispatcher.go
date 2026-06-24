@@ -66,6 +66,12 @@ type Event struct {
 	ResourceName string         `json:"resource_name"`
 	ActorSubject string         `json:"actor_subject,omitempty"`
 	Payload      map[string]any `json:"payload,omitempty"`
+	// ID is the delivery-time unique identifier (the event_deliveries row
+	// id), stamped by the drain loop just before a sink delivers. It is NOT
+	// part of the stored producer payload (json:"-"); sinks that need a
+	// CloudEvents-unique `id` read it here. Stable across retries of the
+	// same row, so downstream consumers can dedup.
+	ID string `json:"-"`
 }
 
 // SubscriptionStore is the read seam the producer uses to look up subs
@@ -538,6 +544,9 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 			r.markFailed(ctx, tx, p.id, p.attempts, 0, fmt.Sprintf("decode payload: %v", err), true)
 			continue
 		}
+		// Stamp the unique, retry-stable delivery id so sinks (NATS
+		// CloudEvents) can emit a CloudEvents-conformant `id`.
+		evt.ID = p.id.String()
 
 		sub, err := r.Dispatcher.Store.Get(ctx, p.subID)
 		if err != nil {
