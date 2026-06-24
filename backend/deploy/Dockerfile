@@ -11,6 +11,9 @@
 # image carries no on-disk SQL. Configs are mounted at runtime via the
 # Helm chart's ConfigMap or the docker-compose volume bind, never baked in.
 
+# GO_VERSION is the human-readable tag; the @sha256 digest on the FROM is the
+# authoritative pin (a tag is mutable, a digest is not). Renovate keeps both
+# in lockstep — see renovate.json. Bump the tag and digest together.
 ARG GO_VERSION=1.26.0
 
 # BuildKit auto-fills these for multi-arch builds.
@@ -22,7 +25,7 @@ ARG BUILDPLATFORM
 # Shared Go base — same toolchain + workspace layout for tools and builder.
 # Everything below extends this stage so we don't duplicate ENV blocks.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS gobase
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:d4c4845f5d60c6a974c6000ce58ae079328d03ab7f721a0734277e69905473e5 AS gobase
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -117,7 +120,9 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 # Health checks are kubelet-side (httpGet probes); compose drops its
 # in-container healthcheck for the same reason.
 # -----------------------------------------------------------------------------
-FROM gcr.io/distroless/static:nonroot
+# Digest-pinned (Renovate-managed, see renovate.json). `:nonroot` is a
+# floating tag that moves often, so the digest is the real reproducibility pin.
+FROM gcr.io/distroless/static:nonroot@sha256:963fa6c544fe5ce420f1f54fb88b6fb01479f054c8056d0f74cc2c6000df5240
 
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined

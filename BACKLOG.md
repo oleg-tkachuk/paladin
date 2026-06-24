@@ -1259,21 +1259,6 @@ of the pipeline._
   `test.yml` / `security.yml` on a PR.
 
 
-### Base image digest pinning
-
-- **Status:** Aspirational
-- **Reason:** both Dockerfiles pin tags
-  (`golang:1.26.0-alpine`, `node:25-alpine`,
-  `gcr.io/distroless/static:nonroot`) but not digests; a tag is
-  mutable, so builds aren't bit-reproducible and a registry-side tag
-  move goes unnoticed.
-- **Definition of Done:** `FROM image:tag@sha256:…` in both
-  Dockerfiles plus a documented bump procedure (or Renovate/dependabot
-  config that updates the digests automatically — manual digest pins
-  without automation rot).
-- **Blockers:** decide on the update automation first; digest pins
-  without it trade staleness for reproducibility.
-
 ---
 
 ## Documentation

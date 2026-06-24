@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "labels": ["dependencies", "base-image"],
+  "description": "Scoped to container base images only. The backend + frontend Dockerfiles pin FROM tags by @sha256 digest for bit-reproducible builds; a digest pin without automation rots, so Renovate keeps the tag + digest in lockstep. Broaden enabledManagers (gomod, npm) deliberately when ready for that PR volume.",
+  "enabledManagers": ["dockerfile", "docker-compose"],
+  "pinDigests": true,
+  "schedule": ["before 6am on monday"],
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": "container base images",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "base-image digests"
+    }
+  ]
+}
