@@ -181,7 +181,7 @@ export const ScopePicker: React.FC = () => {
         align="end"
         side="bottom"
         sideOffset={8}
-        className="w-[360px] p-0"
+        className="w-[min(360px,calc(100vw-1.5rem))] p-0"
       >
         <div className="space-y-2 px-3 py-3">
           {/* ── Backend picker ─────────────────────────────────────────── */}
@@ -550,7 +550,7 @@ function ScopeRow({
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-[320px] p-0"
+        className="w-[min(320px,calc(100vw-1.5rem))] p-0"
       >
         <Command shouldFilter>
           <CommandInput placeholder={searchPlaceholder} />

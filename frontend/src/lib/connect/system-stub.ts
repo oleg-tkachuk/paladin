@@ -21,8 +21,8 @@ export type VersionInfo = {
   commit?: string;
   buildDate?: string;
   goVersion?: string;
-  // Old proto exposed buildTime as Timestamp ({seconds, nanos}); kept loose
-  // so legacy AnalyticsDashboard code reading `.seconds` still type-checks.
+  // Old proto exposed buildTime as a Timestamp ({seconds, nanos}); kept loose
+  // so any consumer still reading `.seconds` continues to type-check.
   buildTime?: { seconds: bigint | number; nanos?: number };
 };
 

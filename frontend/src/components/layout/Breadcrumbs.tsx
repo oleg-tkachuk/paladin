@@ -18,7 +18,6 @@ const ENTITY_PARENTS = new Set([
   "tenants",
   "buckets",
   "object-keys",
-  "objectKeys",
   "objects",
   "object-tags",
 ]);
@@ -57,7 +56,7 @@ export function Breadcrumbs() {
           <div>
             <Link
               href="/"
-              className="text-slate-500 hover:text-indigo-400 transition-colors"
+              className="text-muted-foreground hover:text-primary transition-colors"
             >
               <HomeIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="sr-only">Home</span>
@@ -81,7 +80,7 @@ export function Breadcrumbs() {
             <li key={`${path}-${index}`}>
               <div className="flex items-center">
                 <ChevronRightIcon
-                  className="h-4 w-4 flex-shrink-0 text-slate-600"
+                  className="h-4 w-4 flex-shrink-0 text-muted-foreground/50"
                   aria-hidden="true"
                 />
                 <Link
@@ -89,8 +88,8 @@ export function Breadcrumbs() {
                   title={fullDecoded !== label ? fullDecoded : undefined}
                   className={`ml-2 text-xs font-medium tracking-wide transition-colors max-w-[180px] truncate ${
                     isLast
-                      ? "text-indigo-400 cursor-default pointer-events-none font-mono"
-                      : "text-slate-500 hover:text-slate-300"
+                      ? "text-primary cursor-default pointer-events-none font-mono"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   aria-current={isLast ? "page" : undefined}
                 >
