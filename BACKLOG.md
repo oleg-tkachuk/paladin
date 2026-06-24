@@ -1291,9 +1291,14 @@ of the pipeline._
     `dispatchEvent` twins superseded by the ADR-0003 tx-seam, a retired
     `deliverHTTP`, an unused STS type, two test fields), then drop `unused`
     from the `disable` list.
-  - Adopt the bug-catchers one at a time: `nilerr` (~14), `errorlint` (~12),
-    `noctx` (~12), `contextcheck` (~8) — each catches real issues; fix + add
-    to `enable`.
+  - `nilerr` — EVALUATED AND REJECTED: all 14 hits are deliberate,
+    already-commented fail-open / skip patterns (limiter fail-open, quota
+    "degrade open", restore not blocked on a meta-lookup miss, strict-loader
+    deferring to the main parse error, policy `Validate` returning the error as
+    a string *result*). Enabling it means 14 `//nolint` for zero bugs — not
+    worth the noise. Leave OFF.
+  - Adopt the remaining bug-catchers one at a time: `errorlint` (~12),
+    `noctx` (~12), `contextcheck` (~8) — fix + add to `enable`.
   - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
     `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
   - Resolve the remaining `//nolint:staticcheck` deprecation: pgx
