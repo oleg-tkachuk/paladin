@@ -836,22 +836,39 @@ open deliberately — each notes why._
 - **Blockers:** none — but it is wide and must ride the data-fetching
   refactor to avoid 40 scattered `eslint-disable` lines.
 
-### Slug-rename history redirect
+### Slug-rename history redirect — resolver RPC + 404 CTA
 
-- **Status:** Deferred
+- **Status:** Deferred (capture foundation shipped; resolver + UI remain)
 - **Reason:** When `RenameTenantSlug` rotates a slug, bookmarks
-  using the old slug 404 by design (fail-fast over silent redirect
-  to the wrong tenant). For cross-org link sharing in the wild
-  this is annoying — a grace-window redirect via the audit log
-  would soften it.
-- **Definition of Done:**
-  - On a 404 for `/tenants/<x>/...`, look up the audit log for
-    a recent `RenameTenantSlug` whose `before.slug == x`; if
-    found and within a configurable grace window, surface a
-    "did you mean <new-slug>?" CTA (or auto-redirect with a
-    banner).
-  - Configurable grace window (default 30d).
-- **Blockers:** none — UI-only with audit-log read.
+  using the old slug 404 by design. A grace-window "did you mean
+  <new-slug>?" redirect would soften that. The original entry
+  assumed this was "UI-only with audit-log read" — that was wrong
+  on two counts, now resolved/clarified:
+    1. The old slug was captured NOWHERE queryable — the rename did
+       not `StashBefore`, so `audit_log.before_json` was empty.
+       **Fixed:** migration 039 adds `tenant_slug_history`
+       (old_slug, new_slug, renamed_at) and `TenantRepo.Rename`
+       now writes one row per real rotation IN THE SAME TX as the
+       slug bump (idempotent same-slug rename writes none). Indexed
+       on (old_slug, renamed_at DESC) for the resolver lookup.
+       Integration test: `slug_history_test.go`.
+    2. The `audit_log` read is platform-admin-gated
+       (`RolePlatformAdmin` + Cedar `ActionReadAuditLog`), so it
+       can NOT back a redirect served to an ordinary tenant member
+       hitting a 404. The resolver must read `tenant_slug_history`
+       under its own (tenant-read) authz instead.
+- **Definition of Done (remaining):**
+  - A `ResolveRenamedSlug(old_slug)` resolver RPC (proto + buf
+    regen + connectshim + handler) returning `{new_slug,
+    renamed_at}` for the most recent rotation FROM `old_slug`
+    within a configurable grace window (default 30d), authorized
+    by tenant-read on the *target* tenant — NOT the admin audit
+    gate. Reads the new `tenant_slug_history` table.
+  - Frontend `not-found` handling for `/tenants/<x>/...` that
+    calls the resolver and renders a "did you mean <new-slug>?"
+    CTA (or auto-redirect with a banner).
+- **Blockers:** none — the data-plane capture + index now exist;
+  remaining work is an additive RPC + a Next.js not-found page.
 
 ### Remaining bucket sub-tabs (Replication / Versioning)
 

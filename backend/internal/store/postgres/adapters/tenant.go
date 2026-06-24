@@ -494,6 +494,18 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		}
 	}
 
+	// Record the rotation so a later 404 on the old slug can resolve to the
+	// new one (see migration 039). Same tx as the slug bump: the trail can
+	// never disagree with the live slug. The same-slug no-op returned above
+	// before reaching here, so old_slug != new_slug always holds.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO tenant_slug_history (tenant_id, old_slug, new_slug)
+		 VALUES ($1, $2, $3)`,
+		pgUUID(args.TenantID), oldSlug, args.NewSlug,
+	); err != nil {
+		return tenant.Tenant{}, fmt.Errorf("rename tenant: record slug history: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return tenant.Tenant{}, fmt.Errorf("rename tenant: commit: %w", err)
 	}
