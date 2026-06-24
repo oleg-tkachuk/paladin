@@ -1149,21 +1149,6 @@ frontend, infra). Items the audit surfaced that aren't already covered
 elsewhere in this file. Handler-level tracing/metrics intentionally has
 no entry here — it is the existing "OpenTelemetry baseline" item._
 
-### connectshim proto ↔ struct converters: generate instead of hand-write
-
-- **Status:** Aspirational
-- **Reason:** every `internal/api/connectshim/*/​*_server.go` carries
-  ~50–100 lines of hand-written `xFromProto` / `xToProto` mapping;
-  consistency drifts one field at a time as messages grow.
-- **Definition of Done:** converters emitted by a small protoc/buf
-  plugin (or go:generate tool) from the proto descriptors; hand-written
-  mapping bodies deleted; `task gen:all` regenerates them and the
-  lefthook freshness check covers the output.
-- **Blockers:** tooling spike — decide plugin vs. go:generate template
-  before committing to either.
-
----
-
 ## CI / Delivery pipeline
 
 _Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)
