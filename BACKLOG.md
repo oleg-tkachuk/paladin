@@ -1367,40 +1367,24 @@ mirror the lefthook gates (go vet / go test / buf lint / eslint / tsc,
 gitleaks, trivy-fs). The items below are the deliberately deferred rest
 of the pipeline._
 
-### Reproducible proto codegen — blocks all new RPCs
+### Proto codegen drift-guard in CI
 
-- **Status:** Deferred (prerequisite for the three open `*Service` RPC
-  follow-ups: distinct-tags, ResolveRenamedSlug, MCP ListSessions)
-- **Reason:** There is no captured proto-gen target — no
-  `task gen:proto`, Makefile, or script runs `buf generate`. As a
-  result the committed generated code under
-  `backend/internal/api/pb/` is internally INCONSISTENT in import
-  grouping: e.g. `audit_service.pb.go` is a single sorted import
-  block (raw `buf generate` output) while `cel_service.pb.go`,
-  `tenant_service.pb.go`, and `mcp_inspect_service.pb.go` use
-  goimports/gci-style grouping (stdlib block, blank line, then
-  third-party). Different files were committed through different
-  local pipelines. Running `buf generate` (v1.71.0, protoc-gen-go
-  v1.36.11, protoc-gen-connect-go 1.19.1 — all the versions the
-  files name) re-churns ~40 generated files in import grouping
-  alone, so adding ANY new RPC produces a large mechanical diff that
-  buries the real change. This is why the three RPC follow-ups were
-  left at their data-plane foundations rather than wired through new
-  proto methods.
+- **Status:** Deferred (the reproducibility blocker itself is RESOLVED)
+- **Reason:** The `gen:proto` task now exists (`buf generate` →
+  `goimports -w internal/api/pb`) and every generated file under
+  `backend/internal/api/pb/` was normalized to that canonical style
+  in one mechanical commit, so a fresh `task gen:proto` is a no-op
+  and new RPCs touch only their own service's files. What is NOT yet
+  guarded: a contributor can still hand-edit or `--no-verify`-commit
+  a generated file and re-introduce drift, because nothing in CI
+  asserts the tree matches `task gen:proto` output.
 - **Definition of Done:**
-  - Add a `gen:proto` task = `buf generate` + a pinned post-format
-    step (gci or goimports with an agreed grouping config) so the
-    output is byte-stable and reproducible from a clean checkout.
-  - Regenerate everything once to that canonical style in a single
-    standalone "chore: reproducible proto codegen" commit (generated
-    files only — verify `go build ./...` + `go test ./...` + buf lint
-    are green; no behaviour change).
-  - Wire the task into the lefthook/CI buf step so drift is caught.
-  - After it lands, the three open RPCs each touch only their own
-    service's generated files and become clean to review.
-- **Blockers:** none — purely toolchain hygiene. Should be its own
-  commit (repo-wide generated-code change), kept separate from any
-  feature so reviewers can trust it is mechanical.
+  - A CI step (in `.github/workflows/test.yml`, near the gofmt check)
+    that runs `task gen:proto` on a clean checkout and fails if
+    `git diff --exit-code -- backend/internal/api/pb` is non-empty.
+  - Optionally mirror it as a lefthook pre-push check.
+- **Blockers:** none — additive CI step. Low priority now that the
+  canonical output is committed and the task is reproducible.
 
 ### golangci-lint CI gate
 
