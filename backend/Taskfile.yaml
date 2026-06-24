@@ -87,23 +87,15 @@ tasks:
       - task: docker:deploy-orbstack
 
   metadata:write:
+    # Shared writer (tasks/write-info-env.sh) — single source for both
+    # backend + frontend info.env; was copy-pasted and drifted (see BACKLOG).
     desc: "Write APP_VERSION (from version.sh) + GIT_COMMIT_HASH / BUILD_TIME to deploy/info.env"
     internal: true
     cmds:
-      - cmd: |-
-          set -euo pipefail
-          mkdir -p "$(dirname '{{.DEPLOY_INFO_ENV_FILE}}')"
-          # Single version source — tasks/version.sh. info.env is now a
-          # generated convenience for the compose / orbstack paths that
-          # read it via --env-file / awk; version.sh is the source of
-          # truth (no more stateful patch-bump in a tracked-ish file).
-          ver="$(bash "$(git rev-parse --show-toplevel)/tasks/version.sh")"
-          {
-            printf 'APP_VERSION=%s\n'      "$ver"
-            printf 'GIT_COMMIT_HASH=%s\n'  "$(git rev-parse --short HEAD)"
-            printf 'BUILD_TIME=%s\n'       "$(TZ='{{.TIMEZONE}}' date +%Y-%m-%dT%H:%M:%S%z)"
-          } > '{{.DEPLOY_INFO_ENV_FILE}}'
-          printf 'INFO: %s: version %s\n' '{{.PROJECT_NAME}}' "$ver"
+      - cmd: >-
+          OCI_REGISTRY='{{.OCI_REGISTRY}}' PROJECT_NAME='{{.PROJECT_NAME}}'
+          bash "$(git rev-parse --show-toplevel)/tasks/write-info-env.sh"
+          '{{.DEPLOY_INFO_ENV_FILE}}' '{{.TIMEZONE}}'
 
   # ─── Local stack ─────────────────────────────────────────────────────────
   up:

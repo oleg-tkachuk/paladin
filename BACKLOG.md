@@ -1274,17 +1274,6 @@ of the pipeline._
 - **Blockers:** decide on the update automation first; digest pins
   without it trade staleness for reproducibility.
 
-### Taskfile `metadata:write` duplication
-
-- **Status:** Deferred
-- **Reason:** `backend/Taskfile.yaml` and `frontend/Taskfile.yaml`
-  carry near-identical `metadata:write` tasks (copy-paste, already
-  diverged in comments); a fix in one silently misses the other.
-- **Definition of Done:** single shared definition under
-  `tasks/` included from both halves, or an explicit comment in both
-  files stating why they intentionally diverge.
-- **Blockers:** none — 30-minute cleanup.
-
 ---
 
 ## Documentation
