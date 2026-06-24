@@ -2,7 +2,11 @@
 // @generated from file paladin/common/v1/pagination.proto (package paladin.common.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -10,8 +14,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/common/v1/pagination.proto.
  */
-export const file_paladin_common_v1_pagination: GenFile = /*@__PURE__*/
-  fileDesc("Ch5vY3AvY29tbW9uL3YxL3BhZ2luYXRpb24ucHJvdG8SDW9jcC5jb21tb24udjEiQAoLUGFnZVJlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiOwoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRISCgp0b3RhbF9zaXplGAIgASgDKlAKCVNvcnRPcmRlchIaChZTT1JUX09SREVSX1VOU1BFQ0lGSUVEEAASEgoOU09SVF9PUkRFUl9BU0MQARITCg9TT1JUX09SREVSX0RFU0MQAkJUWlJnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvY29tbW9uL3YxO29jcGNvbW1vbnYxYgZwcm90bzM", [file_buf_validate_validate]);
+export const file_paladin_common_v1_pagination: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ch5vY3AvY29tbW9uL3YxL3BhZ2luYXRpb24ucHJvdG8SDW9jcC5jb21tb24udjEiQAoLUGFnZVJlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiOwoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRISCgp0b3RhbF9zaXplGAIgASgDKlAKCVNvcnRPcmRlchIaChZTT1JUX09SREVSX1VOU1BFQ0lGSUVEEAASEgoOU09SVF9PUkRFUl9BU0MQARITCg9TT1JUX09SREVSX0RFU0MQAkJUWlJnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvY29tbW9uL3YxO29jcGNvbW1vbnYxYgZwcm90bzM",
+    [file_buf_validate_validate],
+  );
 
 /**
  * PageRequest is the AIP-158 pagination input shared across List RPCs.
@@ -38,7 +46,8 @@ export type PageRequest = Message<"paladin.common.v1.PageRequest"> & {
  * Describes the message paladin.common.v1.PageRequest.
  * Use `create(PageRequestSchema)` to create a new message.
  */
-export const PageRequestSchema: GenMessage<PageRequest> = /*@__PURE__*/
+export const PageRequestSchema: GenMessage<PageRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_common_v1_pagination, 0);
 
 /**
@@ -63,7 +72,8 @@ export type PageResponse = Message<"paladin.common.v1.PageResponse"> & {
  * Describes the message paladin.common.v1.PageResponse.
  * Use `create(PageResponseSchema)` to create a new message.
  */
-export const PageResponseSchema: GenMessage<PageResponse> = /*@__PURE__*/
+export const PageResponseSchema: GenMessage<PageResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_common_v1_pagination, 1);
 
 /**
@@ -91,6 +101,6 @@ export enum SortOrder {
 /**
  * Describes the enum paladin.common.v1.SortOrder.
  */
-export const SortOrderSchema: GenEnum<SortOrder> = /*@__PURE__*/
+export const SortOrderSchema: GenEnum<SortOrder> =
+  /*@__PURE__*/
   enumDesc(file_paladin_common_v1_pagination, 0);
-

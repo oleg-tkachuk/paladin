@@ -13,8 +13,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/iam/v1/types.proto.
  */
-export const file_paladin_iam_v1_types: GenFile = /*@__PURE__*/
-  fileDesc("ChZvY3AvaWFtL3YxL3R5cGVzLnByb3RvEgpvY3AuaWFtLnYxItMCCgRVc2VyEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJAoGc2NvcGVzGAcgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIsICCgZBcGlLZXkSDAoEbmFtZRgBIAEoCRISCgphcGlfa2V5X2lkGAIgASgJEhEKCXRlbmFudF9pZBgDIAEoCRIWCg5kaXNwbGF5X3ByZWZpeBgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRINCgVyb2xlcxgGIAMoCRIkCgZzY29wZXMYByADKAsyFC5vY3AuY29tbW9uLnYxLlNjb3BlEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHcmV2b2tlZBgLIAEoCCKTAQoJVG9rZW5QYWlyEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhUKDXJlZnJlc2hfdG9rZW4YAyABKAkSIgoacmVmcmVzaF9leHBpcmVzX2luX3NlY29uZHMYBCABKAUSEgoKdG9rZW5fdHlwZRgFIAEoCUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_paladin_common_v1_scope]);
+export const file_paladin_iam_v1_types: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChZvY3AvaWFtL3YxL3R5cGVzLnByb3RvEgpvY3AuaWFtLnYxItMCCgRVc2VyEgwKBG5hbWUYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSDwoHc3ViamVjdBgEIAEoCRIUCgxkaXNwbGF5X25hbWUYBSABKAkSDQoFcm9sZXMYBiADKAkSJAoGc2NvcGVzGAcgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZRIQCghkaXNhYmxlZBgIIAEoCBIYChByZXNvdXJjZV92ZXJzaW9uGAkgASgJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKDWxhc3RfbG9naW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIsICCgZBcGlLZXkSDAoEbmFtZRgBIAEoCRISCgphcGlfa2V5X2lkGAIgASgJEhEKCXRlbmFudF9pZBgDIAEoCRIWCg5kaXNwbGF5X3ByZWZpeBgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRINCgVyb2xlcxgGIAMoCRIkCgZzY29wZXMYByADKAsyFC5vY3AuY29tbW9uLnYxLlNjb3BlEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHcmV2b2tlZBgLIAEoCCKTAQoJVG9rZW5QYWlyEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhUKDXJlZnJlc2hfdG9rZW4YAyABKAkSIgoacmVmcmVzaF9leHBpcmVzX2luX3NlY29uZHMYBCABKAUSEgoKdG9rZW5fdHlwZRgFIAEoCUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    [file_google_protobuf_timestamp, file_paladin_common_v1_scope],
+  );
 
 /**
  * User is an authenticated identity inside a tenant. Local-IdP form; for
@@ -95,7 +99,8 @@ export type User = Message<"paladin.iam.v1.User"> & {
  * Describes the message paladin.iam.v1.User.
  * Use `create(UserSchema)` to create a new message.
  */
-export const UserSchema: GenMessage<User> = /*@__PURE__*/
+export const UserSchema: GenMessage<User> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_types, 0);
 
 /**
@@ -170,7 +175,8 @@ export type ApiKey = Message<"paladin.iam.v1.ApiKey"> & {
  * Describes the message paladin.iam.v1.ApiKey.
  * Use `create(ApiKeySchema)` to create a new message.
  */
-export const ApiKeySchema: GenMessage<ApiKey> = /*@__PURE__*/
+export const ApiKeySchema: GenMessage<ApiKey> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_types, 1);
 
 /**
@@ -212,6 +218,6 @@ export type TokenPair = Message<"paladin.iam.v1.TokenPair"> & {
  * Describes the message paladin.iam.v1.TokenPair.
  * Use `create(TokenPairSchema)` to create a new message.
  */
-export const TokenPairSchema: GenMessage<TokenPair> = /*@__PURE__*/
+export const TokenPairSchema: GenMessage<TokenPair> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_types, 2);
-

@@ -2,7 +2,11 @@
 // @generated from file paladin/common/v1/scope.proto (package paladin.common.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -10,8 +14,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/common/v1/scope.proto.
  */
-export const file_paladin_common_v1_scope: GenFile = /*@__PURE__*/
-  fileDesc("ChlvY3AvY29tbW9uL3YxL3Njb3BlLnByb3RvEg1vY3AuY29tbW9uLnYxIlMKBVNjb3BlEjIKBHR5cGUYASABKA4yGC5vY3AuY29tbW9uLnYxLlNjb3BlVHlwZUIKukgHggEEEAEgABIWCgV2YWx1ZRgCIAEoCUIHukgEcgIQASqIAQoJU2NvcGVUeXBlEhoKFlNDT1BFX1RZUEVfVU5TUEVDSUZJRUQQABIVChFTQ09QRV9UWVBFX1RFTkFOVBABEhYKElNDT1BFX1RZUEVfQkFDS0VORBACEhUKEVNDT1BFX1RZUEVfQlVDS0VUEAMSGQoVU0NPUEVfVFlQRV9PQkpFQ1RfS0VZEARCVFpSZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2NvbW1vbi92MTtvY3Bjb21tb252MWIGcHJvdG8z", [file_buf_validate_validate]);
+export const file_paladin_common_v1_scope: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChlvY3AvY29tbW9uL3YxL3Njb3BlLnByb3RvEg1vY3AuY29tbW9uLnYxIlMKBVNjb3BlEjIKBHR5cGUYASABKA4yGC5vY3AuY29tbW9uLnYxLlNjb3BlVHlwZUIKukgHggEEEAEgABIWCgV2YWx1ZRgCIAEoCUIHukgEcgIQASqIAQoJU2NvcGVUeXBlEhoKFlNDT1BFX1RZUEVfVU5TUEVDSUZJRUQQABIVChFTQ09QRV9UWVBFX1RFTkFOVBABEhYKElNDT1BFX1RZUEVfQkFDS0VORBACEhUKEVNDT1BFX1RZUEVfQlVDS0VUEAMSGQoVU0NPUEVfVFlQRV9PQkpFQ1RfS0VZEARCVFpSZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2NvbW1vbi92MTtvY3Bjb21tb252MWIGcHJvdG8z",
+    [file_buf_validate_validate],
+  );
 
 /**
  * Scope narrows what resources a Principal may touch. Encoded into JWT
@@ -42,7 +50,8 @@ export type Scope = Message<"paladin.common.v1.Scope"> & {
  * Describes the message paladin.common.v1.Scope.
  * Use `create(ScopeSchema)` to create a new message.
  */
-export const ScopeSchema: GenMessage<Scope> = /*@__PURE__*/
+export const ScopeSchema: GenMessage<Scope> =
+  /*@__PURE__*/
   messageDesc(file_paladin_common_v1_scope, 0);
 
 /**
@@ -78,6 +87,6 @@ export enum ScopeType {
 /**
  * Describes the enum paladin.common.v1.ScopeType.
  */
-export const ScopeTypeSchema: GenEnum<ScopeType> = /*@__PURE__*/
+export const ScopeTypeSchema: GenEnum<ScopeType> =
+  /*@__PURE__*/
   enumDesc(file_paladin_common_v1_scope, 0);
-

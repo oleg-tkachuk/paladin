@@ -2,16 +2,28 @@
 // @generated from file paladin/admin/v1/policy_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/admin/v1/policy_service.proto.
  */
-export const file_paladin_admin_v1_policy_service: GenFile = /*@__PURE__*/
-  fileDesc("CiFvY3AvYWRtaW4vdjEvcG9saWN5X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSIwCg9WYWxpZGF0ZVJlcXVlc3QSHQoMY2VkYXJfcG9saWN5GAEgASgJQge6SARyAhABIlMKEFZhbGlkYXRlUmVzcG9uc2USCgoCb2sYASABKAgSMwoLZGlhZ25vc3RpY3MYAiADKAsyHi5vY3AuYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiqQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImQKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSKQoGbGF5ZXJzGAIgAygLMhkub2NwLmFkbWluLnYxLlBvbGljeUxheWVyIjMKC1BvbGljeUxheWVyEg4KBnNvdXJjZRgBIAEoCRIUCgxjZWRhcl9wb2xpY3kYAiABKAkynQIKDVBvbGljeVNlcnZpY2USSQoIVmFsaWRhdGUSHS5vY3AuYWRtaW4udjEuVmFsaWRhdGVSZXF1ZXN0Gh4ub2NwLmFkbWluLnYxLlZhbGlkYXRlUmVzcG9uc2USWAoNU2ltdWxhdGVBdXRoehIiLm9jcC5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVxdWVzdBojLm9jcC5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVzcG9uc2USZwoSR2V0RWZmZWN0aXZlUG9saWN5Eicub2NwLmFkbWluLnYxLkdldEVmZmVjdGl2ZVBvbGljeVJlcXVlc3QaKC5vY3AuYWRtaW4udjEuR2V0RWZmZWN0aXZlUG9saWN5UmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw", [file_buf_validate_validate]);
+export const file_paladin_admin_v1_policy_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiFvY3AvYWRtaW4vdjEvcG9saWN5X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSIwCg9WYWxpZGF0ZVJlcXVlc3QSHQoMY2VkYXJfcG9saWN5GAEgASgJQge6SARyAhABIlMKEFZhbGlkYXRlUmVzcG9uc2USCgoCb2sYASABKAgSMwoLZGlhZ25vc3RpY3MYAiADKAsyHi5vY3AuYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiqQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImQKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSKQoGbGF5ZXJzGAIgAygLMhkub2NwLmFkbWluLnYxLlBvbGljeUxheWVyIjMKC1BvbGljeUxheWVyEg4KBnNvdXJjZRgBIAEoCRIUCgxjZWRhcl9wb2xpY3kYAiABKAkynQIKDVBvbGljeVNlcnZpY2USSQoIVmFsaWRhdGUSHS5vY3AuYWRtaW4udjEuVmFsaWRhdGVSZXF1ZXN0Gh4ub2NwLmFkbWluLnYxLlZhbGlkYXRlUmVzcG9uc2USWAoNU2ltdWxhdGVBdXRoehIiLm9jcC5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVxdWVzdBojLm9jcC5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVzcG9uc2USZwoSR2V0RWZmZWN0aXZlUG9saWN5Eicub2NwLmFkbWluLnYxLkdldEVmZmVjdGl2ZVBvbGljeVJlcXVlc3QaKC5vY3AuYWRtaW4udjEuR2V0RWZmZWN0aXZlUG9saWN5UmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [file_buf_validate_validate],
+  );
 
 /**
  * @generated from message paladin.admin.v1.ValidateRequest
@@ -27,7 +39,8 @@ export type ValidateRequest = Message<"paladin.admin.v1.ValidateRequest"> & {
  * Describes the message paladin.admin.v1.ValidateRequest.
  * Use `create(ValidateRequestSchema)` to create a new message.
  */
-export const ValidateRequestSchema: GenMessage<ValidateRequest> = /*@__PURE__*/
+export const ValidateRequestSchema: GenMessage<ValidateRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 0);
 
 /**
@@ -49,7 +62,8 @@ export type ValidateResponse = Message<"paladin.admin.v1.ValidateResponse"> & {
  * Describes the message paladin.admin.v1.ValidateResponse.
  * Use `create(ValidateResponseSchema)` to create a new message.
  */
-export const ValidateResponseSchema: GenMessage<ValidateResponse> = /*@__PURE__*/
+export const ValidateResponseSchema: GenMessage<ValidateResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 1);
 
 /**
@@ -83,118 +97,127 @@ export type PolicyDiagnostic = Message<"paladin.admin.v1.PolicyDiagnostic"> & {
  * Describes the message paladin.admin.v1.PolicyDiagnostic.
  * Use `create(PolicyDiagnosticSchema)` to create a new message.
  */
-export const PolicyDiagnosticSchema: GenMessage<PolicyDiagnostic> = /*@__PURE__*/
+export const PolicyDiagnosticSchema: GenMessage<PolicyDiagnostic> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.SimulateAuthzRequest
  */
-export type SimulateAuthzRequest = Message<"paladin.admin.v1.SimulateAuthzRequest"> & {
-  /**
-   * Subject of the simulated principal (does not need to match a real user).
-   *
-   * @generated from field: string principal_subject = 1;
-   */
-  principalSubject: string;
+export type SimulateAuthzRequest =
+  Message<"paladin.admin.v1.SimulateAuthzRequest"> & {
+    /**
+     * Subject of the simulated principal (does not need to match a real user).
+     *
+     * @generated from field: string principal_subject = 1;
+     */
+    principalSubject: string;
 
-  /**
-   * @generated from field: string principal_tenant_id = 2;
-   */
-  principalTenantId: string;
+    /**
+     * @generated from field: string principal_tenant_id = 2;
+     */
+    principalTenantId: string;
 
-  /**
-   * @generated from field: repeated string principal_roles = 3;
-   */
-  principalRoles: string[];
+    /**
+     * @generated from field: repeated string principal_roles = 3;
+     */
+    principalRoles: string[];
 
-  /**
-   * @generated from field: string action = 4;
-   */
-  action: string;
+    /**
+     * @generated from field: string action = 4;
+     */
+    action: string;
 
-  /**
-   * Resource name to authorize against.
-   *
-   * @generated from field: string resource_name = 5;
-   */
-  resourceName: string;
-};
+    /**
+     * Resource name to authorize against.
+     *
+     * @generated from field: string resource_name = 5;
+     */
+    resourceName: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SimulateAuthzRequest.
  * Use `create(SimulateAuthzRequestSchema)` to create a new message.
  */
-export const SimulateAuthzRequestSchema: GenMessage<SimulateAuthzRequest> = /*@__PURE__*/
+export const SimulateAuthzRequestSchema: GenMessage<SimulateAuthzRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.SimulateAuthzResponse
  */
-export type SimulateAuthzResponse = Message<"paladin.admin.v1.SimulateAuthzResponse"> & {
-  /**
-   * @generated from field: bool allowed = 1;
-   */
-  allowed: boolean;
+export type SimulateAuthzResponse =
+  Message<"paladin.admin.v1.SimulateAuthzResponse"> & {
+    /**
+     * @generated from field: bool allowed = 1;
+     */
+    allowed: boolean;
 
-  /**
-   * Decision diagnostics — which permit/forbid rules fired.
-   *
-   * @generated from field: repeated string matched_policies = 2;
-   */
-  matchedPolicies: string[];
+    /**
+     * Decision diagnostics — which permit/forbid rules fired.
+     *
+     * @generated from field: repeated string matched_policies = 2;
+     */
+    matchedPolicies: string[];
 
-  /**
-   * @generated from field: string explanation = 3;
-   */
-  explanation: string;
-};
+    /**
+     * @generated from field: string explanation = 3;
+     */
+    explanation: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.SimulateAuthzResponse.
  * Use `create(SimulateAuthzResponseSchema)` to create a new message.
  */
-export const SimulateAuthzResponseSchema: GenMessage<SimulateAuthzResponse> = /*@__PURE__*/
+export const SimulateAuthzResponseSchema: GenMessage<SimulateAuthzResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.GetEffectivePolicyRequest
  */
-export type GetEffectivePolicyRequest = Message<"paladin.admin.v1.GetEffectivePolicyRequest"> & {
-  /**
-   * @generated from field: string resource_name = 1;
-   */
-  resourceName: string;
-};
+export type GetEffectivePolicyRequest =
+  Message<"paladin.admin.v1.GetEffectivePolicyRequest"> & {
+    /**
+     * @generated from field: string resource_name = 1;
+     */
+    resourceName: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.GetEffectivePolicyRequest.
  * Use `create(GetEffectivePolicyRequestSchema)` to create a new message.
  */
-export const GetEffectivePolicyRequestSchema: GenMessage<GetEffectivePolicyRequest> = /*@__PURE__*/
+export const GetEffectivePolicyRequestSchema: GenMessage<GetEffectivePolicyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.GetEffectivePolicyResponse
  */
-export type GetEffectivePolicyResponse = Message<"paladin.admin.v1.GetEffectivePolicyResponse"> & {
-  /**
-   * Concatenated cedar text in evaluation order: tenant → bucket → object_key.
-   *
-   * @generated from field: string merged_cedar_policy = 1;
-   */
-  mergedCedarPolicy: string;
+export type GetEffectivePolicyResponse =
+  Message<"paladin.admin.v1.GetEffectivePolicyResponse"> & {
+    /**
+     * Concatenated cedar text in evaluation order: tenant → bucket → object_key.
+     *
+     * @generated from field: string merged_cedar_policy = 1;
+     */
+    mergedCedarPolicy: string;
 
-  /**
-   * @generated from field: repeated paladin.admin.v1.PolicyLayer layers = 2;
-   */
-  layers: PolicyLayer[];
-};
+    /**
+     * @generated from field: repeated paladin.admin.v1.PolicyLayer layers = 2;
+     */
+    layers: PolicyLayer[];
+  };
 
 /**
  * Describes the message paladin.admin.v1.GetEffectivePolicyResponse.
  * Use `create(GetEffectivePolicyResponseSchema)` to create a new message.
  */
-export const GetEffectivePolicyResponseSchema: GenMessage<GetEffectivePolicyResponse> = /*@__PURE__*/
+export const GetEffectivePolicyResponseSchema: GenMessage<GetEffectivePolicyResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 6);
 
 /**
@@ -218,7 +241,8 @@ export type PolicyLayer = Message<"paladin.admin.v1.PolicyLayer"> & {
  * Describes the message paladin.admin.v1.PolicyLayer.
  * Use `create(PolicyLayerSchema)` to create a new message.
  */
-export const PolicyLayerSchema: GenMessage<PolicyLayer> = /*@__PURE__*/
+export const PolicyLayerSchema: GenMessage<PolicyLayer> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_policy_service, 7);
 
 /**
@@ -238,7 +262,7 @@ export const PolicyService: GenService<{
     methodKind: "unary";
     input: typeof ValidateRequestSchema;
     output: typeof ValidateResponseSchema;
-  },
+  };
   /**
    * SimulateAuthz answers "would this principal be allowed to take this
    * action against this resource right now?" without performing the action.
@@ -250,7 +274,7 @@ export const PolicyService: GenService<{
     methodKind: "unary";
     input: typeof SimulateAuthzRequestSchema;
     output: typeof SimulateAuthzResponseSchema;
-  },
+  };
   /**
    * GetEffectivePolicy returns the merged policy stack for a target
    * (tenant + bucket + object_key inheritance), useful for debugging.
@@ -261,7 +285,5 @@ export const PolicyService: GenService<{
     methodKind: "unary";
     input: typeof GetEffectivePolicyRequestSchema;
     output: typeof GetEffectivePolicyResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_policy_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_policy_service, 0);

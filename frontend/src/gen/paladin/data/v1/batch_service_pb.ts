@@ -2,11 +2,22 @@
 // @generated from file paladin/data/v1/batch_service.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Any, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_any, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_any,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -14,8 +25,17 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/data/v1/batch_service.proto.
  */
-export const file_paladin_data_v1_batch_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch9vY3AvZGF0YS92MS9iYXRjaF9zZXJ2aWNlLnByb3RvEgtvY3AuZGF0YS52MSKWAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGcmVzdWx0IjkKDk9iamVjdFNlbGVjdG9yEhcKBW5hbWVzGAEgAygJQgi6SAWSAQIQZBIOCgZmaWx0ZXIYAiABKAkifgoZQmF0Y2hEZWxldGVPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESNQoIc2VsZWN0b3IYAiABKAsyGy5vY3AuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEhEKCXBlcm1hbmVudBgDIAEoCCLEAQoXQmF0Y2hDb3B5T2JqZWN0c1JlcXVlc3QSHgoNc291cmNlX3BhcmVudBgBIAEoCUIHukgEcgIQARI1CghzZWxlY3RvchgCIAEoCzIbLm9jcC5kYXRhLnYxLk9iamVjdFNlbGVjdG9yQga6SAPIAQESJwoWZGVzdGluYXRpb25fb2JqZWN0X2tleRgDIAEoCUIHukgEcgIQARIpChhkZXN0aW5hdGlvbl9rZXlfdGVtcGxhdGUYBCABKAlCB7pIBHICEAEibAoaQmF0Y2hSZXN0b3JlT2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjUKCHNlbGVjdG9yGAIgASgLMhsub2NwLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBASLjAQoWQmF0Y2hVcGRhdGVUYWdzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESNQoIc2VsZWN0b3IYAiABKAsyGy5vY3AuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEjsKBHRhZ3MYAyADKAsyLS5vY3AuZGF0YS52MS5CYXRjaFVwZGF0ZVRhZ3NSZXF1ZXN0LlRhZ3NFbnRyeRIPCgdyZXBsYWNlGAQgASgIGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBMt4CCgxCYXRjaFNlcnZpY2USVAoSQmF0Y2hEZWxldGVPYmplY3RzEiYub2NwLmRhdGEudjEuQmF0Y2hEZWxldGVPYmplY3RzUmVxdWVzdBoWLm9jcC5kYXRhLnYxLk9wZXJhdGlvbhJQChBCYXRjaENvcHlPYmplY3RzEiQub2NwLmRhdGEudjEuQmF0Y2hDb3B5T2JqZWN0c1JlcXVlc3QaFi5vY3AuZGF0YS52MS5PcGVyYXRpb24SVgoTQmF0Y2hSZXN0b3JlT2JqZWN0cxInLm9jcC5kYXRhLnYxLkJhdGNoUmVzdG9yZU9iamVjdHNSZXF1ZXN0GhYub2NwLmRhdGEudjEuT3BlcmF0aW9uEk4KD0JhdGNoVXBkYXRlVGFncxIjLm9jcC5kYXRhLnYxLkJhdGNoVXBkYXRlVGFnc1JlcXVlc3QaFi5vY3AuZGF0YS52MS5PcGVyYXRpb25CUFpOZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7b2NwZGF0YXYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_any, file_google_protobuf_timestamp, file_google_rpc_status]);
+export const file_paladin_data_v1_batch_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ch9vY3AvZGF0YS92MS9iYXRjaF9zZXJ2aWNlLnByb3RvEgtvY3AuZGF0YS52MSKWAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGcmVzdWx0IjkKDk9iamVjdFNlbGVjdG9yEhcKBW5hbWVzGAEgAygJQgi6SAWSAQIQZBIOCgZmaWx0ZXIYAiABKAkifgoZQmF0Y2hEZWxldGVPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESNQoIc2VsZWN0b3IYAiABKAsyGy5vY3AuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEhEKCXBlcm1hbmVudBgDIAEoCCLEAQoXQmF0Y2hDb3B5T2JqZWN0c1JlcXVlc3QSHgoNc291cmNlX3BhcmVudBgBIAEoCUIHukgEcgIQARI1CghzZWxlY3RvchgCIAEoCzIbLm9jcC5kYXRhLnYxLk9iamVjdFNlbGVjdG9yQga6SAPIAQESJwoWZGVzdGluYXRpb25fb2JqZWN0X2tleRgDIAEoCUIHukgEcgIQARIpChhkZXN0aW5hdGlvbl9rZXlfdGVtcGxhdGUYBCABKAlCB7pIBHICEAEibAoaQmF0Y2hSZXN0b3JlT2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEjUKCHNlbGVjdG9yGAIgASgLMhsub2NwLmRhdGEudjEuT2JqZWN0U2VsZWN0b3JCBrpIA8gBASLjAQoWQmF0Y2hVcGRhdGVUYWdzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESNQoIc2VsZWN0b3IYAiABKAsyGy5vY3AuZGF0YS52MS5PYmplY3RTZWxlY3RvckIGukgDyAEBEjsKBHRhZ3MYAyADKAsyLS5vY3AuZGF0YS52MS5CYXRjaFVwZGF0ZVRhZ3NSZXF1ZXN0LlRhZ3NFbnRyeRIPCgdyZXBsYWNlGAQgASgIGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBMt4CCgxCYXRjaFNlcnZpY2USVAoSQmF0Y2hEZWxldGVPYmplY3RzEiYub2NwLmRhdGEudjEuQmF0Y2hEZWxldGVPYmplY3RzUmVxdWVzdBoWLm9jcC5kYXRhLnYxLk9wZXJhdGlvbhJQChBCYXRjaENvcHlPYmplY3RzEiQub2NwLmRhdGEudjEuQmF0Y2hDb3B5T2JqZWN0c1JlcXVlc3QaFi5vY3AuZGF0YS52MS5PcGVyYXRpb24SVgoTQmF0Y2hSZXN0b3JlT2JqZWN0cxInLm9jcC5kYXRhLnYxLkJhdGNoUmVzdG9yZU9iamVjdHNSZXF1ZXN0GhYub2NwLmRhdGEudjEuT3BlcmF0aW9uEk4KD0JhdGNoVXBkYXRlVGFncxIjLm9jcC5kYXRhLnYxLkJhdGNoVXBkYXRlVGFnc1JlcXVlc3QaFi5vY3AuZGF0YS52MS5PcGVyYXRpb25CUFpOZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2RhdGEvdjE7b2NwZGF0YXYxYgZwcm90bzM",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_any,
+      file_google_protobuf_timestamp,
+      file_google_rpc_status,
+    ],
+  );
 
 /**
  * Operation mirrors the admin-plane definition; copied here so the data
@@ -47,19 +67,22 @@ export type Operation = Message<"paladin.data.v1.Operation"> & {
   /**
    * @generated from oneof paladin.data.v1.Operation.result
    */
-  result: {
-    /**
-     * @generated from field: google.rpc.Status error = 5;
-     */
-    value: Status;
-    case: "error";
-  } | {
-    /**
-     * @generated from field: google.protobuf.Any response = 6;
-     */
-    value: Any;
-    case: "response";
-  } | { case: undefined; value?: undefined };
+  result:
+    | {
+        /**
+         * @generated from field: google.rpc.Status error = 5;
+         */
+        value: Status;
+        case: "error";
+      }
+    | {
+        /**
+         * @generated from field: google.protobuf.Any response = 6;
+         */
+        value: Any;
+        case: "response";
+      }
+    | { case: undefined; value?: undefined };
 
   /**
    * @generated from field: google.protobuf.Timestamp created_at = 7;
@@ -76,7 +99,8 @@ export type Operation = Message<"paladin.data.v1.Operation"> & {
  * Describes the message paladin.data.v1.Operation.
  * Use `create(OperationSchema)` to create a new message.
  */
-export const OperationSchema: GenMessage<Operation> = /*@__PURE__*/
+export const OperationSchema: GenMessage<Operation> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 0);
 
 /**
@@ -103,130 +127,139 @@ export type ObjectSelector = Message<"paladin.data.v1.ObjectSelector"> & {
  * Describes the message paladin.data.v1.ObjectSelector.
  * Use `create(ObjectSelectorSchema)` to create a new message.
  */
-export const ObjectSelectorSchema: GenMessage<ObjectSelector> = /*@__PURE__*/
+export const ObjectSelectorSchema: GenMessage<ObjectSelector> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 1);
 
 /**
  * @generated from message paladin.data.v1.BatchDeleteObjectsRequest
  */
-export type BatchDeleteObjectsRequest = Message<"paladin.data.v1.BatchDeleteObjectsRequest"> & {
-  /**
-   * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type BatchDeleteObjectsRequest =
+  Message<"paladin.data.v1.BatchDeleteObjectsRequest"> & {
+    /**
+     * Parent ObjectKey: "tenants/{tenant_id_or_slug}/objectKeys/{ok}".
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
-   */
-  selector?: ObjectSelector | undefined;
+    /**
+     * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
+     */
+    selector?: ObjectSelector | undefined;
 
-  /**
-   * @generated from field: bool permanent = 3;
-   */
-  permanent: boolean;
-};
+    /**
+     * @generated from field: bool permanent = 3;
+     */
+    permanent: boolean;
+  };
 
 /**
  * Describes the message paladin.data.v1.BatchDeleteObjectsRequest.
  * Use `create(BatchDeleteObjectsRequestSchema)` to create a new message.
  */
-export const BatchDeleteObjectsRequestSchema: GenMessage<BatchDeleteObjectsRequest> = /*@__PURE__*/
+export const BatchDeleteObjectsRequestSchema: GenMessage<BatchDeleteObjectsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 2);
 
 /**
  * @generated from message paladin.data.v1.BatchCopyObjectsRequest
  */
-export type BatchCopyObjectsRequest = Message<"paladin.data.v1.BatchCopyObjectsRequest"> & {
-  /**
-   * Source parent ObjectKey.
-   *
-   * @generated from field: string source_parent = 1;
-   */
-  sourceParent: string;
+export type BatchCopyObjectsRequest =
+  Message<"paladin.data.v1.BatchCopyObjectsRequest"> & {
+    /**
+     * Source parent ObjectKey.
+     *
+     * @generated from field: string source_parent = 1;
+     */
+    sourceParent: string;
 
-  /**
-   * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
-   */
-  selector?: ObjectSelector | undefined;
+    /**
+     * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
+     */
+    selector?: ObjectSelector | undefined;
 
-  /**
-   * Destination ObjectKey resource name.
-   *
-   * @generated from field: string destination_object_key = 3;
-   */
-  destinationObjectKey: string;
+    /**
+     * Destination ObjectKey resource name.
+     *
+     * @generated from field: string destination_object_key = 3;
+     */
+    destinationObjectKey: string;
 
-  /**
-   * CEL expression evaluated against each source Object to compute dest key.
-   *
-   * @generated from field: string destination_key_template = 4;
-   */
-  destinationKeyTemplate: string;
-};
+    /**
+     * CEL expression evaluated against each source Object to compute dest key.
+     *
+     * @generated from field: string destination_key_template = 4;
+     */
+    destinationKeyTemplate: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.BatchCopyObjectsRequest.
  * Use `create(BatchCopyObjectsRequestSchema)` to create a new message.
  */
-export const BatchCopyObjectsRequestSchema: GenMessage<BatchCopyObjectsRequest> = /*@__PURE__*/
+export const BatchCopyObjectsRequestSchema: GenMessage<BatchCopyObjectsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 3);
 
 /**
  * @generated from message paladin.data.v1.BatchRestoreObjectsRequest
  */
-export type BatchRestoreObjectsRequest = Message<"paladin.data.v1.BatchRestoreObjectsRequest"> & {
-  /**
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type BatchRestoreObjectsRequest =
+  Message<"paladin.data.v1.BatchRestoreObjectsRequest"> & {
+    /**
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
-   */
-  selector?: ObjectSelector | undefined;
-};
+    /**
+     * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
+     */
+    selector?: ObjectSelector | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.BatchRestoreObjectsRequest.
  * Use `create(BatchRestoreObjectsRequestSchema)` to create a new message.
  */
-export const BatchRestoreObjectsRequestSchema: GenMessage<BatchRestoreObjectsRequest> = /*@__PURE__*/
+export const BatchRestoreObjectsRequestSchema: GenMessage<BatchRestoreObjectsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 4);
 
 /**
  * @generated from message paladin.data.v1.BatchUpdateTagsRequest
  */
-export type BatchUpdateTagsRequest = Message<"paladin.data.v1.BatchUpdateTagsRequest"> & {
-  /**
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type BatchUpdateTagsRequest =
+  Message<"paladin.data.v1.BatchUpdateTagsRequest"> & {
+    /**
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
-   */
-  selector?: ObjectSelector | undefined;
+    /**
+     * @generated from field: paladin.data.v1.ObjectSelector selector = 2;
+     */
+    selector?: ObjectSelector | undefined;
 
-  /**
-   * @generated from field: map<string, string> tags = 3;
-   */
-  tags: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> tags = 3;
+     */
+    tags: { [key: string]: string };
 
-  /**
-   * When true, replace the existing tag set; else merge.
-   *
-   * @generated from field: bool replace = 4;
-   */
-  replace: boolean;
-};
+    /**
+     * When true, replace the existing tag set; else merge.
+     *
+     * @generated from field: bool replace = 4;
+     */
+    replace: boolean;
+  };
 
 /**
  * Describes the message paladin.data.v1.BatchUpdateTagsRequest.
  * Use `create(BatchUpdateTagsRequestSchema)` to create a new message.
  */
-export const BatchUpdateTagsRequestSchema: GenMessage<BatchUpdateTagsRequest> = /*@__PURE__*/
+export const BatchUpdateTagsRequestSchema: GenMessage<BatchUpdateTagsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_batch_service, 5);
 
 /**
@@ -243,7 +276,7 @@ export const BatchService: GenService<{
     methodKind: "unary";
     input: typeof BatchDeleteObjectsRequestSchema;
     output: typeof OperationSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.BatchService.BatchCopyObjects
    */
@@ -251,7 +284,7 @@ export const BatchService: GenService<{
     methodKind: "unary";
     input: typeof BatchCopyObjectsRequestSchema;
     output: typeof OperationSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.BatchService.BatchRestoreObjects
    */
@@ -259,7 +292,7 @@ export const BatchService: GenService<{
     methodKind: "unary";
     input: typeof BatchRestoreObjectsRequestSchema;
     output: typeof OperationSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.BatchService.BatchUpdateTags
    */
@@ -267,7 +300,5 @@ export const BatchService: GenService<{
     methodKind: "unary";
     input: typeof BatchUpdateTagsRequestSchema;
     output: typeof OperationSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_data_v1_batch_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_batch_service, 0);

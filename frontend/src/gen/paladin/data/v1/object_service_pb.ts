@@ -2,24 +2,63 @@
 // @generated from file paladin/data/v1/object_service.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  enumDesc,
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration, FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, SortOrder } from "../../common/v1/pagination_pb";
+import {
+  file_google_protobuf_duration,
+  file_google_protobuf_field_mask,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
+import type {
+  PageRequest,
+  PageResponse,
+  SortOrder,
+} from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
-import type { ChecksumAlgorithm, CompletionMode, PresignedUrl } from "../../common/v1/resource_pb";
+import type {
+  ChecksumAlgorithm,
+  CompletionMode,
+  PresignedUrl,
+} from "../../common/v1/resource_pb";
 import { file_paladin_common_v1_resource } from "../../common/v1/resource_pb";
-import type { ChecksumDigest, Object$, ObjectLockState, ObjectSchema } from "./types_pb";
+import type {
+  ChecksumDigest,
+  Object$,
+  ObjectLockState,
+  ObjectSchema,
+} from "./types_pb";
 import { file_paladin_data_v1_types } from "./types_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/data/v1/object_service.proto.
  */
-export const file_paladin_data_v1_object_service: GenFile = /*@__PURE__*/
-  fileDesc("CiBvY3AvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEikwQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEg4KBnMzX2tleRgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSLQoIY2hlY2tzdW0YCCABKAsyGy5vY3AuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSOgoIbWV0YWRhdGEYCiADKAsyKC5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSMgoEdGFncxgLIAMoCzIkLm9jcC5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5EioKBGxvY2sYDCABKAsyHC5vY3AuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXgoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QidQoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLAoIdmVyc2lvbnMYASADKAsyGi5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAki9gMKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkYKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIgLm9jcC5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkAKCG1ldGFkYXRhGAYgAygLMi4ub2NwLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjgKBHRhZ3MYByADKAsyKi5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMAoJdHJhbnNwb3J0GAkgASgOMh0ub2NwLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqQBChRVcGxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSLwoKdXBsb2FkX3VybBgCIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsEjYKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIdLm9jcC5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkicAoWRG93bmxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSMQoMZG93bmxvYWRfdXJsGAIgASgLMhsub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKOAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQAoIbWV0YWRhdGEYBCADKAsyLi5vY3AuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOAoEdGFncxgFIAMoCzIqLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI7ChREZWxldGVPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIpoCChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9vYmplY3Rfa2V5GAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARI9ChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIdLm9jcC5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI1Cg10YWdzX292ZXJyaWRlGAUgASgLMhkub2NwLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoIBChBNZXRhZGF0YU92ZXJyaWRlEj0KCG1ldGFkYXRhGAEgAygLMisub2NwLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJuCgxUYWdzT3ZlcnJpZGUSMQoEdGFncxgBIAMoCzIjLm9jcC5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipwEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEiwKCnNvcnRfb3JkZXIYBSABKA4yGC5vY3AuY29tbW9uLnYxLlNvcnRPcmRlciJmChNMaXN0T2JqZWN0c1Jlc3BvbnNlEiQKB29iamVjdHMYASADKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSKQoEcGFnZRgCIAEoCzIbLm9jcC5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMvUICg1PYmplY3RTZXJ2aWNlElMKDFVwbG9hZE9iamVjdBIgLm9jcC5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaIS5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJZCg5Eb3dubG9hZE9iamVjdBIiLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBojLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USPwoJR2V0T2JqZWN0Eh0ub2NwLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJFCgxMb29rdXBPYmplY3QSIC5vY3AuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhMub2NwLmRhdGEudjEuT2JqZWN0EkUKDFVwZGF0ZU9iamVjdBIgLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSSQoOQ29tcGxldGVPYmplY3QSIi5vY3AuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUwoMRGVsZXRlT2JqZWN0EiAub2NwLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBohLm9jcC5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEkcKDVJlc3RvcmVPYmplY3QSIS5vY3AuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJBCgpDb3B5T2JqZWN0Eh4ub2NwLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUAoLTGlzdE9iamVjdHMSHy5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIC5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElMKDENvdW50T2JqZWN0cxIgLm9jcC5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaIS5vY3AuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJlChJMaXN0T2JqZWN0VmVyc2lvbnMSJi5vY3AuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0Gicub2NwLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USVAoQR2V0T2JqZWN0VmVyc2lvbhIkLm9jcC5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Ghoub2NwLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJVChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIoLm9jcC5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdEJQWk5naXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtvY3BkYXRhdjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_paladin_common_v1_pagination, file_paladin_common_v1_resource, file_paladin_data_v1_types]);
+export const file_paladin_data_v1_object_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiBvY3AvZGF0YS92MS9vYmplY3Rfc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEikwQKDU9iamVjdFZlcnNpb24SDAoEbmFtZRgBIAEoCRISCgp2ZXJzaW9uX2lkGAIgASgJEhEKCW9iamVjdF9pZBgDIAEoCRIYChBpc19kZWxldGVfbWFya2VyGAQgASgIEg4KBnMzX2tleRgFIAEoCRISCgpzaXplX2J5dGVzGAYgASgDEgwKBGV0YWcYByABKAkSLQoIY2hlY2tzdW0YCCABKAsyGy5vY3AuZGF0YS52MS5DaGVja3N1bURpZ2VzdBIUCgxjb250ZW50X3R5cGUYCSABKAkSOgoIbWV0YWRhdGEYCiADKAsyKC5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uLk1ldGFkYXRhRW50cnkSMgoEdGFncxgLIAMoCzIkLm9jcC5kYXRhLnYxLk9iamVjdFZlcnNpb24uVGFnc0VudHJ5EioKBGxvY2sYDCABKAsyHC5vY3AuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSLgoKY3JlYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfY3VycmVudBgOIAEoCBovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXgoZTGlzdE9iamVjdFZlcnNpb25zUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QidQoaTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USLAoIdmVyc2lvbnMYASADKAsyGi5vY3AuZGF0YS52MS5PYmplY3RWZXJzaW9uEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIwChdHZXRPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIk4KG1Jlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAki9gMKE1VwbG9hZE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEgsKA2tleRgCIAEoCRIdCgxjb250ZW50X3R5cGUYAyABKAlCB7pIBHICEAESFwoPc2l6ZV9oaW50X2J5dGVzGAQgASgDEkYKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIgLm9jcC5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCLpIBYIBAhABEkAKCG1ldGFkYXRhGAYgAygLMi4ub2NwLmRhdGEudjEuVXBsb2FkT2JqZWN0UmVxdWVzdC5NZXRhZGF0YUVudHJ5EjgKBHRhZ3MYByADKAsyKi5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSMAoJdHJhbnNwb3J0GAkgASgOMh0ub2NwLmRhdGEudjEuUHJlc2lnblRyYW5zcG9ydBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqQBChRVcGxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSLwoKdXBsb2FkX3VybBgCIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsEjYKD2NvbXBsZXRpb25fbW9kZRgDIAEoDjIdLm9jcC5jb21tb24udjEuQ29tcGxldGlvbk1vZGUicwoVRG93bmxvYWRPYmplY3RSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkicAoWRG93bmxvYWRPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSMQoMZG93bmxvYWRfdXJsGAIgASgLMhsub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwiKQoQR2V0T2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIkQKE0xvb2t1cE9iamVjdFJlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASKOAwoTVXBkYXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESQAoIbWV0YWRhdGEYBCADKAsyLi5vY3AuZGF0YS52MS5VcGRhdGVPYmplY3RSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSOAoEdGFncxgFIAMoCzIqLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QuVGFnc0VudHJ5EhQKDGNvbnRlbnRfdHlwZRgGIAEoCRIUCgxleHRlcm5hbF9yZWYYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlQKFUNvbXBsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkifgoTRGVsZXRlT2JqZWN0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSEQoJcGVybWFuZW50GAMgASgIEiMKG2J5cGFzc19nb3Zlcm5hbmNlX3JldGVudGlvbhgEIAEoCCI7ChREZWxldGVPYmplY3RSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QiRwoUUmVzdG9yZU9iamVjdFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJIpoCChFDb3B5T2JqZWN0UmVxdWVzdBIcCgtzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARInChZkZXN0aW5hdGlvbl9vYmplY3Rfa2V5GAIgASgJQge6SARyAhABEiAKD2Rlc3RpbmF0aW9uX2tleRgDIAEoCUIHukgEcgIQARI9ChFtZXRhZGF0YV9vdmVycmlkZRgEIAEoCzIdLm9jcC5kYXRhLnYxLk1ldGFkYXRhT3ZlcnJpZGVIAIgBARI1Cg10YWdzX292ZXJyaWRlGAUgASgLMhkub2NwLmRhdGEudjEuVGFnc092ZXJyaWRlSAGIAQFCFAoSX21ldGFkYXRhX292ZXJyaWRlQhAKDl90YWdzX292ZXJyaWRlIoIBChBNZXRhZGF0YU92ZXJyaWRlEj0KCG1ldGFkYXRhGAEgAygLMisub2NwLmRhdGEudjEuTWV0YWRhdGFPdmVycmlkZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJuCgxUYWdzT3ZlcnJpZGUSMQoEdGFncxgBIAMoCzIjLm9jcC5kYXRhLnYxLlRhZ3NPdmVycmlkZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipwEKEkxpc3RPYmplY3RzUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhAKCG9yZGVyX2J5GAQgASgJEiwKCnNvcnRfb3JkZXIYBSABKA4yGC5vY3AuY29tbW9uLnYxLlNvcnRPcmRlciJmChNMaXN0T2JqZWN0c1Jlc3BvbnNlEiQKB29iamVjdHMYASADKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSKQoEcGFnZRgCIAEoCzIbLm9jcC5jb21tb24udjEuUGFnZVJlc3BvbnNlIj4KE0NvdW50T2JqZWN0c1JlcXVlc3QSFwoGcGFyZW50GAEgASgJQge6SARyAhABEg4KBmZpbHRlchgCIAEoCSJAChRDb3VudE9iamVjdHNSZXNwb25zZRIZChFhcHByb3hpbWF0ZV9jb3VudBgBIAEoAxINCgVleGFjdBgCIAEoCCpsChBQcmVzaWduVHJhbnNwb3J0EiEKHVBSRVNJR05fVFJBTlNQT1JUX1VOU1BFQ0lGSUVEEAASGQoVUFJFU0lHTl9UUkFOU1BPUlRfUFVUEAESGgoWUFJFU0lHTl9UUkFOU1BPUlRfUE9TVBACMvUICg1PYmplY3RTZXJ2aWNlElMKDFVwbG9hZE9iamVjdBIgLm9jcC5kYXRhLnYxLlVwbG9hZE9iamVjdFJlcXVlc3QaIS5vY3AuZGF0YS52MS5VcGxvYWRPYmplY3RSZXNwb25zZRJZCg5Eb3dubG9hZE9iamVjdBIiLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVxdWVzdBojLm9jcC5kYXRhLnYxLkRvd25sb2FkT2JqZWN0UmVzcG9uc2USPwoJR2V0T2JqZWN0Eh0ub2NwLmRhdGEudjEuR2V0T2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJFCgxMb29rdXBPYmplY3QSIC5vY3AuZGF0YS52MS5Mb29rdXBPYmplY3RSZXF1ZXN0GhMub2NwLmRhdGEudjEuT2JqZWN0EkUKDFVwZGF0ZU9iamVjdBIgLm9jcC5kYXRhLnYxLlVwZGF0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSSQoOQ29tcGxldGVPYmplY3QSIi5vY3AuZGF0YS52MS5Db21wbGV0ZU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUwoMRGVsZXRlT2JqZWN0EiAub2NwLmRhdGEudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBohLm9jcC5kYXRhLnYxLkRlbGV0ZU9iamVjdFJlc3BvbnNlEkcKDVJlc3RvcmVPYmplY3QSIS5vY3AuZGF0YS52MS5SZXN0b3JlT2JqZWN0UmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJBCgpDb3B5T2JqZWN0Eh4ub2NwLmRhdGEudjEuQ29weU9iamVjdFJlcXVlc3QaEy5vY3AuZGF0YS52MS5PYmplY3QSUAoLTGlzdE9iamVjdHMSHy5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1JlcXVlc3QaIC5vY3AuZGF0YS52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlElMKDENvdW50T2JqZWN0cxIgLm9jcC5kYXRhLnYxLkNvdW50T2JqZWN0c1JlcXVlc3QaIS5vY3AuZGF0YS52MS5Db3VudE9iamVjdHNSZXNwb25zZRJlChJMaXN0T2JqZWN0VmVyc2lvbnMSJi5vY3AuZGF0YS52MS5MaXN0T2JqZWN0VmVyc2lvbnNSZXF1ZXN0Gicub2NwLmRhdGEudjEuTGlzdE9iamVjdFZlcnNpb25zUmVzcG9uc2USVAoQR2V0T2JqZWN0VmVyc2lvbhIkLm9jcC5kYXRhLnYxLkdldE9iamVjdFZlcnNpb25SZXF1ZXN0Ghoub2NwLmRhdGEudjEuT2JqZWN0VmVyc2lvbhJVChRSZXN0b3JlT2JqZWN0VmVyc2lvbhIoLm9jcC5kYXRhLnYxLlJlc3RvcmVPYmplY3RWZXJzaW9uUmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdEJQWk5naXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvZGF0YS92MTtvY3BkYXRhdjFiBnByb3RvMw",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_duration,
+      file_google_protobuf_field_mask,
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_pagination,
+      file_paladin_common_v1_resource,
+      file_paladin_data_v1_types,
+    ],
+  );
 
 /**
  * @generated from message paladin.data.v1.ObjectVersion
@@ -102,94 +141,103 @@ export type ObjectVersion = Message<"paladin.data.v1.ObjectVersion"> & {
  * Describes the message paladin.data.v1.ObjectVersion.
  * Use `create(ObjectVersionSchema)` to create a new message.
  */
-export const ObjectVersionSchema: GenMessage<ObjectVersion> = /*@__PURE__*/
+export const ObjectVersionSchema: GenMessage<ObjectVersion> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 0);
 
 /**
  * @generated from message paladin.data.v1.ListObjectVersionsRequest
  */
-export type ListObjectVersionsRequest = Message<"paladin.data.v1.ListObjectVersionsRequest"> & {
-  /**
-   * Object resource name (parent of the versions collection).
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type ListObjectVersionsRequest =
+  Message<"paladin.data.v1.ListObjectVersionsRequest"> & {
+    /**
+     * Object resource name (parent of the versions collection).
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 2;
-   */
-  page?: PageRequest | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.ListObjectVersionsRequest.
  * Use `create(ListObjectVersionsRequestSchema)` to create a new message.
  */
-export const ListObjectVersionsRequestSchema: GenMessage<ListObjectVersionsRequest> = /*@__PURE__*/
+export const ListObjectVersionsRequestSchema: GenMessage<ListObjectVersionsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 1);
 
 /**
  * @generated from message paladin.data.v1.ListObjectVersionsResponse
  */
-export type ListObjectVersionsResponse = Message<"paladin.data.v1.ListObjectVersionsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.data.v1.ObjectVersion versions = 1;
-   */
-  versions: ObjectVersion[];
+export type ListObjectVersionsResponse =
+  Message<"paladin.data.v1.ListObjectVersionsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.data.v1.ObjectVersion versions = 1;
+     */
+    versions: ObjectVersion[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.ListObjectVersionsResponse.
  * Use `create(ListObjectVersionsResponseSchema)` to create a new message.
  */
-export const ListObjectVersionsResponseSchema: GenMessage<ListObjectVersionsResponse> = /*@__PURE__*/
+export const ListObjectVersionsResponseSchema: GenMessage<ListObjectVersionsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 2);
 
 /**
  * @generated from message paladin.data.v1.GetObjectVersionRequest
  */
-export type GetObjectVersionRequest = Message<"paladin.data.v1.GetObjectVersionRequest"> & {
-  /**
-   * Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
-   *
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type GetObjectVersionRequest =
+  Message<"paladin.data.v1.GetObjectVersionRequest"> & {
+    /**
+     * Resource name: "tenants/{tenant_id_or_slug}/objectKeys/{ok}/objects/{id}/versions/{ver}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.GetObjectVersionRequest.
  * Use `create(GetObjectVersionRequestSchema)` to create a new message.
  */
-export const GetObjectVersionRequestSchema: GenMessage<GetObjectVersionRequest> = /*@__PURE__*/
+export const GetObjectVersionRequestSchema: GenMessage<GetObjectVersionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 3);
 
 /**
  * @generated from message paladin.data.v1.RestoreObjectVersionRequest
  */
-export type RestoreObjectVersionRequest = Message<"paladin.data.v1.RestoreObjectVersionRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type RestoreObjectVersionRequest =
+  Message<"paladin.data.v1.RestoreObjectVersionRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
-};
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.RestoreObjectVersionRequest.
  * Use `create(RestoreObjectVersionRequestSchema)` to create a new message.
  */
-export const RestoreObjectVersionRequestSchema: GenMessage<RestoreObjectVersionRequest> = /*@__PURE__*/
+export const RestoreObjectVersionRequestSchema: GenMessage<RestoreObjectVersionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 4);
 
 /**
@@ -264,83 +312,90 @@ export type UploadObjectRequest = Message<"paladin.data.v1.UploadObjectRequest">
  * Describes the message paladin.data.v1.UploadObjectRequest.
  * Use `create(UploadObjectRequestSchema)` to create a new message.
  */
-export const UploadObjectRequestSchema: GenMessage<UploadObjectRequest> = /*@__PURE__*/
+export const UploadObjectRequestSchema: GenMessage<UploadObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 5);
 
 /**
  * @generated from message paladin.data.v1.UploadObjectResponse
  */
-export type UploadObjectResponse = Message<"paladin.data.v1.UploadObjectResponse"> & {
-  /**
-   * @generated from field: paladin.data.v1.Object object = 1;
-   */
-  object?: Object$ | undefined;
+export type UploadObjectResponse =
+  Message<"paladin.data.v1.UploadObjectResponse"> & {
+    /**
+     * @generated from field: paladin.data.v1.Object object = 1;
+     */
+    object?: Object$ | undefined;
 
-  /**
-   * @generated from field: paladin.common.v1.PresignedUrl upload_url = 2;
-   */
-  uploadUrl?: PresignedUrl | undefined;
+    /**
+     * @generated from field: paladin.common.v1.PresignedUrl upload_url = 2;
+     */
+    uploadUrl?: PresignedUrl | undefined;
 
-  /**
-   * @generated from field: paladin.common.v1.CompletionMode completion_mode = 3;
-   */
-  completionMode: CompletionMode;
-};
+    /**
+     * @generated from field: paladin.common.v1.CompletionMode completion_mode = 3;
+     */
+    completionMode: CompletionMode;
+  };
 
 /**
  * Describes the message paladin.data.v1.UploadObjectResponse.
  * Use `create(UploadObjectResponseSchema)` to create a new message.
  */
-export const UploadObjectResponseSchema: GenMessage<UploadObjectResponse> = /*@__PURE__*/
+export const UploadObjectResponseSchema: GenMessage<UploadObjectResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 6);
 
 /**
  * @generated from message paladin.data.v1.DownloadObjectRequest
  */
-export type DownloadObjectRequest = Message<"paladin.data.v1.DownloadObjectRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DownloadObjectRequest =
+  Message<"paladin.data.v1.DownloadObjectRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: google.protobuf.Duration ttl = 2;
-   */
-  ttl?: Duration | undefined;
+    /**
+     * @generated from field: google.protobuf.Duration ttl = 2;
+     */
+    ttl?: Duration | undefined;
 
-  /**
-   * @generated from field: string content_disposition = 3;
-   */
-  contentDisposition: string;
-};
+    /**
+     * @generated from field: string content_disposition = 3;
+     */
+    contentDisposition: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.DownloadObjectRequest.
  * Use `create(DownloadObjectRequestSchema)` to create a new message.
  */
-export const DownloadObjectRequestSchema: GenMessage<DownloadObjectRequest> = /*@__PURE__*/
+export const DownloadObjectRequestSchema: GenMessage<DownloadObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 7);
 
 /**
  * @generated from message paladin.data.v1.DownloadObjectResponse
  */
-export type DownloadObjectResponse = Message<"paladin.data.v1.DownloadObjectResponse"> & {
-  /**
-   * @generated from field: paladin.data.v1.Object object = 1;
-   */
-  object?: Object$ | undefined;
+export type DownloadObjectResponse =
+  Message<"paladin.data.v1.DownloadObjectResponse"> & {
+    /**
+     * @generated from field: paladin.data.v1.Object object = 1;
+     */
+    object?: Object$ | undefined;
 
-  /**
-   * @generated from field: paladin.common.v1.PresignedUrl download_url = 2;
-   */
-  downloadUrl?: PresignedUrl | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PresignedUrl download_url = 2;
+     */
+    downloadUrl?: PresignedUrl | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.DownloadObjectResponse.
  * Use `create(DownloadObjectResponseSchema)` to create a new message.
  */
-export const DownloadObjectResponseSchema: GenMessage<DownloadObjectResponse> = /*@__PURE__*/
+export const DownloadObjectResponseSchema: GenMessage<DownloadObjectResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 8);
 
 /**
@@ -357,7 +412,8 @@ export type GetObjectRequest = Message<"paladin.data.v1.GetObjectRequest"> & {
  * Describes the message paladin.data.v1.GetObjectRequest.
  * Use `create(GetObjectRequestSchema)` to create a new message.
  */
-export const GetObjectRequestSchema: GenMessage<GetObjectRequest> = /*@__PURE__*/
+export const GetObjectRequestSchema: GenMessage<GetObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 9);
 
 /**
@@ -381,7 +437,8 @@ export type LookupObjectRequest = Message<"paladin.data.v1.LookupObjectRequest">
  * Describes the message paladin.data.v1.LookupObjectRequest.
  * Use `create(LookupObjectRequestSchema)` to create a new message.
  */
-export const LookupObjectRequestSchema: GenMessage<LookupObjectRequest> = /*@__PURE__*/
+export const LookupObjectRequestSchema: GenMessage<LookupObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 10);
 
 /**
@@ -428,34 +485,37 @@ export type UpdateObjectRequest = Message<"paladin.data.v1.UpdateObjectRequest">
  * Describes the message paladin.data.v1.UpdateObjectRequest.
  * Use `create(UpdateObjectRequestSchema)` to create a new message.
  */
-export const UpdateObjectRequestSchema: GenMessage<UpdateObjectRequest> = /*@__PURE__*/
+export const UpdateObjectRequestSchema: GenMessage<UpdateObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 11);
 
 /**
  * @generated from message paladin.data.v1.CompleteObjectRequest
  */
-export type CompleteObjectRequest = Message<"paladin.data.v1.CompleteObjectRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type CompleteObjectRequest =
+  Message<"paladin.data.v1.CompleteObjectRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string etag = 2;
-   */
-  etag: string;
+    /**
+     * @generated from field: string etag = 2;
+     */
+    etag: string;
 
-  /**
-   * @generated from field: string checksum_value = 3;
-   */
-  checksumValue: string;
-};
+    /**
+     * @generated from field: string checksum_value = 3;
+     */
+    checksumValue: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.CompleteObjectRequest.
  * Use `create(CompleteObjectRequestSchema)` to create a new message.
  */
-export const CompleteObjectRequestSchema: GenMessage<CompleteObjectRequest> = /*@__PURE__*/
+export const CompleteObjectRequestSchema: GenMessage<CompleteObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 12);
 
 /**
@@ -493,49 +553,54 @@ export type DeleteObjectRequest = Message<"paladin.data.v1.DeleteObjectRequest">
  * Describes the message paladin.data.v1.DeleteObjectRequest.
  * Use `create(DeleteObjectRequestSchema)` to create a new message.
  */
-export const DeleteObjectRequestSchema: GenMessage<DeleteObjectRequest> = /*@__PURE__*/
+export const DeleteObjectRequestSchema: GenMessage<DeleteObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 13);
 
 /**
  * @generated from message paladin.data.v1.DeleteObjectResponse
  */
-export type DeleteObjectResponse = Message<"paladin.data.v1.DeleteObjectResponse"> & {
-  /**
-   * @generated from field: paladin.data.v1.Object object = 1;
-   */
-  object?: Object$ | undefined;
-};
+export type DeleteObjectResponse =
+  Message<"paladin.data.v1.DeleteObjectResponse"> & {
+    /**
+     * @generated from field: paladin.data.v1.Object object = 1;
+     */
+    object?: Object$ | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.DeleteObjectResponse.
  * Use `create(DeleteObjectResponseSchema)` to create a new message.
  */
-export const DeleteObjectResponseSchema: GenMessage<DeleteObjectResponse> = /*@__PURE__*/
+export const DeleteObjectResponseSchema: GenMessage<DeleteObjectResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 14);
 
 /**
  * @generated from message paladin.data.v1.RestoreObjectRequest
  */
-export type RestoreObjectRequest = Message<"paladin.data.v1.RestoreObjectRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type RestoreObjectRequest =
+  Message<"paladin.data.v1.RestoreObjectRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * OCC guard. Empty disables the check (legacy callers); v2 SDKs are
-   * expected to read it from a prior GetObject and pass it back unchanged.
-   *
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
-};
+    /**
+     * OCC guard. Empty disables the check (legacy callers); v2 SDKs are
+     * expected to read it from a prior GetObject and pass it back unchanged.
+     *
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.RestoreObjectRequest.
  * Use `create(RestoreObjectRequestSchema)` to create a new message.
  */
-export const RestoreObjectRequestSchema: GenMessage<RestoreObjectRequest> = /*@__PURE__*/
+export const RestoreObjectRequestSchema: GenMessage<RestoreObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 15);
 
 /**
@@ -574,7 +639,8 @@ export type CopyObjectRequest = Message<"paladin.data.v1.CopyObjectRequest"> & {
  * Describes the message paladin.data.v1.CopyObjectRequest.
  * Use `create(CopyObjectRequestSchema)` to create a new message.
  */
-export const CopyObjectRequestSchema: GenMessage<CopyObjectRequest> = /*@__PURE__*/
+export const CopyObjectRequestSchema: GenMessage<CopyObjectRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 16);
 
 /**
@@ -591,7 +657,8 @@ export type MetadataOverride = Message<"paladin.data.v1.MetadataOverride"> & {
  * Describes the message paladin.data.v1.MetadataOverride.
  * Use `create(MetadataOverrideSchema)` to create a new message.
  */
-export const MetadataOverrideSchema: GenMessage<MetadataOverride> = /*@__PURE__*/
+export const MetadataOverrideSchema: GenMessage<MetadataOverride> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 17);
 
 /**
@@ -608,7 +675,8 @@ export type TagsOverride = Message<"paladin.data.v1.TagsOverride"> & {
  * Describes the message paladin.data.v1.TagsOverride.
  * Use `create(TagsOverrideSchema)` to create a new message.
  */
-export const TagsOverrideSchema: GenMessage<TagsOverride> = /*@__PURE__*/
+export const TagsOverrideSchema: GenMessage<TagsOverride> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 18);
 
 /**
@@ -647,7 +715,8 @@ export type ListObjectsRequest = Message<"paladin.data.v1.ListObjectsRequest"> &
  * Describes the message paladin.data.v1.ListObjectsRequest.
  * Use `create(ListObjectsRequestSchema)` to create a new message.
  */
-export const ListObjectsRequestSchema: GenMessage<ListObjectsRequest> = /*@__PURE__*/
+export const ListObjectsRequestSchema: GenMessage<ListObjectsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 19);
 
 /**
@@ -669,7 +738,8 @@ export type ListObjectsResponse = Message<"paladin.data.v1.ListObjectsResponse">
  * Describes the message paladin.data.v1.ListObjectsResponse.
  * Use `create(ListObjectsResponseSchema)` to create a new message.
  */
-export const ListObjectsResponseSchema: GenMessage<ListObjectsResponse> = /*@__PURE__*/
+export const ListObjectsResponseSchema: GenMessage<ListObjectsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 20);
 
 /**
@@ -691,29 +761,32 @@ export type CountObjectsRequest = Message<"paladin.data.v1.CountObjectsRequest">
  * Describes the message paladin.data.v1.CountObjectsRequest.
  * Use `create(CountObjectsRequestSchema)` to create a new message.
  */
-export const CountObjectsRequestSchema: GenMessage<CountObjectsRequest> = /*@__PURE__*/
+export const CountObjectsRequestSchema: GenMessage<CountObjectsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 21);
 
 /**
  * @generated from message paladin.data.v1.CountObjectsResponse
  */
-export type CountObjectsResponse = Message<"paladin.data.v1.CountObjectsResponse"> & {
-  /**
-   * @generated from field: int64 approximate_count = 1;
-   */
-  approximateCount: bigint;
+export type CountObjectsResponse =
+  Message<"paladin.data.v1.CountObjectsResponse"> & {
+    /**
+     * @generated from field: int64 approximate_count = 1;
+     */
+    approximateCount: bigint;
 
-  /**
-   * @generated from field: bool exact = 2;
-   */
-  exact: boolean;
-};
+    /**
+     * @generated from field: bool exact = 2;
+     */
+    exact: boolean;
+  };
 
 /**
  * Describes the message paladin.data.v1.CountObjectsResponse.
  * Use `create(CountObjectsResponseSchema)` to create a new message.
  */
-export const CountObjectsResponseSchema: GenMessage<CountObjectsResponse> = /*@__PURE__*/
+export const CountObjectsResponseSchema: GenMessage<CountObjectsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_object_service, 22);
 
 /**
@@ -739,7 +812,8 @@ export enum PresignTransport {
 /**
  * Describes the enum paladin.data.v1.PresignTransport.
  */
-export const PresignTransportSchema: GenEnum<PresignTransport> = /*@__PURE__*/
+export const PresignTransportSchema: GenEnum<PresignTransport> =
+  /*@__PURE__*/
   enumDesc(file_paladin_data_v1_object_service, 0);
 
 /**
@@ -757,7 +831,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof UploadObjectRequestSchema;
     output: typeof UploadObjectResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.DownloadObject
    */
@@ -765,7 +839,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof DownloadObjectRequestSchema;
     output: typeof DownloadObjectResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.GetObject
    */
@@ -773,7 +847,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof GetObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * LookupObject resolves an Object by (object_key, key) instead of object_id.
    *
@@ -783,7 +857,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof LookupObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.UpdateObject
    */
@@ -791,7 +865,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof UpdateObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * CompleteObject is no-op for IMPLICIT completion mode and the event has
    * already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
@@ -802,7 +876,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof CompleteObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.DeleteObject
    */
@@ -810,7 +884,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof DeleteObjectRequestSchema;
     output: typeof DeleteObjectResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.RestoreObject
    */
@@ -818,7 +892,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof RestoreObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.CopyObject
    */
@@ -826,7 +900,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof CopyObjectRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.ListObjects
    */
@@ -834,7 +908,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof ListObjectsRequestSchema;
     output: typeof ListObjectsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectService.CountObjects
    */
@@ -842,7 +916,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof CountObjectsRequestSchema;
     output: typeof CountObjectsResponseSchema;
-  },
+  };
   /**
    * ─── Versioning (opt-in per bucket) ──────────────────────────────────────
    * ListObjectVersions returns the immutable history of an object. Empty
@@ -854,7 +928,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof ListObjectVersionsRequestSchema;
     output: typeof ListObjectVersionsResponseSchema;
-  },
+  };
   /**
    * GetObjectVersion fetches metadata for a specific version.
    *
@@ -864,7 +938,7 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof GetObjectVersionRequestSchema;
     output: typeof ObjectVersionSchema;
-  },
+  };
   /**
    * RestoreObjectVersion makes the named version `current` again. The
    * current version becomes a non-current entry preserving lock state.
@@ -875,7 +949,5 @@ export const ObjectService: GenService<{
     methodKind: "unary";
     input: typeof RestoreObjectVersionRequestSchema;
     output: typeof ObjectSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_data_v1_object_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_object_service, 0);

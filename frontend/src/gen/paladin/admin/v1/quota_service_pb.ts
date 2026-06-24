@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/quota_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
@@ -14,8 +22,16 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/quota_service.proto.
  */
-export const file_paladin_admin_v1_quota_service: GenFile = /*@__PURE__*/
-  fileDesc("CiBvY3AvYWRtaW4vdjEvcXVvdGFfc2VydmljZS5wcm90bxIMb2NwLmFkbWluLnYxIigKD0dldFF1b3RhUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqcBCg9TZXRRdW90YVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEioKBXF1b3RhGAQgASgLMhMub2NwLmFkbWluLnYxLlF1b3RhQga6SAPIAQEiKgoRUmVzZXRVc2FnZVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATLSAQoMUXVvdGFTZXJ2aWNlEj4KCEdldFF1b3RhEh0ub2NwLmFkbWluLnYxLkdldFF1b3RhUmVxdWVzdBoTLm9jcC5hZG1pbi52MS5RdW90YRI+CghTZXRRdW90YRIdLm9jcC5hZG1pbi52MS5TZXRRdW90YVJlcXVlc3QaEy5vY3AuYWRtaW4udjEuUXVvdGESQgoKUmVzZXRVc2FnZRIfLm9jcC5hZG1pbi52MS5SZXNldFVzYWdlUmVxdWVzdBoTLm9jcC5hZG1pbi52MS5RdW90YUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_admin_v1_types]);
+export const file_paladin_admin_v1_quota_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiBvY3AvYWRtaW4vdjEvcXVvdGFfc2VydmljZS5wcm90bxIMb2NwLmFkbWluLnYxIigKD0dldFF1b3RhUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqcBCg9TZXRRdW90YVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEioKBXF1b3RhGAQgASgLMhMub2NwLmFkbWluLnYxLlF1b3RhQga6SAPIAQEiKgoRUmVzZXRVc2FnZVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATLSAQoMUXVvdGFTZXJ2aWNlEj4KCEdldFF1b3RhEh0ub2NwLmFkbWluLnYxLkdldFF1b3RhUmVxdWVzdBoTLm9jcC5hZG1pbi52MS5RdW90YRI+CghTZXRRdW90YRIdLm9jcC5hZG1pbi52MS5TZXRRdW90YVJlcXVlc3QaEy5vY3AuYWRtaW4udjEuUXVvdGESQgoKUmVzZXRVc2FnZRIfLm9jcC5hZG1pbi52MS5SZXNldFVzYWdlUmVxdWVzdBoTLm9jcC5hZG1pbi52MS5RdW90YUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_admin_v1_types,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.GetQuotaRequest
@@ -33,7 +49,8 @@ export type GetQuotaRequest = Message<"paladin.admin.v1.GetQuotaRequest"> & {
  * Describes the message paladin.admin.v1.GetQuotaRequest.
  * Use `create(GetQuotaRequestSchema)` to create a new message.
  */
-export const GetQuotaRequestSchema: GenMessage<GetQuotaRequest> = /*@__PURE__*/
+export const GetQuotaRequestSchema: GenMessage<GetQuotaRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_quota_service, 0);
 
 /**
@@ -65,7 +82,8 @@ export type SetQuotaRequest = Message<"paladin.admin.v1.SetQuotaRequest"> & {
  * Describes the message paladin.admin.v1.SetQuotaRequest.
  * Use `create(SetQuotaRequestSchema)` to create a new message.
  */
-export const SetQuotaRequestSchema: GenMessage<SetQuotaRequest> = /*@__PURE__*/
+export const SetQuotaRequestSchema: GenMessage<SetQuotaRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_quota_service, 1);
 
 /**
@@ -85,7 +103,8 @@ export type ResetUsageRequest = Message<"paladin.admin.v1.ResetUsageRequest"> & 
  * Describes the message paladin.admin.v1.ResetUsageRequest.
  * Use `create(ResetUsageRequestSchema)` to create a new message.
  */
-export const ResetUsageRequestSchema: GenMessage<ResetUsageRequest> = /*@__PURE__*/
+export const ResetUsageRequestSchema: GenMessage<ResetUsageRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_quota_service, 2);
 
 /**
@@ -102,7 +121,7 @@ export const QuotaService: GenService<{
     methodKind: "unary";
     input: typeof GetQuotaRequestSchema;
     output: typeof QuotaSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.QuotaService.SetQuota
    */
@@ -110,7 +129,7 @@ export const QuotaService: GenService<{
     methodKind: "unary";
     input: typeof SetQuotaRequestSchema;
     output: typeof QuotaSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.QuotaService.ResetUsage
    */
@@ -118,7 +137,5 @@ export const QuotaService: GenService<{
     methodKind: "unary";
     input: typeof ResetUsageRequestSchema;
     output: typeof QuotaSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_quota_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_quota_service, 0);

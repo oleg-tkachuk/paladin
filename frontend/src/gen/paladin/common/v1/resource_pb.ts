@@ -2,15 +2,22 @@
 // @generated from file paladin/common/v1/resource.proto (package paladin.common.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/common/v1/resource.proto.
  */
-export const file_paladin_common_v1_resource: GenFile = /*@__PURE__*/
-  fileDesc("ChxvY3AvY29tbW9uL3YxL3Jlc291cmNlLnByb3RvEg1vY3AuY29tbW9uLnYxIoQCCgxQcmVzaWduZWRVcmwSCwoDdXJsGAEgASgJEg4KBm1ldGhvZBgCIAEoCRJKChByZXF1aXJlZF9oZWFkZXJzGAMgAygLMjAub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwuUmVxdWlyZWRIZWFkZXJzRW50cnkSNwoLcG9zdF9wb2xpY3kYBCABKAsyIi5vY3AuY29tbW9uLnYxLlByZXNpZ25lZFBvc3RQb2xpY3kSGgoSZXhwaXJlc19hdF9yZmMzMzM5GAUgASgJGjYKFFJlcXVpcmVkSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEilAEKE1ByZXNpZ25lZFBvc3RQb2xpY3kSPgoGZmllbGRzGAEgAygLMi4ub2NwLmNvbW1vbi52MS5QcmVzaWduZWRQb3N0UG9saWN5LkZpZWxkc0VudHJ5Eg4KBmFjdGlvbhgCIAEoCRotCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKm0KDkNvbXBsZXRpb25Nb2RlEh8KG0NPTVBMRVRJT05fTU9ERV9VTlNQRUNJRklFRBAAEhwKGENPTVBMRVRJT05fTU9ERV9JTVBMSUNJVBABEhwKGENPTVBMRVRJT05fTU9ERV9FWFBMSUNJVBACKpEBChFDaGVja3N1bUFsZ29yaXRobRIiCh5DSEVDS1NVTV9BTEdPUklUSE1fVU5TUEVDSUZJRUQQABIdChlDSEVDS1NVTV9BTEdPUklUSE1fQ1JDMzJDEAESHQoZQ0hFQ0tTVU1fQUxHT1JJVEhNX1NIQTI1NhACEhoKFkNIRUNLU1VNX0FMR09SSVRITV9NRDUQA0JUWlJnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvY29tbW9uL3YxO29jcGNvbW1vbnYxYgZwcm90bzM");
+export const file_paladin_common_v1_resource: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChxvY3AvY29tbW9uL3YxL3Jlc291cmNlLnByb3RvEg1vY3AuY29tbW9uLnYxIoQCCgxQcmVzaWduZWRVcmwSCwoDdXJsGAEgASgJEg4KBm1ldGhvZBgCIAEoCRJKChByZXF1aXJlZF9oZWFkZXJzGAMgAygLMjAub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwuUmVxdWlyZWRIZWFkZXJzRW50cnkSNwoLcG9zdF9wb2xpY3kYBCABKAsyIi5vY3AuY29tbW9uLnYxLlByZXNpZ25lZFBvc3RQb2xpY3kSGgoSZXhwaXJlc19hdF9yZmMzMzM5GAUgASgJGjYKFFJlcXVpcmVkSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEilAEKE1ByZXNpZ25lZFBvc3RQb2xpY3kSPgoGZmllbGRzGAEgAygLMi4ub2NwLmNvbW1vbi52MS5QcmVzaWduZWRQb3N0UG9saWN5LkZpZWxkc0VudHJ5Eg4KBmFjdGlvbhgCIAEoCRotCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBKm0KDkNvbXBsZXRpb25Nb2RlEh8KG0NPTVBMRVRJT05fTU9ERV9VTlNQRUNJRklFRBAAEhwKGENPTVBMRVRJT05fTU9ERV9JTVBMSUNJVBABEhwKGENPTVBMRVRJT05fTU9ERV9FWFBMSUNJVBACKpEBChFDaGVja3N1bUFsZ29yaXRobRIiCh5DSEVDS1NVTV9BTEdPUklUSE1fVU5TUEVDSUZJRUQQABIdChlDSEVDS1NVTV9BTEdPUklUSE1fQ1JDMzJDEAESHQoZQ0hFQ0tTVU1fQUxHT1JJVEhNX1NIQTI1NhACEhoKFkNIRUNLU1VNX0FMR09SSVRITV9NRDUQA0JUWlJnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvY29tbW9uL3YxO29jcGNvbW1vbnYxYgZwcm90bzM",
+  );
 
 /**
  * PresignedUrl: time-limited URL the client uses to talk to the storage
@@ -58,33 +65,36 @@ export type PresignedUrl = Message<"paladin.common.v1.PresignedUrl"> & {
  * Describes the message paladin.common.v1.PresignedUrl.
  * Use `create(PresignedUrlSchema)` to create a new message.
  */
-export const PresignedUrlSchema: GenMessage<PresignedUrl> = /*@__PURE__*/
+export const PresignedUrlSchema: GenMessage<PresignedUrl> =
+  /*@__PURE__*/
   messageDesc(file_paladin_common_v1_resource, 0);
 
 /**
  * @generated from message paladin.common.v1.PresignedPostPolicy
  */
-export type PresignedPostPolicy = Message<"paladin.common.v1.PresignedPostPolicy"> & {
-  /**
-   * S3 form fields the client must submit verbatim.
-   *
-   * @generated from field: map<string, string> fields = 1;
-   */
-  fields: { [key: string]: string };
+export type PresignedPostPolicy =
+  Message<"paladin.common.v1.PresignedPostPolicy"> & {
+    /**
+     * S3 form fields the client must submit verbatim.
+     *
+     * @generated from field: map<string, string> fields = 1;
+     */
+    fields: { [key: string]: string };
 
-  /**
-   * POST action URL (the bucket endpoint).
-   *
-   * @generated from field: string action = 2;
-   */
-  action: string;
-};
+    /**
+     * POST action URL (the bucket endpoint).
+     *
+     * @generated from field: string action = 2;
+     */
+    action: string;
+  };
 
 /**
  * Describes the message paladin.common.v1.PresignedPostPolicy.
  * Use `create(PresignedPostPolicySchema)` to create a new message.
  */
-export const PresignedPostPolicySchema: GenMessage<PresignedPostPolicy> = /*@__PURE__*/
+export const PresignedPostPolicySchema: GenMessage<PresignedPostPolicy> =
+  /*@__PURE__*/
   messageDesc(file_paladin_common_v1_resource, 1);
 
 /**
@@ -118,7 +128,8 @@ export enum CompletionMode {
 /**
  * Describes the enum paladin.common.v1.CompletionMode.
  */
-export const CompletionModeSchema: GenEnum<CompletionMode> = /*@__PURE__*/
+export const CompletionModeSchema: GenEnum<CompletionMode> =
+  /*@__PURE__*/
   enumDesc(file_paladin_common_v1_resource, 0);
 
 /**
@@ -152,6 +163,6 @@ export enum ChecksumAlgorithm {
 /**
  * Describes the enum paladin.common.v1.ChecksumAlgorithm.
  */
-export const ChecksumAlgorithmSchema: GenEnum<ChecksumAlgorithm> = /*@__PURE__*/
+export const ChecksumAlgorithmSchema: GenEnum<ChecksumAlgorithm> =
+  /*@__PURE__*/
   enumDesc(file_paladin_common_v1_resource, 1);
-

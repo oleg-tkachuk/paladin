@@ -2,114 +2,144 @@
 // @generated from file paladin/data/v1/multipart_service.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
-import type { ChecksumAlgorithm, PresignedUrl } from "../../common/v1/resource_pb";
+import type {
+  ChecksumAlgorithm,
+  PresignedUrl,
+} from "../../common/v1/resource_pb";
 import { file_paladin_common_v1_resource } from "../../common/v1/resource_pb";
-import type { CompletedPart, Object$, ObjectSchema, PartInfo } from "./types_pb";
+import type {
+  CompletedPart,
+  Object$,
+  ObjectSchema,
+  PartInfo,
+} from "./types_pb";
 import { file_paladin_data_v1_types } from "./types_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/data/v1/multipart_service.proto.
  */
-export const file_paladin_data_v1_multipart_service: GenFile = /*@__PURE__*/
-  fileDesc("CiNvY3AvZGF0YS92MS9tdWx0aXBhcnRfc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEi6wMKHkluaXRpYXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESCwoDa2V5GAIgASgJEh0KDGNvbnRlbnRfdHlwZRgDIAEoCUIHukgEcgIQARIbCgpzaXplX2J5dGVzGAQgASgDQge6SAQiAiAAEkgKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIgLm9jcC5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCrpIB4IBBBABIAASSwoIbWV0YWRhdGEYBiADKAsyOS5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlcXVlc3QuTWV0YWRhdGFFbnRyeRJDCgR0YWdzGAcgAygLMjUub2NwLmRhdGEudjEuSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWRSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSFwoPaWRlbXBvdGVuY3lfa2V5GAkgASgJGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKNAQofSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWRSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSEQoJdXBsb2FkX2lkGAIgASgJEh0KFXJlY29tbWVuZGVkX3BhcnRfc2l6ZRgDIAEoAxITCgt0b3RhbF9wYXJ0cxgEIAEoBSKXAQoSUHJlc2lnblBhcnRSZXF1ZXN0EhwKC29iamVjdF9uYW1lGAEgASgJQge6SARyAhABEhoKCXVwbG9hZF9pZBgCIAEoCUIHukgEcgIQARIfCgtwYXJ0X251bWJlchgDIAEoBUIKukgHGgUYkE4oARImCgN0dGwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iRgoTUHJlc2lnblBhcnRSZXNwb25zZRIvCgp1cGxvYWRfdXJsGAEgASgLMhsub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwijwEKHkNvbXBsZXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBIcCgtvYmplY3RfbmFtZRgBIAEoCUIHukgEcgIQARIaCgl1cGxvYWRfaWQYAiABKAlCB7pIBHICEAESMwoFcGFydHMYAyADKAsyGi5vY3AuZGF0YS52MS5Db21wbGV0ZWRQYXJ0Qgi6SAWSAQIIASJXChtBYm9ydE11bHRpcGFydFVwbG9hZFJlcXVlc3QSHAoLb2JqZWN0X25hbWUYASABKAlCB7pIBHICEAESGgoJdXBsb2FkX2lkGAIgASgJQge6SARyAhABIh4KHEFib3J0TXVsdGlwYXJ0VXBsb2FkUmVzcG9uc2UidgoQTGlzdFBhcnRzUmVxdWVzdBIcCgtvYmplY3RfbmFtZRgBIAEoCUIHukgEcgIQARIaCgl1cGxvYWRfaWQYAiABKAlCB7pIBHICEAESKAoEcGFnZRgDIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QiZAoRTGlzdFBhcnRzUmVzcG9uc2USJAoFcGFydHMYASADKAsyFS5vY3AuZGF0YS52MS5QYXJ0SW5mbxIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2Uy9gMKFk11bHRpcGFydFVwbG9hZFNlcnZpY2USdAoXSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWQSKy5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlcXVlc3QaLC5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlc3BvbnNlElAKC1ByZXNpZ25QYXJ0Eh8ub2NwLmRhdGEudjEuUHJlc2lnblBhcnRSZXF1ZXN0GiAub2NwLmRhdGEudjEuUHJlc2lnblBhcnRSZXNwb25zZRJbChdDb21wbGV0ZU11bHRpcGFydFVwbG9hZBIrLm9jcC5kYXRhLnYxLkNvbXBsZXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJrChRBYm9ydE11bHRpcGFydFVwbG9hZBIoLm9jcC5kYXRhLnYxLkFib3J0TXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBopLm9jcC5kYXRhLnYxLkFib3J0TXVsdGlwYXJ0VXBsb2FkUmVzcG9uc2USSgoJTGlzdFBhcnRzEh0ub2NwLmRhdGEudjEuTGlzdFBhcnRzUmVxdWVzdBoeLm9jcC5kYXRhLnYxLkxpc3RQYXJ0c1Jlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_paladin_common_v1_pagination, file_paladin_common_v1_resource, file_paladin_data_v1_types]);
+export const file_paladin_data_v1_multipart_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiNvY3AvZGF0YS92MS9tdWx0aXBhcnRfc2VydmljZS5wcm90bxILb2NwLmRhdGEudjEi6wMKHkluaXRpYXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESCwoDa2V5GAIgASgJEh0KDGNvbnRlbnRfdHlwZRgDIAEoCUIHukgEcgIQARIbCgpzaXplX2J5dGVzGAQgASgDQge6SAQiAiAAEkgKEmNoZWNrc3VtX2FsZ29yaXRobRgFIAEoDjIgLm9jcC5jb21tb24udjEuQ2hlY2tzdW1BbGdvcml0aG1CCrpIB4IBBBABIAASSwoIbWV0YWRhdGEYBiADKAsyOS5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlcXVlc3QuTWV0YWRhdGFFbnRyeRJDCgR0YWdzGAcgAygLMjUub2NwLmRhdGEudjEuSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWRSZXF1ZXN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYCCABKAkSFwoPaWRlbXBvdGVuY3lfa2V5GAkgASgJGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKNAQofSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWRSZXNwb25zZRIjCgZvYmplY3QYASABKAsyEy5vY3AuZGF0YS52MS5PYmplY3QSEQoJdXBsb2FkX2lkGAIgASgJEh0KFXJlY29tbWVuZGVkX3BhcnRfc2l6ZRgDIAEoAxITCgt0b3RhbF9wYXJ0cxgEIAEoBSKXAQoSUHJlc2lnblBhcnRSZXF1ZXN0EhwKC29iamVjdF9uYW1lGAEgASgJQge6SARyAhABEhoKCXVwbG9hZF9pZBgCIAEoCUIHukgEcgIQARIfCgtwYXJ0X251bWJlchgDIAEoBUIKukgHGgUYkE4oARImCgN0dGwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iRgoTUHJlc2lnblBhcnRSZXNwb25zZRIvCgp1cGxvYWRfdXJsGAEgASgLMhsub2NwLmNvbW1vbi52MS5QcmVzaWduZWRVcmwijwEKHkNvbXBsZXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBIcCgtvYmplY3RfbmFtZRgBIAEoCUIHukgEcgIQARIaCgl1cGxvYWRfaWQYAiABKAlCB7pIBHICEAESMwoFcGFydHMYAyADKAsyGi5vY3AuZGF0YS52MS5Db21wbGV0ZWRQYXJ0Qgi6SAWSAQIIASJXChtBYm9ydE11bHRpcGFydFVwbG9hZFJlcXVlc3QSHAoLb2JqZWN0X25hbWUYASABKAlCB7pIBHICEAESGgoJdXBsb2FkX2lkGAIgASgJQge6SARyAhABIh4KHEFib3J0TXVsdGlwYXJ0VXBsb2FkUmVzcG9uc2UidgoQTGlzdFBhcnRzUmVxdWVzdBIcCgtvYmplY3RfbmFtZRgBIAEoCUIHukgEcgIQARIaCgl1cGxvYWRfaWQYAiABKAlCB7pIBHICEAESKAoEcGFnZRgDIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QiZAoRTGlzdFBhcnRzUmVzcG9uc2USJAoFcGFydHMYASADKAsyFS5vY3AuZGF0YS52MS5QYXJ0SW5mbxIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2Uy9gMKFk11bHRpcGFydFVwbG9hZFNlcnZpY2USdAoXSW5pdGlhdGVNdWx0aXBhcnRVcGxvYWQSKy5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlcXVlc3QaLC5vY3AuZGF0YS52MS5Jbml0aWF0ZU11bHRpcGFydFVwbG9hZFJlc3BvbnNlElAKC1ByZXNpZ25QYXJ0Eh8ub2NwLmRhdGEudjEuUHJlc2lnblBhcnRSZXF1ZXN0GiAub2NwLmRhdGEudjEuUHJlc2lnblBhcnRSZXNwb25zZRJbChdDb21wbGV0ZU11bHRpcGFydFVwbG9hZBIrLm9jcC5kYXRhLnYxLkNvbXBsZXRlTXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBoTLm9jcC5kYXRhLnYxLk9iamVjdBJrChRBYm9ydE11bHRpcGFydFVwbG9hZBIoLm9jcC5kYXRhLnYxLkFib3J0TXVsdGlwYXJ0VXBsb2FkUmVxdWVzdBopLm9jcC5kYXRhLnYxLkFib3J0TXVsdGlwYXJ0VXBsb2FkUmVzcG9uc2USSgoJTGlzdFBhcnRzEh0ub2NwLmRhdGEudjEuTGlzdFBhcnRzUmVxdWVzdBoeLm9jcC5kYXRhLnYxLkxpc3RQYXJ0c1Jlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_duration,
+      file_paladin_common_v1_pagination,
+      file_paladin_common_v1_resource,
+      file_paladin_data_v1_types,
+    ],
+  );
 
 /**
  * @generated from message paladin.data.v1.InitiateMultipartUploadRequest
  */
-export type InitiateMultipartUploadRequest = Message<"paladin.data.v1.InitiateMultipartUploadRequest"> & {
-  /**
-   * ObjectKey
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type InitiateMultipartUploadRequest =
+  Message<"paladin.data.v1.InitiateMultipartUploadRequest"> & {
+    /**
+     * ObjectKey
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: string key = 2;
-   */
-  key: string;
+    /**
+     * @generated from field: string key = 2;
+     */
+    key: string;
 
-  /**
-   * @generated from field: string content_type = 3;
-   */
-  contentType: string;
+    /**
+     * @generated from field: string content_type = 3;
+     */
+    contentType: string;
 
-  /**
-   * @generated from field: int64 size_bytes = 4;
-   */
-  sizeBytes: bigint;
+    /**
+     * @generated from field: int64 size_bytes = 4;
+     */
+    sizeBytes: bigint;
 
-  /**
-   * @generated from field: paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5;
-   */
-  checksumAlgorithm: ChecksumAlgorithm;
+    /**
+     * @generated from field: paladin.common.v1.ChecksumAlgorithm checksum_algorithm = 5;
+     */
+    checksumAlgorithm: ChecksumAlgorithm;
 
-  /**
-   * @generated from field: map<string, string> metadata = 6;
-   */
-  metadata: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> metadata = 6;
+     */
+    metadata: { [key: string]: string };
 
-  /**
-   * @generated from field: map<string, string> tags = 7;
-   */
-  tags: { [key: string]: string };
+    /**
+     * @generated from field: map<string, string> tags = 7;
+     */
+    tags: { [key: string]: string };
 
-  /**
-   * @generated from field: string external_ref = 8;
-   */
-  externalRef: string;
+    /**
+     * @generated from field: string external_ref = 8;
+     */
+    externalRef: string;
 
-  /**
-   * @generated from field: string idempotency_key = 9;
-   */
-  idempotencyKey: string;
-};
+    /**
+     * @generated from field: string idempotency_key = 9;
+     */
+    idempotencyKey: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.InitiateMultipartUploadRequest.
  * Use `create(InitiateMultipartUploadRequestSchema)` to create a new message.
  */
-export const InitiateMultipartUploadRequestSchema: GenMessage<InitiateMultipartUploadRequest> = /*@__PURE__*/
+export const InitiateMultipartUploadRequestSchema: GenMessage<InitiateMultipartUploadRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 0);
 
 /**
  * @generated from message paladin.data.v1.InitiateMultipartUploadResponse
  */
-export type InitiateMultipartUploadResponse = Message<"paladin.data.v1.InitiateMultipartUploadResponse"> & {
-  /**
-   * @generated from field: paladin.data.v1.Object object = 1;
-   */
-  object?: Object$ | undefined;
+export type InitiateMultipartUploadResponse =
+  Message<"paladin.data.v1.InitiateMultipartUploadResponse"> & {
+    /**
+     * @generated from field: paladin.data.v1.Object object = 1;
+     */
+    object?: Object$ | undefined;
 
-  /**
-   * @generated from field: string upload_id = 2;
-   */
-  uploadId: string;
+    /**
+     * @generated from field: string upload_id = 2;
+     */
+    uploadId: string;
 
-  /**
-   * @generated from field: int64 recommended_part_size = 3;
-   */
-  recommendedPartSize: bigint;
+    /**
+     * @generated from field: int64 recommended_part_size = 3;
+     */
+    recommendedPartSize: bigint;
 
-  /**
-   * @generated from field: int32 total_parts = 4;
-   */
-  totalParts: number;
-};
+    /**
+     * @generated from field: int32 total_parts = 4;
+     */
+    totalParts: number;
+  };
 
 /**
  * Describes the message paladin.data.v1.InitiateMultipartUploadResponse.
  * Use `create(InitiateMultipartUploadResponseSchema)` to create a new message.
  */
-export const InitiateMultipartUploadResponseSchema: GenMessage<InitiateMultipartUploadResponse> = /*@__PURE__*/
+export const InitiateMultipartUploadResponseSchema: GenMessage<InitiateMultipartUploadResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 1);
 
 /**
@@ -141,7 +171,8 @@ export type PresignPartRequest = Message<"paladin.data.v1.PresignPartRequest"> &
  * Describes the message paladin.data.v1.PresignPartRequest.
  * Use `create(PresignPartRequestSchema)` to create a new message.
  */
-export const PresignPartRequestSchema: GenMessage<PresignPartRequest> = /*@__PURE__*/
+export const PresignPartRequestSchema: GenMessage<PresignPartRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 2);
 
 /**
@@ -158,69 +189,75 @@ export type PresignPartResponse = Message<"paladin.data.v1.PresignPartResponse">
  * Describes the message paladin.data.v1.PresignPartResponse.
  * Use `create(PresignPartResponseSchema)` to create a new message.
  */
-export const PresignPartResponseSchema: GenMessage<PresignPartResponse> = /*@__PURE__*/
+export const PresignPartResponseSchema: GenMessage<PresignPartResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 3);
 
 /**
  * @generated from message paladin.data.v1.CompleteMultipartUploadRequest
  */
-export type CompleteMultipartUploadRequest = Message<"paladin.data.v1.CompleteMultipartUploadRequest"> & {
-  /**
-   * @generated from field: string object_name = 1;
-   */
-  objectName: string;
+export type CompleteMultipartUploadRequest =
+  Message<"paladin.data.v1.CompleteMultipartUploadRequest"> & {
+    /**
+     * @generated from field: string object_name = 1;
+     */
+    objectName: string;
 
-  /**
-   * @generated from field: string upload_id = 2;
-   */
-  uploadId: string;
+    /**
+     * @generated from field: string upload_id = 2;
+     */
+    uploadId: string;
 
-  /**
-   * @generated from field: repeated paladin.data.v1.CompletedPart parts = 3;
-   */
-  parts: CompletedPart[];
-};
+    /**
+     * @generated from field: repeated paladin.data.v1.CompletedPart parts = 3;
+     */
+    parts: CompletedPart[];
+  };
 
 /**
  * Describes the message paladin.data.v1.CompleteMultipartUploadRequest.
  * Use `create(CompleteMultipartUploadRequestSchema)` to create a new message.
  */
-export const CompleteMultipartUploadRequestSchema: GenMessage<CompleteMultipartUploadRequest> = /*@__PURE__*/
+export const CompleteMultipartUploadRequestSchema: GenMessage<CompleteMultipartUploadRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 4);
 
 /**
  * @generated from message paladin.data.v1.AbortMultipartUploadRequest
  */
-export type AbortMultipartUploadRequest = Message<"paladin.data.v1.AbortMultipartUploadRequest"> & {
-  /**
-   * @generated from field: string object_name = 1;
-   */
-  objectName: string;
+export type AbortMultipartUploadRequest =
+  Message<"paladin.data.v1.AbortMultipartUploadRequest"> & {
+    /**
+     * @generated from field: string object_name = 1;
+     */
+    objectName: string;
 
-  /**
-   * @generated from field: string upload_id = 2;
-   */
-  uploadId: string;
-};
+    /**
+     * @generated from field: string upload_id = 2;
+     */
+    uploadId: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.AbortMultipartUploadRequest.
  * Use `create(AbortMultipartUploadRequestSchema)` to create a new message.
  */
-export const AbortMultipartUploadRequestSchema: GenMessage<AbortMultipartUploadRequest> = /*@__PURE__*/
+export const AbortMultipartUploadRequestSchema: GenMessage<AbortMultipartUploadRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 5);
 
 /**
  * @generated from message paladin.data.v1.AbortMultipartUploadResponse
  */
-export type AbortMultipartUploadResponse = Message<"paladin.data.v1.AbortMultipartUploadResponse"> & {
-};
+export type AbortMultipartUploadResponse =
+  Message<"paladin.data.v1.AbortMultipartUploadResponse"> & {};
 
 /**
  * Describes the message paladin.data.v1.AbortMultipartUploadResponse.
  * Use `create(AbortMultipartUploadResponseSchema)` to create a new message.
  */
-export const AbortMultipartUploadResponseSchema: GenMessage<AbortMultipartUploadResponse> = /*@__PURE__*/
+export const AbortMultipartUploadResponseSchema: GenMessage<AbortMultipartUploadResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 6);
 
 /**
@@ -247,7 +284,8 @@ export type ListPartsRequest = Message<"paladin.data.v1.ListPartsRequest"> & {
  * Describes the message paladin.data.v1.ListPartsRequest.
  * Use `create(ListPartsRequestSchema)` to create a new message.
  */
-export const ListPartsRequestSchema: GenMessage<ListPartsRequest> = /*@__PURE__*/
+export const ListPartsRequestSchema: GenMessage<ListPartsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 7);
 
 /**
@@ -269,7 +307,8 @@ export type ListPartsResponse = Message<"paladin.data.v1.ListPartsResponse"> & {
  * Describes the message paladin.data.v1.ListPartsResponse.
  * Use `create(ListPartsResponseSchema)` to create a new message.
  */
-export const ListPartsResponseSchema: GenMessage<ListPartsResponse> = /*@__PURE__*/
+export const ListPartsResponseSchema: GenMessage<ListPartsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_multipart_service, 8);
 
 /**
@@ -286,7 +325,7 @@ export const MultipartUploadService: GenService<{
     methodKind: "unary";
     input: typeof InitiateMultipartUploadRequestSchema;
     output: typeof InitiateMultipartUploadResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.MultipartUploadService.PresignPart
    */
@@ -294,7 +333,7 @@ export const MultipartUploadService: GenService<{
     methodKind: "unary";
     input: typeof PresignPartRequestSchema;
     output: typeof PresignPartResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.MultipartUploadService.CompleteMultipartUpload
    */
@@ -302,7 +341,7 @@ export const MultipartUploadService: GenService<{
     methodKind: "unary";
     input: typeof CompleteMultipartUploadRequestSchema;
     output: typeof ObjectSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.MultipartUploadService.AbortMultipartUpload
    */
@@ -310,7 +349,7 @@ export const MultipartUploadService: GenService<{
     methodKind: "unary";
     input: typeof AbortMultipartUploadRequestSchema;
     output: typeof AbortMultipartUploadResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.MultipartUploadService.ListParts
    */
@@ -318,7 +357,5 @@ export const MultipartUploadService: GenService<{
     methodKind: "unary";
     input: typeof ListPartsRequestSchema;
     output: typeof ListPartsResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_data_v1_multipart_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_multipart_service, 0);

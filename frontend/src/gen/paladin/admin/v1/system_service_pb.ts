@@ -2,27 +2,38 @@
 // @generated from file paladin/admin/v1/system_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/admin/v1/system_service.proto.
  */
-export const file_paladin_admin_v1_system_service: GenFile = /*@__PURE__*/
-  fileDesc("CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkyXQoNU3lzdGVtU2VydmljZRJMCglHZXRDb25maWcSHi5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVxdWVzdBofLm9jcC5hZG1pbi52MS5HZXRDb25maWdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z");
+export const file_paladin_admin_v1_system_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkyXQoNU3lzdGVtU2VydmljZRJMCglHZXRDb25maWcSHi5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVxdWVzdBofLm9jcC5hZG1pbi52MS5HZXRDb25maWdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+  );
 
 /**
  * @generated from message paladin.admin.v1.GetConfigRequest
  */
-export type GetConfigRequest = Message<"paladin.admin.v1.GetConfigRequest"> & {
-};
+export type GetConfigRequest = Message<"paladin.admin.v1.GetConfigRequest"> & {};
 
 /**
  * Describes the message paladin.admin.v1.GetConfigRequest.
  * Use `create(GetConfigRequestSchema)` to create a new message.
  */
-export const GetConfigRequestSchema: GenMessage<GetConfigRequest> = /*@__PURE__*/
+export const GetConfigRequestSchema: GenMessage<GetConfigRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_system_service, 0);
 
 /**
@@ -51,7 +62,8 @@ export type GetConfigResponse = Message<"paladin.admin.v1.GetConfigResponse"> & 
  * Describes the message paladin.admin.v1.GetConfigResponse.
  * Use `create(GetConfigResponseSchema)` to create a new message.
  */
-export const GetConfigResponseSchema: GenMessage<GetConfigResponse> = /*@__PURE__*/
+export const GetConfigResponseSchema: GenMessage<GetConfigResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_system_service, 1);
 
 /**
@@ -80,7 +92,5 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetConfigRequestSchema;
     output: typeof GetConfigResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_system_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_system_service, 0);

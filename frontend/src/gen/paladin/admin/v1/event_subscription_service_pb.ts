@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/event_subscription_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
@@ -16,203 +24,229 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/event_subscription_service.proto.
  */
-export const file_paladin_admin_v1_event_subscription_service: GenFile = /*@__PURE__*/
-  fileDesc("Ci1vY3AvYWRtaW4vdjEvZXZlbnRfc3Vic2NyaXB0aW9uX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJzChlDcmVhdGVTdWJzY3JpcHRpb25SZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI9CgxzdWJzY3JpcHRpb24YAiABKAsyHy5vY3AuYWRtaW4udjEuRXZlbnRTdWJzY3JpcHRpb25CBrpIA8gBASIvChZHZXRTdWJzY3JpcHRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEivAEKGVVwZGF0ZVN1YnNjcmlwdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEjUKDHN1YnNjcmlwdGlvbhgEIAEoCzIfLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbiJMChlEZWxldGVTdWJzY3JpcHRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCSIcChpEZWxldGVTdWJzY3JpcHRpb25SZXNwb25zZSJUChhMaXN0U3Vic2NyaXB0aW9uc1JlcXVlc3QSDgoGcGFyZW50GAEgASgJEigKBHBhZ2UYAiABKAsyGi5vY3AuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0In4KGUxpc3RTdWJzY3JpcHRpb25zUmVzcG9uc2USNgoNc3Vic2NyaXB0aW9ucxgBIAMoCzIfLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiMAoXVGVzdFN1YnNjcmlwdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASJZChhUZXN0U3Vic2NyaXB0aW9uUmVzcG9uc2USEQoJZGVsaXZlcmVkGAEgASgIEhMKC3N0YXR1c19jb2RlGAIgASgFEhUKDWVycm9yX21lc3NhZ2UYAyABKAky5gQKGEV2ZW50U3Vic2NyaXB0aW9uU2VydmljZRJeChJDcmVhdGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuQ3JlYXRlU3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJYCg9HZXRTdWJzY3JpcHRpb24SJC5vY3AuYWRtaW4udjEuR2V0U3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJeChJVcGRhdGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuVXBkYXRlU3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJnChJEZWxldGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuRGVsZXRlU3Vic2NyaXB0aW9uUmVxdWVzdBooLm9jcC5hZG1pbi52MS5EZWxldGVTdWJzY3JpcHRpb25SZXNwb25zZRJkChFMaXN0U3Vic2NyaXB0aW9ucxImLm9jcC5hZG1pbi52MS5MaXN0U3Vic2NyaXB0aW9uc1JlcXVlc3QaJy5vY3AuYWRtaW4udjEuTGlzdFN1YnNjcmlwdGlvbnNSZXNwb25zZRJhChBUZXN0U3Vic2NyaXB0aW9uEiUub2NwLmFkbWluLnYxLlRlc3RTdWJzY3JpcHRpb25SZXF1ZXN0GiYub2NwLmFkbWluLnYxLlRlc3RTdWJzY3JpcHRpb25SZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_admin_v1_types, file_paladin_common_v1_pagination]);
+export const file_paladin_admin_v1_event_subscription_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ci1vY3AvYWRtaW4vdjEvZXZlbnRfc3Vic2NyaXB0aW9uX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJzChlDcmVhdGVTdWJzY3JpcHRpb25SZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI9CgxzdWJzY3JpcHRpb24YAiABKAsyHy5vY3AuYWRtaW4udjEuRXZlbnRTdWJzY3JpcHRpb25CBrpIA8gBASIvChZHZXRTdWJzY3JpcHRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEivAEKGVVwZGF0ZVN1YnNjcmlwdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEjUKDHN1YnNjcmlwdGlvbhgEIAEoCzIfLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbiJMChlEZWxldGVTdWJzY3JpcHRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCSIcChpEZWxldGVTdWJzY3JpcHRpb25SZXNwb25zZSJUChhMaXN0U3Vic2NyaXB0aW9uc1JlcXVlc3QSDgoGcGFyZW50GAEgASgJEigKBHBhZ2UYAiABKAsyGi5vY3AuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0In4KGUxpc3RTdWJzY3JpcHRpb25zUmVzcG9uc2USNgoNc3Vic2NyaXB0aW9ucxgBIAMoCzIfLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiMAoXVGVzdFN1YnNjcmlwdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASJZChhUZXN0U3Vic2NyaXB0aW9uUmVzcG9uc2USEQoJZGVsaXZlcmVkGAEgASgIEhMKC3N0YXR1c19jb2RlGAIgASgFEhUKDWVycm9yX21lc3NhZ2UYAyABKAky5gQKGEV2ZW50U3Vic2NyaXB0aW9uU2VydmljZRJeChJDcmVhdGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuQ3JlYXRlU3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJYCg9HZXRTdWJzY3JpcHRpb24SJC5vY3AuYWRtaW4udjEuR2V0U3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJeChJVcGRhdGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuVXBkYXRlU3Vic2NyaXB0aW9uUmVxdWVzdBofLm9jcC5hZG1pbi52MS5FdmVudFN1YnNjcmlwdGlvbhJnChJEZWxldGVTdWJzY3JpcHRpb24SJy5vY3AuYWRtaW4udjEuRGVsZXRlU3Vic2NyaXB0aW9uUmVxdWVzdBooLm9jcC5hZG1pbi52MS5EZWxldGVTdWJzY3JpcHRpb25SZXNwb25zZRJkChFMaXN0U3Vic2NyaXB0aW9ucxImLm9jcC5hZG1pbi52MS5MaXN0U3Vic2NyaXB0aW9uc1JlcXVlc3QaJy5vY3AuYWRtaW4udjEuTGlzdFN1YnNjcmlwdGlvbnNSZXNwb25zZRJhChBUZXN0U3Vic2NyaXB0aW9uEiUub2NwLmFkbWluLnYxLlRlc3RTdWJzY3JpcHRpb25SZXF1ZXN0GiYub2NwLmFkbWluLnYxLlRlc3RTdWJzY3JpcHRpb25SZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_admin_v1_types,
+      file_paladin_common_v1_pagination,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.CreateSubscriptionRequest
  */
-export type CreateSubscriptionRequest = Message<"paladin.admin.v1.CreateSubscriptionRequest"> & {
-  /**
-   * "tenants/{tenant_id_or_slug}"
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type CreateSubscriptionRequest =
+  Message<"paladin.admin.v1.CreateSubscriptionRequest"> & {
+    /**
+     * "tenants/{tenant_id_or_slug}"
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.admin.v1.EventSubscription subscription = 2;
-   */
-  subscription?: EventSubscription | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.EventSubscription subscription = 2;
+     */
+    subscription?: EventSubscription | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CreateSubscriptionRequest.
  * Use `create(CreateSubscriptionRequestSchema)` to create a new message.
  */
-export const CreateSubscriptionRequestSchema: GenMessage<CreateSubscriptionRequest> = /*@__PURE__*/
+export const CreateSubscriptionRequestSchema: GenMessage<CreateSubscriptionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 0);
 
 /**
  * @generated from message paladin.admin.v1.GetSubscriptionRequest
  */
-export type GetSubscriptionRequest = Message<"paladin.admin.v1.GetSubscriptionRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type GetSubscriptionRequest =
+  Message<"paladin.admin.v1.GetSubscriptionRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.GetSubscriptionRequest.
  * Use `create(GetSubscriptionRequestSchema)` to create a new message.
  */
-export const GetSubscriptionRequestSchema: GenMessage<GetSubscriptionRequest> = /*@__PURE__*/
+export const GetSubscriptionRequestSchema: GenMessage<GetSubscriptionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.UpdateSubscriptionRequest
  */
-export type UpdateSubscriptionRequest = Message<"paladin.admin.v1.UpdateSubscriptionRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type UpdateSubscriptionRequest =
+  Message<"paladin.admin.v1.UpdateSubscriptionRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * @generated from field: google.protobuf.FieldMask update_mask = 3;
-   */
-  updateMask?: FieldMask | undefined;
+    /**
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 
-  /**
-   * @generated from field: paladin.admin.v1.EventSubscription subscription = 4;
-   */
-  subscription?: EventSubscription | undefined;
-};
+    /**
+     * @generated from field: paladin.admin.v1.EventSubscription subscription = 4;
+     */
+    subscription?: EventSubscription | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.UpdateSubscriptionRequest.
  * Use `create(UpdateSubscriptionRequestSchema)` to create a new message.
  */
-export const UpdateSubscriptionRequestSchema: GenMessage<UpdateSubscriptionRequest> = /*@__PURE__*/
+export const UpdateSubscriptionRequestSchema: GenMessage<UpdateSubscriptionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.DeleteSubscriptionRequest
  */
-export type DeleteSubscriptionRequest = Message<"paladin.admin.v1.DeleteSubscriptionRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteSubscriptionRequest =
+  Message<"paladin.admin.v1.DeleteSubscriptionRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
-};
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.DeleteSubscriptionRequest.
  * Use `create(DeleteSubscriptionRequestSchema)` to create a new message.
  */
-export const DeleteSubscriptionRequestSchema: GenMessage<DeleteSubscriptionRequest> = /*@__PURE__*/
+export const DeleteSubscriptionRequestSchema: GenMessage<DeleteSubscriptionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.DeleteSubscriptionResponse
  */
-export type DeleteSubscriptionResponse = Message<"paladin.admin.v1.DeleteSubscriptionResponse"> & {
-};
+export type DeleteSubscriptionResponse =
+  Message<"paladin.admin.v1.DeleteSubscriptionResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.DeleteSubscriptionResponse.
  * Use `create(DeleteSubscriptionResponseSchema)` to create a new message.
  */
-export const DeleteSubscriptionResponseSchema: GenMessage<DeleteSubscriptionResponse> = /*@__PURE__*/
+export const DeleteSubscriptionResponseSchema: GenMessage<DeleteSubscriptionResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.ListSubscriptionsRequest
  */
-export type ListSubscriptionsRequest = Message<"paladin.admin.v1.ListSubscriptionsRequest"> & {
-  /**
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type ListSubscriptionsRequest =
+  Message<"paladin.admin.v1.ListSubscriptionsRequest"> & {
+    /**
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 2;
-   */
-  page?: PageRequest | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListSubscriptionsRequest.
  * Use `create(ListSubscriptionsRequestSchema)` to create a new message.
  */
-export const ListSubscriptionsRequestSchema: GenMessage<ListSubscriptionsRequest> = /*@__PURE__*/
+export const ListSubscriptionsRequestSchema: GenMessage<ListSubscriptionsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.ListSubscriptionsResponse
  */
-export type ListSubscriptionsResponse = Message<"paladin.admin.v1.ListSubscriptionsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.EventSubscription subscriptions = 1;
-   */
-  subscriptions: EventSubscription[];
+export type ListSubscriptionsResponse =
+  Message<"paladin.admin.v1.ListSubscriptionsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.EventSubscription subscriptions = 1;
+     */
+    subscriptions: EventSubscription[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListSubscriptionsResponse.
  * Use `create(ListSubscriptionsResponseSchema)` to create a new message.
  */
-export const ListSubscriptionsResponseSchema: GenMessage<ListSubscriptionsResponse> = /*@__PURE__*/
+export const ListSubscriptionsResponseSchema: GenMessage<ListSubscriptionsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.TestSubscriptionRequest
  */
-export type TestSubscriptionRequest = Message<"paladin.admin.v1.TestSubscriptionRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type TestSubscriptionRequest =
+  Message<"paladin.admin.v1.TestSubscriptionRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TestSubscriptionRequest.
  * Use `create(TestSubscriptionRequestSchema)` to create a new message.
  */
-export const TestSubscriptionRequestSchema: GenMessage<TestSubscriptionRequest> = /*@__PURE__*/
+export const TestSubscriptionRequestSchema: GenMessage<TestSubscriptionRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.TestSubscriptionResponse
  */
-export type TestSubscriptionResponse = Message<"paladin.admin.v1.TestSubscriptionResponse"> & {
-  /**
-   * @generated from field: bool delivered = 1;
-   */
-  delivered: boolean;
+export type TestSubscriptionResponse =
+  Message<"paladin.admin.v1.TestSubscriptionResponse"> & {
+    /**
+     * @generated from field: bool delivered = 1;
+     */
+    delivered: boolean;
 
-  /**
-   * @generated from field: int32 status_code = 2;
-   */
-  statusCode: number;
+    /**
+     * @generated from field: int32 status_code = 2;
+     */
+    statusCode: number;
 
-  /**
-   * @generated from field: string error_message = 3;
-   */
-  errorMessage: string;
-};
+    /**
+     * @generated from field: string error_message = 3;
+     */
+    errorMessage: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.TestSubscriptionResponse.
  * Use `create(TestSubscriptionResponseSchema)` to create a new message.
  */
-export const TestSubscriptionResponseSchema: GenMessage<TestSubscriptionResponse> = /*@__PURE__*/
+export const TestSubscriptionResponseSchema: GenMessage<TestSubscriptionResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_event_subscription_service, 8);
 
 /**
@@ -229,7 +263,7 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof CreateSubscriptionRequestSchema;
     output: typeof EventSubscriptionSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.GetSubscription
    */
@@ -237,7 +271,7 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof GetSubscriptionRequestSchema;
     output: typeof EventSubscriptionSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.UpdateSubscription
    */
@@ -245,7 +279,7 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof UpdateSubscriptionRequestSchema;
     output: typeof EventSubscriptionSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.DeleteSubscription
    */
@@ -253,7 +287,7 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof DeleteSubscriptionRequestSchema;
     output: typeof DeleteSubscriptionResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.EventSubscriptionService.ListSubscriptions
    */
@@ -261,7 +295,7 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof ListSubscriptionsRequestSchema;
     output: typeof ListSubscriptionsResponseSchema;
-  },
+  };
   /**
    * TestSubscription delivers a synthetic event to the configured sink.
    *
@@ -271,7 +305,5 @@ export const EventSubscriptionService: GenService<{
     methodKind: "unary";
     input: typeof TestSubscriptionRequestSchema;
     output: typeof TestSubscriptionResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_event_subscription_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_event_subscription_service, 0);

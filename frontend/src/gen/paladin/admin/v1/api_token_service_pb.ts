@@ -2,8 +2,16 @@
 // @generated from file paladin/admin/v1/api_token_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -12,8 +20,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/api_token_service.proto.
  */
-export const file_paladin_admin_v1_api_token_service: GenFile = /*@__PURE__*/
-  fileDesc("CiRvY3AvYWRtaW4vdjEvYXBpX3Rva2VuX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSLXAgoIQVBJVG9rZW4SCgoCaWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEgwKBG5hbWUYAyABKAkSDgoGcHJlZml4GAQgASgJEg4KBnNjb3BlcxgFIAMoCRIQCghhdWRpZW5jZRgGIAMoCRIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmNyZWF0ZWRfYnkYCyABKAkSFgoOcmF0ZV9saW1pdF9ycG0YDCABKAUivQEKHEFQSVRva2VuU2VydmljZUNyZWF0ZVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIVCgRuYW1lGAIgASgJQge6SARyAhABEhwKC3R0bF9zZWNvbmRzGAMgASgDQge6SAQiAigAEg4KBnNjb3BlcxgEIAMoCRIaCghhdWRpZW5jZRgFIAMoCUIIukgFkgECCAESHwoOcmF0ZV9saW1pdF9ycG0YBiABKAVCB7pIBBoCKAAiWQodQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVzcG9uc2USKQoJYXBpX3Rva2VuGAEgASgLMhYub2NwLmFkbWluLnYxLkFQSVRva2VuEg0KBXRva2VuGAIgASgJIjQKHEFQSVRva2VuU2VydmljZVJldm9rZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBIh8KHUFQSVRva2VuU2VydmljZVJldm9rZVJlc3BvbnNlIpsBChpBUElUb2tlblNlcnZpY2VMaXN0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEhcKD2luY2x1ZGVfcmV2b2tlZBgCIAEoCBIXCg9pbmNsdWRlX2V4cGlyZWQYAyABKAgSGgoJcGFnZV9zaXplGAQgASgFQge6SAQaAigAEhIKCnBhZ2VfdG9rZW4YBSABKAkiYgobQVBJVG9rZW5TZXJ2aWNlTGlzdFJlc3BvbnNlEioKCmFwaV90b2tlbnMYASADKAsyFi5vY3AuYWRtaW4udjEuQVBJVG9rZW4SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIh8KHUFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0IksKHkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRIpCglhcGlfdG9rZW4YASABKAsyFi5vY3AuYWRtaW4udjEuQVBJVG9rZW4iNgoeQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABASL9AQofQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZRIKCgJpZBgBIAEoCRIRCglsaW1pdF9ycG0YAiABKAUSHAoUY3VycmVudF9idWNrZXRfY291bnQYAyABKAMSHQoVcHJldmlvdXNfYnVja2V0X2NvdW50GAQgASgDEhYKDndlaWdodGVkX2NvdW50GAUgASgBEjQKEHdpbmRvd19yZXNldHNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAygwQKD0FQSVRva2VuU2VydmljZRJhCgZDcmVhdGUSKi5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVxdWVzdBorLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRJhCgZSZXZva2USKi5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVxdWVzdBorLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZRJbCgRMaXN0Eigub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXF1ZXN0Gikub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXNwb25zZRJkCgdHZXRTZWxmEisub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Giwub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRJnCghHZXRVc2FnZRIsLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlcXVlc3QaLS5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+export const file_paladin_admin_v1_api_token_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiRvY3AvYWRtaW4vdjEvYXBpX3Rva2VuX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSLXAgoIQVBJVG9rZW4SCgoCaWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEgwKBG5hbWUYAyABKAkSDgoGcHJlZml4GAQgASgJEg4KBnNjb3BlcxgFIAMoCRIQCghhdWRpZW5jZRgGIAMoCRIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmNyZWF0ZWRfYnkYCyABKAkSFgoOcmF0ZV9saW1pdF9ycG0YDCABKAUivQEKHEFQSVRva2VuU2VydmljZUNyZWF0ZVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIVCgRuYW1lGAIgASgJQge6SARyAhABEhwKC3R0bF9zZWNvbmRzGAMgASgDQge6SAQiAigAEg4KBnNjb3BlcxgEIAMoCRIaCghhdWRpZW5jZRgFIAMoCUIIukgFkgECCAESHwoOcmF0ZV9saW1pdF9ycG0YBiABKAVCB7pIBBoCKAAiWQodQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVzcG9uc2USKQoJYXBpX3Rva2VuGAEgASgLMhYub2NwLmFkbWluLnYxLkFQSVRva2VuEg0KBXRva2VuGAIgASgJIjQKHEFQSVRva2VuU2VydmljZVJldm9rZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBIh8KHUFQSVRva2VuU2VydmljZVJldm9rZVJlc3BvbnNlIpsBChpBUElUb2tlblNlcnZpY2VMaXN0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEhcKD2luY2x1ZGVfcmV2b2tlZBgCIAEoCBIXCg9pbmNsdWRlX2V4cGlyZWQYAyABKAgSGgoJcGFnZV9zaXplGAQgASgFQge6SAQaAigAEhIKCnBhZ2VfdG9rZW4YBSABKAkiYgobQVBJVG9rZW5TZXJ2aWNlTGlzdFJlc3BvbnNlEioKCmFwaV90b2tlbnMYASADKAsyFi5vY3AuYWRtaW4udjEuQVBJVG9rZW4SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIh8KHUFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0IksKHkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRIpCglhcGlfdG9rZW4YASABKAsyFi5vY3AuYWRtaW4udjEuQVBJVG9rZW4iNgoeQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABASL9AQofQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZRIKCgJpZBgBIAEoCRIRCglsaW1pdF9ycG0YAiABKAUSHAoUY3VycmVudF9idWNrZXRfY291bnQYAyABKAMSHQoVcHJldmlvdXNfYnVja2V0X2NvdW50GAQgASgDEhYKDndlaWdodGVkX2NvdW50GAUgASgBEjQKEHdpbmRvd19yZXNldHNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAygwQKD0FQSVRva2VuU2VydmljZRJhCgZDcmVhdGUSKi5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVxdWVzdBorLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRJhCgZSZXZva2USKi5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVxdWVzdBorLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZRJbCgRMaXN0Eigub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXF1ZXN0Gikub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXNwb25zZRJkCgdHZXRTZWxmEisub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Giwub2NwLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRJnCghHZXRVc2FnZRIsLm9jcC5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlcXVlc3QaLS5vY3AuYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    [file_buf_validate_validate, file_google_protobuf_timestamp],
+  );
 
 /**
  * APIToken is the metadata view returned by every RPC. The plaintext
@@ -94,102 +106,109 @@ export type APIToken = Message<"paladin.admin.v1.APIToken"> & {
  * Describes the message paladin.admin.v1.APIToken.
  * Use `create(APITokenSchema)` to create a new message.
  */
-export const APITokenSchema: GenMessage<APIToken> = /*@__PURE__*/
+export const APITokenSchema: GenMessage<APIToken> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 0);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceCreateRequest
  */
-export type APITokenServiceCreateRequest = Message<"paladin.admin.v1.APITokenServiceCreateRequest"> & {
-  /**
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
+export type APITokenServiceCreateRequest =
+  Message<"paladin.admin.v1.APITokenServiceCreateRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
 
-  /**
-   * @generated from field: string name = 2;
-   */
-  name: string;
+    /**
+     * @generated from field: string name = 2;
+     */
+    name: string;
 
-  /**
-   * ttl_seconds caps lifetime. 0 → server default (1 year).
-   * Application clamps to MaxTTL configured on the issuer.
-   *
-   * @generated from field: int64 ttl_seconds = 3;
-   */
-  ttlSeconds: bigint;
+    /**
+     * ttl_seconds caps lifetime. 0 → server default (1 year).
+     * Application clamps to MaxTTL configured on the issuer.
+     *
+     * @generated from field: int64 ttl_seconds = 3;
+     */
+    ttlSeconds: bigint;
 
-  /**
-   * @generated from field: repeated string scopes = 4;
-   */
-  scopes: string[];
+    /**
+     * @generated from field: repeated string scopes = 4;
+     */
+    scopes: string[];
 
-  /**
-   * audience must include at least one plane the token is presented
-   * to. Subset of {data, admin, iam, mcp}.
-   *
-   * @generated from field: repeated string audience = 5;
-   */
-  audience: string[];
+    /**
+     * audience must include at least one plane the token is presented
+     * to. Subset of {data, admin, iam, mcp}.
+     *
+     * @generated from field: repeated string audience = 5;
+     */
+    audience: string[];
 
-  /**
-   * rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
-   * Recommended for any token whose blast radius matters: leaked
-   * tokens with a 60 rpm cap can do far less harm before discovery
-   * than uncapped equivalents.
-   *
-   * @generated from field: int32 rate_limit_rpm = 6;
-   */
-  rateLimitRpm: number;
-};
+    /**
+     * rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
+     * Recommended for any token whose blast radius matters: leaked
+     * tokens with a 60 rpm cap can do far less harm before discovery
+     * than uncapped equivalents.
+     *
+     * @generated from field: int32 rate_limit_rpm = 6;
+     */
+    rateLimitRpm: number;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceCreateRequest.
  * Use `create(APITokenServiceCreateRequestSchema)` to create a new message.
  */
-export const APITokenServiceCreateRequestSchema: GenMessage<APITokenServiceCreateRequest> = /*@__PURE__*/
+export const APITokenServiceCreateRequestSchema: GenMessage<APITokenServiceCreateRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceCreateResponse
  */
-export type APITokenServiceCreateResponse = Message<"paladin.admin.v1.APITokenServiceCreateResponse"> & {
-  /**
-   * @generated from field: paladin.admin.v1.APIToken api_token = 1;
-   */
-  apiToken?: APIToken | undefined;
+export type APITokenServiceCreateResponse =
+  Message<"paladin.admin.v1.APITokenServiceCreateResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.APIToken api_token = 1;
+     */
+    apiToken?: APIToken | undefined;
 
-  /**
-   * The full `paladin_pat_…` plaintext. Returned exactly once. Store it
-   * securely on the consuming side; it cannot be recovered.
-   *
-   * @generated from field: string token = 2;
-   */
-  token: string;
-};
+    /**
+     * The full `paladin_pat_…` plaintext. Returned exactly once. Store it
+     * securely on the consuming side; it cannot be recovered.
+     *
+     * @generated from field: string token = 2;
+     */
+    token: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceCreateResponse.
  * Use `create(APITokenServiceCreateResponseSchema)` to create a new message.
  */
-export const APITokenServiceCreateResponseSchema: GenMessage<APITokenServiceCreateResponse> = /*@__PURE__*/
+export const APITokenServiceCreateResponseSchema: GenMessage<APITokenServiceCreateResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceRevokeRequest
  */
-export type APITokenServiceRevokeRequest = Message<"paladin.admin.v1.APITokenServiceRevokeRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
+export type APITokenServiceRevokeRequest =
+  Message<"paladin.admin.v1.APITokenServiceRevokeRequest"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceRevokeRequest.
  * Use `create(APITokenServiceRevokeRequestSchema)` to create a new message.
  */
-export const APITokenServiceRevokeRequestSchema: GenMessage<APITokenServiceRevokeRequest> = /*@__PURE__*/
+export const APITokenServiceRevokeRequestSchema: GenMessage<APITokenServiceRevokeRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 3);
 
 /**
@@ -197,73 +216,78 @@ export const APITokenServiceRevokeRequestSchema: GenMessage<APITokenServiceRevok
  *
  * @generated from message paladin.admin.v1.APITokenServiceRevokeResponse
  */
-export type APITokenServiceRevokeResponse = Message<"paladin.admin.v1.APITokenServiceRevokeResponse"> & {
-};
+export type APITokenServiceRevokeResponse =
+  Message<"paladin.admin.v1.APITokenServiceRevokeResponse"> & {};
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceRevokeResponse.
  * Use `create(APITokenServiceRevokeResponseSchema)` to create a new message.
  */
-export const APITokenServiceRevokeResponseSchema: GenMessage<APITokenServiceRevokeResponse> = /*@__PURE__*/
+export const APITokenServiceRevokeResponseSchema: GenMessage<APITokenServiceRevokeResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceListRequest
  */
-export type APITokenServiceListRequest = Message<"paladin.admin.v1.APITokenServiceListRequest"> & {
-  /**
-   * @generated from field: string tenant_id = 1;
-   */
-  tenantId: string;
+export type APITokenServiceListRequest =
+  Message<"paladin.admin.v1.APITokenServiceListRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
 
-  /**
-   * @generated from field: bool include_revoked = 2;
-   */
-  includeRevoked: boolean;
+    /**
+     * @generated from field: bool include_revoked = 2;
+     */
+    includeRevoked: boolean;
 
-  /**
-   * @generated from field: bool include_expired = 3;
-   */
-  includeExpired: boolean;
+    /**
+     * @generated from field: bool include_expired = 3;
+     */
+    includeExpired: boolean;
 
-  /**
-   * @generated from field: int32 page_size = 4;
-   */
-  pageSize: number;
+    /**
+     * @generated from field: int32 page_size = 4;
+     */
+    pageSize: number;
 
-  /**
-   * @generated from field: string page_token = 5;
-   */
-  pageToken: string;
-};
+    /**
+     * @generated from field: string page_token = 5;
+     */
+    pageToken: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceListRequest.
  * Use `create(APITokenServiceListRequestSchema)` to create a new message.
  */
-export const APITokenServiceListRequestSchema: GenMessage<APITokenServiceListRequest> = /*@__PURE__*/
+export const APITokenServiceListRequestSchema: GenMessage<APITokenServiceListRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceListResponse
  */
-export type APITokenServiceListResponse = Message<"paladin.admin.v1.APITokenServiceListResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.APIToken api_tokens = 1;
-   */
-  apiTokens: APIToken[];
+export type APITokenServiceListResponse =
+  Message<"paladin.admin.v1.APITokenServiceListResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.APIToken api_tokens = 1;
+     */
+    apiTokens: APIToken[];
 
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-};
+    /**
+     * @generated from field: string next_page_token = 2;
+     */
+    nextPageToken: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceListResponse.
  * Use `create(APITokenServiceListResponseSchema)` to create a new message.
  */
-export const APITokenServiceListResponseSchema: GenMessage<APITokenServiceListResponse> = /*@__PURE__*/
+export const APITokenServiceListResponseSchema: GenMessage<APITokenServiceListResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 6);
 
 /**
@@ -271,110 +295,117 @@ export const APITokenServiceListResponseSchema: GenMessage<APITokenServiceListRe
  *
  * @generated from message paladin.admin.v1.APITokenServiceGetSelfRequest
  */
-export type APITokenServiceGetSelfRequest = Message<"paladin.admin.v1.APITokenServiceGetSelfRequest"> & {
-};
+export type APITokenServiceGetSelfRequest =
+  Message<"paladin.admin.v1.APITokenServiceGetSelfRequest"> & {};
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceGetSelfRequest.
  * Use `create(APITokenServiceGetSelfRequestSchema)` to create a new message.
  */
-export const APITokenServiceGetSelfRequestSchema: GenMessage<APITokenServiceGetSelfRequest> = /*@__PURE__*/
+export const APITokenServiceGetSelfRequestSchema: GenMessage<APITokenServiceGetSelfRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceGetSelfResponse
  */
-export type APITokenServiceGetSelfResponse = Message<"paladin.admin.v1.APITokenServiceGetSelfResponse"> & {
-  /**
-   * @generated from field: paladin.admin.v1.APIToken api_token = 1;
-   */
-  apiToken?: APIToken | undefined;
-};
+export type APITokenServiceGetSelfResponse =
+  Message<"paladin.admin.v1.APITokenServiceGetSelfResponse"> & {
+    /**
+     * @generated from field: paladin.admin.v1.APIToken api_token = 1;
+     */
+    apiToken?: APIToken | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceGetSelfResponse.
  * Use `create(APITokenServiceGetSelfResponseSchema)` to create a new message.
  */
-export const APITokenServiceGetSelfResponseSchema: GenMessage<APITokenServiceGetSelfResponse> = /*@__PURE__*/
+export const APITokenServiceGetSelfResponseSchema: GenMessage<APITokenServiceGetSelfResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceGetUsageRequest
  */
-export type APITokenServiceGetUsageRequest = Message<"paladin.admin.v1.APITokenServiceGetUsageRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
+export type APITokenServiceGetUsageRequest =
+  Message<"paladin.admin.v1.APITokenServiceGetUsageRequest"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceGetUsageRequest.
  * Use `create(APITokenServiceGetUsageRequestSchema)` to create a new message.
  */
-export const APITokenServiceGetUsageRequestSchema: GenMessage<APITokenServiceGetUsageRequest> = /*@__PURE__*/
+export const APITokenServiceGetUsageRequestSchema: GenMessage<APITokenServiceGetUsageRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.APITokenServiceGetUsageResponse
  */
-export type APITokenServiceGetUsageResponse = Message<"paladin.admin.v1.APITokenServiceGetUsageResponse"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
+export type APITokenServiceGetUsageResponse =
+  Message<"paladin.admin.v1.APITokenServiceGetUsageResponse"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
 
-  /**
-   * limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
-   * remaining counters are still returned so UIs can render
-   * "uncapped, current rate: N rpm".
-   *
-   * @generated from field: int32 limit_rpm = 2;
-   */
-  limitRpm: number;
+    /**
+     * limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
+     * remaining counters are still returned so UIs can render
+     * "uncapped, current rate: N rpm".
+     *
+     * @generated from field: int32 limit_rpm = 2;
+     */
+    limitRpm: number;
 
-  /**
-   * current_bucket_count is the raw counter for the in-progress
-   * minute. previous_bucket_count is the previous full minute.
-   * weighted_count = current + previous * (1 - elapsed / 60). Mirrors
-   * the math the Limiter uses on the verify path.
-   *
-   * @generated from field: int64 current_bucket_count = 3;
-   */
-  currentBucketCount: bigint;
+    /**
+     * current_bucket_count is the raw counter for the in-progress
+     * minute. previous_bucket_count is the previous full minute.
+     * weighted_count = current + previous * (1 - elapsed / 60). Mirrors
+     * the math the Limiter uses on the verify path.
+     *
+     * @generated from field: int64 current_bucket_count = 3;
+     */
+    currentBucketCount: bigint;
 
-  /**
-   * @generated from field: int64 previous_bucket_count = 4;
-   */
-  previousBucketCount: bigint;
+    /**
+     * @generated from field: int64 previous_bucket_count = 4;
+     */
+    previousBucketCount: bigint;
 
-  /**
-   * @generated from field: double weighted_count = 5;
-   */
-  weightedCount: number;
+    /**
+     * @generated from field: double weighted_count = 5;
+     */
+    weightedCount: number;
 
-  /**
-   * window_resets_at is when the current minute bucket rolls — UI
-   * renders "resets in Ns" by computing window_resets_at - now.
-   *
-   * @generated from field: google.protobuf.Timestamp window_resets_at = 6;
-   */
-  windowResetsAt?: Timestamp | undefined;
+    /**
+     * window_resets_at is when the current minute bucket rolls — UI
+     * renders "resets in Ns" by computing window_resets_at - now.
+     *
+     * @generated from field: google.protobuf.Timestamp window_resets_at = 6;
+     */
+    windowResetsAt?: Timestamp | undefined;
 
-  /**
-   * last_used_at is the most recent successful Verify on this token.
-   * NULL when the token has never been verified.
-   *
-   * @generated from field: google.protobuf.Timestamp last_used_at = 7;
-   */
-  lastUsedAt?: Timestamp | undefined;
-};
+    /**
+     * last_used_at is the most recent successful Verify on this token.
+     * NULL when the token has never been verified.
+     *
+     * @generated from field: google.protobuf.Timestamp last_used_at = 7;
+     */
+    lastUsedAt?: Timestamp | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.APITokenServiceGetUsageResponse.
  * Use `create(APITokenServiceGetUsageResponseSchema)` to create a new message.
  */
-export const APITokenServiceGetUsageResponseSchema: GenMessage<APITokenServiceGetUsageResponse> = /*@__PURE__*/
+export const APITokenServiceGetUsageResponseSchema: GenMessage<APITokenServiceGetUsageResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_api_token_service, 10);
 
 /**
@@ -405,7 +436,7 @@ export const APITokenService: GenService<{
     methodKind: "unary";
     input: typeof APITokenServiceCreateRequestSchema;
     output: typeof APITokenServiceCreateResponseSchema;
-  },
+  };
   /**
    * Revoke marks a token as revoked at NOW(). Idempotent — re-revoking
    * a revoked token is a no-op. Cannot be undone; caller mints a new
@@ -417,7 +448,7 @@ export const APITokenService: GenService<{
     methodKind: "unary";
     input: typeof APITokenServiceRevokeRequestSchema;
     output: typeof APITokenServiceRevokeResponseSchema;
-  },
+  };
   /**
    * List enumerates tokens for a tenant. Paginated cursor-style. The
    * `token_hash` is never returned; callers see metadata only.
@@ -428,7 +459,7 @@ export const APITokenService: GenService<{
     methodKind: "unary";
     input: typeof APITokenServiceListRequestSchema;
     output: typeof APITokenServiceListResponseSchema;
-  },
+  };
   /**
    * GetSelf introspects the API token attached to the calling request,
    * if any. Returns NOT_FOUND when the request was authenticated via
@@ -442,7 +473,7 @@ export const APITokenService: GenService<{
     methodKind: "unary";
     input: typeof APITokenServiceGetSelfRequestSchema;
     output: typeof APITokenServiceGetSelfResponseSchema;
-  },
+  };
   /**
    * GetUsage returns a readonly snapshot of a token's current rate-
    * limit consumption — current/previous bucket counters, the
@@ -456,7 +487,5 @@ export const APITokenService: GenService<{
     methodKind: "unary";
     input: typeof APITokenServiceGetUsageRequestSchema;
     output: typeof APITokenServiceGetUsageResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_api_token_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_api_token_service, 0);

@@ -2,11 +2,22 @@
 // @generated from file paladin/admin/v1/operation_service.proto (package paladin.admin.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Any, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_any, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_any,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
@@ -16,8 +27,18 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/admin/v1/operation_service.proto.
  */
-export const file_paladin_admin_v1_operation_service: GenFile = /*@__PURE__*/
-  fileDesc("CiRvY3AvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSLOAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASGQoRaW5pdGlhdG9yX3N1YmplY3QYByABKAkSGwoTaW5pdGlhdG9yX3RlbmFudF9pZBgIIAEoCRIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkicAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIrCgpvcGVyYXRpb25zGAEgAygLMhcub2NwLmFkbWluLnYxLk9wZXJhdGlvbhIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMo0CChBPcGVyYXRpb25TZXJ2aWNlEkoKDEdldE9wZXJhdGlvbhIhLm9jcC5hZG1pbi52MS5HZXRPcGVyYXRpb25SZXF1ZXN0Ghcub2NwLmFkbWluLnYxLk9wZXJhdGlvbhJbCg5MaXN0T3BlcmF0aW9ucxIjLm9jcC5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaJC5vY3AuYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZRJQCg9DYW5jZWxPcGVyYXRpb24SJC5vY3AuYWRtaW4udjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoXLm9jcC5hZG1pbi52MS5PcGVyYXRpb25CUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_any, file_google_protobuf_timestamp, file_google_rpc_status, file_paladin_common_v1_pagination]);
+export const file_paladin_admin_v1_operation_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiRvY3AvYWRtaW4vdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSLOAgoJT3BlcmF0aW9uEgwKBG5hbWUYASABKAkSDAoEdHlwZRgCIAEoCRImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSDAoEZG9uZRgEIAEoCBIjCgVlcnJvchgFIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzSAASKAoIcmVzcG9uc2UYBiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASGQoRaW5pdGlhdG9yX3N1YmplY3QYByABKAkSGwoTaW5pdGlhdG9yX3RlbmFudF9pZBgIIAEoCRIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkicAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIrCgpvcGVyYXRpb25zGAEgAygLMhcub2NwLmFkbWluLnYxLk9wZXJhdGlvbhIpCgRwYWdlGAIgASgLMhsub2NwLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMo0CChBPcGVyYXRpb25TZXJ2aWNlEkoKDEdldE9wZXJhdGlvbhIhLm9jcC5hZG1pbi52MS5HZXRPcGVyYXRpb25SZXF1ZXN0Ghcub2NwLmFkbWluLnYxLk9wZXJhdGlvbhJbCg5MaXN0T3BlcmF0aW9ucxIjLm9jcC5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaJC5vY3AuYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZRJQCg9DYW5jZWxPcGVyYXRpb24SJC5vY3AuYWRtaW4udjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoXLm9jcC5hZG1pbi52MS5PcGVyYXRpb25CUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_any,
+      file_google_protobuf_timestamp,
+      file_google_rpc_status,
+      file_paladin_common_v1_pagination,
+    ],
+  );
 
 /**
  * @generated from message paladin.admin.v1.Operation
@@ -48,19 +69,22 @@ export type Operation = Message<"paladin.admin.v1.Operation"> & {
   /**
    * @generated from oneof paladin.admin.v1.Operation.result
    */
-  result: {
-    /**
-     * @generated from field: google.rpc.Status error = 5;
-     */
-    value: Status;
-    case: "error";
-  } | {
-    /**
-     * @generated from field: google.protobuf.Any response = 6;
-     */
-    value: Any;
-    case: "response";
-  } | { case: undefined; value?: undefined };
+  result:
+    | {
+        /**
+         * @generated from field: google.rpc.Status error = 5;
+         */
+        value: Status;
+        case: "error";
+      }
+    | {
+        /**
+         * @generated from field: google.protobuf.Any response = 6;
+         */
+        value: Any;
+        case: "response";
+      }
+    | { case: undefined; value?: undefined };
 
   /**
    * @generated from field: string initiator_subject = 7;
@@ -87,85 +111,94 @@ export type Operation = Message<"paladin.admin.v1.Operation"> & {
  * Describes the message paladin.admin.v1.Operation.
  * Use `create(OperationSchema)` to create a new message.
  */
-export const OperationSchema: GenMessage<Operation> = /*@__PURE__*/
+export const OperationSchema: GenMessage<Operation> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_operation_service, 0);
 
 /**
  * @generated from message paladin.admin.v1.GetOperationRequest
  */
-export type GetOperationRequest = Message<"paladin.admin.v1.GetOperationRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type GetOperationRequest =
+  Message<"paladin.admin.v1.GetOperationRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.GetOperationRequest.
  * Use `create(GetOperationRequestSchema)` to create a new message.
  */
-export const GetOperationRequestSchema: GenMessage<GetOperationRequest> = /*@__PURE__*/
+export const GetOperationRequestSchema: GenMessage<GetOperationRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_operation_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.ListOperationsRequest
  */
-export type ListOperationsRequest = Message<"paladin.admin.v1.ListOperationsRequest"> & {
-  /**
-   * @generated from field: paladin.common.v1.PageRequest page = 1;
-   */
-  page?: PageRequest | undefined;
+export type ListOperationsRequest =
+  Message<"paladin.admin.v1.ListOperationsRequest"> & {
+    /**
+     * @generated from field: paladin.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
 
-  /**
-   * @generated from field: string filter = 2;
-   */
-  filter: string;
-};
+    /**
+     * @generated from field: string filter = 2;
+     */
+    filter: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListOperationsRequest.
  * Use `create(ListOperationsRequestSchema)` to create a new message.
  */
-export const ListOperationsRequestSchema: GenMessage<ListOperationsRequest> = /*@__PURE__*/
+export const ListOperationsRequestSchema: GenMessage<ListOperationsRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_operation_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.ListOperationsResponse
  */
-export type ListOperationsResponse = Message<"paladin.admin.v1.ListOperationsResponse"> & {
-  /**
-   * @generated from field: repeated paladin.admin.v1.Operation operations = 1;
-   */
-  operations: Operation[];
+export type ListOperationsResponse =
+  Message<"paladin.admin.v1.ListOperationsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.Operation operations = 1;
+     */
+    operations: Operation[];
 
-  /**
-   * @generated from field: paladin.common.v1.PageResponse page = 2;
-   */
-  page?: PageResponse | undefined;
-};
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
 
 /**
  * Describes the message paladin.admin.v1.ListOperationsResponse.
  * Use `create(ListOperationsResponseSchema)` to create a new message.
  */
-export const ListOperationsResponseSchema: GenMessage<ListOperationsResponse> = /*@__PURE__*/
+export const ListOperationsResponseSchema: GenMessage<ListOperationsResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_operation_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.CancelOperationRequest
  */
-export type CancelOperationRequest = Message<"paladin.admin.v1.CancelOperationRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type CancelOperationRequest =
+  Message<"paladin.admin.v1.CancelOperationRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.admin.v1.CancelOperationRequest.
  * Use `create(CancelOperationRequestSchema)` to create a new message.
  */
-export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> = /*@__PURE__*/
+export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_operation_service, 4);
 
 /**
@@ -183,7 +216,7 @@ export const OperationService: GenService<{
     methodKind: "unary";
     input: typeof GetOperationRequestSchema;
     output: typeof OperationSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.OperationService.ListOperations
    */
@@ -191,7 +224,7 @@ export const OperationService: GenService<{
     methodKind: "unary";
     input: typeof ListOperationsRequestSchema;
     output: typeof ListOperationsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.admin.v1.OperationService.CancelOperation
    */
@@ -199,7 +232,5 @@ export const OperationService: GenService<{
     methodKind: "unary";
     input: typeof CancelOperationRequestSchema;
     output: typeof OperationSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_admin_v1_operation_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_operation_service, 0);

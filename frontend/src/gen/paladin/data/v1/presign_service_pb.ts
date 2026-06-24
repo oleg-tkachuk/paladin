@@ -2,8 +2,16 @@
 // @generated from file paladin/data/v1/presign_service.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
@@ -14,95 +22,111 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/data/v1/presign_service.proto.
  */
-export const file_paladin_data_v1_presign_service: GenFile = /*@__PURE__*/
-  fileDesc("CiFvY3AvZGF0YS92MS9wcmVzaWduX3NlcnZpY2UucHJvdG8SC29jcC5kYXRhLnYxIlsKGlJlZ2VuZXJhdGVVcGxvYWRVcmxSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIoYBChtSZWdlbmVyYXRlVXBsb2FkVXJsUmVzcG9uc2USLwoKdXBsb2FkX3VybBgBIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsEjYKD2NvbXBsZXRpb25fbW9kZRgCIAEoDjIdLm9jcC5jb21tb24udjEuQ29tcGxldGlvbk1vZGUidAoWUHJlc2lnbkRvd25sb2FkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiYKA3R0bBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIbChNjb250ZW50X2Rpc3Bvc2l0aW9uGAMgASgJIkwKF1ByZXNpZ25Eb3dubG9hZFJlc3BvbnNlEjEKDGRvd25sb2FkX3VybBgBIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsMtgBCg5QcmVzaWduU2VydmljZRJoChNSZWdlbmVyYXRlVXBsb2FkVXJsEicub2NwLmRhdGEudjEuUmVnZW5lcmF0ZVVwbG9hZFVybFJlcXVlc3QaKC5vY3AuZGF0YS52MS5SZWdlbmVyYXRlVXBsb2FkVXJsUmVzcG9uc2USXAoPUHJlc2lnbkRvd25sb2FkEiMub2NwLmRhdGEudjEuUHJlc2lnbkRvd25sb2FkUmVxdWVzdBokLm9jcC5kYXRhLnYxLlByZXNpZ25Eb3dubG9hZFJlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_paladin_common_v1_resource]);
+export const file_paladin_data_v1_presign_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiFvY3AvZGF0YS92MS9wcmVzaWduX3NlcnZpY2UucHJvdG8SC29jcC5kYXRhLnYxIlsKGlJlZ2VuZXJhdGVVcGxvYWRVcmxSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIoYBChtSZWdlbmVyYXRlVXBsb2FkVXJsUmVzcG9uc2USLwoKdXBsb2FkX3VybBgBIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsEjYKD2NvbXBsZXRpb25fbW9kZRgCIAEoDjIdLm9jcC5jb21tb24udjEuQ29tcGxldGlvbk1vZGUidAoWUHJlc2lnbkRvd25sb2FkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiYKA3R0bBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIbChNjb250ZW50X2Rpc3Bvc2l0aW9uGAMgASgJIkwKF1ByZXNpZ25Eb3dubG9hZFJlc3BvbnNlEjEKDGRvd25sb2FkX3VybBgBIAEoCzIbLm9jcC5jb21tb24udjEuUHJlc2lnbmVkVXJsMtgBCg5QcmVzaWduU2VydmljZRJoChNSZWdlbmVyYXRlVXBsb2FkVXJsEicub2NwLmRhdGEudjEuUmVnZW5lcmF0ZVVwbG9hZFVybFJlcXVlc3QaKC5vY3AuZGF0YS52MS5SZWdlbmVyYXRlVXBsb2FkVXJsUmVzcG9uc2USXAoPUHJlc2lnbkRvd25sb2FkEiMub2NwLmRhdGEudjEuUHJlc2lnbkRvd25sb2FkUmVxdWVzdBokLm9jcC5kYXRhLnYxLlByZXNpZ25Eb3dubG9hZFJlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_duration,
+      file_paladin_common_v1_resource,
+    ],
+  );
 
 /**
  * @generated from message paladin.data.v1.RegenerateUploadUrlRequest
  */
-export type RegenerateUploadUrlRequest = Message<"paladin.data.v1.RegenerateUploadUrlRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type RegenerateUploadUrlRequest =
+  Message<"paladin.data.v1.RegenerateUploadUrlRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: google.protobuf.Duration ttl = 2;
-   */
-  ttl?: Duration | undefined;
-};
+    /**
+     * @generated from field: google.protobuf.Duration ttl = 2;
+     */
+    ttl?: Duration | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.RegenerateUploadUrlRequest.
  * Use `create(RegenerateUploadUrlRequestSchema)` to create a new message.
  */
-export const RegenerateUploadUrlRequestSchema: GenMessage<RegenerateUploadUrlRequest> = /*@__PURE__*/
+export const RegenerateUploadUrlRequestSchema: GenMessage<RegenerateUploadUrlRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_presign_service, 0);
 
 /**
  * @generated from message paladin.data.v1.RegenerateUploadUrlResponse
  */
-export type RegenerateUploadUrlResponse = Message<"paladin.data.v1.RegenerateUploadUrlResponse"> & {
-  /**
-   * @generated from field: paladin.common.v1.PresignedUrl upload_url = 1;
-   */
-  uploadUrl?: PresignedUrl | undefined;
+export type RegenerateUploadUrlResponse =
+  Message<"paladin.data.v1.RegenerateUploadUrlResponse"> & {
+    /**
+     * @generated from field: paladin.common.v1.PresignedUrl upload_url = 1;
+     */
+    uploadUrl?: PresignedUrl | undefined;
 
-  /**
-   * @generated from field: paladin.common.v1.CompletionMode completion_mode = 2;
-   */
-  completionMode: CompletionMode;
-};
+    /**
+     * @generated from field: paladin.common.v1.CompletionMode completion_mode = 2;
+     */
+    completionMode: CompletionMode;
+  };
 
 /**
  * Describes the message paladin.data.v1.RegenerateUploadUrlResponse.
  * Use `create(RegenerateUploadUrlResponseSchema)` to create a new message.
  */
-export const RegenerateUploadUrlResponseSchema: GenMessage<RegenerateUploadUrlResponse> = /*@__PURE__*/
+export const RegenerateUploadUrlResponseSchema: GenMessage<RegenerateUploadUrlResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_presign_service, 1);
 
 /**
  * @generated from message paladin.data.v1.PresignDownloadRequest
  */
-export type PresignDownloadRequest = Message<"paladin.data.v1.PresignDownloadRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type PresignDownloadRequest =
+  Message<"paladin.data.v1.PresignDownloadRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: google.protobuf.Duration ttl = 2;
-   */
-  ttl?: Duration | undefined;
+    /**
+     * @generated from field: google.protobuf.Duration ttl = 2;
+     */
+    ttl?: Duration | undefined;
 
-  /**
-   * @generated from field: string content_disposition = 3;
-   */
-  contentDisposition: string;
-};
+    /**
+     * @generated from field: string content_disposition = 3;
+     */
+    contentDisposition: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.PresignDownloadRequest.
  * Use `create(PresignDownloadRequestSchema)` to create a new message.
  */
-export const PresignDownloadRequestSchema: GenMessage<PresignDownloadRequest> = /*@__PURE__*/
+export const PresignDownloadRequestSchema: GenMessage<PresignDownloadRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_presign_service, 2);
 
 /**
  * @generated from message paladin.data.v1.PresignDownloadResponse
  */
-export type PresignDownloadResponse = Message<"paladin.data.v1.PresignDownloadResponse"> & {
-  /**
-   * @generated from field: paladin.common.v1.PresignedUrl download_url = 1;
-   */
-  downloadUrl?: PresignedUrl | undefined;
-};
+export type PresignDownloadResponse =
+  Message<"paladin.data.v1.PresignDownloadResponse"> & {
+    /**
+     * @generated from field: paladin.common.v1.PresignedUrl download_url = 1;
+     */
+    downloadUrl?: PresignedUrl | undefined;
+  };
 
 /**
  * Describes the message paladin.data.v1.PresignDownloadResponse.
  * Use `create(PresignDownloadResponseSchema)` to create a new message.
  */
-export const PresignDownloadResponseSchema: GenMessage<PresignDownloadResponse> = /*@__PURE__*/
+export const PresignDownloadResponseSchema: GenMessage<PresignDownloadResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_presign_service, 3);
 
 /**
@@ -119,7 +143,7 @@ export const PresignService: GenService<{
     methodKind: "unary";
     input: typeof RegenerateUploadUrlRequestSchema;
     output: typeof RegenerateUploadUrlResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.PresignService.PresignDownload
    */
@@ -127,7 +151,5 @@ export const PresignService: GenService<{
     methodKind: "unary";
     input: typeof PresignDownloadRequestSchema;
     output: typeof PresignDownloadResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_data_v1_presign_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_presign_service, 0);

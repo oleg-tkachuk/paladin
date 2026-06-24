@@ -2,8 +2,16 @@
 // @generated from file paladin/iam/v1/api_key_service.proto (package paladin.iam.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
@@ -18,8 +26,18 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/iam/v1/api_key_service.proto.
  */
-export const file_paladin_iam_v1_api_key_service: GenFile = /*@__PURE__*/
-  fileDesc("CiBvY3AvaWFtL3YxL2FwaV9rZXlfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSKgAQoTQ3JlYXRlQXBpS2V5UmVxdWVzdBIOCgZwYXJlbnQYASABKAkSHAoLZGVzY3JpcHRpb24YAiABKAlCB7pIBHICEAESDQoFcm9sZXMYAyADKAkSJAoGc2NvcGVzGAQgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZRImCgN0dGwYBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iSwoUQ3JlYXRlQXBpS2V5UmVzcG9uc2USIwoHYXBpX2tleRgBIAEoCzISLm9jcC5pYW0udjEuQXBpS2V5Eg4KBnNlY3JldBgCIAEoCSIpChBHZXRBcGlLZXlSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiZwoSTGlzdEFwaUtleXNSZXF1ZXN0Eg4KBnBhcmVudBgBIAEoCRIoCgRwYWdlGAIgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIXCg9pbmNsdWRlX3Jldm9rZWQYAyABKAgiZgoTTGlzdEFwaUtleXNSZXNwb25zZRIkCghhcGlfa2V5cxgBIAMoCzISLm9jcC5pYW0udjEuQXBpS2V5EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIsChNSZXZva2VBcGlLZXlSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiFgoUUmV2b2tlQXBpS2V5UmVzcG9uc2UiXQoTUm90YXRlQXBpS2V5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEi8KDGdyYWNlX3BlcmlvZBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJPChRSb3RhdGVBcGlLZXlSZXNwb25zZRIjCgdhcGlfa2V5GAEgASgLMhIub2NwLmlhbS52MS5BcGlLZXkSEgoKbmV3X3NlY3JldBgCIAEoCSKsAQoWTWludFNjb3BlZFRva2VuUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESLgoGc2NvcGVzGAIgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAESLgoDdHRsGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQga6SAPIAQESGQoIYXVkaWVuY2UYBCABKAlCB7pIBHICEAEiSwoXTWludFNjb3BlZFRva2VuUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhoKEmV4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBTLzAwoNQXBpS2V5U2VydmljZRJRCgxDcmVhdGVBcGlLZXkSHy5vY3AuaWFtLnYxLkNyZWF0ZUFwaUtleVJlcXVlc3QaIC5vY3AuaWFtLnYxLkNyZWF0ZUFwaUtleVJlc3BvbnNlEj0KCUdldEFwaUtleRIcLm9jcC5pYW0udjEuR2V0QXBpS2V5UmVxdWVzdBoSLm9jcC5pYW0udjEuQXBpS2V5Ek4KC0xpc3RBcGlLZXlzEh4ub2NwLmlhbS52MS5MaXN0QXBpS2V5c1JlcXVlc3QaHy5vY3AuaWFtLnYxLkxpc3RBcGlLZXlzUmVzcG9uc2USUQoMUmV2b2tlQXBpS2V5Eh8ub2NwLmlhbS52MS5SZXZva2VBcGlLZXlSZXF1ZXN0GiAub2NwLmlhbS52MS5SZXZva2VBcGlLZXlSZXNwb25zZRJRCgxSb3RhdGVBcGlLZXkSHy5vY3AuaWFtLnYxLlJvdGF0ZUFwaUtleVJlcXVlc3QaIC5vY3AuaWFtLnYxLlJvdGF0ZUFwaUtleVJlc3BvbnNlEloKD01pbnRTY29wZWRUb2tlbhIiLm9jcC5pYW0udjEuTWludFNjb3BlZFRva2VuUmVxdWVzdBojLm9jcC5pYW0udjEuTWludFNjb3BlZFRva2VuUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtvY3BpYW12MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_paladin_common_v1_pagination, file_paladin_common_v1_scope, file_paladin_iam_v1_types]);
+export const file_paladin_iam_v1_api_key_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiBvY3AvaWFtL3YxL2FwaV9rZXlfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSKgAQoTQ3JlYXRlQXBpS2V5UmVxdWVzdBIOCgZwYXJlbnQYASABKAkSHAoLZGVzY3JpcHRpb24YAiABKAlCB7pIBHICEAESDQoFcm9sZXMYAyADKAkSJAoGc2NvcGVzGAQgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZRImCgN0dGwYBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iSwoUQ3JlYXRlQXBpS2V5UmVzcG9uc2USIwoHYXBpX2tleRgBIAEoCzISLm9jcC5pYW0udjEuQXBpS2V5Eg4KBnNlY3JldBgCIAEoCSIpChBHZXRBcGlLZXlSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiZwoSTGlzdEFwaUtleXNSZXF1ZXN0Eg4KBnBhcmVudBgBIAEoCRIoCgRwYWdlGAIgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIXCg9pbmNsdWRlX3Jldm9rZWQYAyABKAgiZgoTTGlzdEFwaUtleXNSZXNwb25zZRIkCghhcGlfa2V5cxgBIAMoCzISLm9jcC5pYW0udjEuQXBpS2V5EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIsChNSZXZva2VBcGlLZXlSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiFgoUUmV2b2tlQXBpS2V5UmVzcG9uc2UiXQoTUm90YXRlQXBpS2V5UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEi8KDGdyYWNlX3BlcmlvZBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJPChRSb3RhdGVBcGlLZXlSZXNwb25zZRIjCgdhcGlfa2V5GAEgASgLMhIub2NwLmlhbS52MS5BcGlLZXkSEgoKbmV3X3NlY3JldBgCIAEoCSKsAQoWTWludFNjb3BlZFRva2VuUmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESLgoGc2NvcGVzGAIgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAESLgoDdHRsGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQga6SAPIAQESGQoIYXVkaWVuY2UYBCABKAlCB7pIBHICEAEiSwoXTWludFNjb3BlZFRva2VuUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhoKEmV4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBTLzAwoNQXBpS2V5U2VydmljZRJRCgxDcmVhdGVBcGlLZXkSHy5vY3AuaWFtLnYxLkNyZWF0ZUFwaUtleVJlcXVlc3QaIC5vY3AuaWFtLnYxLkNyZWF0ZUFwaUtleVJlc3BvbnNlEj0KCUdldEFwaUtleRIcLm9jcC5pYW0udjEuR2V0QXBpS2V5UmVxdWVzdBoSLm9jcC5pYW0udjEuQXBpS2V5Ek4KC0xpc3RBcGlLZXlzEh4ub2NwLmlhbS52MS5MaXN0QXBpS2V5c1JlcXVlc3QaHy5vY3AuaWFtLnYxLkxpc3RBcGlLZXlzUmVzcG9uc2USUQoMUmV2b2tlQXBpS2V5Eh8ub2NwLmlhbS52MS5SZXZva2VBcGlLZXlSZXF1ZXN0GiAub2NwLmlhbS52MS5SZXZva2VBcGlLZXlSZXNwb25zZRJRCgxSb3RhdGVBcGlLZXkSHy5vY3AuaWFtLnYxLlJvdGF0ZUFwaUtleVJlcXVlc3QaIC5vY3AuaWFtLnYxLlJvdGF0ZUFwaUtleVJlc3BvbnNlEloKD01pbnRTY29wZWRUb2tlbhIiLm9jcC5pYW0udjEuTWludFNjb3BlZFRva2VuUmVxdWVzdBojLm9jcC5pYW0udjEuTWludFNjb3BlZFRva2VuUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtvY3BpYW12MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_duration,
+      file_paladin_common_v1_pagination,
+      file_paladin_common_v1_scope,
+      file_paladin_iam_v1_types,
+    ],
+  );
 
 /**
  * @generated from message paladin.iam.v1.CreateApiKeyRequest
@@ -59,31 +77,34 @@ export type CreateApiKeyRequest = Message<"paladin.iam.v1.CreateApiKeyRequest"> 
  * Describes the message paladin.iam.v1.CreateApiKeyRequest.
  * Use `create(CreateApiKeyRequestSchema)` to create a new message.
  */
-export const CreateApiKeyRequestSchema: GenMessage<CreateApiKeyRequest> = /*@__PURE__*/
+export const CreateApiKeyRequestSchema: GenMessage<CreateApiKeyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 0);
 
 /**
  * @generated from message paladin.iam.v1.CreateApiKeyResponse
  */
-export type CreateApiKeyResponse = Message<"paladin.iam.v1.CreateApiKeyResponse"> & {
-  /**
-   * @generated from field: paladin.iam.v1.ApiKey api_key = 1;
-   */
-  apiKey?: ApiKey | undefined;
+export type CreateApiKeyResponse =
+  Message<"paladin.iam.v1.CreateApiKeyResponse"> & {
+    /**
+     * @generated from field: paladin.iam.v1.ApiKey api_key = 1;
+     */
+    apiKey?: ApiKey | undefined;
 
-  /**
-   * The full secret value. Stored only as a hash; not retrievable later.
-   *
-   * @generated from field: string secret = 2;
-   */
-  secret: string;
-};
+    /**
+     * The full secret value. Stored only as a hash; not retrievable later.
+     *
+     * @generated from field: string secret = 2;
+     */
+    secret: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.CreateApiKeyResponse.
  * Use `create(CreateApiKeyResponseSchema)` to create a new message.
  */
-export const CreateApiKeyResponseSchema: GenMessage<CreateApiKeyResponse> = /*@__PURE__*/
+export const CreateApiKeyResponseSchema: GenMessage<CreateApiKeyResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 1);
 
 /**
@@ -100,7 +121,8 @@ export type GetApiKeyRequest = Message<"paladin.iam.v1.GetApiKeyRequest"> & {
  * Describes the message paladin.iam.v1.GetApiKeyRequest.
  * Use `create(GetApiKeyRequestSchema)` to create a new message.
  */
-export const GetApiKeyRequestSchema: GenMessage<GetApiKeyRequest> = /*@__PURE__*/
+export const GetApiKeyRequestSchema: GenMessage<GetApiKeyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 2);
 
 /**
@@ -127,7 +149,8 @@ export type ListApiKeysRequest = Message<"paladin.iam.v1.ListApiKeysRequest"> & 
  * Describes the message paladin.iam.v1.ListApiKeysRequest.
  * Use `create(ListApiKeysRequestSchema)` to create a new message.
  */
-export const ListApiKeysRequestSchema: GenMessage<ListApiKeysRequest> = /*@__PURE__*/
+export const ListApiKeysRequestSchema: GenMessage<ListApiKeysRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 3);
 
 /**
@@ -149,7 +172,8 @@ export type ListApiKeysResponse = Message<"paladin.iam.v1.ListApiKeysResponse"> 
  * Describes the message paladin.iam.v1.ListApiKeysResponse.
  * Use `create(ListApiKeysResponseSchema)` to create a new message.
  */
-export const ListApiKeysResponseSchema: GenMessage<ListApiKeysResponse> = /*@__PURE__*/
+export const ListApiKeysResponseSchema: GenMessage<ListApiKeysResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 4);
 
 /**
@@ -166,20 +190,22 @@ export type RevokeApiKeyRequest = Message<"paladin.iam.v1.RevokeApiKeyRequest"> 
  * Describes the message paladin.iam.v1.RevokeApiKeyRequest.
  * Use `create(RevokeApiKeyRequestSchema)` to create a new message.
  */
-export const RevokeApiKeyRequestSchema: GenMessage<RevokeApiKeyRequest> = /*@__PURE__*/
+export const RevokeApiKeyRequestSchema: GenMessage<RevokeApiKeyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 5);
 
 /**
  * @generated from message paladin.iam.v1.RevokeApiKeyResponse
  */
-export type RevokeApiKeyResponse = Message<"paladin.iam.v1.RevokeApiKeyResponse"> & {
-};
+export type RevokeApiKeyResponse =
+  Message<"paladin.iam.v1.RevokeApiKeyResponse"> & {};
 
 /**
  * Describes the message paladin.iam.v1.RevokeApiKeyResponse.
  * Use `create(RevokeApiKeyResponseSchema)` to create a new message.
  */
-export const RevokeApiKeyResponseSchema: GenMessage<RevokeApiKeyResponse> = /*@__PURE__*/
+export const RevokeApiKeyResponseSchema: GenMessage<RevokeApiKeyResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 6);
 
 /**
@@ -201,88 +227,95 @@ export type RotateApiKeyRequest = Message<"paladin.iam.v1.RotateApiKeyRequest"> 
  * Describes the message paladin.iam.v1.RotateApiKeyRequest.
  * Use `create(RotateApiKeyRequestSchema)` to create a new message.
  */
-export const RotateApiKeyRequestSchema: GenMessage<RotateApiKeyRequest> = /*@__PURE__*/
+export const RotateApiKeyRequestSchema: GenMessage<RotateApiKeyRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 7);
 
 /**
  * @generated from message paladin.iam.v1.RotateApiKeyResponse
  */
-export type RotateApiKeyResponse = Message<"paladin.iam.v1.RotateApiKeyResponse"> & {
-  /**
-   * @generated from field: paladin.iam.v1.ApiKey api_key = 1;
-   */
-  apiKey?: ApiKey | undefined;
+export type RotateApiKeyResponse =
+  Message<"paladin.iam.v1.RotateApiKeyResponse"> & {
+    /**
+     * @generated from field: paladin.iam.v1.ApiKey api_key = 1;
+     */
+    apiKey?: ApiKey | undefined;
 
-  /**
-   * @generated from field: string new_secret = 2;
-   */
-  newSecret: string;
-};
+    /**
+     * @generated from field: string new_secret = 2;
+     */
+    newSecret: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.RotateApiKeyResponse.
  * Use `create(RotateApiKeyResponseSchema)` to create a new message.
  */
-export const RotateApiKeyResponseSchema: GenMessage<RotateApiKeyResponse> = /*@__PURE__*/
+export const RotateApiKeyResponseSchema: GenMessage<RotateApiKeyResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 8);
 
 /**
  * @generated from message paladin.iam.v1.MintScopedTokenRequest
  */
-export type MintScopedTokenRequest = Message<"paladin.iam.v1.MintScopedTokenRequest"> & {
-  /**
-   * Parent api_key whose privileges bound the new token. Caller must hold
-   * the api_key's secret AND the new scopes must be ⊆ api_key.scopes.
-   *
-   * @generated from field: string parent = 1;
-   */
-  parent: string;
+export type MintScopedTokenRequest =
+  Message<"paladin.iam.v1.MintScopedTokenRequest"> & {
+    /**
+     * Parent api_key whose privileges bound the new token. Caller must hold
+     * the api_key's secret AND the new scopes must be ⊆ api_key.scopes.
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
 
-  /**
-   * @generated from field: repeated paladin.common.v1.Scope scopes = 2;
-   */
-  scopes: Scope[];
+    /**
+     * @generated from field: repeated paladin.common.v1.Scope scopes = 2;
+     */
+    scopes: Scope[];
 
-  /**
-   * @generated from field: google.protobuf.Duration ttl = 3;
-   */
-  ttl?: Duration | undefined;
+    /**
+     * @generated from field: google.protobuf.Duration ttl = 3;
+     */
+    ttl?: Duration | undefined;
 
-  /**
-   * Audience the minted token should target ("paladin-data" or "paladin-admin").
-   *
-   * @generated from field: string audience = 4;
-   */
-  audience: string;
-};
+    /**
+     * Audience the minted token should target ("paladin-data" or "paladin-admin").
+     *
+     * @generated from field: string audience = 4;
+     */
+    audience: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.MintScopedTokenRequest.
  * Use `create(MintScopedTokenRequestSchema)` to create a new message.
  */
-export const MintScopedTokenRequestSchema: GenMessage<MintScopedTokenRequest> = /*@__PURE__*/
+export const MintScopedTokenRequestSchema: GenMessage<MintScopedTokenRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 9);
 
 /**
  * @generated from message paladin.iam.v1.MintScopedTokenResponse
  */
-export type MintScopedTokenResponse = Message<"paladin.iam.v1.MintScopedTokenResponse"> & {
-  /**
-   * @generated from field: string access_token = 1;
-   */
-  accessToken: string;
+export type MintScopedTokenResponse =
+  Message<"paladin.iam.v1.MintScopedTokenResponse"> & {
+    /**
+     * @generated from field: string access_token = 1;
+     */
+    accessToken: string;
 
-  /**
-   * @generated from field: int32 expires_in_seconds = 2;
-   */
-  expiresInSeconds: number;
-};
+    /**
+     * @generated from field: int32 expires_in_seconds = 2;
+     */
+    expiresInSeconds: number;
+  };
 
 /**
  * Describes the message paladin.iam.v1.MintScopedTokenResponse.
  * Use `create(MintScopedTokenResponseSchema)` to create a new message.
  */
-export const MintScopedTokenResponseSchema: GenMessage<MintScopedTokenResponse> = /*@__PURE__*/
+export const MintScopedTokenResponseSchema: GenMessage<MintScopedTokenResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_api_key_service, 10);
 
 /**
@@ -302,7 +335,7 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof CreateApiKeyRequestSchema;
     output: typeof CreateApiKeyResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.ApiKeyService.GetApiKey
    */
@@ -310,7 +343,7 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof GetApiKeyRequestSchema;
     output: typeof ApiKeySchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.ApiKeyService.ListApiKeys
    */
@@ -318,7 +351,7 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof ListApiKeysRequestSchema;
     output: typeof ListApiKeysResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.ApiKeyService.RevokeApiKey
    */
@@ -326,7 +359,7 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof RevokeApiKeyRequestSchema;
     output: typeof RevokeApiKeyResponseSchema;
-  },
+  };
   /**
    * RotateApiKey issues a new secret while keeping metadata + scopes intact.
    * The previous secret stops working after `grace_period`.
@@ -337,7 +370,7 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof RotateApiKeyRequestSchema;
     output: typeof RotateApiKeyResponseSchema;
-  },
+  };
   /**
    * MintScopedToken issues a short-lived JWT bound to this api_key but with
    * a NARROWER scope set than the api_key itself. Used by the MCP server to
@@ -349,7 +382,5 @@ export const ApiKeyService: GenService<{
     methodKind: "unary";
     input: typeof MintScopedTokenRequestSchema;
     output: typeof MintScopedTokenResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_iam_v1_api_key_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_api_key_service, 0);

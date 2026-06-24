@@ -2,7 +2,11 @@
 // @generated from file paladin/data/v1/types.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -11,8 +15,12 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/data/v1/types.proto.
  */
-export const file_paladin_data_v1_types: GenFile = /*@__PURE__*/
-  fileDesc("ChdvY3AvZGF0YS92MS90eXBlcy5wcm90bxILb2NwLmRhdGEudjEizAYKBk9iamVjdBIMCgRuYW1lGAEgASgJEhEKCW9iamVjdF9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSEgoKb2JqZWN0X2tleRgEIAEoCRILCgNrZXkYBSABKAkSJwoFc3RhdGUYBiABKA4yGC5vY3AuZGF0YS52MS5PYmplY3RTdGF0ZRIUCgxjb250ZW50X3R5cGUYByABKAkSEgoKc2l6ZV9ieXRlcxgIIAEoAxIMCgRldGFnGAkgASgJEi0KCGNoZWNrc3VtGAogASgLMhsub2NwLmRhdGEudjEuQ2hlY2tzdW1EaWdlc3QSEQoJc2VxdWVuY2VyGAsgASgJEjMKCG1ldGFkYXRhGAwgAygLMiEub2NwLmRhdGEudjEuT2JqZWN0Lk1ldGFkYXRhRW50cnkSKwoEdGFncxgNIAMoCzIdLm9jcC5kYXRhLnYxLk9iamVjdC5UYWdzRW50cnkSFAoMZXh0ZXJuYWxfcmVmGA4gASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDyABKAkSLgoKY3JlYXRlZF9hdBgQIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GBIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg10ZXJtaW5hdGVkX2F0GBMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGxvY2sYFSABKAsyHC5vY3AuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSMQoJcGxhY2VtZW50GBYgASgLMh4ub2NwLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjIKDkNoZWNrc3VtRGlnZXN0EhEKCWFsZ29yaXRobRgBIAEoCRINCgV2YWx1ZRgCIAEoCSJlCg9PYmplY3RMb2NrU3RhdGUSDAoEbW9kZRgBIAEoCRIwCgxyZXRhaW5fdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxlZ2FsX2hvbGQYAyABKAgiTAoRUGh5c2ljYWxQbGFjZW1lbnQSEgoKYmFja2VuZF9pZBgBIAEoCRITCgtidWNrZXRfbmFtZRgCIAEoCRIOCgZzM19rZXkYAyABKAkiSgoNQ29tcGxldGVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRIMCgRldGFnGAIgASgJEhYKDmNoZWNrc3VtX3ZhbHVlGAMgASgJInIKCFBhcnRJbmZvEhMKC3BhcnRfbnVtYmVyGAEgASgFEhIKCnNpemVfYnl0ZXMYAiABKAMSDAoEZXRhZxgDIAEoCRIvCgt1cGxvYWRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqlAEKC09iamVjdFN0YXRlEhwKGE9CSkVDVF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFE9CSkVDVF9TVEFURV9QRU5ESU5HEAESGgoWT0JKRUNUX1NUQVRFX0FWQUlMQUJMRRACEhcKE09CSkVDVF9TVEFURV9GQUlMRUQQAxIYChRPQkpFQ1RfU1RBVEVfREVMRVRFRBAEQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+export const file_paladin_data_v1_types: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "ChdvY3AvZGF0YS92MS90eXBlcy5wcm90bxILb2NwLmRhdGEudjEizAYKBk9iamVjdBIMCgRuYW1lGAEgASgJEhEKCW9iamVjdF9pZBgCIAEoCRIRCgl0ZW5hbnRfaWQYAyABKAkSEgoKb2JqZWN0X2tleRgEIAEoCRILCgNrZXkYBSABKAkSJwoFc3RhdGUYBiABKA4yGC5vY3AuZGF0YS52MS5PYmplY3RTdGF0ZRIUCgxjb250ZW50X3R5cGUYByABKAkSEgoKc2l6ZV9ieXRlcxgIIAEoAxIMCgRldGFnGAkgASgJEi0KCGNoZWNrc3VtGAogASgLMhsub2NwLmRhdGEudjEuQ2hlY2tzdW1EaWdlc3QSEQoJc2VxdWVuY2VyGAsgASgJEjMKCG1ldGFkYXRhGAwgAygLMiEub2NwLmRhdGEudjEuT2JqZWN0Lk1ldGFkYXRhRW50cnkSKwoEdGFncxgNIAMoCzIdLm9jcC5kYXRhLnYxLk9iamVjdC5UYWdzRW50cnkSFAoMZXh0ZXJuYWxfcmVmGA4gASgJEhgKEHJlc291cmNlX3ZlcnNpb24YDyABKAkSLgoKY3JlYXRlZF9hdBgQIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GBIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg10ZXJtaW5hdGVkX2F0GBMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGxvY2sYFSABKAsyHC5vY3AuZGF0YS52MS5PYmplY3RMb2NrU3RhdGUSMQoJcGxhY2VtZW50GBYgASgLMh4ub2NwLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjIKDkNoZWNrc3VtRGlnZXN0EhEKCWFsZ29yaXRobRgBIAEoCRINCgV2YWx1ZRgCIAEoCSJlCg9PYmplY3RMb2NrU3RhdGUSDAoEbW9kZRgBIAEoCRIwCgxyZXRhaW5fdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxlZ2FsX2hvbGQYAyABKAgiTAoRUGh5c2ljYWxQbGFjZW1lbnQSEgoKYmFja2VuZF9pZBgBIAEoCRITCgtidWNrZXRfbmFtZRgCIAEoCRIOCgZzM19rZXkYAyABKAkiSgoNQ29tcGxldGVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRIMCgRldGFnGAIgASgJEhYKDmNoZWNrc3VtX3ZhbHVlGAMgASgJInIKCFBhcnRJbmZvEhMKC3BhcnRfbnVtYmVyGAEgASgFEhIKCnNpemVfYnl0ZXMYAiABKAMSDAoEZXRhZxgDIAEoCRIvCgt1cGxvYWRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqlAEKC09iamVjdFN0YXRlEhwKGE9CSkVDVF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFE9CSkVDVF9TVEFURV9QRU5ESU5HEAESGgoWT0JKRUNUX1NUQVRFX0FWQUlMQUJMRRACEhcKE09CSkVDVF9TVEFURV9GQUlMRUQQAxIYChRPQkpFQ1RfU1RBVEVfREVMRVRFRBAEQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z",
+    [file_google_protobuf_timestamp],
+  );
 
 /**
  * Object is the data-plane representation. Hides backend internals;
@@ -147,7 +155,8 @@ export type Object$ = Message<"paladin.data.v1.Object"> & {
  * Describes the message paladin.data.v1.Object.
  * Use `create(ObjectSchema)` to create a new message.
  */
-export const ObjectSchema: GenMessage<Object$> = /*@__PURE__*/
+export const ObjectSchema: GenMessage<Object$> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 0);
 
 /**
@@ -173,7 +182,8 @@ export type ChecksumDigest = Message<"paladin.data.v1.ChecksumDigest"> & {
  * Describes the message paladin.data.v1.ChecksumDigest.
  * Use `create(ChecksumDigestSchema)` to create a new message.
  */
-export const ChecksumDigestSchema: GenMessage<ChecksumDigest> = /*@__PURE__*/
+export const ChecksumDigestSchema: GenMessage<ChecksumDigest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 1);
 
 /**
@@ -202,7 +212,8 @@ export type ObjectLockState = Message<"paladin.data.v1.ObjectLockState"> & {
  * Describes the message paladin.data.v1.ObjectLockState.
  * Use `create(ObjectLockStateSchema)` to create a new message.
  */
-export const ObjectLockStateSchema: GenMessage<ObjectLockState> = /*@__PURE__*/
+export const ObjectLockStateSchema: GenMessage<ObjectLockState> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 2);
 
 /**
@@ -231,7 +242,8 @@ export type PhysicalPlacement = Message<"paladin.data.v1.PhysicalPlacement"> & {
  * Describes the message paladin.data.v1.PhysicalPlacement.
  * Use `create(PhysicalPlacementSchema)` to create a new message.
  */
-export const PhysicalPlacementSchema: GenMessage<PhysicalPlacement> = /*@__PURE__*/
+export const PhysicalPlacementSchema: GenMessage<PhysicalPlacement> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 3);
 
 /**
@@ -262,7 +274,8 @@ export type CompletedPart = Message<"paladin.data.v1.CompletedPart"> & {
  * Describes the message paladin.data.v1.CompletedPart.
  * Use `create(CompletedPartSchema)` to create a new message.
  */
-export const CompletedPartSchema: GenMessage<CompletedPart> = /*@__PURE__*/
+export const CompletedPartSchema: GenMessage<CompletedPart> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 4);
 
 /**
@@ -294,7 +307,8 @@ export type PartInfo = Message<"paladin.data.v1.PartInfo"> & {
  * Describes the message paladin.data.v1.PartInfo.
  * Use `create(PartInfoSchema)` to create a new message.
  */
-export const PartInfoSchema: GenMessage<PartInfo> = /*@__PURE__*/
+export const PartInfoSchema: GenMessage<PartInfo> =
+  /*@__PURE__*/
   messageDesc(file_paladin_data_v1_types, 5);
 
 /**
@@ -330,6 +344,6 @@ export enum ObjectState {
 /**
  * Describes the enum paladin.data.v1.ObjectState.
  */
-export const ObjectStateSchema: GenEnum<ObjectState> = /*@__PURE__*/
+export const ObjectStateSchema: GenEnum<ObjectState> =
+  /*@__PURE__*/
   enumDesc(file_paladin_data_v1_types, 0);
-

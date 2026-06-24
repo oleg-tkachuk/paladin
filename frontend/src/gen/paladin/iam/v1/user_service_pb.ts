@@ -2,8 +2,16 @@
 // @generated from file paladin/iam/v1/user_service.proto (package paladin.iam.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
@@ -18,8 +26,18 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file paladin/iam/v1/user_service.proto.
  */
-export const file_paladin_iam_v1_user_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch1vY3AvaWFtL3YxL3VzZXJfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSKrAQoRQ3JlYXRlVXNlclJlcXVlc3QSDgoGcGFyZW50GAEgASgJEhgKB3N1YmplY3QYAiABKAlCB7pIBHICEAESFAoMZGlzcGxheV9uYW1lGAMgASgJEiEKEGluaXRpYWxfcGFzc3dvcmQYBCABKAlCB7pIBHICEAwSDQoFcm9sZXMYBSADKAkSJAoGc2NvcGVzGAYgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrQBChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIkQKEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCSIUChJEZWxldGVVc2VyUmVzcG9uc2UiXAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJIl8KEUxpc3RVc2Vyc1Jlc3BvbnNlEh8KBXVzZXJzGAEgAygLMhAub2NwLmlhbS52MS5Vc2VyEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJbChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIuCgZzY29wZXMYAiADKAsyFC5vY3AuY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJcChNSZXZva2VTY29wZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESLgoGc2NvcGVzGAIgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiQwoUUmVzZXRQYXNzd29yZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIUCgxuZXdfcGFzc3dvcmQYAiABKAkiMwoVUmVzZXRQYXNzd29yZFJlc3BvbnNlEhoKEmdlbmVyYXRlZF9wYXNzd29yZBgBIAEoCTK1BAoLVXNlclNlcnZpY2USPQoKQ3JlYXRlVXNlchIdLm9jcC5pYW0udjEuQ3JlYXRlVXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISNwoHR2V0VXNlchIaLm9jcC5pYW0udjEuR2V0VXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISPQoKVXBkYXRlVXNlchIdLm9jcC5pYW0udjEuVXBkYXRlVXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISSwoKRGVsZXRlVXNlchIdLm9jcC5pYW0udjEuRGVsZXRlVXNlclJlcXVlc3QaHi5vY3AuaWFtLnYxLkRlbGV0ZVVzZXJSZXNwb25zZRJICglMaXN0VXNlcnMSHC5vY3AuaWFtLnYxLkxpc3RVc2Vyc1JlcXVlc3QaHS5vY3AuaWFtLnYxLkxpc3RVc2Vyc1Jlc3BvbnNlEj8KC0dyYW50U2NvcGVzEh4ub2NwLmlhbS52MS5HcmFudFNjb3Blc1JlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISQQoMUmV2b2tlU2NvcGVzEh8ub2NwLmlhbS52MS5SZXZva2VTY29wZXNSZXF1ZXN0GhAub2NwLmlhbS52MS5Vc2VyElQKDVJlc2V0UGFzc3dvcmQSIC5vY3AuaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXF1ZXN0GiEub2NwLmlhbS52MS5SZXNldFBhc3N3b3JkUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtvY3BpYW12MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_paladin_common_v1_pagination, file_paladin_common_v1_scope, file_paladin_iam_v1_types]);
+export const file_paladin_iam_v1_user_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "Ch1vY3AvaWFtL3YxL3VzZXJfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSKrAQoRQ3JlYXRlVXNlclJlcXVlc3QSDgoGcGFyZW50GAEgASgJEhgKB3N1YmplY3QYAiABKAlCB7pIBHICEAESFAoMZGlzcGxheV9uYW1lGAMgASgJEiEKEGluaXRpYWxfcGFzc3dvcmQYBCABKAlCB7pIBHICEAwSDQoFcm9sZXMYBSADKAkSJAoGc2NvcGVzGAYgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrQBChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIkQKEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCSIUChJEZWxldGVVc2VyUmVzcG9uc2UiXAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSKAoEcGFnZRgCIAEoCzIaLm9jcC5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJIl8KEUxpc3RVc2Vyc1Jlc3BvbnNlEh8KBXVzZXJzGAEgAygLMhAub2NwLmlhbS52MS5Vc2VyEikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJbChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIuCgZzY29wZXMYAiADKAsyFC5vY3AuY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJcChNSZXZva2VTY29wZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESLgoGc2NvcGVzGAIgAygLMhQub2NwLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiQwoUUmVzZXRQYXNzd29yZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIUCgxuZXdfcGFzc3dvcmQYAiABKAkiMwoVUmVzZXRQYXNzd29yZFJlc3BvbnNlEhoKEmdlbmVyYXRlZF9wYXNzd29yZBgBIAEoCTK1BAoLVXNlclNlcnZpY2USPQoKQ3JlYXRlVXNlchIdLm9jcC5pYW0udjEuQ3JlYXRlVXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISNwoHR2V0VXNlchIaLm9jcC5pYW0udjEuR2V0VXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISPQoKVXBkYXRlVXNlchIdLm9jcC5pYW0udjEuVXBkYXRlVXNlclJlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISSwoKRGVsZXRlVXNlchIdLm9jcC5pYW0udjEuRGVsZXRlVXNlclJlcXVlc3QaHi5vY3AuaWFtLnYxLkRlbGV0ZVVzZXJSZXNwb25zZRJICglMaXN0VXNlcnMSHC5vY3AuaWFtLnYxLkxpc3RVc2Vyc1JlcXVlc3QaHS5vY3AuaWFtLnYxLkxpc3RVc2Vyc1Jlc3BvbnNlEj8KC0dyYW50U2NvcGVzEh4ub2NwLmlhbS52MS5HcmFudFNjb3Blc1JlcXVlc3QaEC5vY3AuaWFtLnYxLlVzZXISQQoMUmV2b2tlU2NvcGVzEh8ub2NwLmlhbS52MS5SZXZva2VTY29wZXNSZXF1ZXN0GhAub2NwLmlhbS52MS5Vc2VyElQKDVJlc2V0UGFzc3dvcmQSIC5vY3AuaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXF1ZXN0GiEub2NwLmlhbS52MS5SZXNldFBhc3N3b3JkUmVzcG9uc2VCTlpMZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2lhbS92MTtvY3BpYW12MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_field_mask,
+      file_paladin_common_v1_pagination,
+      file_paladin_common_v1_scope,
+      file_paladin_iam_v1_types,
+    ],
+  );
 
 /**
  * @generated from message paladin.iam.v1.CreateUserRequest
@@ -62,7 +80,8 @@ export type CreateUserRequest = Message<"paladin.iam.v1.CreateUserRequest"> & {
  * Describes the message paladin.iam.v1.CreateUserRequest.
  * Use `create(CreateUserRequestSchema)` to create a new message.
  */
-export const CreateUserRequestSchema: GenMessage<CreateUserRequest> = /*@__PURE__*/
+export const CreateUserRequestSchema: GenMessage<CreateUserRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 0);
 
 /**
@@ -79,7 +98,8 @@ export type GetUserRequest = Message<"paladin.iam.v1.GetUserRequest"> & {
  * Describes the message paladin.iam.v1.GetUserRequest.
  * Use `create(GetUserRequestSchema)` to create a new message.
  */
-export const GetUserRequestSchema: GenMessage<GetUserRequest> = /*@__PURE__*/
+export const GetUserRequestSchema: GenMessage<GetUserRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 1);
 
 /**
@@ -123,7 +143,8 @@ export type UpdateUserRequest = Message<"paladin.iam.v1.UpdateUserRequest"> & {
  * Describes the message paladin.iam.v1.UpdateUserRequest.
  * Use `create(UpdateUserRequestSchema)` to create a new message.
  */
-export const UpdateUserRequestSchema: GenMessage<UpdateUserRequest> = /*@__PURE__*/
+export const UpdateUserRequestSchema: GenMessage<UpdateUserRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 2);
 
 /**
@@ -145,20 +166,21 @@ export type DeleteUserRequest = Message<"paladin.iam.v1.DeleteUserRequest"> & {
  * Describes the message paladin.iam.v1.DeleteUserRequest.
  * Use `create(DeleteUserRequestSchema)` to create a new message.
  */
-export const DeleteUserRequestSchema: GenMessage<DeleteUserRequest> = /*@__PURE__*/
+export const DeleteUserRequestSchema: GenMessage<DeleteUserRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 3);
 
 /**
  * @generated from message paladin.iam.v1.DeleteUserResponse
  */
-export type DeleteUserResponse = Message<"paladin.iam.v1.DeleteUserResponse"> & {
-};
+export type DeleteUserResponse = Message<"paladin.iam.v1.DeleteUserResponse"> & {};
 
 /**
  * Describes the message paladin.iam.v1.DeleteUserResponse.
  * Use `create(DeleteUserResponseSchema)` to create a new message.
  */
-export const DeleteUserResponseSchema: GenMessage<DeleteUserResponse> = /*@__PURE__*/
+export const DeleteUserResponseSchema: GenMessage<DeleteUserResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 4);
 
 /**
@@ -189,7 +211,8 @@ export type ListUsersRequest = Message<"paladin.iam.v1.ListUsersRequest"> & {
  * Describes the message paladin.iam.v1.ListUsersRequest.
  * Use `create(ListUsersRequestSchema)` to create a new message.
  */
-export const ListUsersRequestSchema: GenMessage<ListUsersRequest> = /*@__PURE__*/
+export const ListUsersRequestSchema: GenMessage<ListUsersRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 5);
 
 /**
@@ -211,7 +234,8 @@ export type ListUsersResponse = Message<"paladin.iam.v1.ListUsersResponse"> & {
  * Describes the message paladin.iam.v1.ListUsersResponse.
  * Use `create(ListUsersResponseSchema)` to create a new message.
  */
-export const ListUsersResponseSchema: GenMessage<ListUsersResponse> = /*@__PURE__*/
+export const ListUsersResponseSchema: GenMessage<ListUsersResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 6);
 
 /**
@@ -233,7 +257,8 @@ export type GrantScopesRequest = Message<"paladin.iam.v1.GrantScopesRequest"> & 
  * Describes the message paladin.iam.v1.GrantScopesRequest.
  * Use `create(GrantScopesRequestSchema)` to create a new message.
  */
-export const GrantScopesRequestSchema: GenMessage<GrantScopesRequest> = /*@__PURE__*/
+export const GrantScopesRequestSchema: GenMessage<GrantScopesRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 7);
 
 /**
@@ -255,50 +280,55 @@ export type RevokeScopesRequest = Message<"paladin.iam.v1.RevokeScopesRequest"> 
  * Describes the message paladin.iam.v1.RevokeScopesRequest.
  * Use `create(RevokeScopesRequestSchema)` to create a new message.
  */
-export const RevokeScopesRequestSchema: GenMessage<RevokeScopesRequest> = /*@__PURE__*/
+export const RevokeScopesRequestSchema: GenMessage<RevokeScopesRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 8);
 
 /**
  * @generated from message paladin.iam.v1.ResetPasswordRequest
  */
-export type ResetPasswordRequest = Message<"paladin.iam.v1.ResetPasswordRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type ResetPasswordRequest =
+  Message<"paladin.iam.v1.ResetPasswordRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * If empty, server generates a random one and returns it once.
-   *
-   * @generated from field: string new_password = 2;
-   */
-  newPassword: string;
-};
+    /**
+     * If empty, server generates a random one and returns it once.
+     *
+     * @generated from field: string new_password = 2;
+     */
+    newPassword: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.ResetPasswordRequest.
  * Use `create(ResetPasswordRequestSchema)` to create a new message.
  */
-export const ResetPasswordRequestSchema: GenMessage<ResetPasswordRequest> = /*@__PURE__*/
+export const ResetPasswordRequestSchema: GenMessage<ResetPasswordRequest> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 9);
 
 /**
  * @generated from message paladin.iam.v1.ResetPasswordResponse
  */
-export type ResetPasswordResponse = Message<"paladin.iam.v1.ResetPasswordResponse"> & {
-  /**
-   * Set only when caller didn't provide a password — return-once.
-   *
-   * @generated from field: string generated_password = 1;
-   */
-  generatedPassword: string;
-};
+export type ResetPasswordResponse =
+  Message<"paladin.iam.v1.ResetPasswordResponse"> & {
+    /**
+     * Set only when caller didn't provide a password — return-once.
+     *
+     * @generated from field: string generated_password = 1;
+     */
+    generatedPassword: string;
+  };
 
 /**
  * Describes the message paladin.iam.v1.ResetPasswordResponse.
  * Use `create(ResetPasswordResponseSchema)` to create a new message.
  */
-export const ResetPasswordResponseSchema: GenMessage<ResetPasswordResponse> = /*@__PURE__*/
+export const ResetPasswordResponseSchema: GenMessage<ResetPasswordResponse> =
+  /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_user_service, 10);
 
 /**
@@ -315,7 +345,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof CreateUserRequestSchema;
     output: typeof UserSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.UserService.GetUser
    */
@@ -323,7 +353,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof GetUserRequestSchema;
     output: typeof UserSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.UserService.UpdateUser
    */
@@ -331,7 +361,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof UpdateUserRequestSchema;
     output: typeof UserSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.UserService.DeleteUser
    */
@@ -339,7 +369,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof DeleteUserRequestSchema;
     output: typeof DeleteUserResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.UserService.ListUsers
    */
@@ -347,7 +377,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof ListUsersRequestSchema;
     output: typeof ListUsersResponseSchema;
-  },
+  };
   /**
    * GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
    * than UpdateUser with a scopes field).
@@ -358,7 +388,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof GrantScopesRequestSchema;
     output: typeof UserSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.iam.v1.UserService.RevokeScopes
    */
@@ -366,7 +396,7 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof RevokeScopesRequestSchema;
     output: typeof UserSchema;
-  },
+  };
   /**
    * ResetPassword forces a password change on next login. Local IdP only.
    *
@@ -376,7 +406,5 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof ResetPasswordRequestSchema;
     output: typeof ResetPasswordResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_iam_v1_user_service, 0);
-
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_user_service, 0);
