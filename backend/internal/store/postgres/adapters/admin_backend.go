@@ -8,18 +8,63 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
 
 type BackendRepoV2 struct {
-	q *sqlc.Queries
+	q    *sqlc.Queries
+	pool *pgxpool.Pool // ADR-0003 tx seam (RunInTx + *Tx mutations)
 }
 
-func NewBackendRepoV2(q *sqlc.Queries) *BackendRepoV2 { return &BackendRepoV2{q: q} }
+func NewBackendRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *BackendRepoV2 {
+	return &BackendRepoV2{q: q, pool: pool}
+}
 
 var _ admindomain.BackendRepository = (*BackendRepoV2)(nil)
+
+// RunInTx runs fn inside one transaction on the repo's pool — the ADR-0003
+// seam so a mutation and its outbox fan-out commit (or roll back) atomically.
+func (r *BackendRepoV2) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// RotateCredentialsTx runs the grace-window dual-write on the caller's tx (see
+// RotateCredentials). graceSeconds=0 clears the previous-credential window.
+func (r *BackendRepoV2) RotateCredentialsTx(ctx context.Context, tx pgx.Tx, backendID, secretRef string, graceSeconds int64) error {
+	ref := secretRef
+	rows, err := r.q.WithTx(tx).RotateStorageBackendCredentials(ctx, backendID, &ref, graceSeconds)
+	if err != nil {
+		return fmt.Errorf("rotate credentials: %w", err)
+	}
+	if rows == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
+}
+
+// GetTx reads a backend on the caller's tx — used to read the post-rotation
+// row back for the event payload inside the same transaction.
+func (r *BackendRepoV2) GetTx(ctx context.Context, tx pgx.Tx, backendID string) (admindomain.StorageBackend, error) {
+	row, err := r.q.WithTx(tx).GetStorageBackendV2(ctx, backendID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return admindomain.StorageBackend{}, admindomain.ErrNotFound
+		}
+		return admindomain.StorageBackend{}, fmt.Errorf("get backend: %w", err)
+	}
+	return backendFromGetRow(row), nil
+}
 
 func (r *BackendRepoV2) Upsert(ctx context.Context, b admindomain.StorageBackend) error {
 	return r.q.UpsertStorageBackendV2(ctx,
@@ -49,6 +94,12 @@ func (r *BackendRepoV2) Get(ctx context.Context, backendID string) (admindomain.
 		}
 		return admindomain.StorageBackend{}, fmt.Errorf("get backend: %w", err)
 	}
+	return backendFromGetRow(row), nil
+}
+
+// backendFromGetRow maps a GetStorageBackendV2 row to the domain type. Shared
+// by Get and GetTx so the two never drift.
+func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBackend {
 	return admindomain.StorageBackend{
 		BackendID:            row.ID,
 		DisplayName:          derefStr(row.DisplayName),
@@ -73,7 +124,7 @@ func (r *BackendRepoV2) Get(ctx context.Context, backendID string) (admindomain.
 		ResourceVersion: row.ResourceVersion,
 		CreatedAt:       timeFrom(row.CreatedAt),
 		UpdatedAt:       timeFrom(row.UpdatedAt),
-	}, nil
+	}
 }
 
 func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string) ([]admindomain.StorageBackend, string, error) {

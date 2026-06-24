@@ -280,7 +280,10 @@ func tenantSlugLookup(tr tenant.Repository) func(ctx context.Context, tenantID u
 }
 
 func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, cfg config.Config) *backendh.Handler {
-	return backendh.NewHandler(repos.BackendV2, pe, cfg.Storage.DefaultBackend)
+	// The concrete *BackendRepoV2 satisfies backendh.Repository (domain
+	// interface + ADR-0003 tx seam); Repos.BackendV2 is the pgx-free domain
+	// type, so assert to the wider local interface here (same as bucketh).
+	return backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe, cfg.Storage.DefaultBackend)
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine) *bucketh.Handler {

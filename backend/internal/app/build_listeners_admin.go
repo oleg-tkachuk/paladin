@@ -91,6 +91,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	objectKeyH.SetLogger(l.Named("object-key-events"))
 	quotaH.SetEventProducer(dispatcher)
 	quotaH.SetLogger(l.Named("quota-events"))
+	backendH.SetEventProducer(dispatcher)
+	backendH.SetLogger(l.Named("backend-events"))
 
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()

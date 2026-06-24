@@ -41,7 +41,9 @@ var bootstrapCmd = &cobra.Command{
 		}
 
 		if err := bootstrappkg.EnsureBackends(ctx, cfg.Storage, bootstrappkg.BackendDeps{
-			Backends: adapters.NewBackendRepoV2(db.Queries),
+			// nil pool: bootstrap only Upserts backends, never the RunInTx
+			// tx seam, so the pool is never dereferenced on this path.
+			Backends: adapters.NewBackendRepoV2(db.Queries, nil),
 			Audit:    adapters.NewAuditRepoV2(db.Queries),
 			Logger:   l.Named("bootstrap"),
 		}); err != nil {

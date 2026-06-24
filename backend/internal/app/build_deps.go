@@ -99,7 +99,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Presign:       adapters.NewPresignRepo(db.Queries, pool),
 		Multipart:     adapters.NewMultipartRepo(db.Queries, pool),
 		Operation:     adapters.NewOperationRepo(db.Queries, pool),
-		BackendV2:     adapters.NewBackendRepoV2(db.Queries),
+		BackendV2:     adapters.NewBackendRepoV2(db.Queries, pool),
 		BucketV2:      adapters.NewBucketRepoV2(db.Queries, pool),
 		Audit:         adapters.NewAuditRepoV2(db.Queries),
 		Quota:         adapters.NewQuotaRepoV2(db.Queries, pool),

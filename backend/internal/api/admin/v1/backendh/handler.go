@@ -11,12 +11,32 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
+
+// EventProducer is the ADR-0003 outbox seam: DispatchTx writes the event's
+// outbox rows on the caller's tx so they commit atomically with the mutation.
+// *worker.Dispatcher implements it.
+type EventProducer interface {
+	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+}
+
+// Repository is the admindomain BackendRepository plus the ADR-0003 tx seam
+// (RunInTx + the *Tx mutations the rotate-with-event path needs). Kept local
+// so admindomain stays pgx-free; the concrete *BackendRepoV2 satisfies both.
+type Repository interface {
+	admindomain.BackendRepository
+	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	RotateCredentialsTx(ctx context.Context, tx pgx.Tx, backendID, secretRef string, graceSeconds int64) error
+	GetTx(ctx context.Context, tx pgx.Tx, backendID string) (admindomain.StorageBackend, error)
+}
 
 const (
 	rolePlatformAdmin = "platform.admin"
@@ -39,7 +59,7 @@ type BackendProber interface {
 }
 
 type Handler struct {
-	repo   admindomain.BackendRepository
+	repo   Repository
 	policy cedar.Authorizer
 	// defaultBackendID is the configured storage.default_backend. Disabling
 	// it is refused (FR-006) — new buckets without an explicit backend
@@ -48,19 +68,62 @@ type Handler struct {
 	// prober runs TestBackend's connectivity check. nil → TestBackend
 	// reports unreachable with an explanatory message instead of probing.
 	prober BackendProber
+	// events is the optional outbox producer; nil → events are skipped.
+	events EventProducer
+	log    *zap.Logger
 }
 
-func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer, defaultBackendID string) *Handler {
+func NewHandler(r Repository, policyEngine cedar.Authorizer, defaultBackendID string) *Handler {
 	if policyEngine == nil {
 		panic("backendh: policy authorizer is required")
 	}
-	return &Handler{repo: r, policy: policyEngine, defaultBackendID: defaultBackendID}
+	return &Handler{repo: r, policy: policyEngine, defaultBackendID: defaultBackendID, log: zap.NewNop()}
 }
 
 // SetProber wires the TestBackend connectivity prober. Opt-in: an unset
 // prober makes TestBackend return reachable=false with a clear note rather
 // than panicking, so unit tests and probe-less deployments still work.
 func (h *Handler) SetProber(p BackendProber) { h.prober = p }
+
+// SetEventProducer attaches the optional outbox producer. nil is silent (same
+// contract as tenanth/bucketh) — deployments without the dispatcher leave it
+// unset and rotation simply emits no event.
+func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+
+// SetLogger attaches a non-nop logger so wiring diagnostics surface.
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+// backendResourceName is the canonical StorageBackend resource string
+// subscribers route on (`storageBackends/{backend_id}`).
+func backendResourceName(backendID string) string {
+	return "storageBackends/" + backendID
+}
+
+// dispatchEventTx fans a backend lifecycle event into the outbox on the
+// caller's tx (ADR-0003). Backends are tenant-agnostic infra, so the event is
+// platform-scoped (empty tenant). Returns the error so the caller rolls back.
+func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, eventType, resourceName string, payload map[string]any) error {
+	if h.events == nil {
+		return nil
+	}
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	_, err := h.events.DispatchTx(ctx, tx, "", worker.Event{
+		Type:         eventType,
+		At:           time.Now().UTC(),
+		TenantID:     "",
+		ResourceName: resourceName,
+		ActorSubject: actor,
+		Payload:      payload,
+	})
+	return err
+}
 
 // authorize runs Cedar against the StorageBackend resource (`r.BackendID` is
 // the natural key — backends are tenant-agnostic infra).
@@ -224,14 +287,34 @@ func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef st
 	if grace < 0 {
 		grace = 0
 	}
-	if err := h.repo.RotateCredentials(ctx, backendID, secretRef, int64(grace.Seconds())); err != nil {
+	// Rotation + paladin.backend.credentials_rotated in one tx (ADR-0003): a crash
+	// can't leave the credential swap without its event, nor the reverse. The
+	// event carries the grace horizon so consumers know how long the previous
+	// secret must stay valid at the storage backend before it's safe to purge.
+	rotatedAt := time.Now().UTC()
+	var got admindomain.StorageBackend
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.RotateCredentialsTx(ctx, tx, backendID, secretRef, int64(grace.Seconds())); e != nil {
+			return e
+		}
+		var e error
+		if got, e = h.repo.GetTx(ctx, tx, backendID); e != nil {
+			return e
+		}
+		payload := map[string]any{
+			"backend_id":    backendID,
+			"grace_seconds": int64(grace.Seconds()),
+			"rotated_at":    rotatedAt.Format(time.RFC3339),
+		}
+		if grace > 0 {
+			payload["previous_valid_until"] = rotatedAt.Add(grace).Format(time.RFC3339)
+		}
+		return h.dispatchEventTx(ctx, tx, "paladin.backend.credentials_rotated",
+			backendResourceName(backendID), payload)
+	}); err != nil {
 		if errors.Is(err, admindomain.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	got, err := h.repo.Get(ctx, backendID)
-	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &got, nil

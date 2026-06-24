@@ -20,7 +20,7 @@ func TestRotateCredentialsGraceWindow(t *testing.T) {
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (id, kind, credentials_secret_ref)
 		 VALUES ('primary', 's3-compatible', 'ref-v1')`)
-	repo := adapters.NewBackendRepoV2(sqlc.New(pool))
+	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
 	read := func(t *testing.T) (active, prev *string, validUntil *time.Time) {
 		t.Helper()
