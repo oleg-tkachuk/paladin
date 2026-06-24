@@ -8,7 +8,13 @@
 // (filters, bulk operations, multipart upload state, copy/move
 // dialog, saved views) carries over verbatim.
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -24,6 +30,7 @@ import {
 
 import { useActions } from "@/context/ActionsContext";
 import { useObjects } from "@/hooks/useObjects";
+import { useDistinctTags } from "@/hooks/useDistinctTags";
 import { useNotification } from "@/components/ui/Notification";
 import { STORAGE_KEYS } from "@/constants";
 import { z } from "zod";
@@ -285,6 +292,11 @@ function ObjectKeyObjectsContent() {
     sortDirection: sort.direction,
   });
 
+  // Authoritative tag-facet options from the server (whole-ObjectKey scope via
+  // ListDistinctTags). Empty while loading or on error — the client-side
+  // accumulation below remains the graceful fallback.
+  const serverTagOptions = useDistinctTags(objectKey);
+
   // Build the tag-facet option list from the tags of loaded objects. Union
   // into prior state (never shrink) so applying a tag filter — which narrows
   // `objects` to the matching rows — doesn't collapse the dropdown to the one
@@ -305,6 +317,13 @@ function ObjectKeyObjectsContent() {
       return changed ? Array.from(seen).sort() : prev;
     });
   }, [objects]);
+
+  // Server list is authoritative; union in any client-accumulated pairs so a
+  // freshly-applied tag still shows even if the server fetch hasn't returned.
+  const mergedTagOptions = useMemo(
+    () => Array.from(new Set([...serverTagOptions, ...tagOptions])).sort(),
+    [serverTagOptions, tagOptions],
+  );
 
   const { showNotification } = useNotification();
 
@@ -726,7 +745,7 @@ function ObjectKeyObjectsContent() {
         onStatusChange={handleStatusChange}
         tag={tagFilter}
         onTagChange={handleTagChange}
-        tagOptions={tagOptions}
+        tagOptions={mergedTagOptions}
         visibleColumns={visibleColumns}
         onToggleColumn={toggleColumn}
         savedViews={savedViews}

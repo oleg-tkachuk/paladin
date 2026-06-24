@@ -2,142 +2,229 @@
 // @generated from file paladin/data/v1/object_tag_service.proto (package paladin.data.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type {
+  GenFile,
+  GenMessage,
+  GenService,
+} from "@bufbuild/protobuf/codegenv2";
+import {
+  fileDesc,
+  messageDesc,
+  serviceDesc,
+} from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file paladin/data/v1/object_tag_service.proto.
  */
-export const file_paladin_data_v1_object_tag_service: GenFile = /*@__PURE__*/
-  fileDesc("CiRvY3AvZGF0YS92MS9vYmplY3RfdGFnX3NlcnZpY2UucHJvdG8SC29jcC5kYXRhLnYxIi0KFEdldE9iamVjdFRhZ3NSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEigAEKFUdldE9iamVjdFRhZ3NSZXNwb25zZRI6CgR0YWdzGAEgAygLMiwub2NwLmRhdGEudjEuR2V0T2JqZWN0VGFnc1Jlc3BvbnNlLlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKvAQoUUHV0T2JqZWN0VGFnc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEjkKBHRhZ3MYAyADKAsyKy5vY3AuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVxdWVzdC5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEigAEKFVB1dE9iamVjdFRhZ3NSZXNwb25zZRI6CgR0YWdzGAEgAygLMiwub2NwLmRhdGEudjEuUHV0T2JqZWN0VGFnc1Jlc3BvbnNlLlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJYChdEZWxldGVPYmplY3RUYWdzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSDAoEa2V5cxgDIAMoCSKGAQoYRGVsZXRlT2JqZWN0VGFnc1Jlc3BvbnNlEj0KBHRhZ3MYASADKAsyLy5vY3AuZGF0YS52MS5EZWxldGVPYmplY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBMqMCChBPYmplY3RUYWdTZXJ2aWNlElYKDUdldE9iamVjdFRhZ3MSIS5vY3AuZGF0YS52MS5HZXRPYmplY3RUYWdzUmVxdWVzdBoiLm9jcC5kYXRhLnYxLkdldE9iamVjdFRhZ3NSZXNwb25zZRJWCg1QdXRPYmplY3RUYWdzEiEub2NwLmRhdGEudjEuUHV0T2JqZWN0VGFnc1JlcXVlc3QaIi5vY3AuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVzcG9uc2USXwoQRGVsZXRlT2JqZWN0VGFncxIkLm9jcC5kYXRhLnYxLkRlbGV0ZU9iamVjdFRhZ3NSZXF1ZXN0GiUub2NwLmRhdGEudjEuRGVsZXRlT2JqZWN0VGFnc1Jlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z", [file_buf_validate_validate]);
+export const file_paladin_data_v1_object_tag_service: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CiRvY3AvZGF0YS92MS9vYmplY3RfdGFnX3NlcnZpY2UucHJvdG8SC29jcC5kYXRhLnYxIjIKF0xpc3REaXN0aW5jdFRhZ3NSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQASKeAQoYTGlzdERpc3RpbmN0VGFnc1Jlc3BvbnNlEj0KBHRhZ3MYASADKAsyLy5vY3AuZGF0YS52MS5MaXN0RGlzdGluY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GkMKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5vY3AuZGF0YS52MS5UYWdWYWx1ZXM6AjgBIhsKCVRhZ1ZhbHVlcxIOCgZ2YWx1ZXMYASADKAkiLQoUR2V0T2JqZWN0VGFnc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKAAQoVR2V0T2JqZWN0VGFnc1Jlc3BvbnNlEjoKBHRhZ3MYASADKAsyLC5vY3AuZGF0YS52MS5HZXRPYmplY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIq8BChRQdXRPYmplY3RUYWdzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhgKEHJlc291cmNlX3ZlcnNpb24YAiABKAkSOQoEdGFncxgDIAMoCzIrLm9jcC5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXF1ZXN0LlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKAAQoVUHV0T2JqZWN0VGFnc1Jlc3BvbnNlEjoKBHRhZ3MYASADKAsyLC5vY3AuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVzcG9uc2UuVGFnc0VudHJ5GisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlgKF0RlbGV0ZU9iamVjdFRhZ3NSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIMCgRrZXlzGAMgAygJIoYBChhEZWxldGVPYmplY3RUYWdzUmVzcG9uc2USPQoEdGFncxgBIAMoCzIvLm9jcC5kYXRhLnYxLkRlbGV0ZU9iamVjdFRhZ3NSZXNwb25zZS5UYWdzRW50cnkaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEyhAMKEE9iamVjdFRhZ1NlcnZpY2USVgoNR2V0T2JqZWN0VGFncxIhLm9jcC5kYXRhLnYxLkdldE9iamVjdFRhZ3NSZXF1ZXN0GiIub2NwLmRhdGEudjEuR2V0T2JqZWN0VGFnc1Jlc3BvbnNlElYKDVB1dE9iamVjdFRhZ3MSIS5vY3AuZGF0YS52MS5QdXRPYmplY3RUYWdzUmVxdWVzdBoiLm9jcC5kYXRhLnYxLlB1dE9iamVjdFRhZ3NSZXNwb25zZRJfChBEZWxldGVPYmplY3RUYWdzEiQub2NwLmRhdGEudjEuRGVsZXRlT2JqZWN0VGFnc1JlcXVlc3QaJS5vY3AuZGF0YS52MS5EZWxldGVPYmplY3RUYWdzUmVzcG9uc2USXwoQTGlzdERpc3RpbmN0VGFncxIkLm9jcC5kYXRhLnYxLkxpc3REaXN0aW5jdFRhZ3NSZXF1ZXN0GiUub2NwLmRhdGEudjEuTGlzdERpc3RpbmN0VGFnc1Jlc3BvbnNlQlBaTmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9kYXRhL3YxO29jcGRhdGF2MWIGcHJvdG8z",
+    [file_buf_validate_validate],
+  );
+
+/**
+ * @generated from message paladin.data.v1.ListDistinctTagsRequest
+ */
+export type ListDistinctTagsRequest =
+  Message<"paladin.data.v1.ListDistinctTagsRequest"> & {
+    /**
+     * Parent ObjectKey scope: "tenants/{tenant_id}/objectKeys/{object_key}".
+     * The tenant is enforced from the auth context; this narrows the distinct
+     * scan to one ObjectKey's objects.
+     *
+     * @generated from field: string parent = 1;
+     */
+    parent: string;
+  };
+
+/**
+ * Describes the message paladin.data.v1.ListDistinctTagsRequest.
+ * Use `create(ListDistinctTagsRequestSchema)` to create a new message.
+ */
+export const ListDistinctTagsRequestSchema: GenMessage<ListDistinctTagsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 0);
+
+/**
+ * @generated from message paladin.data.v1.ListDistinctTagsResponse
+ */
+export type ListDistinctTagsResponse =
+  Message<"paladin.data.v1.ListDistinctTagsResponse"> & {
+    /**
+     * Tag key → the distinct values observed for that key across the scope,
+     * each value list sorted ascending.
+     *
+     * @generated from field: map<string, paladin.data.v1.TagValues> tags = 1;
+     */
+    tags: { [key: string]: TagValues };
+  };
+
+/**
+ * Describes the message paladin.data.v1.ListDistinctTagsResponse.
+ * Use `create(ListDistinctTagsResponseSchema)` to create a new message.
+ */
+export const ListDistinctTagsResponseSchema: GenMessage<ListDistinctTagsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 1);
+
+/**
+ * @generated from message paladin.data.v1.TagValues
+ */
+export type TagValues = Message<"paladin.data.v1.TagValues"> & {
+  /**
+   * @generated from field: repeated string values = 1;
+   */
+  values: string[];
+};
+
+/**
+ * Describes the message paladin.data.v1.TagValues.
+ * Use `create(TagValuesSchema)` to create a new message.
+ */
+export const TagValuesSchema: GenMessage<TagValues> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 2);
 
 /**
  * @generated from message paladin.data.v1.GetObjectTagsRequest
  */
-export type GetObjectTagsRequest = Message<"paladin.data.v1.GetObjectTagsRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
+export type GetObjectTagsRequest =
+  Message<"paladin.data.v1.GetObjectTagsRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
 
 /**
  * Describes the message paladin.data.v1.GetObjectTagsRequest.
  * Use `create(GetObjectTagsRequestSchema)` to create a new message.
  */
-export const GetObjectTagsRequestSchema: GenMessage<GetObjectTagsRequest> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 0);
+export const GetObjectTagsRequestSchema: GenMessage<GetObjectTagsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 3);
 
 /**
  * @generated from message paladin.data.v1.GetObjectTagsResponse
  */
-export type GetObjectTagsResponse = Message<"paladin.data.v1.GetObjectTagsResponse"> & {
-  /**
-   * @generated from field: map<string, string> tags = 1;
-   */
-  tags: { [key: string]: string };
-};
+export type GetObjectTagsResponse =
+  Message<"paladin.data.v1.GetObjectTagsResponse"> & {
+    /**
+     * @generated from field: map<string, string> tags = 1;
+     */
+    tags: { [key: string]: string };
+  };
 
 /**
  * Describes the message paladin.data.v1.GetObjectTagsResponse.
  * Use `create(GetObjectTagsResponseSchema)` to create a new message.
  */
-export const GetObjectTagsResponseSchema: GenMessage<GetObjectTagsResponse> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 1);
+export const GetObjectTagsResponseSchema: GenMessage<GetObjectTagsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 4);
 
 /**
  * @generated from message paladin.data.v1.PutObjectTagsRequest
  */
-export type PutObjectTagsRequest = Message<"paladin.data.v1.PutObjectTagsRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type PutObjectTagsRequest =
+  Message<"paladin.data.v1.PutObjectTagsRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * Replaces the entire tag set.
-   *
-   * @generated from field: map<string, string> tags = 3;
-   */
-  tags: { [key: string]: string };
-};
+    /**
+     * Replaces the entire tag set.
+     *
+     * @generated from field: map<string, string> tags = 3;
+     */
+    tags: { [key: string]: string };
+  };
 
 /**
  * Describes the message paladin.data.v1.PutObjectTagsRequest.
  * Use `create(PutObjectTagsRequestSchema)` to create a new message.
  */
-export const PutObjectTagsRequestSchema: GenMessage<PutObjectTagsRequest> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 2);
+export const PutObjectTagsRequestSchema: GenMessage<PutObjectTagsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 5);
 
 /**
  * @generated from message paladin.data.v1.PutObjectTagsResponse
  */
-export type PutObjectTagsResponse = Message<"paladin.data.v1.PutObjectTagsResponse"> & {
-  /**
-   * @generated from field: map<string, string> tags = 1;
-   */
-  tags: { [key: string]: string };
-};
+export type PutObjectTagsResponse =
+  Message<"paladin.data.v1.PutObjectTagsResponse"> & {
+    /**
+     * @generated from field: map<string, string> tags = 1;
+     */
+    tags: { [key: string]: string };
+  };
 
 /**
  * Describes the message paladin.data.v1.PutObjectTagsResponse.
  * Use `create(PutObjectTagsResponseSchema)` to create a new message.
  */
-export const PutObjectTagsResponseSchema: GenMessage<PutObjectTagsResponse> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 3);
+export const PutObjectTagsResponseSchema: GenMessage<PutObjectTagsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 6);
 
 /**
  * @generated from message paladin.data.v1.DeleteObjectTagsRequest
  */
-export type DeleteObjectTagsRequest = Message<"paladin.data.v1.DeleteObjectTagsRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
+export type DeleteObjectTagsRequest =
+  Message<"paladin.data.v1.DeleteObjectTagsRequest"> & {
+    /**
+     * @generated from field: string name = 1;
+     */
+    name: string;
 
-  /**
-   * @generated from field: string resource_version = 2;
-   */
-  resourceVersion: string;
+    /**
+     * @generated from field: string resource_version = 2;
+     */
+    resourceVersion: string;
 
-  /**
-   * If empty, all tags are removed; otherwise only the listed keys.
-   *
-   * @generated from field: repeated string keys = 3;
-   */
-  keys: string[];
-};
+    /**
+     * If empty, all tags are removed; otherwise only the listed keys.
+     *
+     * @generated from field: repeated string keys = 3;
+     */
+    keys: string[];
+  };
 
 /**
  * Describes the message paladin.data.v1.DeleteObjectTagsRequest.
  * Use `create(DeleteObjectTagsRequestSchema)` to create a new message.
  */
-export const DeleteObjectTagsRequestSchema: GenMessage<DeleteObjectTagsRequest> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 4);
+export const DeleteObjectTagsRequestSchema: GenMessage<DeleteObjectTagsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 7);
 
 /**
  * @generated from message paladin.data.v1.DeleteObjectTagsResponse
  */
-export type DeleteObjectTagsResponse = Message<"paladin.data.v1.DeleteObjectTagsResponse"> & {
-  /**
-   * @generated from field: map<string, string> tags = 1;
-   */
-  tags: { [key: string]: string };
-};
+export type DeleteObjectTagsResponse =
+  Message<"paladin.data.v1.DeleteObjectTagsResponse"> & {
+    /**
+     * @generated from field: map<string, string> tags = 1;
+     */
+    tags: { [key: string]: string };
+  };
 
 /**
  * Describes the message paladin.data.v1.DeleteObjectTagsResponse.
  * Use `create(DeleteObjectTagsResponseSchema)` to create a new message.
  */
-export const DeleteObjectTagsResponseSchema: GenMessage<DeleteObjectTagsResponse> = /*@__PURE__*/
-  messageDesc(file_paladin_data_v1_object_tag_service, 5);
+export const DeleteObjectTagsResponseSchema: GenMessage<DeleteObjectTagsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_object_tag_service, 8);
 
 /**
  * ObjectTagService isolates the tag-only path so callers can be granted
@@ -154,7 +241,7 @@ export const ObjectTagService: GenService<{
     methodKind: "unary";
     input: typeof GetObjectTagsRequestSchema;
     output: typeof GetObjectTagsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectTagService.PutObjectTags
    */
@@ -162,7 +249,7 @@ export const ObjectTagService: GenService<{
     methodKind: "unary";
     input: typeof PutObjectTagsRequestSchema;
     output: typeof PutObjectTagsResponseSchema;
-  },
+  };
   /**
    * @generated from rpc paladin.data.v1.ObjectTagService.DeleteObjectTags
    */
@@ -170,7 +257,17 @@ export const ObjectTagService: GenService<{
     methodKind: "unary";
     input: typeof DeleteObjectTagsRequestSchema;
     output: typeof DeleteObjectTagsResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_paladin_data_v1_object_tag_service, 0);
-
+  };
+  /**
+   * ListDistinctTags enumerates the distinct tag key→values present across an
+   * ObjectKey's live objects, so a UI can populate a tag-facet filter from the
+   * whole tenant scope rather than only the objects on the current page.
+   *
+   * @generated from rpc paladin.data.v1.ObjectTagService.ListDistinctTags
+   */
+  listDistinctTags: {
+    methodKind: "unary";
+    input: typeof ListDistinctTagsRequestSchema;
+    output: typeof ListDistinctTagsResponseSchema;
+  };
+}> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_object_tag_service, 0);
