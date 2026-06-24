@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
@@ -24,7 +23,7 @@ func NewObjectKeyServer(h *objectkey.Handler) *ObjectKeyServer { return &ObjectK
 
 func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Request[pb.CreateObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
 	m := req.Msg
-	tenantID, err := tenantUUIDFromParent(m.GetParent())
+	tenantID, err := resolve.ResolveTenantParent(m.GetParent())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -46,11 +45,11 @@ func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Requ
 }
 
 func (s *ObjectKeyServer) GetObjectKey(ctx context.Context, req *connect.Request[pb.GetObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
-	_, name, err := objectKeyParts(req.Msg.GetName())
+	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetObjectKey(ctx, name)
+	out, err := s.H.GetObjectKey(ctx, ref.ObjectKey)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +58,7 @@ func (s *ObjectKeyServer) GetObjectKey(ctx context.Context, req *connect.Request
 
 func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Request[pb.UpdateObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
 	m := req.Msg
-	tenantID, name, err := objectKeyParts(m.GetName())
+	ref, err := resolve.ResolveObjectKeyName(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -69,8 +68,8 @@ func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Requ
 	}
 	src := m.GetObjectKeyResource()
 	args := objectkey.UpdateObjectKeyArgs{
-		TenantID:        tenantID,
-		ObjectKey:       name,
+		TenantID:        ref.TenantID,
+		ObjectKey:       ref.ObjectKey,
 		ExpectedVersion: rv,
 	}
 	mask := m.GetUpdateMask().GetPaths()
@@ -90,12 +89,12 @@ func (s *ObjectKeyServer) UpdateObjectKey(ctx context.Context, req *connect.Requ
 }
 
 func (s *ObjectKeyServer) DeleteObjectKey(ctx context.Context, req *connect.Request[pb.DeleteObjectKeyRequest]) (*connect.Response[pb.DeleteObjectKeyResponse], error) {
-	_, name, err := objectKeyParts(req.Msg.GetName())
+	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(req.Msg.GetResourceVersion())
-	if err := s.H.DeleteObjectKey(ctx, name, rv); err != nil {
+	if err := s.H.DeleteObjectKey(ctx, ref.ObjectKey, rv); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.DeleteObjectKeyResponse{}), nil
@@ -108,7 +107,7 @@ func (s *ObjectKeyServer) ListObjectKeys(ctx context.Context, req *connect.Reque
 		PageToken: m.GetPage().GetPageToken(),
 	}
 	if m.GetParent() != "" {
-		if id, err := tenantUUIDFromParent(m.GetParent()); err == nil {
+		if id, err := resolve.ResolveTenantParent(m.GetParent()); err == nil {
 			args.TenantID = id
 		}
 	}
@@ -133,15 +132,15 @@ func (s *ObjectKeyServer) ListObjectKeys(ctx context.Context, req *connect.Reque
 }
 
 func (s *ObjectKeyServer) SetObjectKeyPolicy(ctx context.Context, req *connect.Request[pb.SetObjectKeyPolicyRequest]) (*connect.Response[pb.ObjectKey], error) {
-	tenantID, name, err := objectKeyParts(req.Msg.GetName())
+	ref, err := resolve.ResolveObjectKeyName(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(req.Msg.GetResourceVersion())
 	policy := req.Msg.GetCedarPolicy()
 	out, err := s.H.UpdateObjectKey(ctx, objectkey.UpdateObjectKeyArgs{
-		TenantID:        tenantID,
-		ObjectKey:       name,
+		TenantID:        ref.TenantID,
+		ObjectKey:       ref.ObjectKey,
 		ExpectedVersion: rv,
 		CedarPolicy:     &policy,
 	})
@@ -153,12 +152,12 @@ func (s *ObjectKeyServer) SetObjectKeyPolicy(ctx context.Context, req *connect.R
 
 func (s *ObjectKeyServer) BindObjectKeyToBucket(ctx context.Context, req *connect.Request[pb.BindObjectKeyToBucketRequest]) (*connect.Response[pb.ObjectKey], error) {
 	m := req.Msg
-	_, name, err := objectKeyParts(m.GetName())
+	ref, err := resolve.ResolveObjectKeyName(ctx, m.GetName())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	rv, _ := parseRV(m.GetResourceVersion())
-	out, err := s.H.BindObjectKeyToBucket(ctx, name, m.GetBucket(), rv)
+	out, err := s.H.BindObjectKeyToBucket(ctx, ref.ObjectKey, m.GetBucket(), rv)
 	if err != nil {
 		return nil, err
 	}
@@ -166,44 +165,6 @@ func (s *ObjectKeyServer) BindObjectKeyToBucket(ctx context.Context, req *connec
 }
 
 var _ paladinadminv1connect.ObjectKeyServiceHandler = (*ObjectKeyServer)(nil)
-
-// objectKeyParts decodes "tenants/{t}/objectKeys/{ok}". `ok` may be
-// a multi-segment slash-separated path (e.g. "invoices/2026/q1"); we
-// anchor on the literal `tenants/<id>/objectKeys/` prefix and treat
-// everything after as the object_key body, so the slashes inside it
-// don't get mistaken for additional resource-name segments.
-func objectKeyParts(name string) (uuid.UUID, string, error) {
-	const prefix = "tenants/"
-	const okSep = "/objectKeys/"
-	if !strings.HasPrefix(name, prefix) {
-		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
-	}
-	rest := name[len(prefix):]
-	tIDEnd := strings.Index(rest, okSep)
-	if tIDEnd <= 0 {
-		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
-	}
-	id, err := uuid.Parse(rest[:tIDEnd])
-	if err != nil {
-		return uuid.Nil, "", err
-	}
-	ok := rest[tIDEnd+len(okSep):]
-	if ok == "" {
-		return uuid.Nil, "", fmt.Errorf("invalid object_key name %q", name)
-	}
-	return id, ok, nil
-}
-
-func tenantUUIDFromParent(parent string) (uuid.UUID, error) {
-	if parent == "" {
-		return uuid.Nil, nil
-	}
-	idStr, err := tenantIDFromName(parent)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return uuid.Parse(idStr)
-}
 
 // bucketRef decodes "storageBackends/{backend}/buckets/{bucket}".
 func bucketRef(name string) (backend, bucket string, err error) {

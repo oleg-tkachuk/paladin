@@ -983,24 +983,27 @@ open deliberately — each notes why._
 - **Blockers:** decide the runtime secret-access mechanism (direct K8s API vs
   projected volume) — same call the dynamic-backend create path will need.
 
-### ResolveObjectKey RPC (Phase 2 of canonical-resource-names)
+### Phase 3: deprecate redundant resource-name shapes
 
-- **Status:** Aspirational
-- **Reason:** Phase 1 landed canonical resource names in audit + event
-  payloads. Phase 2 of the plan in
-  `backend/docs/canonical-resource-names.md` adds a `ResolveObjectKey`
-  RPC + a central resolver on the connectshim edge so clients can
-  send any of the three name shapes (canonical A, tenant-first C,
-  bare B) without each handler doing its own parsing.
-- **Definition of Done:**
-  - `internal/api/connectshim/resolve/resolver.go` exists, exported as
-    `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)`.
-  - Every `*_server.go` under `connectshim/admin/` and `connectshim/data/`
-    that calls `objectKeyParts` / `tenantUUIDFromParent` swaps to the
-    central resolver.
-  - Metric `paladin_resource_name_shape_total{shape="…"}` so we can see
-    real-world distribution before unlocking Phase 3.
-- **Blockers:** none — pure refactor.
+- **Status:** Open — gated on the shape-distribution data the new metric now
+  collects. The Phase-2 central resolver is DONE:
+  `internal/api/connectshim/resolve` exports
+  `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)` handling all three
+  shapes (canonical A / tenant C / bare B; bare takes the tenant from ctx)
+  plus `ResolveTenantParent`, and every objectKey call site in
+  `connectshim/admin/object_key_server.go` swapped to it (the local
+  `objectKeyParts` / `tenantUUIDFromParent` are gone). The
+  `paladin_resource_name_shape_total{shape}` counter records which shape each
+  request used. Unit tests cover all shapes + error paths.
+- **Reason this remains:** once the metric shows the real-world distribution,
+  decide whether to deprecate a shape (e.g. drop bare B if nobody sends it) and
+  whether the data plane's object-name parser
+  (`connectshim/data/conv.go::objectNameParts`, a different
+  `…/objects/{id}` shape) should move behind the same resolver.
+- **Definition of Done:** a deprecation decision per shape backed by ≥1 week of
+  `paladin_resource_name_shape_total` data; optionally fold the data-plane
+  object-name parse into the resolver.
+- **Blockers:** needs production traffic through the new metric first.
 
 ### Cedar policy templates: canonical resource literals
 
