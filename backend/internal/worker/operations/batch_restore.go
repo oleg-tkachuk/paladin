@@ -81,10 +81,11 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operation.Operati
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
 
-	for _, objectID := range args.ObjectIDs {
+	for i, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		ReportProgress(ctx, i, resp.Total)
 
 		if _, found := byID[objectID]; !found {
 			resp.Failed++
@@ -104,6 +105,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operation.Operati
 		}
 		resp.Succeeded++
 	}
+	ReportProgress(ctx, resp.Total, resp.Total)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

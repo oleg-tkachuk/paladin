@@ -83,7 +83,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
 
-	for _, objectID := range args.ObjectIDs {
+	for i, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			// Worker shutting down — surface as a partial success.
 			// Already-deleted rows are committed; the operation row
@@ -91,6 +91,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 			// caller decides; we just stop iterating).
 			return nil, err
 		}
+		ReportProgress(ctx, i, resp.Total)
 
 		obj, found := byID[objectID]
 		if !found {
@@ -111,6 +112,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operation.Operatio
 		}
 		resp.Succeeded++
 	}
+	ReportProgress(ctx, resp.Total, resp.Total)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

@@ -74,10 +74,11 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
 
-	for _, objectID := range args.ObjectIDs {
+	for i, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		ReportProgress(ctx, i, resp.Total)
 
 		obj, found := byID[objectID]
 		if !found {
@@ -104,6 +105,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operation.Oper
 		}
 		resp.Succeeded++
 	}
+	ReportProgress(ctx, resp.Total, resp.Total)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

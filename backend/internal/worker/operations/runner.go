@@ -128,7 +128,7 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 
 	logger.Info("executing operation")
 	start := time.Now()
-	response, err := exec.Execute(ctx, op)
+	response, err := exec.Execute(r.withProgress(ctx, op), op)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -148,6 +148,31 @@ func (r *Runner) runOne(ctx context.Context, op operation.Operation) {
 		operation.StateSucceeded, op.Metadata, response, "", ""); err != nil {
 		logger.Warn("failed to mark SUCCEEDED", zap.Error(err))
 	}
+}
+
+// withProgress installs a throttled progress reporter on ctx. Executors call
+// operations.ReportProgress in their loops; this writes `{processed, total}`
+// to the operation row's metadata (state RUNNING) so a polling client renders
+// a live progress bar. Writes are throttled to ~1/s (the final tick always
+// lands) to keep the queue's DB pressure bounded on large batches. The
+// terminal success/fail write in runOne / markFailed is authoritative.
+func (r *Runner) withProgress(ctx context.Context, op operation.Operation) context.Context {
+	var last time.Time
+	return WithProgress(ctx, func(processed, total int) {
+		now := time.Now()
+		if processed < total && now.Sub(last) < time.Second {
+			return
+		}
+		last = now
+		meta, _ := json.Marshal(struct {
+			Processed int `json:"processed"`
+			Total     int `json:"total"`
+		}{processed, total})
+		if err := r.Repo.UpdateState(ctx, op.OperationID,
+			operation.StateRunning, meta, nil, "", ""); err != nil {
+			r.log().Debug("progress write failed", zap.Error(err))
+		}
+	})
 }
 
 // markFailed encodes the error to a JSON-friendly response field too

@@ -116,10 +116,11 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
 
-	for _, srcID := range args.ObjectIDs {
+	for i, srcID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		ReportProgress(ctx, i, resp.Total)
 		src, found := byID[srcID]
 		if !found {
 			resp.Failed++
@@ -139,6 +140,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 		}
 		resp.Succeeded++
 	}
+	ReportProgress(ctx, resp.Total, resp.Total)
 
 	body, err := json.Marshal(resp)
 	if err != nil {
