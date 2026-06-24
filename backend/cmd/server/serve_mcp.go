@@ -230,10 +230,16 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 
 	// Track live sessions off the wire — the SDK exposes no enumeration hook,
 	// so the middleware records Mcp-Session-Id activity into a process-local
-	// registry. A reaper (below) evicts idle sessions; surfacing the registry
-	// through MCPInspectService is a separate, cross-process step (BACKLOG).
+	// registry. A reaper (below) evicts idle sessions.
+	//
+	// agent_subject enrichment: the agent's bearer JWT rides in X-PALADIN-Token.
+	// subjectFn verifies its signature (NOT its audience — an agent token
+	// targets whichever plane it calls: admin/data/iam) and reads the `sub`
+	// claim for the session's display label. Degrades to blank when no signing
+	// key is configured (a thin bridge) or the token is absent/invalid.
 	sessions := mcp.NewSessionRegistry()
-	tracked := mcp.TrackSessions(handler, sessions, nil)
+	subjectFn := agentSubjectFn(ctx, cfg.Auth, l)
+	tracked := mcp.TrackSessions(handler, sessions, subjectFn)
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", tracked)
@@ -323,5 +329,47 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		l.Fatal("mcp http listen failed", zap.Error(err))
+	}
+}
+
+// agentSubjectFn returns a TrackSessions subjectFn that extracts the verified
+// `sub` claim from the agent's X-PALADIN-Token for the session display label. It is
+// audience-agnostic on purpose (ExpectedAudience left empty) — an agent token
+// targets whichever plane it calls (admin/data/iam). Returns a no-op (blank
+// subject) when no usable verifier can be built (e.g. a thin bridge with no
+// signing key), so the column stays empty rather than trusting an unverified
+// token.
+func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*http.Request) string {
+	blank := func(*http.Request) string { return "" }
+	var verifier auth.TokenVerifier
+	switch {
+	case a.JWKSURL != "":
+		v := auth.NewJWKSVerifier(a.JWKSURL)
+		v.ExpectedIssuer = a.Issuer
+		v.Leeway = a.Leeway // ExpectedAudience left empty → any audience
+		if err := v.Start(ctx); err != nil {
+			l.Warn("agent_subject disabled: jwks verifier failed to start", zap.Error(err))
+			return blank
+		}
+		verifier = v
+	case a.SigningKey != "":
+		verifier = &auth.JWTVerifier{
+			Key:            []byte(a.SigningKey),
+			ExpectedIssuer: a.Issuer,
+			Leeway:         a.Leeway,
+		}
+	default:
+		return blank
+	}
+	return func(r *http.Request) string {
+		tok := r.Header.Get("X-PALADIN-Token")
+		if tok == "" {
+			return ""
+		}
+		p, err := verifier.Verify(r.Context(), tok)
+		if err != nil {
+			return ""
+		}
+		return p.Subject
 	}
 }
