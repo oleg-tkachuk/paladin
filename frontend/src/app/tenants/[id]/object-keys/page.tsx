@@ -14,6 +14,7 @@
 // useObjectKeys when platform-admin cross-tenant mutation lands.
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
@@ -89,17 +90,6 @@ import { T } from "@/lib/ui/typography";
 import { useTenant } from "../tenant-context";
 
 type SortColumn = "name" | "displayName" | "bucket";
-type SortDirection = "asc" | "desc" | null;
-interface SortState {
-  column: SortColumn | null;
-  direction: SortDirection;
-}
-function nextSort(prev: SortState, column: SortColumn): SortState {
-  if (prev.column !== column) return { column, direction: "asc" };
-  if (prev.direction === "asc") return { column, direction: "desc" };
-  if (prev.direction === "desc") return { column: null, direction: null };
-  return { column, direction: "asc" };
-}
 
 function SortHeader({
   label,
@@ -109,7 +99,7 @@ function SortHeader({
 }: {
   label: string;
   column: SortColumn;
-  current: SortState;
+  current: SortState<SortColumn>;
   onSort: (c: SortColumn) => void;
 }) {
   const active = current.column === column && current.direction !== null;
@@ -152,14 +142,7 @@ export default function TenantObjectKeysPage() {
   const [list, setList] = useState<ObjectKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const handleSort = useCallback(
-    (c: SortColumn) => setSort((prev) => nextSort(prev, c)),
-    [],
-  );
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   const fetchList = useCallback(
     async (filter: string = "") => {

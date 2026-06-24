@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { errorMessage } from "@/hooks/errorContract";
@@ -72,21 +72,9 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { useTableSort, type SortState } from "@/hooks/useTableSort";
 
 type SortColumn = "backend" | "name" | "region";
-type SortDirection = "asc" | "desc" | null;
-
-interface SortState {
-  column: SortColumn | null;
-  direction: SortDirection;
-}
-
-function nextSort(prev: SortState, column: SortColumn): SortState {
-  if (prev.column !== column) return { column, direction: "asc" };
-  if (prev.direction === "asc") return { column, direction: "desc" };
-  if (prev.direction === "desc") return { column: null, direction: null };
-  return { column, direction: "asc" };
-}
 
 function SortHeader({
   label,
@@ -97,7 +85,7 @@ function SortHeader({
 }: {
   label: string;
   column: SortColumn;
-  current: SortState;
+  current: SortState<SortColumn>;
   onSort: (c: SortColumn) => void;
   className?: string;
 }) {
@@ -141,14 +129,7 @@ export default function BucketsPage() {
   // ─── filters + sort ──────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
-  const [sort, setSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const handleSort = useCallback(
-    (c: SortColumn) => setSort((prev) => nextSort(prev, c)),
-    [],
-  );
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   // ─── create ───────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);

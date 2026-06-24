@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -70,17 +71,6 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 type SortColumn = "name" | "displayName" | "backendId";
-type SortDirection = "asc" | "desc" | null;
-interface SortState {
-  column: SortColumn | null;
-  direction: SortDirection;
-}
-function nextSort(prev: SortState, column: SortColumn): SortState {
-  if (prev.column !== column) return { column, direction: "asc" };
-  if (prev.direction === "asc") return { column, direction: "desc" };
-  if (prev.direction === "desc") return { column: null, direction: null };
-  return { column, direction: "asc" };
-}
 
 function SortHeader({
   label,
@@ -90,7 +80,7 @@ function SortHeader({
 }: {
   label: string;
   column: SortColumn;
-  current: SortState;
+  current: SortState<SortColumn>;
   onSort: (c: SortColumn) => void;
 }) {
   const active = current.column === column && current.direction !== null;
@@ -136,14 +126,7 @@ export default function ObjectKeysPage() {
 
   // ── search + sort
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortState>({
-    column: null,
-    direction: null,
-  });
-  const handleSort = useCallback(
-    (c: SortColumn) => setSort((prev) => nextSort(prev, c)),
-    [],
-  );
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
   // ── create
   const [createOpen, setCreateOpen] = useState(false);
