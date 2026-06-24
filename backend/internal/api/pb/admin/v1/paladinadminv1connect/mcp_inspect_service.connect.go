@@ -37,11 +37,21 @@ const (
 	// MCPInspectServiceInspectProcedure is the fully-qualified name of the MCPInspectService's Inspect
 	// RPC.
 	MCPInspectServiceInspectProcedure = "/paladin.admin.v1.MCPInspectService/Inspect"
+	// MCPInspectServiceListSessionsProcedure is the fully-qualified name of the MCPInspectService's
+	// ListSessions RPC.
+	MCPInspectServiceListSessionsProcedure = "/paladin.admin.v1.MCPInspectService/ListSessions"
 )
 
 // MCPInspectServiceClient is a client for the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceClient interface {
 	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
+	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
+	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,
+	// stateless) this reflects live process state that lives in the MCP server,
+	// so the admin plane proxies the call to the MCP server's own /sessions
+	// endpoint. Returns an empty list when the MCP server is unconfigured or
+	// unreachable. Platform-admin only.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 }
 
 // NewMCPInspectServiceClient constructs a client for the paladin.admin.v1.MCPInspectService service. By
@@ -61,12 +71,19 @@ func NewMCPInspectServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
 			connect.WithClientOptions(opts...),
 		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+MCPInspectServiceListSessionsProcedure,
+			connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // mCPInspectServiceClient implements MCPInspectServiceClient.
 type mCPInspectServiceClient struct {
-	inspect *connect.Client[v1.MCPInspectRequest, v1.MCPInspectResponse]
+	inspect      *connect.Client[v1.MCPInspectRequest, v1.MCPInspectResponse]
+	listSessions *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
 }
 
 // Inspect calls paladin.admin.v1.MCPInspectService.Inspect.
@@ -74,9 +91,21 @@ func (c *mCPInspectServiceClient) Inspect(ctx context.Context, req *connect.Requ
 	return c.inspect.CallUnary(ctx, req)
 }
 
+// ListSessions calls paladin.admin.v1.MCPInspectService.ListSessions.
+func (c *mCPInspectServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
 // MCPInspectServiceHandler is an implementation of the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceHandler interface {
 	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
+	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
+	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,
+	// stateless) this reflects live process state that lives in the MCP server,
+	// so the admin plane proxies the call to the MCP server's own /sessions
+	// endpoint. Returns an empty list when the MCP server is unconfigured or
+	// unreachable. Platform-admin only.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
 }
 
 // NewMCPInspectServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -92,10 +121,18 @@ func NewMCPInspectServiceHandler(svc MCPInspectServiceHandler, opts ...connect.H
 		connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
 		connect.WithHandlerOptions(opts...),
 	)
+	mCPInspectServiceListSessionsHandler := connect.NewUnaryHandler(
+		MCPInspectServiceListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.MCPInspectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MCPInspectServiceInspectProcedure:
 			mCPInspectServiceInspectHandler.ServeHTTP(w, r)
+		case MCPInspectServiceListSessionsProcedure:
+			mCPInspectServiceListSessionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -107,4 +144,8 @@ type UnimplementedMCPInspectServiceHandler struct{}
 
 func (UnimplementedMCPInspectServiceHandler) Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.Inspect is not implemented"))
+}
+
+func (UnimplementedMCPInspectServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.ListSessions is not implemented"))
 }

@@ -14,12 +14,15 @@ package mcpinspecth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
@@ -34,15 +37,22 @@ import (
 // — until hot-reload lands the handler returns the same view for
 // the lifetime of the process.
 type Handler struct {
-	cfg    config.MCP
-	policy cedar.Authorizer
+	cfg         config.MCP
+	policy      cedar.Authorizer
+	sessionsURL string
+	httpClient  *http.Client
 }
 
 func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("mcpinspecth: policy authorizer is required")
 	}
-	return &Handler{cfg: cfg, policy: policy}
+	return &Handler{
+		cfg:         cfg,
+		policy:      policy,
+		sessionsURL: cfg.HTTP.SessionsURL,
+		httpClient:  &http.Client{Timeout: 5 * time.Second},
+	}
 }
 
 // authorize gates an RPC against Cedar with the tenant-resource
@@ -72,6 +82,54 @@ func (h *Handler) authorize(ctx context.Context) error {
 		return connect.NewError(connect.CodePermissionDenied, errors.New("mcp inspect denied"))
 	}
 	return nil
+}
+
+// ListSessions proxies to the MCP server's /sessions endpoint, forwarding the
+// caller's admin JWT (which that endpoint re-verifies + RBAC-gates). The live
+// registry lives in the MCP process, not here, so this is the only way the
+// admin plane can surface it. When SessionsURL is unset or the MCP server is
+// unreachable the result is an empty list — the truthful answer (a restarted
+// MCP server has no sessions; an unconfigured proxy shows none) and a graceful
+// degrade rather than a hard error.
+func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1.ListSessionsRequest]) (*connect.Response[adminv1.ListSessionsResponse], error) {
+	if err := h.authorize(ctx); err != nil {
+		return nil, err
+	}
+	out := &adminv1.ListSessionsResponse{}
+	if h.sessionsURL == "" {
+		return connect.NewResponse(out), nil
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.sessionsURL, nil)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if authz := req.Header().Get("Authorization"); authz != "" {
+		httpReq.Header.Set("Authorization", authz)
+	}
+	resp, err := h.httpClient.Do(httpReq)
+	if err != nil {
+		// MCP unreachable → empty (no sessions visible), per the design.
+		return connect.NewResponse(out), nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return connect.NewResponse(out), nil
+	}
+	var infos []mcppkg.SessionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&infos); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode mcp sessions: %w", err))
+	}
+	for _, s := range infos {
+		out.Sessions = append(out.Sessions, &adminv1.MCPSession{
+			Id:            s.ID,
+			AgentSubject:  s.AgentSubject,
+			StartedAt:     timestamppb.New(s.StartedAt),
+			LastSeen:      timestamppb.New(s.LastSeen),
+			ToolCallCount: s.ToolCallCount,
+			RequestCount:  s.RequestCount,
+		})
+	}
+	return connect.NewResponse(out), nil
 }
 
 // Inspect returns the merged effective MCP configuration: profiles

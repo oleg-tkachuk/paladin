@@ -4,6 +4,8 @@ package paladin.admin.v1;
 
 option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1";
 
+import "google/protobuf/timestamp.proto";
+
 // MCPInspectService — read-only operator visibility into the MCP
 // (Model Context Protocol) bridge. The MCP plane sits between agentic
 // runtimes (Claude Desktop, Cursor, Hatchet workers) and the PALADIN
@@ -21,9 +23,35 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 // admin/v1 services.
 service MCPInspectService {
   rpc Inspect(MCPInspectRequest) returns (MCPInspectResponse);
+
+  // ListSessions returns the live MCP streamable-HTTP sessions tracked by the
+  // bridge (id, agent, activity counts). Unlike Inspect (config-derived,
+  // stateless) this reflects live process state that lives in the MCP server,
+  // so the admin plane proxies the call to the MCP server's own /sessions
+  // endpoint. Returns an empty list when the MCP server is unconfigured or
+  // unreachable. Platform-admin only.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
 }
 
 message MCPInspectRequest {}
+
+message ListSessionsRequest {}
+
+message ListSessionsResponse {
+  repeated MCPSession sessions = 1;
+}
+
+// MCPSession mirrors internal/mcp.SessionInfo — one live streamable-HTTP
+// session. agent_subject is best-effort (blank until the MCP server verifies
+// the per-request JWT subject); counts are cumulative over the session life.
+message MCPSession {
+  string id = 1;
+  string agent_subject = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp last_seen = 4;
+  int64 tool_call_count = 5;
+  int64 request_count = 6;
+}
 
 message MCPInspectResponse {
   // Profiles is the merged map: built-in DefaultProfiles overlaid by

@@ -1,12 +1,27 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
+
+type fakeVerifier struct {
+	principal *auth.Principal
+	err       error
+}
+
+func (f fakeVerifier) Verify(context.Context, string) (*auth.Principal, error) {
+	return f.principal, f.err
+}
 
 // fakeClock lets the test drive last_seen / reap deterministically.
 type fakeClock struct{ t time.Time }
@@ -111,5 +126,50 @@ func TestSessionRegistry_Reap(t *testing.T) {
 	}
 	if n := reg.Reap(0); n != 0 {
 		t.Errorf("Reap(0) evicted %d, want 0 (disabled)", n)
+	}
+}
+
+func TestSessionsHandler(t *testing.T) {
+	clk := &fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	reg := newTestRegistry(clk)
+	reg.observe("s1", "agent-a", true)
+
+	admin := fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}
+	nonAdmin := fakeVerifier{principal: &auth.Principal{Roles: []string{"tenant.admin"}}}
+	bad := fakeVerifier{err: errors.New("bad token")}
+
+	call := func(v auth.TokenVerifier, authz string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
+		if authz != "" {
+			req.Header.Set("Authorization", authz)
+		}
+		rec := httptest.NewRecorder()
+		SessionsHandler(reg, v).ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := call(admin, "Bearer ok")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin GET = %d, want 200", rec.Code)
+	}
+	var got []SessionInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "s1" || got[0].ToolCallCount != 1 {
+		t.Fatalf("snapshot = %+v, want one s1 with 1 tool call", got)
+	}
+
+	if c := call(admin, "").Code; c != http.StatusUnauthorized {
+		t.Errorf("no auth = %d, want 401", c)
+	}
+	if c := call(bad, "Bearer x").Code; c != http.StatusUnauthorized {
+		t.Errorf("bad token = %d, want 401", c)
+	}
+	if c := call(nonAdmin, "Bearer ok").Code; c != http.StatusForbidden {
+		t.Errorf("non-admin = %d, want 403", c)
+	}
+	if c := call(nil, "Bearer ok").Code; c != http.StatusUnauthorized {
+		t.Errorf("nil verifier = %d, want 401", c)
 	}
 }

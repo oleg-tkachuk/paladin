@@ -87,6 +87,9 @@ func LoadMCP(path string) (MCP, error) {
 	if v := os.Getenv("PALADIN_MCP_HTTP_PROFILE"); v != "" {
 		cfg.HTTP.Profile = v
 	}
+	if v := os.Getenv("PALADIN_MCP_HTTP_SESSIONS_URL"); v != "" {
+		cfg.HTTP.SessionsURL = v
+	}
 	if v := os.Getenv("PALADIN_MCP_HTTP_SESSION_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {

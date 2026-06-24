@@ -14,6 +14,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/oleg-tkachuk/paladin/internal/app"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
@@ -236,6 +237,18 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", tracked)
+
+	// Expose the registry for the admin plane's MCPInspectService.ListSessions
+	// proxy. The endpoint re-verifies the admin-audience JWT the admin plane
+	// forwards and requires the platform-admin role — no new shared secret,
+	// the call is gated by the same RBAC as the admin service. If no usable
+	// verifier can be built (e.g. a bridge with no signing key configured),
+	// skip the endpoint; the admin proxy treats unreachable as an empty list.
+	if verifier, verr := app.BuildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l); verr != nil {
+		l.Warn("mcp /sessions disabled: no usable JWT verifier", zap.Error(verr))
+	} else {
+		mux.Handle("GET /sessions", mcp.SessionsHandler(sessions, verifier))
+	}
 
 	// The streamable transport has no reliable disconnect signal (clients can
 	// vanish without a DELETE), so evict sessions idle past the session

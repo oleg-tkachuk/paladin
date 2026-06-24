@@ -6,8 +6,12 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
+	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
 // mcpSessionIDHeader is the header the MCP streamable-HTTP transport uses to
@@ -220,4 +224,36 @@ func (w *sessionCapturingWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// SessionsHandler serves the live session registry as a JSON array of
+// SessionInfo, for the admin plane's MCPInspectService.ListSessions proxy. It
+// requires a Bearer JWT the verifier accepts AND that carries the platform-
+// admin role — the same gate as the admin service it backs (the admin plane
+// forwards the caller's token; this endpoint re-verifies it rather than
+// trusting the network). GET only; a nil verifier rejects every request.
+func SessionsHandler(reg *SessionRegistry, verifier auth.TokenVerifier) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		const bearer = "Bearer "
+		authz := r.Header.Get("Authorization")
+		if verifier == nil || !strings.HasPrefix(authz, bearer) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		p, err := verifier.Verify(r.Context(), strings.TrimSpace(authz[len(bearer):]))
+		if err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if !p.HasRole(apiutil.RolePlatformAdmin) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(reg.Snapshot())
+	})
 }

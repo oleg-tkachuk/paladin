@@ -13,6 +13,7 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -58,6 +59,173 @@ func (*MCPInspectRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{0}
 }
 
+type ListSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsRequest) Reset() {
+	*x = ListSessionsRequest{}
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsRequest) ProtoMessage() {}
+
+func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
+func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{1}
+}
+
+type ListSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sessions      []*MCPSession          `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsResponse) Reset() {
+	*x = ListSessionsResponse{}
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsResponse) ProtoMessage() {}
+
+func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
+func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListSessionsResponse) GetSessions() []*MCPSession {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+// MCPSession mirrors internal/mcp.SessionInfo — one live streamable-HTTP
+// session. agent_subject is best-effort (blank until the MCP server verifies
+// the per-request JWT subject); counts are cumulative over the session life.
+type MCPSession struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	AgentSubject  string                 `protobuf:"bytes,2,opt,name=agent_subject,json=agentSubject,proto3" json:"agent_subject,omitempty"`
+	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	LastSeen      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	ToolCallCount int64                  `protobuf:"varint,5,opt,name=tool_call_count,json=toolCallCount,proto3" json:"tool_call_count,omitempty"`
+	RequestCount  int64                  `protobuf:"varint,6,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPSession) Reset() {
+	*x = MCPSession{}
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPSession) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPSession) ProtoMessage() {}
+
+func (x *MCPSession) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPSession.ProtoReflect.Descriptor instead.
+func (*MCPSession) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MCPSession) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MCPSession) GetAgentSubject() string {
+	if x != nil {
+		return x.AgentSubject
+	}
+	return ""
+}
+
+func (x *MCPSession) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
+	}
+	return nil
+}
+
+func (x *MCPSession) GetLastSeen() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeen
+	}
+	return nil
+}
+
+func (x *MCPSession) GetToolCallCount() int64 {
+	if x != nil {
+		return x.ToolCallCount
+	}
+	return 0
+}
+
+func (x *MCPSession) GetRequestCount() int64 {
+	if x != nil {
+		return x.RequestCount
+	}
+	return 0
+}
+
 type MCPInspectResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Profiles is the merged map: built-in DefaultProfiles overlaid by
@@ -84,7 +252,7 @@ type MCPInspectResponse struct {
 
 func (x *MCPInspectResponse) Reset() {
 	*x = MCPInspectResponse{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -96,7 +264,7 @@ func (x *MCPInspectResponse) String() string {
 func (*MCPInspectResponse) ProtoMessage() {}
 
 func (x *MCPInspectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +277,7 @@ func (x *MCPInspectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPInspectResponse.ProtoReflect.Descriptor instead.
 func (*MCPInspectResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{1}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MCPInspectResponse) GetProfiles() []*MCPProfile {
@@ -170,7 +338,7 @@ type MCPProfile struct {
 
 func (x *MCPProfile) Reset() {
 	*x = MCPProfile{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -182,7 +350,7 @@ func (x *MCPProfile) String() string {
 func (*MCPProfile) ProtoMessage() {}
 
 func (x *MCPProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -195,7 +363,7 @@ func (x *MCPProfile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPProfile.ProtoReflect.Descriptor instead.
 func (*MCPProfile) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{2}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MCPProfile) GetName() string {
@@ -253,7 +421,7 @@ type MCPTool struct {
 
 func (x *MCPTool) Reset() {
 	*x = MCPTool{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -265,7 +433,7 @@ func (x *MCPTool) String() string {
 func (*MCPTool) ProtoMessage() {}
 
 func (x *MCPTool) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,7 +446,7 @@ func (x *MCPTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPTool.ProtoReflect.Descriptor instead.
 func (*MCPTool) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{3}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MCPTool) GetName() string {
@@ -327,7 +495,7 @@ type MCPUpstreams struct {
 
 func (x *MCPUpstreams) Reset() {
 	*x = MCPUpstreams{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[4]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +507,7 @@ func (x *MCPUpstreams) String() string {
 func (*MCPUpstreams) ProtoMessage() {}
 
 func (x *MCPUpstreams) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[4]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +520,7 @@ func (x *MCPUpstreams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPUpstreams.ProtoReflect.Descriptor instead.
 func (*MCPUpstreams) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{4}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MCPUpstreams) GetAdminUrl() string {
@@ -386,7 +554,7 @@ type MCPTransports struct {
 
 func (x *MCPTransports) Reset() {
 	*x = MCPTransports{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[5]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +566,7 @@ func (x *MCPTransports) String() string {
 func (*MCPTransports) ProtoMessage() {}
 
 func (x *MCPTransports) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[5]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +579,7 @@ func (x *MCPTransports) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPTransports.ProtoReflect.Descriptor instead.
 func (*MCPTransports) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{5}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MCPTransports) GetStdio() *MCPTransportStdio {
@@ -438,7 +606,7 @@ type MCPTransportStdio struct {
 
 func (x *MCPTransportStdio) Reset() {
 	*x = MCPTransportStdio{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[6]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +618,7 @@ func (x *MCPTransportStdio) String() string {
 func (*MCPTransportStdio) ProtoMessage() {}
 
 func (x *MCPTransportStdio) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[6]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +631,7 @@ func (x *MCPTransportStdio) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPTransportStdio.ProtoReflect.Descriptor instead.
 func (*MCPTransportStdio) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{6}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MCPTransportStdio) GetEnabled() bool {
@@ -493,7 +661,7 @@ type MCPTransportHTTP struct {
 
 func (x *MCPTransportHTTP) Reset() {
 	*x = MCPTransportHTTP{}
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[7]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +673,7 @@ func (x *MCPTransportHTTP) String() string {
 func (*MCPTransportHTTP) ProtoMessage() {}
 
 func (x *MCPTransportHTTP) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[7]
+	mi := &file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +686,7 @@ func (x *MCPTransportHTTP) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPTransportHTTP.ProtoReflect.Descriptor instead.
 func (*MCPTransportHTTP) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{7}
+	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MCPTransportHTTP) GetEnabled() bool {
@@ -553,8 +721,20 @@ var File_paladin_admin_v1_mcp_inspect_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\n" +
-	"&paladin/admin/v1/mcp_inspect_service.proto\x12\focp.admin.v1\"\x13\n" +
-	"\x11MCPInspectRequest\"\x9c\x02\n" +
+	"&paladin/admin/v1/mcp_inspect_service.proto\x12\focp.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
+	"\x11MCPInspectRequest\"\x15\n" +
+	"\x13ListSessionsRequest\"L\n" +
+	"\x14ListSessionsResponse\x124\n" +
+	"\bsessions\x18\x01 \x03(\v2\x18.paladin.admin.v1.MCPSessionR\bsessions\"\x82\x02\n" +
+	"\n" +
+	"MCPSession\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
+	"\ragent_subject\x18\x02 \x01(\tR\fagentSubject\x129\n" +
+	"\n" +
+	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x127\n" +
+	"\tlast_seen\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12&\n" +
+	"\x0ftool_call_count\x18\x05 \x01(\x03R\rtoolCallCount\x12#\n" +
+	"\rrequest_count\x18\x06 \x01(\x03R\frequestCount\"\x9c\x02\n" +
 	"\x12MCPInspectResponse\x124\n" +
 	"\bprofiles\x18\x01 \x03(\v2\x18.paladin.admin.v1.MCPProfileR\bprofiles\x12\x1f\n" +
 	"\valways_deny\x18\x02 \x03(\tR\n" +
@@ -591,9 +771,10 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x12\n" +
 	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x18\n" +
 	"\aprofile\x18\x03 \x01(\tR\aprofile\x126\n" +
-	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2a\n" +
+	"\x17session_timeout_seconds\x18\x04 \x01(\x03R\x15sessionTimeoutSeconds2\xb8\x01\n" +
 	"\x11MCPInspectService\x12L\n" +
-	"\aInspect\x12\x1f.paladin.admin.v1.MCPInspectRequest\x1a .paladin.admin.v1.MCPInspectResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\aInspect\x12\x1f.paladin.admin.v1.MCPInspectRequest\x1a .paladin.admin.v1.MCPInspectResponse\x12U\n" +
+	"\fListSessions\x12!.paladin.admin.v1.ListSessionsRequest\x1a\".paladin.admin.v1.ListSessionsResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_mcp_inspect_service_proto_rawDescOnce sync.Once
@@ -607,31 +788,40 @@ func file_paladin_admin_v1_mcp_inspect_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_mcp_inspect_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_paladin_admin_v1_mcp_inspect_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_paladin_admin_v1_mcp_inspect_service_proto_goTypes = []any{
-	(*MCPInspectRequest)(nil),  // 0: paladin.admin.v1.MCPInspectRequest
-	(*MCPInspectResponse)(nil), // 1: paladin.admin.v1.MCPInspectResponse
-	(*MCPProfile)(nil),         // 2: paladin.admin.v1.MCPProfile
-	(*MCPTool)(nil),            // 3: paladin.admin.v1.MCPTool
-	(*MCPUpstreams)(nil),       // 4: paladin.admin.v1.MCPUpstreams
-	(*MCPTransports)(nil),      // 5: paladin.admin.v1.MCPTransports
-	(*MCPTransportStdio)(nil),  // 6: paladin.admin.v1.MCPTransportStdio
-	(*MCPTransportHTTP)(nil),   // 7: paladin.admin.v1.MCPTransportHTTP
+	(*MCPInspectRequest)(nil),     // 0: paladin.admin.v1.MCPInspectRequest
+	(*ListSessionsRequest)(nil),   // 1: paladin.admin.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),  // 2: paladin.admin.v1.ListSessionsResponse
+	(*MCPSession)(nil),            // 3: paladin.admin.v1.MCPSession
+	(*MCPInspectResponse)(nil),    // 4: paladin.admin.v1.MCPInspectResponse
+	(*MCPProfile)(nil),            // 5: paladin.admin.v1.MCPProfile
+	(*MCPTool)(nil),               // 6: paladin.admin.v1.MCPTool
+	(*MCPUpstreams)(nil),          // 7: paladin.admin.v1.MCPUpstreams
+	(*MCPTransports)(nil),         // 8: paladin.admin.v1.MCPTransports
+	(*MCPTransportStdio)(nil),     // 9: paladin.admin.v1.MCPTransportStdio
+	(*MCPTransportHTTP)(nil),      // 10: paladin.admin.v1.MCPTransportHTTP
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_mcp_inspect_service_proto_depIdxs = []int32{
-	2, // 0: paladin.admin.v1.MCPInspectResponse.profiles:type_name -> paladin.admin.v1.MCPProfile
-	3, // 1: paladin.admin.v1.MCPInspectResponse.tool_catalog:type_name -> paladin.admin.v1.MCPTool
-	4, // 2: paladin.admin.v1.MCPInspectResponse.upstreams:type_name -> paladin.admin.v1.MCPUpstreams
-	5, // 3: paladin.admin.v1.MCPInspectResponse.transports:type_name -> paladin.admin.v1.MCPTransports
-	6, // 4: paladin.admin.v1.MCPTransports.stdio:type_name -> paladin.admin.v1.MCPTransportStdio
-	7, // 5: paladin.admin.v1.MCPTransports.http:type_name -> paladin.admin.v1.MCPTransportHTTP
-	0, // 6: paladin.admin.v1.MCPInspectService.Inspect:input_type -> paladin.admin.v1.MCPInspectRequest
-	1, // 7: paladin.admin.v1.MCPInspectService.Inspect:output_type -> paladin.admin.v1.MCPInspectResponse
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	3,  // 0: paladin.admin.v1.ListSessionsResponse.sessions:type_name -> paladin.admin.v1.MCPSession
+	11, // 1: paladin.admin.v1.MCPSession.started_at:type_name -> google.protobuf.Timestamp
+	11, // 2: paladin.admin.v1.MCPSession.last_seen:type_name -> google.protobuf.Timestamp
+	5,  // 3: paladin.admin.v1.MCPInspectResponse.profiles:type_name -> paladin.admin.v1.MCPProfile
+	6,  // 4: paladin.admin.v1.MCPInspectResponse.tool_catalog:type_name -> paladin.admin.v1.MCPTool
+	7,  // 5: paladin.admin.v1.MCPInspectResponse.upstreams:type_name -> paladin.admin.v1.MCPUpstreams
+	8,  // 6: paladin.admin.v1.MCPInspectResponse.transports:type_name -> paladin.admin.v1.MCPTransports
+	9,  // 7: paladin.admin.v1.MCPTransports.stdio:type_name -> paladin.admin.v1.MCPTransportStdio
+	10, // 8: paladin.admin.v1.MCPTransports.http:type_name -> paladin.admin.v1.MCPTransportHTTP
+	0,  // 9: paladin.admin.v1.MCPInspectService.Inspect:input_type -> paladin.admin.v1.MCPInspectRequest
+	1,  // 10: paladin.admin.v1.MCPInspectService.ListSessions:input_type -> paladin.admin.v1.ListSessionsRequest
+	4,  // 11: paladin.admin.v1.MCPInspectService.Inspect:output_type -> paladin.admin.v1.MCPInspectResponse
+	2,  // 12: paladin.admin.v1.MCPInspectService.ListSessions:output_type -> paladin.admin.v1.ListSessionsResponse
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_mcp_inspect_service_proto_init() }
@@ -645,7 +835,7 @@ func file_paladin_admin_v1_mcp_inspect_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc), len(file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

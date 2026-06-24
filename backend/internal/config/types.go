@@ -753,6 +753,13 @@ type MCPHTTP struct {
 	Addr           string        `yaml:"addr" json:"addr"`
 	Profile        string        `yaml:"profile" json:"profile"`
 	SessionTimeout time.Duration `yaml:"session_timeout" json:"session_timeout"`
+	// SessionsURL is the admin plane's view of the MCP server's /sessions
+	// endpoint (e.g. "http://paladin-mcp:8095/sessions"). The admin
+	// MCPInspectService.ListSessions proxies there, forwarding the caller's
+	// admin JWT. Empty disables the proxy — ListSessions returns an empty
+	// list. Admin→MCP is the reverse of the bridge's MCP→plane direction, so
+	// this is a distinct URL from Upstreams.
+	SessionsURL string `yaml:"sessions_url" json:"sessions_url"`
 }
 
 // Capability configures the agent-runtime authorisation primitive. See
