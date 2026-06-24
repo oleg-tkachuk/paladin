@@ -33,41 +33,30 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Live session enumeration: surface the registry via RPC + UI
+### Live MCP sessions: multi-replica aggregation + agent_subject enrichment
 
-- **Status:** Deferred (tracking shipped; cross-process surfacing remains)
-- **Reason:** The SDK fork-vs-wrapper decision is RESOLVED in favour
-  of the wrapper (no fork, no maintenance burden). The tracking core
-  now exists: `mcp.SessionRegistry` (in-memory, concurrency-safe:
-  observe / Snapshot / Reap) plus `mcp.TrackSessions`, an
-  `http.Handler` middleware wired into the streamable-HTTP server in
-  [serve_mcp.go](backend/cmd/server/serve_mcp.go). It captures the
-  real `Mcp-Session-Id` (v1.6.1 header — minted on the `initialize`
-  response, echoed on continuations), counts `tools/call` by sniffing
-  the JSON-RPC method, tracks started_at / last_seen / request_count,
-  and a ctx-bound reaper evicts idle sessions. Unit-tested in
-  `sessions_test.go` (mint + continue + tool-count + reap).
-- **The remaining gap is TOPOLOGY, not tracking:** `MCPInspectService`
-  ([mcpinspecth](backend/internal/api/admin/v1/mcpinspecth/handler.go))
-  runs in the ADMIN plane, built only from `config.MCP` — a different
-  process from the MCP bridge that owns the registry. An admin-plane
-  `ListSessions` RPC therefore cannot read the in-memory map directly.
+- **Status:** Deferred (the feature shipped; two refinements remain)
+- **Reason:** Live MCP session enumeration is now end-to-end: the
+  `mcp.SessionRegistry` + `TrackSessions` middleware feed a registry in
+  the MCP server; `mcp.SessionsHandler` exposes it as an admin-gated
+  `GET /sessions` (forwarded-JWT + platform-admin verified, no shared
+  secret); `MCPInspectService.ListSessions` proxies there (config
+  `PALADIN_MCP_HTTP_SESSIONS_URL`); and the `/mcp` page renders the live
+  table (`MCPLiveSessions`). Two refinements are left:
 - **Definition of Done (remaining):**
-  - Decide the surfacing path: (a) expose a read endpoint on the MCP
-    server's own mux that MCPInspectService proxies, or (b) wait for
-    the single-binary multi-mode migration and share the registry by
-    pointer. (a) is shippable today and preferred.
-  - `MCPInspectService.ListSessions` RPC (proto + buf regen +
-    connectshim + handler) returning the `SessionInfo` rows.
-  - Enrich `agent_subject` (and agent_type / model if available):
-    `TrackSessions` currently passes a nil subjectFn, so the field is
-    blank — populating it needs the MCP server to verify the per-
-    request `X-PALADIN-Token` JWT and extract the subject.
-  - `/mcp` UI swaps the placeholder card for a live table.
-  - Meanwhile MCP tool calls remain visible via
-    `/audit?audience=paladin-mcp` (deep-linked from the placeholder).
-- **Blockers:** none — additive RPC + a surfacing-path choice (both
-  options listed); the tracking half is done and tested.
+  - Multi-replica aggregation: the registry is process-local, so
+    `ListSessions` reflects whichever MCP replica the proxy GET landed
+    on. With >1 MCP replica behind a Service, sessions on the other
+    replicas are invisible. Options: fan the proxy out to all replica
+    pods (headless Service + per-pod GET), or move to a shared store —
+    the latter reintroduces the staleness-after-restart problem the
+    in-memory design avoids, so fan-out is preferred.
+  - `agent_subject` enrichment: `serve_mcp` passes a nil subjectFn to
+    `TrackSessions`, so the column is blank. Populating it needs the
+    MCP server to verify the per-request `X-PALADIN-Token` JWT and stamp the
+    subject (and ideally agent_type / model) onto the session.
+- **Blockers:** none — both are additive refinements on a working
+  feature.
 
 ---
 
