@@ -309,31 +309,26 @@ open deliberately — each notes why._
 
 ## Performance / Scale
 
-### `audit_log` partitioning by `at`
+### Partition-maintainer worker (drop-old + create-ahead)
 
-- **Status:** Deferred
-- **Reason:** Audit log is append-only with TTL-based DELETE. Bounded
-  reapers (migration 008) cap WAL bursts, but vacuum still has to
-  reclaim dead tuples. RANGE partitioning (daily or weekly) lets
-  `DROP PARTITION` replace `DELETE` — zero dead tuples, zero VACUUM
-  load.
-- **Definition of Done:**
-  - Daily/weekly partitions with attach/detach automation.
-  - `housekeeping.audit_log_ttl` becomes "drop partitions older than
-    this" instead of `DELETE WHERE at < cutoff`.
-  - Migration plan that re-buckets existing data with bounded
-    downtime.
-- **Blockers:** insert rate metrics from a real deploy — pick interval
-  granularity from observed daily volume.
-
-### `idempotency_keys` partitioning by `expires_at`
-
-- **Status:** Deferred
-- **Reason:** Same shape as audit_log — insert + TTL-purge. Bloat
-  scales with traffic.
-- **Definition of Done:** mirrors audit_log partitioning above
-  (hourly or daily depending on idempotency-key TTL distribution).
-- **Blockers:** same as audit_log.
+- **Status:** In progress — partitioning shipped, lifecycle worker remains.
+- **Done:** `audit_log` (migration 041, monthly) and `idempotency_keys`
+  (042, daily) are RANGE-partitioned; existing data re-bucketed under a
+  bounded maintenance window (runbook:
+  `docs/runbooks/partition-audit-idempotency.md`), verified end-to-end
+  including the data copy by `internal/integration/partition_test.go`. A
+  `DEFAULT` partition + the existing `DELETE` purgers keep the system
+  correct with zero partition maintenance.
+- **Definition of Done (remaining):**
+  - A `worker.PartitionMaintainer` that pre-creates upcoming partitions
+    and `DROP`s partitions fully past the TTL — turning retention into
+    `DROP PARTITION` (the zero-VACUUM payoff) instead of leaning on the
+    `DELETE` backstop.
+  - Wire it into the worker set with the audit/idempotency retention TTLs.
+- **Blockers:** none for the worker. Granularity (monthly / daily) is a
+  documented default; revisit weekly for `audit_log` if a real deploy's
+  insert-rate metrics show a month is too coarse (the maintainer `Period`
+  is the only knob).
 
 ### AuditLog action-prefix index: planner validation
 
