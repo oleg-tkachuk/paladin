@@ -51,11 +51,13 @@ const (
 	actionReadBackend   = "ReadBackend"
 )
 
-// BackendProber runs a read-only reachability + auth probe against a
-// backend's storage endpoint (a ListBuckets). Implemented in the app layer
-// over the runtime-configured S3 clients. nil-safe at the handler.
+// BackendProber runs a read-only reachability + auth probe against a backend's
+// storage endpoint (a ListBuckets). Implemented in the app layer: config
+// backends use their pre-built client; a dynamic backend is resolved from its
+// row (endpoint/region + credentials_secret_ref). Takes the whole row so the
+// dynamic path has everything it needs. nil-safe at the handler.
 type BackendProber interface {
-	Probe(ctx context.Context, backendID string) error
+	Probe(ctx context.Context, backend admindomain.StorageBackend) error
 }
 
 type Handler struct {
@@ -365,8 +367,9 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 		return nil, err
 	}
 	// Existence first — a probe against an unknown backend id is a 404, not
-	// an "unreachable" result.
-	if _, err := h.repo.Get(ctx, backendID); err != nil {
+	// an "unreachable" result. The row also feeds the dynamic probe path.
+	got, err := h.repo.Get(ctx, backendID)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 	// Read-only — no audit row (per the BackendService contract).
@@ -380,7 +383,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	start := time.Now()
-	perr := h.prober.Probe(pctx, backendID)
+	perr := h.prober.Probe(pctx, got)
 	out := &TestBackendOutput{LatencyMs: int32(time.Since(start).Milliseconds())}
 	if perr != nil {
 		out.Reachable = false

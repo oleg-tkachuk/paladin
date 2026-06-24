@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
 
 type fakeProber struct {
@@ -13,7 +15,7 @@ type fakeProber struct {
 	called bool
 }
 
-func (p *fakeProber) Probe(_ context.Context, _ string) error {
+func (p *fakeProber) Probe(_ context.Context, _ admindomain.StorageBackend) error {
 	p.called = true
 	return p.err
 }

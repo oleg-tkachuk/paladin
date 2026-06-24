@@ -168,6 +168,14 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 	return nil
 }
 
+// ResolveSecret reads one key from a K8s Secret at runtime via the pod's
+// ServiceAccount — the same mechanism ResolveConfig uses at boot. Exported for
+// runtime callers (e.g. the dynamic-backend connectivity probe) that resolve a
+// secret outside config load.
+func (r *K8sSecretResolver) ResolveSecret(ctx context.Context, ref *SecretRef) (string, error) {
+	return r.resolveSecret(ctx, ref)
+}
+
 func (r *K8sSecretResolver) resolveSecret(ctx context.Context, ref *SecretRef) (string, error) {
 	if ref.Name == "" {
 		return "", fmt.Errorf("secret name is required")

@@ -851,24 +851,6 @@ open deliberately — each notes why._
 - **Blockers:** none — pure backend refactor, no proto change.
 
 
-### TestBackend probe for dynamically-registered backends
-
-- **Status:** Open follow-up — `BackendService.TestBackend` is DONE for
-  config-declared backends: `s3adapter.Client.Probe` (ListBuckets, ctx-bounded,
-  read-only, no audit row), an `app.s3BackendProber` over the runtime S3
-  clients (keyed by backend_id == config key), and `backendh.TestBackend`
-  returning `{reachable, latency_ms, error_message}`. Unit tests cover
-  reachable / unreachable / no-prober / role-gate.
-- **Reason this remains:** a backend created purely via the CreateBackend RPC
-  (credentials in a Secret the running process never loaded) has no runtime
-  S3 client, so its probe returns a clear "not in runtime config" error rather
-  than dialing. Closing this needs runtime credential resolution from a
-  `credentials_ref` (K8s Secret read / CSI-mounted path) — out of scope for
-  the config-backend MVP.
-- **Definition of Done:** resolve a backend row's `credentials_secret_ref` at
-  probe time, build an ephemeral client, and probe it (cache briefly).
-- **Blockers:** decide the runtime secret-access mechanism (direct K8s API vs
-  projected volume) — same call the dynamic-backend create path will need.
 
 ### Phase 3: deprecate redundant resource-name shapes
 
