@@ -146,20 +146,24 @@ export function useObjectKeys() {
     [user?.tenantId],
   );
 
+  // Hoist the tenant id so the callback closes over a scalar, not `user`.
+  // React Compiler infers the dep from the body; referencing `user?.tenantId`
+  // inline made the inferred dep (`user`) disagree with the manual
+  // `[user?.tenantId]` (react-hooks/preserve-manual-memoization).
+  const callerTenantId = user?.tenantId ?? "";
   const getObjectKey = useCallback(
     async (objectKey: string): Promise<ObjectKey | null> => {
       try {
         setError(null);
-        const tenantId = user?.tenantId ?? "";
         return await objectKeyClient.getObjectKey({
-          name: objectKeyResourceName(tenantId, objectKey),
+          name: objectKeyResourceName(callerTenantId, objectKey),
         });
       } catch (err) {
         if (err instanceof ConnectError) setError(err.rawMessage);
         throw err;
       }
     },
-    [user?.tenantId],
+    [callerTenantId],
   );
 
   const updateObjectKey = useCallback(

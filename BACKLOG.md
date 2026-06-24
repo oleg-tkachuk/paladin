@@ -872,25 +872,26 @@ open deliberately — each notes why._
 - **Blockers:** none — schedule alongside feature work in those areas
   to avoid pure-churn PRs.
 
-### react-hooks v6 rules re-promotion (set-state-in-effect et al.)
+### react-hooks v6: `set-state-in-effect` re-promotion
 
-- **Status:** Deferred
-- **Reason:** the react-hooks plugin v6 bump promoted
-  `set-state-in-effect`, `immutability`, and
-  `preserve-manual-memoization` to `error`; ~48 pre-existing hits
-  (mostly the fetch-in-`useEffect` pattern every data hook uses, e.g.
-  `useStats.ts`, `useTenants.ts`) predate the bump. Demoted to `warn`
-  in `frontend/eslint.config.mjs` on 2026-06-11 so `eslint .` could
-  become a CI gate without a 48-site refactor in the same change.
+- **Status:** Deferred — gated on a data-fetching architecture change.
+  (`immutability` + `preserve-manual-memoization` are DONE: their few real
+  hits — forward references in `objects/page.tsx`, a memo-dep mismatch in
+  `useObjectKeys.ts` — are fixed and both rules now enforce at `error`. Only
+  `set-state-in-effect` remains demoted to `warn`.)
+- **Reason:** the ~40 `set-state-in-effect` hits are the legitimate
+  fetch-on-mount / init-from-browser pattern in the data hooks (`useObjects`,
+  `useConfig`, `ScopeContext`, …). They are not lint suppressions to sprinkle
+  — the rule wants the state derived during render or pushed into an external
+  store, which is an architectural change, not a per-line fix.
 - **Definition of Done:**
-  - Refactor the data hooks off synchronous setState-in-effect (the
-    idiomatic fix is moving fetch state into a small
-    `useSyncExternalStore`-style store or adopting a query library —
-    one decision, applied uniformly).
-  - `npx eslint .` reports zero warnings for the three rules.
-  - Delete the three `"warn"` overrides in `eslint.config.mjs`.
-- **Blockers:** none — mechanical but wide; bundle with any future
-  data-fetching refactor (e.g. if TanStack Query is adopted).
+  - Adopt a uniform data-fetching primitive (TanStack Query or a small
+    `useSyncExternalStore` store) so fetch state no longer lands via
+    setState-in-effect.
+  - `npx eslint .` reports zero `set-state-in-effect` hits.
+  - Delete the remaining `"warn"` override in `eslint.config.mjs`.
+- **Blockers:** none — but it is wide and must ride the data-fetching
+  refactor to avoid 40 scattered `eslint-disable` lines.
 
 ### Slug-rename history redirect
 

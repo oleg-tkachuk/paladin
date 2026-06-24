@@ -387,50 +387,6 @@ function ObjectKeyObjectsContent() {
     setVisibleColumns(next);
   };
 
-  useEffect(() => {
-    registerAction({
-      id: "objects.refresh",
-      label: "Sync View",
-      description: "Refresh objects from backend",
-      category: "operation",
-      perform: async () => {
-        await refresh();
-      },
-    });
-    registerAction({
-      id: "objects.save_view",
-      label: "Save View bookmark",
-      description: "Persist current filter configuration",
-      category: "operation",
-      perform: () => setIsSavingView(true),
-    });
-    if (selectedIds.size > 0) {
-      registerAction({
-        id: "objects.bulk_delete",
-        label: `Trash ${selectedIds.size} selected objects`,
-        description: "Move selected objects to trash bin",
-        category: "operation",
-        perform: async () => {
-          await handleBulkDelete();
-        },
-      });
-      registerAction({
-        id: "objects.bulk_labels",
-        label: `Patch tags for ${selectedIds.size} objects`,
-        description: "Bulk update metadata tags",
-        category: "operation",
-        perform: () => setIsBulkEditing(true),
-      });
-    }
-    return () => {
-      unregisterAction("objects.refresh");
-      unregisterAction("objects.save_view");
-      unregisterAction("objects.bulk_delete");
-      unregisterAction("objects.bulk_labels");
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds.size, refresh, registerAction, unregisterAction]);
-
   const toggleSelect = (
     id: string,
     e?: React.MouseEvent,
@@ -543,6 +499,54 @@ function ObjectKeyObjectsContent() {
     if (copyMove.type === "move") await softDeleteObject(source);
     setCopyMove((prev) => ({ ...prev, open: false }));
   };
+
+  // Command-palette registration. Declared AFTER the state setters +
+  // handlers it closes over (setIsSavingView, handleBulkDelete) so the React
+  // Compiler can preserve their bindings — react-hooks/immutability flags a
+  // forward reference otherwise.
+  useEffect(() => {
+    registerAction({
+      id: "objects.refresh",
+      label: "Sync View",
+      description: "Refresh objects from backend",
+      category: "operation",
+      perform: async () => {
+        await refresh();
+      },
+    });
+    registerAction({
+      id: "objects.save_view",
+      label: "Save View bookmark",
+      description: "Persist current filter configuration",
+      category: "operation",
+      perform: () => setIsSavingView(true),
+    });
+    if (selectedIds.size > 0) {
+      registerAction({
+        id: "objects.bulk_delete",
+        label: `Trash ${selectedIds.size} selected objects`,
+        description: "Move selected objects to trash bin",
+        category: "operation",
+        perform: async () => {
+          await handleBulkDelete();
+        },
+      });
+      registerAction({
+        id: "objects.bulk_labels",
+        label: `Patch tags for ${selectedIds.size} objects`,
+        description: "Bulk update metadata tags",
+        category: "operation",
+        perform: () => setIsBulkEditing(true),
+      });
+    }
+    return () => {
+      unregisterAction("objects.refresh");
+      unregisterAction("objects.save_view");
+      unregisterAction("objects.bulk_delete");
+      unregisterAction("objects.bulk_labels");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds.size, refresh, registerAction, unregisterAction]);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.savedViews);
