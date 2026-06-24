@@ -899,28 +899,6 @@ open deliberately — each notes why._
 - **Blockers:** Replication proto + worker for the Replication
   tab; Versioning needs the toggle handler.
 
-### Object Tags filter: server-side distinct-tags index (whole-tenant breadth)
-
-- **Status:** Deferred (UI shipped; only the breadth gap remains)
-- **Reason:** The tag-facet dropdown now exists on the Objects tab
-  ([objects/page.tsx](frontend/src/app/tenants/[id]/object-keys/[name]/objects/page.tsx)):
-  it derives `key=value` options client-side from the tags of
-  loaded objects and applies the selection as a `tags['k'] == 'v'`
-  CEL clause on `ListObjects` (URL param `tag`, accumulated so the
-  list never collapses when a filter narrows the rows). The
-  `idx_objects_tags_gin` index already backs the filter eval. The
-  one residual gap is BREADTH: the dropdown only offers tags seen
-  on already-loaded pages, not every tag in the tenant.
-- **Definition of Done:**
-  - A distinct-tags query/RPC on the data plane (per-tenant, or
-    per-ObjectKey) returning the full key→values set, so the
-    dropdown is populated from the index rather than the loaded
-    page. Needs a new proto method + buf regen + connectshim +
-    a frontend client call to swap the client-side accumulation
-    for the server list.
-- **Blockers:** none — additive RPC; the client-derived facet is a
-  working fallback in the meantime.
-
 ### Multi-segment ObjectKey: event-ingest path disambiguation
 
 - **Status:** Aspirational
