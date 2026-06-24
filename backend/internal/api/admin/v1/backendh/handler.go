@@ -31,6 +31,13 @@ const (
 	actionReadBackend   = "ReadBackend"
 )
 
+// BackendProber runs a read-only reachability + auth probe against a
+// backend's storage endpoint (a ListBuckets). Implemented in the app layer
+// over the runtime-configured S3 clients. nil-safe at the handler.
+type BackendProber interface {
+	Probe(ctx context.Context, backendID string) error
+}
+
 type Handler struct {
 	repo   admindomain.BackendRepository
 	policy cedar.Authorizer
@@ -38,6 +45,9 @@ type Handler struct {
 	// it is refused (FR-006) — new buckets without an explicit backend
 	// resolve to it, so turning it off would break platform-wide creation.
 	defaultBackendID string
+	// prober runs TestBackend's connectivity check. nil → TestBackend
+	// reports unreachable with an explanatory message instead of probing.
+	prober BackendProber
 }
 
 func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer, defaultBackendID string) *Handler {
@@ -46,6 +56,11 @@ func NewHandler(r admindomain.BackendRepository, policyEngine cedar.Authorizer, 
 	}
 	return &Handler{repo: r, policy: policyEngine, defaultBackendID: defaultBackendID}
 }
+
+// SetProber wires the TestBackend connectivity prober. Opt-in: an unset
+// prober makes TestBackend return reachable=false with a clear note rather
+// than panicking, so unit tests and probe-less deployments still work.
+func (h *Handler) SetProber(p BackendProber) { h.prober = p }
 
 // authorize runs Cedar against the StorageBackend resource (`r.BackendID` is
 // the natural key — backends are tenant-agnostic infra).
@@ -256,13 +271,31 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	if err := h.authorize(ctx, actionReadBackend, backendID); err != nil {
 		return nil, err
 	}
-	// Probe is wired by the storage adapter package in main.go; here we just
-	// confirm the row exists. Real probe lives in `internal/storage/probe.go`
-	// — wiring follows in slice 4.
+	// Existence first — a probe against an unknown backend id is a 404, not
+	// an "unreachable" result.
 	if _, err := h.repo.Get(ctx, backendID); err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return &TestBackendOutput{Reachable: true, LatencyMs: 0}, nil
+	// Read-only — no audit row (per the BackendService contract).
+	if h.prober == nil {
+		return &TestBackendOutput{
+			Reachable:    false,
+			ErrorMessage: "connectivity probe not wired in this deployment",
+		}, nil
+	}
+	// Bound the probe so a wedged endpoint can't hang the RPC.
+	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	perr := h.prober.Probe(pctx, backendID)
+	out := &TestBackendOutput{LatencyMs: int32(time.Since(start).Milliseconds())}
+	if perr != nil {
+		out.Reachable = false
+		out.ErrorMessage = perr.Error()
+	} else {
+		out.Reachable = true
+	}
+	return out, nil
 }
 
 // ─── role helpers ──────────────────────────────────────────────────────────

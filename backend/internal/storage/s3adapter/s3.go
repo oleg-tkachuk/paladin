@@ -268,6 +268,15 @@ func (c *Client) resolveBucket(perCall string) string {
 // CreateBucket provisions a real S3 bucket. Idempotent — returns nil when
 // the bucket already exists and is owned by the caller (S3 returns
 // BucketAlreadyOwnedByYou).
+// Probe is a lightweight, read-only reachability + auth check used by
+// BackendService.TestBackend. ListBuckets exercises the endpoint, TLS, and
+// the configured credentials without mutating anything. The caller bounds it
+// with a context timeout. Returns nil when the backend answered.
+func (c *Client) Probe(ctx context.Context) error {
+	_, err := c.s3.ListBuckets(ctx, &s3.ListBucketsInput{})
+	return err
+}
+
 func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region string) error {
 	in := &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),

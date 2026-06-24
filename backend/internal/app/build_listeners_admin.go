@@ -42,6 +42,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	opH := wire.ProvideOperationHandler(repos, polEngine)
 	policyH := wire.ProvidePolicyHandler(polEngine, deps.PolStore)
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine, cfg)
+	// TestBackend connectivity probe over the runtime-configured S3 clients.
+	backendProber, err := BuildBackendProber(ctx, cfg.Storage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build backend prober: %w", err)
+	}
+	backendH.SetProber(backendProber)
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
