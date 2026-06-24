@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
+
+import { errorMessage } from "@/hooks/errorContract";
 import {
   ArchiveBoxIcon,
   ArrowPathIcon,
@@ -127,7 +128,7 @@ function SortHeader({
 const ALL_BACKENDS = "__all__";
 
 export default function BucketsPage() {
-  const { buckets, loading, fetchBuckets, createBucket, deleteBucket, error } =
+  const { buckets, loading, fetchBuckets, createBucket, deleteBucket } =
     useBuckets();
   const { backends: backendRows } = useBackends();
   const { showNotification } = useNotification();
@@ -221,11 +222,11 @@ export default function BucketsPage() {
       setNewDisplayName("");
       setNewRegion("");
       setCreateOpen(false);
-    } catch {
+    } catch (err) {
       showNotification({
         type: "error",
         title: "Creation failed",
-        message: error || "Failed to create bucket.",
+        message: errorMessage(err, "Failed to create bucket."),
       });
     } finally {
       setSubmitting(false);
@@ -249,14 +250,10 @@ export default function BucketsPage() {
       setDeleteTarget(null);
       setDeleteRemote(false);
     } catch (err) {
-      const message =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : error || "Failed to delete bucket.";
       showNotification({
         type: "error",
         title: "Deletion failed",
-        message,
+        message: errorMessage(err, "Failed to delete bucket."),
       });
     }
   };

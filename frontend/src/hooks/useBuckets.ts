@@ -59,12 +59,13 @@ export function useBuckets() {
           nextPageToken: res.page?.nextPageToken ?? "",
         };
       } catch (err) {
-        const msg =
+        // Query contract (state-only): surface via `error`, never throw.
+        setError(
           err instanceof ConnectError
             ? err.rawMessage
-            : "Failed to fetch buckets";
-        setError(msg);
-        throw err;
+            : "Failed to fetch buckets",
+        );
+        return { buckets: [], nextPageToken: "" };
       } finally {
         setLoading(false);
       }
@@ -104,11 +105,7 @@ export function useBuckets() {
         bumpRefresh("buckets");
         return created;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to create bucket";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -136,11 +133,7 @@ export function useBuckets() {
         );
         bumpRefresh("buckets");
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to delete bucket";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },

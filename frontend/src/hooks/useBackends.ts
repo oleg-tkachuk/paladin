@@ -45,12 +45,13 @@ export function useBackends(autoFetch: boolean = true) {
       setBackends(res.backends);
       return res.backends;
     } catch (err) {
-      const msg =
+      // Query contract (state-only): surface via `error`, never throw.
+      setError(
         err instanceof ConnectError
           ? err.rawMessage
-          : "Failed to fetch backends";
-      setError(msg);
-      throw err;
+          : "Failed to fetch backends",
+      );
+      return [];
     } finally {
       setLoading(false);
     }
@@ -84,11 +85,7 @@ export function useBackends(autoFetch: boolean = true) {
         bumpRefresh("backends");
         return created;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to create backend";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -119,11 +116,7 @@ export function useBackends(autoFetch: boolean = true) {
         bumpRefresh("backends");
         return updated;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to change backend state";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },

@@ -58,30 +58,27 @@ import { IdentityField } from "@/components/IdentityField";
 import { T } from "@/lib/ui/typography";
 
 export default function TrashPage() {
-  const { fetchTenants, restoreTenant, purgeTenant } = useTenants();
+  // `error` is the hook's query-error state (set by fetchTenants on failure);
+  // the contract makes fetchTenants state-only, so we read it here instead of
+  // catching a throw. restoreTenant/purgeTenant are mutations (throw-only) and
+  // surface via toasts below.
+  const { fetchTenants, restoreTenant, purgeTenant, error } = useTenants();
   const [trashed, setTrashed] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<Tenant | null>(null);
   const { showNotification } = useNotification();
 
   const reload = async () => {
+    // only_trashed=true → exclusively soft-deleted rows. We read the RETURN
+    // value of fetchTenants rather than the hook's shared `tenants` (which
+    // would conflict with the /tenants page when both are mounted in the same
+    // tab session). fetchTenants is a query: on failure it sets the hook's
+    // `error` (rendered in the banner) and returns an empty page — no throw.
     setLoading(true);
-    setError(null);
-    try {
-      // only_trashed=true → exclusively soft-deleted rows. The hook
-      // shares state with the active list, so we read the result of
-      // fetchTenants directly instead of relying on the hook's
-      // internal `tenants` (which would conflict with the /tenants
-      // page when both are mounted in the same tab session).
-      const res = await fetchTenants("", "", { onlyTrashed: true });
-      setTrashed(res.tenants);
-    } catch (err) {
-      setError(err instanceof ConnectError ? err.rawMessage : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetchTenants("", "", { onlyTrashed: true });
+    setTrashed(res.tenants);
+    setLoading(false);
   };
 
   useEffect(() => {

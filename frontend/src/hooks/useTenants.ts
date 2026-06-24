@@ -55,12 +55,14 @@ export function useTenants() {
           nextPageToken: res.page?.nextPageToken ?? "",
         };
       } catch (err) {
-        const msg =
+        // Query contract (state-only): surface via `error`, never throw.
+        // Callers read `error`; awaiting callers get an empty page.
+        setError(
           err instanceof ConnectError
             ? err.rawMessage
-            : "Failed to fetch tenants";
-        setError(msg);
-        throw err;
+            : "Failed to fetch tenants",
+        );
+        return { tenants: [], nextPageToken: "" };
       } finally {
         setLoading(false);
       }
@@ -106,11 +108,7 @@ export function useTenants() {
         bumpRefresh("tenants");
         return created;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to create tenant";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -148,11 +146,7 @@ export function useTenants() {
         bumpRefresh("tenants");
         return updated;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to update tenant";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -179,11 +173,7 @@ export function useTenants() {
         setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
         bumpRefresh("tenants");
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to delete tenant";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -207,11 +197,7 @@ export function useTenants() {
         bumpRefresh("tenants");
         return restored;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to restore tenant";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -230,9 +216,7 @@ export function useTenants() {
       setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
       bumpRefresh("tenants");
     } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to purge tenant";
-      setError(msg);
+      // Mutation contract (throw-only): caller surfaces via errorMessage().
       throw err;
     }
   }, []);

@@ -709,22 +709,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Data-hook error contract: pick one (state vs. throw)
-
-- **Status:** Deferred
-- **Reason:** ~15 data hooks (`useTenants`, `useObject`, …) both set an
-  `error` state **and** re-throw; callers must handle two channels and
-  do so inconsistently (some toast, some swallow, some rely on the
-  throw). Fragile — NotFound-vs-error special-casing is duplicated per
-  caller.
-- **Definition of Done:** one documented contract (recommended:
-  state-only for queries, throw-only for imperative mutations) applied
-  to all hooks; callers updated; convention noted in a comment on the
-  first hook or a small README in `src/hooks/`.
-- **Blockers:** none — pairs naturally with the Vitest entry above
-  (tests pin the chosen contract) and with any TanStack Query adoption,
-  which would subsume it.
-
 ### Oversized component refactor (ObjectDetailView and friends)
 
 - **Status:** Deferred

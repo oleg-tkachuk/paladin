@@ -107,8 +107,9 @@ export function useObjects(options: UseObjectsOptions = {}) {
         setNextCursor(next);
         return { objects: res.objects, nextCursor: next };
       } catch (err) {
+        // Query contract (state-only): surface via `error`, never throw.
         setError(err as Error);
-        throw err;
+        return { objects: [] as Object$[], nextCursor: undefined };
       } finally {
         setLoading(false);
       }

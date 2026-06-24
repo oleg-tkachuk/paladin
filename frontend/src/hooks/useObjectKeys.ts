@@ -60,12 +60,13 @@ export function useObjectKeys() {
           nextPageToken: res.page?.nextPageToken ?? "",
         };
       } catch (err) {
-        const msg =
+        // Query contract (state-only): surface via `error`, never throw.
+        setError(
           err instanceof ConnectError
             ? err.rawMessage
-            : "Failed to fetch object keys";
-        setError(msg);
-        throw err;
+            : "Failed to fetch object keys",
+        );
+        return { objectKeys: [], nextPageToken: "" };
       } finally {
         setLoading(false);
       }
@@ -105,11 +106,7 @@ export function useObjectKeys() {
         bumpRefresh("objectKeys");
         return created;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to create object key";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -135,11 +132,7 @@ export function useObjectKeys() {
         // beneath it — fan out to "objects" so any open list refetches.
         bumpRefresh(["objectKeys", "objects"]);
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to delete object key";
-        setError(msg);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -159,7 +152,7 @@ export function useObjectKeys() {
           name: objectKeyResourceName(callerTenantId, objectKey),
         });
       } catch (err) {
-        if (err instanceof ConnectError) setError(err.rawMessage);
+        // Imperative read (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
@@ -196,7 +189,7 @@ export function useObjectKeys() {
         bumpRefresh("objectKeys");
         return updated;
       } catch (err) {
-        if (err instanceof ConnectError) setError(err.rawMessage);
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
