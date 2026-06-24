@@ -80,17 +80,25 @@ func seedAuditRows(b testing.TB, ctx context.Context, pool interface {
 //	no_pushdown   1.60 ms/op   1511 KB/op   5032 allocs/op
 //
 // FINDING — the original BACKLOG claim of "≥10× p50 latency speedup" is
-// DROPPED: on this shape the two are within noise on latency, because
-// audit_log has no index on `action`, so the action-prefix predicate is a
-// filter (not an index range) under both paths and each scans a comparable
-// number of `at`-ordered rows. What pushdown DOES buy, decisively, is ~20×
-// fewer bytes + allocations shipped into Go (77 KB vs 1.5 MB) — only the
-// matching page crosses the wire instead of the full candidate set — plus,
-// in production, one avoided compiled-CEL eval per shipped row (not modelled
-// here, which understates the win). A real latency win for "newest-N rows
-// matching an action prefix" needs a dedicated index strategy on `action`
-// (text_pattern_ops) — flagged as a follow-up; it's a query-planning change,
-// not a pushdown-extractor one.
+// DROPPED: on this shape the two are within noise on latency. What pushdown
+// DOES buy, decisively, is ~20× fewer bytes + allocations shipped into Go
+// (77 KB vs 1.5 MB) — only the matching page crosses the wire instead of the
+// full candidate set — plus, in production, one avoided compiled-CEL eval per
+// shipped row (not modelled here, which understates the win).
+//
+// FOLLOW-UP RESOLVED (migration 040 + partitioning 041). Migration 040 added
+// idx_audit_log_action_at = (action text_pattern_ops, at DESC). Re-running
+// this bench WITH that index did NOT move prefix-range latency (pushdown
+// 1.79 -> 1.92 ms/op, within noise) — the planner never picks the action
+// index for a multi-value prefix range, because (action, at) cannot yield a
+// global at-DESC stream. TestAuditActionIndex_PlannerChoice
+// (audit_action_index_test.go) proves the split with EXPLAIN: prefix-range
+// rides the at-ordered index; EXACT-action queries DO use the action index
+// (that is what it earns its keep for). Both carry a cheap incremental sort
+// from the entry_id cursor tiebreaker + the cross-partition merge — inherent,
+// not an index defect. Conclusion: no partial-per-action-class index is
+// warranted; the prefix-range path is already index-driven and pushdown wins
+// on bytes. BACKLOG entry closed.
 func BenchmarkAuditListPushdown(b *testing.B) {
 	ctx := context.Background()
 	pool := startPostgres(b)

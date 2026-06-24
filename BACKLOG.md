@@ -309,24 +309,6 @@ open deliberately — each notes why._
 
 ## Performance / Scale
 
-### AuditLog action-prefix index: planner validation
-
-- **Status:** Deferred (index shipped; the bench measurement remains)
-- **Reason:** Migration 040 adds `idx_audit_log_action_at` =
-  `(action text_pattern_ops, at DESC)`, built CONCURRENTLY, so the
-  `action LIKE 'prefix%' ... ORDER BY at DESC LIMIT N` shape can range-scan
-  the action prefix instead of filtering every row (the gap the pushdown
-  benchmark surfaced). What is NOT yet done: confirming the *latency* win on
-  the 1M-row bench — the composite orders `at` per-action, so for a multi-value
-  prefix range the planner may still sort; that needs measuring under
-  testcontainers (`task test:bench`), not assumed.
-- **Definition of Done:**
-  - Re-run `task test:bench` against the new index and confirm
-    `EXPLAIN ANALYZE` shows an index range scan (and whether a partial index
-    per high-volume action class, or a query rewrite, beats the composite for
-    the `ORDER BY at DESC LIMIT` shape).
-- **Blockers:** none — gated only on running the (Docker-bound) bench.
-
 ### Per-row Cedar filtering in ListObjects
 
 - **Status:** Deferred
