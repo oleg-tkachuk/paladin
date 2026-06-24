@@ -13,8 +13,11 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { FieldMask } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_field_mask,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
 import type { Tenant, TenantSchema } from "./types_pb";
 import { file_paladin_admin_v1_types } from "./types_pb";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
@@ -27,10 +30,11 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIn0KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkSFwoPaW5jbHVkZV90cmFzaGVkGAMgASgIEhQKDG9ubHlfdHJhc2hlZBgEIAEoCCJnChNMaXN0VGVuYW50c1Jlc3BvbnNlEiUKB3RlbmFudHMYASADKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJiChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQATLUBQoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSSQoNUmVzdG9yZVRlbmFudBIiLm9jcC5hZG1pbi52MS5SZXN0b3JlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSUgoLUHVyZ2VUZW5hbnQSIC5vY3AuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXF1ZXN0GiEub2NwLmFkbWluLnYxLlB1cmdlVGVuYW50UmVzcG9uc2USTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnRCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
+    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIn0KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkSFwoPaW5jbHVkZV90cmFzaGVkGAMgASgIEhQKDG9ubHlfdHJhc2hlZBgEIAEoCCJnChNMaXN0VGVuYW50c1Jlc3BvbnNlEiUKB3RlbmFudHMYASADKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJiChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQASI2ChlSZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0EhkKCG9sZF9zbHVnGAEgASgJQge6SARyAhABIl4KGlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlEhAKCG5ld19zbHVnGAEgASgJEi4KCnJlbmFtZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wMr0GCg1UZW5hbnRTZXJ2aWNlEkcKDENyZWF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5DcmVhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJBCglHZXRUZW5hbnQSHi5vY3AuYWRtaW4udjEuR2V0VGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSRwoMVXBkYXRlVGVuYW50EiEub2NwLmFkbWluLnYxLlVwZGF0ZVRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50ElUKDERlbGV0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlc3BvbnNlElIKC0xpc3RUZW5hbnRzEiAub2NwLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVxdWVzdBohLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1Jlc3BvbnNlElMKElNldEluaGVyaXRlZFBvbGljeRInLm9jcC5hZG1pbi52MS5TZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJJCg1SZXN0b3JlVGVuYW50EiIub2NwLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJSCgtQdXJnZVRlbmFudBIgLm9jcC5hZG1pbi52MS5QdXJnZVRlbmFudFJlcXVlc3QaIS5vY3AuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZRJPChBSZW5hbWVUZW5hbnRTbHVnEiUub2NwLmFkbWluLnYxLlJlbmFtZVRlbmFudFNsdWdSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJnChJSZXNvbHZlUmVuYW1lZFNsdWcSJy5vY3AuYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBooLm9jcC5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
+      file_google_protobuf_timestamp,
       file_paladin_admin_v1_types,
       file_paladin_common_v1_pagination,
     ],
@@ -369,6 +373,55 @@ export const RenameTenantSlugRequestSchema: GenMessage<RenameTenantSlugRequest> 
   messageDesc(file_paladin_admin_v1_tenant_service, 11);
 
 /**
+ * @generated from message paladin.admin.v1.ResolveRenamedSlugRequest
+ */
+export type ResolveRenamedSlugRequest =
+  Message<"paladin.admin.v1.ResolveRenamedSlugRequest"> & {
+    /**
+     * old_slug — the slug that 404'd (the one in the stale bookmark).
+     *
+     * @generated from field: string old_slug = 1;
+     */
+    oldSlug: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ResolveRenamedSlugRequest.
+ * Use `create(ResolveRenamedSlugRequestSchema)` to create a new message.
+ */
+export const ResolveRenamedSlugRequestSchema: GenMessage<ResolveRenamedSlugRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 12);
+
+/**
+ * @generated from message paladin.admin.v1.ResolveRenamedSlugResponse
+ */
+export type ResolveRenamedSlugResponse =
+  Message<"paladin.admin.v1.ResolveRenamedSlugResponse"> & {
+    /**
+     * new_slug — the slug the tenant uses now.
+     *
+     * @generated from field: string new_slug = 1;
+     */
+    newSlug: string;
+
+    /**
+     * renamed_at — when the rotation happened (for a "renamed N days ago" hint).
+     *
+     * @generated from field: google.protobuf.Timestamp renamed_at = 2;
+     */
+    renamedAt?: Timestamp | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ResolveRenamedSlugResponse.
+ * Use `create(ResolveRenamedSlugResponseSchema)` to create a new message.
+ */
+export const ResolveRenamedSlugResponseSchema: GenMessage<ResolveRenamedSlugResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 13);
+
+/**
  * TenantService manages tenants. Platform-admin only.
  *
  * @generated from service paladin.admin.v1.TenantService
@@ -468,5 +521,22 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof RenameTenantSlugRequestSchema;
     output: typeof TenantSchema;
+  };
+  /**
+   * ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
+   * renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
+   * "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
+   * is NOT platform-admin gated — it authorizes by READ access to the resolved
+   * target tenant, so an ordinary member of that tenant can follow a stale
+   * link. Every failure (no rename history, outside the grace window, or
+   * read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
+   * enumerate slug→tenant mappings.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.ResolveRenamedSlug
+   */
+  resolveRenamedSlug: {
+    methodKind: "unary";
+    input: typeof ResolveRenamedSlugRequestSchema;
+    output: typeof ResolveRenamedSlugResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_service, 0);
