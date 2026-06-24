@@ -33,30 +33,41 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Live session enumeration on the streamable-HTTP transport
+### Live session enumeration: surface the registry via RPC + UI
 
-- **Status:** Deferred
-- **Reason:** The new admin/v1.MCPInspectService surfaces profiles,
-  always-deny, the tool catalog and upstream URLs (everything that's
-  config-derived). Live session state — who is connected over
-  streamable-HTTP right now, what session-id, last activity, total
-  tool calls — lives inside `mcpsdk.Server` from
-  `github.com/modelcontextprotocol/go-sdk` which doesn't expose an
-  enumeration hook today.
-- **Definition of Done:**
-  - A new `MCPInspectService.ListSessions` RPC returns
-    `[]Session{id, agent_subject, started_at, last_seen,
-    tool_call_count, agent_type, model}` for the streamable-HTTP
-    transport.
-  - Implementation either upstreams a session-iterator hook to the
-    SDK (cleanest) or wraps the SDK's `http.Handler` with a
-    middleware that tracks session-id from the `X-Session-Id`
-    header into a local in-memory map (simpler; no SDK fork).
+- **Status:** Deferred (tracking shipped; cross-process surfacing remains)
+- **Reason:** The SDK fork-vs-wrapper decision is RESOLVED in favour
+  of the wrapper (no fork, no maintenance burden). The tracking core
+  now exists: `mcp.SessionRegistry` (in-memory, concurrency-safe:
+  observe / Snapshot / Reap) plus `mcp.TrackSessions`, an
+  `http.Handler` middleware wired into the streamable-HTTP server in
+  [serve_mcp.go](backend/cmd/server/serve_mcp.go). It captures the
+  real `Mcp-Session-Id` (v1.6.1 header — minted on the `initialize`
+  response, echoed on continuations), counts `tools/call` by sniffing
+  the JSON-RPC method, tracks started_at / last_seen / request_count,
+  and a ctx-bound reaper evicts idle sessions. Unit-tested in
+  `sessions_test.go` (mint + continue + tool-count + reap).
+- **The remaining gap is TOPOLOGY, not tracking:** `MCPInspectService`
+  ([mcpinspecth](backend/internal/api/admin/v1/mcpinspecth/handler.go))
+  runs in the ADMIN plane, built only from `config.MCP` — a different
+  process from the MCP bridge that owns the registry. An admin-plane
+  `ListSessions` RPC therefore cannot read the in-memory map directly.
+- **Definition of Done (remaining):**
+  - Decide the surfacing path: (a) expose a read endpoint on the MCP
+    server's own mux that MCPInspectService proxies, or (b) wait for
+    the single-binary multi-mode migration and share the registry by
+    pointer. (a) is shippable today and preferred.
+  - `MCPInspectService.ListSessions` RPC (proto + buf regen +
+    connectshim + handler) returning the `SessionInfo` rows.
+  - Enrich `agent_subject` (and agent_type / model if available):
+    `TrackSessions` currently passes a nil subjectFn, so the field is
+    blank — populating it needs the MCP server to verify the per-
+    request `X-PALADIN-Token` JWT and extract the subject.
   - `/mcp` UI swaps the placeholder card for a live table.
-  - In the meantime, MCP tool calls remain visible via
+  - Meanwhile MCP tool calls remain visible via
     `/audit?audience=paladin-mcp` (deep-linked from the placeholder).
-- **Blockers:** decide between SDK fork (clean but adds a maintenance
-  burden) vs middleware wrapper (simpler, uses public SDK surface).
+- **Blockers:** none — additive RPC + a surfacing-path choice (both
+  options listed); the tracking half is done and tested.
 
 ---
 

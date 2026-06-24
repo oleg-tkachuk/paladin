@@ -227,8 +227,35 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		SessionTimeout: cfg.MCP.HTTP.SessionTimeout,
 	})
 
+	// Track live sessions off the wire — the SDK exposes no enumeration hook,
+	// so the middleware records Mcp-Session-Id activity into a process-local
+	// registry. A reaper (below) evicts idle sessions; surfacing the registry
+	// through MCPInspectService is a separate, cross-process step (BACKLOG).
+	sessions := mcp.NewSessionRegistry()
+	tracked := mcp.TrackSessions(handler, sessions, nil)
+
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", handler)
+	mux.Handle("/mcp", tracked)
+
+	// The streamable transport has no reliable disconnect signal (clients can
+	// vanish without a DELETE), so evict sessions idle past the session
+	// timeout to keep the registry bounded.
+	reapIdle := cfg.MCP.HTTP.SessionTimeout
+	if reapIdle <= 0 {
+		reapIdle = 5 * time.Minute
+	}
+	go func() {
+		t := time.NewTicker(reapIdle)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				sessions.Reap(reapIdle)
+			}
+		}
+	}()
 
 	// Probe surface — same shape as api / admin / worker. /livez +
 	// /readyz + /startupz follow the K8s contract; /system/health.json
