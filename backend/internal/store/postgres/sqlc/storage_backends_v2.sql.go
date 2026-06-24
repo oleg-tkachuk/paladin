@@ -186,12 +186,20 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 
 const rotateStorageBackendCredentials = `-- name: RotateStorageBackendCredentials :execrows
 UPDATE storage_backends
-SET credentials_secret_ref = $2
+SET previous_credentials_secret_ref  = credentials_secret_ref,
+    previous_credentials_valid_until = CASE
+        WHEN $3::bigint > 0 THEN now() + make_interval(secs => $3::bigint)
+        ELSE NULL
+    END,
+    credentials_secret_ref           = $2
 WHERE id = $1
 `
 
-func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string) (int64, error) {
-	result, err := q.db.Exec(ctx, rotateStorageBackendCredentials, iD, credentialsSecretRef)
+// Dual-write rotation: stash the current ref as the previous one with a
+// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
+// window in seconds; 0 clears the previous window (instant rotation).
+func (q *Queries) RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string, column3 int64) (int64, error) {
+	result, err := q.db.Exec(ctx, rotateStorageBackendCredentials, iD, credentialsSecretRef, column3)
 	if err != nil {
 		return 0, err
 	}

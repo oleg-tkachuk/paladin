@@ -414,26 +414,28 @@ type ReplicationState struct {
 }
 
 type StorageBackend struct {
-	ID                   string             `json:"id"`
-	Kind                 string             `json:"kind"`
-	Endpoint             *string            `json:"endpoint"`
-	Region               *string            `json:"region"`
-	EventsEnabled        bool               `json:"events_enabled"`
-	EventsTarget         *string            `json:"events_target"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	DisplayName          *string            `json:"display_name"`
-	PublicEndpoint       *string            `json:"public_endpoint"`
-	ForcePathStyle       bool               `json:"force_path_style"`
-	CredentialsSecretRef *string            `json:"credentials_secret_ref"`
-	SseType              string             `json:"sse_type"`
-	SseKeyID             string             `json:"sse_key_id"`
-	EventsQueueUrl       string             `json:"events_queue_url"`
-	EventsPollIntervalMs int64              `json:"events_poll_interval_ms"`
-	CedarPolicy          string             `json:"cedar_policy"`
-	CedarPolicyHash      []byte             `json:"cedar_policy_hash"`
-	ResourceVersion      int64              `json:"resource_version"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	Enabled              bool               `json:"enabled"`
+	ID                            string             `json:"id"`
+	Kind                          string             `json:"kind"`
+	Endpoint                      *string            `json:"endpoint"`
+	Region                        *string            `json:"region"`
+	EventsEnabled                 bool               `json:"events_enabled"`
+	EventsTarget                  *string            `json:"events_target"`
+	CreatedAt                     pgtype.Timestamptz `json:"created_at"`
+	DisplayName                   *string            `json:"display_name"`
+	PublicEndpoint                *string            `json:"public_endpoint"`
+	ForcePathStyle                bool               `json:"force_path_style"`
+	CredentialsSecretRef          *string            `json:"credentials_secret_ref"`
+	SseType                       string             `json:"sse_type"`
+	SseKeyID                      string             `json:"sse_key_id"`
+	EventsQueueUrl                string             `json:"events_queue_url"`
+	EventsPollIntervalMs          int64              `json:"events_poll_interval_ms"`
+	CedarPolicy                   string             `json:"cedar_policy"`
+	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
+	ResourceVersion               int64              `json:"resource_version"`
+	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
+	Enabled                       bool               `json:"enabled"`
+	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
+	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 }
 
 type Tenant struct {

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -123,7 +124,17 @@ func (s *BackendServer) RotateCredentials(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.RotateCredentials(ctx, id, req.Msg.GetNewSecretRef(), 0)
+	// grace_period is a Go duration string ("30m", "1h"); empty = instant.
+	var grace time.Duration
+	if gp := req.Msg.GetGracePeriod(); gp != "" {
+		d, perr := time.ParseDuration(gp)
+		if perr != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("invalid grace_period %q: %w", gp, perr))
+		}
+		grace = d
+	}
+	out, err := s.H.RotateCredentials(ctx, id, req.Msg.GetNewSecretRef(), grace)
 	if err != nil {
 		return nil, err
 	}

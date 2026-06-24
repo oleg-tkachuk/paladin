@@ -32,9 +32,9 @@ func (fakeBackendRepo) List(context.Context, int32, string) ([]admindomain.Stora
 func (fakeBackendRepo) Update(context.Context, admindomain.StorageBackend, int64, []string) error {
 	return nil
 }
-func (fakeBackendRepo) SetEnabled(context.Context, string, bool, int64) error   { return nil }
-func (fakeBackendRepo) RotateCredentials(context.Context, string, string) error { return nil }
-func (fakeBackendRepo) Delete(context.Context, string, int64, bool) error       { return nil }
+func (fakeBackendRepo) SetEnabled(context.Context, string, bool, int64) error          { return nil }
+func (fakeBackendRepo) RotateCredentials(context.Context, string, string, int64) error { return nil }
+func (fakeBackendRepo) Delete(context.Context, string, int64, bool) error              { return nil }
 
 func ctxWithRoles(roles ...string) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{

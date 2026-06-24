@@ -85,8 +85,16 @@ WHERE id = sqlc.arg('id')
        OR resource_version = sqlc.arg('expected_version')::bigint);
 
 -- name: RotateStorageBackendCredentials :execrows
+-- Dual-write rotation: stash the current ref as the previous one with a
+-- validity horizon of now()+grace, then swap in the new ref. $3 is the grace
+-- window in seconds; 0 clears the previous window (instant rotation).
 UPDATE storage_backends
-SET credentials_secret_ref = $2
+SET previous_credentials_secret_ref  = credentials_secret_ref,
+    previous_credentials_valid_until = CASE
+        WHEN $3::bigint > 0 THEN now() + make_interval(secs => $3::bigint)
+        ELSE NULL
+    END,
+    credentials_secret_ref           = $2
 WHERE id = $1;
 
 -- name: DeleteStorageBackend :execrows

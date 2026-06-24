@@ -25,7 +25,12 @@ type BackendRepository interface {
 	List(ctx context.Context, pageSize int32, afterID string) ([]StorageBackend, string, error)
 	Update(ctx context.Context, b StorageBackend, expectedVersion int64, mask []string) error
 	SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error
-	RotateCredentials(ctx context.Context, backendID, secretRef string) error
+	// RotateCredentials swaps credentials_secret_ref to secretRef. When
+	// graceSeconds > 0 it preserves the prior ref in
+	// previous_credentials_secret_ref with a now()+grace validity horizon so
+	// in-flight presigns signed against the old credentials are observably
+	// still valid; 0 rotates instantly (clears the previous window).
+	RotateCredentials(ctx context.Context, backendID, secretRef string, graceSeconds int64) error
 	Delete(ctx context.Context, backendID string, expectedVersion int64, force bool) error
 }
 

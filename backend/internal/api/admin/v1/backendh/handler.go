@@ -214,14 +214,17 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	return &got, nil
 }
 
-func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, _ time.Duration) (*admindomain.StorageBackend, error) {
+func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, grace time.Duration) (*admindomain.StorageBackend, error) {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionRotateBackendCredentials, backendID); err != nil {
 		return nil, err
 	}
-	if err := h.repo.RotateCredentials(ctx, backendID, secretRef); err != nil {
+	if grace < 0 {
+		grace = 0
+	}
+	if err := h.repo.RotateCredentials(ctx, backendID, secretRef, int64(grace.Seconds())); err != nil {
 		if errors.Is(err, admindomain.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
 		}

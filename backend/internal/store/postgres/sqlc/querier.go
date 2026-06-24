@@ -376,7 +376,10 @@ type Querier interface {
 	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	RotateApiKeySecret(ctx context.Context, apiKeyID pgtype.UUID, secretHash []byte, secretHashOld []byte, secretHashOldUntil pgtype.Timestamptz) error
-	RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string) (int64, error)
+	// Dual-write rotation: stash the current ref as the previous one with a
+	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
+	// window in seconds; 0 clears the previous window (instant rotation).
+	RotateStorageBackendCredentials(ctx context.Context, iD string, credentialsSecretRef *string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	SetBucketConstraints(ctx context.Context, backendID string, bucketName string, constraints []byte, expectedVersion int64) (int64, error)

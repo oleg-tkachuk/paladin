@@ -212,8 +212,8 @@ func (r *BackendRepoV2) SetEnabled(ctx context.Context, backendID string, enable
 	return nil
 }
 
-func (r *BackendRepoV2) RotateCredentials(ctx context.Context, backendID, secretRef string) error {
-	rows, err := r.q.RotateStorageBackendCredentials(ctx, backendID, &secretRef)
+func (r *BackendRepoV2) RotateCredentials(ctx context.Context, backendID, secretRef string, graceSeconds int64) error {
+	rows, err := r.q.RotateStorageBackendCredentials(ctx, backendID, &secretRef, graceSeconds)
 	if err != nil {
 		return err
 	}
