@@ -13,6 +13,21 @@ tasks:
       - task: ":core:banner"
         vars: { MESSAGE: "regenerating code (mocks → proto → go generate → sqlc)" }
       - go run github.com/vektra/mockery/v3 --config .mockery.yaml
-      - buf generate
+      - task: proto
       - go generate ./...
       - sqlc generate
+
+  proto:
+    desc: "Regenerate protobuf + Connect-Go stubs (reproducible: buf generate → goimports)"
+    cmds:
+      # buf emits one alphabetically-sorted import block. The repo's de-facto
+      # canonical for generated Go is whatever the lefthook pre-commit hook
+      # applies — a plain `goimports -w` (stdlib group, blank line, then the
+      # rest) — NOT raw buf output. Commits that bypassed the hook (--no-verify)
+      # left some pb files in raw single-block form, so a no-op `buf generate`
+      # used to churn ~40 files. Applying the same goimports pass here makes
+      # `task gen:proto` byte-reproducible and matches the hook. Requires
+      # goimports on PATH (same assumption as the lefthook backend-goimports
+      # step); install with `go install golang.org/x/tools/cmd/goimports@latest`.
+      - buf generate
+      - goimports -w internal/api/pb
