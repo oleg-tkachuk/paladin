@@ -1,15 +1,34 @@
 import { defineConfig } from "vitest/config";
 
-// Unit tests run in node (pure logic: formatters, validators, the BFF
-// audience gate). Component/DOM tests would add jsdom + RTL later; the
-// first wave deliberately covers framework-free units so it stays fast
-// and dependency-light. `@/` path aliases resolve via Vite's native
-// tsconfig-paths support (vitest 4 / vite 6+).
+// Two projects, split by file extension:
+//   - node  (*.test.ts):  pure logic — formatters, validators, the BFF
+//     audience gate, hook reducers. Fast, no DOM.
+//   - dom   (*.test.tsx): React component/page tests via @testing-library
+//     under jsdom, with jest-dom matchers + auto-cleanup (src/test/setup.ts).
+// `@/` path aliases resolve via Vite's native tsconfig-paths support
+// (vitest 4 / vite 6+).
 export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
     globals: false,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+    ],
   },
 });
