@@ -126,4 +126,63 @@ describe("CapabilitiesPage", () => {
     // operator lands on shows it (the success path's setSubject + setItems).
     expect(screen.getByDisplayValue("agent-x")).toBeInTheDocument();
   });
+
+  // ── row-menu flows (Details + Revoke) ─────────────────────────────────
+  // Seed the last-browsed principal so the page hydrates + lists on mount,
+  // giving us a row to drive the kebab menu against.
+  const makeCap = (id: string) => ({
+    id,
+    issuer: "iss",
+    parentId: "",
+    generation: 0n,
+    subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
+    audience: ["data"],
+    caveats: {
+      ops: ["get"],
+      resourcePrefixes: [],
+      resourceUris: [],
+      sourceIpCidr: [],
+      maxRequests: 0n,
+      maxBudgetAmount: 0,
+      unitCode: "UNIT",
+      allowTaintedRead: false,
+      idempotencyKeyRequired: false,
+    },
+    issuedAt: undefined,
+    notBefore: undefined,
+    expiresAt: undefined,
+  });
+  const seedBrowse = () =>
+    localStorage.setItem(
+      "paladin:capabilities:lastBrowse:t-1",
+      JSON.stringify({ kind: "2", subject: "agent-x" }),
+    );
+
+  it("opens the details dialog from the row menu", async () => {
+    seedBrowse();
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    await userEvent.click(
+      await screen.findByText("Actions for capability cap-1"),
+    );
+    await userEvent.click(screen.getByText("View details"));
+    expect(await screen.findByText("Capability details")).toBeInTheDocument();
+  });
+
+  it("revokes a capability from the row menu", async () => {
+    seedBrowse();
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    h.revoke.mockResolvedValue({});
+    render(<CapabilitiesPage />);
+    await userEvent.click(
+      await screen.findByText("Actions for capability cap-1"),
+    );
+    await userEvent.click(screen.getByText("Revoke"));
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(h.revoke).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "cap-1" }),
+      ),
+    );
+  });
 });
