@@ -88,6 +88,9 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_presign_download", Audience: "data", Description: "Mint a signed GET URL.", CapabilityOp: "presign"},
 	{Name: "paladin_upload_object", Audience: "data", Description: "Initiate object upload (presigned PUT).", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_complete_object", Audience: "data", Description: "Finalise upload + commit object metadata.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_delete_object", Audience: "data", Description: "Delete an object (soft by default; permanent on request).", CapabilityOp: "delete", Mutates: true},
+	{Name: "paladin_copy_object", Audience: "data", Description: "Server-side copy of an object to a new object_key + key.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_batch_delete", Audience: "data", Description: "Async bulk delete by names or CEL filter; returns an Operation.", CapabilityOp: "delete", Mutates: true},
 	{Name: "paladin_list_operations", Audience: "data", Description: "List async batch operations."},
 	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
 

@@ -33,6 +33,54 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
+### Tool-coverage gaps vs the PALADIN RPC surface
+
+- **Status:** Deferred (partial — object delete/copy + batch-delete landed).
+- **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
+  read-heavy subset of the ~110 PALADIN RPCs (41 tools as of the
+  delete/copy/batch-delete addition). `DefaultCatalog` in
+  `internal/mcp/profile.go` is the ground-truth list and is now pinned to the
+  real registrations by `TestServerRegistersDefaultCatalog`. The following
+  PALADIN capabilities are still **not** reachable from an MCP agent. Some are
+  deliberate (see the next entry); the rest are unfilled coverage:
+  - **ObjectService:** `LookupObject`, `CountObjects`, `UpdateObject` (no
+    metadata-patch tool; tags have one but generic metadata does not).
+  - **ObjectTagService:** `DeleteObjectTags`, `ListDistinctTags`.
+  - **PresignService:** `RegenerateUploadUrl` (only download is exposed).
+  - **BatchService:** `BatchCopyObjects`, `BatchRestoreObjects`,
+    `BatchUpdateTags` (only `BatchDeleteObjects` is wired).
+  - **MultipartUploadService:** none of the 5 RPCs — large-object agent
+    uploads are impossible. (These are unary, so the inline-transport
+    streaming limitation does not block them; this is pure coverage.)
+  - **QuotaService.ResetUsage**, **AuditLogService.GetAuditLogEntry**,
+    **OperationService.CancelOperation** (admin + data).
+  - **Whole services with no client wired:** BillingService,
+    TenantBudgetService, admin SystemService (`GetConfig`), admin
+    OperationService, UserSettingsService.
+  - **Lifecycle writes** on Backend / Bucket / ObjectKey / Tenant
+    (create/update/delete) — Tenant lifecycle is intentionally human-only
+    (denylist); the others are gaps if agent-driven provisioning is wanted.
+- **Definition of Done:** For each capability decided in-scope, add the tool
+  in `registerReadTools`/`registerWriteTools`, append a `DefaultCatalog` row
+  (the invariant test enforces this), and gate it into the right
+  `DefaultProfiles` entry (destructive ops stay out of `agent_safe`). Wire any
+  missing Connect client into `Clients`.
+- **Blockers:** none technical. Needs a product call on which surfaces an
+  agent should drive vs. which stay human-operated.
+
+### Capability / API-token issuance via MCP — intentionally excluded
+
+- **Status:** Won't-do (by design) unless a human-gated profile is added.
+- **Reason:** `DefaultAlwaysDeny` blocks `paladin_capability_*` and
+  `paladin_apitoken_*`: an agent minting/delegating/revoking its own capability
+  or M2M token is a trivial bypass of the caveat model the agentic plane is
+  built on. The bridge forwards `X-PALADIN-Capability` but must never let the
+  callee issue new authority. Recorded so the absence reads as a decision,
+  not an oversight.
+- **Definition of Done (only if revisited):** a separate, explicitly
+  human-approved profile (not `agent_safe`/`admin`) that scopes capability
+  issuance, plus an audit trail tying each issuance to the operator session.
+- **Blockers:** security review; no current ask.
 
 ## Agentic plane / single-binary multi-mode migration
 

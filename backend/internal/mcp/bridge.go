@@ -52,6 +52,7 @@ type Clients struct {
 	Multipart     datav1connect.MultipartUploadServiceClient
 	Presign       datav1connect.PresignServiceClient
 	ObjectTag     datav1connect.ObjectTagServiceClient
+	Batch         datav1connect.BatchServiceClient
 	DataOperation datav1connect.OperationServiceClient
 
 	Auth   iamv1connect.AuthServiceClient
@@ -114,6 +115,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		Multipart:     datav1connect.NewMultipartUploadServiceClient(httpc, dataURL, authInjector),
 		Presign:       datav1connect.NewPresignServiceClient(httpc, dataURL, authInjector),
 		ObjectTag:     datav1connect.NewObjectTagServiceClient(httpc, dataURL, authInjector),
+		Batch:         datav1connect.NewBatchServiceClient(httpc, dataURL, authInjector),
 		DataOperation: datav1connect.NewOperationServiceClient(httpc, dataURL, authInjector),
 
 		Auth:   iamv1connect.NewAuthServiceClient(httpc, iamURL, authInjector),
@@ -783,6 +785,45 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			Tags: in.Tags,
 		})))
 	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_delete_object",
+		Description: "Delete an object. Default is a soft delete (recoverable via paladin_restore_version); set `permanent` to purge it irrecoverably. Locked objects refuse deletion unless the caller holds GOVERNANCE bypass.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteObjectArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+			Permanent:       in.Permanent,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_copy_object",
+		Description: "Server-side copy of an object to a destination object_key + key. The source is left in place (use paladin_delete_object after for a move).",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in copyObjectArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Object.CopyObject(ctx, connect.NewRequest(&datav1.CopyObjectRequest{
+			SourceName:           in.SourceName,
+			DestinationObjectKey: in.DestinationObjectKey,
+			DestinationKey:       in.DestinationKey,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_batch_delete",
+		Description: "Asynchronously delete many objects under one object_key. Select either by explicit `names` (≤100) or a CEL `filter`. Returns a long-running Operation; poll it via paladin_get_operation.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchDeleteArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Batch.BatchDeleteObjects(ctx, connect.NewRequest(&datav1.BatchDeleteObjectsRequest{
+			Parent: in.Parent,
+			Selector: &datav1.ObjectSelector{
+				Names:  in.Names,
+				Filter: in.Filter,
+			},
+			Permanent: in.Permanent,
+		})))
+	})
 }
 
 // ─── Presign / tag mutating arg types ───────────────────────────────────────
@@ -809,6 +850,22 @@ type presignDownloadArgs struct {
 type setObjectTagsArgs struct {
 	Name string            `json:"name" jsonschema:"object resource name"`
 	Tags map[string]string `json:"tags" jsonschema:"replacement tag map; empty = clear"`
+}
+type deleteObjectArgs struct {
+	Name            string `json:"name" jsonschema:"object resource name"`
+	ResourceVersion string `json:"resource_version,omitempty" jsonschema:"optimistic-concurrency token; empty skips the check"`
+	Permanent       bool   `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
+}
+type copyObjectArgs struct {
+	SourceName           string `json:"source_name" jsonschema:"source object resource name"`
+	DestinationObjectKey string `json:"destination_object_key" jsonschema:"destination ObjectKey resource name (tenants/{t}/objectKeys/{ok})"`
+	DestinationKey       string `json:"destination_key" jsonschema:"destination key (path) under that object_key"`
+}
+type batchDeleteArgs struct {
+	Parent    string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Names     []string `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
+	Filter    string   `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
+	Permanent bool     `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────────
