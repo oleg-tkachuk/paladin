@@ -18,9 +18,6 @@ import React, {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
-  ArrowsUpDownIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   ClockIcon,
   DocumentIcon,
   ExclamationTriangleIcon,
@@ -74,82 +71,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useObjectKey } from "../objectkey-context";
-
-interface ViewFilters {
-  search?: string;
-  status?: string;
-  recursive?: boolean;
-}
-interface SavedView {
-  name: string;
-  filters: ViewFilters;
-}
-
-// Runtime schema for the localStorage-persisted saved views. localStorage is
-// user-editable, so the read is validated (safeParseJson) instead of trusting
-// the shape via `as` — a corrupt entry falls back to [] rather than crashing
-// the effect with a TypeError on the next `.map`.
-const SavedViewSchema = z.object({
-  name: z.string(),
-  filters: z.object({
-    search: z.string().optional(),
-    status: z.string().optional(),
-    recursive: z.boolean().optional(),
-  }),
-});
-
-type SortDirection = "asc" | "desc" | null;
-interface SortState {
-  column: string;
-  direction: SortDirection;
-}
-function getNextSort(prev: SortState, column: string): SortState {
-  if (prev.column !== column) return { column, direction: "asc" };
-  if (prev.direction === "asc") return { column, direction: "desc" };
-  if (prev.direction === "desc") return { column: "", direction: null };
-  return { column, direction: "asc" };
-}
-
-function SortHeader({
-  label,
-  column,
-  current,
-  onSort,
-  align = "start",
-}: {
-  label: string;
-  column: string;
-  current: SortState;
-  onSort: (c: string) => void;
-  align?: "start" | "end";
-}) {
-  const active = current.column === column && current.direction !== null;
-  const Icon = !active
-    ? ArrowsUpDownIcon
-    : current.direction === "asc"
-      ? ArrowUpIcon
-      : ArrowDownIcon;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(column)}
-      className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider transition-colors",
-        active
-          ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground",
-        align === "end" && "justify-end w-full",
-      )}
-    >
-      {label}
-      <Icon className="size-3.5 opacity-70" />
-    </button>
-  );
-}
+import {
+  SavedViewSchema,
+  getNextSort,
+  type SavedView,
+  type SortState,
+} from "./_view";
+import { SortHeader } from "./_table";
 
 function ObjectKeyObjectsContent() {
   const searchParams = useSearchParams();
