@@ -20,12 +20,12 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useTenants } from "@/hooks/useTenants";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
-import { useNotification } from "@/components/ui/Notification";
 import { TenantCreateDialog } from "./TenantCreateDialog";
+import { TenantEditDialog } from "./TenantEditDialog";
+import { TenantDeleteDialog } from "./TenantDeleteDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
@@ -43,26 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { IdentityField } from "@/components/IdentityField";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -115,27 +96,16 @@ export default function TenantsPage() {
     updateTenantMetadata,
     deleteTenant,
   } = useTenants();
-  const { showNotification } = useNotification();
 
   // ─── search + sort ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
-  // ─── create ───────────────────────────────────────────────────────────────
-  // Phase 0 contract: slug is required, tenant_id is optional (server
-  // mints UUIDv7 when empty), display_name is optional (defaults to
-  // slug). Both slug and display_name are unique across tenants.
-  // Create-dialog open state; all the form state + backend/bucket cascade now
-  // lives inside TenantCreateDialog.
+  // Dialog open/target state. The create/edit/delete form state + handlers
+  // live inside their respective Tenant*Dialog components; the page only holds
+  // which one is open (set by the row menu / New tenant button).
   const [createOpen, setCreateOpen] = useState(false);
-  // Shared by the edit flow below (create has its own submitting state now).
-  const [submitting, setSubmitting] = useState(false);
-
-  // ─── edit ─────────────────────────────────────────────────────────────────
   const [editing, setEditing] = useState<Tenant | null>(null);
-  const [editDisplayName, setEditDisplayName] = useState("");
-
-  // ─── delete ───────────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
@@ -171,54 +141,6 @@ export default function TenantsPage() {
     }
     return list;
   }, [tenants, search, sort]);
-
-  const handleUpdate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!editing) return;
-    try {
-      setSubmitting(true);
-      await updateTenantMetadata(
-        editing.tenantId,
-        editing.resourceVersion,
-        editDisplayName,
-        editing.labels,
-      );
-      showNotification({
-        type: "success",
-        title: "Tenant updated",
-        message: editDisplayName || editing.tenantId,
-      });
-      setEditing(null);
-    } catch (err) {
-      console.error(err);
-      showNotification({
-        type: "error",
-        title: "Update failed",
-        message: "Failed to update tenant display name.",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await deleteTenant(deleteTarget);
-      showNotification({
-        type: "success",
-        title: "Tenant deleted",
-        message: deleteTarget,
-      });
-      setDeleteTarget(null);
-    } catch {
-      showNotification({
-        type: "error",
-        title: "Deletion failed",
-        message: "The tenant could not be removed.",
-      });
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -410,12 +332,7 @@ export default function TenantsPage() {
                               Open tenant
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setEditing(tenant);
-                              setEditDisplayName(tenant.displayName || "");
-                            }}
-                          >
+                          <DropdownMenuItem onSelect={() => setEditing(tenant)}>
                             <PencilSquareIcon className="size-4" />
                             Edit display name
                           </DropdownMenuItem>
@@ -446,124 +363,18 @@ export default function TenantsPage() {
       />
 
       {/* ─── Edit dialog ─────────────────────────────────────────────────── */}
-      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent>
-          <form onSubmit={handleUpdate}>
-            <DialogHeader>
-              <DialogTitle>Edit tenant</DialogTitle>
-              <DialogDescription>
-                Display name is the only editable identity field. Tenant ID and
-                slug are immutable — slug rotation requires the RenameTenantSlug
-                RPC.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* Immutable identity rows — IdentityField gives the
-                  operator a copy affordance, matching the overview
-                  page. Plain disabled <Input> didn't. */}
-              <div className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-                <IdentityField
-                  label="slug"
-                  value={editing?.slug || ""}
-                  immutable
-                  labelWidth="w-20"
-                />
-                <IdentityField
-                  label="tenant id"
-                  value={editing?.tenantId || ""}
-                  immutable
-                  truncate
-                  labelWidth="w-20"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-display-name">Display name</Label>
-                <Input
-                  id="edit-display-name"
-                  autoFocus
-                  placeholder="Acme Corporation"
-                  value={editDisplayName}
-                  onChange={(e) => setEditDisplayName(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Must be unique across tenants.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Saving…" : "Save changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <TenantEditDialog
+        editing={editing}
+        onClose={() => setEditing(null)}
+        updateTenantMetadata={updateTenantMetadata}
+      />
 
       {/* ─── Delete confirmation ─────────────────────────────────────────── */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this tenant?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  All data scoped to{" "}
-                  <span className="font-mono text-foreground">
-                    {deleteTarget}
-                  </span>{" "}
-                  will become inaccessible.
-                </p>
-                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs space-y-1">
-                  <p className="font-semibold text-destructive">
-                    What gets removed (cascade)
-                  </p>
-                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
-                    <li>Default backend/bucket binding</li>
-                    <li>All Object Keys + their cedar policies</li>
-                    <li>Audit log entries (after retention TTL)</li>
-                    <li>API tokens, M2M tokens, capabilities</li>
-                  </ul>
-                </div>
-                <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs space-y-1">
-                  <p className="font-semibold">What stays</p>
-                  <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
-                    <li>
-                      Physical S3 objects under{" "}
-                      <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span>
-                    </li>
-                    <li>
-                      In-flight presigned URLs (continue working until TTL
-                      expires)
-                    </li>
-                  </ul>
-                </div>
-                <p className="text-xs italic text-muted-foreground">
-                  Recovery requires direct database intervention.
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete tenant
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <TenantDeleteDialog
+        deleteTarget={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        deleteTenant={deleteTenant}
+      />
     </div>
   );
 }
