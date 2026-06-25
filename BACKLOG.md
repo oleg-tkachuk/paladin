@@ -35,20 +35,19 @@ the same commit. Treat this file like a runtime invariant.
 
 ### Tool-coverage gaps vs the PALADIN RPC surface
 
-- **Status:** Deferred (partial — object delete/copy + batch-delete landed).
+- **Status:** Deferred (partial — object delete/copy/lookup/count + batch
+  delete/copy/restore landed; 45 tools).
 - **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
-  read-heavy subset of the ~110 PALADIN RPCs (41 tools as of the
-  delete/copy/batch-delete addition). `DefaultCatalog` in
-  `internal/mcp/profile.go` is the ground-truth list and is now pinned to the
+  read-heavy subset of the ~110 PALADIN RPCs (45 tools). `DefaultCatalog` in
+  `internal/mcp/profile.go` is the ground-truth list and is pinned to the
   real registrations by `TestServerRegistersDefaultCatalog`. The following
   PALADIN capabilities are still **not** reachable from an MCP agent. Some are
   deliberate (see the next entry); the rest are unfilled coverage:
-  - **ObjectService:** `LookupObject`, `CountObjects`, `UpdateObject` (no
-    metadata-patch tool; tags have one but generic metadata does not).
+  - **ObjectService:** `UpdateObject` (no generic metadata-patch tool; tags
+    have one but arbitrary metadata does not).
   - **ObjectTagService:** `DeleteObjectTags`, `ListDistinctTags`.
   - **PresignService:** `RegenerateUploadUrl` (only download is exposed).
-  - **BatchService:** `BatchCopyObjects`, `BatchRestoreObjects`,
-    `BatchUpdateTags` (only `BatchDeleteObjects` is wired).
+  - **BatchService:** `BatchUpdateTags` (delete / copy / restore are wired).
   - **MultipartUploadService:** none of the 5 RPCs — large-object agent
     uploads are impossible. (These are unary, so the inline-transport
     streaming limitation does not block them; this is pure coverage.)

@@ -114,6 +114,40 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 			},
 			want: "/paladin.data.v1.BatchService/BatchDeleteObjects",
 		},
+		{
+			tool: "paladin_batch_copy",
+			args: map[string]any{
+				"source_parent":            "tenants/t1/objectKeys/ok1",
+				"names":                    []string{"objects/o1"},
+				"destination_object_key":   "tenants/t1/objectKeys/ok2",
+				"destination_key_template": "object.key",
+			},
+			want: "/paladin.data.v1.BatchService/BatchCopyObjects",
+		},
+		{
+			tool: "paladin_batch_restore",
+			args: map[string]any{
+				"parent": "tenants/t1/objectKeys/ok1",
+				"names":  []string{"objects/o1"},
+			},
+			want: "/paladin.data.v1.BatchService/BatchRestoreObjects",
+		},
+		{
+			tool: "paladin_lookup_object",
+			args: map[string]any{
+				"parent": "tenants/t1/objectKeys/ok1",
+				"key":    "path/to/file.txt",
+			},
+			want: "/paladin.data.v1.ObjectService/LookupObject",
+		},
+		{
+			tool: "paladin_count_objects",
+			args: map[string]any{
+				"parent": "tenants/t1/objectKeys/ok1",
+				"filter": "state == 'AVAILABLE'",
+			},
+			want: "/paladin.data.v1.ObjectService/CountObjects",
+		},
 	}
 
 	for _, tc := range cases {

@@ -80,6 +80,8 @@ var DefaultCatalog = []ToolMeta{
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under an object_key with CEL filter.", CapabilityOp: "list"},
 	{Name: "paladin_get_object", Audience: "data", Description: "Read object metadata.", CapabilityOp: "get"},
+	{Name: "paladin_lookup_object", Audience: "data", Description: "Resolve an object by its human key within an object_key.", CapabilityOp: "get"},
+	{Name: "paladin_count_objects", Audience: "data", Description: "Count objects under an object_key, optionally CEL-filtered.", CapabilityOp: "list"},
 	{Name: "paladin_list_versions", Audience: "data", Description: "List versions of one object.", CapabilityOp: "list"},
 	{Name: "paladin_get_version", Audience: "data", Description: "Read one version's metadata.", CapabilityOp: "get"},
 	{Name: "paladin_restore_version", Audience: "data", Description: "Promote an older version as current.", CapabilityOp: "put", Mutates: true},
@@ -91,6 +93,8 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_delete_object", Audience: "data", Description: "Delete an object (soft by default; permanent on request).", CapabilityOp: "delete", Mutates: true},
 	{Name: "paladin_copy_object", Audience: "data", Description: "Server-side copy of an object to a new object_key + key.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_batch_delete", Audience: "data", Description: "Async bulk delete by names or CEL filter; returns an Operation.", CapabilityOp: "delete", Mutates: true},
+	{Name: "paladin_batch_copy", Audience: "data", Description: "Async bulk server-side copy into a destination object_key; returns an Operation.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_batch_restore", Audience: "data", Description: "Async bulk restore of soft-deleted objects; returns an Operation.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_list_operations", Audience: "data", Description: "List async batch operations."},
 	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
 

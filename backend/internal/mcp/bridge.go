@@ -395,6 +395,26 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_lookup_object",
+		Description: "Resolve an object by its human key within an object_key (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in lookupObjectArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
+			Parent: in.Parent,
+			Key:    in.Key,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_count_objects",
+		Description: "Count objects under an object_key, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in countObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Object.CountObjects(ctx, connect.NewRequest(&datav1.CountObjectsRequest{
+			Parent: in.Parent,
+			Filter: in.Filter,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_object_tags",
 		Description: "Read the tag map for a single object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
@@ -824,6 +844,34 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			Permanent: in.Permanent,
 		})))
 	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_batch_copy",
+		Description: "Asynchronously server-side-copy many objects into a destination object_key. Select sources by `names` (≤100) or CEL `filter`; each destination key is computed by `destination_key_template` (a CEL expression over the source Object). Returns an Operation; poll via paladin_get_operation.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchCopyArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Batch.BatchCopyObjects(ctx, connect.NewRequest(&datav1.BatchCopyObjectsRequest{
+			SourceParent: in.SourceParent,
+			Selector: &datav1.ObjectSelector{
+				Names:  in.Names,
+				Filter: in.Filter,
+			},
+			DestinationObjectKey:   in.DestinationObjectKey,
+			DestinationKeyTemplate: in.DestinationKeyTemplate,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_batch_restore",
+		Description: "Asynchronously restore many soft-deleted objects under one object_key. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchRestoreArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Batch.BatchRestoreObjects(ctx, connect.NewRequest(&datav1.BatchRestoreObjectsRequest{
+			Parent: in.Parent,
+			Selector: &datav1.ObjectSelector{
+				Names:  in.Names,
+				Filter: in.Filter,
+			},
+		})))
+	})
 }
 
 // ─── Presign / tag mutating arg types ───────────────────────────────────────
@@ -866,6 +914,26 @@ type batchDeleteArgs struct {
 	Names     []string `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
 	Filter    string   `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
 	Permanent bool     `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
+}
+type batchCopyArgs struct {
+	SourceParent           string   `json:"source_parent" jsonschema:"source ObjectKey: tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Names                  []string `json:"names,omitempty" jsonschema:"explicit source object resource names; ≤100. Use filter for larger sets."`
+	Filter                 string   `json:"filter,omitempty" jsonschema:"CEL filter over the source Object"`
+	DestinationObjectKey   string   `json:"destination_object_key" jsonschema:"destination ObjectKey resource name"`
+	DestinationKeyTemplate string   `json:"destination_key_template" jsonschema:"CEL expression over the source Object that computes each destination key (e.g. 'object.key')"`
+}
+type batchRestoreArgs struct {
+	Parent string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Names  []string `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
+	Filter string   `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
+}
+type lookupObjectArgs struct {
+	Parent string `json:"parent" jsonschema:"object_key the key lives under: tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Key    string `json:"key" jsonschema:"the object's human key (path) within that object_key"`
+}
+type countObjectsArgs struct {
+	Parent string `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Filter string `json:"filter,omitempty" jsonschema:"optional CEL filter over Object"`
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────────
