@@ -22,7 +22,6 @@ import {
   DocumentIcon,
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
-  TrashIcon,
 } from "@heroicons/react/24/outline";
 
 import { useActions } from "@/context/ActionsContext";
@@ -40,7 +39,6 @@ import { BulkEditModal } from "@/components/features/objects/BulkEditModal";
 import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -53,24 +51,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { T } from "@/lib/ui/typography";
 
 import { useObjectKey } from "../objectkey-context";
@@ -81,6 +61,8 @@ import {
   type SortState,
 } from "./_view";
 import { SortHeader } from "./_table";
+import { CopyMoveDialog } from "./CopyMoveDialog";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 
 function ObjectKeyObjectsContent() {
   const searchParams = useSearchParams();
@@ -885,98 +867,29 @@ function ObjectKeyObjectsContent() {
       </div>
 
       {/* ─── Copy / Move dialog ───────────────────────────────────────── */}
-      <Dialog
+      <CopyMoveDialog
         open={copyMove.open}
-        onOpenChange={(o) => !o && setCopyMove((p) => ({ ...p, open: false }))}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {copyMove.type === "copy" ? "Copy" : "Move"} object
-            </DialogTitle>
-            <DialogDescription>
-              {copyMove.type === "copy"
-                ? "Server-side copy. The source object remains in place."
-                : "Soft-deletes the source after a successful copy. The original can be restored from Trash."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-1.5">
-              <Label>Source path</Label>
-              <Input
-                disabled
-                value={copyMove.obj?.key || ""}
-                className="font-mono text-xs text-muted-foreground"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-key">Destination key</Label>
-              <Input
-                id="dest-key"
-                autoFocus
-                value={copyMove.destKey}
-                onChange={(e) =>
-                  setCopyMove((p) => ({ ...p, destKey: e.target.value }))
-                }
-                onKeyDown={(e) => e.key === "Enter" && handleCopyMove()}
-                className="font-mono text-xs"
-              />
-              <p className={T.hint}>
-                Full path including filename, within the same ObjectKey.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setCopyMove((p) => ({ ...p, open: false }))}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCopyMove}>
-              Confirm {copyMove.type === "copy" ? "copy" : "move"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        type={copyMove.type}
+        sourceKey={copyMove.obj?.key || ""}
+        destKey={copyMove.destKey}
+        onDestKeyChange={(v) => setCopyMove((p) => ({ ...p, destKey: v }))}
+        onConfirm={handleCopyMove}
+        onClose={() => setCopyMove((p) => ({ ...p, open: false }))}
+      />
 
       {/* ─── Confirmation (soft + hard delete) ───────────────────────── */}
-      <AlertDialog
+      <DeleteConfirmDialog
         open={confirm.open}
+        type={confirm.type}
+        title={confirm.title}
+        message={confirm.message}
+        confirmText={confirm.confirmText}
+        onConfirm={async () => {
+          await confirm.onConfirm();
+          setConfirm((p) => ({ ...p, open: false }));
+        }}
         onOpenChange={(o) => !o && setConfirm((p) => ({ ...p, open: false }))}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              {confirm.type === "danger" ? (
-                <ExclamationTriangleIcon className="size-5 text-destructive" />
-              ) : (
-                <TrashIcon className="size-5 text-chart-3" />
-              )}
-              {confirm.title}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="whitespace-pre-wrap">
-              {confirm.message}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                await confirm.onConfirm();
-                setConfirm((p) => ({ ...p, open: false }));
-              }}
-              className={
-                confirm.type === "danger"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : ""
-              }
-            >
-              {confirm.confirmText}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      />
     </div>
   );
 }
