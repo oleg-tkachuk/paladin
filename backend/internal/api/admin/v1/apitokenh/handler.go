@@ -29,9 +29,17 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
+// tokenIssuer is the narrow slice of *api_token.Issuer the Create RPC needs.
+// Declared as an interface so the handler is unit-testable with a stub; the
+// concrete *api_token.Issuer satisfies it implicitly, so call sites are
+// unchanged.
+type tokenIssuer interface {
+	Issue(ctx context.Context, req api_token.IssueRequest) (*api_token.Token, error)
+}
+
 // Handler wires the dependencies the RPCs need.
 type Handler struct {
-	issuer  *api_token.Issuer
+	issuer  tokenIssuer
 	store   api_token.Store
 	limiter ratelimit.Limiter
 	policy  cedar.Authorizer
@@ -44,7 +52,7 @@ type Handler struct {
 // pass ratelimit.NoopLimiter{} in that case so GetUsage degrades to an
 // empty snapshot rather than a runtime nil-deref.
 func NewHandler(
-	issuer *api_token.Issuer,
+	issuer tokenIssuer,
 	store api_token.Store,
 	limiter ratelimit.Limiter,
 	policy cedar.Authorizer,
