@@ -86,4 +86,44 @@ describe("CapabilitiesPage", () => {
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
   });
+
+  it("reveals the token and seeds the browse list on a successful issue", async () => {
+    h.issue.mockResolvedValue({
+      token: "cap-jwt-xyz",
+      capability: {
+        id: "cap-new-1",
+        audience: ["data"],
+        caveats: {
+          ops: ["get"],
+          resourcePrefixes: [],
+          resourceUris: [],
+          sourceIpCidr: [],
+          maxRequests: 0n,
+          maxBudgetAmount: 0,
+          unitCode: "UNIT",
+          allowTaintedRead: false,
+          idempotencyKeyRequired: false,
+        },
+        subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
+        generation: 0n,
+      },
+    });
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    await userEvent.type(
+      screen.getByPlaceholderText(SUBJECT_PLACEHOLDER),
+      "agent-x",
+    );
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+
+    // One-shot token reveal panel (the JWT is shown in a readOnly textarea).
+    expect(await screen.findByDisplayValue("cap-jwt-xyz")).toBeInTheDocument();
+    // Success toast.
+    expect(h.showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success", title: "Capability issued" }),
+    );
+    // The browse filter is synced to the just-issued principal so the list the
+    // operator lands on shows it (the success path's setSubject + setItems).
+    expect(screen.getByDisplayValue("agent-x")).toBeInTheDocument();
+  });
 });
