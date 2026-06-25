@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
-  ClipboardDocumentIcon,
   EllipsisVerticalIcon,
   EyeIcon,
   KeyIcon,
@@ -29,36 +28,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
-import { DetailsBody } from "./_details";
 import { IssueCapabilityDialog } from "./IssueCapabilityDialog";
+import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
+import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import {
   PRINCIPAL_KIND_OPTIONS,
   formatTimestamp,
   isExpired,
 } from "./_constants";
 import { capabilityClient } from "@/lib/connect/client";
-import { copyToClipboard, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -329,36 +311,6 @@ export default function CapabilitiesPage() {
 
   // ── revoke ──────────────────────────────────────────────────────────
   const [revokeTarget, setRevokeTarget] = useState<Capability | null>(null);
-  const [revokeCascade, setRevokeCascade] = useState(false);
-  const [revokeReason, setRevokeReason] = useState("");
-
-  const handleRevoke = async () => {
-    if (!revokeTarget) return;
-    try {
-      await capabilityClient.revoke({
-        id: revokeTarget.id,
-        reason: revokeReason.trim(),
-        cascadeChildren: revokeCascade,
-      });
-      showNotification({
-        type: "success",
-        title: "Revoked",
-        message: revokeTarget.id,
-      });
-      setRevokeTarget(null);
-      setRevokeCascade(false);
-      setRevokeReason("");
-      void fetchList();
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Revoke failed";
-      showNotification({
-        type: "error",
-        title: "Revoke failed",
-        message: msg,
-      });
-    }
-  };
 
   const visibleItems = useMemo(() => items, [items]);
 
@@ -708,112 +660,18 @@ export default function CapabilitiesPage() {
       />
 
       {/* ─── Details dialog ────────────────────────────────────────── */}
-      {/* Read-only display of every field the capability carries.
-          Opens from the row kebab menu. No RPC — purely renders the
-          row data + the usage entry already in the page's `usage`
-          map, so the dialog is instant. Token plaintext is NOT
-          shown; the issuer keeps no copy after Issue. */}
-      <Dialog
-        open={!!detailsTarget}
-        onOpenChange={(o) => !o && setDetailsTarget(null)}
-      >
-        {/* Same Tailwind-merge pitfall as the Issue dialog — shadcn's
-            base classes ship `sm:max-w-sm`, so the override must be at
-            the same responsive breakpoint to win. 5xl ≈ 1024px, wide
-            enough for the two-column section layout below. */}
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl">
-          {detailsTarget && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Capability details</DialogTitle>
-                <DialogDescription>
-                  Full record as stored on the admin plane.
-                </DialogDescription>
-              </DialogHeader>
-              <DetailsBody
-                cap={detailsTarget}
-                usageEntry={usage.get(detailsTarget.id)}
-              />
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    void copyToClipboard(detailsTarget.id);
-                    showNotification({
-                      type: "success",
-                      title: "Copied",
-                      message: "Capability ID copied.",
-                    });
-                  }}
-                >
-                  <ClipboardDocumentIcon className="size-4" />
-                  Copy ID
-                </Button>
-                <Button onClick={() => setDetailsTarget(null)}>Close</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <CapabilityDetailsDialog
+        cap={detailsTarget}
+        usageEntry={detailsTarget ? usage.get(detailsTarget.id) : undefined}
+        onClose={() => setDetailsTarget(null)}
+      />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}
-      <AlertDialog
-        open={!!revokeTarget}
-        onOpenChange={(o) => {
-          if (!o) {
-            setRevokeTarget(null);
-            setRevokeCascade(false);
-            setRevokeReason("");
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke this capability?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="font-mono text-foreground">
-                {revokeTarget?.id}
-              </span>{" "}
-              will stop verifying immediately on every plane. Revocation is
-              checked locally by interceptors using a denylist that purges after
-              the natural expiry, so the cost of revoking is bounded.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="revoke-reason">
-                Reason (optional)
-              </Label>
-              <Input
-                id="revoke-reason"
-                placeholder="leaked / superseded / agent retired"
-                value={revokeReason}
-                onChange={(e) => setRevokeReason(e.target.value)}
-              />
-            </div>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={revokeCascade}
-                onChange={(e) => setRevokeCascade(e.target.checked)}
-                className="size-4 accent-primary"
-              />
-              <span>
-                Cascade to children — revoke every delegation under this one.
-              </span>
-            </label>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRevoke}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Revoke
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <RevokeCapabilityDialog
+        cap={revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+        onRevoked={() => void fetchList()}
+      />
     </div>
   );
 }
