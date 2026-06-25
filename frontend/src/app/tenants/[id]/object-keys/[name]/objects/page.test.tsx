@@ -1,0 +1,241 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+// Protective net for decomposing the ObjectKey objects page. The page is
+// orchestration over many hooks + extracted feature components, so mock the
+// data hooks, contexts, and navigation, and stub the heavy child components.
+// ObjectTableRow is replaced with a minimal row that surfaces the copy/move/
+// delete callbacks as buttons — that lets us drive the page-owned dialogs
+// (Copy/Move + the soft/hard delete confirm) and the sort header, which are
+// exactly the pieces the extraction will move.
+const h = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  loadMore: vi.fn(),
+  softDelete: vi.fn(() => Promise.resolve()),
+  purge: vi.fn(() => Promise.resolve()),
+  bulkDelete: vi.fn(() => Promise.resolve()),
+  bulkRestore: vi.fn(() => Promise.resolve()),
+  bulkPatch: vi.fn(() => Promise.resolve()),
+  copy: vi.fn(() => Promise.resolve()),
+  genUrl: vi.fn(() => Promise.resolve(undefined)),
+  replace: vi.fn(),
+  showNotification: vi.fn(),
+  objects: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(""),
+  useRouter: () => ({ replace: h.replace }),
+  usePathname: () => "/tenants/t-1/object-keys/ok-1/objects",
+}));
+vi.mock("@/hooks/useObjects", () => ({
+  useObjects: () => ({
+    objects: h.objects,
+    loading: false,
+    error: null,
+    refresh: h.refresh,
+    loadMore: h.loadMore,
+    nextCursor: undefined,
+    softDeleteObject: h.softDelete,
+    purgeObject: h.purge,
+    bulkDeleteObjects: h.bulkDelete,
+    bulkRestoreObjects: h.bulkRestore,
+    bulkPatchObjects: h.bulkPatch,
+    copyObject: h.copy,
+    generateDownloadUrl: h.genUrl,
+  }),
+}));
+vi.mock("@/hooks/useDistinctTags", () => ({ useDistinctTags: () => [] }));
+vi.mock("@/context/ActionsContext", () => ({
+  useActions: () => ({
+    registerAction: vi.fn(),
+    unregisterAction: vi.fn(),
+    executeAction: vi.fn(),
+  }),
+}));
+vi.mock("@/components/ui/Notification", () => ({
+  useNotification: () => ({ showNotification: h.showNotification }),
+}));
+vi.mock("../objectkey-context", () => ({
+  useObjectKey: () => ({ objectKey: { objectKey: "ok-1", bucket: "b-1" } }),
+}));
+
+// Stub the heavy feature children — not under test here, and they drag in
+// their own deps. The page's own table/dialogs stay real.
+vi.mock("@/components/features/ObjectInspector", () => ({
+  ObjectInspector: () => null,
+}));
+vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
+  ObjectsFilterBar: () => null,
+}));
+vi.mock("@/components/features/objects/BulkActionsToolbar", () => ({
+  BulkActionsToolbar: ({ selectedCount }: { selectedCount: number }) => (
+    <div data-testid="bulk-toolbar">selected:{selectedCount}</div>
+  ),
+}));
+vi.mock("@/components/features/objects/SaveViewModal", () => ({
+  SaveViewModal: () => null,
+}));
+vi.mock("@/components/features/objects/BulkEditModal", () => ({
+  BulkEditModal: () => null,
+}));
+vi.mock("@/components/features/objects/ObjectTableRow", () => ({
+  ObjectTableRow: ({
+    obj,
+    onCopy,
+    onMove,
+    onSoftDelete,
+    onHardDelete,
+  }: {
+    obj: { objectId: string; objectKey: string; key: string };
+    onCopy: (o: { key: string; objectKey: string }) => void;
+    onMove: (o: { key: string; objectKey: string }) => void;
+    onSoftDelete: (o: {
+      objectId: string;
+      objectKey: string;
+      key: string;
+    }) => void;
+    onHardDelete: (o: {
+      objectId: string;
+      objectKey: string;
+      key: string;
+    }) => void;
+  }) => (
+    <tr>
+      <td>{obj.key}</td>
+      <td>
+        <button
+          onClick={() => onCopy({ key: obj.key, objectKey: obj.objectKey })}
+        >
+          copy {obj.key}
+        </button>
+        <button
+          onClick={() => onMove({ key: obj.key, objectKey: obj.objectKey })}
+        >
+          move {obj.key}
+        </button>
+        <button
+          onClick={() =>
+            onSoftDelete({
+              objectId: obj.objectId,
+              objectKey: obj.objectKey,
+              key: obj.key,
+            })
+          }
+        >
+          trash {obj.key}
+        </button>
+        <button
+          onClick={() =>
+            onHardDelete({
+              objectId: obj.objectId,
+              objectKey: obj.objectKey,
+              key: obj.key,
+            })
+          }
+        >
+          purge {obj.key}
+        </button>
+      </td>
+    </tr>
+  ),
+}));
+
+import ObjectKeyObjectsPage from "./page";
+
+const makeObj = (key: string) => ({
+  objectId: "o1",
+  name: `objects/o1`,
+  objectKey: "ok-1",
+  key,
+  tags: {},
+});
+
+beforeEach(() => {
+  for (const k of [
+    "refresh",
+    "loadMore",
+    "softDelete",
+    "purge",
+    "bulkDelete",
+    "bulkRestore",
+    "bulkPatch",
+    "copy",
+    "genUrl",
+    "replace",
+    "showNotification",
+  ] as const) {
+    h[k].mockClear();
+  }
+  h.objects = [makeObj("path/to/file.txt")];
+  localStorage.clear();
+});
+
+describe("ObjectKeyObjectsPage", () => {
+  it("renders the ObjectKey scope and the object count", () => {
+    render(<ObjectKeyObjectsPage />);
+    expect(screen.getByText("ok-1")).toBeInTheDocument();
+    expect(screen.getByText("1 objects")).toBeInTheDocument();
+  });
+
+  it("opens the copy dialog and copies on confirm", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("copy path/to/file.txt"));
+    expect(
+      await screen.findByRole("heading", { name: "Copy object" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Confirm copy/i }),
+    );
+    await waitFor(() => expect(h.copy).toHaveBeenCalled());
+    expect(h.copy).toHaveBeenCalledWith(
+      "objects/o1",
+      expect.any(String),
+      "ok-1",
+    );
+  });
+
+  it("opens the move dialog and copies then soft-deletes on confirm", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("move path/to/file.txt"));
+    expect(
+      await screen.findByRole("heading", { name: "Move object" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Confirm move/i }),
+    );
+    await waitFor(() => expect(h.copy).toHaveBeenCalled());
+    await waitFor(() => expect(h.softDelete).toHaveBeenCalled());
+  });
+
+  it("soft-deletes through the confirm dialog", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("trash path/to/file.txt"));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+      "Move to Trash",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Move to Trash" }),
+    );
+    await waitFor(() => expect(h.softDelete).toHaveBeenCalled());
+  });
+
+  it("hard-deletes through the confirm dialog", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("purge path/to/file.txt"));
+    expect(
+      await screen.findByText("Permanently delete object?"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Purge permanently" }),
+    );
+    await waitFor(() => expect(h.purge).toHaveBeenCalled());
+  });
+
+  it("syncs the URL when a sort header is clicked", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByRole("button", { name: /Name \/ ID/i }));
+    await waitFor(() => expect(h.replace).toHaveBeenCalled());
+  });
+});
