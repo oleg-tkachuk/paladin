@@ -756,21 +756,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Oversized component refactor: `ObjectVersionsTab`
-
-- **Status:** Deferred. The sibling items in the original entry are DONE:
-  `ObjectDetailView` is decomposed (719 → 293 LOC: `ObjectDetailActions`,
-  `ObjectSpecsPanel`, `ObjectTagsCard`, `ObjectDetailStates`, under
-  `ObjectDetailView.test.tsx`); CSV parsing is a pure `src/lib/csv.ts` with
-  unit tests; `ObjectsFilterBar`'s filter props are collapsed into a
-  `FilterState` + `onFilterChange`.
-- **Reason:** `ObjectVersionsTab.tsx` (~394 LOC) still mixes the versions
-  list, the diff/restore wiring, and layout in one file.
-- **Definition of Done:** split so each piece is ≤300 LOC, no behaviour
-  change behind a protective RTL net written first.
-- **Blockers:** none — schedule alongside feature work touching versions
-  to avoid a pure-churn PR.
-
 ### react-hooks v6: `set-state-in-effect` re-promotion
 
 - **Status:** Deferred — gated on a data-fetching architecture change.
