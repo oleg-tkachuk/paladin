@@ -24,15 +24,23 @@ import (
 // here to avoid cross-package coupling for one type alias.
 type TenantSlugLookup func(ctx context.Context, tenantID uuid.UUID) (string, error)
 
+// tokenMinter is the narrow slice of *issuer.Issuer this handler needs —
+// minting a short-lived access token from claims (MintScopedToken). Declared
+// as an interface so the handler is unit-testable with a stub; the concrete
+// *issuer.Issuer satisfies it implicitly, so call sites are unchanged.
+type tokenMinter interface {
+	MintAccess(c issuer.AccessClaims) (string, time.Time, error)
+}
+
 type Handler struct {
 	apiKeys    authstore.ApiKeyRepository
-	issuer     *issuer.Issuer
+	issuer     tokenMinter
 	policy     cedar.Authorizer
 	tenantSlug TenantSlugLookup
 	now        func() time.Time
 }
 
-func NewHandler(keys authstore.ApiKeyRepository, iss *issuer.Issuer, policy cedar.Authorizer) *Handler {
+func NewHandler(keys authstore.ApiKeyRepository, iss tokenMinter, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("apikeyh: policy authorizer is required")
 	}
