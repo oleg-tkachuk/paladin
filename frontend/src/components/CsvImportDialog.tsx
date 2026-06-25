@@ -31,6 +31,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { parseCSV } from "@/lib/csv";
 import { T } from "@/lib/ui/typography";
 
 export interface CsvColumn {
@@ -61,61 +62,6 @@ interface ParsedRow<T> {
   ok: boolean;
   value?: T;
   error?: string;
-}
-
-function detectDelimiter(line: string): string {
-  return line.includes("\t") ? "\t" : ",";
-}
-
-function parseCSV(text: string): Record<string, string>[] {
-  // Minimal RFC-4180-ish CSV: respects double-quoted cells (which
-  // may contain the delimiter / newlines). Doesn't claim full
-  // compliance (no Unicode-aware splits, no BOM stripping for non-
-  // ASCII headers). Operators bringing edge-case CSV from Excel
-  // can use the file-picker variant where the browser File API
-  // gives us a UTF-8 string already.
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
-  if (lines.length === 0) return [];
-  const delim = detectDelimiter(lines[0]);
-  const splitRow = (line: string): string[] => {
-    const out: string[] = [];
-    let buf = "";
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (inQ) {
-        if (c === '"' && line[i + 1] === '"') {
-          buf += '"';
-          i++;
-        } else if (c === '"') {
-          inQ = false;
-        } else {
-          buf += c;
-        }
-      } else if (c === '"') {
-        inQ = true;
-      } else if (c === delim) {
-        out.push(buf);
-        buf = "";
-      } else {
-        buf += c;
-      }
-    }
-    out.push(buf);
-    return out;
-  };
-  const header = splitRow(lines[0]).map((h) => h.trim());
-  const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitRow(lines[i]);
-    const obj: Record<string, string> = {};
-    for (let j = 0; j < header.length; j++) {
-      obj[header[j]] = (cells[j] ?? "").trim();
-    }
-    rows.push(obj);
-  }
-  return rows;
 }
 
 export function CsvImportDialog<T>({
