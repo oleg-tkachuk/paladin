@@ -22,6 +22,11 @@ const h = vi.hoisted(() => ({
   replace: vi.fn(),
   showNotification: vi.fn(),
   objects: [] as Array<Record<string, unknown>>,
+  // Last options useObjects was called with — lets the filter-wiring tests
+  // assert the CEL filter + sort the page derives and feeds the data hook.
+  lastOpts: undefined as
+    | { filter: string; orderBy?: string; sortDirection: unknown }
+    | undefined,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -30,21 +35,28 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/tenants/t-1/object-keys/ok-1/objects",
 }));
 vi.mock("@/hooks/useObjects", () => ({
-  useObjects: () => ({
-    objects: h.objects,
-    loading: false,
-    error: null,
-    refresh: h.refresh,
-    loadMore: h.loadMore,
-    nextCursor: undefined,
-    softDeleteObject: h.softDelete,
-    purgeObject: h.purge,
-    bulkDeleteObjects: h.bulkDelete,
-    bulkRestoreObjects: h.bulkRestore,
-    bulkPatchObjects: h.bulkPatch,
-    copyObject: h.copy,
-    generateDownloadUrl: h.genUrl,
-  }),
+  useObjects: (opts: {
+    filter: string;
+    orderBy?: string;
+    sortDirection: unknown;
+  }) => {
+    h.lastOpts = opts;
+    return {
+      objects: h.objects,
+      loading: false,
+      error: null,
+      refresh: h.refresh,
+      loadMore: h.loadMore,
+      nextCursor: undefined,
+      softDeleteObject: h.softDelete,
+      purgeObject: h.purge,
+      bulkDeleteObjects: h.bulkDelete,
+      bulkRestoreObjects: h.bulkRestore,
+      bulkPatchObjects: h.bulkPatch,
+      copyObject: h.copy,
+      generateDownloadUrl: h.genUrl,
+    };
+  },
 }));
 vi.mock("@/hooks/useDistinctTags", () => ({ useDistinctTags: () => [] }));
 vi.mock("@/context/ActionsContext", () => ({
@@ -67,7 +79,24 @@ vi.mock("@/components/features/ObjectInspector", () => ({
   ObjectInspector: () => null,
 }));
 vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
-  ObjectsFilterBar: () => null,
+  ObjectsFilterBar: ({
+    onStatusChange,
+    onTagChange,
+    onSearchChange,
+    onRecursiveChange,
+  }: {
+    onStatusChange: (v: string | undefined) => void;
+    onTagChange: (v: string | undefined) => void;
+    onSearchChange: (v: string) => void;
+    onRecursiveChange: (v: boolean) => void;
+  }) => (
+    <div>
+      <button onClick={() => onStatusChange("active")}>set status</button>
+      <button onClick={() => onTagChange("env=prod")}>set tag</button>
+      <button onClick={() => onSearchChange("hello")}>set search</button>
+      <button onClick={() => onRecursiveChange(true)}>set recursive</button>
+    </div>
+  ),
 }));
 vi.mock("@/components/features/objects/BulkActionsToolbar", () => ({
   BulkActionsToolbar: ({ selectedCount }: { selectedCount: number }) => (
@@ -169,6 +198,7 @@ beforeEach(() => {
     h[k].mockClear();
   }
   h.objects = [makeObj("path/to/file.txt")];
+  h.lastOpts = undefined;
   localStorage.clear();
 });
 
@@ -233,9 +263,35 @@ describe("ObjectKeyObjectsPage", () => {
     await waitFor(() => expect(h.purge).toHaveBeenCalled());
   });
 
-  it("syncs the URL when a sort header is clicked", async () => {
+  it("syncs the URL and feeds the sort column to the data hook", async () => {
     render(<ObjectKeyObjectsPage />);
     await userEvent.click(screen.getByRole("button", { name: /Name \/ ID/i }));
     await waitFor(() => expect(h.replace).toHaveBeenCalled());
+    await waitFor(() => expect(h.lastOpts?.orderBy).toBe("key"));
+  });
+
+  it("applies a status filter to the CEL filter", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("set status"));
+    await waitFor(() => expect(h.lastOpts?.filter).toBe("state == 'active'"));
+    expect(h.replace).toHaveBeenCalled();
+  });
+
+  it("applies a tag facet to the CEL filter", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("set tag"));
+    await waitFor(() =>
+      expect(h.lastOpts?.filter).toContain("tags['env'] == 'prod'"),
+    );
+  });
+
+  it("debounces search into the CEL filter", async () => {
+    render(<ObjectKeyObjectsPage />);
+    await userEvent.click(screen.getByText("set search"));
+    // The visible input updates immediately but the filter trails 300ms.
+    await waitFor(
+      () => expect(h.lastOpts?.filter).toContain("key.contains('hello')"),
+      { timeout: 1500 },
+    );
   });
 });
