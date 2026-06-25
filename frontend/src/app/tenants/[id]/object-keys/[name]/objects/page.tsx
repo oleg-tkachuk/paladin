@@ -17,13 +17,6 @@ import React, {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import {
-  ClockIcon,
-  DocumentIcon,
-  ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
-} from "@heroicons/react/24/outline";
-
 import { useActions } from "@/context/ActionsContext";
 import { useObjects } from "@/hooks/useObjects";
 import { useDistinctTags } from "@/hooks/useDistinctTags";
@@ -36,21 +29,9 @@ import { ObjectsFilterBar } from "@/components/features/objects/ObjectsFilterBar
 import { BulkActionsToolbar } from "@/components/features/objects/BulkActionsToolbar";
 import { SaveViewModal } from "@/components/features/objects/SaveViewModal";
 import { BulkEditModal } from "@/components/features/objects/BulkEditModal";
-import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
 
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { T } from "@/lib/ui/typography";
 
 import { useObjectKey } from "../objectkey-context";
@@ -60,9 +41,9 @@ import {
   type SavedView,
   type SortState,
 } from "./_view";
-import { SortHeader } from "./_table";
 import { CopyMoveDialog } from "./CopyMoveDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { ObjectsTable } from "./ObjectsTable";
 
 function ObjectKeyObjectsContent() {
   const searchParams = useSearchParams();
@@ -669,196 +650,61 @@ function ObjectKeyObjectsContent() {
         onRefresh={refresh}
       />
 
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={someChecked ? "indeterminate" : allChecked}
-                  onCheckedChange={toggleSelectAll}
-                  aria-label="Select all rows"
-                />
-              </TableHead>
-              {visibleColumns.has("key") && (
-                <TableHead>
-                  <SortHeader
-                    label="Name / ID"
-                    column="key"
-                    current={sort}
-                    onSort={handleSort}
-                  />
-                </TableHead>
-              )}
-              {visibleColumns.has("object_tag") && (
-                <TableHead>
-                  <SortHeader
-                    label="Object Tags"
-                    column="object_tag"
-                    current={sort}
-                    onSort={handleSort}
-                  />
-                </TableHead>
-              )}
-              {visibleColumns.has("mime") && (
-                <TableHead className="hidden lg:table-cell">
-                  <SortHeader
-                    label="MIME"
-                    column="content_type"
-                    current={sort}
-                    onSort={handleSort}
-                  />
-                </TableHead>
-              )}
-              {visibleColumns.has("size") && (
-                <TableHead className="hidden md:table-cell text-right">
-                  <SortHeader
-                    label="Size"
-                    column="size_bytes"
-                    current={sort}
-                    onSort={handleSort}
-                    align="end"
-                  />
-                </TableHead>
-              )}
-              {visibleColumns.has("status") && (
-                <TableHead>
-                  <SortHeader
-                    label="State"
-                    column="status"
-                    current={sort}
-                    onSort={handleSort}
-                  />
-                </TableHead>
-              )}
-              {visibleColumns.has("created") && (
-                <TableHead className="hidden sm:table-cell">
-                  <div className="flex items-center gap-1">
-                    <SortHeader
-                      label="Created"
-                      column="created_at"
-                      current={sort}
-                      onSort={handleSort}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setUseRelativeTime((v) => !v)}
-                      className="text-muted-foreground hover:text-foreground"
-                      title="Toggle timestamp format"
-                    >
-                      <ClockIcon className="size-3" />
-                    </button>
-                  </div>
-                </TableHead>
-              )}
-              {visibleColumns.has("actions") && (
-                <TableHead className="text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {objects.map((obj) => (
-              <ObjectTableRow
-                key={obj.objectId}
-                obj={obj}
-                isSelected={selectedIds.has(obj.objectId)}
-                isInspected={selectedInspectorKey === obj.key}
-                isEditingLabels={editingLabelsId === obj.objectId}
-                editLabelsValue={editLabelsValue}
-                useRelativeTime={useRelativeTime}
-                visibleColumns={visibleColumns}
-                onToggleSelect={toggleSelect}
-                onInspect={setSelectedInspectorKey}
-                onStartInlineEdit={handleStartInlineEdit}
-                onSaveInlineLabels={handleSaveInlineLabels}
-                onCancelInlineEdit={() => setEditingLabelsId(null)}
-                onEditLabelsValueChange={setEditLabelsValue}
-                onCopyToClipboard={copyToClipboard}
-                onSoftDelete={handleSoftDelete}
-                onHardDelete={handleHardDelete}
-                onCopy={(o) =>
-                  setCopyMove({
-                    open: true,
-                    type: "copy",
-                    obj: o,
-                    destKey: o.key + "-copy",
-                  })
-                }
-                onMove={(o) =>
-                  setCopyMove({
-                    open: true,
-                    type: "move",
-                    obj: o,
-                    destKey: o.key,
-                  })
-                }
-                onGenerateDownloadUrl={async (key, objectKeyOfRow) => {
-                  const o = objects.find(
-                    (x) => x.key === key && x.objectKey === objectKeyOfRow,
-                  );
-                  if (!o) return undefined;
-                  const url = await generateDownloadUrl(o.name);
-                  return url ? { url: url.url } : undefined;
-                }}
-              />
-            ))}
-
-            {objects.length === 0 && !loading && (
-              <TableRow>
-                <TableCell colSpan={9} className="h-56 text-center">
-                  {error ? (
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <ExclamationTriangleIcon className="size-10 text-destructive opacity-70" />
-                      <p className="text-sm font-medium text-destructive">
-                        Failed to load objects
-                      </p>
-                      <p className="max-w-md text-xs">{error.message}</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => refresh()}
-                      >
-                        Retry
-                      </Button>
-                    </div>
-                  ) : search || status ? (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <MagnifyingGlassIcon className="size-10 opacity-40" />
-                      <p className="text-sm">No matches found.</p>
-                      <p className="text-xs">
-                        Try adjusting your search or filters.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <DocumentIcon className="size-10 opacity-40" />
-                      <p className="text-sm">No objects yet.</p>
-                      <p className="text-xs">
-                        Upload your first object to get started.
-                      </p>
-                    </div>
-                  )}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {nextCursor && (
-          <div className="border-t p-3 text-center">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => loadMore?.()}
-              disabled={loading}
-              className="text-muted-foreground"
-            >
-              {loading ? "Syncing…" : "Load more objects"}
-            </Button>
-          </div>
-        )}
-      </Card>
+      <ObjectsTable
+        objects={objects}
+        loading={loading}
+        error={error}
+        nextCursor={nextCursor}
+        onLoadMore={() => loadMore?.()}
+        onRefresh={refresh}
+        selectedIds={selectedIds}
+        allChecked={allChecked}
+        someChecked={someChecked}
+        onToggleSelectAll={toggleSelectAll}
+        sort={sort}
+        onSort={handleSort}
+        visibleColumns={visibleColumns}
+        useRelativeTime={useRelativeTime}
+        onToggleRelativeTime={() => setUseRelativeTime((v) => !v)}
+        selectedInspectorKey={selectedInspectorKey}
+        editingLabelsId={editingLabelsId}
+        editLabelsValue={editLabelsValue}
+        search={search}
+        status={status}
+        rowProps={{
+          onToggleSelect: toggleSelect,
+          onInspect: setSelectedInspectorKey,
+          onStartInlineEdit: handleStartInlineEdit,
+          onSaveInlineLabels: handleSaveInlineLabels,
+          onCancelInlineEdit: () => setEditingLabelsId(null),
+          onEditLabelsValueChange: setEditLabelsValue,
+          onCopyToClipboard: copyToClipboard,
+          onSoftDelete: handleSoftDelete,
+          onHardDelete: handleHardDelete,
+          onCopy: (o) =>
+            setCopyMove({
+              open: true,
+              type: "copy",
+              obj: o,
+              destKey: o.key + "-copy",
+            }),
+          onMove: (o) =>
+            setCopyMove({
+              open: true,
+              type: "move",
+              obj: o,
+              destKey: o.key,
+            }),
+          onGenerateDownloadUrl: async (key, objectKeyOfRow) => {
+            const o = objects.find(
+              (x) => x.key === key && x.objectKey === objectKeyOfRow,
+            );
+            if (!o) return undefined;
+            const url = await generateDownloadUrl(o.name);
+            return url ? { url: url.url } : undefined;
+          },
+        }}
+      />
 
       <div className="flex justify-center pb-4">
         <Badge variant="secondary" className="font-mono tabular-nums">
