@@ -3,85 +3,38 @@
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useObject } from "@/hooks/useObject";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import {
   DocumentIcon,
-  ClipboardIcon,
   ArrowLeftIcon,
   ArrowDownTrayIcon,
   PencilSquareIcon,
   TrashIcon,
-  PlusIcon,
   XMarkIcon,
-  CheckIcon,
   EllipsisHorizontalIcon,
   ShareIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
-import { cn, formatBytes, copyToClipboard } from "@/lib/utils";
+import { copyToClipboard } from "@/lib/utils";
 import { useNotification } from "@/components/ui/Notification";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Separator } from "@/components/ui/separator";
-import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ObjectVersionsTab } from "@/components/features/ObjectVersionsTab";
+import { ObjectTagsCard } from "@/components/features/ObjectTagsCard";
+import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
 import { T } from "@/lib/ui/typography";
-
-// SpecRow renders one fact in the Specs sidebar — label above value,
-// value gets full sidebar width to wrap into. Children are usually
-// `<span>value</span>` and optionally a copy button; the row's flex
-// layout keeps the value and the trailing action on the same baseline
-// while letting the value `break-all` wrap when it's a long mono
-// string (UUID, path).
-function SpecRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <dt className={T.label}>{label}</dt>
-      <dd className="flex min-w-0 items-start gap-2">{children}</dd>
-    </div>
-  );
-}
 
 interface ObjectDetailViewProps {
   objectKey: string;
   parentObjectKey?: string;
-}
-
-function formatExpiresAt(seconds: bigint | undefined): string {
-  if (!seconds) return "Never";
-  try {
-    return new Date(Number(seconds) * 1000).toLocaleString();
-  } catch {
-    return "—";
-  }
-}
-
-function stateColorClasses(state: ObjectState): {
-  text: string;
-  dot: string;
-} {
-  if (state === ObjectState.AVAILABLE)
-    return { text: "text-chart-2", dot: "bg-chart-2" };
-  if (state === ObjectState.DELETED)
-    return { text: "text-destructive", dot: "bg-destructive" };
-  return { text: "text-chart-3", dot: "bg-chart-3" };
 }
 
 export function ObjectDetailView({
@@ -141,53 +94,16 @@ export function ObjectDetailView({
     }
   };
 
-  // State for tag editing
-  const [editingLabels, setEditingLabels] = React.useState<
-    Record<string, string>
-  >({});
+  // The Tags card owns its edit draft; the parent keeps only the isEditing
+  // flag so both the header "Edit Metadata" button and the card's own "Edit"
+  // button can toggle it.
   const [isEditing, setIsEditing] = React.useState(false);
-  const [newLabelKey, setNewLabelKey] = React.useState("");
-  const [newLabelValue, setNewLabelValue] = React.useState("");
-  const [isSaving, setIsSaving] = React.useState(false);
 
   // Confirmation modal state
   const [confirmAction, setConfirmAction] = React.useState<
     "trash" | "purge" | "restore" | null
   >(null);
   const [isConfirming, setIsConfirming] = React.useState(false);
-
-  // editingLabels is seeded in startEditing (not synced reactively from
-  // `object`): a background refetch mid-edit used to re-run a sync
-  // effect and silently wipe the user's unsaved label changes.
-  const startEditing = () => {
-    setEditingLabels(object?.tags ? { ...object.tags } : {});
-    setIsEditing(true);
-  };
-
-  const handleSaveLabels = async () => {
-    try {
-      setIsSaving(true);
-      await patchObjectMeta(editingLabels);
-      setIsEditing(false);
-    } catch {
-      // Error handled by hook
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const removeLabel = (key: string) => {
-    const newLabels = { ...editingLabels };
-    delete newLabels[key];
-    setEditingLabels(newLabels);
-  };
-
-  const addLabel = () => {
-    if (!newLabelKey || !newLabelValue) return;
-    setEditingLabels({ ...editingLabels, [newLabelKey]: newLabelValue });
-    setNewLabelKey("");
-    setNewLabelValue("");
-  };
 
   const handleCopy = async (text: string, label: string) => {
     const ok = await copyToClipboard(text);
@@ -309,7 +225,6 @@ export function ObjectDetailView({
 
   const fileName = object.key.split("/").pop() || object.key;
   const isImage = object.contentType?.startsWith("image/");
-  const stateColors = stateColorClasses(object.state);
 
   return (
     <div className="space-y-6">
@@ -333,7 +248,11 @@ export function ObjectDetailView({
         description={object.key}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={startEditing}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+            >
               <PencilSquareIcon className="size-4" />
               <span className="hidden sm:inline">Edit Metadata</span>
             </Button>
@@ -426,127 +345,12 @@ export function ObjectDetailView({
                 </div>
               </Card>
 
-              {/* Tags */}
-              <Card className="space-y-3 p-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">Tags</h2>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      isEditing ? setIsEditing(false) : startEditing()
-                    }
-                  >
-                    {isEditing ? "Cancel" : "Edit"}
-                  </Button>
-                </div>
-
-                {isEditing ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                      <Input
-                        placeholder="TAG_KEY"
-                        aria-label="New tag key"
-                        value={newLabelKey}
-                        onChange={(e) =>
-                          setNewLabelKey(e.target.value.toUpperCase())
-                        }
-                        className="font-mono text-xs"
-                      />
-                      <Input
-                        placeholder="TAG_VALUE"
-                        aria-label="New tag value"
-                        value={newLabelValue}
-                        onChange={(e) => setNewLabelValue(e.target.value)}
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={addLabel}
-                        disabled={!newLabelKey || !newLabelValue}
-                      >
-                        <PlusIcon className="size-4" />
-                        Add
-                      </Button>
-                    </div>
-
-                    {/* Free-form tags only. The reserved `object_tag` key
-                    is the classification slug — surfaced in the Specs
-                    sidebar instead, edited via the admin taxonomy
-                    flow. Hiding it here also prevents the user from
-                    accidentally clearing it via the trash button on
-                    a row whose semantics don't match the rest. */}
-                    <div className="space-y-1.5">
-                      {Object.entries(editingLabels).filter(
-                        ([k]) => k !== "object_tag",
-                      ).length === 0 ? (
-                        <p className={T.hint}>No tags assigned.</p>
-                      ) : (
-                        Object.entries(editingLabels)
-                          .filter(([k]) => k !== "object_tag")
-                          .map(([key, value]) => (
-                            <div
-                              key={key}
-                              className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
-                            >
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {key}
-                              </span>
-                              <span className="text-muted-foreground">=</span>
-                              <span className="flex-1 break-all font-mono text-xs">
-                                {value}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                onClick={() => removeLabel(key)}
-                                aria-label="Remove tag"
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </Button>
-                            </div>
-                          ))
-                      )}
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        onClick={handleSaveLabels}
-                        disabled={isSaving}
-                      >
-                        <CheckIcon className="size-4" />
-                        {isSaving ? "Saving…" : "Save"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  (() => {
-                    // View-mode also filters `object_tag` — its value is the
-                    // classification slug rendered in the Specs sidebar.
-                    // Computed once so the empty-state branch keys on the
-                    // same filtered list as the rendered one.
-                    const freeFormTags = Object.entries(
-                      object.tags || {},
-                    ).filter(([k]) => k !== "object_tag");
-                    return freeFormTags.length > 0 ? (
-                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                        {freeFormTags.map(([key, value]) => (
-                          <Badge
-                            key={key}
-                            variant="outline"
-                            className="justify-start font-mono text-xs"
-                          >
-                            {key}={value}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className={T.hint}>No tags assigned.</p>
-                    );
-                  })()
-                )}
-              </Card>
+              <ObjectTagsCard
+                tags={object.tags}
+                isEditing={isEditing}
+                onEditToggle={setIsEditing}
+                onSave={patchObjectMeta}
+              />
             </TabsContent>
 
             <TabsContent value="versions">
@@ -559,128 +363,11 @@ export function ObjectDetailView({
           </Tabs>
         </div>
 
-        {/* ─── Sidebar ─────────────────────────────────────────────
-            Single facts card. Was previously split into "Identifiers"
-            (main column) + "Specs" (sidebar) but the two cards
-            duplicated three rows: Object Key appeared in both
-            (once as "Object Key" plain mono, once as "Storage
-            ObjectKey" link), Storage Path lived only in Identifiers,
-            Object UUID lived only in Identifiers. Folded them all
-            into the sidebar in canonical order — identifiers first
-            (UUID, path, key-link), then physical attributes (size,
-            type, state, tag), then lifecycle (expires, external
-            ref). Picks the more useful presentation per duplicate:
-            object.objectKey renders as a link to /object-keys/<n>
-            rather than plain mono. Drops the plain "Object Key" row
-            and the standalone Identifiers card. ──────────────── */}
-        <aside className="space-y-4">
-          {/* Stacked-row layout (label above value) instead of the
-              side-by-side `[140px_1fr]` dl that worked in the wide
-              object-keys/[name] page but cramped the sidebar here.
-              Sidebar takes 1/3 of the page width on lg+, so a 36-char
-              UUID or a long Storage Path needs the full column to
-              wrap into. Stacked rows give each value full width and
-              `break-all` lets long mono strings wrap mid-token without
-              spilling out of the card.
-              A Separator between the identity group (UUID, path,
-              key-link) and the attributes group (size, type, state,
-              tag, expires, ref) keeps the card scannable in two
-              passes — one for "what is this thing" and one for "what
-              are its properties". */}
-          <Card className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold">Specs</h2>
-            <dl className="space-y-3">
-              <SpecRow label="Object UUID">
-                <span className="break-all font-mono text-xs">
-                  {object.objectId || objectKey}
-                </span>
-                <IdentifierCopy
-                  value={object.objectId || objectKey}
-                  label="Object UUID"
-                  iconOnly
-                />
-              </SpecRow>
-
-              <SpecRow label="Storage Path">
-                <span
-                  className="break-all font-mono text-xs"
-                  title={object.key}
-                >
-                  {object.key}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => handleCopy(object.key, "Storage path")}
-                  aria-label="Copy storage path"
-                >
-                  <ClipboardIcon className="size-3.5" />
-                </Button>
-              </SpecRow>
-
-              <SpecRow label="Object Key">
-                <Link
-                  href={`/object-keys/${object.objectKey}`}
-                  className="break-all font-mono text-xs text-primary hover:underline"
-                >
-                  {object.objectKey}
-                </Link>
-              </SpecRow>
-
-              <Separator />
-
-              <SpecRow label="Size">
-                <span className="font-mono text-xs">
-                  {formatBytes(object.sizeBytes)}
-                </span>
-              </SpecRow>
-
-              <SpecRow label="Type">
-                <span className="break-all font-mono text-xs">
-                  {object.contentType || "—"}
-                </span>
-              </SpecRow>
-
-              <SpecRow label="State">
-                <span className={cn(T.pill, stateColors.text)}>
-                  <span className={cn(T.pillDot, stateColors.dot)} />
-                  {ObjectState[object.state]}
-                </span>
-              </SpecRow>
-
-              {/* Classification = the reserved `object_tag` key inside
-                  the same `tags` map the Tags card edits. It points at
-                  a tenant-scoped taxonomy slug (admin's ObjectTag
-                  resource) and is one-of, not bag-of, so it lives here
-                  in Specs rather than in the Tags card. The Tags card
-                  filters this key out so the same value never renders
-                  twice on the page. */}
-              <SpecRow label="Classification">
-                {object.tags?.object_tag ? (
-                  <span className="font-mono text-xs">
-                    {object.tags.object_tag}
-                  </span>
-                ) : (
-                  <span className="font-mono text-xs text-muted-foreground">
-                    —
-                  </span>
-                )}
-              </SpecRow>
-
-              <SpecRow label="Expires">
-                <span className="font-mono text-xs">
-                  {formatExpiresAt(object.presignExpiresAt?.seconds)}
-                </span>
-              </SpecRow>
-
-              <SpecRow label="External Ref">
-                <span className="break-all font-mono text-xs">
-                  {object.externalRef || "—"}
-                </span>
-              </SpecRow>
-            </dl>
-          </Card>
-        </aside>
+        <ObjectSpecsPanel
+          object={object}
+          objectKey={objectKey}
+          onCopy={handleCopy}
+        />
       </div>
 
       {/* Confirmation Modals */}

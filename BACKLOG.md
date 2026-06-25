@@ -758,15 +758,19 @@ open deliberately — each notes why._
 
 ### Oversized component refactor (ObjectDetailView and friends)
 
-- **Status:** Deferred
-- **Reason:** `ObjectDetailView.tsx` (~711 LOC),
-  `ObjectVersionsTab.tsx` (~394 LOC) and `CsvImportDialog.tsx`
-  (~391 LOC) each mix layout, data wiring and business rules in one
-  file; `ObjectsFilterBar` takes 13 parallel value/onChange props.
-  Review and change cost grows with every feature touching them.
+- **Status:** Deferred (partial — `ObjectDetailView` Specs + Tags
+  extracted under an RTL net; 719 → 406 LOC).
+- **Reason:** `ObjectVersionsTab.tsx` (~394 LOC) and
+  `CsvImportDialog.tsx` (~391 LOC) still mix layout, data wiring and
+  business rules in one file; `ObjectsFilterBar` takes 13 parallel
+  value/onChange props. `ObjectDetailView` had its Specs sidebar
+  (`ObjectSpecsPanel`) and Tags card (`ObjectTagsCard`, which now owns
+  its own edit draft) split out, but the parent is still 406 LOC (the
+  header actions + preview + tabs orchestration remain inline).
 - **Definition of Done:**
-  - `ObjectDetailView` split into header / specs / tabs subcomponents,
-    each ≤300 LOC, no behaviour change (e2e suite green).
+  - `ObjectDetailView` further split so the parent is ≤300 LOC (header
+    actions are the next candidate), no behaviour change (RTL net
+    `ObjectDetailView.test.tsx` stays green).
   - CSV parsing extracted from `CsvImportDialog` into a pure function
     in `src/lib/` (unit-testable — see Vitest entry).
   - `ObjectsFilterBar` props collapsed into a single `FilterState`
