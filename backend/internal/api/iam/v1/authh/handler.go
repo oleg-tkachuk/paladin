@@ -34,10 +34,19 @@ type RefreshTokenDecoder interface {
 // claim and Cedar policies fall back to UUID-keyed Tenant UIDs.
 type TenantSlugLookup func(ctx context.Context, tenantID uuid.UUID) (string, error)
 
+// tokenMinter is the slice of *issuer.Issuer this handler needs — minting the
+// access + refresh JWT pair. Declared as an interface so the handler is
+// unit-testable with a stub; the concrete *issuer.Issuer satisfies it
+// implicitly, so call sites are unchanged.
+type tokenMinter interface {
+	MintAccess(c issuer.AccessClaims) (string, time.Time, error)
+	MintRefresh(c issuer.RefreshClaims) (string, time.Time, error)
+}
+
 type Handler struct {
 	users          authstore.UserRepository
 	refresh        authstore.RefreshTokenRepository
-	issuer         *issuer.Issuer
+	issuer         tokenMinter
 	refreshDecoder RefreshTokenDecoder
 	policy         cedar.Authorizer
 	tenantSlug     TenantSlugLookup
@@ -47,7 +56,7 @@ type Handler struct {
 func NewHandler(
 	users authstore.UserRepository,
 	refresh authstore.RefreshTokenRepository,
-	iss *issuer.Issuer,
+	iss tokenMinter,
 	dec RefreshTokenDecoder,
 	policy cedar.Authorizer,
 ) *Handler {
