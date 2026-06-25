@@ -530,14 +530,13 @@ function ObjectKeyObjectsContent() {
       </div>
 
       <ObjectsFilterBar
-        search={search}
-        onSearchChange={handleSearchChange}
-        recursive={recursive}
-        onRecursiveChange={handleRecursiveChange}
-        status={status}
-        onStatusChange={handleStatusChange}
-        tag={tagFilter}
-        onTagChange={handleTagChange}
+        filter={{ search, status, tag: tagFilter, recursive }}
+        onFilterChange={(patch) => {
+          if ("search" in patch) handleSearchChange(patch.search!);
+          if ("status" in patch) handleStatusChange(patch.status);
+          if ("tag" in patch) handleTagChange(patch.tag);
+          if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
+        }}
         tagOptions={mergedTagOptions}
         visibleColumns={visibleColumns}
         onToggleColumn={toggleColumn}

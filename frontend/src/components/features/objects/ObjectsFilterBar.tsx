@@ -23,16 +23,23 @@ interface SavedView {
   };
 }
 
-interface ObjectsFilterBarProps {
+/**
+ * The object-list filter values, collapsed into one object. `tag` is the
+ * selected "key=value" facet (undefined = none); `status` is undefined when
+ * unfiltered.
+ */
+export interface FilterState {
   search: string;
-  onSearchChange: (value: string) => void;
-  recursive: boolean;
-  onRecursiveChange: (value: boolean) => void;
   status: string | undefined;
-  onStatusChange: (value: string | undefined) => void;
-  /** Selected tag facet as a "key=value" pair, or undefined for none. */
   tag: string | undefined;
-  onTagChange: (value: string | undefined) => void;
+  recursive: boolean;
+}
+
+interface ObjectsFilterBarProps {
+  /** The four filter values, bundled. */
+  filter: FilterState;
+  /** Apply a single-field patch — the bar always changes one field at a time. */
+  onFilterChange: (patch: Partial<FilterState>) => void;
   /** Distinct "key=value" pairs seen across loaded objects. */
   tagOptions: string[];
   visibleColumns: Set<string>;
@@ -64,14 +71,8 @@ const STATUS_OPTIONS = [
 ];
 
 export function ObjectsFilterBar({
-  search,
-  onSearchChange,
-  recursive,
-  onRecursiveChange,
-  status,
-  onStatusChange,
-  tag,
-  onTagChange,
+  filter,
+  onFilterChange,
   tagOptions,
   visibleColumns,
   onToggleColumn,
@@ -82,6 +83,16 @@ export function ObjectsFilterBar({
   loading,
   onRefresh,
 }: ObjectsFilterBarProps) {
+  // Re-derive the per-field values + setters from the bundled filter so the
+  // markup below stays unchanged. Each setter emits a single-field patch.
+  const { search, status, tag, recursive } = filter;
+  const onSearchChange = (value: string) => onFilterChange({ search: value });
+  const onStatusChange = (value: string | undefined) =>
+    onFilterChange({ status: value });
+  const onTagChange = (value: string | undefined) =>
+    onFilterChange({ tag: value });
+  const onRecursiveChange = (value: boolean) =>
+    onFilterChange({ recursive: value });
   return (
     <div className="flex flex-wrap items-center gap-4 bg-surface/30 border border-white/5 rounded-2xl p-4">
       <div className="flex-1 min-w-[240px] relative group">

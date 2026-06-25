@@ -80,21 +80,28 @@ vi.mock("@/components/features/ObjectInspector", () => ({
 }));
 vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
   ObjectsFilterBar: ({
-    onStatusChange,
-    onTagChange,
-    onSearchChange,
-    onRecursiveChange,
+    onFilterChange,
   }: {
-    onStatusChange: (v: string | undefined) => void;
-    onTagChange: (v: string | undefined) => void;
-    onSearchChange: (v: string) => void;
-    onRecursiveChange: (v: boolean) => void;
+    onFilterChange: (patch: {
+      search?: string;
+      status?: string | undefined;
+      tag?: string | undefined;
+      recursive?: boolean;
+    }) => void;
   }) => (
     <div>
-      <button onClick={() => onStatusChange("active")}>set status</button>
-      <button onClick={() => onTagChange("env=prod")}>set tag</button>
-      <button onClick={() => onSearchChange("hello")}>set search</button>
-      <button onClick={() => onRecursiveChange(true)}>set recursive</button>
+      <button onClick={() => onFilterChange({ status: "active" })}>
+        set status
+      </button>
+      <button onClick={() => onFilterChange({ tag: "env=prod" })}>
+        set tag
+      </button>
+      <button onClick={() => onFilterChange({ search: "hello" })}>
+        set search
+      </button>
+      <button onClick={() => onFilterChange({ recursive: true })}>
+        set recursive
+      </button>
     </div>
   ),
 }));
