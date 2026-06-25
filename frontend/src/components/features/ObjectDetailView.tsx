@@ -6,28 +6,19 @@ import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useObject } from "@/hooks/useObject";
-import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
-import {
-  DocumentIcon,
-  ArrowLeftIcon,
-  ArrowDownTrayIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  XMarkIcon,
-  EllipsisHorizontalIcon,
-  ShareIcon,
-  ArrowPathIcon,
-  ExclamationTriangleIcon,
-} from "@heroicons/react/24/outline";
+import { DocumentIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { copyToClipboard } from "@/lib/utils";
 import { useNotification } from "@/components/ui/Notification";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { Dropdown } from "@/components/ui/Dropdown";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ObjectVersionsTab } from "@/components/features/ObjectVersionsTab";
+import { ObjectDetailActions } from "@/components/features/ObjectDetailActions";
+import {
+  ObjectDetailSkeleton,
+  ObjectNotFound,
+} from "@/components/features/ObjectDetailStates";
 import { ObjectTagsCard } from "@/components/features/ObjectTagsCard";
 import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
 import { T } from "@/lib/ui/typography";
@@ -156,71 +147,12 @@ export function ObjectDetailView({
 
   // ─── Loading ─────────────────────────────────────────────────────────
   if (loading) {
-    return (
-      <div
-        className="space-y-6"
-        role="status"
-        aria-busy="true"
-        aria-label="Loading object details"
-      >
-        <PageHeader
-          title={
-            <h1 className="flex items-center gap-3 truncate text-2xl font-semibold tracking-tight">
-              <Skeleton className="size-8" />
-              <Skeleton className="h-6 w-64" />
-            </h1>
-          }
-          showDefaultActions={false}
-        />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="space-y-4 lg:col-span-2">
-            <Skeleton className="h-[360px] w-full" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-32 w-full" />
-          </div>
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    );
+    return <ObjectDetailSkeleton />;
   }
 
   // ─── Missing ─────────────────────────────────────────────────────────
   if (!object) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title={
-            <h1 className="flex items-center gap-3 truncate text-2xl font-semibold tracking-tight">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => router.push(backHref)}
-                aria-label="Back to Objects"
-              >
-                <ArrowLeftIcon className="size-5" />
-              </Button>
-              <span>Object Not Found</span>
-            </h1>
-          }
-          showDefaultActions={false}
-        />
-        <Card className="flex flex-col items-center gap-3 p-12 text-center">
-          <ExclamationTriangleIcon className="size-10 text-destructive" />
-          <div className="text-sm font-medium">Missing Object</div>
-          <div className="max-w-md text-sm text-muted-foreground">
-            The object you&apos;re looking for doesn&apos;t exist or you
-            don&apos;t have access.
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(backHref)}
-          >
-            Back to Objects
-          </Button>
-        </Card>
-      </div>
-    );
+    return <ObjectNotFound onBack={() => router.push(backHref)} />;
   }
 
   const fileName = object.key.split("/").pop() || object.key;
@@ -247,58 +179,13 @@ export function ObjectDetailView({
         }
         description={object.key}
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(true)}
-            >
-              <PencilSquareIcon className="size-4" />
-              <span className="hidden sm:inline">Edit Metadata</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleShare}>
-              <ShareIcon className="size-4" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            <Button size="sm" onClick={handleDownload}>
-              <ArrowDownTrayIcon className="size-4" />
-              Download
-            </Button>
-            <Dropdown align="right" width="w-56">
-              <Dropdown.Trigger>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Object actions"
-                >
-                  <EllipsisHorizontalIcon className="size-4" />
-                </Button>
-              </Dropdown.Trigger>
-              <Dropdown.Menu className="py-1">
-                {object.state === ObjectState.DELETED ? (
-                  <Dropdown.Item onClick={() => setConfirmAction("restore")}>
-                    <span className="flex items-center gap-2">
-                      <ArrowPathIcon className="size-4" />
-                      Restore Object
-                    </span>
-                  </Dropdown.Item>
-                ) : (
-                  <Dropdown.Item onClick={() => setConfirmAction("trash")}>
-                    <span className="flex items-center gap-2">
-                      <TrashIcon className="size-4" />
-                      Move to Trash
-                    </span>
-                  </Dropdown.Item>
-                )}
-                <Dropdown.Item onClick={() => setConfirmAction("purge")}>
-                  <span className="flex items-center gap-2 text-destructive">
-                    <XMarkIcon className="size-4" />
-                    Permanently Delete
-                  </span>
-                </Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
-          </div>
+          <ObjectDetailActions
+            state={object.state}
+            onEdit={() => setIsEditing(true)}
+            onShare={handleShare}
+            onDownload={handleDownload}
+            onAction={setConfirmAction}
+          />
         }
       />
 
