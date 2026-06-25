@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
@@ -14,25 +14,14 @@ import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
-  SparklesIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
-import { ConnectError } from "@connectrpc/connect";
-
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useTenants } from "@/hooks/useTenants";
-import { useBackends } from "@/hooks/useBackends";
-import { useBuckets } from "@/hooks/useBuckets";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { useNotification } from "@/components/ui/Notification";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
+import { TenantCreateDialog } from "./TenantCreateDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,15 +106,6 @@ function SortHeader({
   );
 }
 
-// UUID format check is permissive across versions (v1/v4/v7) — server
-// generates v7 by default but accepts any RFC 4122 UUID from clients.
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// SLUG_RE mirrors backend/internal/api/v1/apiutil/slug.go ValidateTenantSlug.
-// Keep in lockstep with the server-side regex.
-const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
-
 export default function TenantsPage() {
   const {
     tenants,
@@ -145,47 +125,11 @@ export default function TenantsPage() {
   // Phase 0 contract: slug is required, tenant_id is optional (server
   // mints UUIDv7 when empty), display_name is optional (defaults to
   // slug). Both slug and display_name are unique across tenants.
+  // Create-dialog open state; all the form state + backend/bucket cascade now
+  // lives inside TenantCreateDialog.
   const [createOpen, setCreateOpen] = useState(false);
-  const [newSlug, setNewSlug] = useState("");
-  const [newId, setNewId] = useState("");
-  const [newDisplayName, setNewDisplayName] = useState("");
-  const [newBackend, setNewBackend] = useState("");
-  const [newBucket, setNewBucket] = useState("");
+  // Shared by the edit flow below (create has its own submitting state now).
   const [submitting, setSubmitting] = useState(false);
-
-  // Backends + buckets feed the cascading Backend → Bucket dropdowns
-  // in the create dialog. Tenants land on a (backend, bucket) pair so
-  // the default binding can be persisted at create time. Both lists
-  // are tiny (handful of rows) and refreshed on dialog open.
-  const { backends } = useBackends(createOpen);
-  const { buckets, fetchBuckets } = useBuckets();
-  useEffect(() => {
-    if (createOpen) void fetchBuckets();
-  }, [createOpen, fetchBuckets]);
-  const bucketsForBackend = useMemo(
-    () => (newBackend ? buckets.filter((b) => b.backendId === newBackend) : []),
-    [buckets, newBackend],
-  );
-  // Pick a sensible default backend the moment the dialog opens with
-  // backends loaded — saves a click in the typical single-backend
-  // dev environment.
-  useEffect(() => {
-    if (createOpen && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0].backendId);
-    }
-  }, [createOpen, newBackend, backends]);
-  // Reset bucket when backend changes; the previous bucket may not
-  // belong to the new backend.
-  useEffect(() => {
-    if (
-      newBucket &&
-      !buckets.some(
-        (b) => b.backendId === newBackend && b.bucketName === newBucket,
-      )
-    ) {
-      setNewBucket("");
-    }
-  }, [newBackend, newBucket, buckets]);
 
   // ─── edit ─────────────────────────────────────────────────────────────────
   const [editing, setEditing] = useState<Tenant | null>(null);
@@ -227,86 +171,6 @@ export default function TenantsPage() {
     }
     return list;
   }, [tenants, search, sort]);
-
-  const handleCreate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    // Slug is required and must match the kebab-case format the
-    // server validates against (mirrors apiutil.ValidateTenantSlug).
-    if (!SLUG_RE.test(newSlug)) {
-      showNotification({
-        type: "error",
-        title: "Invalid slug",
-        message:
-          "Slug must be 3–63 chars, kebab-case, starting with a letter and ending alphanumeric.",
-      });
-      return;
-    }
-    // tenant_id is optional. If supplied, validate UUID format
-    // client-side so the server's INVALID_ARGUMENT round-trip isn't
-    // the first signal of a typo.
-    if (newId && !UUID_RE.test(newId)) {
-      showNotification({
-        type: "error",
-        title: "Invalid Tenant ID",
-        message:
-          "Tenant ID must be a valid UUID, or leave empty to auto-generate.",
-      });
-      return;
-    }
-    if (!newBackend || !newBucket) {
-      showNotification({
-        type: "error",
-        title: "Default location required",
-        message:
-          "Pick a storage backend and a bucket. Tenant objects live there by default.",
-      });
-      return;
-    }
-    const defaultBucketRef = `storageBackends/${newBackend}/buckets/${newBucket}`;
-    try {
-      setSubmitting(true);
-      const created = await createTenant(
-        newSlug,
-        newId,
-        newDisplayName,
-        {},
-        defaultBucketRef,
-      );
-      showNotification({
-        type: "success",
-        title: "Tenant created",
-        message: created.displayName || created.slug || created.tenantId,
-      });
-      setNewSlug("");
-      setNewId("");
-      setNewDisplayName("");
-      setNewBucket("");
-      // keep newBackend so the next create defaults to the same one
-      setCreateOpen(false);
-    } catch (err) {
-      console.error(err);
-      // Surface the actual backend error rather than guessing at
-      // "ID must be unique and a valid UUID v4". The previous copy
-      // misread network failures (transport errors, BFF cold start)
-      // as a UUID validation error and confused operators. Connect
-      // errors carry rawMessage with the server's typed reason
-      // (already-exists, invalid-argument, etc.); plain Error
-      // instances fall back to .message; everything else stringifies.
-      const message =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      showNotification({
-        type: "error",
-        title: "Creation failed",
-        message,
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleUpdate = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -575,234 +439,11 @@ export default function TenantsPage() {
       </Card>
 
       {/* ─── Create dialog ───────────────────────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <form onSubmit={handleCreate}>
-            <DialogHeader>
-              <DialogTitle>New tenant</DialogTitle>
-              <DialogDescription>
-                Slug is the human-readable handle and is immutable after
-                creation. The default Cedar policy is applied automatically.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* Slug — required, primary identity field. Live-validated
-                  against SLUG_RE so the operator sees green/red before
-                  hitting submit. */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="tenant-slug">
-                    Slug <span className="text-destructive">*</span>
-                  </Label>
-                  {newSlug.length > 0 && (
-                    <span
-                      className={cn(
-                        "text-[11px] font-medium",
-                        SLUG_RE.test(newSlug)
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-destructive",
-                      )}
-                    >
-                      {SLUG_RE.test(newSlug) ? "valid" : "invalid format"}
-                    </span>
-                  )}
-                </div>
-                <Input
-                  id="tenant-slug"
-                  autoFocus
-                  placeholder="acme-prod"
-                  value={newSlug}
-                  onChange={(e) => setNewSlug(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  3–63 chars, lowercase kebab-case. Used in URLs and Cedar
-                  policies. <span className="font-medium">Immutable</span> after
-                  creation.
-                </p>
-              </div>
-              {/* Display name — optional, defaults to slug on the server. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="tenant-display-name">
-                  Display name{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="tenant-display-name"
-                  placeholder={newSlug || "Acme Corporation"}
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Unique, editable. Defaults to slug when empty.
-                </p>
-              </div>
-              {/* Default location — required. The tenant's objects
-                  live under <bucket>/<tenant_id>/... after create;
-                  this picks WHERE that prefix exists. Backend +
-                  bucket cascade. Empty bucket list means the chosen
-                  backend has no buckets registered yet — operator
-                  needs to create one in /buckets before continuing. */}
-              {backends.length === 0 && (
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
-                  <p className="font-medium text-amber-900 dark:text-amber-200">
-                    No storage backends registered yet
-                  </p>
-                  <p className="text-muted-foreground">
-                    Tenants need a backend + bucket to land. Register one before
-                    creating the first tenant.
-                  </p>
-                  <Link
-                    href="/storage-backends"
-                    className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
-                    onClick={() => setCreateOpen(false)}
-                  >
-                    Open Storage Backends →
-                  </Link>
-                </div>
-              )}
-              {backends.length > 0 &&
-                bucketsForBackend.length === 0 &&
-                newBackend && (
-                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1">
-                    <p className="font-medium text-amber-900 dark:text-amber-200">
-                      No buckets on backend{" "}
-                      <span className={T.code}>{newBackend}</span>
-                    </p>
-                    <p className="text-muted-foreground">
-                      Create a bucket on this backend before continuing.
-                    </p>
-                    <Link
-                      href={`/buckets`}
-                      className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 hover:underline"
-                      onClick={() => setCreateOpen(false)}
-                    >
-                      Open Buckets →
-                    </Link>
-                  </div>
-                )}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="tenant-backend">
-                    Storage backend <span className="text-destructive">*</span>
-                  </Label>
-                  <SelectRoot
-                    value={newBackend}
-                    onValueChange={(v) => setNewBackend(v)}
-                  >
-                    <SelectTrigger id="tenant-backend">
-                      <SelectValue
-                        placeholder={
-                          backends.length === 0
-                            ? "No backends registered"
-                            : "Pick backend"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {backends.map((b) => (
-                        <SelectItem key={b.backendId} value={b.backendId}>
-                          {b.displayName
-                            ? `${b.displayName} (${b.backendId})`
-                            : b.backendId}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </SelectRoot>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="tenant-bucket">
-                    Bucket <span className="text-destructive">*</span>
-                  </Label>
-                  <SelectRoot
-                    value={newBucket}
-                    onValueChange={(v) => setNewBucket(v)}
-                    disabled={!newBackend || bucketsForBackend.length === 0}
-                  >
-                    <SelectTrigger id="tenant-bucket">
-                      <SelectValue
-                        placeholder={
-                          !newBackend
-                            ? "Pick backend first"
-                            : bucketsForBackend.length === 0
-                              ? "No buckets on this backend"
-                              : "Pick bucket"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bucketsForBackend.map((b) => (
-                        <SelectItem key={b.bucketName} value={b.bucketName}>
-                          {b.bucketName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </SelectRoot>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground -mt-2">
-                Tenant objects will live under{" "}
-                <span className={cn(T.code, "text-[10px]")}>
-                  {newBucket || "<bucket>"}/&lt;tenant_id&gt;/…
-                </span>
-                . Bind cannot be moved without rebinding via the admin RPC.
-              </p>
-              {/* Advanced — Tenant ID lives under a disclosure since
-                  the typical operator never touches it (server mints
-                  UUIDv7). Power users importing a known UUID open
-                  this. */}
-              <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
-                  Advanced — supply your own UUID
-                </summary>
-                <div className="space-y-1.5 pt-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="tenant-id" className="text-xs">
-                      Tenant ID
-                    </Label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => setNewId(crypto.randomUUID())}
-                    >
-                      <SparklesIcon className="size-3" />
-                      Generate
-                    </Button>
-                  </div>
-                  <Input
-                    id="tenant-id"
-                    placeholder="Leave empty — server mints UUIDv7"
-                    className="font-mono text-xs"
-                    value={newId}
-                    onChange={(e) => setNewId(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Any RFC 4122 UUID. Immutable after creation.
-                  </p>
-                </div>
-              </details>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || !newSlug || !newBackend || !newBucket}
-              >
-                {submitting ? "Creating…" : "Create tenant"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <TenantCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        createTenant={createTenant}
+      />
 
       {/* ─── Edit dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
