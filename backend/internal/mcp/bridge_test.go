@@ -174,3 +174,60 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		})
 	}
 }
+
+// TestCoverageToolsDispatch pins the RPC routing of every tool added to close
+// the MCP tool-coverage gap (data-plane object/tag/multipart/operation + admin
+// audit/system/quota). A wrong client wiring would still compile, so asserting
+// the captured Connect procedure path is what makes this test load-bearing.
+func TestCoverageToolsDispatch(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		tool  string
+		plane string // "data" | "admin"
+		args  map[string]any
+		want  string
+	}{
+		{"paladin_update_object", "data", map[string]any{"name": "objects/o1", "update_mask": []string{"tags"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.ObjectService/UpdateObject"},
+		{"paladin_delete_object_tags", "data", map[string]any{"name": "objects/o1", "keys": []string{"k"}}, "/paladin.data.v1.ObjectTagService/DeleteObjectTags"},
+		{"paladin_list_distinct_tags", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1"}, "/paladin.data.v1.ObjectTagService/ListDistinctTags"},
+		{"paladin_batch_update_tags", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1", "names": []string{"objects/o1"}, "tags": map[string]any{"k": "v"}}, "/paladin.data.v1.BatchService/BatchUpdateTags"},
+		{"paladin_regenerate_upload_url", "data", map[string]any{"name": "objects/o1"}, "/paladin.data.v1.PresignService/RegenerateUploadUrl"},
+		{"paladin_initiate_multipart_upload", "data", map[string]any{"parent": "tenants/t1/objectKeys/ok1", "content_type": "application/octet-stream"}, "/paladin.data.v1.MultipartUploadService/InitiateMultipartUpload"},
+		{"paladin_presign_part", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1", "part_number": 1}, "/paladin.data.v1.MultipartUploadService/PresignPart"},
+		{"paladin_complete_multipart_upload", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1", "parts": []any{map[string]any{"part_number": 1, "etag": "e1"}}}, "/paladin.data.v1.MultipartUploadService/CompleteMultipartUpload"},
+		{"paladin_abort_multipart_upload", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1"}, "/paladin.data.v1.MultipartUploadService/AbortMultipartUpload"},
+		{"paladin_list_parts", "data", map[string]any{"object_name": "objects/o1", "upload_id": "u1"}, "/paladin.data.v1.MultipartUploadService/ListParts"},
+		{"paladin_cancel_operation", "data", map[string]any{"name": "operations/op1"}, "/paladin.data.v1.OperationService/CancelOperation"},
+		{"paladin_get_audit_entry", "admin", map[string]any{"entry_id": "a1"}, "/paladin.admin.v1.AuditLogService/GetAuditLogEntry"},
+		{"paladin_system_config", "admin", map[string]any{}, "/paladin.admin.v1.SystemService/GetConfig"},
+		{"paladin_reset_usage", "admin", map[string]any{"name": "tenants/t1"}, "/paladin.admin.v1.QuotaService/ResetUsage"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			var paths []string
+			h := InlineHandlers{}
+			switch tc.plane {
+			case "admin":
+				h.Admin = recordingPlane(&paths)
+			default:
+				h.Data = recordingPlane(&paths)
+			}
+			cs := dialInProcess(t, NewInlineClients(h, "tok"))
+
+			if _, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+				Name:      tc.tool,
+				Arguments: tc.args,
+			}); err != nil {
+				t.Fatalf("CallTool %s: %v", tc.tool, err)
+			}
+			if len(paths) != 1 {
+				t.Fatalf("%s: recorded %d %s-plane calls, want 1 (%v)", tc.tool, len(paths), tc.plane, paths)
+			}
+			if paths[0] != tc.want {
+				t.Fatalf("%s: dispatched to %q, want %q", tc.tool, paths[0], tc.want)
+			}
+		})
+	}
+}

@@ -35,27 +35,22 @@ the same commit. Treat this file like a runtime invariant.
 
 ### Tool-coverage gaps vs the PALADIN RPC surface
 
-- **Status:** Deferred (partial — object delete/copy/lookup/count + batch
-  delete/copy/restore landed; 45 tools).
+- **Status:** Deferred (partial — the data-plane cluster + admin read gaps
+  landed 2026-06-26; 59 tools). Remaining items below need a product call.
 - **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
-  read-heavy subset of the ~110 PALADIN RPCs (45 tools). `DefaultCatalog` in
+  subset of the ~110 PALADIN RPCs (59 tools). `DefaultCatalog` in
   `internal/mcp/profile.go` is the ground-truth list and is pinned to the
-  real registrations by `TestServerRegistersDefaultCatalog`. The following
-  PALADIN capabilities are still **not** reachable from an MCP agent. Some are
-  deliberate (see the next entry); the rest are unfilled coverage:
-  - **ObjectService:** `UpdateObject` (no generic metadata-patch tool; tags
-    have one but arbitrary metadata does not).
-  - **ObjectTagService:** `DeleteObjectTags`, `ListDistinctTags`.
-  - **PresignService:** `RegenerateUploadUrl` (only download is exposed).
-  - **BatchService:** `BatchUpdateTags` (delete / copy / restore are wired).
-  - **MultipartUploadService:** none of the 5 RPCs — large-object agent
-    uploads are impossible. (These are unary, so the inline-transport
-    streaming limitation does not block them; this is pure coverage.)
-  - **QuotaService.ResetUsage**, **AuditLogService.GetAuditLogEntry**,
-    **OperationService.CancelOperation** (admin + data).
+  real registrations by `TestServerRegistersDefaultCatalog`. Now wired:
+  `UpdateObject`, `DeleteObjectTags`, `ListDistinctTags`, `BatchUpdateTags`,
+  `RegenerateUploadUrl`, the 5 `MultipartUploadService` RPCs, data
+  `CancelOperation`, admin `ResetUsage` / `GetAuditLogEntry` / `GetConfig`
+  (`SystemService` client added). The agent-usable upload/tag mutations are
+  in `agent_safe`; `ResetUsage` / `system_config` / batch tools stay
+  admin-only. The following PALADIN capabilities are still **not** reachable
+  from an MCP agent. Some are deliberate (see the next entry); the rest are
+  unfilled coverage pending a product decision:
   - **Whole services with no client wired:** BillingService,
-    TenantBudgetService, admin SystemService (`GetConfig`), admin
-    OperationService, UserSettingsService.
+    TenantBudgetService, admin OperationService, UserSettingsService.
   - **Lifecycle writes** on Backend / Bucket / ObjectKey / Tenant
     (create/update/delete) — Tenant lifecycle is intentionally human-only
     (denylist); the others are gaps if agent-driven provisioning is wanted.
@@ -64,8 +59,9 @@ the same commit. Treat this file like a runtime invariant.
   (the invariant test enforces this), and gate it into the right
   `DefaultProfiles` entry (destructive ops stay out of `agent_safe`). Wire any
   missing Connect client into `Clients`.
-- **Blockers:** none technical. Needs a product call on which surfaces an
-  agent should drive vs. which stay human-operated.
+- **Blockers:** none technical. Needs a product call on whether an agent
+  should drive provisioning (lifecycle writes) and billing/budget/settings
+  surfaces vs. keep them human-operated.
 
 ### Capability / API-token issuance via MCP — intentionally excluded
 

@@ -47,6 +47,7 @@ type Clients struct {
 	Audit    adminv1connect.AuditLogServiceClient
 	EventSub adminv1connect.EventSubscriptionServiceClient
 	CEL      adminv1connect.CELServiceClient
+	System   adminv1connect.SystemServiceClient
 
 	Object        datav1connect.ObjectServiceClient
 	Multipart     datav1connect.MultipartUploadServiceClient
@@ -110,6 +111,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		Audit:    adminv1connect.NewAuditLogServiceClient(httpc, adminURL, authInjector),
 		EventSub: adminv1connect.NewEventSubscriptionServiceClient(httpc, adminURL, authInjector),
 		CEL:      adminv1connect.NewCELServiceClient(httpc, adminURL, authInjector),
+		System:   adminv1connect.NewSystemServiceClient(httpc, adminURL, authInjector),
 
 		Object:        datav1connect.NewObjectServiceClient(httpc, dataURL, authInjector),
 		Multipart:     datav1connect.NewMultipartUploadServiceClient(httpc, dataURL, authInjector),
@@ -469,6 +471,42 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Fetch a single long-running operation (state + response payload).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.DataOperation.GetOperation(ctx, connect.NewRequest(&datav1.GetOperationRequest{Name: in.Name})))
+	})
+
+	// Tag / multipart read surface (data plane).
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_list_distinct_tags",
+		Description: "List the distinct tag keys/values currently in use under an object_key — useful before filtering or tagging.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{Parent: in.Parent})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_list_parts",
+		Description: "List the parts uploaded so far for an in-progress multipart upload.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listPartsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Multipart.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{
+			ObjectName: in.ObjectName,
+			UploadId:   in.UploadID,
+			Page:       &commonv1.PageRequest{PageSize: in.PageSize},
+		})))
+	})
+
+	// Admin discovery gaps.
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_get_audit_entry",
+		Description: "Read a single audit-log entry by its id (the granular companion to paladin_audit_recent).",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in auditEntryArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Audit.GetAuditLogEntry(ctx, connect.NewRequest(&adminv1.GetAuditLogEntryRequest{EntryId: in.EntryID})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_system_config",
+		Description: "Read the platform's effective runtime configuration (admin-profile only; not exposed to agent_safe).",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.System.GetConfig(ctx, connect.NewRequest(&adminv1.GetConfigRequest{})))
 	})
 }
 
@@ -872,6 +910,140 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			},
 		})))
 	})
+
+	// Object / tag metadata mutations (data plane).
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_update_object",
+		Description: "Patch an object's mutable metadata. Only the fields named in `update_mask` are changed (e.g. \"metadata,tags,content_type\"); omit the mask to replace all of them. Does not touch the object body.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in updateObjectArgs) (*mcpsdk.CallToolResult, any, error) {
+		req := &datav1.UpdateObjectRequest{
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+			Metadata:        in.Metadata,
+			Tags:            in.Tags,
+			ContentType:     in.ContentType,
+			ExternalRef:     in.ExternalRef,
+		}
+		if len(in.UpdateMask) > 0 {
+			req.UpdateMask = &fieldmaskpb.FieldMask{Paths: in.UpdateMask}
+		}
+		return jsonResult(c.Object.UpdateObject(ctx, connect.NewRequest(req)))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_delete_object_tags",
+		Description: "Remove specific tag keys from an object. Pass the keys to drop in `keys`; the rest are left intact. (Use paladin_set_object_tags with an empty map to clear all tags at once.)",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteObjectTagsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.ObjectTag.DeleteObjectTags(ctx, connect.NewRequest(&datav1.DeleteObjectTagsRequest{
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+			Keys:            in.Keys,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_batch_update_tags",
+		Description: "Asynchronously merge (or, with `replace`, overwrite) a tag map across many objects under one object_key. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchUpdateTagsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Batch.BatchUpdateTags(ctx, connect.NewRequest(&datav1.BatchUpdateTagsRequest{
+			Parent: in.Parent,
+			Selector: &datav1.ObjectSelector{
+				Names:  in.Names,
+				Filter: in.Filter,
+			},
+			Tags:    in.Tags,
+			Replace: in.Replace,
+		})))
+	})
+
+	// Upload-flow surface: single-shot re-sign + the multipart lifecycle.
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_regenerate_upload_url",
+		Description: "Re-mint a presigned PUT URL for an object whose upload was initiated but not completed (e.g. the first URL expired). Does not create a new object.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in regenerateUploadURLArgs) (*mcpsdk.CallToolResult, any, error) {
+		req := &datav1.RegenerateUploadUrlRequest{Name: in.Name}
+		if in.TtlSeconds > 0 {
+			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
+		}
+		return jsonResult(c.Presign.RegenerateUploadUrl(ctx, connect.NewRequest(req)))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_initiate_multipart_upload",
+		Description: "Begin a multipart upload for a large object. Returns an upload_id + object name; presign each part with paladin_presign_part, then finalise with paladin_complete_multipart_upload.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in initiateMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Multipart.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+			Parent:      in.Parent,
+			Key:         in.Key,
+			ContentType: in.ContentType,
+			SizeBytes:   in.SizeBytes,
+			Metadata:    in.Metadata,
+			Tags:        in.Tags,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_presign_part",
+		Description: "Mint a presigned PUT URL for one part (1-based `part_number`) of an in-progress multipart upload. The agent PUTs the bytes to S3 and keeps the returned ETag for completion.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in presignPartArgs) (*mcpsdk.CallToolResult, any, error) {
+		req := &datav1.PresignPartRequest{
+			ObjectName: in.ObjectName,
+			UploadId:   in.UploadID,
+			PartNumber: in.PartNumber,
+		}
+		if in.TtlSeconds > 0 {
+			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
+		}
+		return jsonResult(c.Multipart.PresignPart(ctx, connect.NewRequest(req)))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_complete_multipart_upload",
+		Description: "Finalise a multipart upload by committing the ordered part list (each {part_number, etag} from paladin_presign_part). Returns the committed Object.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in completeMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
+		parts := make([]*datav1.CompletedPart, 0, len(in.Parts))
+		for _, p := range in.Parts {
+			parts = append(parts, &datav1.CompletedPart{
+				PartNumber:    p.PartNumber,
+				Etag:          p.Etag,
+				ChecksumValue: p.ChecksumValue,
+			})
+		}
+		return jsonResult(c.Multipart.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
+			ObjectName: in.ObjectName,
+			UploadId:   in.UploadID,
+			Parts:      parts,
+		})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_abort_multipart_upload",
+		Description: "Abort an in-progress multipart upload and discard its uploaded parts. Safe — it never touches a committed object.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in abortMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Multipart.AbortMultipartUpload(ctx, connect.NewRequest(&datav1.AbortMultipartUploadRequest{
+			ObjectName: in.ObjectName,
+			UploadId:   in.UploadID,
+		})))
+	})
+
+	// Operation control (data plane) + quota maintenance (admin).
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_cancel_operation",
+		Description: "Request cancellation of a running long-running operation (e.g. a batch job). Returns the operation's updated state.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.DataOperation.CancelOperation(ctx, connect.NewRequest(&datav1.CancelOperationRequest{Name: in.Name})))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_reset_usage",
+		Description: "Reset the accumulated usage counters on a tenant- or bucket-scoped quota (admin-profile only). Does not change the quota limits.",
+		Annotations: &destructive,
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Quota.ResetUsage(ctx, connect.NewRequest(&adminv1.ResetUsageRequest{Name: in.Name})))
+	})
 }
 
 // ─── Presign / tag mutating arg types ───────────────────────────────────────
@@ -934,6 +1106,70 @@ type lookupObjectArgs struct {
 type countObjectsArgs struct {
 	Parent string `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
 	Filter string `json:"filter,omitempty" jsonschema:"optional CEL filter over Object"`
+}
+
+// ─── Coverage-fill arg types (ADR/BACKLOG: MCP tool-coverage gaps) ───────────
+
+type updateObjectArgs struct {
+	Name            string            `json:"name" jsonschema:"object resource name"`
+	ResourceVersion string            `json:"resource_version,omitempty" jsonschema:"OCC guard; empty skips the check"`
+	UpdateMask      []string          `json:"update_mask,omitempty" jsonschema:"field paths to change (metadata, tags, content_type, external_ref); empty = replace all of them"`
+	Metadata        map[string]string `json:"metadata,omitempty" jsonschema:"replacement user metadata"`
+	Tags            map[string]string `json:"tags,omitempty" jsonschema:"replacement tag map"`
+	ContentType     string            `json:"content_type,omitempty" jsonschema:"replacement MIME type"`
+	ExternalRef     string            `json:"external_ref,omitempty" jsonschema:"replacement external reference"`
+}
+type deleteObjectTagsArgs struct {
+	Name            string   `json:"name" jsonschema:"object resource name"`
+	ResourceVersion string   `json:"resource_version,omitempty" jsonschema:"OCC guard; empty skips the check"`
+	Keys            []string `json:"keys" jsonschema:"tag keys to remove; others are left intact"`
+}
+type batchUpdateTagsArgs struct {
+	Parent  string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Names   []string          `json:"names,omitempty" jsonschema:"explicit object resource names; ≤100. Use filter for larger sets."`
+	Filter  string            `json:"filter,omitempty" jsonschema:"CEL filter over Object, evaluated lazily in the worker"`
+	Tags    map[string]string `json:"tags" jsonschema:"tag map to apply to each selected object"`
+	Replace bool              `json:"replace,omitempty" jsonschema:"true = overwrite the whole tag map; default false = merge"`
+}
+type regenerateUploadURLArgs struct {
+	Name       string `json:"name" jsonschema:"object resource name of the pending (not-yet-completed) upload"`
+	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side by cfg.Limits.Presign.put_ttl"`
+}
+type initiateMultipartArgs struct {
+	Parent      string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/objectKeys/{ok}"`
+	Key         string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
+	ContentType string            `json:"content_type" jsonschema:"MIME type (e.g. application/octet-stream)"`
+	SizeBytes   int64             `json:"size_bytes,omitempty" jsonschema:"optional total size hint"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Tags        map[string]string `json:"tags,omitempty"`
+}
+type presignPartArgs struct {
+	ObjectName string `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
+	UploadID   string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
+	PartNumber int32  `json:"part_number" jsonschema:"1-based part index"`
+	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side"`
+}
+type completedPartArg struct {
+	PartNumber    int32  `json:"part_number" jsonschema:"1-based part index"`
+	Etag          string `json:"etag" jsonschema:"ETag the S3 endpoint returned on the part PUT"`
+	ChecksumValue string `json:"checksum_value,omitempty" jsonschema:"hex-encoded checksum, if computed"`
+}
+type completeMultipartArgs struct {
+	ObjectName string             `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
+	UploadID   string             `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
+	Parts      []completedPartArg `json:"parts" jsonschema:"ordered list of uploaded parts"`
+}
+type abortMultipartArgs struct {
+	ObjectName string `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
+	UploadID   string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
+}
+type listPartsArgs struct {
+	ObjectName string `json:"object_name" jsonschema:"object resource name of the in-progress multipart upload"`
+	UploadID   string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
+	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 1000"`
+}
+type auditEntryArgs struct {
+	EntryID string `json:"entry_id" jsonschema:"audit-log entry id"`
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────────

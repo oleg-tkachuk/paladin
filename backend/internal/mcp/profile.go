@@ -76,6 +76,9 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_test_subscription", Audience: "admin", Description: "Deliver a synthetic event to a subscription's sink (non-mutating)."},
 	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true},
 	{Name: "paladin_validate_cel", Audience: "admin", Description: "Compile-check a CEL expression against an PALADIN schema (Object | ObjectKey | AuditLogEntry | EventEnvelope)."},
+	{Name: "paladin_get_audit_entry", Audience: "admin", Description: "Read a single audit-log entry by id."},
+	{Name: "paladin_system_config", Audience: "admin", Description: "Read the platform's effective runtime config (admin profile only)."},
+	{Name: "paladin_reset_usage", Audience: "admin", Description: "Reset accumulated usage counters on a quota (limits unchanged).", Mutates: true},
 
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under an object_key with CEL filter.", CapabilityOp: "list"},
@@ -97,6 +100,17 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_batch_restore", Audience: "data", Description: "Async bulk restore of soft-deleted objects; returns an Operation.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_list_operations", Audience: "data", Description: "List async batch operations."},
 	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
+	{Name: "paladin_cancel_operation", Audience: "data", Description: "Request cancellation of a running operation.", Mutates: true},
+	{Name: "paladin_update_object", Audience: "data", Description: "Patch object metadata/tags/content-type via field mask (not the body).", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_delete_object_tags", Audience: "data", Description: "Remove specific tag keys from an object.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_list_distinct_tags", Audience: "data", Description: "List distinct tag keys/values in use under an object_key.", CapabilityOp: "list"},
+	{Name: "paladin_batch_update_tags", Audience: "data", Description: "Async bulk tag merge/replace across an object_key; returns an Operation.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_regenerate_upload_url", Audience: "data", Description: "Re-mint a presigned PUT URL for an in-progress (not completed) upload.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_initiate_multipart_upload", Audience: "data", Description: "Begin a multipart upload for a large object.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_presign_part", Audience: "data", Description: "Mint a presigned PUT URL for one part of a multipart upload.", CapabilityOp: "presign"},
+	{Name: "paladin_complete_multipart_upload", Audience: "data", Description: "Finalise a multipart upload from the ordered part list.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_abort_multipart_upload", Audience: "data", Description: "Abort an in-progress multipart upload and discard its parts.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_list_parts", Audience: "data", Description: "List parts uploaded so far for a multipart upload.", CapabilityOp: "list"},
 
 	// ── iam plane: identity surface ──────────────────────────────
 	// NB: most iam tools (login, mint-token, manage-user, manage-api-key)
@@ -136,6 +150,13 @@ var DefaultProfiles = map[string][]string{
 		"paladin_upload_object",
 		"paladin_complete_object",
 		"paladin_set_object_tags",
+		"paladin_update_object",
+		"paladin_delete_object_tags",
+		"paladin_regenerate_upload_url",
+		"paladin_initiate_multipart_upload",
+		"paladin_presign_part",
+		"paladin_complete_multipart_upload",
+		"paladin_abort_multipart_upload",
 	},
 	"admin": {
 		"*",
