@@ -171,6 +171,7 @@ auth: {
     dynamic_registration:     bool | *false
     authorization_code_ttl:   =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
     allowed_redirect_schemes: [...string] | *["https"]
+    consent_url:              string | *""
     seed_clients: [...{
       client_id:         string
       redirect_uris:     [...string] | *[]

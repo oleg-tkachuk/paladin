@@ -433,11 +433,13 @@ open deliberately — each notes why._
     resource; the ADR-0008 RS + plane interceptors enforce it.
   Unit-tested (PKCE, single-use, PKCE-mismatch, authorize allow/deny, DCR)
   + a testcontainers store test.
+- **Consent UI DONE (2026-06-27):** `frontend/src/app/oauth/consent/page.tsx`
+  (shadcn card matching login; native cross-origin form POST so the browser
+  follows the backend 302 to the client redirect_uri). Backend gained
+  `auth.oauth.consent_url`: `/authorize` redirects there when set, else
+  server-renders. `/oauth` added to the middleware public prefixes. Vitest +
+  eslint + tsc green.
 - **Definition of Done (remaining):**
-  - **Consent UI:** polished `/oauth/consent` page in
-    `frontend/src/app/oauth/consent/page.tsx`, localised like login. The
-    server-rendered consent works today; this is UX polish. The backend
-    `/oauth/authorize` POST contract is stable.
   - **Cedar gating:** wire the `AuthorizeOAuth` action once policy templates
     exist (Cedar is default-deny; today consent enforces scope-subset +
     authentication instead).

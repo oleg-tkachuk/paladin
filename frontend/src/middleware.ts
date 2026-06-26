@@ -39,6 +39,9 @@ const PUBLIC_PREFIXES = [
   // (which kubelet treats as success) and the real liveness route never
   // runs, defeating the probe.
   "/api/health",
+  // OAuth consent (ADR-0009) is a pre-login flow: the user arrives here
+  // unauthenticated to grant a client access, so it must not bounce to /login.
+  "/oauth",
   "/_next",
   "/favicon.ico",
   "/robots.txt",

@@ -75,9 +75,13 @@ may grant which scopes to which clients.
   The `AuthorizeOAuth` Cedar action is **deferred**: Cedar is default-deny,
   so wiring it without first authoring policy templates would make every
   consent fail. Scope-subset is the interim enforcement.
-- **Deferred within this ADR (tracked in BACKLOG):** the polished Next.js
-  consent page (the server-rendered page is the working v1; the backend
-  contract it posts to is stable); per-client rate-limiting on `/oauth/token`
-  (the api-token limiter exists to reuse); Cedar `AuthorizeOAuth` policy
-  gating; refresh-token family/reuse-detection analytics; and per-client
-  scope-grant memory (skip re-consent).
+- **Consent UI:** shipped both ways. The built-in server-rendered form works
+  standalone; when `auth.oauth.consent_url` is set, `/authorize` redirects to
+  the polished Next.js page (`frontend/src/app/oauth/consent`) which POSTs the
+  credentials + decision back. The form is a native cross-origin POST (not
+  fetch) so the browser follows the backend's 302 to the client redirect_uri
+  — including custom schemes like `claude-desktop://`.
+- **Deferred within this ADR (tracked in BACKLOG):** per-client rate-limiting
+  on `/oauth/token` (the api-token limiter exists to reuse); Cedar
+  `AuthorizeOAuth` policy gating; refresh-token family/reuse-detection
+  analytics; and per-client scope-grant memory (skip re-consent).

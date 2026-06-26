@@ -284,6 +284,12 @@ type OAuthAS struct {
 	// AllowedRedirectSchemes restricts registered redirect_uri schemes
 	// (e.g. https, claude-desktop, cursor). Empty → https only.
 	AllowedRedirectSchemes []string `yaml:"allowed_redirect_schemes" json:"allowed_redirect_schemes"`
+	// ConsentURL, when set, is the front-end consent page the /authorize GET
+	// redirects to (after validating the request) instead of server-rendering
+	// its built-in HTML form. The page collects credentials + the Allow/Deny
+	// decision and POSTs them back to /oauth/authorize. Empty → use the
+	// built-in server-rendered consent (works standalone, no front-end).
+	ConsentURL string `yaml:"consent_url" json:"consent_url"`
 	// SeedClients are first-party clients registered at boot so a fresh
 	// deployment works without DCR. Keyed by client_id.
 	SeedClients []OAuthSeedClient `yaml:"seed_clients" json:"seed_clients"`

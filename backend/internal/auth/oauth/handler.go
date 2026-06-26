@@ -116,6 +116,13 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
+		// When a front-end consent page is configured, hand off to it (the
+		// request is already validated); otherwise server-render the built-in
+		// form so the AS works standalone.
+		if h.cfg.ConsentURL != "" {
+			h.redirectToConsentUI(w, r, p, "")
+			return
+		}
 		h.renderConsent(w, client, p, "")
 		return
 	}
@@ -130,7 +137,12 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	tenantHint := r.PostForm.Get("tenant")
 	u, err := h.authenticate(r.Context(), subject, password, tenantHint)
 	if err != nil {
-		// Re-render with an error rather than leaking which factor failed.
+		// Bounce back to the consent UI with an error rather than leaking
+		// which factor failed.
+		if h.cfg.ConsentURL != "" {
+			h.redirectToConsentUI(w, r, p, "invalid_credentials")
+			return
+		}
 		h.renderConsent(w, client, p, "Invalid credentials or tenant.")
 		return
 	}
@@ -582,6 +594,34 @@ type consentView struct {
 	ClientName string
 	Scopes     []string
 	Error      string
+}
+
+// redirectToConsentUI hands the (already-validated) request off to the
+// configured front-end consent page, forwarding the OAuth params as query
+// string. The page collects credentials + the decision and POSTs them back to
+// /oauth/authorize. errCode (optional) lets the page show "invalid credentials"
+// on a retry.
+func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p authorizeParams, errCode string) {
+	u, err := url.Parse(h.cfg.ConsentURL)
+	if err != nil {
+		h.jsonError(w, http.StatusInternalServerError, "server_error", "consent_url misconfigured")
+		return
+	}
+	q := u.Query()
+	q.Set("client_id", p.ClientID)
+	q.Set("redirect_uri", p.RedirectURI)
+	q.Set("scope", p.Scope)
+	q.Set("state", p.State)
+	q.Set("code_challenge", p.CodeChallenge)
+	q.Set("code_challenge_method", p.CodeChallengeMethod)
+	if p.Resource != "" {
+		q.Set("resource", p.Resource)
+	}
+	if errCode != "" {
+		q.Set("error", errCode)
+	}
+	u.RawQuery = q.Encode()
+	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
 func (h *Handler) renderConsent(w http.ResponseWriter, client Client, p authorizeParams, errMsg string) {
