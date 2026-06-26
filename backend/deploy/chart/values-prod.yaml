@@ -68,6 +68,43 @@ config:
     # NEVER commit a real signing key here.
     signing_key: "<prod-signing-key-from-sealed-secret>"
 
+    # OAuth 2.1 Authorization Server (ADR-0009): the /oauth/authorize +
+    # /oauth/token + /oauth/register endpoints that mint the bearers the MCP
+    # Resource Server validates. For the end-to-end Claude Desktop / Cursor
+    # flow you must ALSO enable the RS side under `config.mcp.oauth`
+    # (ADR-0008) so the MCP server advertises this AS in its discovery
+    # metadata. Tokens reuse the signing_key + access/refresh TTLs above.
+    oauth:
+      enabled: true
+      # Browser-reachable consent page (the frontend route). Omit to fall
+      # back to the built-in server-rendered consent form.
+      consent_url: "https://paladin.example.com/oauth/consent"
+      # Dynamic Client Registration OFF in prod: only the seed_clients below
+      # may run the flow. Enable only behind a trusted ingress + rate limit.
+      dynamic_registration: false
+      authorization_code_ttl: "60s"
+      # Schemes a registered redirect_uri may use (desktop clients use custom
+      # schemes). redirect_uris are still matched EXACTLY, per client.
+      allowed_redirect_schemes: ["https", "claude-desktop", "cursor"]
+      # First-party clients seeded (idempotent upsert) at boot so the flow
+      # works without DCR. Public = PKCE-only, no secret in config.
+      # NOTE: confirm each redirect_uri against the client's published OAuth
+      # docs before rollout — they are matched exactly.
+      seed_clients:
+        - client_id: "claude-desktop"
+          redirect_uris:
+            - "claude-desktop://callback"
+            - "https://claude.ai/api/mcp/auth_callback"
+          allowed_scopes: ["paladin.read", "paladin.write"]
+          allowed_audiences: ["paladin-data"]
+          public: true
+        - client_id: "cursor"
+          redirect_uris:
+            - "cursor://anysphere.paladin/callback"
+          allowed_scopes: ["paladin.read"]
+          allowed_audiences: ["paladin-data"]
+          public: true
+
   security:
     log_sensitive: false
 
