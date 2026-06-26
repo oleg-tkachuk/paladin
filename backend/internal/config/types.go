@@ -716,6 +716,56 @@ type MCP struct {
 	// Tool-name patterns support trailing-* wildcard. Default list
 	// (when empty) is the built-in DefaultAlwaysDeny.
 	AlwaysDeny []string `yaml:"always_deny" json:"always_deny"`
+
+	// OAuth turns the streamable-HTTP MCP server into a spec-compliant
+	// OAuth 2.1 Resource Server (ADR-0008): it advertises where to
+	// authenticate (RFC 9728 / RFC 8414 metadata) and challenges
+	// unauthenticated requests with 401 + WWW-Authenticate. Disabled by
+	// default — the legacy X-PALADIN-Token header keeps working untouched.
+	OAuth MCPOAuth `yaml:"oauth" json:"oauth"`
+}
+
+// MCPOAuth configures the MCP server's OAuth 2.1 Resource-Server posture
+// (ADR-0008). The Authorization Server itself (the /authorize + /token +
+// registration endpoints) is a separate, deferred phase; this block only
+// makes the MCP server discoverable + enforce bearer auth at its edge.
+type MCPOAuth struct {
+	// Enabled gates the whole RS behaviour: the 401 challenge and the
+	// metadata endpoints. When false the transport behaves exactly as
+	// before (X-PALADIN-Token, missing token → 400).
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// ResourceURL is this MCP server's OAuth resource identifier — the
+	// canonical URL clients bind their token to (RFC 8707), e.g.
+	// "https://paladin.example.com/mcp". Published as `resource` in the
+	// protected-resource metadata and echoed in the WWW-Authenticate
+	// challenge.
+	ResourceURL string `yaml:"resource_url" json:"resource_url"`
+	// AuthorizationServers lists the issuer URLs of the OAuth Authorization
+	// Servers that can mint tokens for this resource (RFC 9728). A standard
+	// MCP client fetches each AS's own metadata from these URLs. Typically
+	// one entry: PALADIN IAM, or a federated IdP.
+	AuthorizationServers []string `yaml:"authorization_servers" json:"authorization_servers"`
+	// ScopesSupported is advertised in the protected-resource metadata so
+	// clients know which scopes to request. Optional.
+	ScopesSupported []string `yaml:"scopes_supported" json:"scopes_supported"`
+	// AuthorizationServer, when its Issuer is set, makes this process ALSO
+	// serve RFC 8414 Authorization-Server metadata at
+	// /.well-known/oauth-authorization-server — the PALADIN-IAM-is-the-AS case
+	// (same origin). Leave Issuer empty when delegating to an external IdP
+	// that serves its own metadata. The endpoint paths it advertises are
+	// the contract the deferred AS phase fulfils.
+	AuthorizationServer MCPOAuthAS `yaml:"authorization_server" json:"authorization_server"`
+}
+
+// MCPOAuthAS is the RFC 8414 Authorization-Server metadata this process
+// advertises when it is itself the AS. All fields are URLs; empty endpoint
+// fields are omitted from the document.
+type MCPOAuthAS struct {
+	Issuer                string `yaml:"issuer" json:"issuer"`
+	AuthorizationEndpoint string `yaml:"authorization_endpoint" json:"authorization_endpoint"`
+	TokenEndpoint         string `yaml:"token_endpoint" json:"token_endpoint"`
+	RegistrationEndpoint  string `yaml:"registration_endpoint" json:"registration_endpoint"`
+	JWKSURI               string `yaml:"jwks_uri" json:"jwks_uri"`
 }
 
 // MCPProfile is a named tool allow-list. Tool-name patterns support a

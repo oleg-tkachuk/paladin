@@ -17,6 +17,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0005](0005-cnpg-ha-ownership.md) | CNPG Postgres HA ownership & verify-full TLS | Accepted |
 | [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Accepted |
 | [0007](0007-postgres-connection-headroom.md) | Postgres connection headroom & pooling ownership | Accepted |
+| [0008](0008-mcp-oauth-resource-server.md) | MCP server as an OAuth 2.1 Resource Server | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

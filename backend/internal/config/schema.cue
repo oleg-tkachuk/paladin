@@ -388,6 +388,23 @@ mcp: {
     allow_write:     bool   | *false
     session_timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"
   }
+  // OAuth 2.1 Resource-Server posture for the streamable-HTTP MCP server
+  // (ADR-0008). Disabled by default — the X-PALADIN-Token header path is
+  // unchanged. When enabled, set resource_url + authorization_servers so
+  // standard MCP clients can discover where to authenticate.
+  oauth: {
+    enabled:               bool | *false
+    resource_url:          string | *""
+    authorization_servers: [...string] | *[]
+    scopes_supported:      [...string] | *[]
+    authorization_server: {
+      issuer:                 string | *""
+      authorization_endpoint: string | *""
+      token_endpoint:         string | *""
+      registration_endpoint:  string | *""
+      jwks_uri:               string | *""
+    }
+  }
 }
 
 llm: {

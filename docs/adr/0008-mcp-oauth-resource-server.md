@@ -1,0 +1,73 @@
+# ADR-0008: MCP server as an OAuth 2.1 Resource Server
+
+- **Status:** Accepted (RS phase implemented 2026-06-27; AS phase deferred
+  — see BACKLOG)
+- **Context:** The streamable-HTTP MCP server authenticated requests with a
+  non-standard `X-PALADIN-Token` header — a bearer the operator pasted into the
+  agent host's config. Standard MCP clients (Claude Desktop, Cursor)
+  implement the MCP Authorization spec (OAuth 2.1): they send
+  `Authorization: Bearer`, and on a 401 they expect a `WWW-Authenticate`
+  challenge that points at OAuth metadata so they can *discover* where to
+  authenticate and run an auth-code + PKCE flow. Against the old server they
+  could not connect — a missing/absent token got a flat `400` with no
+  discovery hint.
+
+  Building PALADIN into a full OAuth Authorization Server (browser consent,
+  `/authorize` + `/token`, dynamic client registration, PKCE, code storage)
+  is a large, multi-part effort with a frontend consent screen. The
+  Resource-Server half — discovery metadata + a spec-compliant challenge +
+  edge token validation — is small, self-contained, and unblocks standard
+  clients against *any* Authorization Server (PALADIN IAM later, or a federated
+  IdP now). So we split the work and ship the RS half first.
+
+## Decision
+
+Make the MCP server a spec-compliant OAuth 2.1 **Resource Server**, gated by
+`cfg.MCP.OAuth.Enabled` (off by default; the legacy `X-PALADIN-Token` path is
+unchanged when off):
+
+- **Discovery.** Serve `/.well-known/oauth-protected-resource` (RFC 9728)
+  advertising the resource identifier + the `authorization_servers` that
+  mint tokens for it. When PALADIN is itself the AS (same origin), also serve
+  `/.well-known/oauth-authorization-server` (RFC 8414) — driven by config,
+  advertising auth-code + refresh grants and mandatory PKCE S256 (the
+  contract the deferred AS phase fulfils). When delegating to a federated
+  IdP, leave the AS issuer empty and the client fetches the IdP's own
+  metadata.
+- **Challenge.** An unauthenticated (or invalid-token) `/mcp` request gets
+  `401 + WWW-Authenticate: Bearer resource_metadata="…"` (RFC 9728 §5.1) so
+  a compliant client can begin discovery. Invalid tokens carry
+  `error="invalid_token"` (RFC 6750).
+- **Token intake.** Accept the standard `Authorization: Bearer` header, with
+  `X-PALADIN-Token` kept as a fallback for existing bridge deployments
+  (`mcp.BearerToken`).
+- **Edge validation.** Validate the bearer at the MCP edge — signature +
+  issuer + expiry, but **not** audience: an agent token targets whichever
+  plane it calls (admin/data/iam), and the planes enforce audience
+  downstream. This reuses the existing `auth.JWTVerifier` / `JWKSVerifier`
+  via a shared `buildAgentVerifier`, which also feeds the session-subject
+  enrichment — one verifier, one policy.
+
+The capability model is untouched: OAuth authenticates the *principal*; the
+fine-grained `X-PALADIN-Capability` caveat authority is still operator-provisioned
+and never self-minted (an agent issuing its own capability stays in
+`DefaultAlwaysDeny`).
+
+## Consequences
+
+- Standard MCP clients can discover and authenticate against PALADIN without a
+  hand-pasted token, as soon as an Authorization Server exists to point at.
+- The RS works with either PALADIN-IAM-as-AS (future) or a federated IdP today —
+  the config decides; no code change to switch.
+- Edge validation turns a bad/expired token into an immediate, correct `401`
+  challenge instead of a confusing downstream `Unauthenticated` on the first
+  RPC. Any token the planes accept is signed by the same key, so it also
+  passes the edge — no behaviour change for valid callers.
+- **Deferred (the AS phase, tracked in BACKLOG):** `/authorize` with browser
+  consent, `/token`, dynamic client registration (RFC 7591), the
+  `oauth_clients` / `oauth_authorization_codes` / refresh-rotation storage,
+  audience-binding enforcement (RFC 8707), and the consent UI. Until then,
+  tokens come from `AuthService.Login` / `APITokenService.Create`.
+- Open decision (shared with "Phase 5b.1 — drop user-authn IAM, accept
+  OIDC"): whether the AS is PALADIN IAM or a federated OIDC IdP. The RS half is
+  identical either way, which is why it shipped first.

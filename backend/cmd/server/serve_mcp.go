@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -114,7 +115,7 @@ func runMCPBridge(ctx context.Context) {
 		))
 	case "http":
 		runHTTP(ctx, cfg, l, "bridge", func(r *http.Request) *mcp.Clients {
-			token := r.Header.Get("X-PALADIN-Token")
+			token := mcp.BearerToken(r)
 			if token == "" {
 				return nil
 			}
@@ -171,7 +172,7 @@ func runMCPEmbedded(ctx context.Context) {
 		))
 	case "http":
 		runHTTP(ctx, cfg, l, "embedded", func(r *http.Request) *mcp.Clients {
-			token := r.Header.Get("X-PALADIN-Token")
+			token := mcp.BearerToken(r)
 			if token == "" {
 				return nil
 			}
@@ -243,7 +244,29 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	tracked := mcp.TrackSessions(handler, sessions, subjectFn)
 
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", tracked)
+
+	// OAuth 2.1 Resource-Server posture (ADR-0008). When enabled, the MCP
+	// endpoint advertises where to authenticate (RFC 9728 / RFC 8414) and
+	// challenges unauthenticated requests with 401 + WWW-Authenticate so a
+	// standard MCP client can run discovery. Disabled → the legacy
+	// X-PALADIN-Token path is unchanged (missing token → 400 from getServer).
+	mcpHandler := http.Handler(tracked)
+	if cfg.MCP.OAuth.Enabled {
+		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
+		if cfg.MCP.OAuth.AuthorizationServer.Issuer != "" {
+			mux.Handle(mcp.WellKnownAuthorizationServer, mcp.AuthorizationServerMetadataHandler(cfg.MCP.OAuth.AuthorizationServer))
+		}
+		// Edge verifier: signature + issuer + expiry, NOT audience (an agent
+		// token targets whichever plane it calls; the planes do per-audience
+		// checks downstream). Without a usable verifier we can't enforce, so
+		// log and fall back to serving metadata only.
+		if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
+			mcpHandler = mcp.RequireBearer(tracked, v, oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL))
+		} else {
+			l.Warn("mcp oauth: bearer challenge disabled — no usable JWT verifier (set auth.signing_key or auth.jwks_url)")
+		}
+	}
+	mux.Handle("/mcp", mcpHandler)
 
 	// Expose the registry for the admin plane's MCPInspectService.ListSessions
 	// proxy. The endpoint re-verifies the admin-audience JWT the admin plane
@@ -341,29 +364,12 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 // signing key), so the column stays empty rather than trusting an unverified
 // token.
 func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*http.Request) string {
-	blank := func(*http.Request) string { return "" }
-	var verifier auth.TokenVerifier
-	switch {
-	case a.JWKSURL != "":
-		v := auth.NewJWKSVerifier(a.JWKSURL)
-		v.ExpectedIssuer = a.Issuer
-		v.Leeway = a.Leeway // ExpectedAudience left empty → any audience
-		if err := v.Start(ctx); err != nil {
-			l.Warn("agent_subject disabled: jwks verifier failed to start", zap.Error(err))
-			return blank
-		}
-		verifier = v
-	case a.SigningKey != "":
-		verifier = &auth.JWTVerifier{
-			Key:            []byte(a.SigningKey),
-			ExpectedIssuer: a.Issuer,
-			Leeway:         a.Leeway,
-		}
-	default:
-		return blank
+	verifier := buildAgentVerifier(ctx, a, l)
+	if verifier == nil {
+		return func(*http.Request) string { return "" }
 	}
 	return func(r *http.Request) string {
-		tok := r.Header.Get("X-PALADIN-Token")
+		tok := mcp.BearerToken(r)
 		if tok == "" {
 			return ""
 		}
@@ -373,4 +379,49 @@ func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*htt
 		}
 		return p.Subject
 	}
+}
+
+// buildAgentVerifier constructs the audience-agnostic JWT verifier the MCP
+// edge uses for both session-subject enrichment and the OAuth bearer
+// challenge (ADR-0008). Signature + issuer + expiry are checked;
+// ExpectedAudience is deliberately left empty because an agent token targets
+// whichever plane it calls (admin/data/iam) — the planes enforce audience
+// downstream. Returns nil when no key/JWKS is configured (a thin bridge),
+// so callers degrade gracefully rather than trusting unverified tokens.
+func buildAgentVerifier(ctx context.Context, a config.Auth, l *zap.Logger) auth.TokenVerifier {
+	switch {
+	case a.JWKSURL != "":
+		v := auth.NewJWKSVerifier(a.JWKSURL)
+		v.ExpectedIssuer = a.Issuer
+		v.Leeway = a.Leeway
+		if err := v.Start(ctx); err != nil {
+			l.Warn("mcp token verifier: jwks failed to start", zap.Error(err))
+			return nil
+		}
+		return v
+	case a.SigningKey != "":
+		return &auth.JWTVerifier{
+			Key:            []byte(a.SigningKey),
+			ExpectedIssuer: a.Issuer,
+			Leeway:         a.Leeway,
+		}
+	default:
+		return nil
+	}
+}
+
+// oauthResourceMetadataURL builds the absolute URL of the RFC 9728
+// protected-resource document from the configured resource URL's origin. The
+// WWW-Authenticate challenge points clients here to begin discovery. Falls
+// back to the root-relative path when resourceURL is empty/unparseable —
+// clients resolve it against the request origin.
+func oauthResourceMetadataURL(resourceURL string) string {
+	if resourceURL == "" {
+		return mcp.WellKnownProtectedResource
+	}
+	u, err := url.Parse(resourceURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return mcp.WellKnownProtectedResource
+	}
+	return u.Scheme + "://" + u.Host + mcp.WellKnownProtectedResource
 }

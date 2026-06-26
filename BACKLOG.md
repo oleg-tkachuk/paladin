@@ -402,20 +402,24 @@ open deliberately — each notes why._
 
 ### OAuth 2.0 authorization-code flow for MCP clients (Claude Desktop / Cursor / agent hosts)
 
-- **Status:** Deferred
-- **Reason:** Claude Desktop's "Custom Connectors" prefer OAuth
-  authorization-code with PKCE for browser-based consent. PALADIN today
-  authenticates MCP requests with either short-lived JWTs (15m, painful
-  to refresh manually in a Connector form) or long-lived API tokens
-  (paste-once, works fine but lacks browser consent UX). For now the
-  documented Claude Desktop integration uses an API token minted via
-  `APITokenService.Create`; OAuth is the proper-but-deferred path.
-- **Definition of Done:**
-  - **Discovery:** `GET /.well-known/oauth-protected-resource` (RFC
-    9728) on the MCP plane pointing at the auth server, and
-    `GET /.well-known/oauth-authorization-server` (RFC 8414) on the
-    IAM plane listing supported response_types, grant_types, PKCE
-    methods, scopes, token endpoint URL.
+- **Status:** Partial — the Resource-Server half landed (ADR-0008,
+  2026-06-27); the Authorization-Server half (the auth-code + PKCE flow,
+  consent UI, storage) remains deferred.
+- **RS side DONE (ADR-0008):** the streamable-HTTP MCP server is now a
+  spec-compliant OAuth 2.1 Resource Server when `mcp.oauth.enabled`:
+  serves `/.well-known/oauth-protected-resource` (RFC 9728) and, when it
+  is the AS, `/.well-known/oauth-authorization-server` (RFC 8414);
+  challenges unauthenticated `/mcp` with `401 + WWW-Authenticate`
+  (resource_metadata pointer); accepts `Authorization: Bearer` (X-PALADIN-Token
+  back-compat) and validates the token at the edge (signature/issuer/expiry,
+  audience-agnostic) via the shared `buildAgentVerifier`. See
+  `internal/mcp/oauth.go` + `cmd/server/serve_mcp.go`.
+- **Reason it remains:** Claude Desktop's "Custom Connectors" still need a
+  real Authorization Server to point at — the auth-code + PKCE browser
+  flow that mints the bearer the RS now validates. PALADIN today still mints
+  tokens via `APITokenService.Create` / `AuthService.Login` (password),
+  not a browser consent flow.
+- **Definition of Done (remaining — the AS half):**
   - **Endpoints (RFC 6749 form-encoded, NOT Connect):**
     - `GET /oauth/authorize` — reuses existing IAM session (refresh
       cookie); when not logged in, redirects to `/login?next=...`.
