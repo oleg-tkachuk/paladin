@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
 	"github.com/oleg-tkachuk/paladin/internal/middleware"
@@ -274,6 +275,27 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		connectiam.NewUserSettingsServer(userSettingsH),
 		iamOpts,
 	))
+
+	// OAuth 2.1 Authorization Server (ADR-0009): mount the raw-HTTP /oauth/*
+	// endpoints on the IAM mux and seed first-party clients. Reuses the same
+	// issuer + refresh decoder the Connect AuthService uses, so OAuth-minted
+	// bearers are indistinguishable from login-minted ones downstream.
+	if cfg.Auth.OAuth.Enabled {
+		oauthStore := oauth.NewPgxStore(deps.Pool)
+		for _, sc := range cfg.Auth.OAuth.SeedClients {
+			if serr := oauthStore.UpsertClient(ctx, oauth.Client{
+				ClientID:         sc.ClientID,
+				RedirectURIs:     sc.RedirectURIs,
+				AllowedScopes:    sc.AllowedScopes,
+				AllowedAudiences: sc.AllowedAudiences,
+				Public:           sc.Public,
+			}); serr != nil {
+				return nil, nil, nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
+			}
+		}
+		oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).Mount(iamMux)
+		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
+	}
 
 	return dataMux, iamMux, healthH, nil
 }

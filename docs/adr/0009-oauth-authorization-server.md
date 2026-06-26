@@ -70,6 +70,14 @@ may grant which scopes to which clients.
   follow-up; the backend contract it posts to is stable.
 - Federated OIDC (Phase 5b.1) remains a clean future swap: the RS half is
   identical, and the AS endpoints map onto an external IdP's equivalents.
-- **Deferred within this ADR:** the polished frontend consent page, refresh
-  token family/repudiation analytics, and per-client scope-grant memory
-  (skip re-consent). Tracked in BACKLOG.
+- **Authz, as shipped:** consent is gated on resource-owner authentication
+  + the requested scopes being a subset of the client's registered grant.
+  The `AuthorizeOAuth` Cedar action is **deferred**: Cedar is default-deny,
+  so wiring it without first authoring policy templates would make every
+  consent fail. Scope-subset is the interim enforcement.
+- **Deferred within this ADR (tracked in BACKLOG):** the polished Next.js
+  consent page (the server-rendered page is the working v1; the backend
+  contract it posts to is stable); per-client rate-limiting on `/oauth/token`
+  (the api-token limiter exists to reuse); Cedar `AuthorizeOAuth` policy
+  gating; refresh-token family/reuse-detection analytics; and per-client
+  scope-grant memory (skip re-consent).
