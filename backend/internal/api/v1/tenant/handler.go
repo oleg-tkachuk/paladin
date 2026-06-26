@@ -352,16 +352,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 				"display_name": args.DisplayName,
 			})
 	}); err != nil {
-		switch {
-		case errors.Is(err, ErrTenantIDConflict),
-			errors.Is(err, ErrSlugConflict),
-			errors.Is(err, ErrDisplayNameConflict):
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		case errors.Is(err, ErrDefaultBindingBucketMissing):
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
-		default:
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: %w", err))
-		}
+		return nil, apiutil.MapError(fmt.Errorf("create tenant: %w", err))
 	}
 	t, err := h.repo.Get(ctx, args.TenantID)
 	if err != nil {
@@ -527,13 +518,7 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 				"resource_version": t.ResourceVersion,
 			})
 	}); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		if errors.Is(err, ErrDisplayNameConflict) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &t, nil
 }
@@ -577,24 +562,10 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 				"force":            force,
 			})
 	}); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		if errors.Is(err, ErrNotFound) {
-			return connect.NewError(connect.CodeNotFound, err)
-		}
-		if errors.Is(err, ErrAlreadyDeleted) {
-			// Soft-delete on a trashed row → noop'ish; surface as a
-			// FailedPrecondition so the UI can show "this is already
-			// in the trash" instead of treating it as success.
-			return connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		if errors.Is(err, ErrTenantHasChildren) {
-			// force-delete blocked by the RESTRICT FK — actionable text
-			// instead of an opaque Internal error.
-			return connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		// ErrVersionMismatch→Aborted, ErrNotFound→NotFound,
+		// ErrAlreadyDeleted/ErrTenantHasChildren→FailedPrecondition — all
+		// via the central registry (ADR-0002).
+		return apiutil.MapError(err)
 	}
 	return nil
 }
@@ -626,16 +597,7 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 				"display_name": t.DisplayName,
 			})
 	}); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		if errors.Is(err, ErrNotTrashed) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		if errors.Is(err, ErrSlugConflict) || errors.Is(err, ErrDisplayNameConflict) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &t, nil
 }
@@ -673,10 +635,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 				"tenant_id": tenantID.String(),
 			})
 	}); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return connect.NewError(connect.CodeNotFound, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	return nil
 }
@@ -704,16 +663,7 @@ func (h *Handler) RenameTenantSlug(ctx context.Context, args RenameTenantSlugArg
 	}
 	t, err := h.repo.Rename(ctx, args)
 	if err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		if errors.Is(err, ErrSlugConflict) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		}
-		if errors.Is(err, ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &t, nil
 }
@@ -791,3 +741,18 @@ var ErrDefaultBindingBucketMissing = errors.New(
 // Postgres FK-violation string mapped to Internal.
 var ErrTenantHasChildren = errors.New(
 	"tenant still has object keys or objects; delete them before hard-deleting the tenant")
+
+// Register this package's sentinels with the central error→Connect-code
+// mapper (ADR-0002). Each maps consistently to one code across every RPC,
+// so the per-handler if/else ladders collapse to apiutil.MapError(err).
+func init() {
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
+	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrTenantIDConflict, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrDisplayNameConflict, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrAlreadyDeleted, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrNotTrashed, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrDefaultBindingBucketMissing, connect.CodeInvalidArgument)
+	apiutil.RegisterError(ErrTenantHasChildren, connect.CodeFailedPrecondition)
+}

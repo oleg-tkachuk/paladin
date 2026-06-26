@@ -467,11 +467,13 @@ var ErrObjectKeyHasObjects = errors.New(
 var ErrVersionMismatch = errors.New("resource_version mismatch")
 
 func mapVersionErr(err error) error {
-	if errors.Is(err, ErrVersionMismatch) {
-		return connect.NewError(connect.CodeAborted, err)
-	}
-	if errors.Is(err, ErrObjectKeyHasObjects) {
-		return connect.NewError(connect.CodeFailedPrecondition, err)
-	}
-	return connect.NewError(connect.CodeInternal, err)
+	return apiutil.MapError(err)
+}
+
+// Register this package's sentinels with the central error→Connect-code
+// mapper (ADR-0002). mapVersionErr now delegates to apiutil.MapError; the
+// registry — not a per-handler if/else — decides the code.
+func init() {
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrObjectKeyHasObjects, connect.CodeFailedPrecondition)
 }

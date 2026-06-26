@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 )
@@ -100,10 +101,7 @@ func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*Object
 	args.TenantID = t
 	ot, err := h.repo.Update(ctx, args)
 	if err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &ot, nil
 }
@@ -117,10 +115,7 @@ func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVers
 		return err
 	}
 	if err := h.repo.Delete(ctx, t, slug, expectedVersion); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	return nil
 }
@@ -137,3 +132,10 @@ func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken 
 }
 
 var ErrVersionMismatch = errors.New("resource_version mismatch")
+
+// Register this package's sentinels with the central error→Connect-code
+// mapper (ADR-0002) so handlers route through apiutil.MapError for a
+// consistent code instead of a hand-written per-handler if/else.
+func init() {
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+}

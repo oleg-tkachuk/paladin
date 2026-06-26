@@ -28,8 +28,15 @@ FailedPrecondition`.
 
 - Codes are consistent across RPCs; adding a mapping is one table/registry
   line.
-- Adoption is incremental: the chokepoint exists and `errors.Is`-based
-  matching means existing local checks keep working; handlers route their
-  generic `CodeInternal` fallthroughs through `MapError` as they're
-  touched, rather than a big-bang sweep.
+- The `internal/api/v1` plane is fully adopted: every package that owns
+  domain sentinels (`object`, `object_key`, `object_tag`, `bucket`,
+  `tenant`) registers them in an `init()` and collapses its
+  `CodeInternal`-default classification ladders to `apiutil.MapError(err)`.
+  A per-package `TestErrorRegistration` pins each sentinel→code so the
+  collapsed ladders cannot drift. Ladders with a deliberate non-`Internal`
+  default (`object_key.Rebind` → `FailedPrecondition`, `object.MapResolveErr`
+  → `NotFound`) are left intact — `MapError` defaults to `CodeInternal` and
+  cannot replicate those.
+- Remaining planes (`internal/api/admin/v1`, `internal/api/iam/v1`) still
+  use per-handler if/else over their own sentinels — see BACKLOG.
 - `.Error()` substring matching is forbidden going forward.

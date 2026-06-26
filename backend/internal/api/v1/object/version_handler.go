@@ -76,10 +76,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
 	if err != nil {
-		if errors.Is(err, ErrVersionNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	if v.ObjectID != parent.ObjectID {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("version does not belong to the named object"))
@@ -111,10 +108,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name string) (*Obje
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
 	if err != nil {
-		if errors.Is(err, ErrVersionNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	if v.ObjectID != parent.ObjectID {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("version does not belong to the named object"))

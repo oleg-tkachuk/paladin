@@ -1067,10 +1067,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 			})
 	})
 	if err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &obj, nil
 }
@@ -1201,10 +1198,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 				"bypass_governance": bypassGovernance,
 			})
 	}); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	// DB row is gone (and the event is enqueued). Now remove the bytes; a
 	// failure here orphans the object in S3 but cannot resurrect a dangling
@@ -1523,7 +1517,7 @@ func mapCreateErr(err error) error {
 			return connect.NewError(connect.CodeAlreadyExists, err)
 		}
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return apiutil.MapError(err)
 }
 
 // ErrVersionMismatch is returned by Repository implementations when an
@@ -1537,4 +1531,5 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound)
 }

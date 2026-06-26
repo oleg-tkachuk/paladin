@@ -1178,6 +1178,24 @@ frontend, infra). Items the audit surfaced that aren't already covered
 elsewhere in this file. Handler-level tracing/metrics intentionally has
 no entry here — it is the existing "OpenTelemetry baseline" item._
 
+### ADR-0002 adoption: admin/v1 + iam/v1 planes
+
+- **Status:** Deferred (v1 plane is done; these planes are unswept).
+- **Reason:** ADR-0002's `apiutil.MapError` chokepoint is now fully
+  adopted across `internal/api/v1` (object, object_key, object_tag,
+  bucket, tenant register their sentinels in `init()` and route through
+  `MapError`). The `internal/api/admin/v1` and `internal/api/iam/v1`
+  planes still map their own sentinels with per-handler if/else:
+  `admindomain.{ErrNotFound,ErrVersionMismatch,ErrConflict}`,
+  `auth/store.{ErrNotFound,ErrVersionMismatch,ErrSubjectTaken}`,
+  `usersettingsh.ErrNotFound`. They were outside the v1 sweep scope.
+- **Definition of Done:** each admin/iam handler package registers its
+  sentinels via `apiutil.RegisterError` in `init()`, collapses its
+  `CodeInternal`-default classification ladders to `apiutil.MapError`,
+  and carries a `TestErrorRegistration` table pinning sentinel→code.
+  Ladders with a deliberate non-`Internal` default stay as-is.
+- **Blockers:** none — mechanical, follow the v1 pattern.
+
 ## CI / Delivery pipeline
 
 _Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)

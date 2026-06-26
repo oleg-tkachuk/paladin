@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
@@ -118,10 +119,7 @@ func (h *Handler) UpdateBucket(ctx context.Context, args UpdateArgs) (*Bucket, e
 	}
 	b, err := h.repo.Update(ctx, args)
 	if err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &b, nil
 }
@@ -140,10 +138,7 @@ func (h *Handler) DeleteBucket(ctx context.Context, backendID, bucketName string
 			fmt.Errorf("bucket has %d ObjectKey references; remove them first", count))
 	}
 	if err := h.repo.Delete(ctx, backendID, bucketName, expectedVersion); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	if deleteRemote && h.provisioner != nil {
 		if err := h.provisioner.DeleteBucket(ctx, backendID, bucketName); err != nil {
@@ -164,3 +159,10 @@ func (h *Handler) ListBuckets(ctx context.Context, args ListArgs) ([]Bucket, str
 }
 
 var ErrVersionMismatch = errors.New("resource_version mismatch")
+
+// Register this package's sentinels with the central error→Connect-code
+// mapper (ADR-0002) so handlers route through apiutil.MapError for a
+// consistent code instead of a hand-written per-handler if/else.
+func init() {
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+}
