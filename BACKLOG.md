@@ -419,62 +419,34 @@ open deliberately — each notes why._
   flow that mints the bearer the RS now validates. PALADIN today still mints
   tokens via `APITokenService.Create` / `AuthService.Login` (password),
   not a browser consent flow.
-- **Definition of Done (remaining — the AS half):**
-  - **Endpoints (RFC 6749 form-encoded, NOT Connect):**
-    - `GET /oauth/authorize` — reuses existing IAM session (refresh
-      cookie); when not logged in, redirects to `/login?next=...`.
-      Renders a consent screen (frontend route) showing client +
-      requested scopes; POST commits the decision and redirects with
-      `code` to the registered `redirect_uri`.
-    - `POST /oauth/token` — exchanges `code + code_verifier` for an
-      `access_token` (re-using the existing `auth.JWTIssuer` with
-      audience binding) and optionally a `refresh_token`. PKCE S256
-      mandatory for public clients.
-    - `POST /oauth/register` (RFC 7591) — dynamic client registration.
-      Behind a feature flag; first cut can hardcode known clients
-      (`claude-desktop`, `cursor`) in config.
-  - **Storage:**
-    - `oauth_clients` (id, redirect_uris[], allowed_scopes[],
-      secret_hash NULL for public, created_at).
-    - `oauth_authorization_codes` (code_hash PK, client_id, user_id,
-      redirect_uri, code_challenge, scopes[], expires_at <60s,
-      used_at NULL).
-    - `oauth_refresh_tokens` — either new table or extend the
-      existing `refresh_tokens` schema with an `oauth_client_id`
-      column + audience tag.
-    - All on `paladin_app` with RLS keyed on `user_id` / `tenant_id`.
-  - **Consent UI:** new `/oauth/consent` page in
-    `frontend/src/app/oauth/consent/page.tsx` rendering client name,
-    scope list, Allow/Deny buttons; posts the decision back to the
-    backend `/oauth/authorize` endpoint via the existing IAM
-    transport. Localised same as login.
-  - **Audience binding (RFC 8707):** access tokens carry `aud` set
-    to the resource indicator the client requested (e.g.
-    `mcp.paladin.local`); existing JWT verifier on the MCP plane
-    enforces it. No data-plane token usable on admin and vice versa.
-  - **Hardening:**
-    - Codes single-use (mark `used_at` atomically; reject reuse).
-    - Refresh tokens rotated on every grant (RFC 6749 §6).
-    - `client_secret` (when present) hashed with argon2id, like
-      api_tokens.
-    - Rate-limit `/oauth/token` per client_id (re-use the
-      api_token limiter).
-    - CORS on `/oauth/token` for browser-based clients (preflight
-      from Claude Desktop's renderer is acceptable).
-  - **Config block** `oauth: { enabled: bool, dynamic_registration:
-      bool, access_token_ttl, refresh_token_ttl,
-      allowed_redirect_schemes: [https, claude-desktop, cursor] }`.
-  - **Tests:**
-    - Unit: PKCE verifier, code single-use, expiry, audience
-      validation, refresh rotation.
-    - Integration (hurl in `tests/api/e2e/oauth.hurl`): full
-      authorise → token → refresh → revoke loop.
-    - Manual: real Claude Desktop Custom Connector against
-      `paladin.local` end-to-end.
-  - **Cedar gating:** `oauth:authorize` action — admins control
-    which roles can grant which scopes to which clients.
-  - BACKLOG.md entry deleted in the same commit that lands the
-    full Phase-1 slice.
+- **AS backend DONE (ADR-0009, 2026-06-27):** the full server-side
+  Authorization Server shipped across three slices —
+  - PKCE (RFC 7636) S256 primitive; `auth.oauth` config + CUE.
+  - migration 043 (`oauth_clients`, `oauth_authorization_codes`, no RLS —
+    pre-tenant like users/refresh_tokens) + a pgx store (single-use codes,
+    sha256-at-rest, bcrypt client secrets).
+  - `/oauth/authorize` (server-rendered login+consent → PKCE-bound code),
+    `/oauth/token` (authorization_code + refresh_token, audience-bound mint
+    via the shared issuer, refresh rotation), `/oauth/register` (RFC 7591
+    DCR, flag-gated), wired on the IAM mux with seed-client provisioning.
+    Audience binding (RFC 8707): the access token's `aud` is the requested
+    resource; the ADR-0008 RS + plane interceptors enforce it.
+  Unit-tested (PKCE, single-use, PKCE-mismatch, authorize allow/deny, DCR)
+  + a testcontainers store test.
+- **Definition of Done (remaining):**
+  - **Consent UI:** polished `/oauth/consent` page in
+    `frontend/src/app/oauth/consent/page.tsx`, localised like login. The
+    server-rendered consent works today; this is UX polish. The backend
+    `/oauth/authorize` POST contract is stable.
+  - **Cedar gating:** wire the `AuthorizeOAuth` action once policy templates
+    exist (Cedar is default-deny; today consent enforces scope-subset +
+    authentication instead).
+  - **Hardening follow-ups:** per-client rate-limit on `/oauth/token` (reuse
+    the api-token limiter); CORS on `/oauth/token` for browser clients;
+    refresh-token reuse-detection analytics.
+  - **Tests:** hurl e2e (`tests/api/e2e/oauth.hurl`) authorise→token→refresh
+    →revoke; manual Claude Desktop Custom Connector against `paladin.local`.
+  - Delete this entry when the consent UI + Cedar gating land.
 - **Blockers:**
   - Decide whether to keep IAM as the auth server or fold it into a
     federated OIDC IdP (overlaps with the existing
