@@ -28,7 +28,7 @@ var migrateCmd = &cobra.Command{
 		defer stop()
 
 		cfg, l, db, otelShutdown := boot(ctx)
-		defer func() { _ = db.Close }()
+		defer db.Close()
 		defer flushOTel(otelShutdown)
 
 		if err := db.RunMigrationsWith(ctx, migrations.FS, cfg.Datastores.Postgres); err != nil && !errors.Is(err, context.Canceled) {

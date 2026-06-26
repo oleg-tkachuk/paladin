@@ -20,7 +20,7 @@ var serveAPICmd = &cobra.Command{
 		defer stop()
 
 		cfg, l, db, otelShutdown := boot(ctx)
-		defer func() { _ = db.Close }()
+		defer db.Close()
 		defer flushOTel(otelShutdown)
 
 		deps, err := app.BuildSharedDeps(ctx, cfg, db, l)

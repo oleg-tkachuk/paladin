@@ -102,7 +102,7 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}
 	if err := db.Ping(ctx); err != nil {
-		_ = db.Close
+		db.Close()
 		l.Fatal("failed to ping database", zap.Error(err))
 	}
 	return cfg, l, db, otelShutdown

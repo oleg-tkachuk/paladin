@@ -133,7 +133,7 @@ func runMCPBridge(ctx context.Context) {
 // graph the listener subcommands use; the only difference is no TCP.
 func runMCPEmbedded(ctx context.Context) {
 	cfg, l, db, otelShutdown := boot(ctx)
-	defer func() { _ = db.Close }()
+	defer db.Close()
 	defer flushOTel(otelShutdown)
 
 	deps, err := app.BuildSharedDeps(ctx, cfg, db, l)

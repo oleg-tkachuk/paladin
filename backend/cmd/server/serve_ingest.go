@@ -39,7 +39,7 @@ var serveIngestCmd = &cobra.Command{
 		defer stop()
 
 		cfg, l, db, otelShutdown := boot(ctx)
-		defer func() { _ = db.Close }()
+		defer db.Close()
 		defer flushOTel(otelShutdown)
 
 		if !cfg.Ingest.Enabled {

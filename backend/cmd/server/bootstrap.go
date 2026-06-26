@@ -28,7 +28,7 @@ var bootstrapCmd = &cobra.Command{
 		defer stop()
 
 		cfg, l, db, otelShutdown := boot(ctx)
-		defer func() { _ = db.Close }()
+		defer db.Close()
 		defer flushOTel(otelShutdown)
 
 		if err := bootstrappkg.EnsureAdmin(ctx, cfg.Bootstrap.Admin, bootstrappkg.Deps{
