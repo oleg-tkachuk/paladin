@@ -164,6 +164,21 @@ auth: {
   access_token_ttl:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   refresh_token_ttl:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
   scoped_token_max_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+  // OAuth 2.1 Authorization Server (ADR-0009). Disabled by default; tokens
+  // reuse the signing_key + *_token_ttl above.
+  oauth: {
+    enabled:                  bool | *false
+    dynamic_registration:     bool | *false
+    authorization_code_ttl:   =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
+    allowed_redirect_schemes: [...string] | *["https"]
+    seed_clients: [...{
+      client_id:         string
+      redirect_uris:     [...string] | *[]
+      allowed_scopes:    [...string] | *[]
+      allowed_audiences: [...string] | *[]
+      public:            bool | *true
+    }] | *[]
+  }
 }
 
 security: {

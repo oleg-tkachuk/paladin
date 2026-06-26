@@ -259,6 +259,43 @@ type Auth struct {
 	AccessTokenTTL    time.Duration `yaml:"access_token_ttl" json:"access_token_ttl"`
 	RefreshTokenTTL   time.Duration `yaml:"refresh_token_ttl" json:"refresh_token_ttl"`
 	ScopedTokenMaxTTL time.Duration `yaml:"scoped_token_max_ttl" json:"scoped_token_max_ttl"`
+
+	// OAuth turns IAM into an OAuth 2.1 Authorization Server (ADR-0009):
+	// the /oauth/authorize + /oauth/token + /oauth/register endpoints that
+	// mint the bearers the MCP Resource Server (ADR-0008) validates.
+	// Disabled by default.
+	OAuth OAuthAS `yaml:"oauth" json:"oauth"`
+}
+
+// OAuthAS configures the IAM-hosted OAuth 2.1 Authorization Server (ADR-0009).
+// Tokens are minted by the same issuer.Issuer the login path uses, so the
+// SigningKey / AccessTokenTTL / RefreshTokenTTL on the parent Auth block
+// apply; this block adds only the OAuth-specific knobs.
+type OAuthAS struct {
+	// Enabled mounts the /oauth/* endpoints. Off → IAM serves only the
+	// existing Connect AuthService.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// DynamicRegistration gates POST /oauth/register (RFC 7591). When false,
+	// only pre-seeded clients (SeedClients) can be used.
+	DynamicRegistration bool `yaml:"dynamic_registration" json:"dynamic_registration"`
+	// AuthorizationCodeTTL bounds how long an issued code is valid before
+	// the token exchange must happen. Spec recommends ≤10m; we default 60s.
+	AuthorizationCodeTTL time.Duration `yaml:"authorization_code_ttl" json:"authorization_code_ttl"`
+	// AllowedRedirectSchemes restricts registered redirect_uri schemes
+	// (e.g. https, claude-desktop, cursor). Empty → https only.
+	AllowedRedirectSchemes []string `yaml:"allowed_redirect_schemes" json:"allowed_redirect_schemes"`
+	// SeedClients are first-party clients registered at boot so a fresh
+	// deployment works without DCR. Keyed by client_id.
+	SeedClients []OAuthSeedClient `yaml:"seed_clients" json:"seed_clients"`
+}
+
+// OAuthSeedClient is a pre-registered (usually public / PKCE) OAuth client.
+type OAuthSeedClient struct {
+	ClientID         string   `yaml:"client_id" json:"client_id"`
+	RedirectURIs     []string `yaml:"redirect_uris" json:"redirect_uris"`
+	AllowedScopes    []string `yaml:"allowed_scopes" json:"allowed_scopes"`
+	AllowedAudiences []string `yaml:"allowed_audiences" json:"allowed_audiences"`
+	Public           bool     `yaml:"public" json:"public"`
 }
 
 type Security struct {
