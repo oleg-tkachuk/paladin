@@ -127,38 +127,6 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
-	if h.events == nil {
-		return
-	}
-	actor := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		actor = p.Subject
-	}
-	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
-		Type:         eventType,
-		At:           time.Now().UTC(),
-		TenantID:     tenantID.String(),
-		ResourceName: resourceName,
-		ActorSubject: actor,
-		Payload:      payload,
-	})
-	if err != nil {
-		h.log.Warn("object_key event fan-out failed",
-			zap.String("event_type", eventType),
-			zap.String("tenant_id", tenantID.String()),
-			zap.String("resource", resourceName),
-			zap.Error(err),
-		)
-		return
-	}
-	h.log.Debug("object_key event queued",
-		zap.String("event_type", eventType),
-		zap.String("tenant_id", tenantID.String()),
-		zap.Int("subscriptions_matched", queued),
-	)
-}
-
 // dispatchEventTx fans the event out on the caller's tx so the outbox rows
 // commit atomically with the object_key mutation (ADR-0003). Returns the
 // error (caller rolls back); nil-safe.

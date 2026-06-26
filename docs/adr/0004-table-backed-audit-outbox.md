@@ -47,13 +47,17 @@ unacceptable under load:
   done together or back-to-back.
 - Benchmark gate before committing to (A): p99 of the mutating RPCs with
   the synchronous insert must stay within budget; if not, fall back to (B).
-  - **2026-06-26:** the gate is now measurable —
+  - **2026-06-26:** the gate is now measured at two levels.
     `BenchmarkAuditInterceptor` (`internal/middleware/audit_bench_test.go`)
     isolates the interceptor's non-DB overhead (~0.5µs, 152 B/6 allocs —
-    negligible) from the synchronous-insert tax, which is just the DB
-    append latency. Swap the in-test `latencyWriter` for the Postgres
-    `AuditRepository` to read the gate against a real DB; form (B) is
-    triggered only if that delta pushes a mutating RPC's p99 over budget.
+    negligible). `BenchmarkAuditInsertDurable`
+    (`internal/integration/audit_insert_bench_test.go`, `-tags=integration`,
+    testcontainers Postgres) measures the real synchronous-insert tax: on
+    postgres:17 / Apple M3 Max, **~0.16–0.18 ms/op** per audit row
+    (no_payload 185µs / with ~1KB payload 160µs). That is the per-mutating-
+    RPC audit cost; it sits well within budget, so form (A) holds and form
+    (B) is NOT triggered. Re-run the integration bench in the target
+    environment to confirm the gate before scaling.
 
 ## Status of implementation (2026-06)
 

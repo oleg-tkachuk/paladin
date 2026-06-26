@@ -36,13 +36,11 @@ linters:
     - whitespace # leading/trailing newlines in blocks
 
   # Explicitly off — high-churn complexity/style metrics we don't gate on.
+  # NB: `unused` (a standard linter) is now ON — the dead-code pass it gated
+  # on (the non-Tx dispatchEvent twins superseded by the ADR-0003 tx-seam, a
+  # retired deliverHTTP wrapper, an unused STS interface, dead test scaffold)
+  # landed 2026-06-26.
   disable:
-    # `unused` (a standard linter) is deferred: it flags ~9 genuinely-dead
-    # funcs/fields (the non-Tx dispatchEvent twins superseded by the ADR-0003
-    # tx-seam, a retired deliverHTTP, an unused STS type, two test fields).
-    # Removing them is a clean but separate dead-code pass — re-enable after.
-    # Tracked in BACKLOG (golangci follow-ups).
-    - unused
     - cyclop
     - depguard
     - exhaustruct

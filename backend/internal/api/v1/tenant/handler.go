@@ -204,42 +204,6 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-// dispatchEvent is best-effort: the lifecycle write already committed
-// by the time we get here, so a fan-out failure must not flip the
-// RPC reply to error. We log + return. The dispatcher pod's outbox
-// reaper retries delivery from the row; this layer's only job is to
-// land the row (or quietly miss it if the producer is unconfigured).
-func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
-	if h.events == nil {
-		return
-	}
-	actor := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		actor = p.Subject
-	}
-	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
-		Type:         eventType,
-		At:           time.Now().UTC(),
-		TenantID:     tenantID.String(),
-		ResourceName: resourceName,
-		ActorSubject: actor,
-		Payload:      payload,
-	})
-	if err != nil {
-		h.log.Warn("tenant event fan-out failed",
-			zap.String("event_type", eventType),
-			zap.String("tenant_id", tenantID.String()),
-			zap.Error(err),
-		)
-		return
-	}
-	h.log.Debug("tenant event queued",
-		zap.String("event_type", eventType),
-		zap.String("tenant_id", tenantID.String()),
-		zap.Int("subscriptions_matched", queued),
-	)
-}
-
 // dispatchEventTx fans the event out on the caller's tx so the outbox rows
 // commit atomically with the tenant mutation (ADR-0003). Unlike
 // dispatchEvent, an error here is RETURNED so the caller rolls the mutation

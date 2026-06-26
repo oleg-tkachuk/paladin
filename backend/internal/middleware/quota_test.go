@@ -21,13 +21,6 @@ func (f *fakeQuotaReader) GetTenant(_ context.Context, _ uuid.UUID) (admindomain
 	return f.q, f.err
 }
 
-// fakeRequest implements just enough of connect.AnyRequest for the
-// interceptor to read its size hint and procedure path.
-type fakeRequest struct {
-	procedure string
-	msg       any
-}
-
 type fakeUploadObjectRequest struct {
 	sizeHint int64
 }
@@ -137,6 +130,3 @@ func (q *QuotaSoftCheck) checkUploadAt(ctx context.Context, procedure string, ms
 	}
 	return nil
 }
-
-// silence unused
-var _ = fakeRequest{}

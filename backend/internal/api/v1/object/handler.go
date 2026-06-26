@@ -396,43 +396,6 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	return err
 }
 
-// dispatchEvent fans out an object lifecycle event. Best-effort:
-// the lifecycle write already committed by the time we get here.
-func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
-	if h.events == nil {
-		return
-	}
-	actor := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		actor = p.Subject
-	}
-	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
-		Type:         eventType,
-		At:           time.Now().UTC(),
-		TenantID:     tenantID.String(),
-		ResourceName: resourceName,
-		ActorSubject: actor,
-		Payload:      payload,
-	})
-	if err != nil {
-		if h.log != nil {
-			h.log.Warn("object event fan-out failed",
-				zap.String("event_type", eventType),
-				zap.String("tenant_id", tenantID.String()),
-				zap.String("resource", resourceName),
-				zap.Error(err),
-			)
-		}
-		return
-	}
-	if h.log != nil {
-		h.log.Debug("object event queued",
-			zap.String("event_type", eventType),
-			zap.Int("subscriptions_matched", queued),
-		)
-	}
-}
-
 func objectResourceName(tenantID uuid.UUID, objectKey, key string) string {
 	return fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", tenantID, objectKey, key)
 }

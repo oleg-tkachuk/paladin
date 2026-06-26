@@ -1211,10 +1211,11 @@ of the pipeline._
   because each needs its own fix pass first — adopting them is the remaining
   work.
 - **Definition of Done (remaining), each its own no-behaviour-change pass:**
-  - Re-enable `unused`: remove the ~9 dead funcs/fields it flags (the non-Tx
-    `dispatchEvent` twins superseded by the ADR-0003 tx-seam, a retired
-    `deliverHTTP`, an unused STS type, two test fields), then drop `unused`
-    from the `disable` list.
+  - `unused` — DONE (2026-06-26): removed the 9 dead items (5× non-Tx
+    `dispatchEvent` twins superseded by the ADR-0003 tx-seam, the
+    `deliverHTTP` wrapper, the `statelessSTSClient` interface, and the
+    `fakeRequest` test scaffold + its keep-alive) and dropped `unused` from
+    the `disable` list. Gate is green with it on.
   - `nilerr` — EVALUATED AND REJECTED: all 14 hits are deliberate,
     already-commented fail-open / skip patterns (limiter fail-open, quota
     "degrade open", restore not blocked on a meta-lookup miss, strict-loader

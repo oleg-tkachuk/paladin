@@ -1,11 +1,8 @@
 package s3adapter
 
 import (
-	"context"
 	"fmt"
 	"os"
-
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // rotatingTokenRetriever satisfies stscreds.IdentityTokenRetriever and
@@ -43,10 +40,3 @@ func (r *rotatingTokenRetriever) GetIdentityToken() ([]byte, error) {
 var _ interface {
 	GetIdentityToken() ([]byte, error)
 } = (*rotatingTokenRetriever)(nil)
-
-// statelessSTSClient is the slice of sts.Client we depend on. Lets tests
-// inject a fake without pulling in the real STS endpoint.
-type statelessSTSClient interface {
-	AssumeRoleWithWebIdentity(ctx context.Context, params *sts.AssumeRoleWithWebIdentityInput,
-		optFns ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
-}

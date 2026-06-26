@@ -64,39 +64,6 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-func (h *Handler) dispatchEvent(ctx context.Context, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) {
-	if h.events == nil || tenantID == uuid.Nil {
-		// quota.ResetUsage on a quotaID we haven't loaded yields tenantID=Nil;
-		// we'd have no fan-out target. Skip rather than emit a malformed
-		// event with empty tenant_id.
-		return
-	}
-	actor := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		actor = p.Subject
-	}
-	queued, err := h.events.Dispatch(ctx, tenantID.String(), worker.Event{
-		Type:         eventType,
-		At:           time.Now().UTC(),
-		TenantID:     tenantID.String(),
-		ResourceName: resourceName,
-		ActorSubject: actor,
-		Payload:      payload,
-	})
-	if err != nil {
-		h.log.Warn("quota event fan-out failed",
-			zap.String("event_type", eventType),
-			zap.String("tenant_id", tenantID.String()),
-			zap.Error(err),
-		)
-		return
-	}
-	h.log.Debug("quota event queued",
-		zap.String("event_type", eventType),
-		zap.Int("subscriptions_matched", queued),
-	)
-}
-
 // dispatchEventTx fans the event out on the caller's tx so the outbox rows
 // commit atomically with the quota upsert (ADR-0003). Returns the error so
 // the caller rolls back; nil-safe (and skips a Nil tenant, same as

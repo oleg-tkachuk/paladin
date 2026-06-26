@@ -269,21 +269,14 @@ func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscript
 	}
 }
 
-// deliverHTTP signs and POSTs `evt` to the sub's HTTP sink. Per-attempt
-// retries here are intentionally narrow (sub.MaxAttempts) — they cover
-// transient flakes within a single delivery attempt. The outbox loop's
-// row-level retry budget is the durable retry path; this loop just
-// gives flaky-network requests a small in-process re-try window before
-// the row is marked for backoff.
-func (d *Dispatcher) deliverHTTP(ctx context.Context, sub admindomain.EventSubscription, evt Event) error {
-	_, err := d.deliverHTTPWithStatus(ctx, sub, evt)
-	return err
-}
-
-// deliverHTTPWithStatus is the same as deliverHTTP but also returns
-// the HTTP status code of the last attempt (0 if no response was
-// received — i.e. transport error). The outbox loop persists this
-// for operator visibility.
+// deliverHTTPWithStatus signs and POSTs `evt` to the sub's HTTP sink,
+// returning the HTTP status code of the last attempt (0 if no response was
+// received — i.e. transport error) for the outbox loop to persist for
+// operator visibility. Per-attempt retries here are intentionally narrow
+// (sub.MaxAttempts) — they cover transient flakes within a single delivery
+// attempt. The outbox loop's row-level retry budget is the durable retry
+// path; this loop just gives flaky-network requests a small in-process
+// re-try window before the row is marked for backoff.
 func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.EventSubscription, evt Event) (int, error) {
 	var sink struct {
 		URL              string `json:"url"`
