@@ -27,8 +27,9 @@ var migrateCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		cfg, l, db := boot(ctx)
+		cfg, l, db, otelShutdown := boot(ctx)
 		defer func() { _ = db.Close }()
+		defer flushOTel(otelShutdown)
 
 		if err := db.RunMigrationsWith(ctx, migrations.FS, cfg.Datastores.Postgres); err != nil && !errors.Is(err, context.Canceled) {
 			l.Fatal("failed to apply migrations", zap.Error(err))

@@ -6,23 +6,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	"github.com/oleg-tkachuk/paladin/internal/logger"
+	"github.com/oleg-tkachuk/paladin/internal/observability"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres"
 )
 
 // boot is the prologue every subcommand runs: build the bootstrap logger,
-// load the YAML config, build the production logger, open the DB pool,
-// ping it. Returns a started, pinged *postgres.DB and the production
-// logger; the caller is responsible for db.Close() in its own defer.
+// load the YAML config, build the production logger, initialise OpenTelemetry,
+// open the DB pool, ping it. Returns a started, pinged *postgres.DB, the
+// production logger, and the OTel shutdown hook; the caller is responsible
+// for db.Close() AND otelShutdown(ctx) in its own defers.
+//
+// The OTel init (ADR-0001) is the single activation point for the whole
+// process: it installs the global Tracer/Meter providers the otelconnect
+// and otelpgx instrumentation already feed. When cfg.OTel.Enabled is false
+// it returns a no-op shutdown, so non-observable environments pay nothing.
 //
 // Subcommands that do not need a DB (none today, but future read-only
 // `paladin version` / `paladin config` flavours might) should not call boot —
 // they can build the logger directly.
-func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
+func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observability.ShutdownFunc) {
 	bootstrap, err := logger.NewBootstrapLogger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
@@ -66,6 +74,19 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 	}
 	logger.ReplaceGlobals(l)
 
+	// Activate OpenTelemetry (ADR-0001). This is the single point that
+	// installs the global Tracer/Meter providers; the otelconnect + otelpgx
+	// instrumentation wired into the planes/pool feed these providers. A
+	// failure here is non-fatal — observability must never block the
+	// service from starting — so we log and continue with the no-op
+	// providers. With cfg.OTel.Enabled=false, InitOTel itself returns a
+	// no-op shutdown and never errors.
+	otelShutdown, err := observability.InitOTel(ctx, cfg.OTel)
+	if err != nil {
+		l.Error("failed to initialise OpenTelemetry; continuing without it", zap.Error(err))
+		otelShutdown = func(context.Context) error { return nil }
+	}
+
 	// RLS is non-optional. Migration 023 enables per-table policies
 	// unconditionally and the runtime DSN connects as paladin_app
 	// (NOBYPASSRLS), so the BeforeAcquire hook that stamps
@@ -84,5 +105,17 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB) {
 		_ = db.Close
 		l.Fatal("failed to ping database", zap.Error(err))
 	}
-	return cfg, l, db
+	return cfg, l, db, otelShutdown
+}
+
+// flushOTel runs the OTel shutdown hook with a bounded, fresh context so a
+// cancelled parent context (SIGTERM already fired) can't abort the final
+// span/metric batch flush. Callers `defer flushOTel(otelShutdown)`.
+func flushOTel(shutdown observability.ShutdownFunc) {
+	if shutdown == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = shutdown(ctx)
 }

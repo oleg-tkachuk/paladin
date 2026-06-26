@@ -27,8 +27,9 @@ var bootstrapCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		cfg, l, db := boot(ctx)
+		cfg, l, db, otelShutdown := boot(ctx)
 		defer func() { _ = db.Close }()
+		defer flushOTel(otelShutdown)
 
 		if err := bootstrappkg.EnsureAdmin(ctx, cfg.Bootstrap.Admin, bootstrappkg.Deps{
 			Tenants: db.Queries,

@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // TokenVerifier validates a bearer token and returns the derived Principal.
@@ -34,8 +37,30 @@ func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if err != nil {
 			return nil, err
 		}
+		annotateSpan(ctx, p)
 		return next(WithPrincipal(ctx, p), req)
 	}
+}
+
+// annotateSpan stamps the caller's tenant onto the active RPC span (the
+// otelconnect server span, created upstream of this interceptor). ADR-0001
+// follow-up: gives traces a per-tenant dimension to filter on. tenant_id is
+// bounded-cardinality (one per tenant); object_key is deliberately NOT set
+// here — it is per-request and unbounded, so it stays a handler concern.
+// No-op when OTel is disabled (the span is non-recording).
+func annotateSpan(ctx context.Context, p *Principal) {
+	if p == nil || p.TenantID == uuid.Nil {
+		return
+	}
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	attrs := []attribute.KeyValue{attribute.String("paladin.tenant_id", p.TenantID.String())}
+	if p.TenantSlug != "" {
+		attrs = append(attrs, attribute.String("paladin.tenant_slug", p.TenantSlug))
+	}
+	span.SetAttributes(attrs...)
 }
 
 func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
@@ -49,6 +74,7 @@ func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 		if err != nil {
 			return err
 		}
+		annotateSpan(ctx, p)
 		return next(WithPrincipal(ctx, p), conn)
 	}
 }
