@@ -87,10 +87,7 @@ func (h *Handler) Get(ctx context.Context, id uuid.UUID) (*admindomain.EventSubs
 	}
 	s, err := h.repo.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("subscription not found"))
@@ -110,10 +107,7 @@ func (h *Handler) Update(ctx context.Context, s admindomain.EventSubscription, e
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
-		if errors.Is(err, admindomain.ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	got, _ := h.repo.Get(ctx, s.SubscriptionID)
 	return &got, nil
@@ -128,10 +122,7 @@ func (h *Handler) Delete(ctx context.Context, id uuid.UUID, expectedVersion int6
 		return err
 	}
 	if err := h.repo.Delete(ctx, id, expectedVersion); err != nil {
-		if errors.Is(err, admindomain.ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	return nil
 }

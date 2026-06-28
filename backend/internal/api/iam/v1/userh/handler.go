@@ -105,10 +105,7 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 		Scopes:       in.Scopes,
 	})
 	if err != nil {
-		if errors.Is(err, authstore.ErrSubjectTaken) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &u, nil
 }
@@ -122,10 +119,7 @@ func (h *Handler) GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, e
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, authstore.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
@@ -176,10 +170,7 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 	}
 	updated, err := h.users.Update(ctx, current, in.ExpectedVersion)
 	if err != nil {
-		if errors.Is(err, authstore.ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &updated, nil
 }
@@ -203,10 +194,7 @@ func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion 
 		return err
 	}
 	if err := h.users.Delete(ctx, id, expectedVersion); err != nil {
-		if errors.Is(err, authstore.ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	return nil
 }

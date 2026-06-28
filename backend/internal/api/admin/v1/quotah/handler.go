@@ -127,10 +127,7 @@ func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admi
 	}
 	q, err := h.repo.GetTenant(ctx, tenantID)
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &q, nil
 }
@@ -146,10 +143,7 @@ func (h *Handler) GetBucketQuota(ctx context.Context, backendID, bucketName stri
 	}
 	q, err := h.repo.GetBucket(ctx, backendID, bucketName)
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &q, nil
 }

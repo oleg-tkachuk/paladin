@@ -37,6 +37,14 @@ FailedPrecondition`.
   default (`object_key.Rebind` → `FailedPrecondition`, `object.MapResolveErr`
   → `NotFound`) are left intact — `MapError` defaults to `CodeInternal` and
   cannot replicate those.
-- Remaining planes (`internal/api/admin/v1`, `internal/api/iam/v1`) still
-  use per-handler if/else over their own sentinels — see BACKLOG.
+- The `internal/api/admin/v1` + `internal/api/iam/v1` planes are now adopted
+  too (2026-06-27): the shared `admindomain.{ErrNotFound,ErrVersionMismatch,
+  ErrConflict}` and `authstore.{ErrNotFound,ErrVersionMismatch,ErrSubjectTaken}`
+  sentinels register in their packages' `init()`, and the handlers
+  (backend/bucket/eventsub/quota/audit/user) collapse their
+  `CodeInternal`-default ladders to `apiutil.MapError`. Deliberate
+  non-default mappings stay inline (authh maps `ErrNotFound` →
+  `Unauthenticated` on the login/refresh paths so user existence isn't
+  leaked; usersettings treats its `ErrNotFound` as "serve defaults", not a
+  client error). Every adopting plane carries a `TestErrorRegistration`.
 - `.Error()` substring matching is forbidden going forward.

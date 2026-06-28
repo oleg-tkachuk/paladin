@@ -186,10 +186,7 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 	}
 	b, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	// Tenant/bucket admins get a redacted view — both the active and the
 	// previous (grace-window) secret refs are secrets.
@@ -236,10 +233,7 @@ func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBacken
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, b, expectedVersion, mask); err != nil {
-		if errors.Is(err, admindomain.ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {
@@ -271,13 +265,7 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 			fmt.Errorf("cannot disable the configured default backend %q", backendID))
 	}
 	if err := h.repo.SetEnabled(ctx, backendID, enabled, expectedVersion); err != nil {
-		if errors.Is(err, admindomain.ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
-		}
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
@@ -321,10 +309,7 @@ func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef st
 		return h.dispatchEventTx(ctx, tx, "paladin.backend.credentials_rotated",
 			backendResourceName(backendID), payload)
 	}); err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	return &got, nil
 }
@@ -339,13 +324,7 @@ func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedV
 		return err
 	}
 	if err := h.repo.Delete(ctx, backendID, expectedVersion, force); err != nil {
-		if errors.Is(err, admindomain.ErrVersionMismatch) {
-			return connect.NewError(connect.CodeAborted, err)
-		}
-		if errors.Is(err, admindomain.ErrConflict) {
-			return connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return apiutil.MapError(err)
 	}
 	return nil
 }

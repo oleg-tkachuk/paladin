@@ -9,8 +9,10 @@ import (
 	"errors"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 )
 
@@ -124,3 +126,14 @@ var (
 	ErrSubjectTaken    = errors.New("auth/store: subject already exists in tenant")
 	ErrTokenRevoked    = errors.New("auth/store: refresh token revoked")
 )
+
+// Register the IAM store sentinels with the central error→Connect-code mapper
+// (ADR-0002). ErrNotFound→NotFound is the generic mapping; authh deliberately
+// maps it to Unauthenticated INLINE on the login/refresh paths (so it never
+// reaches MapError), which is why both coexist. ErrTokenRevoked is handled
+// inline (reuse-detection) and intentionally not registered.
+func init() {
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrSubjectTaken, connect.CodeAlreadyExists)
+}

@@ -165,10 +165,7 @@ func (h *Handler) GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindom
 	}
 	e, err := h.repo.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, apiutil.MapError(err)
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && e.ActorTenantID != caller {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("audit entry not found"))

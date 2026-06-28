@@ -217,13 +217,9 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 				"provision_state": string(got.ProvisionState),
 			})
 	}); err != nil {
-		// Translate the typed ErrConflict the repo raises for FK / unique
-		// violations into FailedPrecondition so clients see a readable
-		// message instead of "internal: SQLSTATE 23503".
-		if errors.Is(err, admindomain.ErrConflict) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// ErrConflict (FK / unique violations the repo types) → FailedPrecondition
+		// via the central registry (ADR-0002), so clients see a readable code.
+		return nil, apiutil.MapError(err)
 	}
 	return &got, nil
 }
@@ -496,22 +492,9 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func mapNotFound(err error) error {
-	if errors.Is(err, admindomain.ErrNotFound) {
-		return connect.NewError(connect.CodeNotFound, err)
-	}
-	return connect.NewError(connect.CodeInternal, err)
-}
+func mapNotFound(err error) error { return apiutil.MapError(err) }
 
-func mapVersion(err error) error {
-	if errors.Is(err, admindomain.ErrVersionMismatch) {
-		return connect.NewError(connect.CodeAborted, err)
-	}
-	if errors.Is(err, admindomain.ErrNotFound) {
-		return connect.NewError(connect.CodeNotFound, err)
-	}
-	return connect.NewError(connect.CodeInternal, err)
-}
+func mapVersion(err error) error { return apiutil.MapError(err) }
 
 // silence unused
 var _ = auth.AudienceAdmin

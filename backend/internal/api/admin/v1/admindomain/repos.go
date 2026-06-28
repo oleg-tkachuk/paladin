@@ -5,7 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
+
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/apiutil"
 )
 
 // ErrNotFound / ErrVersionMismatch are the canonical not-found / OCC errors
@@ -16,6 +19,15 @@ var (
 	ErrVersionMismatch = errors.New("admin: resource_version mismatch")
 	ErrConflict        = errors.New("admin: conflict")
 )
+
+// Register the admin domain sentinels with the central error→Connect-code
+// mapper (ADR-0002) so admin handlers route through apiutil.MapError for a
+// consistent code instead of a per-handler if/else.
+func init() {
+	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
+	apiutil.RegisterError(ErrConflict, connect.CodeFailedPrecondition)
+}
 
 // ─── Storage backend repository ─────────────────────────────────────────────
 
