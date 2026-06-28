@@ -59,8 +59,17 @@ type Handler struct {
 	corsOrigins []string
 	authz       Authorizer
 	audit       AuditWriter
+	skipConsent map[string]bool
 	log         *zap.Logger
 	now         func() time.Time
+}
+
+// WithSkipConsent marks client_ids the operator pre-authorized (trusted
+// first-party clients): /authorize goes straight to login, no consent screen.
+// Never applies to dynamically-registered clients.
+func (h *Handler) WithSkipConsent(clientIDs map[string]bool) *Handler {
+	h.skipConsent = clientIDs
+	return h
 }
 
 // WithAuthorizer enables Cedar gating of the consent step (ActionAuthorizeOAuth).
@@ -161,15 +170,18 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	skip := h.skipConsent[client.ClientID]
+
 	if r.Method == http.MethodGet {
 		// When a front-end consent page is configured, hand off to it (the
 		// request is already validated); otherwise server-render the built-in
-		// form so the AS works standalone.
+		// form so the AS works standalone. Pre-authorized (skip_consent)
+		// clients render a plain login — no per-user consent prompt.
 		if h.cfg.ConsentURL != "" {
 			h.redirectToConsentUI(w, r, p, "")
 			return
 		}
-		h.renderConsent(w, client, p, "")
+		h.renderConsent(w, client, p, "", skip)
 		return
 	}
 
@@ -189,7 +201,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 			h.redirectToConsentUI(w, r, p, "invalid_credentials")
 			return
 		}
-		h.renderConsent(w, client, p, "Invalid credentials or tenant.")
+		h.renderConsent(w, client, p, "Invalid credentials or tenant.", skip)
 		return
 	}
 
@@ -721,11 +733,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 var consentTmpl = template.Must(template.New("consent").Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Authorize {{.ClientName}}</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>Sign in — {{.ClientName}}</title></head>
 <body style="font-family:system-ui;max-width:28rem;margin:3rem auto">
+{{if .SkipConsent}}
+<h1>Sign in to {{.ClientName}}</h1>
+<p>{{.ClientName}} is a trusted application.</p>
+{{else}}
 <h1>Authorize access</h1>
 <p><strong>{{.ClientName}}</strong> ({{.ClientID}}) is requesting access{{if .Scopes}} to:</p>
 <ul>{{range .Scopes}}<li>{{.}}</li>{{end}}</ul>{{else}}.</p>{{end}}
+{{end}}
 {{if .Error}}<p style="color:#b00">{{.Error}}</p>{{end}}
 <form method="post" action="/oauth/authorize">
   <input type="hidden" name="client_id" value="{{.ClientID}}">
@@ -738,16 +755,22 @@ var consentTmpl = template.Must(template.New("consent").Parse(`<!doctype html>
   <p><label>Username<br><input name="username" autocomplete="username"></label></p>
   <p><label>Password<br><input name="password" type="password" autocomplete="current-password"></label></p>
   <p><label>Tenant (optional)<br><input name="tenant" placeholder="tenant id"></label></p>
+{{if .SkipConsent}}
+  <input type="hidden" name="action" value="allow">
+  <button type="submit">Sign in</button>
+{{else}}
   <button name="action" value="allow" type="submit">Allow</button>
   <button name="action" value="deny" type="submit">Deny</button>
+{{end}}
 </form>
 </body></html>`))
 
 type consentView struct {
 	authorizeParams
-	ClientName string
-	Scopes     []string
-	Error      string
+	ClientName  string
+	Scopes      []string
+	Error       string
+	SkipConsent bool
 }
 
 // redirectToConsentUI hands the (already-validated) request off to the
@@ -778,7 +801,7 @@ func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p 
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
-func (h *Handler) renderConsent(w http.ResponseWriter, client Client, p authorizeParams, errMsg string) {
+func (h *Handler) renderConsent(w http.ResponseWriter, client Client, p authorizeParams, errMsg string, skip bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = consentTmpl.Execute(w, consentView{
@@ -786,6 +809,7 @@ func (h *Handler) renderConsent(w http.ResponseWriter, client Client, p authoriz
 		ClientName:      orDefault(client.ClientName, client.ClientID),
 		Scopes:          splitScopes(p.Scope),
 		Error:           errMsg,
+		SkipConsent:     skip,
 	})
 }
 

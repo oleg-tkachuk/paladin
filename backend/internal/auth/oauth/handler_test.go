@@ -491,3 +491,31 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 		t.Errorf("audit entry should name the reuse + carry an error message (is_error): %+v", e)
 	}
 }
+
+func TestAuthorize_SkipConsent(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	h := testHandler(t, store, &memRefresh{}, sampleUser()).
+		WithSkipConsent(map[string]bool{"claude-desktop": true})
+
+	q := url.Values{
+		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
+	}
+	rec := httptest.NewRecorder()
+	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	body := rec.Body.String()
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if !strings.Contains(body, "trusted application") {
+		t.Error("pre-authorized client should render the trusted-app login, not consent")
+	}
+	if strings.Contains(body, "is requesting access") {
+		t.Error("skip-consent page must omit the consent framing")
+	}
+	if strings.Contains(body, `value="deny"`) {
+		t.Error("skip-consent page must not offer Deny")
+	}
+}

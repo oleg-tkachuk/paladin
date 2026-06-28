@@ -282,6 +282,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// bearers are indistinguishable from login-minted ones downstream.
 	if cfg.Auth.OAuth.Enabled {
 		oauthStore := oauth.NewPgxStore(deps.Pool)
+		skipConsent := map[string]bool{}
 		for _, sc := range cfg.Auth.OAuth.SeedClients {
 			if serr := oauthStore.UpsertClient(ctx, oauth.Client{
 				ClientID:         sc.ClientID,
@@ -292,10 +293,14 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			}); serr != nil {
 				return nil, nil, nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
 			}
+			if sc.SkipConsent {
+				skipConsent[sc.ClientID] = true
+			}
 		}
 		oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
 			WithAuthorizer(polEngine).
 			WithAudit(repos.Audit).
+			WithSkipConsent(skipConsent).
 			Mount(iamMux)
 		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
 	}

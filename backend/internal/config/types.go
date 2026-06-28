@@ -312,6 +312,12 @@ type OAuthSeedClient struct {
 	AllowedScopes    []string `yaml:"allowed_scopes" json:"allowed_scopes"`
 	AllowedAudiences []string `yaml:"allowed_audiences" json:"allowed_audiences"`
 	Public           bool     `yaml:"public" json:"public"`
+	// SkipConsent pre-authorizes this client: the operator trusts it (a
+	// first-party app like claude-desktop), so /authorize goes straight to
+	// login without the per-user consent screen. Only configurable here, never
+	// via dynamic registration — a self-registered client can never skip
+	// consent.
+	SkipConsent bool `yaml:"skip_consent" json:"skip_consent"`
 }
 
 type Security struct {

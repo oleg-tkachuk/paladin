@@ -180,6 +180,7 @@ auth: {
       allowed_scopes:    [...string] | *[]
       allowed_audiences: [...string] | *[]
       public:            bool | *true
+      skip_consent:      bool | *false
     }] | *[]
   }
 }

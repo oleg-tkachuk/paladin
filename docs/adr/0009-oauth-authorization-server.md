@@ -1,9 +1,11 @@
 # ADR-0009: OAuth 2.1 Authorization Server (IAM-as-AS)
 
-- **Status:** Proposed — implementation in progress. Foundation (storage,
-  PKCE, config) landed 2026-06-27; endpoints + consent UI follow. Supersedes
-  the AS half of the BACKLOG "OAuth … for MCP clients" entry; builds on the
-  Resource-Server half in [ADR-0008](0008-mcp-oauth-resource-server.md).
+- **Status:** Accepted — fully implemented 2026-06-27 (storage, PKCE,
+  endpoints, consent UI, Cedar gating, rate-limit/CORS, refresh
+  reuse-detection with per-family precision, trusted-client skip-consent, and
+  an end-to-end HTTP integration test). Supersedes the AS half of the BACKLOG
+  "OAuth … for MCP clients" entry; builds on the Resource-Server half in
+  [ADR-0008](0008-mcp-oauth-resource-server.md).
 - **Context:** ADR-0008 made the MCP server a spec-compliant OAuth Resource
   Server — it advertises where to authenticate and validates bearers — but
   nothing *mints* those bearers via a browser auth-code flow. Standard MCP
@@ -99,6 +101,17 @@ may grant which scopes to which clients.
   6819 — the compromised chain, not the user's other sessions), logs a
   warning, and writes an audit row (`iam.RefreshTokenReuseDetected`,
   is_error) that surfaces — highlighted — in the admin audit console.
-- **Deferred within this ADR (tracked in BACKLOG):** per-client scope-grant
-  memory (skip re-consent); and a live-stack hurl e2e (needs the e2e harness
-  to enable OAuth + seed a client + a known-password user).
+- **Skip-consent (trusted clients):** seed clients may set `skip_consent` —
+  the operator pre-authorizes a first-party app (claude-desktop/cursor), so
+  `/authorize` renders a plain login with no per-user consent screen. Never
+  available to dynamically-registered clients. This is the
+  sessionless-appropriate form of "skip re-consent": PALADIN has no browser
+  session, so per-user remembered consent can't skip the login step anyway —
+  the operator grants consent once via config instead. Per-user remembered
+  consent is revisitable if/when a browser session lands (ADR-0006 Phase
+  5b.1 / OIDC).
+- **End-to-end test:** `internal/integration/oauth_e2e_test.go`
+  (`-tags=integration`, testcontainers) drives authorize → token → refresh +
+  single-use replay over real HTTP against real Postgres. This supersedes the
+  live-stack hurl variant, which needs a full compose stack + a password user
+  the e2e harness doesn't provision.

@@ -235,9 +235,9 @@ the same commit. Treat this file like a runtime invariant.
 ### Role split: `auth-server` (OAuth / OIDC isolation)
 
 - **Status:** Aspirational
-- **Reason:** When OAuth 2.0 authorization-code flow lands (per the
-  OAuth BACKLOG entry below), the authorization server has its own
-  attack surface (browser-facing /authorize, code storage, refresh
+- **Reason:** The OAuth 2.0 authorization-code flow has landed (ADR-0009,
+  in the iam plane), so the authorization server now has its own attack
+  surface (browser-facing /authorize, code storage, refresh
   rotation, JWKS rotation, client registration). Isolating from the
   iam plane lets you rotate signing keys without rolling api pods,
   apply a tighter NetworkPolicy on the OAuth endpoints, and run
@@ -399,83 +399,6 @@ open deliberately — each notes why._
     errors.
   - Integration test using two MinIO instances.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
-
-### OAuth 2.0 authorization-code flow for MCP clients (Claude Desktop / Cursor / agent hosts)
-
-- **Status:** Partial — the Resource-Server half landed (ADR-0008,
-  2026-06-27); the Authorization-Server half (the auth-code + PKCE flow,
-  consent UI, storage) remains deferred.
-- **RS side DONE (ADR-0008):** the streamable-HTTP MCP server is now a
-  spec-compliant OAuth 2.1 Resource Server when `mcp.oauth.enabled`:
-  serves `/.well-known/oauth-protected-resource` (RFC 9728) and, when it
-  is the AS, `/.well-known/oauth-authorization-server` (RFC 8414);
-  challenges unauthenticated `/mcp` with `401 + WWW-Authenticate`
-  (resource_metadata pointer); accepts `Authorization: Bearer` (X-PALADIN-Token
-  back-compat) and validates the token at the edge (signature/issuer/expiry,
-  audience-agnostic) via the shared `buildAgentVerifier`. See
-  `internal/mcp/oauth.go` + `cmd/server/serve_mcp.go`.
-- **Reason it remains:** Claude Desktop's "Custom Connectors" still need a
-  real Authorization Server to point at — the auth-code + PKCE browser
-  flow that mints the bearer the RS now validates. PALADIN today still mints
-  tokens via `APITokenService.Create` / `AuthService.Login` (password),
-  not a browser consent flow.
-- **AS backend DONE (ADR-0009, 2026-06-27):** the full server-side
-  Authorization Server shipped across three slices —
-  - PKCE (RFC 7636) S256 primitive; `auth.oauth` config + CUE.
-  - migration 043 (`oauth_clients`, `oauth_authorization_codes`, no RLS —
-    pre-tenant like users/refresh_tokens) + a pgx store (single-use codes,
-    sha256-at-rest, bcrypt client secrets).
-  - `/oauth/authorize` (server-rendered login+consent → PKCE-bound code),
-    `/oauth/token` (authorization_code + refresh_token, audience-bound mint
-    via the shared issuer, refresh rotation), `/oauth/register` (RFC 7591
-    DCR, flag-gated), wired on the IAM mux with seed-client provisioning.
-    Audience binding (RFC 8707): the access token's `aud` is the requested
-    resource; the ADR-0008 RS + plane interceptors enforce it.
-  Unit-tested (PKCE, single-use, PKCE-mismatch, authorize allow/deny, DCR)
-  + a testcontainers store test.
-- **Consent UI DONE (2026-06-27):** `frontend/src/app/oauth/consent/page.tsx`
-  (shadcn card matching login; native cross-origin form POST so the browser
-  follows the backend 302 to the client redirect_uri). Backend gained
-  `auth.oauth.consent_url`: `/authorize` redirects there when set, else
-  server-renders. `/oauth` added to the middleware public prefixes. Vitest +
-  eslint + tsc green.
-- **Hardening DONE (2026-06-27):** `/oauth/token` rate-limited per client_id
-  (in-memory token bucket, `auth.oauth.token_rate_limit_per_minute`, default
-  60/min → 429 + Retry-After) and CORS for browser public clients
-  (`auth.oauth.token_endpoint_allowed_origins`; OPTIONS preflight + ACAO).
-  Full authorize→token→refresh chain covered by an in-process integration
-  test. Unit tests for the limiter + CORS.
-- **Cedar gating DONE (2026-06-27):** `AuthorizeOAuth` action + a built-in
-  permit (default-allow self-consent) that a tenant policy can `forbid` per
-  principal/client/scope via `context.oauth_client_id` / `context.oauth_scopes`
-  (first-forbid wins). Engine injected via `WithAuthorizer` (optional). Cedar
-  engine tests (default-permit, forbid-by-client, forbid-by-scope) + a handler
-  gate test.
-- **Refresh reuse-detection DONE (2026-06-27):** refresh tokens carry a
-  `family_id` (migration 044; login starts a family, rotation inherits it).
-  Replaying a rotated (revoked) token at either path (OAuth `/oauth/token`,
-  Connect `AuthService.RefreshToken`/`ExchangeAudience`) revokes only that
-  family (`RevokeFamilyOf`, RFC 6819 — the compromised chain, not the user's
-  other sessions), logs a warning, and writes an audit row
-  (`iam.RefreshTokenReuseDetected`, is_error → highlighted in the admin audit
-  console; frontend `actionPalette` also flags `reuse`). Unit tests + a
-  testcontainers family-revoke test.
-- **Definition of Done (remaining):**
-  - **hurl e2e:** `tests/api/e2e/oauth.hurl` (authorise→token→refresh→revoke)
-    — needs the e2e harness (run-e2e.sh runs every .hurl) to start the server
-    with `auth.oauth.enabled` + a seeded client + a known-password user;
-    otherwise it fails the whole suite. Plus a manual Claude Desktop Custom
-    Connector run against `paladin.local`.
-  - Delete this entry when Cedar gating + the hurl e2e land.
-- **Blockers:**
-  - Decide whether to keep IAM as the auth server or fold it into a
-    federated OIDC IdP (overlaps with the existing
-    `Phase 5b.1 — Drop user-authn IAM, accept OIDC` entry above).
-    Building OAuth here makes the OIDC migration cheaper because
-    the discovery + endpoint shape is mostly the same; choose this
-    deliberately, not by accident.
-  - Consent-screen branding / scope-string copy — needs a product
-    pass before exposing to non-internal Claude Desktop users.
 
 ### `ResetPassword` — email/SSO delivery
 
