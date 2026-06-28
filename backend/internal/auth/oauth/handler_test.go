@@ -519,3 +519,42 @@ func TestAuthorize_SkipConsent(t *testing.T) {
 		t.Error("skip-consent page must not offer Deny")
 	}
 }
+
+func TestAuthorize_ConsentURLRedirect_SkipConsent(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	cfg := config.OAuthAS{
+		Enabled: true, AuthorizationCodeTTL: time.Minute,
+		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+		ConsentURL:             "https://ui.example.com/oauth/consent",
+	}
+	h := testHandlerCfg(t, store, &memRefresh{}, sampleUser(), cfg).
+		WithSkipConsent(map[string]bool{"claude-desktop": true})
+
+	q := url.Values{
+		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
+	}
+	rec := httptest.NewRecorder()
+	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	if loc.Host != "ui.example.com" {
+		t.Fatalf("redirect host = %q", loc.Host)
+	}
+	if loc.Query().Get("skip_consent") != "1" {
+		t.Error("pre-authorized client redirect must carry skip_consent=1")
+	}
+
+	// A non-pre-authorized client must NOT carry the flag.
+	rec2 := httptest.NewRecorder()
+	h2 := testHandlerCfg(t, store, &memRefresh{}, sampleUser(), cfg) // no skip set
+	h2.handleAuthorize(rec2, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	loc2, _ := url.Parse(rec2.Header().Get("Location"))
+	if loc2.Query().Has("skip_consent") {
+		t.Error("ordinary client redirect must not carry skip_consent")
+	}
+}

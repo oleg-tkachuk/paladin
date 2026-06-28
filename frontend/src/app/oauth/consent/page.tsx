@@ -36,6 +36,10 @@ function ConsentForm() {
   const codeChallengeMethod = search.get("code_challenge_method") || "S256";
   const resource = search.get("resource") || "";
   const hadError = search.get("error") !== null;
+  // Advisory hint from the backend: a pre-authorized (trusted) client renders
+  // a plain login with no per-user consent prompt. The backend re-derives this
+  // from config on POST — this flag only shapes the UI, it grants nothing.
+  const skipConsent = search.get("skip_consent") === "1";
 
   const scopes = scope.split(/\s+/).filter(Boolean);
 
@@ -44,15 +48,17 @@ function ConsentForm() {
       <Card className="w-full max-w-sm space-y-6 p-8">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Authorize access
+            {skipConsent ? "Sign in" : "Authorize access"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{clientID}</span> is
-            requesting access to your Paladin account.
+            <span className="font-medium text-foreground">{clientID}</span>
+            {skipConsent
+              ? " is a trusted application. Sign in to continue."
+              : " is requesting access to your Paladin account."}
           </p>
         </div>
 
-        {scopes.length > 0 ? (
+        {!skipConsent && scopes.length > 0 ? (
           <div className="space-y-1.5">
             <p className="text-sm font-medium">This will allow it to:</p>
             <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
@@ -108,25 +114,34 @@ function ConsentForm() {
             </div>
           ) : null}
 
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              name="action"
-              value="allow"
-              className="flex-1"
-            >
-              Allow
-            </Button>
-            <Button
-              type="submit"
-              name="action"
-              value="deny"
-              variant="outline"
-              className="flex-1"
-            >
-              Deny
-            </Button>
-          </div>
+          {skipConsent ? (
+            <>
+              <input type="hidden" name="action" value="allow" />
+              <Button type="submit" className="w-full">
+                Sign in
+              </Button>
+            </>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                name="action"
+                value="allow"
+                className="flex-1"
+              >
+                Allow
+              </Button>
+              <Button
+                type="submit"
+                name="action"
+                value="deny"
+                variant="outline"
+                className="flex-1"
+              >
+                Deny
+              </Button>
+            </div>
+          )}
         </form>
       </Card>
     </div>

@@ -178,7 +178,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		// form so the AS works standalone. Pre-authorized (skip_consent)
 		// clients render a plain login — no per-user consent prompt.
 		if h.cfg.ConsentURL != "" {
-			h.redirectToConsentUI(w, r, p, "")
+			h.redirectToConsentUI(w, r, p, "", skip)
 			return
 		}
 		h.renderConsent(w, client, p, "", skip)
@@ -198,7 +198,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		// Bounce back to the consent UI with an error rather than leaking
 		// which factor failed.
 		if h.cfg.ConsentURL != "" {
-			h.redirectToConsentUI(w, r, p, "invalid_credentials")
+			h.redirectToConsentUI(w, r, p, "invalid_credentials", skip)
 			return
 		}
 		h.renderConsent(w, client, p, "Invalid credentials or tenant.", skip)
@@ -778,7 +778,7 @@ type consentView struct {
 // string. The page collects credentials + the decision and POSTs them back to
 // /oauth/authorize. errCode (optional) lets the page show "invalid credentials"
 // on a retry.
-func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p authorizeParams, errCode string) {
+func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p authorizeParams, errCode string, skip bool) {
 	u, err := url.Parse(h.cfg.ConsentURL)
 	if err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "consent_url misconfigured")
@@ -791,6 +791,13 @@ func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p 
 	q.Set("state", p.State)
 	q.Set("code_challenge", p.CodeChallenge)
 	q.Set("code_challenge_method", p.CodeChallengeMethod)
+	if skip {
+		// Pre-authorized client: tell the front-end page to render a plain
+		// login (no per-user consent prompt). Advisory only — the decision is
+		// re-derived server-side from config on the POST, never trusted from
+		// this round-trip.
+		q.Set("skip_consent", "1")
+	}
 	if p.Resource != "" {
 		q.Set("resource", p.Resource)
 	}

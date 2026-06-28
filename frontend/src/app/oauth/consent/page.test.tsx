@@ -1,14 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+const baseParams =
+  "client_id=claude-desktop&scope=paladin.read paladin.write&redirect_uri=claude-desktop%3A%2F%2Fcb&state=st&code_challenge=abc&code_challenge_method=S256";
+
+let searchString = baseParams;
+
 vi.mock("next/navigation", () => ({
-  useSearchParams: () =>
-    new URLSearchParams(
-      "client_id=claude-desktop&scope=paladin.read paladin.write&redirect_uri=claude-desktop%3A%2F%2Fcb&state=st&code_challenge=abc&code_challenge_method=S256",
-    ),
+  useSearchParams: () => new URLSearchParams(searchString),
 }));
 
 import ConsentPage from "./page";
+
+beforeEach(() => {
+  searchString = baseParams;
+});
 
 describe("OAuth ConsentPage", () => {
   it("shows the requesting client and the requested scopes", () => {
@@ -39,5 +45,36 @@ describe("OAuth ConsentPage", () => {
     ).map((b) => b.value);
     expect(actions).toContain("allow");
     expect(actions).toContain("deny");
+  });
+
+  describe("skip_consent (pre-authorized client)", () => {
+    beforeEach(() => {
+      searchString = `${baseParams}&skip_consent=1`;
+    });
+
+    it("renders a plain login — no scope list, no Deny", () => {
+      const { container } = render(<ConsentPage />);
+      expect(
+        screen.getByRole("heading", { name: "Sign in" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Sign in" }),
+      ).toBeInTheDocument();
+      // Scope list is suppressed for a trusted client.
+      expect(screen.queryByText("paladin.read")).not.toBeInTheDocument();
+      const actions = Array.from(
+        container.querySelectorAll<HTMLButtonElement>('button[name="action"]'),
+      ).map((b) => b.value);
+      expect(actions).not.toContain("deny");
+    });
+
+    it("still submits action=allow via a hidden field", () => {
+      const { container } = render(<ConsentPage />);
+      const form = container.querySelector("form")!;
+      const action = form.querySelector<HTMLInputElement>(
+        'input[name="action"]',
+      );
+      expect(action?.value).toBe("allow");
+    });
   });
 });
