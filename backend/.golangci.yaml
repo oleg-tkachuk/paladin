@@ -26,6 +26,7 @@ linters:
     - makezero # make([]T, len) then append surprises
     - misspell # common misspellings
     - nakedret # naked returns in longer funcs
+    - noctx # HTTP requests built without a context
     - nolintlint # well-formed //nolint directives
     - promlinter # prometheus metric naming
     - reassign # reassigning pkg-level vars from other pkgs

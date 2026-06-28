@@ -13,7 +13,7 @@ func TestSnapshotGate(t *testing.T) {
 	t.Parallel()
 
 	call := func(h *Handler, set func(*http.Request)) int {
-		req := httptest.NewRequest(http.MethodGet, "/system/health.json", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/system/health.json", nil)
 		if set != nil {
 			set(req)
 		}

@@ -211,7 +211,7 @@ func TestAuthorize_GetRendersConsent(t *testing.T) {
 
 	q := url.Values{"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"}, "state": {"st"}}
 	rec := httptest.NewRecorder()
-	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	h.handleAuthorize(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Authorize access") {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -258,7 +258,7 @@ func TestAuthorize_UnknownClient(t *testing.T) {
 	h := testHandler(t, newMemStore(), &memRefresh{}, sampleUser())
 	q := url.Values{"client_id": {"nope"}, "redirect_uri": {"https://x"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"}}
 	rec := httptest.NewRecorder()
-	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	h.handleAuthorize(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_client") {
 		t.Fatalf("status=%d body=%s, want 400 invalid_client", rec.Code, rec.Body.String())
 	}
@@ -269,7 +269,7 @@ func TestRegister_DCR(t *testing.T) {
 	h := testHandler(t, store, &memRefresh{}, sampleUser())
 	body := `{"client_name":"Cursor","redirect_uris":["https://cursor.sh/cb"],"token_endpoint_auth_method":"none"}`
 	rec := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/oauth/register", strings.NewReader(body))
 	h.handleRegister(rec, r)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d body=%s, want 201", rec.Code, rec.Body.String())
@@ -286,7 +286,7 @@ func TestRegister_DCR(t *testing.T) {
 
 func postForm(h *Handler, path string, form url.Values) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	switch path {
 	case "/oauth/token":
@@ -332,7 +332,7 @@ func TestToken_CORS(t *testing.T) {
 
 	t.Run("preflight from allowed origin", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodOptions, "/oauth/token", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/oauth/token", nil)
 		r.Header.Set("Origin", "https://app.example.com")
 		h.handleToken(rec, r)
 		if rec.Code != http.StatusNoContent {
@@ -348,7 +348,7 @@ func TestToken_CORS(t *testing.T) {
 
 	t.Run("disallowed origin gets no ACAO", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodOptions, "/oauth/token", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/oauth/token", nil)
 		r.Header.Set("Origin", "https://evil.example.com")
 		h.handleToken(rec, r)
 		if rec.Header().Get("Access-Control-Allow-Origin") != "" {
@@ -503,7 +503,7 @@ func TestAuthorize_SkipConsent(t *testing.T) {
 		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
 	}
 	rec := httptest.NewRecorder()
-	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	h.handleAuthorize(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 	body := rec.Body.String()
 
 	if rec.Code != http.StatusOK {
@@ -536,7 +536,7 @@ func TestAuthorize_ConsentURLRedirect_SkipConsent(t *testing.T) {
 		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
 	}
 	rec := httptest.NewRecorder()
-	h.handleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	h.handleAuthorize(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", rec.Code)
@@ -552,7 +552,7 @@ func TestAuthorize_ConsentURLRedirect_SkipConsent(t *testing.T) {
 	// A non-pre-authorized client must NOT carry the flag.
 	rec2 := httptest.NewRecorder()
 	h2 := testHandlerCfg(t, store, &memRefresh{}, sampleUser(), cfg) // no skip set
-	h2.handleAuthorize(rec2, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+	h2.handleAuthorize(rec2, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 	loc2, _ := url.Parse(rec2.Header().Get("Location"))
 	if loc2.Query().Has("skip_consent") {
 		t.Error("ordinary client redirect must not carry skip_consent")

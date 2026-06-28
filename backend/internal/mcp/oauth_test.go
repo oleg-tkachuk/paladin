@@ -28,7 +28,7 @@ func TestBearerToken(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 			if tc.authz != "" {
 				r.Header.Set("Authorization", tc.authz)
 			}
@@ -49,7 +49,7 @@ func TestProtectedResourceMetadata(t *testing.T) {
 		ScopesSupported:      []string{"paladin.read", "paladin.write"},
 	})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, WellKnownProtectedResource, nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, WellKnownProtectedResource, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -79,7 +79,7 @@ func TestAuthorizationServerMetadata(t *testing.T) {
 		// RegistrationEndpoint + JWKSURI left empty → must be omitted.
 	})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, WellKnownAuthorizationServer, nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, WellKnownAuthorizationServer, nil))
 
 	var doc map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
@@ -121,7 +121,7 @@ func TestRequireBearer(t *testing.T) {
 
 	t.Run("missing token → 401 + challenge", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", nil))
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil))
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want 401", rec.Code)
 		}
@@ -133,7 +133,7 @@ func TestRequireBearer(t *testing.T) {
 
 	t.Run("invalid token → 401 invalid_token", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 		r.Header.Set("Authorization", "Bearer garbage")
 		h.ServeHTTP(rec, r)
 		if rec.Code != http.StatusUnauthorized {
@@ -146,7 +146,7 @@ func TestRequireBearer(t *testing.T) {
 
 	t.Run("valid token passes through", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 		r.Header.Set("Authorization", "Bearer valid-tok")
 		h.ServeHTTP(rec, r)
 		if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
@@ -156,7 +156,7 @@ func TestRequireBearer(t *testing.T) {
 
 	t.Run("valid token via X-PALADIN-Token fallback", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 		r.Header.Set("X-PALADIN-Token", "valid-tok")
 		h.ServeHTTP(rec, r)
 		if rec.Code != http.StatusOK {

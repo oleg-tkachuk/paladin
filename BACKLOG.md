@@ -1112,8 +1112,19 @@ of the pipeline._
     chain incl. multi-`%w` for the "compensation also failed" sites; `==` →
     `errors.Is` in serve_worker; type-assert → `errors.As` in a celh test) and
     added to `enable`.
-  - Adopt the remaining bug-catchers one at a time: `noctx` (~12),
-    `contextcheck` (~8) — fix + add to `enable`.
+  - `noctx` — DONE (2026-06-28): the 28 `httptest.NewRequest` /
+    `http.NewRequest` test call sites now use `…NewRequestWithContext`
+    (`t.Context()`, or `context.Background()` in the one `t`-less helper).
+    Added to `enable`; gate green.
+  - `contextcheck` — EVALUATED AND REJECTED: all 9 hits are deliberate.
+    Four are the canonical graceful-shutdown idiom (`context.WithTimeout(
+    context.Background(), …)` created *after* `<-ctx.Done()` — you can't
+    derive from the already-canceled parent: serve_ingest, serve_mcp,
+    driver_webhook, the flushOTel/Shutdown teardown). Two are `config.Load`
+    (synchronous boot-time file I/O, ctx-less by design). The rest are
+    `container.Run()`/`Shutdown()` lifecycle methods and `DecodeRefresh`
+    (pure JWT decode, no I/O). Enabling it means ~9 `//nolint` for zero
+    bugs — same calculus as `nilerr`. Leave OFF.
   - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
     `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
   - Resolve the remaining `//nolint:staticcheck` deprecation: pgx

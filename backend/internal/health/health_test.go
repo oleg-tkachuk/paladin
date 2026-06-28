@@ -16,7 +16,7 @@ func probe(t *testing.T, h *Handler, path string) (int, response) {
 	mux := http.NewServeMux()
 	h.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 

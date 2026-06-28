@@ -82,7 +82,7 @@ func TestWebhookHandler_HMACGate(t *testing.T) {
 
 	// Wrong signature → 401 + handler not called.
 	r := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/webhook/stub", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), "POST", "/webhook/stub", bytes.NewReader(body))
 	req.Header.Set("X-PALADIN-Signature", "deadbeef")
 	h(r, req)
 	if r.Code != http.StatusUnauthorized {
@@ -94,7 +94,7 @@ func TestWebhookHandler_HMACGate(t *testing.T) {
 
 	// Correct signature → 200 + handler called.
 	r = httptest.NewRecorder()
-	req = httptest.NewRequest("POST", "/webhook/stub", bytes.NewReader(body))
+	req = httptest.NewRequestWithContext(t.Context(), "POST", "/webhook/stub", bytes.NewReader(body))
 	req.Header.Set("X-PALADIN-Signature", sign(body, "secret"))
 	h(r, req)
 	if r.Code != http.StatusOK {
@@ -114,7 +114,7 @@ func TestWebhookHandler_MethodNotAllowed(t *testing.T) {
 	h := d.handler(src, func(_ context.Context, _ CloudEvent) error { return nil })
 
 	r := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/webhook/stub", nil)
+	req := httptest.NewRequestWithContext(t.Context(), "GET", "/webhook/stub", nil)
 	h(r, req)
 	if r.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET got %d, want 405", r.Code)

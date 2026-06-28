@@ -56,7 +56,7 @@ func TestTrackSessions_MintAndContinue(t *testing.T) {
 
 	// 1) initialize: no request session id → server mints "sess-1" on response.
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/mcp",
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp",
 		strings.NewReader(`{"jsonrpc":"2.0","method":"initialize","id":1}`))
 	h.ServeHTTP(rec, req)
 	if got := rec.Header().Get(mcpSessionIDHeader); got != "sess-1" {
@@ -77,7 +77,7 @@ func TestTrackSessions_MintAndContinue(t *testing.T) {
 	// 2) continuation tools/call carries the session id → counts + touches.
 	clk.t = clk.t.Add(30 * time.Second)
 	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/mcp",
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp",
 		strings.NewReader(`{"jsonrpc":"2.0","method":"tools/call","id":2}`))
 	req2.Header.Set(mcpSessionIDHeader, "sess-1")
 	h.ServeHTTP(rec2, req2)
@@ -99,7 +99,7 @@ func TestTrackSessions_MintAndContinue(t *testing.T) {
 
 	// 3) a non-tool continuation does not bump the tool counter.
 	rec3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest(http.MethodPost, "/mcp",
+	req3 := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp",
 		strings.NewReader(`{"jsonrpc":"2.0","method":"tools/list","id":3}`))
 	req3.Header.Set(mcpSessionIDHeader, "sess-1")
 	h.ServeHTTP(rec3, req3)
@@ -137,7 +137,7 @@ func TestSessionsHandler(t *testing.T) {
 	bad := fakeVerifier{err: errors.New("bad token")}
 
 	call := func(v auth.TokenVerifier, authz string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/sessions", nil)
 		if authz != "" {
 			req.Header.Set("Authorization", authz)
 		}

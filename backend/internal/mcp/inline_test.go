@@ -42,7 +42,7 @@ func TestInlineRoundTripper_Routes(t *testing.T) {
 		{InlineIAMURL + "/baz", "iam"},
 	}
 	for _, tc := range cases {
-		req, err := http.NewRequest(http.MethodPost, tc.url, strings.NewReader("{}"))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, tc.url, strings.NewReader("{}"))
 		if err != nil {
 			t.Fatalf("new request %s: %v", tc.url, err)
 		}
@@ -80,7 +80,7 @@ func TestInlineRoundTripper_UnknownHost(t *testing.T) {
 		}),
 	})
 
-	req, err := http.NewRequest(http.MethodPost, "http://unknown.inline/foo", strings.NewReader(""))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://unknown.inline/foo", strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestNewInlineClients_TokenInjected(t *testing.T) {
 	if clients.HTTP == nil {
 		t.Fatal("Clients.HTTP nil")
 	}
-	req, _ := http.NewRequest(http.MethodPost, InlineDataURL+"/test", strings.NewReader("{}"))
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, InlineDataURL+"/test", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer tok-abc") // simulate what the interceptor does
 	resp, err := clients.HTTP.Do(req)
 	if err != nil {
