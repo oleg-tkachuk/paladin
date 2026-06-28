@@ -55,7 +55,9 @@ function actionPalette(
 ): "destructive" | "warning" | "info" | "success" | "outline" {
   if (hasError) return "destructive";
   const a = action.toLowerCase();
-  if (a.includes("delete") || a.includes("revoke")) return "destructive";
+  // Security events (e.g. refresh-token reuse) stand out even without an error.
+  if (a.includes("delete") || a.includes("revoke") || a.includes("reuse"))
+    return "destructive";
   if (a.includes("update") || a.includes("rotate") || a.includes("set"))
     return "warning";
   if (a.includes("create") || a.includes("login")) return "success";

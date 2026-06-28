@@ -14,12 +14,20 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 	cedar "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
+
+// AuditWriter records security-relevant OAuth events (currently refresh-token
+// reuse) so they surface in the admin audit console. Optional — a nil writer
+// just skips the audit row; the log + token revocation still happen.
+type AuditWriter interface {
+	Insert(ctx context.Context, e admindomain.AuditEntry) error
+}
 
 // Authorizer is the slice of the Cedar engine the AS uses to gate consent
 // (ActionAuthorizeOAuth). Optional — a nil Authorizer skips the policy check
@@ -50,6 +58,7 @@ type Handler struct {
 	limiter     *tokenBucket
 	corsOrigins []string
 	authz       Authorizer
+	audit       AuditWriter
 	log         *zap.Logger
 	now         func() time.Time
 }
@@ -58,6 +67,13 @@ type Handler struct {
 // Optional; nil leaves the AS on scope-subset + authentication only.
 func (h *Handler) WithAuthorizer(a Authorizer) *Handler {
 	h.authz = a
+	return h
+}
+
+// WithAudit records refresh-token reuse events to the audit log (visible in
+// the admin audit console). Optional.
+func (h *Handler) WithAudit(a AuditWriter) *Handler {
+	h.audit = a
 	return h
 }
 
@@ -366,7 +382,17 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stored, err := h.refresh.Get(r.Context(), jti)
-	if err != nil || h.now().After(stored.ExpiresAt) {
+	if err != nil {
+		// A revoked-but-present token means a rotated refresh was replayed —
+		// the RFC 6819 theft signal. Revoke the whole family (all the user's
+		// refresh tokens), log, and record it for the audit console.
+		if errors.Is(err, authstore.ErrTokenRevoked) {
+			h.onRefreshReuse(r.Context(), userID, tenantID)
+		}
+		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token rejected")
+		return
+	}
+	if h.now().After(stored.ExpiresAt) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token rejected")
 		return
 	}
@@ -381,6 +407,33 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.issueTokens(r.Context(), w, u, auth.AudienceData, "")
+}
+
+// onRefreshReuse handles a detected refresh-token replay: revoke every refresh
+// token for the user (RFC 6819 reuse detection), log a warning, and write an
+// audit row (is_error → highlighted in the admin audit console). Best-effort:
+// failures here never change the caller's already-decided rejection.
+func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID) {
+	revoked, err := h.refresh.RevokeForUser(ctx, userID)
+	if h.log != nil {
+		h.log.Warn("oauth refresh token reuse detected; revoked all user refresh tokens",
+			zap.String("user_id", userID.String()),
+			zap.Int64("revoked", revoked),
+			zap.Error(err))
+	}
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+		EntryID:       uuid.Must(uuid.NewV7()),
+		At:            h.now().UTC(),
+		ActorSubject:  userID.String(),
+		ActorTenantID: tenantID,
+		ActorAudience: auth.AudienceIAM,
+		Action:        "iam.RefreshTokenReuseDetected",
+		ResourceName:  "users/" + userID.String(),
+		ErrorMessage:  "rotated refresh token replayed; all user refresh tokens revoked",
+	})
 }
 
 // tokenResponse is the RFC 6749 §5.1 success body.

@@ -91,7 +91,15 @@ may grant which scopes to which clients.
   429 + Retry-After) and supports CORS for browser public clients
   (`token_endpoint_allowed_origins`; OPTIONS preflight + ACAO). The full
   authorize→token→refresh chain has an in-process integration test.
-- **Deferred within this ADR (tracked in BACKLOG):** refresh-token
-  family/reuse-detection analytics; per-client scope-grant memory (skip
-  re-consent); and a live-stack hurl e2e (needs the e2e harness to enable
-  OAuth + seed a client + a known-password user).
+- **Refresh-token reuse-detection, as shipped:** replaying a rotated
+  (revoked) refresh token at either refresh path (OAuth `/oauth/token` or
+  Connect `AuthService.RefreshToken`/`ExchangeAudience`) revokes ALL the
+  user's refresh tokens (RFC 6819), logs a warning, and writes an audit row
+  (`iam.RefreshTokenReuseDetected`, is_error) that surfaces — highlighted —
+  in the admin audit console. Revocation is user-wide; per-family precision
+  (only the compromised chain) is the deferred refinement (needs a family_id
+  column).
+- **Deferred within this ADR (tracked in BACKLOG):** per-family reuse
+  revocation (vs. the current user-wide); per-client scope-grant memory
+  (skip re-consent); and a live-stack hurl e2e (needs the e2e harness to
+  enable OAuth + seed a client + a known-password user).

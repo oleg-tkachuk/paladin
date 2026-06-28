@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
@@ -75,15 +76,32 @@ func (m memUsers) FindBySubjectGlobal(_ context.Context, subject string) ([]auth
 	return nil, nil
 }
 
-type memRefresh struct{ inserted, revoked int }
+type memRefresh struct {
+	inserted, revoked, userRevoked int
+	getErr                         error // when set, Get returns it (e.g. ErrTokenRevoked)
+}
 
 func (m *memRefresh) Insert(context.Context, authstore.RefreshToken) error { m.inserted++; return nil }
 func (m *memRefresh) Get(_ context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
+	if m.getErr != nil {
+		return authstore.RefreshToken{}, m.getErr
+	}
 	return authstore.RefreshToken{JTI: jti, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
-func (m *memRefresh) Revoke(context.Context, uuid.UUID) error                 { m.revoked++; return nil }
-func (m *memRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) { return 0, nil }
-func (m *memRefresh) PurgeExpired(context.Context, time.Time) (int64, error)  { return 0, nil }
+func (m *memRefresh) Revoke(context.Context, uuid.UUID) error { m.revoked++; return nil }
+func (m *memRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {
+	m.userRevoked++
+	return 1, nil
+}
+func (m *memRefresh) PurgeExpired(context.Context, time.Time) (int64, error) { return 0, nil }
+
+// memAudit records audit entries for the reuse-detection test.
+type memAudit struct{ entries []admindomain.AuditEntry }
+
+func (m *memAudit) Insert(_ context.Context, e admindomain.AuditEntry) error {
+	m.entries = append(m.entries, e)
+	return nil
+}
 
 func testHandler(t *testing.T, store Store, refresh authstore.RefreshTokenRepository, u authstore.User) *Handler {
 	t.Helper()
@@ -431,4 +449,41 @@ func TestAuthorize_CedarGate(t *testing.T) {
 			t.Fatalf("status=%d loc=%s, want 302 with code", rec.Code, rec.Header().Get("Location"))
 		}
 	})
+}
+
+func TestToken_RefreshReuseDetected(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	// Get returns ErrTokenRevoked → the presented refresh was already rotated.
+	refresh := &memRefresh{getErr: authstore.ErrTokenRevoked}
+	audit := &memAudit{}
+	h := testHandler(t, store, refresh, u).WithAudit(audit)
+
+	// Mint a validly-signed IAM refresh token the decoder will accept.
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	if err != nil {
+		t.Fatalf("issuer: %v", err)
+	}
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.Must(uuid.NewV7())})
+	if err != nil {
+		t.Fatalf("mint refresh: %v", err)
+	}
+
+	rec := postForm(h, "/oauth/token", url.Values{
+		"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"}, "refresh_token": {rt},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 invalid_grant", rec.Code)
+	}
+	if refresh.userRevoked != 1 {
+		t.Errorf("reuse must revoke ALL the user's refresh tokens; RevokeForUser calls = %d", refresh.userRevoked)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("reuse must write exactly one audit entry, got %d", len(audit.entries))
+	}
+	e := audit.entries[0]
+	if !strings.Contains(e.Action, "Reuse") || e.ErrorMessage == "" {
+		t.Errorf("audit entry should name the reuse + carry an error message (is_error): %+v", e)
+	}
 }

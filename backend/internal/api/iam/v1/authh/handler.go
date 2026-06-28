@@ -12,12 +12,20 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
+
+// reuseAuditor records refresh-token reuse to the audit log (admin console).
+// Satisfied by admindomain.AuditRepository; optional.
+type reuseAuditor interface {
+	Insert(ctx context.Context, e admindomain.AuditEntry) error
+}
 
 // RefreshTokenDecoder verifies a refresh-token signature and extracts the
 // jti / user_id / tenant_id claims. Implemented by the auth package using
@@ -51,6 +59,18 @@ type Handler struct {
 	policy         cedar.Authorizer
 	tenantSlug     TenantSlugLookup
 	now            func() time.Time
+
+	// Optional: refresh-token reuse-detection observability.
+	audit reuseAuditor
+	log   *zap.Logger
+}
+
+// WithReuseAudit wires the audit log + logger used to surface refresh-token
+// reuse events. Optional; both nil → revoke-only (no audit row / log).
+func (h *Handler) WithReuseAudit(a reuseAuditor, l *zap.Logger) *Handler {
+	h.audit = a
+	h.log = l
+	return h
 }
 
 func NewHandler(
@@ -174,7 +194,13 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
-		if errors.Is(err, authstore.ErrTokenRevoked) || errors.Is(err, authstore.ErrNotFound) {
+		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
+		// the whole family and record it before rejecting.
+		if errors.Is(err, authstore.ErrTokenRevoked) {
+			h.onRefreshReuse(ctx, userID, tenantID)
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+		}
+		if errors.Is(err, authstore.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -256,7 +282,13 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	}
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
-		if errors.Is(err, authstore.ErrTokenRevoked) || errors.Is(err, authstore.ErrNotFound) {
+		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
+		// the whole family and record it before rejecting.
+		if errors.Is(err, authstore.ErrTokenRevoked) {
+			h.onRefreshReuse(ctx, userID, tenantID)
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+		}
+		if errors.Is(err, authstore.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -489,6 +521,33 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 }
 
 // parseRefresh delegates to the injected RefreshTokenDecoder.
+// onRefreshReuse revokes every refresh token for the user (RFC 6819 reuse
+// detection), logs a warning, and writes an audit row (is_error → highlighted
+// in the admin audit console). Best-effort — never alters the caller's already
+// decided rejection.
+func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID) {
+	revoked, err := h.refresh.RevokeForUser(ctx, userID)
+	if h.log != nil {
+		h.log.Warn("refresh token reuse detected; revoked all user refresh tokens",
+			zap.String("user_id", userID.String()),
+			zap.Int64("revoked", revoked),
+			zap.Error(err))
+	}
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+		EntryID:       uuid.Must(uuid.NewV7()),
+		At:            h.now().UTC(),
+		ActorSubject:  userID.String(),
+		ActorTenantID: tenantID,
+		ActorAudience: auth.AudienceIAM,
+		Action:        "iam.RefreshTokenReuseDetected",
+		ResourceName:  "users/" + userID.String(),
+		ErrorMessage:  "rotated refresh token replayed; all user refresh tokens revoked",
+	})
+}
+
 func (h *Handler) parseRefresh(token string) (uuid.UUID, uuid.UUID, uuid.UUID, error) {
 	if h.refreshDecoder == nil {
 		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh decoder not configured")

@@ -451,9 +451,17 @@ open deliberately — each notes why._
   (first-forbid wins). Engine injected via `WithAuthorizer` (optional). Cedar
   engine tests (default-permit, forbid-by-client, forbid-by-scope) + a handler
   gate test.
+- **Refresh reuse-detection DONE (2026-06-27):** replaying a rotated
+  (revoked) refresh token at either path (OAuth `/oauth/token`, Connect
+  `AuthService.RefreshToken`/`ExchangeAudience`) revokes all the user's
+  refresh tokens (RFC 6819), logs a warning, and writes an audit row
+  (`iam.RefreshTokenReuseDetected`, is_error → highlighted in the admin
+  audit console; frontend `actionPalette` also flags `reuse`). Revocation
+  is user-wide; per-family precision is the remaining refinement below.
 - **Definition of Done (remaining):**
-  - **Refresh reuse-detection:** flag/revoke a refresh-token family when a
-    rotated token is replayed (theft signal).
+  - **Per-family reuse revocation:** add a `family_id` to refresh_tokens so a
+    reuse event revokes only the compromised chain, not all the user's
+    sessions (current behaviour is user-wide).
   - **hurl e2e:** `tests/api/e2e/oauth.hurl` (authorise→token→refresh→revoke)
     — needs the e2e harness (run-e2e.sh runs every .hurl) to start the server
     with `auth.oauth.enabled` + a seeded client + a known-password user;

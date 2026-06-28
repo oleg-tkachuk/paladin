@@ -90,7 +90,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		return nil, nil, nil, err
 	}
 	dec := wire.ProvideRefreshDecoder(cfg)
-	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine)
+	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).WithReuseAudit(repos.Audit, l)
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	apikH := wire.ProvideApiKeyHandler(repos, iss, polEngine)
 	userSettingsH := usersettingsh.NewHandler(
@@ -295,6 +295,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		}
 		oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
 			WithAuthorizer(polEngine).
+			WithAudit(repos.Audit).
 			Mount(iamMux)
 		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
 	}
