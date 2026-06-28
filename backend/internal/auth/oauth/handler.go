@@ -18,7 +18,15 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	cedar "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
+
+// Authorizer is the slice of the Cedar engine the AS uses to gate consent
+// (ActionAuthorizeOAuth). Optional — a nil Authorizer skips the policy check
+// (scope-subset + authentication still apply), so the AS runs standalone.
+type Authorizer interface {
+	IsAuthorized(ctx context.Context, p *cedar.Principal, action string, r *cedar.Resource, rc cedar.RequestContext) (cedar.Decision, error)
+}
 
 // UserResolver is the slice of the IAM user store the AS needs: look a user up
 // for the login leg (by subject, tenant-disambiguated) and by id (refresh).
@@ -41,8 +49,16 @@ type Handler struct {
 	dec         *auth.RefreshDecoder
 	limiter     *tokenBucket
 	corsOrigins []string
+	authz       Authorizer
 	log         *zap.Logger
 	now         func() time.Time
+}
+
+// WithAuthorizer enables Cedar gating of the consent step (ActionAuthorizeOAuth).
+// Optional; nil leaves the AS on scope-subset + authentication only.
+func (h *Handler) WithAuthorizer(a Authorizer) *Handler {
+	h.authz = a
+	return h
 }
 
 // NewHandler builds the AS. now may be nil (defaults to time.Now).
@@ -166,6 +182,23 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		h.redirectError(w, r, p, "invalid_scope", "requested scope exceeds client grant")
 		return
 	}
+
+	// Cedar gate (ADR-0009): the built-in policy permits AuthorizeOAuth for
+	// any authenticated principal; a tenant policy may forbid specific
+	// principals/clients/scopes via context.oauth_client_id / oauth_scopes.
+	if h.authz != nil {
+		dec, aerr := h.authz.IsAuthorized(r.Context(),
+			&cedar.Principal{Subject: u.Subject, TenantID: u.TenantID, Roles: u.Roles},
+			cedar.ActionAuthorizeOAuth,
+			&cedar.Resource{TenantID: u.TenantID},
+			cedar.RequestContext{Now: h.now(), OAuthClientID: client.ClientID, OAuthScopes: scopes},
+		)
+		if aerr != nil || dec != cedar.DecisionAllow {
+			h.redirectError(w, r, p, "access_denied", "authorization denied by policy")
+			return
+		}
+	}
+
 	audience := audienceFor(client, p.Resource)
 
 	code, err := GenerateCode()

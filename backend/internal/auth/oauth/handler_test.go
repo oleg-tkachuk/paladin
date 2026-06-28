@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/internal/config"
+	cedar "github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 )
 
 const testSigningKey = "test-signing-key-at-least-32-bytes-long!!"
@@ -381,4 +382,53 @@ func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
 	if rrec.Code != http.StatusOK {
 		t.Fatalf("refresh status = %d body=%s", rrec.Code, rrec.Body.String())
 	}
+}
+
+// fakeAuthorizer gates the consent step for the Cedar wiring test.
+type fakeAuthorizer struct{ allow bool }
+
+func (f fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	if f.allow {
+		return cedar.DecisionAllow, nil
+	}
+	return cedar.DecisionDeny, nil
+}
+
+func TestAuthorize_CedarGate(t *testing.T) {
+	verifier := strings.Repeat("a", 50)
+	allowForm := func(u authstore.User) url.Values {
+		return url.Values{
+			"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "scope": {"paladin.read"},
+			"code_challenge": {ComputeS256Challenge(verifier)}, "code_challenge_method": {"S256"},
+			"state": {"st"}, "action": {"allow"},
+			"username": {"svc@acme"}, "password": {"hunter2hunter2"}, "tenant": {u.TenantID.String()},
+		}
+	}
+
+	t.Run("policy deny → access_denied", func(t *testing.T) {
+		store := newMemStore()
+		store.clients[publicClient().ClientID] = publicClient()
+		u := sampleUser()
+		h := testHandler(t, store, &memRefresh{}, u).WithAuthorizer(fakeAuthorizer{allow: false})
+		rec := postForm(h, "/oauth/authorize", allowForm(u))
+		loc, _ := url.Parse(rec.Header().Get("Location"))
+		if rec.Code != http.StatusFound || loc.Query().Get("error") != "access_denied" {
+			t.Fatalf("status=%d loc=%s, want 302 access_denied", rec.Code, rec.Header().Get("Location"))
+		}
+		if loc.Query().Get("code") != "" {
+			t.Error("no code must be issued when policy denies")
+		}
+	})
+
+	t.Run("policy allow → code issued", func(t *testing.T) {
+		store := newMemStore()
+		store.clients[publicClient().ClientID] = publicClient()
+		u := sampleUser()
+		h := testHandler(t, store, &memRefresh{}, u).WithAuthorizer(fakeAuthorizer{allow: true})
+		rec := postForm(h, "/oauth/authorize", allowForm(u))
+		loc, _ := url.Parse(rec.Header().Get("Location"))
+		if rec.Code != http.StatusFound || loc.Query().Get("code") == "" {
+			t.Fatalf("status=%d loc=%s, want 302 with code", rec.Code, rec.Header().Get("Location"))
+		}
+	})
 }

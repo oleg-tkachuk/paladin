@@ -70,11 +70,16 @@ may grant which scopes to which clients.
   follow-up; the backend contract it posts to is stable.
 - Federated OIDC (Phase 5b.1) remains a clean future swap: the RS half is
   identical, and the AS endpoints map onto an external IdP's equivalents.
-- **Authz, as shipped:** consent is gated on resource-owner authentication
-  + the requested scopes being a subset of the client's registered grant.
-  The `AuthorizeOAuth` Cedar action is **deferred**: Cedar is default-deny,
-  so wiring it without first authoring policy templates would make every
-  consent fail. Scope-subset is the interim enforcement.
+- **Authz, as shipped:** consent is gated on (1) resource-owner
+  authentication, (2) the requested scopes being a subset of the client's
+  registered grant, and (3) a Cedar `AuthorizeOAuth` check. The built-in
+  policy *permits* `AuthorizeOAuth` for any authenticated principal (standard
+  OAuth self-consent), so the flow works out of the box; a tenant policy can
+  `forbid` it for specific principals/clients/scopes (first-forbid wins) via
+  `context.oauth_client_id` / `context.oauth_scopes`. This default-permit +
+  forbiddable shape sidesteps Cedar's default-deny without needing per-tenant
+  permit templates. The engine is injected optionally (`WithAuthorizer`); a
+  nil authorizer falls back to (1)+(2) so the AS still runs standalone.
 - **Consent UI:** shipped both ways. The built-in server-rendered form works
   standalone; when `auth.oauth.consent_url` is set, `/authorize` redirects to
   the polished Next.js page (`frontend/src/app/oauth/consent`) which POSTs the
@@ -86,7 +91,7 @@ may grant which scopes to which clients.
   429 + Retry-After) and supports CORS for browser public clients
   (`token_endpoint_allowed_origins`; OPTIONS preflight + ACAO). The full
   authorize→token→refresh chain has an in-process integration test.
-- **Deferred within this ADR (tracked in BACKLOG):** Cedar `AuthorizeOAuth`
-  policy gating; refresh-token family/reuse-detection analytics; per-client
-  scope-grant memory (skip re-consent); and a live-stack hurl e2e (needs the
-  e2e harness to enable OAuth + seed a client + a known-password user).
+- **Deferred within this ADR (tracked in BACKLOG):** refresh-token
+  family/reuse-detection analytics; per-client scope-grant memory (skip
+  re-consent); and a live-stack hurl e2e (needs the e2e harness to enable
+  OAuth + seed a client + a known-password user).

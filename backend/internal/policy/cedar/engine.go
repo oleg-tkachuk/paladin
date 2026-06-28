@@ -115,6 +115,13 @@ const (
 	ActionReadOperation   = "ReadOperation"
 	ActionCancelOperation = "CancelOperation"
 
+	// OAuth consent (ADR-0009). Checked at /oauth/authorize when a user
+	// approves an OAuth client. Resource is the Tenant entity; the request
+	// context carries oauth_client_id + oauth_scopes so a tenant policy can
+	// forbid specific clients/scopes. Permitted by default for any
+	// authenticated principal via the built-in policy.
+	ActionAuthorizeOAuth = "AuthorizeOAuth"
+
 	// Billing-scoped actions. Resource is the Tenant entity. Used by
 	// BillingService (admin plane) over the charges ledger from
 	// migration 027.
@@ -194,6 +201,13 @@ type RequestContext struct {
 	ContentType string
 	Now         time.Time
 	IP          string
+
+	// OAuth consent context (ADR-0009): the client being authorized and the
+	// scopes it requested. Exposed to policies as context.oauth_client_id +
+	// context.oauth_scopes so a tenant can forbid specific clients/scopes.
+	// Zero values for non-OAuth checks.
+	OAuthClientID string
+	OAuthScopes   []string
 }
 
 // Engine is a thread-safe Cedar authorizer with a compiled-policy cache.
@@ -338,6 +352,18 @@ permit (
 when {
   principal has roles && principal.roles.contains("platform.admin")
 };
+
+// Built-in: any authenticated principal may consent to an OAuth client
+// (AuthorizeOAuth) granting access to their own account — standard OAuth
+// self-service. A tenant policy can still forbid it for specific principals
+// or clients/scopes (first-forbid wins), e.g.
+//   forbid(principal, action == Action::"AuthorizeOAuth", resource)
+//   when { context.oauth_client_id == "some-client" };
+permit (
+  principal,
+  action == Action::"AuthorizeOAuth",
+  resource
+);
 `
 
 // compile parses the policy text into a cedar.PolicySet, prepending the
@@ -621,11 +647,17 @@ func buildContext(rc RequestContext) cedartypes.Record {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	scopes := make([]cedartypes.Value, 0, len(rc.OAuthScopes))
+	for _, s := range rc.OAuthScopes {
+		scopes = append(scopes, cedartypes.String(s))
+	}
 	return cedartypes.NewRecord(cedartypes.RecordMap{
-		"size_bytes":   cedartypes.Long(rc.SizeBytes),
-		"content_type": cedartypes.String(rc.ContentType),
-		"now":          cedartypes.Long(now.Unix()),
-		"ip":           cedartypes.String(rc.IP),
+		"size_bytes":      cedartypes.Long(rc.SizeBytes),
+		"content_type":    cedartypes.String(rc.ContentType),
+		"now":             cedartypes.Long(now.Unix()),
+		"ip":              cedartypes.String(rc.IP),
+		"oauth_client_id": cedartypes.String(rc.OAuthClientID),
+		"oauth_scopes":    cedartypes.NewSet(scopes...),
 	})
 }
 

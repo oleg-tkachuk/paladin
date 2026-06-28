@@ -445,10 +445,13 @@ open deliberately — each notes why._
   (`auth.oauth.token_endpoint_allowed_origins`; OPTIONS preflight + ACAO).
   Full authorize→token→refresh chain covered by an in-process integration
   test. Unit tests for the limiter + CORS.
+- **Cedar gating DONE (2026-06-27):** `AuthorizeOAuth` action + a built-in
+  permit (default-allow self-consent) that a tenant policy can `forbid` per
+  principal/client/scope via `context.oauth_client_id` / `context.oauth_scopes`
+  (first-forbid wins). Engine injected via `WithAuthorizer` (optional). Cedar
+  engine tests (default-permit, forbid-by-client, forbid-by-scope) + a handler
+  gate test.
 - **Definition of Done (remaining):**
-  - **Cedar gating:** wire the `AuthorizeOAuth` action once policy templates
-    exist (Cedar is default-deny; today consent enforces scope-subset +
-    authentication instead).
   - **Refresh reuse-detection:** flag/revoke a refresh-token family when a
     rotated token is replayed (theft signal).
   - **hurl e2e:** `tests/api/e2e/oauth.hurl` (authorise→token→refresh→revoke)
