@@ -154,6 +154,22 @@ type AuditLog struct {
 	CapabilityID  pgtype.UUID        `json:"capability_id"`
 }
 
+type AuditLogDefault struct {
+	EntryID       pgtype.UUID        `json:"entry_id"`
+	At            pgtype.Timestamptz `json:"at"`
+	ActorSubject  string             `json:"actor_subject"`
+	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
+	ActorAudience string             `json:"actor_audience"`
+	Action        string             `json:"action"`
+	ResourceName  string             `json:"resource_name"`
+	RequestID     *string            `json:"request_id"`
+	SourceIp      *string            `json:"source_ip"`
+	BeforeJson    []byte             `json:"before_json"`
+	AfterJson     []byte             `json:"after_json"`
+	ErrorMessage  *string            `json:"error_message"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+}
+
 type Bucket struct {
 	BackendID                         string             `json:"backend_id"`
 	BucketName                        string             `json:"bucket_name"`
@@ -267,6 +283,16 @@ type IdempotencyKey struct {
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
+type IdempotencyKeysDefault struct {
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Method      string             `json:"method"`
+	Key         string             `json:"key"`
+	Response    []byte             `json:"response"`
+	ResponseSha []byte             `json:"response_sha"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
 type IngestedEvent struct {
 	EventID    string             `json:"event_id"`
 	Source     string             `json:"source"`
@@ -292,6 +318,32 @@ type MultipartUpload struct {
 	TotalParts      int32              `json:"total_parts"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type OauthAuthorizationCode struct {
+	CodeHash            []byte             `json:"code_hash"`
+	ClientID            string             `json:"client_id"`
+	UserID              pgtype.UUID        `json:"user_id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	CodeChallenge       string             `json:"code_challenge"`
+	CodeChallengeMethod string             `json:"code_challenge_method"`
+	Scopes              []string           `json:"scopes"`
+	Audience            string             `json:"audience"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt          pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type OauthClient struct {
+	ClientID         string             `json:"client_id"`
+	ClientName       string             `json:"client_name"`
+	RedirectUris     []string           `json:"redirect_uris"`
+	AllowedScopes    []string           `json:"allowed_scopes"`
+	AllowedAudiences []string           `json:"allowed_audiences"`
+	SecretHash       []byte             `json:"secret_hash"`
+	IsPublic         bool               `json:"is_public"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type Object struct {
@@ -404,6 +456,7 @@ type RefreshToken struct {
 	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Revoked   bool               `json:"revoked"`
+	FamilyID  pgtype.UUID        `json:"family_id"`
 }
 
 type ReplicationState struct {

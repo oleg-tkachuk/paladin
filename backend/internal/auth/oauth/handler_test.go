@@ -77,8 +77,8 @@ func (m memUsers) FindBySubjectGlobal(_ context.Context, subject string) ([]auth
 }
 
 type memRefresh struct {
-	inserted, revoked, userRevoked int
-	getErr                         error // when set, Get returns it (e.g. ErrTokenRevoked)
+	inserted, revoked, userRevoked, familyRevoked int
+	getErr                                        error // when set, Get returns it (e.g. ErrTokenRevoked)
 }
 
 func (m *memRefresh) Insert(context.Context, authstore.RefreshToken) error { m.inserted++; return nil }
@@ -91,6 +91,10 @@ func (m *memRefresh) Get(_ context.Context, jti uuid.UUID) (authstore.RefreshTok
 func (m *memRefresh) Revoke(context.Context, uuid.UUID) error { m.revoked++; return nil }
 func (m *memRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {
 	m.userRevoked++
+	return 1, nil
+}
+func (m *memRefresh) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) {
+	m.familyRevoked++
 	return 1, nil
 }
 func (m *memRefresh) PurgeExpired(context.Context, time.Time) (int64, error) { return 0, nil }
@@ -476,8 +480,8 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 invalid_grant", rec.Code)
 	}
-	if refresh.userRevoked != 1 {
-		t.Errorf("reuse must revoke ALL the user's refresh tokens; RevokeForUser calls = %d", refresh.userRevoked)
+	if refresh.familyRevoked != 1 {
+		t.Errorf("reuse must revoke the token family; RevokeFamilyOf calls = %d", refresh.familyRevoked)
 	}
 	if len(audit.entries) != 1 {
 		t.Fatalf("reuse must write exactly one audit entry, got %d", len(audit.entries))

@@ -76,6 +76,7 @@ func (f *fakeUsers) TouchLogin(context.Context, uuid.UUID, time.Time) error { f.
 type fakeRefresh struct {
 	inserts        int
 	revokeForUsers int
+	revokeFamilies int
 	getTok         authstore.RefreshToken
 	getErr         error
 }
@@ -87,6 +88,10 @@ func (f *fakeRefresh) Get(context.Context, uuid.UUID) (authstore.RefreshToken, e
 func (f *fakeRefresh) Revoke(context.Context, uuid.UUID) error { return nil }
 func (f *fakeRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {
 	f.revokeForUsers++
+	return 0, nil
+}
+func (f *fakeRefresh) RevokeFamilyOf(context.Context, uuid.UUID) (int64, error) {
+	f.revokeFamilies++
 	return 0, nil
 }
 func (f *fakeRefresh) PurgeExpired(context.Context, time.Time) (int64, error) { return 0, nil }

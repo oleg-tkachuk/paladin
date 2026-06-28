@@ -1,9 +1,9 @@
 -- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (jti, user_id, tenant_id, issued_at, expires_at)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO refresh_tokens (jti, user_id, tenant_id, family_id, issued_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetRefreshToken :one
-SELECT jti, user_id, tenant_id, issued_at, expires_at, revoked
+SELECT jti, user_id, tenant_id, family_id, issued_at, expires_at, revoked
 FROM refresh_tokens
 WHERE jti = $1;
 
@@ -16,6 +16,14 @@ WHERE jti = $1;
 UPDATE refresh_tokens
 SET revoked = TRUE
 WHERE user_id = $1 AND revoked = FALSE;
+
+-- name: RevokeRefreshTokenFamily :execrows
+-- Reuse-detection (ADR-0009): revoke every still-live token in the family of
+-- the given jti — the compromised chain only, not all the user's sessions.
+UPDATE refresh_tokens
+SET revoked = TRUE
+WHERE family_id = (SELECT rt.family_id FROM refresh_tokens AS rt WHERE rt.jti = $1)
+  AND revoked = FALSE;
 
 -- name: PurgeExpiredRefreshTokens :execrows
 -- Bounded batch (10k). Worker loops until result is 0.

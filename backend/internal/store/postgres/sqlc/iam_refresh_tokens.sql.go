@@ -12,18 +12,29 @@ import (
 )
 
 const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT jti, user_id, tenant_id, issued_at, expires_at, revoked
+SELECT jti, user_id, tenant_id, family_id, issued_at, expires_at, revoked
 FROM refresh_tokens
 WHERE jti = $1
 `
 
-func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (RefreshToken, error) {
+type GetRefreshTokenRow struct {
+	Jti       pgtype.UUID        `json:"jti"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	FamilyID  pgtype.UUID        `json:"family_id"`
+	IssuedAt  pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	Revoked   bool               `json:"revoked"`
+}
+
+func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (GetRefreshTokenRow, error) {
 	row := q.db.QueryRow(ctx, getRefreshToken, jti)
-	var i RefreshToken
+	var i GetRefreshTokenRow
 	err := row.Scan(
 		&i.Jti,
 		&i.UserID,
 		&i.TenantID,
+		&i.FamilyID,
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.Revoked,
@@ -32,15 +43,16 @@ func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (Refresh
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (jti, user_id, tenant_id, issued_at, expires_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO refresh_tokens (jti, user_id, tenant_id, family_id, issued_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
-func (q *Queries) InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error {
+func (q *Queries) InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, insertRefreshToken,
 		jti,
 		userID,
 		tenantID,
+		familyID,
 		issuedAt,
 		expiresAt,
 	)
@@ -75,6 +87,23 @@ WHERE jti = $1
 func (q *Queries) RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, jti)
 	return err
+}
+
+const revokeRefreshTokenFamily = `-- name: RevokeRefreshTokenFamily :execrows
+UPDATE refresh_tokens
+SET revoked = TRUE
+WHERE family_id = (SELECT rt.family_id FROM refresh_tokens AS rt WHERE rt.jti = $1)
+  AND revoked = FALSE
+`
+
+// Reuse-detection (ADR-0009): revoke every still-live token in the family of
+// the given jti — the compromised chain only, not all the user's sessions.
+func (q *Queries) RevokeRefreshTokenFamily(ctx context.Context, jti pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeRefreshTokenFamily, jti)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeRefreshTokensForUser = `-- name: RevokeRefreshTokensForUser :execrows

@@ -150,7 +150,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		return nil, err
 	}
 
-	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience)
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -197,7 +197,7 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
 		// the whole family and record it before rejecting.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			h.onRefreshReuse(ctx, userID, tenantID)
+			h.onRefreshReuse(ctx, jti, userID, tenantID)
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
 		if errors.Is(err, authstore.ErrNotFound) {
@@ -225,11 +225,12 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		return nil, err
 	}
 
-	// Rotation: revoke the presented refresh, mint a fresh pair.
+	// Rotation: revoke the presented refresh, mint a fresh pair in the SAME
+	// family so the chain stays linked for reuse-detection.
 	if err := h.refresh.Revoke(ctx, jti); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience)
+	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -285,7 +286,7 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
 		// the whole family and record it before rejecting.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			h.onRefreshReuse(ctx, userID, tenantID)
+			h.onRefreshReuse(ctx, jti, userID, tenantID)
 			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
 		}
 		if errors.Is(err, authstore.ErrNotFound) {
@@ -473,9 +474,15 @@ func isAdminRole(r string) bool {
 	return strings.HasSuffix(r, ".admin")
 }
 
-func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string) (
+// mintPair issues an access+refresh pair. familyID groups the refresh chain:
+// pass uuid.Nil for a fresh login (a new family is generated) or the previous
+// token's family on rotation so the chain stays linked for reuse-detection.
+func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string, familyID uuid.UUID) (
 	access string, refresh string, accessExp, refreshExp time.Time, err error,
 ) {
+	if familyID == uuid.Nil {
+		familyID = uuid.Must(uuid.NewV7())
+	}
 	// Resolve tenant slug if a lookup is configured. Failure is non-fatal
 	// — the access token can still be minted with UUID-only tenant binding,
 	// and Cedar policies fall back to UUID-keyed Tenant UIDs. Logging the
@@ -510,6 +517,7 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 	}
 	if err := h.refresh.Insert(ctx, authstore.RefreshToken{
 		JTI:       tokenID,
+		FamilyID:  familyID,
 		UserID:    u.UserID,
 		TenantID:  u.TenantID,
 		IssuedAt:  h.now(),
@@ -525,10 +533,10 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 // detection), logs a warning, and writes an audit row (is_error → highlighted
 // in the admin audit console). Best-effort — never alters the caller's already
 // decided rejection.
-func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID) {
-	revoked, err := h.refresh.RevokeForUser(ctx, userID)
+func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
+	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
 	if h.log != nil {
-		h.log.Warn("refresh token reuse detected; revoked all user refresh tokens",
+		h.log.Warn("refresh token reuse detected; revoked the token family",
 			zap.String("user_id", userID.String()),
 			zap.Int64("revoked", revoked),
 			zap.Error(err))
@@ -544,7 +552,7 @@ func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID
 		ActorAudience: auth.AudienceIAM,
 		Action:        "iam.RefreshTokenReuseDetected",
 		ResourceName:  "users/" + userID.String(),
-		ErrorMessage:  "rotated refresh token replayed; all user refresh tokens revoked",
+		ErrorMessage:  "rotated refresh token replayed; token family revoked",
 	})
 }
 

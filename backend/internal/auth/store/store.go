@@ -96,11 +96,19 @@ type RefreshTokenRepository interface {
 	Get(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	Revoke(ctx context.Context, jti uuid.UUID) error
 	RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// RevokeFamilyOf revokes every still-live token sharing the family of the
+	// given jti — the reuse-detection chain revocation (ADR-0009). Returns the
+	// number of tokens revoked.
+	RevokeFamilyOf(ctx context.Context, jti uuid.UUID) (int64, error)
 	PurgeExpired(ctx context.Context, olderThan time.Time) (int64, error)
 }
 
 type RefreshToken struct {
-	JTI       uuid.UUID
+	JTI uuid.UUID
+	// FamilyID groups a login + all its subsequent rotations. A new login
+	// starts a family; each rotation inherits it. Reuse-detection revokes by
+	// family so only the compromised chain dies (ADR-0009).
+	FamilyID  uuid.UUID
 	UserID    uuid.UUID
 	TenantID  uuid.UUID
 	IssuedAt  time.Time

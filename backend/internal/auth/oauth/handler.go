@@ -359,7 +359,7 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
 		return
 	}
-	h.issueTokens(r.Context(), w, u, ac.Audience, scopesJoin(ac.Scopes))
+	h.issueTokens(r.Context(), w, u, ac.Audience, scopesJoin(ac.Scopes), uuid.Nil)
 }
 
 func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -387,7 +387,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		// the RFC 6819 theft signal. Revoke the whole family (all the user's
 		// refresh tokens), log, and record it for the audit console.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
-			h.onRefreshReuse(r.Context(), userID, tenantID)
+			h.onRefreshReuse(r.Context(), jti, userID, tenantID)
 		}
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token rejected")
 		return
@@ -401,22 +401,24 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
 		return
 	}
-	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749 §6).
+	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749
+	// §6), keeping the same family so the chain stays linked for reuse-detection.
 	if err := h.refresh.Revoke(r.Context(), jti); err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "rotation failed")
 		return
 	}
-	h.issueTokens(r.Context(), w, u, auth.AudienceData, "")
+	h.issueTokens(r.Context(), w, u, auth.AudienceData, "", stored.FamilyID)
 }
 
-// onRefreshReuse handles a detected refresh-token replay: revoke every refresh
-// token for the user (RFC 6819 reuse detection), log a warning, and write an
-// audit row (is_error → highlighted in the admin audit console). Best-effort:
-// failures here never change the caller's already-decided rejection.
-func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID) {
-	revoked, err := h.refresh.RevokeForUser(ctx, userID)
+// onRefreshReuse handles a detected refresh-token replay: revoke the token's
+// family (RFC 6819 reuse detection — the compromised chain only), log a
+// warning, and write an audit row (is_error → highlighted in the admin audit
+// console). Best-effort: failures here never change the caller's already
+// decided rejection.
+func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
+	revoked, err := h.refresh.RevokeFamilyOf(ctx, jti)
 	if h.log != nil {
-		h.log.Warn("oauth refresh token reuse detected; revoked all user refresh tokens",
+		h.log.Warn("oauth refresh token reuse detected; revoked the token family",
 			zap.String("user_id", userID.String()),
 			zap.Int64("revoked", revoked),
 			zap.Error(err))
@@ -432,7 +434,7 @@ func (h *Handler) onRefreshReuse(ctx context.Context, userID, tenantID uuid.UUID
 		ActorAudience: auth.AudienceIAM,
 		Action:        "iam.RefreshTokenReuseDetected",
 		ResourceName:  "users/" + userID.String(),
-		ErrorMessage:  "rotated refresh token replayed; all user refresh tokens revoked",
+		ErrorMessage:  "rotated refresh token replayed; token family revoked",
 	})
 }
 
@@ -447,7 +449,10 @@ type tokenResponse struct {
 
 // issueTokens mints an access token (aud-bound) + a rotating refresh token,
 // stores the refresh row, and writes the §5.1 JSON.
-func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, audience, scope string) {
+func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, audience, scope string, familyID uuid.UUID) {
+	if familyID == uuid.Nil {
+		familyID = uuid.Must(uuid.NewV7())
+	}
 	access, accessExp, err := h.iss.MintAccess(issuer.AccessClaims{
 		Subject:  u.UserID.String(),
 		TenantID: u.TenantID,
@@ -468,7 +473,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint refresh failed")
 		return
 	}
-	if err := h.refresh.Insert(ctx, r2RefreshToken(tokenID, u, h.now(), refreshExp)); err != nil {
+	if err := h.refresh.Insert(ctx, r2RefreshToken(tokenID, familyID, u, h.now(), refreshExp)); err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "persist refresh failed")
 		return
 	}
@@ -481,8 +486,8 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 	})
 }
 
-func r2RefreshToken(jti uuid.UUID, u authstore.User, iat, exp time.Time) authstore.RefreshToken {
-	return authstore.RefreshToken{JTI: jti, UserID: u.UserID, TenantID: u.TenantID, IssuedAt: iat, ExpiresAt: exp}
+func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, iat, exp time.Time) authstore.RefreshToken {
+	return authstore.RefreshToken{JTI: jti, FamilyID: familyID, UserID: u.UserID, TenantID: u.TenantID, IssuedAt: iat, ExpiresAt: exp}
 }
 
 // authenticateClient enforces client authentication: public clients pass

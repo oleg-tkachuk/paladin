@@ -122,7 +122,7 @@ type Querier interface {
 	// used to issue 1000 sequential SELECTs before any state mutation).
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, operationID pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
-	GetRefreshToken(ctx context.Context, jti pgtype.UUID) (RefreshToken, error)
+	GetRefreshToken(ctx context.Context, jti pgtype.UUID) (GetRefreshTokenRow, error)
 	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
@@ -164,7 +164,7 @@ type Querier interface {
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, versionID pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, s3Key string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte, lockMode string, lockRetainUntil pgtype.Timestamptz, legalHold bool) error
-	InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
+	InsertRefreshToken(ctx context.Context, jti pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz) error
 	// Streams a window of AVAILABLE-only objects under (tenant, object_key)
 	// newest-first. Pagination cursor: object_id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
@@ -374,6 +374,9 @@ type Querier interface {
 	RestoreTenant(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	RevokeApiKey(ctx context.Context, apiKeyID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error
+	// Reuse-detection (ADR-0009): revoke every still-live token in the family of
+	// the given jti — the compromised chain only, not all the user's sessions.
+	RevokeRefreshTokenFamily(ctx context.Context, jti pgtype.UUID) (int64, error)
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	RotateApiKeySecret(ctx context.Context, apiKeyID pgtype.UUID, secretHash []byte, secretHashOld []byte, secretHashOldUntil pgtype.Timestamptz) error
 	// Dual-write rotation: stash the current ref as the previous one with a

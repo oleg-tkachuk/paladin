@@ -25,6 +25,7 @@ func (r *RefreshTokenRepo) Insert(ctx context.Context, t authstore.RefreshToken)
 		pgUUID(t.JTI),
 		pgUUID(t.UserID),
 		pgUUID(t.TenantID),
+		pgUUID(t.FamilyID),
 		pgTS(t.IssuedAt),
 		pgTS(t.ExpiresAt),
 	)
@@ -43,6 +44,7 @@ func (r *RefreshTokenRepo) Get(ctx context.Context, jti uuid.UUID) (authstore.Re
 	}
 	return authstore.RefreshToken{
 		JTI:       uuidFrom(row.Jti),
+		FamilyID:  uuidFrom(row.FamilyID),
 		UserID:    uuidFrom(row.UserID),
 		TenantID:  uuidFrom(row.TenantID),
 		IssuedAt:  timeFrom(row.IssuedAt),
@@ -57,6 +59,10 @@ func (r *RefreshTokenRepo) Revoke(ctx context.Context, jti uuid.UUID) error {
 
 func (r *RefreshTokenRepo) RevokeForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
 	return r.q.RevokeRefreshTokensForUser(ctx, pgUUID(userID))
+}
+
+func (r *RefreshTokenRepo) RevokeFamilyOf(ctx context.Context, jti uuid.UUID) (int64, error) {
+	return r.q.RevokeRefreshTokenFamily(ctx, pgUUID(jti))
 }
 
 func (r *RefreshTokenRepo) PurgeExpired(ctx context.Context, olderThan time.Time) (int64, error) {
