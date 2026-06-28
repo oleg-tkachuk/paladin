@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,19 +33,32 @@ type UserResolver interface {
 // minted by the same issuer.Issuer the Connect login path uses, so the bearer
 // validates on the target plane (and at the MCP Resource Server, ADR-0008).
 type Handler struct {
-	cfg     config.OAuthAS
-	store   Store
-	users   UserResolver
-	refresh authstore.RefreshTokenRepository
-	iss     *issuer.Issuer
-	dec     *auth.RefreshDecoder
-	log     *zap.Logger
-	now     func() time.Time
+	cfg         config.OAuthAS
+	store       Store
+	users       UserResolver
+	refresh     authstore.RefreshTokenRepository
+	iss         *issuer.Issuer
+	dec         *auth.RefreshDecoder
+	limiter     *tokenBucket
+	corsOrigins []string
+	log         *zap.Logger
+	now         func() time.Time
 }
 
 // NewHandler builds the AS. now may be nil (defaults to time.Now).
 func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh authstore.RefreshTokenRepository, iss *issuer.Issuer, dec *auth.RefreshDecoder, l *zap.Logger) *Handler {
-	return &Handler{cfg: cfg, store: store, users: users, refresh: refresh, iss: iss, dec: dec, log: l, now: time.Now}
+	return &Handler{
+		cfg:         cfg,
+		store:       store,
+		users:       users,
+		refresh:     refresh,
+		iss:         iss,
+		dec:         dec,
+		limiter:     newTokenBucket(cfg.TokenRateLimitPerMinute),
+		corsOrigins: cfg.TokenEndpointAllowedOrigins,
+		log:         l,
+		now:         time.Now,
+	}
 }
 
 // Mount registers the OAuth endpoints on the given mux.
@@ -225,12 +239,29 @@ func (h *Handler) authenticate(ctx context.Context, subject, password, tenantHin
 // ─── /token ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
+	// CORS for browser-based public clients (no-op unless origins configured).
+	h.applyCORS(w, r)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method != http.MethodPost {
 		h.jsonError(w, http.StatusMethodNotAllowed, "invalid_request", "POST required")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
 		h.jsonError(w, http.StatusBadRequest, "invalid_request", "malformed form")
+		return
+	}
+	// Rate-limit per client_id before any DB work, to blunt code/secret
+	// brute-forcing (ADR-0009 hardening).
+	if ok, retry := h.limiter.allow(r.PostForm.Get("client_id")); !ok {
+		secs := int(retry.Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		h.jsonError(w, http.StatusTooManyRequests, "slow_down", "too many token requests; retry later")
 		return
 	}
 	switch r.PostForm.Get("grant_type") {
@@ -557,6 +588,38 @@ func (h *Handler) redirectError(w http.ResponseWriter, r *http.Request, p author
 
 func (h *Handler) jsonError(w http.ResponseWriter, status int, errCode, desc string) {
 	writeJSON(w, status, map[string]string{"error": errCode, "error_description": desc})
+}
+
+// applyCORS sets Access-Control-* headers on /oauth/token when the request's
+// Origin is in the configured allow-list (or "*"). No-op when no origins are
+// configured — server-to-server and native-form clients don't need CORS.
+func (h *Handler) applyCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" || len(h.corsOrigins) == 0 {
+		return
+	}
+	allowed := ""
+	for _, o := range h.corsOrigins {
+		if o == "*" {
+			allowed = "*"
+			break
+		}
+		if o == origin {
+			allowed = origin
+			break
+		}
+	}
+	if allowed == "" {
+		return
+	}
+	hdr := w.Header()
+	hdr.Set("Access-Control-Allow-Origin", allowed)
+	if allowed != "*" {
+		hdr.Add("Vary", "Origin")
+	}
+	hdr.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	hdr.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	hdr.Set("Access-Control-Max-Age", "600")
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

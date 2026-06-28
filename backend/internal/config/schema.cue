@@ -172,6 +172,8 @@ auth: {
     authorization_code_ttl:   =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"60s"
     allowed_redirect_schemes: [...string] | *["https"]
     consent_url:              string | *""
+    token_rate_limit_per_minute:    int | *60
+    token_endpoint_allowed_origins: [...string] | *[]
     seed_clients: [...{
       client_id:         string
       redirect_uris:     [...string] | *[]

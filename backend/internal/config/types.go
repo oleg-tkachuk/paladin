@@ -290,6 +290,16 @@ type OAuthAS struct {
 	// decision and POSTs them back to /oauth/authorize. Empty → use the
 	// built-in server-rendered consent (works standalone, no front-end).
 	ConsentURL string `yaml:"consent_url" json:"consent_url"`
+	// TokenRateLimitPerMinute caps /oauth/token requests per client_id
+	// (in-memory token bucket, per pod) to blunt code/secret brute-forcing.
+	// <= 0 falls back to a built-in default (60/min); set a high value to
+	// effectively disable.
+	TokenRateLimitPerMinute int `yaml:"token_rate_limit_per_minute" json:"token_rate_limit_per_minute"`
+	// TokenEndpointAllowedOrigins enables CORS on /oauth/token for
+	// browser-based public clients: an Origin in this list (or "*") gets the
+	// Access-Control-Allow-Origin reply and OPTIONS preflight handling. Empty
+	// → no CORS headers (server-to-server / native-form clients need none).
+	TokenEndpointAllowedOrigins []string `yaml:"token_endpoint_allowed_origins" json:"token_endpoint_allowed_origins"`
 	// SeedClients are first-party clients registered at boot so a fresh
 	// deployment works without DCR. Keyed by client_id.
 	SeedClients []OAuthSeedClient `yaml:"seed_clients" json:"seed_clients"`

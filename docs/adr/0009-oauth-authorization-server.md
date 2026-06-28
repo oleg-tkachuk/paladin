@@ -81,7 +81,12 @@ may grant which scopes to which clients.
   credentials + decision back. The form is a native cross-origin POST (not
   fetch) so the browser follows the backend's 302 to the client redirect_uri
   — including custom schemes like `claude-desktop://`.
-- **Deferred within this ADR (tracked in BACKLOG):** per-client rate-limiting
-  on `/oauth/token` (the api-token limiter exists to reuse); Cedar
-  `AuthorizeOAuth` policy gating; refresh-token family/reuse-detection
-  analytics; and per-client scope-grant memory (skip re-consent).
+- **Hardening, as shipped:** `/oauth/token` is rate-limited per `client_id`
+  (in-memory token bucket, `token_rate_limit_per_minute`, default 60/min →
+  429 + Retry-After) and supports CORS for browser public clients
+  (`token_endpoint_allowed_origins`; OPTIONS preflight + ACAO). The full
+  authorize→token→refresh chain has an in-process integration test.
+- **Deferred within this ADR (tracked in BACKLOG):** Cedar `AuthorizeOAuth`
+  policy gating; refresh-token family/reuse-detection analytics; per-client
+  scope-grant memory (skip re-consent); and a live-stack hurl e2e (needs the
+  e2e harness to enable OAuth + seed a client + a known-password user).

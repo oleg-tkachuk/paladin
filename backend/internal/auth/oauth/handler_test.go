@@ -86,12 +86,19 @@ func (m *memRefresh) PurgeExpired(context.Context, time.Time) (int64, error)  { 
 
 func testHandler(t *testing.T, store Store, refresh authstore.RefreshTokenRepository, u authstore.User) *Handler {
 	t.Helper()
+	return testHandlerCfg(t, store, refresh, u, config.OAuthAS{
+		Enabled: true, DynamicRegistration: true, AuthorizationCodeTTL: time.Minute,
+		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+	})
+}
+
+func testHandlerCfg(t *testing.T, store Store, refresh authstore.RefreshTokenRepository, u authstore.User, cfg config.OAuthAS) *Handler {
+	t.Helper()
 	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
 	dec := &auth.RefreshDecoder{Verifier: &auth.JWTVerifier{Key: []byte(testSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceIAM}}
-	cfg := config.OAuthAS{Enabled: true, DynamicRegistration: true, AuthorizationCodeTTL: time.Minute, AllowedRedirectSchemes: []string{"https", "claude-desktop"}}
 	return NewHandler(cfg, store, memUsers{u: u}, refresh, iss, dec, zap.NewNop())
 }
 
@@ -265,4 +272,113 @@ func postForm(h *Handler, path string, form url.Values) *httptest.ResponseRecord
 		h.handleAuthorize(rec, r)
 	}
 	return rec
+}
+
+func TestToken_RateLimited(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	// capacity 1 → second token request is throttled before any DB work.
+	h := testHandlerCfg(t, store, &memRefresh{}, u, config.OAuthAS{
+		Enabled: true, TokenRateLimitPerMinute: 1,
+		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+	})
+	form := url.Values{
+		"grant_type": {"authorization_code"}, "client_id": {"claude-desktop"},
+		"code": {"nope"}, "redirect_uri": {"claude-desktop://cb"},
+		"code_verifier": {strings.Repeat("a", 50)},
+	}
+	// First request consumes the single token (fails on bad code with 400).
+	if rec := postForm(h, "/oauth/token", form); rec.Code == http.StatusTooManyRequests {
+		t.Fatalf("first request should not be rate-limited")
+	}
+	// Second request is throttled before processing.
+	rec := postForm(h, "/oauth/token", form)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("429 must carry Retry-After")
+	}
+}
+
+func TestToken_CORS(t *testing.T) {
+	h := testHandlerCfg(t, newMemStore(), &memRefresh{}, sampleUser(), config.OAuthAS{
+		Enabled: true, TokenEndpointAllowedOrigins: []string{"https://app.example.com"},
+	})
+
+	t.Run("preflight from allowed origin", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodOptions, "/oauth/token", nil)
+		r.Header.Set("Origin", "https://app.example.com")
+		h.handleToken(rec, r)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("preflight status = %d, want 204", rec.Code)
+		}
+		if rec.Header().Get("Access-Control-Allow-Origin") != "https://app.example.com" {
+			t.Errorf("ACAO = %q", rec.Header().Get("Access-Control-Allow-Origin"))
+		}
+		if rec.Header().Get("Access-Control-Allow-Methods") == "" {
+			t.Error("missing Allow-Methods")
+		}
+	})
+
+	t.Run("disallowed origin gets no ACAO", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodOptions, "/oauth/token", nil)
+		r.Header.Set("Origin", "https://evil.example.com")
+		h.handleToken(rec, r)
+		if rec.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Error("disallowed origin must not receive Access-Control-Allow-Origin")
+		}
+	})
+}
+
+func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	h := testHandler(t, store, &memRefresh{}, u)
+	verifier := strings.Repeat("a", 50)
+
+	// 1. /authorize POST allow → 302 with code.
+	aform := url.Values{
+		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"scope":          {"paladin.read"},
+		"code_challenge": {ComputeS256Challenge(verifier)}, "code_challenge_method": {"S256"},
+		"state": {"st"}, "action": {"allow"},
+		"username": {"svc@acme"}, "password": {"hunter2hunter2"}, "tenant": {u.TenantID.String()},
+	}
+	arec := postForm(h, "/oauth/authorize", aform)
+	if arec.Code != http.StatusFound {
+		t.Fatalf("authorize status = %d body=%s", arec.Code, arec.Body.String())
+	}
+	loc, _ := url.Parse(arec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+	if code == "" {
+		t.Fatal("authorize did not return a code")
+	}
+
+	// 2. /token authorization_code → access + refresh.
+	trec := postForm(h, "/oauth/token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"claude-desktop"},
+		"redirect_uri": {"claude-desktop://cb"}, "code_verifier": {verifier},
+	})
+	if trec.Code != http.StatusOK {
+		t.Fatalf("token status = %d body=%s", trec.Code, trec.Body.String())
+	}
+	var tok tokenResponse
+	_ = json.Unmarshal(trec.Body.Bytes(), &tok)
+	if tok.AccessToken == "" || tok.RefreshToken == "" {
+		t.Fatalf("missing tokens: %+v", tok)
+	}
+
+	// 3. /token refresh_token → new access.
+	rrec := postForm(h, "/oauth/token", url.Values{
+		"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"},
+		"refresh_token": {tok.RefreshToken},
+	})
+	if rrec.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d body=%s", rrec.Code, rrec.Body.String())
+	}
 }

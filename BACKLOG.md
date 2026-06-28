@@ -439,16 +439,24 @@ open deliberately — each notes why._
   `auth.oauth.consent_url`: `/authorize` redirects there when set, else
   server-renders. `/oauth` added to the middleware public prefixes. Vitest +
   eslint + tsc green.
+- **Hardening DONE (2026-06-27):** `/oauth/token` rate-limited per client_id
+  (in-memory token bucket, `auth.oauth.token_rate_limit_per_minute`, default
+  60/min → 429 + Retry-After) and CORS for browser public clients
+  (`auth.oauth.token_endpoint_allowed_origins`; OPTIONS preflight + ACAO).
+  Full authorize→token→refresh chain covered by an in-process integration
+  test. Unit tests for the limiter + CORS.
 - **Definition of Done (remaining):**
   - **Cedar gating:** wire the `AuthorizeOAuth` action once policy templates
     exist (Cedar is default-deny; today consent enforces scope-subset +
     authentication instead).
-  - **Hardening follow-ups:** per-client rate-limit on `/oauth/token` (reuse
-    the api-token limiter); CORS on `/oauth/token` for browser clients;
-    refresh-token reuse-detection analytics.
-  - **Tests:** hurl e2e (`tests/api/e2e/oauth.hurl`) authorise→token→refresh
-    →revoke; manual Claude Desktop Custom Connector against `paladin.local`.
-  - Delete this entry when the consent UI + Cedar gating land.
+  - **Refresh reuse-detection:** flag/revoke a refresh-token family when a
+    rotated token is replayed (theft signal).
+  - **hurl e2e:** `tests/api/e2e/oauth.hurl` (authorise→token→refresh→revoke)
+    — needs the e2e harness (run-e2e.sh runs every .hurl) to start the server
+    with `auth.oauth.enabled` + a seeded client + a known-password user;
+    otherwise it fails the whole suite. Plus a manual Claude Desktop Custom
+    Connector run against `paladin.local`.
+  - Delete this entry when Cedar gating + the hurl e2e land.
 - **Blockers:**
   - Decide whether to keep IAM as the auth server or fold it into a
     federated OIDC IdP (overlaps with the existing
