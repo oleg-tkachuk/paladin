@@ -1144,18 +1144,24 @@ of the pipeline._
   SC-002/SC-003/SC-004 must pass locally first.
 
 
-### Branch protection on `main` and `develop`
+### Branch protection on `main` and `develop` — require status checks
 
-- **Status:** Deferred
-- **Reason:** workflows alone don't gate merges; branch protection is a
-  repo-settings change (GitHub admin), not a code change, so it can't
-  land via a commit.
-- **Definition of Done:** `main` (and `develop`) require the `backend`,
-  `frontend`, `gitleaks`, and `trivy-fs` checks to pass before merge;
-  force-pushes disabled. One-time setup via repo Settings → Branches or
-  `gh api repos/:owner/:repo/branches/main/protection`.
-- **Blockers:** repo admin access; do after the first green runs of
-  `test.yml` / `security.yml` on a PR.
+- **Status:** Partially done — safe rules applied 2026-06-28; required
+  status checks still deferred.
+- **Reason:** The non-blocking half landed via the API on both branches:
+  force-pushes disabled, branch deletion blocked, linear history required,
+  `enforce_admins` on. The **required status checks** half
+  (`backend`, `frontend`, `gitleaks`, `trivy-fs`) is intentionally still OFF
+  because every Actions run currently fails at startup (0 steps executed) —
+  the signature of an exhausted private-repo Actions minutes / spending
+  limit. Requiring red checks would block all merges and direct pushes.
+- **Definition of Done:** once Actions runs go green, add
+  `required_status_checks` for `backend` / `frontend` / `gitleaks` /
+  `trivy-fs` (strict) via
+  `gh api -X PUT repos/:owner/:repo/branches/<br>/protection`.
+- **Blockers:** GitHub Actions billing — the runner accepts each job then
+  fails instantly (Settings → Billing → spending limit / payment method).
+  Account-level; only the repo owner can resolve it.
 
 
 ---
