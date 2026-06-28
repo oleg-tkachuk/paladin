@@ -20,7 +20,7 @@ import (
 // unconditionally), so every case runs inside a tx that `SET LOCAL ROLE`s to
 // a restricted, non-BYPASSRLS role mirroring the runtime's `paladin_app`, and
 // sets the `paladin.tenant_id` GUC exactly as internal/store/postgres/rls.go's
-// BeforeAcquire hook does per connection acquisition.
+// PrepareConn hook does per connection acquisition.
 func TestRLSTenantIsolation(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)

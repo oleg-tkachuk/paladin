@@ -33,12 +33,12 @@ type DB struct {
 }
 
 // Option mutates the pool config after parse and before the pool is
-// constructed. Used today only to install the RLS BeforeAcquire /
+// constructed. Used today only to install the RLS PrepareConn /
 // AfterRelease hooks; future hooks (telemetry, soft-delete defaults)
 // can plug in the same way.
 type Option func(*pgxpool.Config) *pgxpool.Config
 
-// WithRLS turns on tenant-isolating BeforeAcquire / AfterRelease hooks
+// WithRLS turns on tenant-isolating PrepareConn / AfterRelease hooks
 // that set / wipe `paladin.tenant_id` per acquisition. Migration 023
 // installs the matching per-table policies. The runtime DSN must
 // connect as `paladin_app` (NOBYPASSRLS); workers / migrations as

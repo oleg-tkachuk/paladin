@@ -334,7 +334,7 @@ type Security struct {
 
 	// RLS is intentionally not configurable here. Migration 023
 	// enables per-table policies unconditionally; the runtime always
-	// installs the BeforeAcquire hook that stamps paladin.tenant_id GUC
+	// installs the PrepareConn hook that stamps paladin.tenant_id GUC
 	// (cmd/server/common.go). Operator-visible knob would only
 	// surface a footgun (every "off" position breaks writes since
 	// paladin_app is NOBYPASSRLS by design). See migrations/023_rls.sql

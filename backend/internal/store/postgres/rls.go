@@ -20,19 +20,26 @@ const wipeTimeout = 2 * time.Second
 // wires per-table RLS policies that key on this GUC; together they
 // give us closed-by-default tenant isolation at the DB layer.
 //
-// BeforeAcquire is the right hook for two reasons:
+// PrepareConn is the right hook for two reasons:
 //
-//  1. It runs before pgx hands the connection to the caller, so the
-//     SET fires inside the same connection acquisition that serves
-//     the query.
+//  1. It runs before pgx hands the connection to the caller (per
+//     acquire, not once at connection creation), so the SET fires
+//     inside the same connection acquisition that serves the query.
 //
 //  2. The (ctx, conn) signature lets us thread the tenant from the
 //     calling request's context — which is exactly where the auth
 //     interceptors stamp it.
 //
+// PrepareConn replaces the deprecated BeforeAcquire (same timing) and
+// its (bool, error) result lets a failed GUC set surface as the real
+// error on the instigating query instead of the old behaviour, which
+// silently retried on other connections until "too many failed
+// attempts". We return (false, err) on a failed SET: the connection
+// is suspect, so destroy it and fail the query with the cause.
+//
 // AfterRelease wipes the GUC back to ” so a connection returning
 // to the pool doesn't leak its previous tenant on the next checkout
-// if (somehow) BeforeAcquire is bypassed. The policy's "NULL ⇒ no
+// if (somehow) PrepareConn is bypassed. The policy's "NULL ⇒ no
 // rows" rule means a wiped GUC fails closed.
 //
 // Worker / migrate paths run as `paladin_migrate` (BYPASSRLS) so they
@@ -43,8 +50,7 @@ const wipeTimeout = 2 * time.Second
 // Returns the modified config so the caller's NewWithConfig picks
 // it up. Caller passes a fresh pgxpool.Config.
 func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
-	//nolint:staticcheck // BeforeAcquire deprecated; migration to PrepareConn tracked in BACKLOG
-	cfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+	cfg.PrepareConn = func(ctx context.Context, conn *pgx.Conn) (bool, error) {
 		tenantID, err := auth.TenantFromContext(ctx)
 		if err != nil || tenantID.String() == "" {
 			// No tenant in ctx: zero the GUC. RLS policies will see
@@ -52,16 +58,20 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 			// genuinely needs cross-tenant access (admin RPCs over
 			// the limited set of un-RLS'd tables) runs queries
 			// against tables not covered by migration 023.
-			_, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', '', false)`)
-			return err == nil
+			if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', '', false)`); err != nil {
+				return false, err
+			}
+			return true, nil
 		}
-		_, err = conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, false)`, tenantID.String())
-		return err == nil
+		if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, false)`, tenantID.String()); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 	cfg.AfterRelease = func(conn *pgx.Conn) bool {
 		// Wipe the GUC on release so a connection returning to the
 		// pool doesn't carry tenant context for a request that
-		// somehow skipped BeforeAcquire. Pool keeps the connection
+		// somehow skipped PrepareConn. Pool keeps the connection
 		// only when this returns true.
 		ctx, cancel := context.WithTimeout(context.Background(), wipeTimeout)
 		defer cancel()

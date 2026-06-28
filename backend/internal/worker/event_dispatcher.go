@@ -377,7 +377,7 @@ func (d *Dispatcher) log() *zap.Logger {
 // PgxOutboxWriter is the production OutboxWriter — INSERTs straight
 // into event_deliveries on the supplied pgxpool.Pool. The producer
 // (admin pod) connection has the tenant GUC set per-request via the
-// RLS BeforeAcquire hook; the policy WITH CHECK clause keeps the
+// RLS PrepareConn hook; the policy WITH CHECK clause keeps the
 // INSERT honest even if a future regression bypasses tenant context.
 type PgxOutboxWriter struct {
 	Pool *pgxpool.Pool

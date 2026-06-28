@@ -1144,12 +1144,16 @@ of the pipeline._
     args, dropping the error, then submitting the possibly-nil result — was
     fixed independently (the three `Batch*` handlers now return on a marshal
     error). Leave OFF.
-  - Resolve the remaining `//nolint:staticcheck` deprecation: pgx
-    `BeforeAcquire` → `PrepareConn`. NOT a simple swap — `PrepareConn` runs
-    once at connection creation, but `EnableRLS` sets the `app.current_tenant`
-    GUC *per acquire* (the tenant changes per request), so the RLS GUC plumbing
-    needs rethinking (e.g. `SET LOCAL` in the request tx) before the swap.
-    (`h2c.NewHandler` → `http.Server.Protocols` is DONE.)
+  - pgx `BeforeAcquire` → `PrepareConn` — DONE (2026-06-28). The old
+    "needs rethinking" note was wrong: in pgx v5.10 `PrepareConn` is also a
+    *per-acquire* hook (same timing as `BeforeAcquire`), just with a
+    `(bool, error)` result, so `EnableRLS` swapped to it directly. The new
+    error return is an upgrade: a failed `set_config('paladin.tenant_id', …)` now
+    surfaces as the real error on the instigating query — `(false, err)`
+    destroys the suspect conn — instead of the old silent retry until "too
+    many failed attempts". `AfterRelease` is not deprecated, unchanged.
+    `//nolint:staticcheck` removed; RLS integration tests green.
+    (`h2c.NewHandler` → `http.Server.Protocols` was already DONE.)
   - The pure-style linters (`nlreturn` ~1.5k, `goconst`, `predeclared`,
     `nestif`, `dupl`, …) stay OFF by design — not worth the churn.
 - **Blockers:** none — incremental, each linter independently adoptable.

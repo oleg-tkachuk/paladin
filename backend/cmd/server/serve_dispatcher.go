@@ -168,7 +168,7 @@ var serveDispatcherCmd = &cobra.Command{
 }
 
 // newDispatcherPool opens a minimal pgxpool aimed at the dispatcher's
-// outbox loop. Skips the RLS BeforeAcquire / AfterRelease hooks — the
+// outbox loop. Skips the RLS PrepareConn / AfterRelease hooks — the
 // loop legitimately spans tenants and the MigrateDSN role is BYPASSRLS.
 //
 // `password` is the secret-resolved migrate password (populated at

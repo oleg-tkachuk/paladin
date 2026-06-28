@@ -46,7 +46,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 //
 // RLS handling: migration 023 enables row-level security on
 // capability_records keyed on the session GUC `paladin.tenant_id`. The
-// pool's BeforeAcquire hook (see internal/store/postgres/rls.go) sets
+// pool's PrepareConn hook (see internal/store/postgres/rls.go) sets
 // that GUC from the request's JWT — which is correct for in-tenant
 // flows but wrong when a platform-admin issues a capability for a
 // DIFFERENT tenant (the JWT carries the platform tenant, the row
@@ -59,7 +59,7 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // object hard-delete adapter (see store/postgres/adapters/object.go).
 //
 // The SET LOCAL scope dies with the transaction, so the connection's
-// pool-level GUC (set by BeforeAcquire) is restored automatically on
+// pool-level GUC (set by PrepareConn) is restored automatically on
 // release without an explicit reset.
 func (s *Store) Insert(ctx context.Context, c capability.Capability) error {
 	principalPayload, err := json.Marshal(c.Subject)

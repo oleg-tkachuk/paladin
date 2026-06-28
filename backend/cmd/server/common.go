@@ -89,7 +89,7 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 
 	// RLS is non-optional. Migration 023 enables per-table policies
 	// unconditionally and the runtime DSN connects as paladin_app
-	// (NOBYPASSRLS), so the BeforeAcquire hook that stamps
+	// (NOBYPASSRLS), so the PrepareConn hook that stamps
 	// paladin.tenant_id is the only place tenant context reaches the
 	// session GUC. Without it, every INSERT fails 'new row violates
 	// row-level security policy'. The hook is microseconds per
