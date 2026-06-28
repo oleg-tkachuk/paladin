@@ -1125,8 +1125,25 @@ of the pipeline._
     `container.Run()`/`Shutdown()` lifecycle methods and `DecodeRefresh`
     (pure JWT decode, no I/O). Enabling it means ~9 `//nolint` for zero
     bugs — same calculus as `nilerr`. Leave OFF.
-  - Security: `gosec` (~44, mostly G115 int-conversion + G104) and
-    `errchkjson` (~36) — triage real vs. noise, `//nolint` the safe ones.
+  - `gosec` — DONE (2026-06-28): enabled. The G115 rule (int→int32/uint32
+    narrowing) is excluded in `settings.gosec.excludes` — it has no range
+    analysis and all 26 hits are pagination totals / counts / lengths bounded
+    by query results or config (zero overflow risk, per-site nolint would be
+    pure noise). `_test\.go` is excluded (test G304 file-inclusion + G101
+    throwaway-cred hits aren't a runtime surface). Three production hits are
+    `//nolint`'d with reasons: G101 on the `X-PALADIN-API-Token` header const,
+    G118 on the two graceful-shutdown goroutines (detached ctx after parent
+    cancel), G709 on the internal SeaweedFS→NATS gob envelope. The rest of
+    gosec (command injection, weak crypto, file perms, …) stays active.
+  - `errchkjson` — EVALUATED AND REJECTED: the 15 hits are app-controlled
+    marshals that can't fail in practice — proto sink config, structs with
+    `uuid.UUID`/`time.Time`/`any` (all marshalable), static metadata docs —
+    or `Encode` to an `http.ResponseWriter` with no recovery after the header
+    is written. Adopting needs ~12 `//nolint` for ~0 real risk (same calculus
+    as `nilerr`). The one genuine smell it surfaced — `batch` marshaling its
+    args, dropping the error, then submitting the possibly-nil result — was
+    fixed independently (the three `Batch*` handlers now return on a marshal
+    error). Leave OFF.
   - Resolve the remaining `//nolint:staticcheck` deprecation: pgx
     `BeforeAcquire` → `PrepareConn`. NOT a simple swap — `PrepareConn` runs
     once at connection creation, but `EnableRLS` sets the `app.current_tenant`

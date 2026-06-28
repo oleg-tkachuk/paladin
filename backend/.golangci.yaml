@@ -22,6 +22,7 @@ linters:
     - errorlint # == / type-assert on errors + %w wrapping correctness
     - gomoddirectives # go.mod replace/retract hygiene
     - goprintffuncname # printf-like funcs end in "f"
+    - gosec # security issues (overflow, taint, hardcoded creds, file inclusion)
     - importas # consistent import aliases
     - makezero # make([]T, len) then append surprises
     - misspell # common misspellings
@@ -66,6 +67,24 @@ linters:
         - fmt.Fprintln
         - fmt.Fprint
         - (io.Closer).Close
+    gosec:
+      excludes:
+        # G115 (int->int32/uint32 narrowing) has no range analysis, so it
+        # flags every narrowing conversion. All 26 current hits are pagination
+        # totals / counts / lengths bounded by query results or config — zero
+        # real overflow risk, and per-site //nolint would be pure noise. The
+        # rest of gosec (command injection, file inclusion, weak crypto, …)
+        # stays on.
+        - G115
+
+  exclusions:
+    rules:
+      # gosec on test code is noise — tests read fixture paths (G304) and
+      # embed throwaway credentials (G101); they're not a runtime attack
+      # surface.
+      - path: _test\.go
+        linters:
+          - gosec
 
 issues:
   max-issues-per-linter: 0

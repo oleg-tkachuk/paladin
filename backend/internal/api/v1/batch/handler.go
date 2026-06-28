@@ -92,7 +92,10 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionDeleteObject); err != nil {
 		return uuid.Nil, err
 	}
-	md, _ := json.Marshal(args)
+	md, err := json.Marshal(args)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
+	}
 	return h.chargeAndSubmit(ctx, "BatchDelete", md)
 }
 
@@ -120,7 +123,10 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	if err := h.authorize(ctx, p, tenantID, args.DstObjectKey, cedar.ActionPutObject); err != nil {
 		return uuid.Nil, err
 	}
-	md, _ := json.Marshal(args)
+	md, err := json.Marshal(args)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
+	}
 	return h.chargeAndSubmit(ctx, "BatchCopy", md)
 }
 
@@ -140,7 +146,10 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if err := h.authorize(ctx, p, tenantID, args.ObjectKey, cedar.ActionUpdateObject); err != nil {
 		return uuid.Nil, err
 	}
-	md, _ := json.Marshal(args)
+	md, err := json.Marshal(args)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
+	}
 	return h.chargeAndSubmit(ctx, "BatchUpdateTags", md)
 }
 

@@ -133,7 +133,7 @@ func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 // the publisher writes `gob.Encode(metadata) || gob.Encode(body)` into
 // `nats.Msg.Data`. We decode both halves in order.
 func decodeNATSEnvelope(raw []byte) (metadata map[string]string, body []byte, err error) {
-	dec := gob.NewDecoder(bytes.NewReader(raw))
+	dec := gob.NewDecoder(bytes.NewReader(raw)) //nolint:gosec // G709: decodes the internal SeaweedFS→NATS envelope into fixed types (map[string]string + []byte), not arbitrary user types
 	if err := dec.Decode(&metadata); err != nil {
 		return nil, nil, fmt.Errorf("decode metadata: %w", err)
 	}

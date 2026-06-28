@@ -17,7 +17,7 @@ import (
 // HeaderAPIToken is the additional accepted header for API tokens.
 // Both `Authorization: Bearer paladin_pat_…` and `X-PALADIN-API-Token: paladin_pat_…`
 // route to the same verifier; X-PALADIN wins on duplicate (explicit > overloaded).
-const HeaderAPIToken = "X-PALADIN-API-Token"
+const HeaderAPIToken = "X-PALADIN-API-Token" //nolint:gosec // G101: HTTP header name, not a credential
 
 // apiTokenKey is the context value the interceptor stashes the verified
 // *api_token.Token under. Read via APITokenFromContext from handler code.
