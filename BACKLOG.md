@@ -1052,22 +1052,6 @@ open deliberately — each notes why._
   - Replay tooling (rebuild a sink from sequence N).
 - **Blockers:** operator preference (NATS vs Kafka vs Redpanda).
 
-### OpenTelemetry baseline (traces + metrics + logs)
-
-- **Status:** Partially done — traces + RED metrics shipped ([ADR-0001](docs/adr/0001-otel-observability-baseline.md): otelconnect + otelpgx). Remaining: committed Grafana dashboards under deploy/grafana/ and log↔trace correlation.
-- **Reason:** Today the only structured signal is access logs.
-  Cross-plane debugging — "this presign call took 1.4 s, why?" —
-  needs OTel spans across HTTP → Connect handler → sqlc → S3
-  signer, plus RED metrics on every RPC.
-- **Definition of Done:**
-  - `otel-go` SDK wired in `cmd/server/main.go` with OTLP exporter.
-  - Connect interceptor that names spans from RPC method.
-  - pgx tracer plugged into the pool.
-  - Helm chart wires `OTEL_EXPORTER_OTLP_ENDPOINT` to whatever
-    collector the cluster runs.
-  - Dashboards committed under `deploy/grafana/`.
-- **Blockers:** collector choice (Tempo? Honeycomb? Datadog?).
-
 ### SealedSecrets for prod-class clusters
 
 - **Status:** Aspirational
@@ -1091,7 +1075,8 @@ open deliberately — each notes why._
 _Context: full-codebase architecture audit on 2026-06-11 (backend,
 frontend, infra). Items the audit surfaced that aren't already covered
 elsewhere in this file. Handler-level tracing/metrics intentionally has
-no entry here — it is the existing "OpenTelemetry baseline" item._
+no entry here — it shipped as [ADR-0001](docs/adr/0001-otel-observability-baseline.md)
+(traces + RED metrics + log↔trace correlation)._
 
 ## CI / Delivery pipeline
 

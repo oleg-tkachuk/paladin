@@ -51,6 +51,12 @@ Endpoint / enable flow from `config.otel` (`endpoint`, `protocol`,
 - **Dashboards (2026-06-26):** `deploy/grafana/paladin-rpc-red.json` — a RED
   dashboard over the `rpc.server.*` metrics, with `deploy/grafana/README.md`
   documenting the datasource + metric-name assumptions.
+- **Log↔trace correlation (2026-06-28):** `logger.enrich` already stamps
+  `trace_id` / `span_id` / `request_id` / `tenant_id` on every structured log
+  line. `deploy/grafana/datasources.example.yaml` is the operator-facing glue
+  that makes it navigable: a Loki derived field links log → trace, Tempo
+  `tracesToLogsV2` links trace → log, and Prometheus exemplars link metric →
+  trace. Backend-agnostic (Tempo/Loki/Prometheus reference set).
 - **Exemplars:** handled by the SDK default (trace-based exemplar filter)
   once OTel is active — measurements taken inside a sampled span carry a
   trace exemplar over OTLP. Rendering them (Tempo/Prometheus exemplars) is

@@ -1,0 +1,77 @@
+# Grafana datasource provisioning — log ↔ trace ↔ metric correlation (ADR-0001)
+#
+# This wires the three PALADIN signals together so a single click pivots between
+# them. It is an EXAMPLE: PALADIN only speaks OTLP (push) and is agnostic to the
+# backend you run. Tempo / Loki / Prometheus are the OSS reference set; swap
+# the types/uids if you front OTLP with Honeycomb, Datadog, etc.
+#
+# Drop into Grafana's provisioning path (e.g. /etc/grafana/provisioning/
+# datasources/datasources.yaml) and restart Grafana. The committed dashboard
+# (paladin-rpc-red.json) expects a Prometheus datasource; the derived-field +
+# tracesToLogs glue below is what makes ADR-0001's log↔trace correlation
+# actually navigable in the UI.
+#
+# What makes the correlation work end to end:
+#   - PALADIN stamps trace_id / span_id / request_id / tenant_id onto every
+#     structured log line (internal/logger logger.enrich). The Loki derived
+#     field below extracts trace_id and links the log to its Tempo trace.
+#   - Tempo's tracesToLogsV2 links the other way (trace → its logs), filtered
+#     by trace_id.
+#   - Prometheus exemplars (SDK-default, trace-based) link a histogram bucket
+#     in the RED dashboard back to a sampled trace.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    jsonData:
+      # Exemplars: a measurement taken inside a sampled span carries a trace
+      # exemplar over OTLP. This makes the RED histogram panels clickable
+      # through to the trace that produced an outlier latency bucket.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Extract trace_id from PALADIN's JSON log lines and turn it into a link to
+      # the matching Tempo trace. The regex matches the `"trace_id":"..."`
+      # field emitted by logger.enrich.
+      derivedFields:
+        - name: trace_id
+          matcherType: regex
+          matcherRegex: '"trace_id":"(\w+)"'
+          # Standalone provisioning file → single `$`. If you mount this via
+          # docker-compose, double it to `$${__value.raw}` so compose doesn't
+          # eat the variable.
+          url: '${__value.raw}'
+          datasourceUid: tempo
+          urlDisplayLabel: View trace
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # Trace → logs: jump from a span to the log lines sharing its trace_id.
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+        # PALADIN tags traces with service.name + paladin.tenant_id (see ADR-0001).
+        tags:
+          - key: service.name
+            value: service
+      # Trace → metrics + the service graph, both off the RED metrics.
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus

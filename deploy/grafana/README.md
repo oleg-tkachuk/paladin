@@ -4,6 +4,26 @@ Committed dashboards for the OpenTelemetry baseline (ADR-0001). Import the
 JSON via Grafana → Dashboards → Import, and pick your Prometheus datasource
 when prompted.
 
+## Datasource provisioning + log↔trace correlation
+
+[`datasources.example.yaml`](datasources.example.yaml) is a reference Grafana
+datasource provisioning file that wires the three PALADIN signals together so a
+single click pivots between them:
+
+- **Log → trace.** PALADIN stamps `trace_id` / `span_id` / `request_id` /
+  `tenant_id` onto every structured log line (`internal/logger`
+  `logger.enrich`). The Loki datasource's *derived field* extracts `trace_id`
+  and turns it into a "View trace" link into Tempo.
+- **Trace → log.** Tempo's `tracesToLogsV2` jumps from a span back to the log
+  lines sharing its `trace_id`.
+- **Metric → trace.** Prometheus exemplars (SDK-default, trace-based) link a
+  RED histogram bucket to the sampled trace behind an outlier latency.
+
+It's an *example* — PALADIN only speaks OTLP (push) and is backend-agnostic.
+Tempo / Loki / Prometheus are the OSS reference set; swap the types/uids for
+Honeycomb / Datadog / etc. The collector that bridges OTLP → these backends
+is an operator concern (see ADR-0001).
+
 ## `paladin-rpc-red.json` — RPC RED
 
 Rate / Errors / Duration for every PALADIN Connect RPC across all three planes
