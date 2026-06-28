@@ -63,7 +63,10 @@ config:
     insecure: false
 
   auth:
-    issuer: "https://paladin.example.com/"
+    # The OAuth issuer identifier (the `iss` claim). No trailing slash — it
+    # must equal config.mcp.oauth.authorization_server.issuer exactly, and a
+    # trailing slash breaks the /.well-known/ metadata fetch.
+    issuer: "https://paladin.example.com"
     # signing_key MUST come from a SealedSecret / ExternalSecret —
     # NEVER commit a real signing key here.
     signing_key: "<prod-signing-key-from-sealed-secret>"
@@ -116,6 +119,34 @@ config:
         # auth.access_key / secret_key sourced from K8s Secret via
         # `storage.s3CredentialsSecret` below. Production NEVER inlines
         # plaintext keys here.
+
+  # MCP server config. The oauth block here is the Resource-Server half
+  # (ADR-0008) — the counterpart to config.auth.oauth (the AS, ADR-0009).
+  # Enable BOTH for the end-to-end Claude Desktop / Cursor flow: the RS
+  # advertises where to authenticate + challenges unauthenticated /mcp, the
+  # AS mints the bearer the RS then validates. (upstreams/http/profiles are
+  # inherited from values.yaml.)
+  mcp:
+    oauth:
+      enabled: true
+      # This MCP server's public resource identifier (RFC 8707). The access
+      # token's `aud` is bound to it; clients pass it as ?resource=.
+      resource_url: "https://mcp.paladin.example.com/mcp"
+      # The Authorization Server(s) that mint tokens for this resource — the
+      # IAM plane serving config.auth.oauth. MUST match config.auth.issuer so
+      # clients fetch the right AS metadata.
+      authorization_servers:
+        - "https://paladin.example.com"
+      scopes_supported: ["paladin.read", "paladin.write"]
+      # RFC 8414 AS metadata served at /.well-known/oauth-authorization-server
+      # (PALADIN-IAM-is-the-AS, same origin). issuer MUST equal config.auth.issuer.
+      authorization_server:
+        issuer: "https://paladin.example.com"
+        authorization_endpoint: "https://paladin.example.com/oauth/authorize"
+        token_endpoint: "https://paladin.example.com/oauth/token"
+        # registration_endpoint omitted — DCR is off in prod (auth.oauth).
+        # jwks_uri omitted — IAM access tokens are HS256 (symmetric), verified
+        # server-side, so there is no public key set for clients to fetch.
 
 # Primary-backend credentials Secret. Prod convention: ExternalSecret
 # (managed by SOPS / Vault / AWS Secrets Manager controller) provisions
