@@ -21,7 +21,7 @@ import (
 func TestBootstrapPreservesDisabledState(t *testing.T) {
 	h := pgharness.Setup(t)
 	q := sqlc.New(h.PoolMigrate)
-	be := adapters.NewBackendRepoV2(q)
+	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
 	ctx := context.Background()
 
 	cfg := config.Storage{

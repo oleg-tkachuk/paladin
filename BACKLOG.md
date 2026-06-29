@@ -437,13 +437,20 @@ open deliberately — each notes why._
       plane policy handler is read-only; Cedar policy
       mutations go through parent `*.updated` events.
 - **What's left:**
-  - **Integration tests for bucket / object_key / quota /
-    object lifecycle handlers.** Today only
-    `tenant_events_test.go` covers the seam end-to-end. The
-    other four handler classes inherit the exact same
-    pattern; the contract holds, but there's no regression
-    safety in CI for any of them. Copy-paste from the tenant
-    test, swap repo + handler + lifecycle method.
+  - ~~Integration tests for bucket / object_key / quota / object lifecycle
+    handlers.~~ **DONE (2026-06-29):**
+    `tests/integration/lifecycle_events_test.go` pins all four seams
+    end-to-end (handler write → outbox row → dispatcher tick → CloudEvents
+    envelope on NATS): bucket→`paladin.bucket.updated`,
+    object_key→`paladin.object_key.updated`, quota→`paladin.quota.set`,
+    object→`paladin.object.updated`. Writing the quota test surfaced + fixed a
+    real bug — the tenant/bucket-scoped quota upserts used `ON CONFLICT
+    (col)` against a **partial** unique index, so every `SetQuota` failed
+    with 42P10; added the `WHERE … IS NOT NULL` index predicate to
+    `queries/quotas.sql` (+ sqlc regen). Also un-bit-rotted the
+    `tests/integration` package (stale `NewBackendRepoV2` / `NewBucketRepoV2`
+    call sites — the suite is `//go:build integration`, outside the default
+    gate, so it had drifted and stopped compiling).
   - **Adoption check** — once a real subscriber needs charge
     or audit events, flip `cfg.Dispatcher.ChargeEventsEnabled`
     / `audit_mirror_enabled` per overlay and verify the
@@ -632,11 +639,11 @@ open deliberately — each notes why._
     notifications. An additional source adapter (mirror of
     SF's) plus a `[bucket][notify]` config block on the MinIO
     side, and the same `ingest.driver=nats` wiring works.
-  - **`buckets/` prefix observation** — the `buckets/` strip in
-    `parseSeaweedFSPath` was inferred from observed live
-    paths; document the wire-format contract under `docs/`
-    so a future SF version that drops the prefix or a
-    different storage backend doesn't silently regress.
+  - ~~`buckets/` prefix observation — document the wire-format contract.~~
+    **DONE (2026-06-29):** [`docs/storage-ingest.md`](docs/storage-ingest.md)
+    documents the SF→NATS path contract (`<tenant>/<object_key>/<key>`), why
+    the `buckets/` prefix is stripped (two publishers disagree on it), the
+    drift risk, delivery semantics, and the MinIO path.
 - **Trigger to act:** customer pipeline that writes directly
   to the storage bucket bypassing PALADIN RPCs (the entire
   raison d'être of the ingest plane), or production at-least-

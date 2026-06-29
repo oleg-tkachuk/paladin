@@ -1,7 +1,7 @@
 -- name: UpsertTenantQuota :exec
 INSERT INTO quotas (quota_id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tenant_id) DO UPDATE SET
+ON CONFLICT (tenant_id) WHERE tenant_id IS NOT NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
@@ -11,7 +11,7 @@ ON CONFLICT (tenant_id) DO UPDATE SET
 -- name: UpsertBucketQuota :exec
 INSERT INTO quotas (quota_id, backend_id, bucket_name, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (backend_id, bucket_name) DO UPDATE SET
+ON CONFLICT (backend_id, bucket_name) WHERE backend_id IS NOT NULL DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,

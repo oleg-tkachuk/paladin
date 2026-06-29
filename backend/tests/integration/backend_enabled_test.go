@@ -28,7 +28,7 @@ import (
 
 func TestBackendSetEnabled_RepoRoundTrip(t *testing.T) {
 	h := pgharness.Setup(t)
-	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	ctx := context.Background()
 
 	seedBackend(t, h.PoolMigrate, "be-roundtrip")
@@ -69,7 +69,7 @@ func TestBackendSetEnabled_RepoRoundTrip(t *testing.T) {
 
 func TestBackendSetEnabled_VersionMismatch(t *testing.T) {
 	h := pgharness.Setup(t)
-	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	ctx := context.Background()
 
 	seedBackend(t, h.PoolMigrate, "be-occ")
@@ -88,7 +88,7 @@ func TestBackendSetEnabled_VersionMismatch(t *testing.T) {
 
 func TestBackendSetEnabled_NotFound(t *testing.T) {
 	h := pgharness.Setup(t)
-	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	repo := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 
 	err := repo.SetEnabled(context.Background(), "does-not-exist", false, 1)
 	if !errors.Is(err, admindomain.ErrNotFound) {
@@ -120,7 +120,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	}
 
 	// Disable the backend.
-	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	cur, _ := be.Get(ctx, "gate-be")
 	if err := be.SetEnabled(ctx, "gate-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("disable: %v", err)
@@ -151,13 +151,13 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 	h := pgharness.Setup(t)
 	q := sqlc.New(h.PoolMigrate)
-	handler := bucketh.NewHandler(adapters.NewBucketRepoV2(q), nil, allowAll{})
+	handler := bucketh.NewHandler(adapters.NewBucketRepoV2(q, h.PoolMigrate), nil, allowAll{})
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
 		Subject: "tester", Roles: []string{"platform.admin"},
 	})
 
 	seedBackend(t, h.PoolMigrate, "cb-be")
-	be := adapters.NewBackendRepoV2(q)
+	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
 	cur, _ := be.Get(ctx, "cb-be")
 	if err := be.SetEnabled(ctx, "cb-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("disable: %v", err)
@@ -197,7 +197,7 @@ func (allowAll) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ 
 func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	h := pgharness.Setup(t)
 	repo := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
-	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate))
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	ctx := context.Background()
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "rev-tenant")
