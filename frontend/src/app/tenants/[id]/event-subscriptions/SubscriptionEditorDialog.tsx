@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { PlayIcon } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
@@ -83,13 +83,17 @@ export function SubscriptionEditorDialog({
   const [saving, setSaving] = useState(false);
 
   // Initialize the form whenever the dialog opens — EMPTY_FORM for create,
-  // the subscription's current config for edit. Mirrors the old page-level
-  // openCreate/openEdit which set the form before flipping editorOpen.
-  useEffect(() => {
-    if (!open) return;
-    setForm(editing ? formFromSubscription(editing) : EMPTY_FORM);
-    setErrors({});
-  }, [open, editing]);
+  // the subscription's current config for edit. Render-phase adjust-on-change
+  // keyed on (open, editing) (not a set-state-in-effect); only reseeds while
+  // open, so closing doesn't clobber the form mid-animation.
+  const [seedKey, setSeedKey] = useState({ open, editing });
+  if (seedKey.open !== open || seedKey.editing !== editing) {
+    setSeedKey({ open, editing });
+    if (open) {
+      setForm(editing ? formFromSubscription(editing) : EMPTY_FORM);
+      setErrors({});
+    }
+  }
 
   const applyTemplate = (id: TemplateId) => {
     const tpl = TEMPLATES.find((t) => t.id === id);

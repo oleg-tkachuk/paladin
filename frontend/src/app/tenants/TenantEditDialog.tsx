@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 import {
   Dialog,
@@ -45,11 +45,14 @@ export function TenantEditDialog({
   const [editDisplayName, setEditDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Seed the field whenever a new tenant opens the dialog (the row menu used
-  // to do this inline before the extraction).
-  useEffect(() => {
+  // Seed the field whenever a new tenant opens the dialog — render-phase
+  // adjust-on-change keyed on the `editing` prop identity (not a
+  // set-state-in-effect).
+  const [seededEditing, setSeededEditing] = useState(editing);
+  if (editing !== seededEditing) {
+    setSeededEditing(editing);
     if (editing) setEditDisplayName(editing.displayName || "");
-  }, [editing]);
+  }
 
   const handleUpdate = async (e?: React.FormEvent) => {
     e?.preventDefault();

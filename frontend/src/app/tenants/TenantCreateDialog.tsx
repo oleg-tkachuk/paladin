@@ -80,24 +80,21 @@ export function TenantCreateDialog({
     () => (newBackend ? buckets.filter((b) => b.backendId === newBackend) : []),
     [buckets, newBackend],
   );
-  // Default the backend the moment the dialog opens with backends loaded.
-  useEffect(() => {
-    if (open && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0].backendId);
-    }
-  }, [open, newBackend, backends]);
-  // Reset bucket when backend changes; the previous bucket may not belong to
-  // the new backend.
-  useEffect(() => {
-    if (
-      newBucket &&
-      !buckets.some(
-        (b) => b.backendId === newBackend && b.bucketName === newBucket,
-      )
-    ) {
-      setNewBucket("");
-    }
-  }, [newBackend, newBucket, buckets]);
+  // Default the backend the moment the dialog opens with backends loaded, and
+  // drop a bucket that no longer belongs to the chosen backend. Both are
+  // render-phase adjust-on-condition (the guards converge in one extra
+  // render) — not set-state-in-effect.
+  if (open && !newBackend && backends.length > 0) {
+    setNewBackend(backends[0].backendId);
+  }
+  if (
+    newBucket &&
+    !buckets.some(
+      (b) => b.backendId === newBackend && b.bucketName === newBucket,
+    )
+  ) {
+    setNewBucket("");
+  }
 
   const handleCreate = async (e?: React.FormEvent) => {
     e?.preventDefault();
