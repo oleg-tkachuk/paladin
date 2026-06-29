@@ -653,27 +653,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### react-hooks v6: `set-state-in-effect` re-promotion
-
-- **Status:** Deferred — gated on a data-fetching architecture change.
-  (`immutability` + `preserve-manual-memoization` are DONE: their few real
-  hits — forward references in `objects/page.tsx`, a memo-dep mismatch in
-  `useObjectKeys.ts` — are fixed and both rules now enforce at `error`. Only
-  `set-state-in-effect` remains demoted to `warn`.)
-- **Reason:** the ~40 `set-state-in-effect` hits are the legitimate
-  fetch-on-mount / init-from-browser pattern in the data hooks (`useObjects`,
-  `useConfig`, `ScopeContext`, …). They are not lint suppressions to sprinkle
-  — the rule wants the state derived during render or pushed into an external
-  store, which is an architectural change, not a per-line fix.
-- **Definition of Done:**
-  - Adopt a uniform data-fetching primitive (TanStack Query or a small
-    `useSyncExternalStore` store) so fetch state no longer lands via
-    setState-in-effect.
-  - `npx eslint .` reports zero `set-state-in-effect` hits.
-  - Delete the remaining `"warn"` override in `eslint.config.mjs`.
-- **Blockers:** none — but it is wide and must ride the data-fetching
-  refactor to avoid 40 scattered `eslint-disable` lines.
-
 ### Remaining bucket sub-tab: Replication
 
 - **Status:** Deferred (Versioning DONE; Replication blocked on the worker)

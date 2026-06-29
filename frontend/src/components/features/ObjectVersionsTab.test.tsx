@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing ObjectVersionsTab (pure helpers, VersionRow,
@@ -64,7 +64,12 @@ describe("ObjectVersionsTab", () => {
       />,
     );
     await waitFor(() =>
-      expect(h.list).toHaveBeenCalledWith({ parent: "objects/o1" }),
+      // Second arg is the Connect call options carrying the AbortSignal that
+      // TanStack passes the queryFn.
+      expect(h.list).toHaveBeenCalledWith(
+        { parent: "objects/o1" },
+        expect.anything(),
+      ),
     );
   });
 

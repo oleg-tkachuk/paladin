@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/utils";
 
 // Characterization net for the MCP Bridge page. Read-only inspector — mock the
 // inspect RPC and pin the shell + the on-mount fetch.

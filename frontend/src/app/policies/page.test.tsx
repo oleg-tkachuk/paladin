@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@/test/utils";
 
 // Characterization net for the policies page. It orchestrates four admin
 // clients + three list hooks + live Cedar validation + a Tabs/TestSuite UI, so

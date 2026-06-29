@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the api-tokens page (legacy user-scoped PATs, an
