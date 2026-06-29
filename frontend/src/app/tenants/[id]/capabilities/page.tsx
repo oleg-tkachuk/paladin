@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   EllipsisVerticalIcon,
@@ -45,6 +46,31 @@ import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { formatMoney } from "@/lib/format/money";
+
+// Per-capability usage snapshot keyed by capability id; "never" ⇒ the
+// capability has no usage row yet (GetUsage NotFound).
+type UsageSnap = {
+  requestCount: bigint;
+  spentAmount: number;
+  unitCode: string;
+};
+type UsageMap = Map<string, UsageSnap | "never">;
+const EMPTY_USAGE: UsageMap = new Map();
+
+// Tenant-scoped "last browsed principal", persisted across reloads.
+function readLastBrowse(
+  key: string,
+): { kind?: string; subject?: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return safeParseJson(
+      z.object({ kind: z.string().optional(), subject: z.string().optional() }),
+      window.localStorage.getItem(key),
+    );
+  } catch {
+    return null;
+  }
+}
 
 // /capabilities — agent-runtime authorisation primitive.
 //
@@ -96,179 +122,112 @@ export default function CapabilitiesPage() {
   // Tenant-scoped key so two tenants on the same browser profile
   // don't bleed each other's last-used principal.
   const lastBrowseKey = `paladin:capabilities:lastBrowse:${tenantId || "_"}`;
+  // Lazy-init from localStorage so a return visit pre-fills the last browsed
+  // principal — replaces the old hydrate effect. tenantId is available
+  // synchronously here (the page renders inside the resolved TenantLayout).
   const [principalKind, setPrincipalKind] = useState<string>(
-    String(PrincipalKind.AGENT),
+    () => readLastBrowse(lastBrowseKey)?.kind ?? String(PrincipalKind.AGENT),
   );
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(
+    () => readLastBrowse(lastBrowseKey)?.subject ?? "",
+  );
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeRevoked, setIncludeRevoked] = useState(false);
 
-  // hydrated guards the auto-restore + auto-fetch effects so we don't
-  // fire fetchList against an empty filter on the very first render
-  // before localStorage has been read. Set true once the restore
-  // attempt completes, regardless of whether anything was actually
-  // restored.
-  const hydratedRef = useRef(false);
-
-  const [items, setItems] = useState<Capability[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false);
-
-  // Per-capability usage snapshots fetched after list. Map keyed by
-  // cap.id; absent ⇒ never used (NOT_FOUND), pending ⇒ fetch
-  // in-flight. Re-fetched whenever the list refreshes.
-  const [usage, setUsage] = useState<
-    Map<
-      string,
-      { requestCount: bigint; spentAmount: number; unitCode: string } | "never"
-    >
-  >(new Map());
-
-  const fetchList = useCallback(async () => {
-    if (!tenantId || !subject.trim()) {
-      setItems([]);
-      setUsage(new Map());
-      setHasFetched(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await capabilityClient.list({
-        tenantId,
-        principalKind: Number(principalKind),
-        subject: subject.trim(),
-        includeExpired,
-        includeRevoked,
-        pageSize: 100,
-      });
-      setItems(res.capabilities);
-      setHasFetched(true);
-
-      // Fan-out usage fetches in parallel. Each cap's request is
-      // a single Postgres index hit on the server, so 100 rows in
-      // flight is fine. NOT_FOUND maps to "never" sentinel.
-      void Promise.all(
-        res.capabilities.map(async (c) => {
-          try {
-            const u = await capabilityClient.getUsage({ id: c.id });
-            return [
-              c.id,
-              {
-                requestCount: u.requestCount,
-                spentAmount: u.spentAmount,
-                // UsageRecord without a unit_code means metering-
-                // only; render as UNIT rather than implying USD.
-                unitCode: u.unitCode || "UNIT",
-              },
-            ] as const;
-          } catch (err) {
-            if (err instanceof ConnectError && err.code === Code.NotFound) {
-              return [c.id, "never" as const] as const;
+  const browseQuery = useQuery({
+    queryKey: [
+      "capabilities",
+      tenantId,
+      principalKind,
+      subject.trim(),
+      includeExpired,
+      includeRevoked,
+    ],
+    // Only browse once a principal is chosen — List is principal-scoped.
+    enabled: !!tenantId && !!subject.trim(),
+    retry: false, // queryFn toasts real failures.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await capabilityClient.list(
+          {
+            tenantId,
+            principalKind: Number(principalKind),
+            subject: subject.trim(),
+            includeExpired,
+            includeRevoked,
+            pageSize: 100,
+          },
+          { signal },
+        );
+        // Persist the successful browse so a return visit pre-fills it.
+        try {
+          window.localStorage.setItem(
+            lastBrowseKey,
+            JSON.stringify({ kind: principalKind, subject: subject.trim() }),
+          );
+        } catch {
+          // private-mode / quota — non-fatal.
+        }
+        // Fan-out usage fetches in parallel — each is a single index hit, so
+        // 100 in flight is fine. NotFound ⇒ "never" sentinel. The shared
+        // signal cancels them all if the browse is superseded.
+        const entries = await Promise.all(
+          res.capabilities.map(async (c) => {
+            try {
+              const u = await capabilityClient.getUsage(
+                { id: c.id },
+                { signal },
+              );
+              return [
+                c.id,
+                {
+                  requestCount: u.requestCount,
+                  spentAmount: u.spentAmount,
+                  // UsageRecord without a unit_code is metering-only → UNIT.
+                  unitCode: u.unitCode || "UNIT",
+                },
+              ] as const;
+            } catch (err) {
+              if (err instanceof ConnectError && err.code === Code.NotFound) {
+                return [c.id, "never" as const] as const;
+              }
+              return null;
             }
-            return null;
-          }
-        }),
-      ).then((entries) => {
-        setUsage(
-          new Map(
-            entries.filter(
-              (
-                e,
-              ): e is readonly [
-                string,
-                (
-                  | {
-                      requestCount: bigint;
-                      spentAmount: number;
-                      unitCode: string;
-                    }
-                  | "never"
-                ),
-              ] => e !== null,
-            ),
+          }),
+        );
+        const usage: UsageMap = new Map(
+          entries.filter(
+            (e): e is readonly [string, UsageSnap | "never"] => e !== null,
           ),
         );
-      });
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to list capabilities";
-      showNotification({
-        type: "error",
-        title: "Load failed",
-        message: msg,
-      });
-      setHasFetched(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    tenantId,
-    principalKind,
-    subject,
-    includeExpired,
-    includeRevoked,
-    showNotification,
-  ]);
+        return { items: res.capabilities, usage };
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to list capabilities",
+        });
+        throw err;
+      }
+    },
+  });
+  const items = useMemo(
+    () => browseQuery.data?.items ?? [],
+    [browseQuery.data],
+  );
+  const usage = browseQuery.data?.usage ?? EMPTY_USAGE;
+  const loading = browseQuery.isFetching;
+  const hasFetched = browseQuery.isFetched;
+  const fetchList = () => browseQuery.refetch();
 
-  // ── restore last browsed principal on mount ────────────────────────
-  // Read from localStorage once tenantId is available (the storage key
-  // is tenant-scoped so we can't read it during render-0 before
-  // useTenant resolves). Set state synchronously and mark hydrated; a
-  // separate effect picks up the state change and calls fetchList.
-  useEffect(() => {
-    if (!tenantId || hydratedRef.current) return;
-    try {
-      const raw = window.localStorage.getItem(lastBrowseKey);
-      const saved = safeParseJson(
-        z.object({
-          kind: z.string().optional(),
-          subject: z.string().optional(),
-        }),
-        raw,
-      );
-      if (saved?.kind) setPrincipalKind(saved.kind);
-      if (saved?.subject) setSubject(saved.subject);
-    } catch {
-      // localStorage can throw in private-mode / quota scenarios — fall
-      // through to the default (empty subject) state.
-    }
-    hydratedRef.current = true;
-  }, [tenantId, lastBrowseKey]);
-
-  // Auto-fetch whenever the browse filter changes after hydration.
-  // Only fires once hydratedRef is set so we don't issue an empty-
-  // subject request on render-0. After the restore effect runs and
-  // sets subject/principalKind, this effect reacts to the state
-  // update and calls fetchList with the restored values.
-  //
-  // Side effect: persist the new (kind, subject) so a manual Browse
-  // click is remembered across reloads, not just the post-Issue
-  // synchronisation. The persist only fires when subject is non-
-  // empty — empty would clobber a previously-saved value with a
-  // useless filter.
-  useEffect(() => {
-    if (!hydratedRef.current) return;
-    if (!tenantId || !subject.trim()) return;
-    void fetchList();
-    try {
-      window.localStorage.setItem(
-        lastBrowseKey,
-        JSON.stringify({ kind: principalKind, subject: subject.trim() }),
-      );
-    } catch {
-      // private-mode / quota — non-fatal.
-    }
-  }, [
-    tenantId,
-    principalKind,
-    subject,
-    includeExpired,
-    includeRevoked,
-    fetchList,
-    lastBrowseKey,
-  ]);
+  // Browse filter + persistence are now driven by the query itself: the
+  // (kind, subject, filters) tuple is the queryKey, so changing any of them
+  // refetches automatically (and the signal cancels a superseded browse);
+  // the queryFn persists the last successful browse to localStorage. Initial
+  // restore happens via the lazy useState initializers above — no effects.
 
   // ── issue dialog ────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -279,19 +238,16 @@ export default function CapabilitiesPage() {
   // seed the list so the capability is visible after the reveal panel closes;
   // List is principal-scoped, so without this the page reads empty. Persist
   // the principal so a reload / navigation back restores it.
-  const handleIssued = (capability: Capability, kind: string, subj: string) => {
+  const handleIssued = (
+    _capability: Capability,
+    kind: string,
+    subj: string,
+  ) => {
+    // Switching the browse filter to the just-issued principal changes the
+    // query key → the list refetches and shows the new capability (List is
+    // principal-scoped). The queryFn persists the new (kind, subject).
     setPrincipalKind(kind);
     setSubject(subj);
-    setItems([capability]);
-    setHasFetched(true);
-    try {
-      window.localStorage.setItem(
-        lastBrowseKey,
-        JSON.stringify({ kind, subject: subj }),
-      );
-    } catch {
-      // private-mode / quota — silent fall-through.
-    }
   };
 
   // onClose — close the dialog and refetch so the list reflects the server
