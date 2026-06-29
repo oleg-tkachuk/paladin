@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -12,17 +13,21 @@ import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { useAuth } from "@/context/AuthContext";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
+import { normalizeError } from "@/lib/connect/error";
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 
 /**
  * useObject — singular variant for the inspector / detail page. Loads one
- * object via LookupObject (key + parent ObjectKey), refreshes its presigned
- * download URL when the object is AVAILABLE, and exposes per-object
- * mutators (soft-delete / restore / purge / patch-tags).
- *
- * Parent ObjectKey is assembled from the user's tenantId so callers only
- * pass the bare ObjectKey id (typically from URL or scope).
+ * object via LookupObject (key + parent ObjectKey) and, when AVAILABLE, its
+ * presigned download URL — both in one TanStack query. Exposes per-object
+ * mutators (soft-delete / restore / purge / patch-tags) that refetch the
+ * query and bump the shared "objects" signal so list views stay in sync.
  */
+
+interface ObjectQueryResult {
+  object: Object$;
+  downloadUrl: PresignedUrl | null;
+}
 
 export function useObject(
   key: string | undefined,
@@ -38,60 +43,68 @@ export function useObject(
   const refreshSignal = useRefreshSignal("objects");
   const bumpRefresh = useBumpRefresh();
 
-  const [object, setObject] = useState<Object$ | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<PresignedUrl | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchObject = useCallback(async () => {
-    if (!key || !parent) return null;
-    setLoading(true);
-    setError(null);
-    try {
-      const obj = await objectClient.lookupObject({ parent, key });
-      setObject(obj);
-
-      if (obj.state === ObjectState.AVAILABLE) {
-        try {
-          const res = await presignClient.presignDownload({
-            name: obj.name,
-            contentDisposition: "",
-          });
-          setDownloadUrl(res.downloadUrl ?? null);
-        } catch (downloadErr: unknown) {
-          console.error("Failed to fetch download URL", downloadErr);
-          setDownloadUrl(null);
+  const query = useQuery<ObjectQueryResult>({
+    // refreshSignal in the key keeps the old refetch-on-bump behaviour.
+    queryKey: ["object", parent, key, refreshSignal],
+    enabled: !!key && !!parent,
+    // No retry: the queryFn toasts non-NotFound failures, and a retry would
+    // double-toast (and NotFound is a normal inspector state, not transient).
+    retry: false,
+    queryFn: async ({ signal }) => {
+      try {
+        const obj = await objectClient.lookupObject(
+          { parent, key: key! },
+          { signal },
+        );
+        let downloadUrl: PresignedUrl | null = null;
+        if (obj.state === ObjectState.AVAILABLE) {
+          try {
+            const res = await presignClient.presignDownload(
+              { name: obj.name, contentDisposition: "" },
+              { signal },
+            );
+            downloadUrl = res.downloadUrl ?? null;
+          } catch (downloadErr: unknown) {
+            // Non-fatal: detail page still renders without the download link.
+            console.error("Failed to fetch download URL", downloadErr);
+          }
         }
-      } else {
-        setDownloadUrl(null);
+        return { object: obj, downloadUrl };
+      } catch (err: unknown) {
+        // NotFound is a normal inspector state (row deleted in another tab,
+        // or scope just changed) — show it inline, no red toast. Everything
+        // else is a genuine sync failure worth surfacing.
+        const isNotFound =
+          err instanceof ConnectError && err.code === Code.NotFound;
+        if (!isNotFound) {
+          showNotification({
+            type: "error",
+            title: "Sync Failed",
+            message:
+              err instanceof Error
+                ? err.message
+                : "Could not synchronize object details.",
+          });
+        }
+        throw normalizeError(err);
       }
-      return obj;
-    } catch (err: unknown) {
-      const e = err as Error;
-      setError(e);
-      // NotFound is a normal state for the inspector — the row may have
-      // been deleted in another tab or the user just changed scope. Show
-      // it inline (`object` stays null) instead of a red toast.
-      const isNotFound =
-        err instanceof ConnectError && err.code === Code.NotFound;
-      if (!isNotFound) {
-        showNotification({
-          type: "error",
-          title: "Sync Failed",
-          message: e.message || "Could not synchronize object details.",
-        });
-      }
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [key, parent, showNotification]);
+    },
+  });
 
+  const object = query.data?.object ?? null;
+  const downloadUrl = query.data?.downloadUrl ?? null;
+
+  const refresh = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+
+  // Mutators: run the RPC, refetch this object, bump the shared signal so
+  // list views refetch too, then toast. The previous hand-rolled loading
+  // flag is replaced by query.isFetching during the refetch.
   const patchObjectMeta = useCallback(
     async (tags: Record<string, string>) => {
       if (!object) return;
       try {
-        setLoading(true);
         await objectClient.updateObject({
           name: object.name,
           resourceVersion: object.resourceVersion,
@@ -101,38 +114,36 @@ export function useObject(
           contentType: "",
           externalRef: "",
         });
-        await fetchObject();
+        await refresh();
+        bumpRefresh("objects");
         showNotification({
           type: "success",
           title: "Update Successful",
           message: "Object metadata has been synchronized.",
         });
       } catch (err: unknown) {
-        const e = err as Error;
         showNotification({
           type: "error",
           title: "Update Failed",
-          message: e.message || "Could not update object metadata.",
+          message:
+            (err as Error).message || "Could not update object metadata.",
         });
-        throw e;
-      } finally {
-        setLoading(false);
+        throw err;
       }
     },
-    [object, fetchObject, showNotification],
+    [object, refresh, bumpRefresh, showNotification],
   );
 
   const softDeleteObject = useCallback(async () => {
     if (!object) return;
     try {
-      setLoading(true);
       await objectClient.deleteObject({
         name: object.name,
         resourceVersion: object.resourceVersion,
         permanent: false,
         bypassGovernanceRetention: false,
       });
-      await fetchObject();
+      await refresh();
       bumpRefresh("objects");
       showNotification({
         type: "success",
@@ -146,22 +157,19 @@ export function useObject(
         message: (err as Error).message,
       });
       throw err;
-    } finally {
-      setLoading(false);
     }
-  }, [object, fetchObject, showNotification]);
+  }, [object, refresh, bumpRefresh, showNotification]);
 
   const purgeObject = useCallback(async () => {
     if (!object) return;
     try {
-      setLoading(true);
       await objectClient.deleteObject({
         name: object.name,
         resourceVersion: object.resourceVersion,
         permanent: true,
         bypassGovernanceRetention: false,
       });
-      await fetchObject();
+      await refresh();
       bumpRefresh("objects");
       showNotification({
         type: "success",
@@ -175,20 +183,17 @@ export function useObject(
         message: (err as Error).message,
       });
       throw err;
-    } finally {
-      setLoading(false);
     }
-  }, [object, fetchObject, showNotification]);
+  }, [object, refresh, bumpRefresh, showNotification]);
 
   const restoreObject = useCallback(async () => {
     if (!object) return;
     try {
-      setLoading(true);
       await objectClient.restoreObject({
         name: object.name,
         resourceVersion: object.resourceVersion,
       });
-      await fetchObject();
+      await refresh();
       bumpRefresh("objects");
       showNotification({
         type: "success",
@@ -202,23 +207,15 @@ export function useObject(
         message: (err as Error).message,
       });
       throw err;
-    } finally {
-      setLoading(false);
     }
-  }, [object, fetchObject, showNotification]);
-
-  useEffect(() => {
-    if (key) {
-      void fetchObject();
-    }
-  }, [fetchObject, key, refreshSignal]);
+  }, [object, refresh, bumpRefresh, showNotification]);
 
   return {
     object,
     downloadUrl,
-    loading,
-    error,
-    refresh: fetchObject,
+    loading: query.isFetching,
+    error: (query.error as Error | null) ?? null,
+    refresh,
     patchObjectMeta,
     softDeleteObject,
     restoreObject,
