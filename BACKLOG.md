@@ -459,27 +459,6 @@ open deliberately — each notes why._
       validate the cardinality assumption holds for their
       tenant.
 
-### Event dispatcher: NATS sink — nkey / JWT auth
-
-- **Status:** DONE except nkey/JWT auth. The NATS sink shipped:
-  `EventSink.NatsSink` proto, `internal/worker/sink_nats.go` (pooled client
-  + token auth + CloudEvents 1.0 envelope), `Dispatcher.deliverNATS`, the
-  dispatcher `nats:<server>` health check, and the frontend
-  `/event-subscriptions` NATS connector form. Tests cover the embedded-server
-  round-trip, connection reuse, missing-config error, and (2026-06)
-  CloudEvents `id` conformance — the envelope `id` is now the per-event
-  delivery-row id (unique, retry-stable) instead of the subscription id.
-- **Reason this remains:** `sink_nats.go` accepts a `token:` credentials_ref
-  scheme but returns "not yet wired" for `nkey:` / `jwt:` (the seed-file /
-  decentralized-auth flows). Token auth covers the common in-cluster case.
-- **Definition of Done:**
-  - `nkey:<secretRef>` resolves an nkey seed and connects with
-    `nats.Nkey(...)`.
-  - `jwt:<secretRef>` resolves a user JWT + seed (creds file) and connects
-    with `nats.UserCredentials(...)` / `nats.UserJWTAndSeed(...)`.
-  - A test per scheme against the embedded server with auth enabled.
-- **Blockers:** none — additive to the existing credentials_ref dispatcher.
-
 ### Event dispatcher: Kafka sink
 
 - **Status:** Deferred
@@ -543,36 +522,32 @@ open deliberately — each notes why._
 
 ### NATS auth: NKey / JWT support
 
-- **Status:** Deferred
-- **Reason:** The two production NATS edges PALADIN cares about
-  today both run unauthenticated:
-    - **Outbound** — `Dispatcher` → NATS via `EventSubscription`
-      `NatsSink`. The proto's `credentials_ref` accepts
-      `<scheme>:<value>`; v1 only honours `token:<plaintext>`
-      (see `internal/worker/sink_nats.go`).
-    - **SeaweedFS publisher** — `gocdk_pub_sub` reads
-      `NATS_SERVER_URL` from process env (set on
-      `spec.filer.env` in `gitops/.../seaweedfs/seaweed.yaml`).
-      No auth fields; gocloud.dev's natspubsub driver doesn't
-      surface them.
-  Fine for the lab cluster — NATS service has no exposed
-  ingress and lives on the cluster network. Production needs
-  one of NKey / JWT so a stolen Pod identity can't fan-out
-  arbitrary events.
-- **Definition of Done:**
-  - `NatsSink.credentials_ref` supports `nkey:<seed>` and
-    `jwt:<jwt>+nkey:<seed>` schemes. Need on-disk credential
-    file materialisation (the nats.go client only accepts
-    file paths for these). Use `os.CreateTemp` with
-    `0600`-perm files, deleted on connection close.
-  - `NATS_SERVER_URL` for SeaweedFS published via a
-    Kubernetes `Secret` (the URL itself becomes
-    `nats://<token>@host:port` for the simplest auth flavour).
-  - `gitops` overlay enables NKey/JWT on the NATS broker
-    deployment. Today `nats` chart runs auth-free.
+- **Status:** Partially done — the PALADIN dispatcher half shipped
+  2026-06-29; the broker + SeaweedFS-publisher + ops half remains.
+- **Reason:** The outbound `Dispatcher` → NATS edge now supports NKey /
+  JWT: `NatsSink.credentials_ref` honours `token:`, `nkey:<seed>` (in-memory
+  `nats.Nkey` via `nkeys.FromSeed`), and `jwt:<jwt>+<seed>` (in-memory
+  `nats.UserJWTAndSeed`) — no temp-file materialisation needed. Covered by
+  embedded-server auth round-trip tests per scheme (nkey + decentralized
+  JWT). What's still unauthenticated:
+    - **SeaweedFS publisher** — `gocdk_pub_sub` reads `NATS_SERVER_URL`
+      from process env (set on `spec.filer.env` in
+      `gitops/.../seaweedfs/seaweed.yaml`). No auth fields; gocloud.dev's
+      natspubsub driver doesn't surface them.
+    - **The broker itself** — the `nats` chart runs auth-free, so the
+      dispatcher's new NKey/JWT support has nothing to authenticate against
+      yet in the lab.
+  Fine for the lab cluster (NATS has no exposed ingress, cluster-network
+  only). Production needs broker-side auth so a stolen Pod identity can't
+  fan-out arbitrary events.
+- **Definition of Done (remaining):**
+  - `NATS_SERVER_URL` for SeaweedFS published via a Kubernetes `Secret`
+    (the URL itself becomes `nats://<token>@host:port` for the simplest
+    auth flavour).
+  - `gitops` overlay enables NKey/JWT on the NATS broker deployment.
   - Document the credential-rotation flow in `docs/`.
-- **Trigger to do:** before any non-lab deployment of either
-  the PALADIN NATS sink or the SF NATS publisher.
+- **Trigger to do:** before any non-lab deployment of the SF NATS
+  publisher (the PALADIN sink half is ready now).
 
 ### Event dispatcher: SQS sink
 

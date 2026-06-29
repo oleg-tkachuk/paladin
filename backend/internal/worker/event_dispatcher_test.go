@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	jwt "github.com/nats-io/jwt/v2"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
 )
@@ -465,8 +467,8 @@ func TestParseNatsCredentials_Schemes(t *testing.T) {
 		{"", false, true},
 		{"token:abc", false, false},
 		{"token:", true, false},
-		{"nkey:SUACS", true, false},
-		{"jwt:eyJ", true, false},
+		{"nkey:SUACS", true, false},  // malformed seed → error
+		{"jwt:onlyjwt", true, false}, // missing '+<seed>' half → error
 		{"unknown:x", true, false},
 		{"noscheme", true, false},
 	}
@@ -479,6 +481,164 @@ func TestParseNatsCredentials_Schemes(t *testing.T) {
 			t.Errorf("ref=%q: expected nil option, got %v", c.ref, opt)
 		}
 	}
+
+	// Positive: a real user nkey seed and a jwt+seed both parse to a
+	// non-nil option without error.
+	ukp, err := nkeys.CreateUser()
+	if err != nil {
+		t.Fatalf("create user nkey: %v", err)
+	}
+	seed, _ := ukp.Seed()
+	if opt, err := parseNatsCredentials("nkey:" + string(seed)); err != nil || opt == nil {
+		t.Errorf("valid nkey seed: opt=%v err=%v", opt, err)
+	}
+	if opt, err := parseNatsCredentials("jwt:eyJ0eXAi.eyJzdWIi+" + string(seed)); err != nil || opt == nil {
+		t.Errorf("valid jwt+seed: opt=%v err=%v", opt, err)
+	}
+	// The `nkey:` prefix on the seed half is tolerated.
+	if opt, err := parseNatsCredentials("jwt:eyJ0eXAi.eyJzdWIi+nkey:" + string(seed)); err != nil || opt == nil {
+		t.Errorf("valid jwt+nkey:seed: opt=%v err=%v", opt, err)
+	}
+}
+
+// natsAuthRoundTrip drives one DeliverOne against an auth-enabled NATS
+// server (the probe consumer authenticates with the same credentials_ref)
+// and asserts the CloudEvents envelope landed — proving the credential
+// scheme completes the server's auth handshake.
+func natsAuthRoundTrip(t *testing.T, url, credsRef string) {
+	t.Helper()
+	authOpt, err := parseNatsCredentials(credsRef)
+	if err != nil {
+		t.Fatalf("parse creds: %v", err)
+	}
+	pc, err := nats.Connect(url, authOpt, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("probe connect (auth): %v", err)
+	}
+	defer pc.Close()
+	got := make(chan *nats.Msg, 1)
+	if _, err := pc.Subscribe("paladin.events.>", func(m *nats.Msg) { got <- m }); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := pc.Flush(); err != nil {
+		t.Fatalf("flush sub: %v", err)
+	}
+
+	tenantID := uuid.Must(uuid.NewV7())
+	subject := "paladin.events." + tenantID.String() + ".object.uploaded"
+	cfg, _ := json.Marshal(map[string]any{"url": url, "subject": subject, "credentials_ref": credsRef})
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	d := &Dispatcher{NATS: pool, MaxAttempts: 1}
+	sub := admindomain.EventSubscription{
+		SubscriptionID: uuid.Must(uuid.NewV7()),
+		TenantID:       tenantID,
+		SinkKind:       "nats",
+		SinkConfig:     cfg,
+	}
+	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
+		t.Fatalf("DeliverOne: %v", err)
+	}
+	select {
+	case m := <-got:
+		if m.Subject != subject {
+			t.Errorf("subject: got %q want %q", m.Subject, subject)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nats: no message received within 2s — auth round-trip failed")
+	}
+}
+
+// TestDispatcher_NATSDelivery_NKeyAuth proves the nkey: scheme completes
+// the NKey challenge-response against an auth-enabled embedded server.
+func TestDispatcher_NATSDelivery_NKeyAuth(t *testing.T) {
+	ukp, err := nkeys.CreateUser()
+	if err != nil {
+		t.Fatalf("create user nkey: %v", err)
+	}
+	pub, _ := ukp.PublicKey()
+	seed, _ := ukp.Seed()
+
+	opts := natstest.DefaultTestOptions
+	opts.Port = -1
+	opts.Nkeys = []*natsserver.NkeyUser{{Nkey: pub}}
+	srv := natstest.RunServer(&opts)
+	t.Cleanup(func() { srv.Shutdown(); srv.WaitForShutdown() })
+	if !srv.ReadyForConnections(2 * time.Second) {
+		t.Fatal("embedded nats (nkey): not ready")
+	}
+	url := srv.ClientURL()
+
+	// Auth is genuinely enforced — an anonymous connect must be rejected.
+	if c, err := nats.Connect(url, nats.Timeout(time.Second)); err == nil {
+		c.Close()
+		t.Fatal("anonymous connect should be rejected when nkey auth is on")
+	}
+
+	natsAuthRoundTrip(t, url, "nkey:"+string(seed))
+}
+
+// TestDispatcher_NATSDelivery_JWTAuth proves the jwt: scheme completes
+// decentralized (operator/account/user JWT) auth against an embedded
+// server running a trusted operator + in-memory account resolver.
+func TestDispatcher_NATSDelivery_JWTAuth(t *testing.T) {
+	okp, _ := nkeys.CreateOperator()
+	opub, _ := okp.PublicKey()
+
+	// System account — operator mode expects one.
+	skp, _ := nkeys.CreateAccount()
+	spub, _ := skp.PublicKey()
+	sjwt, err := jwt.NewAccountClaims(spub).Encode(okp)
+	if err != nil {
+		t.Fatalf("sys account encode: %v", err)
+	}
+
+	oc := jwt.NewOperatorClaims(opub)
+	oc.Name = "TESTOP"
+	oc.SystemAccount = spub
+	ojwt, err := oc.Encode(okp)
+	if err != nil {
+		t.Fatalf("operator encode: %v", err)
+	}
+	opClaims, err := jwt.DecodeOperatorClaims(ojwt)
+	if err != nil {
+		t.Fatalf("operator decode: %v", err)
+	}
+
+	// Workload account + user (user JWT signed by the account).
+	akp, _ := nkeys.CreateAccount()
+	apub, _ := akp.PublicKey()
+	ajwt, err := jwt.NewAccountClaims(apub).Encode(okp)
+	if err != nil {
+		t.Fatalf("account encode: %v", err)
+	}
+	ukp, _ := nkeys.CreateUser()
+	upub, _ := ukp.PublicKey()
+	useed, _ := ukp.Seed()
+	ujwt, err := jwt.NewUserClaims(upub).Encode(akp)
+	if err != nil {
+		t.Fatalf("user encode: %v", err)
+	}
+
+	opts := natstest.DefaultTestOptions
+	opts.Port = -1
+	opts.TrustedOperators = []*jwt.OperatorClaims{opClaims}
+	opts.SystemAccount = spub
+	res := &natsserver.MemAccResolver{}
+	if err := res.Store(spub, sjwt); err != nil {
+		t.Fatalf("resolver store sys: %v", err)
+	}
+	if err := res.Store(apub, ajwt); err != nil {
+		t.Fatalf("resolver store acc: %v", err)
+	}
+	opts.AccountResolver = res
+	srv := natstest.RunServer(&opts)
+	t.Cleanup(func() { srv.Shutdown(); srv.WaitForShutdown() })
+	if !srv.ReadyForConnections(2 * time.Second) {
+		t.Fatal("embedded nats (jwt): not ready")
+	}
+
+	natsAuthRoundTrip(t, srv.ClientURL(), "jwt:"+ujwt+"+"+string(useed))
 }
 
 // TestOutboxRunnerBackoff exercises the backoff curve without standing

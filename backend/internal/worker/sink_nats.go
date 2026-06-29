@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -176,12 +177,21 @@ func (p *NatsConnPool) Statuses() map[string]nats.Status {
 // dev/lab only). Unknown schemes are rejected so a typo doesn't
 // silently degrade to anonymous.
 //
-// v1 supports `token:` only — bare token auth covers in-cluster NATS
-// with the operator's auth-as-token bootstrap. NKey and JWT modes
-// are BACKLOG: nats.go's NKey/JWT helpers expect filesystem paths,
-// which means the dispatcher has to materialise secrets to a temp
-// file with 0600 mode — extra moving parts that aren't needed until
-// production NATS is wired with NKey-based auth.
+// Schemes:
+//
+//   - `token:<token>` — bare token auth, the common in-cluster case.
+//   - `nkey:<seed>` — NKey challenge-response. The value is a user nkey
+//     SEED (starts with `SU…`); we derive the public key and sign the
+//     server nonce in-process via nats.Nkey.
+//   - `jwt:<user-jwt>+<seed>` — decentralized (operator/account/user JWT)
+//     auth. The JWT identifies the user; the trailing nkey seed signs the
+//     nonce. A `nkey:` prefix on the seed half is tolerated, so both
+//     `jwt:<jwt>+<seed>` and `jwt:<jwt>+nkey:<seed>` parse.
+//
+// All modes are wired in-memory (nats.go's UserJWTAndSeed / nkeys.FromSeed)
+// — no 0600 temp-file materialisation. The credential string itself is
+// expected to arrive from a K8s Secret via the sink_config resolution path,
+// the same way the token value does.
 func parseNatsCredentials(ref string) (nats.Option, error) {
 	if ref == "" {
 		return nil, nil
@@ -197,8 +207,29 @@ func parseNatsCredentials(ref string) (nats.Option, error) {
 			return nil, errors.New("nats credentials_ref: token: scheme with empty value")
 		}
 		return nats.Token(value), nil
-	case "nkey", "jwt":
-		return nil, fmt.Errorf("nats credentials_ref: %s scheme not yet wired (BACKLOG)", scheme)
+	case "nkey":
+		if value == "" {
+			return nil, errors.New("nats credentials_ref: nkey: scheme with empty seed")
+		}
+		kp, err := nkeys.FromSeed([]byte(value))
+		if err != nil {
+			return nil, fmt.Errorf("nats credentials_ref: invalid nkey seed: %w", err)
+		}
+		pub, err := kp.PublicKey()
+		if err != nil {
+			return nil, fmt.Errorf("nats credentials_ref: nkey public key: %w", err)
+		}
+		// Sign from the in-memory keypair on each (re)connect nonce.
+		return nats.Nkey(pub, func(nonce []byte) ([]byte, error) {
+			return kp.Sign(nonce)
+		}), nil
+	case "jwt":
+		jwtStr, seedPart, ok := strings.Cut(value, "+")
+		seed := strings.TrimPrefix(seedPart, "nkey:")
+		if !ok || jwtStr == "" || seed == "" {
+			return nil, errors.New("nats credentials_ref: jwt: scheme expects '<jwt>+<seed>'")
+		}
+		return nats.UserJWTAndSeed(jwtStr, seed), nil
 	default:
 		return nil, fmt.Errorf("nats credentials_ref: unknown scheme %q", scheme)
 	}
