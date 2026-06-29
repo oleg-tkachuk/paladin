@@ -1,24 +1,46 @@
 package statemachine
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"context"
 
-// metricTransitionsTotal emits a label `source` ∈ {event, rpc, reconciler}
-// and `target` ∈ {AVAILABLE, FAILED, DELETED}. Critical alert:
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+)
+
+// transitionsTotal counts object state transitions by `source` ∈
+// {event, rpc, reconciler} and `target` ∈ {AVAILABLE, FAILED, DELETED}.
+//
+// Emitted over OTLP; the collector renders it in Prometheus as
+// paladin_object_transitions_total (counters get a _total suffix), the name the
+// SLO alert below queries:
 //
 //	rate(paladin_object_transitions_total{source="reconciler",target="AVAILABLE"}[10m])
 //	  / rate(paladin_object_transitions_total{target="AVAILABLE"}[10m]) > 0.05
 //
 // → event pipeline broken or latency ≫ reconciler TTL.
-var metricTransitionsTotal = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "paladin",
-		Subsystem: "object",
-		Name:      "transitions_total",
-		Help:      "Object state transitions by source signal.",
-	},
-	[]string{"source", "target"},
-)
+//
+// (Was a prometheus.NewCounterVec on the default registry, which PALADIN never
+// served — so it collected no observable data. Migrated to the OTel meter
+// 2026-06-29.)
+var transitionsTotal metric.Int64Counter
 
 func init() {
-	prometheus.MustRegister(metricTransitionsTotal)
+	var err error
+	transitionsTotal, err = otel.Meter("github.com/oleg-tkachuk/paladin/statemachine").
+		Int64Counter(
+			"paladin_object_transitions",
+			metric.WithDescription("Object state transitions by source signal."),
+		)
+	if err != nil {
+		otel.Handle(err)
+	}
+}
+
+// recordTransition records one object state transition.
+func recordTransition(ctx context.Context, source, target string) {
+	transitionsTotal.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("source", source),
+		attribute.String("target", target),
+	))
 }

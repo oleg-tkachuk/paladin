@@ -3,33 +3,18 @@ package metrics_test
 import (
 	"context"
 	"testing"
-	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/oleg-tkachuk/paladin/internal/metrics"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestMetricsPrometheusHelpers(t *testing.T) {
-	// Simple assertions to ensure calling the helpers doesn't panic
+func TestRecordResourceNameShape(t *testing.T) {
+	// Smoke test: recording each shape must not panic (no-op meter when
+	// OTel is disabled, real counter otherwise).
 	assert.NotPanics(t, func() {
-		metrics.RecordObjectOperation("create", "success", 0.5)
-		metrics.RecordS3Operation("put", "success", 0.2)
-		metrics.RecordDatabaseQuery("select", "success", 0.1)
-		metrics.UpdateConnectionPoolMetrics(5, 10, 50, 15)
-		metrics.RecordCacheOperation("get", "hit")
-		metrics.UpdateRateLimiterMetrics(10, 100)
-		metrics.RecordHTTPRequest("GET", "/v1/objects", "200", 0.05)
-	})
-}
-
-func TestOtelHelpers(t *testing.T) {
-	ctx := context.Background()
-	start := time.Now()
-
-	assert.NotPanics(t, func() {
-		metrics.RecordObjectOp(ctx, "create", "success", start)
-		metrics.RecordS3Op(ctx, "put", "success", start)
-		metrics.RecordDbQuery(ctx, "select", "success", start)
-		metrics.RecordCacheOp(ctx, "get", "hit")
+		metrics.RecordResourceNameShape(context.Background(), "canonical")
+		metrics.RecordResourceNameShape(context.Background(), "tenant")
+		metrics.RecordResourceNameShape(context.Background(), "bare")
 	})
 }

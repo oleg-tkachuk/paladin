@@ -172,7 +172,7 @@ func (t *Transitioner) promote(
 		}
 		return false, fmt.Errorf("sm: promote: %w", err)
 	}
-	metricTransitionsTotal.WithLabelValues(string(source), "AVAILABLE").Inc()
+	recordTransition(ctx, string(source), "AVAILABLE")
 	return true, nil
 }
 
@@ -189,7 +189,7 @@ func (t *Transitioner) MarkFailed(ctx context.Context, objectID uuid.UUID, reaso
 	if err != nil {
 		return fmt.Errorf("sm: mark failed: %w", err)
 	}
-	metricTransitionsTotal.WithLabelValues(string(SourceReconciler), "FAILED").Inc()
+	recordTransition(ctx, string(SourceReconciler), "FAILED")
 	return nil
 }
 
