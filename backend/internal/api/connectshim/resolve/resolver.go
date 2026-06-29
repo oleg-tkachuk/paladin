@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/oleg-tkachuk/paladin/internal/auth"
+	"github.com/oleg-tkachuk/paladin/internal/metrics"
 )
 
 // Shape classifies which of the three resource-name forms a caller sent.
@@ -38,14 +38,11 @@ type CanonicalRef struct {
 	Shape      Shape
 }
 
-// shapeTotal lets us see the real-world distribution of the three name shapes
-// before deciding whether to deprecate any of them (Phase 3).
-var shapeTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "paladin_resource_name_shape_total",
-	Help: "ObjectKey resource-name shapes received at the connectshim edge, by shape.",
-}, []string{"shape"})
-
-func init() { prometheus.MustRegister(shapeTotal) }
+// The shape distribution is recorded via metrics.RecordResourceNameShape so
+// it flows over the OTLP pipeline PALADIN actually exports — the previous
+// prometheus default-registry counter was never served, so it collected no
+// observable data (Phase 3 needs the real distribution to decide on
+// deprecating a shape).
 
 const (
 	prefixCanonical = "storageBackends/"
@@ -66,7 +63,7 @@ func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error
 		if err != nil {
 			return CanonicalRef{}, err
 		}
-		shapeTotal.WithLabelValues(string(ShapeCanonical)).Inc()
+		metrics.RecordResourceNameShape(ctx, string(ShapeCanonical))
 		return ref, nil
 
 	case strings.HasPrefix(name, prefixTenant):
@@ -74,7 +71,7 @@ func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error
 		if err != nil {
 			return CanonicalRef{}, fmt.Errorf("invalid object_key name %q: %w", name, err)
 		}
-		shapeTotal.WithLabelValues(string(ShapeTenant)).Inc()
+		metrics.RecordResourceNameShape(ctx, string(ShapeTenant))
 		return CanonicalRef{TenantID: tid, ObjectKey: ok, Shape: ShapeTenant}, nil
 
 	default:
@@ -82,7 +79,7 @@ func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error
 		if err != nil {
 			return CanonicalRef{}, fmt.Errorf("bare object_key %q requires a caller tenant: %w", name, err)
 		}
-		shapeTotal.WithLabelValues(string(ShapeBare)).Inc()
+		metrics.RecordResourceNameShape(ctx, string(ShapeBare))
 		return CanonicalRef{TenantID: tid, ObjectKey: name, Shape: ShapeBare}, nil
 	}
 }

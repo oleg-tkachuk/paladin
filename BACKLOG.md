@@ -713,25 +713,33 @@ open deliberately — each notes why._
 
 ### Phase 3: deprecate redundant resource-name shapes
 
-- **Status:** Open — gated on the shape-distribution data the new metric now
-  collects. The Phase-2 central resolver is DONE:
-  `internal/api/connectshim/resolve` exports
+- **Status:** Open — gated on real-world shape-distribution data. The Phase-2
+  central resolver is DONE: `internal/api/connectshim/resolve` exports
   `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)` handling all three
   shapes (canonical A / tenant C / bare B; bare takes the tenant from ctx)
   plus `ResolveTenantParent`, and every objectKey call site in
-  `connectshim/admin/object_key_server.go` swapped to it (the local
-  `objectKeyParts` / `tenantUUIDFromParent` are gone). The
-  `paladin_resource_name_shape_total{shape}` counter records which shape each
-  request used. Unit tests cover all shapes + error paths.
-- **Reason this remains:** once the metric shows the real-world distribution,
-  decide whether to deprecate a shape (e.g. drop bare B if nobody sends it) and
-  whether the data plane's object-name parser
-  (`connectshim/data/conv.go::objectNameParts`, a different
-  `…/objects/{id}` shape) should move behind the same resolver.
+  `connectshim/admin/object_key_server.go` swapped to it.
+- **2026-06-29 — metric is now actually exported.** The
+  `paladin_resource_name_shape_total{shape}` counter was registered on the
+  Prometheus *default registry*, which PALADIN never serves (no `/metrics`
+  handler, no Prom→OTLP bridge — PALADIN exports via OTLP only). So it collected
+  **zero observable data**. Migrated to the OTel meter
+  (`metrics.RecordResourceNameShape`), so it now flows over the OTLP pipeline
+  like every other PALADIN metric. A deprecation decision is finally *possible*
+  once traffic accrues.
+- **Reason this remains:** the decision needs the real distribution. A local
+  lab has no representative traffic (and runs `otel.enabled: false`), so the
+  call cannot be made from dev data — dropping a shape clients actually send
+  would break them. Also still open: whether the data plane's object-name
+  parser (`connectshim/data/conv.go::objectNameParts`, a different
+  `…/objects/{id}` shape that *also* does an `assertJWTTenant` cross-tenant
+  guard) should move behind the resolver — a hot-path refactor with security
+  semantics, hence left optional.
 - **Definition of Done:** a deprecation decision per shape backed by ≥1 week of
-  `paladin_resource_name_shape_total` data; optionally fold the data-plane
-  object-name parse into the resolver.
-- **Blockers:** needs production traffic through the new metric first.
+  `paladin_resource_name_shape_total` data from a real deployment (`otel.enabled`);
+  optionally fold the data-plane object-name parse into the resolver.
+- **Blockers:** needs a real (non-lab) deployment emitting the metric over
+  OTLP, then ≥1 week of traffic.
 
 ### Cedar policy templates: canonical resource literals
 
