@@ -19,7 +19,8 @@
 // The retention TTL reaper for unattended purge lives in worker/
 // housekeeping.go and is BACKLOG'd separately.
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ArchiveBoxIcon,
@@ -63,34 +64,30 @@ export default function TrashPage() {
   // catching a throw. restoreTenant/purgeTenant are mutations (throw-only) and
   // surface via toasts below.
   const { fetchTenants, restoreTenant, purgeTenant, error } = useTenants();
-  const [trashed, setTrashed] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<Tenant | null>(null);
   const { showNotification } = useNotification();
 
-  const reload = async () => {
-    // only_trashed=true → exclusively soft-deleted rows. We read the RETURN
-    // value of fetchTenants rather than the hook's shared `tenants` (which
-    // would conflict with the /tenants page when both are mounted in the same
-    // tab session). fetchTenants is a query: on failure it sets the hook's
-    // `error` (rendered in the banner) and returns an empty page — no throw.
-    setLoading(true);
-    const res = await fetchTenants("", "", { onlyTrashed: true });
-    setTrashed(res.tenants);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // only_trashed=true → exclusively soft-deleted rows. We read the RETURN
+  // value of fetchTenants rather than the hook's shared `tenants` (which
+  // would conflict with the /tenants page when both are mounted in the same
+  // tab session). fetchTenants is a query: on failure it sets the hook's
+  // `error` (rendered in the banner) and returns an empty page — no throw.
+  const trashQuery = useQuery({
+    queryKey: ["trashedTenants"],
+    queryFn: () =>
+      fetchTenants("", "", { onlyTrashed: true }).then((res) => res.tenants),
+  });
+  const trashed = useMemo(() => trashQuery.data ?? [], [trashQuery.data]);
+  const loading = trashQuery.isFetching;
+  // Mutations refetch instead of optimistically splicing local state.
+  const reload = () => void trashQuery.refetch();
 
   const handleRestore = async (t: Tenant) => {
     setBusyId(t.tenantId);
     try {
       const restored = await restoreTenant(t.tenantId);
-      setTrashed((prev) => prev.filter((x) => x.tenantId !== t.tenantId));
+      reload();
       showNotification({
         type: "success",
         title: "Tenant restored",
@@ -118,7 +115,7 @@ export default function TrashPage() {
     setBusyId(t.tenantId);
     try {
       await purgeTenant(t.tenantId);
-      setTrashed((prev) => prev.filter((x) => x.tenantId !== t.tenantId));
+      reload();
       showNotification({
         type: "success",
         title: "Tenant purged",

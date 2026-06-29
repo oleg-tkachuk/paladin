@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import React, { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   CommandLineIcon,
@@ -30,7 +30,6 @@ import { mcpInspectClient } from "@/lib/connect/client";
 import { MCPLiveSessions } from "@/components/features/mcp/MCPLiveSessions";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 
 // /mcp — operator visibility for the MCP (Model Context Protocol)
 // bridge. Single page with tabs because all four views share one
@@ -70,26 +69,18 @@ function sourceTone(
 }
 
 export default function MCPInspectPage() {
-  const [data, setData] = useState<MCPInspectResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetch = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await mcpInspectClient.inspect({});
-      setData(res);
-    } catch (err) {
-      setError(err instanceof ConnectError ? err.rawMessage : "Inspect failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetch();
-  }, []);
+  const inspectQuery = useQuery({
+    queryKey: ["mcpInspect"],
+    queryFn: ({ signal }) => mcpInspectClient.inspect({}, { signal }),
+  });
+  const data = inspectQuery.data ?? null;
+  const loading = inspectQuery.isFetching;
+  const error = inspectQuery.error
+    ? inspectQuery.error instanceof ConnectError
+      ? inspectQuery.error.rawMessage
+      : "Inspect failed"
+    : null;
+  const refresh = () => void inspectQuery.refetch();
 
   const profiles = useMemo(() => data?.profiles ?? [], [data]);
   const tools = useMemo(() => data?.toolCatalog ?? [], [data]);
@@ -116,7 +107,7 @@ export default function MCPInspectPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void fetch()}
+            onClick={refresh}
             disabled={loading}
           >
             <ArrowPathIcon
