@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -40,7 +41,6 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
-import type { UserSettings } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -90,8 +90,6 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
 
-  const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form state — held separately from `settings` so the user can edit
@@ -101,39 +99,44 @@ export default function ProfilePage() {
   const [locale, setLocale] = useState("");
   const [theme, setTheme] = useState("system");
 
-  const loadMine = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await userSettingsClient.getMine({});
-      setSettings(res);
-      setTimezone(res.timezone || "");
-      setLocale(res.locale || "");
-      setTheme(res.theme || "system");
-    } catch (err) {
-      // First-time users may not have a row yet; the backend creates
-      // an empty default on UpdateMine, so a NotFound here is fine.
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to load";
-      if (err instanceof ConnectError && /not.*found/i.test(err.rawMessage)) {
-        setSettings(null);
-        setTimezone("");
-        setLocale("");
-        setTheme("system");
-      } else {
+  const settingsQuery = useQuery({
+    queryKey: ["userSettings"],
+    retry: false, // queryFn toasts real failures; NotFound is a normal state.
+    queryFn: async ({ signal }) => {
+      try {
+        return await userSettingsClient.getMine({}, { signal });
+      } catch (err) {
+        // First-time users may not have a row yet; the backend creates an
+        // empty default on UpdateMine, so a NotFound here is fine → null.
+        if (err instanceof ConnectError && /not.*found/i.test(err.rawMessage)) {
+          return null;
+        }
         showNotification({
           type: "error",
           title: "Load failed",
-          message: msg,
+          message:
+            err instanceof ConnectError ? err.rawMessage : "Failed to load",
         });
+        throw err;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [showNotification]);
+    },
+  });
+  const settings = settingsQuery.data ?? null;
+  const loading = settingsQuery.isFetching;
+  // refetch is referentially stable across renders (TanStack), so it's safe
+  // to list in the handleSave dependency array below.
+  const loadMine = settingsQuery.refetch;
 
-  useEffect(() => {
-    void loadMine();
-  }, [loadMine]);
+  // Seed the editable form whenever a new snapshot arrives — render-phase
+  // adjust-on-change (not a set-state-in-effect hit). Identity is stable
+  // between fetches via TanStack structural sharing.
+  const [seededFrom, setSeededFrom] = useState(settings);
+  if (settings !== seededFrom) {
+    setSeededFrom(settings);
+    setTimezone(settings?.timezone || "");
+    setLocale(settings?.locale || "");
+    setTheme(settings?.theme || "system");
+  }
 
   const dirty = useMemo(() => {
     if (!settings) {
@@ -149,7 +152,7 @@ export default function ProfilePage() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const updated = await userSettingsClient.updateMine({
+      await userSettingsClient.updateMine({
         updateMask: create(FieldMaskSchema, {
           paths: ["timezone", "locale", "theme"],
         }),
@@ -158,7 +161,7 @@ export default function ProfilePage() {
         theme,
         preferences: {},
       });
-      setSettings(updated);
+      await loadMine();
       showNotification({
         type: "success",
         title: "Saved",
@@ -174,7 +177,7 @@ export default function ProfilePage() {
     } finally {
       setSaving(false);
     }
-  }, [timezone, locale, theme, showNotification]);
+  }, [timezone, locale, theme, showNotification, loadMine]);
 
   const handleReset = useCallback(() => {
     setTimezone(settings?.timezone || "");

@@ -113,8 +113,6 @@ export default function TenantQuotasPage() {
   const loading = quotaQuery.isFetching;
   const fetchQuota = () => quotaQuery.refetch();
 
-  // Whenever the snapshot loads, populate the form so editing is
-  // "tweak this" rather than "type from scratch".
   // Hydrate the form whenever a new snapshot arrives — render-phase
   // adjust-on-change (React's recommended alternative to a sync effect, not a
   // set-state-in-effect hit). `quota` identity changes only on real data
