@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ClockIcon } from "@heroicons/react/24/outline";
 
 import { objectClient } from "@/lib/connect/client";
@@ -33,50 +34,46 @@ export function ObjectVersionsTab({
 }: ObjectVersionsTabProps) {
   const { showNotification } = useNotification();
 
-  const [versions, setVersions] = React.useState<ObjectVersion[] | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [hasFetched, setHasFetched] = React.useState(false);
-
   const [detailsVersion, setDetailsVersion] =
     React.useState<ObjectVersion | null>(null);
   const [restoreVersion, setRestoreVersion] =
     React.useState<ObjectVersion | null>(null);
   const [isRestoring, setIsRestoring] = React.useState(false);
 
-  const fetchVersions = React.useCallback(async () => {
-    if (!object.name) return;
-    setLoading(true);
-    try {
-      const res = await objectClient.listObjectVersions({
-        parent: object.name,
-      });
-      // Newest first — defensive sort if the server already ordered.
-      const sorted = [...res.versions].sort((a, b) => {
-        const aSec = Number(a.createdAt?.seconds ?? 0n);
-        const bSec = Number(b.createdAt?.seconds ?? 0n);
-        return bSec - aSec;
-      });
-      setVersions(sorted);
-    } catch (err: unknown) {
-      const e = err as Error;
-      showNotification({
-        type: "error",
-        title: "Failed to load versions",
-        message: e.message || "Could not load version history.",
-      });
-      setVersions([]);
-    } finally {
-      setLoading(false);
-      setHasFetched(true);
-    }
-  }, [object.name, showNotification]);
-
-  // Lazy: fetch only on first activation. Don't refetch on tab swap.
-  React.useEffect(() => {
-    if (active && !hasFetched && !loading) {
-      void fetchVersions();
-    }
-  }, [active, hasFetched, loading, fetchVersions]);
+  // Lazy: enabled:active fetches on first activation; staleTime:Infinity keeps
+  // it from refetching on tab swap (the old `hasFetched` guard). refetch()
+  // after a restore still forces a reload regardless of staleTime.
+  const versionsQuery = useQuery({
+    queryKey: ["objectVersions", object.name],
+    enabled: active && !!object.name,
+    staleTime: Infinity,
+    retry: false, // queryFn toasts; a retry would double-toast.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await objectClient.listObjectVersions(
+          { parent: object.name },
+          { signal },
+        );
+        // Newest first — defensive sort if the server already ordered.
+        return [...res.versions].sort((a, b) => {
+          const aSec = Number(a.createdAt?.seconds ?? 0n);
+          const bSec = Number(b.createdAt?.seconds ?? 0n);
+          return bSec - aSec;
+        });
+      } catch (err: unknown) {
+        showNotification({
+          type: "error",
+          title: "Failed to load versions",
+          message: (err as Error).message || "Could not load version history.",
+        });
+        throw err;
+      }
+    },
+  });
+  // null until the first fetch resolves — preserves the `!versions` skeleton gate.
+  const versions = versionsQuery.data ?? null;
+  const loading = versionsQuery.isFetching;
+  const fetchVersions = () => versionsQuery.refetch();
 
   const handleConfirmRestore = async () => {
     if (!restoreVersion) return;

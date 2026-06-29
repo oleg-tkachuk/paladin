@@ -16,7 +16,8 @@
 // component uses `contains(resource_name, ...)` so either form
 // matches.
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 import {
   ChevronDownIcon,
@@ -48,40 +49,32 @@ export function ActivityTimeline({
   limit = PAGE_SIZE,
   className,
 }: ActivityTimelineProps) {
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        // CEL: substring match on resource_name so both A-shape
-        // (canonical) and C-shape (tenant-first) keys hit. Escape
-        // any embedded quotes to prevent filter injection.
-        const safe = resourceName.replace(/"/g, '\\"');
-        const filter = `resource_name.contains("${safe}")`;
-        const res = await auditClient.listAuditLog({
-          page: { pageSize: limit, pageToken: "" },
-          filter,
-        });
-        if (cancelled) return;
-        setEntries(res.entries);
-      } catch (err) {
-        if (!cancelled)
-          setError(
-            err instanceof ConnectError ? err.rawMessage : "Failed to load",
-          );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [resourceName, limit]);
+  const query = useQuery({
+    queryKey: ["activityTimeline", resourceName, limit],
+    queryFn: ({ signal }) => {
+      // CEL: substring match on resource_name so both A-shape (canonical)
+      // and C-shape (tenant-first) keys hit. Escape embedded quotes to
+      // prevent filter injection. TanStack cancels via `signal` on unmount /
+      // prop change — replaces the manual `cancelled` guard.
+      const safe = resourceName.replace(/"/g, '\\"');
+      return auditClient
+        .listAuditLog(
+          {
+            page: { pageSize: limit, pageToken: "" },
+            filter: `resource_name.contains("${safe}")`,
+          },
+          { signal },
+        )
+        .then((res) => res.entries);
+    },
+  });
+  const entries = query.data ?? [];
+  const loading = query.isLoading;
+  const error = query.error
+    ? query.error instanceof ConnectError
+      ? query.error.rawMessage
+      : "Failed to load"
+    : null;
 
   if (loading) {
     return (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BoltIcon,
   EllipsisVerticalIcon,
@@ -48,9 +49,6 @@ export default function EventsPage() {
   const tenantId = tenant.tenantId;
   const { showNotification } = useNotification();
 
-  const [items, setItems] = useState<EventSubscription[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false);
   const [tests, setTests] = useState<Map<string, TestResult>>(new Map());
   const [pendingTest, setPendingTest] = useState<Set<string>>(new Set());
 
@@ -62,39 +60,47 @@ export default function EventsPage() {
   );
   const [deleting, setDeleting] = useState(false);
 
-  const fetchList = useCallback(async () => {
-    if (!tenantId) {
-      setItems([]);
-      setHasFetched(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await eventSubscriptionClient.listSubscriptions({
-        parent: `tenants/${tenantId}`,
-      });
-      setItems(res.subscriptions);
-      setHasFetched(true);
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to list event subscriptions";
-      showNotification({
-        type: "error",
-        title: "Load failed",
-        message: msg,
-      });
-      setHasFetched(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, showNotification]);
-
-  useEffect(() => {
-    if (!tenantId) return;
-    void fetchList();
-  }, [tenantId, fetchList]);
+  const queryClient = useQueryClient();
+  const esKey = ["eventSubscriptions", tenantId] as const;
+  const listQuery = useQuery({
+    queryKey: esKey,
+    enabled: !!tenantId,
+    retry: false, // queryFn toasts; a retry would double-toast.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await eventSubscriptionClient.listSubscriptions(
+          { parent: `tenants/${tenantId}` },
+          { signal },
+        );
+        return res.subscriptions;
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to list event subscriptions",
+        });
+        throw err;
+      }
+    },
+  });
+  const items = listQuery.data ?? [];
+  const loading = listQuery.isFetching;
+  const hasFetched = listQuery.isFetched;
+  const fetchList = () => listQuery.refetch();
+  // Optimistic-update shim: writes straight into the query cache, so the
+  // existing handlers (handleSaved / handleToggle / handleDelete) keep their
+  // setItems(curr => …) and setItems(array) call shapes unchanged.
+  const setItems = (
+    next:
+      | EventSubscription[]
+      | ((curr: EventSubscription[]) => EventSubscription[]),
+  ) =>
+    queryClient.setQueryData<EventSubscription[]>(esKey, (curr) =>
+      typeof next === "function" ? next(curr ?? []) : next,
+    );
 
   // ── Open create / edit ────────────────────────────────────────────
   // The editor dialog owns the form + save RPC; the page only tracks which

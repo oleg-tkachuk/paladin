@@ -9,6 +9,7 @@
 // view that platform-admins reach for during an incident or audit.
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ConnectError } from "@connectrpc/connect";
@@ -57,9 +58,6 @@ export default function BucketDetailPage() {
   const { buckets, loading: loadingBucket } = useBuckets();
   const { tenants, fetchTenants } = useTenants();
 
-  const [objectKeys, setObjectKeys] = useState<ObjectKey[]>([]);
-  const [loadingOKs, setLoadingOKs] = useState(false);
-  const [okError, setOkError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // Server-side narrow via the new `bucket` field on
@@ -68,28 +66,35 @@ export default function BucketDetailPage() {
   // pair so we don't pull every OK platform-wide just to filter a
   // handful client-side.
   const bucketRef = `storageBackends/${backendId}/buckets/${bucketName}`;
-  const reloadObjectKeys = async () => {
-    setLoadingOKs(true);
-    setOkError(null);
-    try {
-      const res = await objectKeyClient.listObjectKeys({
-        parent: "",
-        page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-        filter: "",
-        bucket: bucketRef,
-      });
-      setObjectKeys(res.objectKeys);
-    } catch (err) {
-      setOkError(
-        err instanceof ConnectError ? err.rawMessage : "Failed to load",
-      );
-    } finally {
-      setLoadingOKs(false);
-    }
-  };
+  const objectKeysQuery = useQuery({
+    queryKey: ["bucketObjectKeys", bucketRef],
+    queryFn: ({ signal }) =>
+      objectKeyClient
+        .listObjectKeys(
+          {
+            parent: "",
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+            filter: "",
+            bucket: bucketRef,
+          },
+          { signal },
+        )
+        .then((res) => res.objectKeys),
+  });
+  const objectKeys = useMemo(
+    () => objectKeysQuery.data ?? [],
+    [objectKeysQuery.data],
+  );
+  const loadingOKs = objectKeysQuery.isFetching;
+  const okError = objectKeysQuery.error
+    ? objectKeysQuery.error instanceof ConnectError
+      ? objectKeysQuery.error.rawMessage
+      : "Failed to load"
+    : null;
+  const reloadObjectKeys = () => objectKeysQuery.refetch();
 
+  // useTenants has no auto-fetch; kick it on mount (unflagged cross-module).
   useEffect(() => {
-    void reloadObjectKeys();
     void fetchTenants();
   }, [fetchTenants]);
 
