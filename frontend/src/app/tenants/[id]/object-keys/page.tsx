@@ -13,7 +13,8 @@
 // otherwise. Tracked in BACKLOG: thread tenantId through
 // useObjectKeys when platform-admin cross-tenant mutation lands.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
@@ -36,7 +37,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { objectKeyClient } from "@/lib/connect/client";
-import type { ObjectKey } from "@/gen/paladin/admin/v1/types_pb";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
@@ -139,37 +139,41 @@ export default function TenantObjectKeysPage() {
     [backendRows],
   );
 
-  const [list, setList] = useState<ObjectKey[]>([]);
-  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
 
-  const fetchList = useCallback(
-    async (filter: string = "") => {
-      setLoading(true);
+  const listQuery = useQuery({
+    queryKey: ["tenantObjectKeys", tenant.tenantId, search],
+    retry: false, // queryFn toasts real failures.
+    queryFn: async ({ signal }) => {
       try {
-        const res = await objectKeyClient.listObjectKeys({
-          parent: `tenants/${tenant.tenantId}`,
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-          filter,
-        });
-        setList(res.objectKeys);
+        const res = await objectKeyClient.listObjectKeys(
+          {
+            parent: `tenants/${tenant.tenantId}`,
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
+            filter: search,
+          },
+          { signal },
+        );
+        return res.objectKeys;
       } catch (err) {
-        const msg =
-          err instanceof ConnectError
-            ? err.rawMessage
-            : "Failed to fetch object keys";
-        showNotification({ type: "error", title: "Load failed", message: msg });
-      } finally {
-        setLoading(false);
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to fetch object keys",
+        });
+        throw err;
       }
     },
-    [tenant.tenantId, showNotification],
-  );
-
-  useEffect(() => {
-    void fetchList(search);
-  }, [fetchList, search]);
+  });
+  const list = useMemo(() => listQuery.data ?? [], [listQuery.data]);
+  const loading = listQuery.isFetching;
+  // Call sites pass the current search; it's already in the queryKey, so a
+  // bare refetch suffices.
+  const fetchList = (_filter?: string) => listQuery.refetch();
 
   // ── create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -186,11 +190,13 @@ export default function TenantObjectKeysPage() {
     if (createOpen) fetchBuckets(newBackend || undefined);
   }, [createOpen, newBackend, fetchBuckets]);
 
-  useEffect(() => {
-    if (createOpen && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0]);
-    }
-  }, [createOpen, newBackend, backends]);
+  // Default the create form to the first backend / first bucket once the
+  // dialog opens and the lists have loaded. Render-phase adjust-on-condition
+  // (the !newBackend / !newBucketRef guards converge in one extra render) —
+  // not set-state-in-effect.
+  if (createOpen && !newBackend && backends.length > 0) {
+    setNewBackend(backends[0]);
+  }
 
   const availableBuckets = useMemo(
     () =>
@@ -198,11 +204,9 @@ export default function TenantObjectKeysPage() {
     [buckets, newBackend],
   );
 
-  useEffect(() => {
-    if (createOpen && !newBucketRef && availableBuckets.length > 0) {
-      setNewBucketRef(availableBuckets[0].bucketName);
-    }
-  }, [createOpen, newBucketRef, availableBuckets]);
+  if (createOpen && !newBucketRef && availableBuckets.length > 0) {
+    setNewBucketRef(availableBuckets[0].bucketName);
+  }
 
   const sorted = useMemo(() => {
     const arr = [...list];

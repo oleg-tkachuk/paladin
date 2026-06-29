@@ -147,12 +147,13 @@ export default function BucketsPage() {
     fetchBuckets();
   }, [fetchBuckets]);
 
-  // Default the create form to the first available backend.
-  useEffect(() => {
-    if (createOpen && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0]);
-    }
-  }, [createOpen, newBackend, backends]);
+  // Default the create form to the first available backend once the dialog
+  // opens and backends have loaded. Render-phase adjust-on-condition — the
+  // !newBackend guard makes it converge in one extra render, so it's not a
+  // set-state-in-effect.
+  if (createOpen && !newBackend && backends.length > 0) {
+    setNewBackend(backends[0]);
+  }
 
   const filtered = useMemo(() => {
     let list = buckets;

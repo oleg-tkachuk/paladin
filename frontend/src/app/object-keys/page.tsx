@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTableSort, type SortState } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
@@ -147,11 +147,13 @@ export default function ObjectKeysPage() {
     if (createOpen) fetchBuckets(newBackend || undefined);
   }, [createOpen, newBackend, fetchBuckets]);
 
-  useEffect(() => {
-    if (createOpen && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0]);
-    }
-  }, [createOpen, newBackend, backends]);
+  // Default the create form to the first backend / first bucket once the
+  // dialog opens and the lists have loaded. Render-phase adjust-on-condition
+  // (the !newBackend / !newBucketRef guards converge in one extra render) —
+  // not set-state-in-effect.
+  if (createOpen && !newBackend && backends.length > 0) {
+    setNewBackend(backends[0]);
+  }
 
   const availableBuckets = useMemo(
     () =>
@@ -159,11 +161,9 @@ export default function ObjectKeysPage() {
     [buckets, newBackend],
   );
 
-  useEffect(() => {
-    if (createOpen && !newBucketRef && availableBuckets.length > 0) {
-      setNewBucketRef(availableBuckets[0].bucketName);
-    }
-  }, [createOpen, newBucketRef, availableBuckets]);
+  if (createOpen && !newBucketRef && availableBuckets.length > 0) {
+    setNewBucketRef(availableBuckets[0].bucketName);
+  }
 
   const sorted = useMemo(() => {
     const list = [...objectKeys];

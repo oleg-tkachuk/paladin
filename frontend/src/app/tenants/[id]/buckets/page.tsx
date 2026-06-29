@@ -163,11 +163,12 @@ export default function TenantBucketsPage() {
     fetchBuckets(undefined, "", "", tenant.tenantId);
   }, [fetchBuckets, tenant.tenantId]);
 
-  useEffect(() => {
-    if (createOpen && !newBackend && backends.length > 0) {
-      setNewBackend(backends[0]);
-    }
-  }, [createOpen, newBackend, backends]);
+  // Default the create form to the first backend once the dialog opens and
+  // backends have loaded. Render-phase adjust-on-condition (the !newBackend
+  // guard converges in one extra render) — not set-state-in-effect.
+  if (createOpen && !newBackend && backends.length > 0) {
+    setNewBackend(backends[0]);
+  }
 
   // The server-side `owner_tenant_id` filter (passed in fetchBuckets
   // above) already narrows `buckets` to this tenant's rows; we list
