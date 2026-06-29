@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -106,37 +107,36 @@ export default function ApiTokensPage() {
   const parent = tenantParent(tenantId);
 
   // ── list state ──────────────────────────────────────────────────────
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(false);
   const [includeRevoked, setIncludeRevoked] = useState(false);
 
-  const fetchKeys = useCallback(async () => {
-    if (!parent) return;
-    setLoading(true);
-    try {
-      const res = await apiKeyClient.listApiKeys({
-        parent,
-        includeRevoked,
-      });
-      setKeys(res.apiKeys);
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to list API tokens";
-      showNotification({
-        type: "error",
-        title: "Load failed",
-        message: msg,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [parent, includeRevoked, showNotification]);
-
-  useEffect(() => {
-    void fetchKeys();
-  }, [fetchKeys]);
+  const keysQuery = useQuery({
+    queryKey: ["apiTokens", parent, includeRevoked],
+    enabled: !!parent,
+    // retry off: the queryFn toasts on failure, a retry would double-toast.
+    retry: false,
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await apiKeyClient.listApiKeys(
+          { parent, includeRevoked },
+          { signal },
+        );
+        return res.apiKeys;
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to list API tokens",
+        });
+        throw err;
+      }
+    },
+  });
+  const keys = useMemo(() => keysQuery.data ?? [], [keysQuery.data]);
+  const loading = keysQuery.isFetching;
+  const refreshKeys = () => void keysQuery.refetch();
 
   // ── create dialog ───────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -183,10 +183,8 @@ export default function ApiTokensPage() {
         secret: res.secret,
         displayPrefix: res.apiKey?.displayPrefix ?? "",
       });
-      // Optimistically prepend; refresh on close to pick up server timestamps.
-      if (res.apiKey) {
-        setKeys((prev) => [res.apiKey!, ...prev]);
-      }
+      // The reveal dialog stays open showing the secret; closing it calls
+      // refreshKeys(), which picks up the new key with server timestamps.
       showNotification({
         type: "success",
         title: "Token created",
@@ -213,7 +211,7 @@ export default function ApiTokensPage() {
     if (reveal && !revealAcknowledged) return; // block close until acked
     setCreateOpen(false);
     resetCreateForm();
-    void fetchKeys();
+    refreshKeys();
   };
 
   const copySecret = useCallback(async () => {
@@ -240,7 +238,7 @@ export default function ApiTokensPage() {
         message: revokeTarget.displayPrefix || revokeTarget.apiKeyId,
       });
       setRevokeTarget(null);
-      void fetchKeys();
+      refreshKeys();
     } catch (err) {
       const msg =
         err instanceof ConnectError ? err.rawMessage : "Revoke failed";
@@ -268,7 +266,7 @@ export default function ApiTokensPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void fetchKeys()}
+              onClick={refreshKeys}
               disabled={loading}
             >
               <ArrowPathIcon

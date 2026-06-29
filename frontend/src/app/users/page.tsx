@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   MagnifyingGlassIcon,
@@ -19,7 +19,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { userClient } from "@/lib/connect/client";
 import { useTenants } from "@/hooks/useTenants";
-import type { User } from "@/gen/paladin/iam/v1/types_pb";
+import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
@@ -41,31 +41,29 @@ import { T } from "@/lib/ui/typography";
 
 export default function UsersPage() {
   const { tenants, fetchTenants } = useTenants();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await userClient.listUsers({
-        parent: "",
-        page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-      });
-      setUsers(res.users);
-    } catch (err) {
-      setError(
-        err instanceof ConnectError ? err.rawMessage : "Failed to load users",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const usersQuery = useQuery({
+    queryKey: ["users"],
+    queryFn: ({ signal }) =>
+      userClient
+        .listUsers(
+          { parent: "", page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" } },
+          { signal },
+        )
+        .then((res) => res.users),
+  });
+  // useMemo keeps the fallback array stable so downstream memos don't churn.
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+  const loading = usersQuery.isFetching;
+  const error = usersQuery.error
+    ? normalizeError(usersQuery.error).message
+    : null;
+  const refreshUsers = () => void usersQuery.refetch();
 
+  // useTenants has no auto-fetch (caller-triggered); kick it on mount. Not a
+  // set-state-in-effect hit — fetchTenants is a cross-module useCallback.
   useEffect(() => {
-    void fetchUsers();
     void fetchTenants();
   }, [fetchTenants]);
 
@@ -108,7 +106,7 @@ export default function UsersPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => void fetchUsers()}
+          onClick={refreshUsers}
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
