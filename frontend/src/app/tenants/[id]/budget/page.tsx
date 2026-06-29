@@ -19,7 +19,8 @@
 // NOT_FOUND → "no budget configured" + Set form to create the
 // first one; non-zero cap activates server-side enforcement.
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   BanknotesIcon,
@@ -36,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 import { tenantBudgetClient } from "@/lib/connect/client";
-import type { TenantBudget } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
@@ -72,35 +72,34 @@ export default function TenantBudgetPage() {
   const tenantId = tenant.tenantId;
   const { showNotification } = useNotification();
 
-  const [budget, setBudget] = useState<TenantBudget | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-
-  const fetchBudget = useCallback(async () => {
-    setLoading(true);
-    setNotFound(false);
-    try {
-      const res = await tenantBudgetClient.get({ tenantId });
-      setBudget(res.budget ?? null);
-    } catch (err) {
-      if (err instanceof ConnectError && err.code === Code.NotFound) {
-        setBudget(null);
-        setNotFound(true);
-        return;
+  const budgetQuery = useQuery({
+    queryKey: ["tenantBudget", tenantId],
+    retry: false, // queryFn toasts real failures; NotFound is a normal state.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await tenantBudgetClient.get({ tenantId }, { signal });
+        return { budget: res.budget ?? null, notFound: false };
+      } catch (err) {
+        // No budget row yet is a normal "Create budget" state, not an error.
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          return { budget: null, notFound: true };
+        }
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to load tenant budget",
+        });
+        throw err;
       }
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to load tenant budget";
-      showNotification({ type: "error", title: "Load failed", message: msg });
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, showNotification]);
-
-  useEffect(() => {
-    void fetchBudget();
-  }, [fetchBudget]);
+    },
+  });
+  const budget = budgetQuery.data?.budget ?? null;
+  const notFound = budgetQuery.data?.notFound ?? false;
+  const loading = budgetQuery.isFetching;
+  const fetchBudget = () => budgetQuery.refetch();
 
   const [maxBudget, setMaxBudget] = useState<string>("");
   // Form picker default. Cold-start (no existing budget) starts on
@@ -111,7 +110,13 @@ export default function TenantBudgetPage() {
   const [resetSpend, setResetSpend] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  // Hydrate the form whenever a new snapshot arrives — render-phase
+  // adjust-on-change (React's recommended alternative to a sync effect, and
+  // not a set-state-in-effect hit). `budget` identity only changes on real
+  // data change thanks to TanStack's structural sharing.
+  const [seededFrom, setSeededFrom] = useState(budget);
+  if (budget !== seededFrom) {
+    setSeededFrom(budget);
     if (budget) {
       setMaxBudget(String(budget.maxBudgetAmount));
       if (budget.unitCode) setUnitCode(budget.unitCode);
@@ -120,7 +125,7 @@ export default function TenantBudgetPage() {
       setUnitCode("UNIT");
     }
     setResetSpend(false);
-  }, [budget]);
+  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -135,14 +140,13 @@ export default function TenantBudgetPage() {
     }
     setSubmitting(true);
     try {
-      const res = await tenantBudgetClient.set({
+      await tenantBudgetClient.set({
         tenantId,
         maxBudgetAmount: cap,
         unitCode,
         resetSpend,
       });
-      setBudget(res.budget ?? null);
-      setNotFound(false);
+      await fetchBudget();
       showNotification({
         type: "success",
         title: "Budget updated",

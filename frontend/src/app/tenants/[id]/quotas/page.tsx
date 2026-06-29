@@ -18,7 +18,8 @@
 //   - 0 caps mean "unlimited" per proto contract — same convention as
 //     TenantBudget.maxBudgetAmount. UI renders `∞ unlimited`.
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -37,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 import { quotaClient } from "@/lib/connect/client";
-import { QuotaSchema, type Quota } from "@/gen/paladin/admin/v1/types_pb";
+import { QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -74,10 +75,6 @@ export default function TenantQuotasPage() {
   const quotaName = `tenants/${tenant.tenantId}/quota`;
   const { showNotification } = useNotification();
 
-  const [quota, setQuota] = useState<Quota | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-
   // Form state mirrors the four caps as strings (so an empty input
   // round-trips to 0 unlimited). Hydrated from the latest snapshot.
   const [maxTotalBytes, setMaxTotalBytes] = useState("");
@@ -87,33 +84,44 @@ export default function TenantQuotasPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  const fetchQuota = useCallback(async () => {
-    setLoading(true);
-    setNotFound(false);
-    try {
-      const res = await quotaClient.getQuota({ name: quotaName });
-      setQuota(res);
-    } catch (err) {
-      if (err instanceof ConnectError && err.code === Code.NotFound) {
-        setQuota(null);
-        setNotFound(true);
-        return;
+  const quotaQuery = useQuery({
+    queryKey: ["tenantQuota", quotaName],
+    retry: false, // queryFn toasts real failures; NotFound is a normal state.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await quotaClient.getQuota({ name: quotaName }, { signal });
+        return { quota: res, notFound: false };
+      } catch (err) {
+        // No quota row yet is a normal "unlimited / create" state, not an error.
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          return { quota: null, notFound: true };
+        }
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to load quota",
+        });
+        throw err;
       }
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to load quota";
-      showNotification({ type: "error", title: "Load failed", message: msg });
-    } finally {
-      setLoading(false);
-    }
-  }, [quotaName, showNotification]);
-
-  useEffect(() => {
-    void fetchQuota();
-  }, [fetchQuota]);
+    },
+  });
+  const quota = quotaQuery.data?.quota ?? null;
+  const notFound = quotaQuery.data?.notFound ?? false;
+  const loading = quotaQuery.isFetching;
+  const fetchQuota = () => quotaQuery.refetch();
 
   // Whenever the snapshot loads, populate the form so editing is
   // "tweak this" rather than "type from scratch".
-  useEffect(() => {
+  // Hydrate the form whenever a new snapshot arrives — render-phase
+  // adjust-on-change (React's recommended alternative to a sync effect, not a
+  // set-state-in-effect hit). `quota` identity changes only on real data
+  // change (TanStack structural sharing).
+  const [seededFrom, setSeededFrom] = useState(quota);
+  if (quota !== seededFrom) {
+    setSeededFrom(quota);
     if (quota) {
       setMaxTotalBytes(String(quota.maxTotalBytes));
       setMaxObjectCount(String(quota.maxObjectCount));
@@ -125,7 +133,7 @@ export default function TenantQuotasPage() {
       setMaxBytesPerDay("");
       setMaxObjectsPerDay("");
     }
-  }, [quota]);
+  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -141,7 +149,7 @@ export default function TenantQuotasPage() {
       // FieldMask covers all four caps — usage stays untouched
       // (server-managed). resource_version supplied for OCC; empty
       // on first creation.
-      const res = await quotaClient.setQuota({
+      await quotaClient.setQuota({
         name: quotaName,
         resourceVersion: quota?.resourceVersion ?? "",
         updateMask: create(FieldMaskSchema, {
@@ -154,8 +162,7 @@ export default function TenantQuotasPage() {
         }),
         quota: next,
       });
-      setQuota(res);
-      setNotFound(false);
+      await fetchQuota();
       showNotification({ type: "success", title: "Quota updated" });
     } catch (err) {
       const msg =
