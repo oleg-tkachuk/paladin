@@ -4,10 +4,10 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
 import { DEFAULT_OBJECT_KEY, STORAGE_KEYS } from "@/constants";
@@ -87,49 +87,42 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const { user, status } = useAuth();
   const tenantId = user?.tenantId ?? null;
 
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [isTenantLoading, setIsTenantLoading] = useState(false);
-
-  const loadTenant = useCallback(async () => {
-    if (!tenantId) {
-      setTenant(null);
-      return;
-    }
-    setIsTenantLoading(true);
-    try {
-      const fetched = await tenantClient.getTenant({
-        name: `tenants/${tenantId}`,
-      });
-      setTenant(fetched ?? null);
-    } catch (err) {
-      // 404 / NotFound is plausible right after signup or in dev where
-      // the JWT carries a tenant id that doesn't exist yet — log and
-      // move on rather than red-toasting.
-      if (err instanceof ConnectError) {
-        console.warn(
-          `[ScopeContext] getTenant(${tenantId}) failed:`,
-          err.rawMessage,
+  // Tenant record fetched via GetTenant, cached by TanStack. `enabled` gates
+  // on auth + tenantId; deriving `tenant` from auth status (below) clears it
+  // on logout without a setState-in-effect.
+  const tenantQuery = useQuery({
+    queryKey: ["scopeTenant", tenantId],
+    enabled: status === "authenticated" && !!tenantId,
+    queryFn: async ({ signal }) => {
+      try {
+        const fetched = await tenantClient.getTenant(
+          { name: `tenants/${tenantId}` },
+          { signal },
         );
-      } else {
-        console.error("[ScopeContext] getTenant failed:", err);
+        return fetched ?? null;
+      } catch (err) {
+        // 404 / NotFound is plausible right after signup or in dev where the
+        // JWT carries a tenant id that doesn't exist yet — log, return null,
+        // don't red-toast.
+        if (err instanceof ConnectError) {
+          console.warn(
+            `[ScopeContext] getTenant(${tenantId}) failed:`,
+            err.rawMessage,
+          );
+        } else {
+          console.error("[ScopeContext] getTenant failed:", err);
+        }
+        return null;
       }
-      setTenant(null);
-    } finally {
-      setIsTenantLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    if (status !== "authenticated") {
-      setTenant(null);
-      return;
-    }
-    void loadTenant();
-  }, [status, loadTenant]);
-
+    },
+  });
+  // Only surface the record while authenticated — clears on logout.
+  const tenant = status === "authenticated" ? (tenantQuery.data ?? null) : null;
+  const isTenantLoading = tenantQuery.isFetching;
+  const refetchTenant = tenantQuery.refetch;
   const refreshTenant = useCallback(async () => {
-    await loadTenant();
-  }, [loadTenant]);
+    await refetchTenant();
+  }, [refetchTenant]);
 
   // ── Soft scope: backend / bucket / objectKey ───────────────────────────
   const [backendId, setBackendIdState] = useState<string | null>(() =>

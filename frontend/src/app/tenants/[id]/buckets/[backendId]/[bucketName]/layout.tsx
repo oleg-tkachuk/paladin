@@ -11,7 +11,8 @@
 // On 404 / not-found we surface notFound() so the operator gets the
 // standard 404 chrome instead of a generic "load failed" toast.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, type Dispatch, type SetStateAction } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 
@@ -46,35 +47,38 @@ export default function BucketDetailLayout({
   const bucketName = decodeURIComponent(params?.bucketName ?? "");
   const tenant = useTenant();
 
-  const [bucket, setBucket] = useState<Bucket | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notFoundFlag, setNotFoundFlag] = useState(false);
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const fresh = await bucketClient.getBucket({
-        name: bucketResourceName(backendId, bucketName),
-      });
-      setBucket(fresh);
-    } catch (err) {
-      if (err instanceof ConnectError && err.code === Code.NotFound) {
-        setNotFoundFlag(true);
-        return;
-      }
-      setError(
-        err instanceof ConnectError ? err.rawMessage : "Failed to load bucket.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [backendId, bucketName]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
+  const queryClient = useQueryClient();
+  const bucketKey = ["bucket", backendId, bucketName] as const;
+  const bucketQuery = useQuery({
+    queryKey: bucketKey,
+    retry: false, // NotFound short-circuits to notFound(); a retry won't help.
+    queryFn: ({ signal }) =>
+      bucketClient.getBucket(
+        { name: bucketResourceName(backendId, bucketName) },
+        { signal },
+      ),
+  });
+  const bucket = bucketQuery.data ?? null;
+  const loading = bucketQuery.isFetching;
+  const notFoundFlag =
+    bucketQuery.error instanceof ConnectError &&
+    bucketQuery.error.code === Code.NotFound;
+  const error =
+    bucketQuery.error && !notFoundFlag
+      ? bucketQuery.error instanceof ConnectError
+        ? bucketQuery.error.rawMessage
+        : "Failed to load bucket."
+      : null;
+  const refetch = async () => {
+    await bucketQuery.refetch();
+  };
+  // setBucket: child tabs push a server-updated Bucket into the query cache
+  // (e.g. SetLifecycleRules returns the new Bucket) — same Dispatch contract.
+  const setBucket: Dispatch<SetStateAction<Bucket | null>> = (next) =>
+    queryClient.setQueryData<Bucket>(bucketKey, (curr) => {
+      const resolved = typeof next === "function" ? next(curr ?? null) : next;
+      return resolved ?? undefined;
+    });
 
   // Cross-ownership guard: an operator who pasted a bucket URL
   // belonging to a different tenant lands here with the bucket

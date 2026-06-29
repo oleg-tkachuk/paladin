@@ -10,7 +10,8 @@
 // tenant, bounce to the canonical path so the address bar tells
 // the truth.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, type Dispatch, type SetStateAction } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notFound, useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -48,37 +49,37 @@ export default function ObjectKeyDetailLayout({
   const rawName = params?.name ?? "";
   const objectKeyName = decodeURIComponent(rawName);
 
-  const [ok, setOk] = useState<ObjectKey | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notFoundFlag, setNotFoundFlag] = useState(false);
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const fresh = await objectKeyClient.getObjectKey({
-        name: okResourceName(tenant.tenantId, objectKeyName),
-      });
-      setOk(fresh);
-    } catch (err) {
-      if (err instanceof ConnectError && err.code === Code.NotFound) {
-        setNotFoundFlag(true);
-        return;
-      }
-      setError(
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to load object key.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [tenant.tenantId, objectKeyName]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
+  const queryClient = useQueryClient();
+  const okKey = ["objectKey", tenant.tenantId, objectKeyName] as const;
+  const okQuery = useQuery({
+    queryKey: okKey,
+    retry: false, // NotFound short-circuits to notFound(); a retry won't help.
+    queryFn: ({ signal }) =>
+      objectKeyClient.getObjectKey(
+        { name: okResourceName(tenant.tenantId, objectKeyName) },
+        { signal },
+      ),
+  });
+  const ok = okQuery.data ?? null;
+  const loading = okQuery.isFetching;
+  const notFoundFlag =
+    okQuery.error instanceof ConnectError &&
+    okQuery.error.code === Code.NotFound;
+  const error =
+    okQuery.error && !notFoundFlag
+      ? okQuery.error instanceof ConnectError
+        ? okQuery.error.rawMessage
+        : "Failed to load object key."
+      : null;
+  const refetch = async () => {
+    await okQuery.refetch();
+  };
+  // setObjectKey for child tabs (push a server-updated ObjectKey into cache).
+  const setOk: Dispatch<SetStateAction<ObjectKey | null>> = (next) =>
+    queryClient.setQueryData<ObjectKey>(okKey, (curr) => {
+      const resolved = typeof next === "function" ? next(curr ?? null) : next;
+      return resolved ?? undefined;
+    });
 
   // Cross-ownership guard. ObjectKey.tenantId is the canonical
   // owner — if a paste linked the wrong tenant slug, bounce. Hooks
