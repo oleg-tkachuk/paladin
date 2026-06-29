@@ -9,6 +9,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
 import { ClientLayout } from "@/components/layout/ClientLayout";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 import { NotificationProvider } from "@/components/ui/Notification";
 import { AuthProvider } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -41,14 +42,16 @@ export default function RootLayout({
             useEffect-driven list/version fetches throw before there's a
             session — visible as red toasts on the login page.
         */}
-        <TooltipProvider delayDuration={150}>
-          <NotificationProvider>
-            <AuthProvider>
-              <ClientLayout>{children}</ClientLayout>
-              <Toaster richColors position="bottom-right" />
-            </AuthProvider>
-          </NotificationProvider>
-        </TooltipProvider>
+        <QueryProvider>
+          <TooltipProvider delayDuration={150}>
+            <NotificationProvider>
+              <AuthProvider>
+                <ClientLayout>{children}</ClientLayout>
+                <Toaster richColors position="bottom-right" />
+              </AuthProvider>
+            </NotificationProvider>
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
 import { useAuth } from "@/context/AuthContext";
@@ -20,36 +19,27 @@ import { objectTagClient } from "@/lib/connect/client";
 export function useDistinctTags(objectKey: string): string[] {
   const { user } = useAuth();
   const tenantId = user?.tenantId ?? "";
-  const [options, setOptions] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (!tenantId || !objectKey) {
-      setOptions([]);
-      return;
-    }
-    let cancelled = false;
-    const parent = `tenants/${tenantId}/objectKeys/${objectKey}`;
-    objectTagClient
-      .listDistinctTags({ parent })
-      .then((res) => {
-        if (cancelled) return;
+  const { data } = useQuery({
+    queryKey: ["distinctTags", tenantId, objectKey],
+    enabled: !!tenantId && !!objectKey,
+    queryFn: async () => {
+      const parent = `tenants/${tenantId}/objectKeys/${objectKey}`;
+      try {
+        const res = await objectTagClient.listDistinctTags({ parent });
         const pairs: string[] = [];
         for (const [key, tv] of Object.entries(res.tags)) {
           for (const value of tv.values) pairs.push(`${key}=${value}`);
         }
         pairs.sort();
-        setOptions(pairs);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
+        return pairs;
+      } catch (e: unknown) {
         // Non-fatal: the dropdown still works off client-side accumulation.
         console.debug("listDistinctTags failed", ConnectError.from(e).message);
-        setOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantId, objectKey]);
+        return [] as string[];
+      }
+    },
+  });
 
-  return options;
+  return data ?? [];
 }

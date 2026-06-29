@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ConnectError } from "@connectrpc/connect";
+import { useQuery } from "@tanstack/react-query";
 
 import { adminSystemClient } from "@/lib/connect/client";
+import { normalizeError } from "@/lib/connect/error";
 
 // useConfig — wraps admin/v1.SystemService.GetConfig.
 //
@@ -17,34 +17,27 @@ import { adminSystemClient } from "@/lib/connect/client";
 // informative state instead of unmounting.
 
 export function useConfig() {
-  const [config, setConfig] = useState<string | null>(null);
-  const [path, setPath] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const query = useQuery({
+    queryKey: ["admin", "config"],
+    queryFn: async () => {
+      try {
+        const res = await adminSystemClient.getConfig({});
+        return { config: res.yaml, path: res.sourcePath || null };
+      } catch (err) {
+        throw normalizeError(err);
+      }
+    },
+  });
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await adminSystemClient.getConfig({});
-      setConfig(res.yaml);
-      setPath(res.sourcePath || null);
-    } catch (err) {
-      const e =
-        err instanceof ConnectError
-          ? new Error(err.rawMessage)
-          : err instanceof Error
-            ? err
-            : new Error(String(err));
-      setError(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return { config, path, loading, error, refresh };
+  return {
+    config: query.data?.config ?? null,
+    path: query.data?.path ?? null,
+    // isFetching (not isLoading) preserves the old hook's "loading is true
+    // on mount AND on every refresh" semantics.
+    loading: query.isFetching,
+    error: (query.error as Error | null) ?? null,
+    refresh: async () => {
+      await query.refetch();
+    },
+  };
 }
