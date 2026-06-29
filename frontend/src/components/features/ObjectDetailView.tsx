@@ -69,10 +69,16 @@ export function ObjectDetailView({
   const [activeTab, setActiveTab] = React.useState<"object" | "versions">(
     "object",
   );
+  // Sync the tab from the URL hash AFTER hydration. This is the legitimate
+  // "sync with a browser-only source" exception to set-state-in-effect:
+  // reading window.location.hash during render (lazy init) would diverge from
+  // the server's "object" default and trip a hydration mismatch, so the read
+  // must happen in an effect post-hydration.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const hash = window.location.hash.replace(/^#/, "");
     if (hash === "versions" || hash === "object") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- post-hydration browser-hash read; see comment above
       setActiveTab(hash);
     }
   }, []);

@@ -15,7 +15,7 @@
 // peeking at a stray binary won't accidentally lock the browser
 // downloading a 4GB blob.
 
-import React, { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownTrayIcon,
   ExclamationTriangleIcon,
@@ -49,9 +49,6 @@ export function FilePreview({
   className,
 }: FilePreviewProps) {
   const kind = classifyFile(contentType, filename);
-  const [text, setText] = useState<string | null>(null);
-  const [textError, setTextError] = useState<string | null>(null);
-  const [textLoading, setTextLoading] = useState(false);
 
   // Only fetch text-class previews — image/pdf/etc. load
   // declaratively below.
@@ -59,50 +56,44 @@ export function FilePreview({
   const tooLarge =
     typeof sizeBytes === "number" && sizeBytes > TEXT_PREVIEW_LIMIT;
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!isTextual || tooLarge || !presignedUrl) {
-      setText(null);
-      return;
-    }
-    setTextLoading(true);
-    setTextError(null);
-    (async () => {
-      try {
-        const res = await fetch(presignedUrl);
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const reader = res.body?.getReader();
-        if (!reader) {
-          const body = await res.text();
-          if (!cancelled) setText(body.slice(0, TEXT_PREVIEW_LIMIT));
-          return;
-        }
-        // Streamed read with a hard byte cap so a Content-Length
-        // mis-report can't pull the whole file.
-        const decoder = new TextDecoder();
-        let acc = "";
-        let received = 0;
-        while (received < TEXT_PREVIEW_LIMIT) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          received += value.byteLength;
-          acc += decoder.decode(value, { stream: true });
-        }
-        acc += decoder.decode();
-        if (!cancelled) setText(acc.slice(0, TEXT_PREVIEW_LIMIT));
-      } catch (err) {
-        if (!cancelled)
-          setTextError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setTextLoading(false);
+  // Stream the text preview through TanStack — keyed on the presigned URL;
+  // the signal aborts the in-flight fetch on unmount / URL change (replaces
+  // the manual `cancelled` guard). Disabled for non-textual / oversized /
+  // urlless previews, so `text` stays null there.
+  const previewQuery = useQuery({
+    queryKey: ["filePreview", presignedUrl, isTextual, tooLarge],
+    enabled: isTextual && !tooLarge && !!presignedUrl,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const res = await fetch(presignedUrl!, { signal });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isTextual, tooLarge, presignedUrl]);
+      const reader = res.body?.getReader();
+      if (!reader) {
+        const body = await res.text();
+        return body.slice(0, TEXT_PREVIEW_LIMIT);
+      }
+      // Streamed read with a hard byte cap so a Content-Length mis-report
+      // can't pull the whole file.
+      const decoder = new TextDecoder();
+      let acc = "";
+      let received = 0;
+      while (received < TEXT_PREVIEW_LIMIT) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        acc += decoder.decode(value, { stream: true });
+      }
+      acc += decoder.decode();
+      return acc.slice(0, TEXT_PREVIEW_LIMIT);
+    },
+  });
+  const text = previewQuery.data ?? null;
+  const textError = previewQuery.error
+    ? (previewQuery.error as Error).message
+    : null;
+  const textLoading = previewQuery.isFetching;
 
   if (!presignedUrl) {
     return (

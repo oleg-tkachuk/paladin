@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -20,34 +20,34 @@ import { tenantClient } from "@/lib/connect/client";
  */
 export function RenamedSlugHint() {
   const pathname = usePathname();
-  const [target, setTarget] = useState<string | null>(null);
+  const match = /^\/tenants\/([^/]+)(\/.*)?$/.exec(pathname ?? "");
+  const oldSlug = match ? decodeURIComponent(match[1]) : "";
+  const rest = match?.[2] ?? "";
 
-  useEffect(() => {
-    const match = /^\/tenants\/([^/]+)(\/.*)?$/.exec(pathname ?? "");
-    if (!match) {
-      setTarget(null);
-      return;
-    }
-    const oldSlug = decodeURIComponent(match[1]);
-    const rest = match[2] ?? "";
-    let cancelled = false;
-    tenantClient
-      .resolveRenamedSlug({ oldSlug })
-      .then((res) => {
-        if (cancelled || !res.newSlug) return;
-        setTarget(`/tenants/${res.newSlug}${rest}`);
-      })
-      .catch((e: unknown) => {
-        // NOT_FOUND = no rename on record / not authorized — stay silent.
+  // Resolve the (possibly renamed) slug via TanStack — keyed on oldSlug (the
+  // RPC's only input); the signal cancels a superseded lookup. NotFound /
+  // not-authorized resolve to null so the surrounding 404 stays plain.
+  const { data: newSlug } = useQuery({
+    queryKey: ["renamedSlug", oldSlug],
+    enabled: !!match,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await tenantClient.resolveRenamedSlug(
+          { oldSlug },
+          { signal },
+        );
+        return res.newSlug || null;
+      } catch (e: unknown) {
         if (!(e instanceof ConnectError) || e.code !== Code.NotFound) {
           console.debug("resolveRenamedSlug failed", e);
         }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]);
+        return null;
+      }
+    },
+  });
 
+  const target = newSlug ? `/tenants/${newSlug}${rest}` : null;
   if (!target) return null;
 
   return (
