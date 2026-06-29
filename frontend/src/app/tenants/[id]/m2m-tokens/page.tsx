@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   KeyIcon,
@@ -31,6 +32,17 @@ import { formatTimestamp, isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 
+// Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
+// the token was never verified (GetUsage NotFound).
+type UsageSnap = {
+  limitRpm: number;
+  weighted: number;
+  currentBucket: bigint;
+  resetsAtMs: number;
+};
+type UsageMap = Map<string, UsageSnap | "never">;
+const EMPTY_USAGE: UsageMap = new Map();
+
 // /m2m-tokens — service-to-service hashed-bearer tokens.
 //
 // Distinct from /api-tokens (legacy iam.ApiKey, user-scoped PATs).
@@ -60,90 +72,72 @@ export default function M2MTokensPage() {
   const { showNotification } = useNotification();
 
   // ── list state ──────────────────────────────────────────────────────
-  const [tokens, setTokens] = useState<APIToken[]>([]);
-  const [loading, setLoading] = useState(false);
   const [includeRevoked, setIncludeRevoked] = useState(false);
   const [includeExpired, setIncludeExpired] = useState(false);
 
-  // Per-token sliding-window snapshot fetched after list. Map keyed
-  // by token.id; "never" sentinel for NOT_FOUND (token never used).
-  // Re-fetched whenever the list refreshes; UI renders weighted /
-  // limit with a "resets in Ns" subtitle.
-  type UsageSnap = {
-    limitRpm: number;
-    weighted: number;
-    currentBucket: bigint;
-    resetsAtMs: number;
-  };
-  const [usage, setUsage] = useState<Map<string, UsageSnap | "never">>(
-    new Map(),
-  );
-
-  const fetchTokens = useCallback(async () => {
-    if (!tenantId) return;
-    setLoading(true);
-    try {
-      const res = await apiTokenClient.list({
-        tenantId,
-        includeRevoked,
-        includeExpired,
-        pageSize: 100,
-      });
-      setTokens(res.apiTokens);
-
-      // Fan-out usage fetches for non-revoked tokens. Revoked
-      // tokens have no live counters worth showing.
-      void Promise.all(
-        res.apiTokens.map(async (t) => {
-          if (isRevoked(t)) return null;
-          try {
-            const u = await apiTokenClient.getUsage({ id: t.id });
-            const resetsAtMs = u.windowResetsAt
-              ? Number(u.windowResetsAt.seconds) * 1000
-              : 0;
-            return [
-              t.id,
-              {
-                limitRpm: u.limitRpm,
-                weighted: u.weightedCount,
-                currentBucket: u.currentBucketCount,
-                resetsAtMs,
-              },
-            ] as const;
-          } catch (err) {
-            if (err instanceof ConnectError && err.code === Code.NotFound) {
-              return [t.id, "never" as const] as const;
+  const tokensQuery = useQuery({
+    queryKey: ["m2mTokens", tenantId, includeRevoked, includeExpired],
+    enabled: !!tenantId,
+    retry: false, // queryFn toasts real failures.
+    queryFn: async ({ signal }) => {
+      try {
+        const res = await apiTokenClient.list(
+          { tenantId, includeRevoked, includeExpired, pageSize: 100 },
+          { signal },
+        );
+        // Fan-out usage fetches for non-revoked tokens (revoked have no live
+        // counters worth showing). NotFound ⇒ "never". The shared signal
+        // cancels them if the list query is superseded.
+        const entries = await Promise.all(
+          res.apiTokens.map(async (t) => {
+            if (isRevoked(t)) return null;
+            try {
+              const u = await apiTokenClient.getUsage({ id: t.id }, { signal });
+              return [
+                t.id,
+                {
+                  limitRpm: u.limitRpm,
+                  weighted: u.weightedCount,
+                  currentBucket: u.currentBucketCount,
+                  resetsAtMs: u.windowResetsAt
+                    ? Number(u.windowResetsAt.seconds) * 1000
+                    : 0,
+                },
+              ] as const;
+            } catch (err) {
+              if (err instanceof ConnectError && err.code === Code.NotFound) {
+                return [t.id, "never" as const] as const;
+              }
+              return null;
             }
-            return null;
-          }
-        }),
-      ).then((entries) => {
-        setUsage(
-          new Map(
-            entries.filter(
-              (e): e is readonly [string, UsageSnap | "never"] => e !== null,
-            ),
+          }),
+        );
+        const usage: UsageMap = new Map(
+          entries.filter(
+            (e): e is readonly [string, UsageSnap | "never"] => e !== null,
           ),
         );
-      });
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError
-          ? err.rawMessage
-          : "Failed to list M2M tokens";
-      showNotification({
-        type: "error",
-        title: "Load failed",
-        message: msg,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, includeRevoked, includeExpired, showNotification]);
-
-  useEffect(() => {
-    void fetchTokens();
-  }, [fetchTokens]);
+        return { tokens: res.apiTokens, usage };
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to list M2M tokens",
+        });
+        throw err;
+      }
+    },
+  });
+  const tokens = useMemo(
+    () => tokensQuery.data?.tokens ?? [],
+    [tokensQuery.data],
+  );
+  const usage = tokensQuery.data?.usage ?? EMPTY_USAGE;
+  const loading = tokensQuery.isFetching;
+  const fetchTokens = () => tokensQuery.refetch();
 
   // ── create / revoke dialog targets ──────────────────────────────────
   // The dialogs own their own form + RPC; the page only tracks open state.
@@ -410,7 +404,7 @@ export default function M2MTokensPage() {
           setCreateOpen(false);
           void fetchTokens();
         }}
-        onCreated={(tok) => setTokens((prev) => [tok, ...prev])}
+        onCreated={() => void fetchTokens()}
       />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}
