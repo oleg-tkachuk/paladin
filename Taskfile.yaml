@@ -30,6 +30,11 @@ vars:
   # registry is a one-line override here (or `GLOBAL_REGISTRY=… task …`).
   # Both components' deploy chains read it via tasks/_service.task.yaml.
   GLOBAL_REGISTRY: '{{.GLOBAL_REGISTRY | default "registry.local"}}'
+  # Kube context every kubectl / helm task targets. Defaults to the local
+  # OrbStack cluster; override with `K8S_CONTEXT=<ctx> task …`. The
+  # backend/frontend includes redeclare it so a standalone `cd backend &&
+  # task …` resolves the same default.
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
 
 includes:
   backend:
@@ -203,11 +208,12 @@ tasks:
     cmds:
       - cmd: |-
           set -u
-          if ! kubectl version --request-timeout=3s >/dev/null 2>&1; then
-            echo "[deploy-all:sync] kubectl can't reach the cluster; skip" >&2
+          echo "[deploy-all:sync] context={{.K8S_CONTEXT}}"
+          if ! kubectl --context {{.K8S_CONTEXT}} version --request-timeout=3s >/dev/null 2>&1; then
+            echo "[deploy-all:sync] kubectl can't reach context {{.K8S_CONTEXT}}; skip" >&2
             exit 0
           fi
-          apps=$(kubectl -n argocd get app -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
+          apps=$(kubectl --context {{.K8S_CONTEXT}} -n argocd get app -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
                  | grep -E '^paladin(-|$)' || true)
           if [ -z "$apps" ]; then
             echo "[deploy-all:sync] no paladin* apps in argocd ns"
@@ -215,7 +221,7 @@ tasks:
           fi
           for app in $apps; do
             echo "[deploy-all:sync] refresh $app"
-            kubectl -n argocd patch app "$app" --type merge \
+            kubectl --context {{.K8S_CONTEXT}} -n argocd patch app "$app" --type merge \
               -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' >/dev/null
           done
 

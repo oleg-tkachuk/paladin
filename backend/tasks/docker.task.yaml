@@ -47,7 +47,7 @@ tasks:
     desc: "Build into the local Docker store + helm upgrade --install to OrbStack (no registry)"
     deps: [":core:tools:build"]
     vars:
-      KUBE_CONTEXT: '{{.KUBE_CONTEXT | default "orbstack"}}'
+      K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
       # Explicit Helm values file override. Empty ⇒ use OVERLAY if present,
       # else chart defaults.
       VALUES: '{{.VALUES | default ""}}'
@@ -59,12 +59,12 @@ tasks:
     preconditions:
       - sh: command -v helm >/dev/null
         msg: "helm is not installed"
-      - sh: kubectl config get-contexts -o name | grep -qx "{{.KUBE_CONTEXT | default `orbstack`}}"
-        msg: "no '{{.KUBE_CONTEXT | default `orbstack`}}' kube context — enable Kubernetes in OrbStack"
+      - sh: kubectl config get-contexts -o name | grep -qx "{{.K8S_CONTEXT | default `orbstack`}}"
+        msg: "no '{{.K8S_CONTEXT | default `orbstack`}}' kube context — enable Kubernetes in OrbStack"
     cmds:
       - task: build-local
       - task: ":core:banner"
-        vars: { MESSAGE: "[orbstack] helm upgrade --install {{.PROJECT_NAME}} -> ns {{.K8S_NAMESPACE}}" }
+        vars: { MESSAGE: "[ctx={{.K8S_CONTEXT}}] helm upgrade --install {{.PROJECT_NAME}} -> ns {{.K8S_NAMESPACE}}" }
       - cmd: |-
           set -euo pipefail
           # Values: explicit VALUES wins; else the sibling gitops overlay
@@ -84,7 +84,7 @@ tasks:
           # image.tag=latest matches build-local; pullPolicy=IfNotPresent
           # uses the shared Docker store (nothing serves registry.local).
           helm upgrade --install {{.PROJECT_NAME}} {{.CHART_DIR}} \
-            --kube-context {{.KUBE_CONTEXT}} \
+            --kube-context {{.K8S_CONTEXT}} \
             --namespace {{.K8S_NAMESPACE}} --create-namespace \
             --set image.tag=latest \
             --set image.pullPolicy=IfNotPresent \

@@ -13,28 +13,28 @@ tasks:
           # Both checks need to swallow stderr — kubectl emits "namespaces
           # … not found" to stderr even with --ignore-not-found, which
           # confuses log scrapers.
-          if ! kubectl get namespace {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
+          if ! kubectl --context {{.K8S_CONTEXT}} get namespace {{.K8S_NAMESPACE}} >/dev/null 2>&1; then
             printf 'INFO: %s: skip restart — namespace %s missing\n' \
               '{{.PROJECT_NAME}}' '{{.K8S_NAMESPACE}}'
             exit 0
           fi
-          if ! kubectl -n {{.K8S_NAMESPACE}} get deploy/{{.PROJECT_NAME}} >/dev/null 2>&1; then
+          if ! kubectl --context {{.K8S_CONTEXT}} -n {{.K8S_NAMESPACE}} get deploy/{{.PROJECT_NAME}} >/dev/null 2>&1; then
             printf 'INFO: %s: skip restart — deploy/%s missing in %s\n' \
               '{{.PROJECT_NAME}}' '{{.PROJECT_NAME}}' '{{.K8S_NAMESPACE}}'
             exit 0
           fi
-          printf 'INFO: %s: rolling deployment\n' '{{.PROJECT_NAME}}'
-          kubectl -n {{.K8S_NAMESPACE}} rollout restart deploy/{{.PROJECT_NAME}}
-          kubectl -n {{.K8S_NAMESPACE}} rollout status  deploy/{{.PROJECT_NAME}} --timeout=2m
+          printf 'INFO: %s: rolling deployment (ctx=%s ns=%s)\n' '{{.PROJECT_NAME}}' '{{.K8S_CONTEXT}}' '{{.K8S_NAMESPACE}}'
+          kubectl --context {{.K8S_CONTEXT}} -n {{.K8S_NAMESPACE}} rollout restart deploy/{{.PROJECT_NAME}}
+          kubectl --context {{.K8S_CONTEXT}} -n {{.K8S_NAMESPACE}} rollout status  deploy/{{.PROJECT_NAME}} --timeout=2m
 
   logs:
     desc: "Tail the deployment's logs (Ctrl-C to stop)"
     cmds:
-      - kubectl -n {{.K8S_NAMESPACE}} logs deploy/{{.PROJECT_NAME}} -f --tail=100
+      - kubectl --context {{.K8S_CONTEXT}} -n {{.K8S_NAMESPACE}} logs deploy/{{.PROJECT_NAME}} -f --tail=100
 
   port-forward:
     desc: "Port-forward the data plane (8080) — override PORT for iam (8085) / admin (8090)"
     vars:
       PORT: '{{.PORT | default "8080"}}'
     cmds:
-      - kubectl -n {{.K8S_NAMESPACE}} port-forward deploy/{{.PROJECT_NAME}} {{.PORT}}:{{.PORT}}
+      - kubectl --context {{.K8S_CONTEXT}} -n {{.K8S_NAMESPACE}} port-forward deploy/{{.PROJECT_NAME}} {{.PORT}}:{{.PORT}}

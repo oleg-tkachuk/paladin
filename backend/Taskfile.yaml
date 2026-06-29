@@ -13,6 +13,9 @@ vars:
   CHART_DIR: ./deploy/chart
   TIMEZONE: Europe/Kyiv
   K8S_NAMESPACE: paladin
+  # Kube context for every kubectl / helm task (k8s:* + deploy-orbstack).
+  # Defaults to the local OrbStack cluster; override with `K8S_CONTEXT=<ctx>`.
+  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
 
   # OCI Registry — derived from GLOBAL_REGISTRY, the single source of
   # truth in the root Taskfile (threaded here via the deploy fan-out, or

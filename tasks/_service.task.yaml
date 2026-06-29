@@ -88,10 +88,12 @@ tasks:
   k8s:logs:
     desc: "Tail pod logs in the paladin namespace for this component"
     cmds:
-      - kubectl logs -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}} -f --tail=100
+      - echo "{{.PROJECT_NAME}} k8s-logs ctx={{.K8S_CONTEXT}} ns={{.K8S_NAMESPACE | default "paladin"}}"
+      - kubectl --context {{.K8S_CONTEXT}} logs -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}} -f --tail=100
 
   k8s:restart:
     desc: "Roll the Deployment (force pod recycle without redeploy)"
     cmds:
-      - kubectl rollout restart deploy -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}}
-      - kubectl rollout status deploy -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}}
+      - echo "{{.PROJECT_NAME}} k8s-restart ctx={{.K8S_CONTEXT}} ns={{.K8S_NAMESPACE | default "paladin"}}"
+      - kubectl --context {{.K8S_CONTEXT}} rollout restart deploy -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}}
+      - kubectl --context {{.K8S_CONTEXT}} rollout status deploy -n {{.K8S_NAMESPACE | default "paladin"}} -l app.kubernetes.io/name={{.PROJECT_NAME}}
