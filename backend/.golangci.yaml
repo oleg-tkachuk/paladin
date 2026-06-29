@@ -9,11 +9,19 @@ linters:
   default: standard
   # Curated additions. This list is intentionally NOT the full golangci set:
   # the pure-style / high-noise linters (nlreturn ~1.5k hits, goconst,
-  # predeclared, nestif, dupl, …) and several opinionated ones were dropped so
-  # the gate is green on the current tree and enforces what catches real bugs /
-  # resource leaks rather than reformatting churn. The bug-catchers still worth
-  # adopting incrementally (nilerr, errorlint, noctx, contextcheck, gosec,
-  # errchkjson) are tracked in BACKLOG — each needs a dedicated fix pass first.
+  # predeclared, nestif, dupl, …) are dropped so the gate enforces what
+  # catches real bugs / resource leaks rather than reformatting churn.
+  #
+  # Bug-catcher review (settled — no longer tracked in BACKLOG):
+  #   ADOPTED:  errorlint, noctx, gosec (G115 excluded — see settings.gosec),
+  #             plus the `standard` core (errcheck/govet/ineffassign/
+  #             staticcheck/unused).
+  #   REJECTED: nilerr (14 hits, all deliberate fail-open/skip patterns),
+  #             contextcheck (9 hits, all the graceful-shutdown detached-ctx
+  #             idiom / ctx-less boot I/O), errchkjson (15 hits, app-controlled
+  #             marshals that can't fail). Each would mean a pile of //nolint
+  #             for zero real bugs — left OFF on purpose; don't re-add without
+  #             a new reason.
   enable:
     - asasalint # []any passed to append-like variadics
     - bodyclose # http.Response.Body not closed (leak)
