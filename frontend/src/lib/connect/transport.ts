@@ -70,11 +70,23 @@ const idempotencyInterceptor: Interceptor = (next) => async (req) => {
   return next(req);
 };
 
+// A request aborted by the caller (TanStack Query cancels a query's RPC on
+// unmount / key-change; React StrictMode double-mounts make this routine in
+// dev) is expected, not an error — surfaces as ConnectError Code.Canceled or
+// a raw AbortError. Don't log those as `[RPC Error]`.
+function isCanceled(err: unknown): boolean {
+  if (err instanceof ConnectError) return err.code === Code.Canceled;
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
 const loggingInterceptor: Interceptor = (next) => async (req) => {
   try {
     return await next(req);
   } catch (err: unknown) {
     if (err instanceof ConnectError && err.code === Code.Unimplemented) {
+      throw err;
+    }
+    if (isCanceled(err)) {
       throw err;
     }
     // No token-cache work here — the auth interceptor (inner) owns

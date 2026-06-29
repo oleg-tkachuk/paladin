@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
@@ -8,6 +9,7 @@ import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { useAuth } from "@/context/AuthContext";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
+import { normalizeError } from "@/lib/connect/error";
 import { API_LIMIT_DEFAULT } from "@/constants";
 
 /**
@@ -18,10 +20,15 @@ import { API_LIMIT_DEFAULT } from "@/constants";
  *   Object name       → opaque (returned by ListObjects, used for delete /
  *                        copy / presign)
  *
+ * Backed by TanStack `useInfiniteQuery`: the list + cursor pagination live in
+ * the query cache. The cross-component "objects" refresh signal is folded
+ * into the queryKey, so any `bumpRefresh("objects")` (uploads / deletes here
+ * or elsewhere) changes the key and TanStack refetches from page 1 — the same
+ * reset-to-page-1 behaviour the old setState-in-effect had, without the
+ * effect.
+ *
  * Bulk operations group by destination ObjectKey because BatchService
- * requires a single `parent` per call. The page already passes
- * `{name, objectKey}[]` so the wrapper buckets by `objectKey` and issues
- * one Batch RPC per group.
+ * requires a single `parent` per call.
  */
 
 export interface UseObjectsOptions {
@@ -74,65 +81,58 @@ export function useObjects(options: UseObjectsOptions = {}) {
     [tenantId],
   );
 
-  const [objects, setObjects] = useState<Object$[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
-
   const refreshSignal = useRefreshSignal("objects");
   const bumpRefresh = useBumpRefresh();
+  const pageSize = options.pageSize ?? options.limit ?? API_LIMIT_DEFAULT;
 
-  const fetchPage = useCallback(
-    async (pageToken: string = "") => {
-      if (!parent) return { objects: [] as Object$[], nextCursor: undefined };
-      setLoading(true);
-      setError(null);
+  const query = useInfiniteQuery({
+    // refreshSignal in the key: a bump → new key → refetch from page 1.
+    queryKey: [
+      "objects",
+      parent,
+      options.filter ?? "",
+      options.orderBy ?? "",
+      options.sortDirection ?? null,
+      pageSize,
+      refreshSignal,
+    ],
+    enabled: !!parent,
+    initialPageParam: "",
+    queryFn: async ({ pageParam }) => {
       try {
-        const res = await objectClient.listObjects({
+        return await objectClient.listObjects({
           parent,
-          page: {
-            pageSize: options.pageSize ?? options.limit ?? API_LIMIT_DEFAULT,
-            pageToken,
-          },
+          page: { pageSize, pageToken: pageParam },
           filter: options.filter ?? "",
           orderBy: options.orderBy ?? "",
           sortOrder: toSortOrder(options.sortDirection),
         });
-        const next = res.page?.nextPageToken || undefined;
-        if (pageToken) {
-          setObjects((prev) => [...prev, ...res.objects]);
-        } else {
-          setObjects(res.objects);
-        }
-        setNextCursor(next);
-        return { objects: res.objects, nextCursor: next };
       } catch (err) {
-        // Query contract (state-only): surface via `error`, never throw.
-        setError(err as Error);
-        return { objects: [] as Object$[], nextCursor: undefined };
-      } finally {
-        setLoading(false);
+        throw normalizeError(err);
       }
     },
-    [
-      parent,
-      options.pageSize,
-      options.limit,
-      options.filter,
-      options.orderBy,
-      options.sortDirection,
-    ],
+    getNextPageParam: (last) => last.page?.nextPageToken || undefined,
+  });
+
+  const objects: Object$[] = useMemo(
+    () => query.data?.pages.flatMap((p) => p.objects) ?? [],
+    [query.data],
   );
+  const nextCursor = query.hasNextPage
+    ? (query.data?.pages.at(-1)?.page?.nextPageToken ?? undefined)
+    : undefined;
 
-  // Initial load + refetch on options change. Also re-runs whenever any
-  // page bumps the "objects" refresh signal (uploads, deletes elsewhere, …).
-  useEffect(() => {
-    void fetchPage("");
-  }, [fetchPage, refreshSignal]);
+  const refresh = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+  const loadMore = query.hasNextPage
+    ? () => {
+        void query.fetchNextPage();
+      }
+    : undefined;
 
-  const refresh = useCallback(async () => fetchPage(""), [fetchPage]);
-  const loadMore = nextCursor ? () => fetchPage(nextCursor) : undefined;
-
+  // Mutations: fire the RPC, then bumpRefresh("objects") → queryKey changes →
+  // the list refetches. (Replaces the old optimistic local setObjects edits.)
   const softDeleteObject = useCallback(
     async (obj: Object$): Promise<void> => {
       await objectClient.deleteObject({
@@ -141,7 +141,6 @@ export function useObjects(options: UseObjectsOptions = {}) {
         permanent: false,
         bypassGovernanceRetention: false,
       });
-      setObjects((prev) => prev.filter((o) => o.objectId !== obj.objectId));
       bumpRefresh("objects");
     },
     [bumpRefresh],
@@ -155,7 +154,6 @@ export function useObjects(options: UseObjectsOptions = {}) {
         permanent: true,
         bypassGovernanceRetention: false,
       });
-      setObjects((prev) => prev.filter((o) => o.objectId !== obj.objectId));
       bumpRefresh("objects");
     },
     [bumpRefresh],
@@ -167,7 +165,6 @@ export function useObjects(options: UseObjectsOptions = {}) {
         name: obj.name,
         resourceVersion: obj.resourceVersion,
       });
-      // Caller usually refreshes; nothing to mutate locally.
       bumpRefresh("objects");
     },
     [bumpRefresh],
@@ -220,8 +217,6 @@ export function useObjects(options: UseObjectsOptions = {}) {
           }),
         ),
       );
-      const namesSet = new Set(items.map((i) => i.name));
-      setObjects((prev) => prev.filter((o) => !namesSet.has(o.name)));
       bumpRefresh("objects");
     },
     [parentFor, bumpRefresh],
@@ -245,9 +240,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   const bulkPatchObjects = useCallback(
     async (items: { objectId: string; tags: Record<string, string> }[]) => {
-      // Group affected objects by their parent + intended tag set. The page
-      // currently calls this with one tag-map for all items, so we batch
-      // them per ObjectKey under the same selector.
+      // The page calls this with one tag-map for all items, so we batch them
+      // per ObjectKey under the same selector.
       const tags = items[0]?.tags ?? {};
       const namesByOk = new Map<string, string[]>();
       for (const it of items) {
@@ -274,8 +268,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   return {
     objects,
-    loading,
-    error,
+    loading: query.isFetching,
+    error: (query.error as Error | null) ?? null,
     nextCursor,
     refresh,
     loadMore,

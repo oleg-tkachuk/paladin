@@ -16,9 +16,9 @@
 // Server load is minimal: small page sizes, no polling — only
 // re-fetch on tenant context refresh from RefreshContext.
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ConnectError } from "@connectrpc/connect";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRightIcon,
   BoltIcon,
@@ -59,28 +59,19 @@ export function DashboardWidgets() {
 }
 
 function RecentActivityWidget() {
-  const [rows, setRows] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    // Abort the RPC itself on unmount (the dashboard is the landing
-    // page — fast navigation away used to leave it in flight), not
-    // just suppress the setState.
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await auditClient.listAuditLog(
+  // TanStack passes an AbortSignal to the queryFn and cancels the RPC on
+  // unmount / key-change without logging an AbortError. On failure `data`
+  // is undefined → rows defaults to [] and the widget degrades silently.
+  const { data: rows = [], isLoading: loading } = useQuery<AuditLogEntry[]>({
+    queryKey: ["dashboard", "recentActivity"],
+    queryFn: ({ signal }) =>
+      auditClient
+        .listAuditLog(
           { page: { pageSize: 5, pageToken: "" }, filter: "" },
-          { signal: controller.signal },
-        );
-        setRows(res.entries);
-      } catch {
-        // silent — widget hides itself (covers aborts too)
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    })();
-    return () => controller.abort();
-  }, []);
+          { signal },
+        )
+        .then((res) => res.entries),
+  });
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -137,28 +128,19 @@ function RecentActivityWidget() {
 }
 
 function FailedOpsWidget() {
-  const [ops, setOps] = useState<Operation[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await adminOperationClient.listOperations(
+  const { data: ops = [], isLoading: loading } = useQuery<Operation[]>({
+    queryKey: ["dashboard", "failedOps"],
+    queryFn: ({ signal }) =>
+      adminOperationClient
+        .listOperations(
           {
             page: { pageSize: 5, pageToken: "" },
             filter: "error_message != null",
           },
-          { signal: controller.signal },
-        );
-        setOps(res.operations.filter((o) => !!opError(o)).slice(0, 5));
-      } catch {
-        /* silent (covers aborts too) */
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    })();
-    return () => controller.abort();
-  }, []);
+          { signal },
+        )
+        .then((res) => res.operations.filter((o) => !!opError(o)).slice(0, 5)),
+  });
   return (
     <Card
       className={cn(
@@ -212,33 +194,25 @@ const BUDGET_ALERT_THRESHOLD = 80;
 const BUDGET_ALERT_LIMIT = 5;
 
 function BudgetAlertsWidget() {
-  const [rows, setRows] = useState<TenantBudgetSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await tenantBudgetClient.summarize(
+  const {
+    data: rows = [],
+    isLoading: loading,
+    error,
+  } = useQuery<TenantBudgetSummary[]>({
+    queryKey: ["dashboard", "budgetAlerts"],
+    queryFn: ({ signal }) =>
+      tenantBudgetClient
+        .summarize(
           {
             thresholdPct: BUDGET_ALERT_THRESHOLD,
             unlimitedOnly: false,
             excludeInactive: true,
             limit: BUDGET_ALERT_LIMIT,
           },
-          { signal: controller.signal },
-        );
-        setRows(res.summaries);
-      } catch (err) {
-        if (!controller.signal.aborted)
-          setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    })();
-    return () => controller.abort();
-  }, []);
+          { signal },
+        )
+        .then((res) => res.summaries),
+  });
 
   const overCap = useMemo(
     () => rows.filter((r) => r.utilisationPct >= 100).length,
