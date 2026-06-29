@@ -232,7 +232,7 @@ the same commit. Treat this file like a runtime invariant.
   real tenant exceeds ~1M audit log rows per period, making
   on-the-fly aggregation slower than the SLA.
 
-### Role split: `auth-server` (OAuth / OIDC isolation)
+### Role split: `auth-server` (OAuth AS isolation)
 
 - **Status:** Aspirational
 - **Reason:** The OAuth 2.0 authorization-code flow has landed (ADR-0009,
@@ -247,8 +247,8 @@ the same commit. Treat this file like a runtime invariant.
     `/register`, `/.well-known/oauth-authorization-server`,
     `/.well-known/jwks.json`.
   - Independent JWKS rotation runbook.
-  - api / admin verify tokens against the auth-server's JWKS — same
-    code path that already exists for the federated-IdP case.
+  - api / admin verify tokens against the auth-server's JWKS — the same
+    JWKS-verify path the planes already use.
 - **Trigger to do:** when OAuth lands (separate BACKLOG entry) and
   becomes the primary auth path for at least one customer. Until
   then, fold OAuth endpoints into the existing iam plane.
@@ -273,32 +273,27 @@ the same commit. Treat this file like a runtime invariant.
 - **Trigger to do:** when the first real subscription feature
   ships. Skip until then.
 
-### Phase 5b.1 — Drop user-authn IAM, accept OIDC
+### Phase 5b.1 — Drop user-authn IAM, accept OIDC — WITHDRAWN
 
-- **Status:** Blocked
-- **Reason:** PALADIN currently mints HS256 JWTs against local `users` /
-  `refresh_tokens` and exposes a login flow through
-  `internal/api/iam/v1/auth_service`. The agentic-plane spec calls
-  this an anti-feature for B2B integration — every buyer already
-  runs Okta / Auth0 / Cognito / Keycloak. User authn is the
-  customer's IdP problem, not PALADIN's.
-- **Scope clarification (added after the M2M discussion):** this
-  phase is about **user authentication only**. It does NOT touch
-  `api_keys`, which serve a different purpose (machine-to-machine
-  service tokens) and are modernised in Phase 5b.2 instead.
-- **Definition of Done:**
-  - `internal/auth` accepts JWKS-issued tokens from configured
-    issuers; HS256 path retained only for `bootstrap.admin` first-run.
-  - `users`, `refresh_tokens` tables removed via migration after a
-    deprecation cycle; existing tenants migrated by a runbook.
-  - `internal/api/iam/v1/auth_service`, `user_service`,
-    `user_settings_service` deleted; the corresponding handlers,
-    proto, and Connect mux registrations gone.
-  - The `iam` listener stays for `api_key` operations until 5b.2
-    runs; the chart still maps the iam port to the api role.
-- **Blockers:** Customer IdP commitment (Auth0 / Cognito / Keycloak)
-  + a migration plan for existing PALADIN-IAM users + a clear cutover
-  signal (no live tenants on the local IAM path).
+- **Status:** Won't-do (for now) — direction reversed 2026-06-30.
+- **Decision:** PALADIN is an **engineer-operated control plane** that
+  integrates with other services and exposes an API for bucket access
+  and management. Human authentication stays in PALADIN's **own IAM** (local
+  `users` + HS256, and the OAuth Authorization Server in
+  [ADR-0009](docs/adr/0009-oauth-authorization-server.md) = PALADIN IAM
+  itself); service-to-service is `api_keys` + capabilities. An external /
+  federated IdP is **not needed now**, so the earlier premise — "user
+  authn is a B2B anti-feature, offload to the customer's Okta / Auth0 /
+  Cognito / Keycloak" — is **withdrawn**. The local `users` /
+  `refresh_tokens` tables and the `auth_service` / `user_service` /
+  `user_settings_service` are **kept**, not removed.
+- **Reconsider only if:** a concrete customer mandates SSO against their
+  own IdP. The swap stays cheap — the OAuth RS/AS halves
+  ([ADR-0008](docs/adr/0008-mcp-oauth-resource-server.md) /
+  [ADR-0009](docs/adr/0009-oauth-authorization-server.md)) are
+  IdP-agnostic by design, and an inert JWKS verifier stub already exists
+  (see *Federated IdP via JWKS* below). Until such an ask, this is not on
+  the roadmap.
 
 
 ---
@@ -317,19 +312,18 @@ open deliberately — each notes why._
 
 ### Federated IdP via JWKS
 
-- **Status:** Deferred
-- **Reason:** `auth.jwks_url` is declared in config + types and there's
-  a stub `auth.NewJWKSVerifier` constructor wired in `cmd/server/root.go`,
-  but no live deploy uses it — every JWT today is HS256 minted by the
-  IAM plane itself.
-- **Definition of Done:**
-  - JWKS verifier reads + caches keys from the configured URL with a
-    rotation grace window.
-  - `kid` claim required and matched against the active key set.
-  - End-to-end test that issues a token signed by an external IdP
-    (mock OAuth2 provider) and verifies through the data plane.
-  - Documented role-claim mapping (e.g. `cognito:groups` → PALADIN roles).
-- **Blockers:** which IdP(s) we commit to (Auth0 / Cognito / Keycloak).
+- **Status:** Won't-do (for now) — not on the roadmap (2026-06-30).
+- **Reason:** PALADIN is engineer-operated and owns its own IAM (see the
+  withdrawn *Phase 5b.1* above), so accepting tokens minted by an
+  external IdP is **not needed now**. `auth.jwks_url` + the stub
+  `auth.NewJWKSVerifier` constructor (wired in `cmd/server/root.go`)
+  stay inert and harmless — every JWT today is HS256 minted by the IAM
+  plane itself.
+- **Reconsider only if:** a customer mandates SSO against their own IdP.
+  Then finish the verifier (cache + rotation grace window, required
+  `kid` matched against the active key set, role-claim mapping such as
+  `cognito:groups` → PALADIN roles) plus an end-to-end test issuing a token
+  from a mock OAuth2 provider and verifying it through the data plane.
 
 ### Audit-log encryption at rest beyond filesystem-level
 
@@ -400,16 +394,15 @@ open deliberately — each notes why._
   - Integration test using two MinIO instances.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
-### `ResetPassword` — email/SSO delivery
+### `ResetPassword` — self-service email delivery
 
 - **Status:** Deferred
 - **Reason:** [userh/handler.go](internal/api/iam/v1/userh/handler.go)
   `ResetPassword` returns the new password to the caller (admin) so
-  they can hand it off out-of-band. Self-service reset via email/SSO
-  is the natural production model but isn't wired.
+  they can hand it off out-of-band. Self-service reset via an email link
+  is the natural production model for PALADIN's own `users` but isn't wired.
 - **Definition of Done:**
   - Email-link reset flow with single-use signed token.
-  - Integration with the federated IdP (depends on JWKS work above).
 - **Blockers:** Email sender selection (SES / Sendgrid / SMTP).
 
 ### Event dispatcher: producer wiring — handler-class integration tests + adoption

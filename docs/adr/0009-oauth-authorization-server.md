@@ -12,8 +12,10 @@
   clients (Claude Desktop / Cursor) open a browser at the AS's `/authorize`,
   consent, and exchange a code for a token. We choose **PALADIN IAM as the
   Authorization Server** (not a federated IdP) so the agentic plane has a
-  self-contained auth story; the federated-OIDC option (Phase 5b.1) stays
-  open and is cheaper later because the discovery + endpoint shapes match.
+  self-contained auth story; the federated-OIDC option (Phase 5b.1) is **not
+  on the roadmap** (PALADIN is engineer-operated and owns its IAM — withdrawn
+  2026-06-30, see [ADR-0006](0006-deferred-roadmap.md)) but stays a cheap
+  future swap because the discovery + endpoint shapes match.
 
   Two facts from the codebase shape the design:
   - **Single-audience tokens.** A JWT carries one `aud`; the three planes
@@ -70,8 +72,10 @@ may grant which scopes to which clients.
 - The server-rendered login/consent is intentionally minimal (no i18n). A
   polished Next.js consent page (`frontend/src/app/oauth/consent`) is a
   follow-up; the backend contract it posts to is stable.
-- Federated OIDC (Phase 5b.1) remains a clean future swap: the RS half is
-  identical, and the AS endpoints map onto an external IdP's equivalents.
+- Federated OIDC (Phase 5b.1) is not on the roadmap (withdrawn 2026-06-30,
+  [ADR-0006](0006-deferred-roadmap.md)) but remains a clean future swap if a
+  customer ever mandates SSO: the RS half is identical, and the AS endpoints
+  map onto an external IdP's equivalents.
 - **Authz, as shipped:** consent is gated on (1) resource-owner
   authentication, (2) the requested scopes being a subset of the client's
   registered grant, and (3) a Cedar `AuthorizeOAuth` check. The built-in

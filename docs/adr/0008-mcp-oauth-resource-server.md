@@ -57,8 +57,8 @@ and never self-minted (an agent issuing its own capability stays in
 
 - Standard MCP clients can discover and authenticate against PALADIN without a
   hand-pasted token, as soon as an Authorization Server exists to point at.
-- The RS works with either PALADIN-IAM-as-AS (future) or a federated IdP today —
-  the config decides; no code change to switch.
+- The RS works with either PALADIN-IAM-as-AS ([ADR-0009](0009-oauth-authorization-server.md))
+  or a federated IdP — the config decides; no code change to switch.
 - Edge validation turns a bad/expired token into an immediate, correct `401`
   challenge instead of a confusing downstream `Unauthenticated` on the first
   RPC. Any token the planes accept is signed by the same key, so it also
@@ -68,6 +68,10 @@ and never self-minted (an agent issuing its own capability stays in
   `oauth_clients` / `oauth_authorization_codes` / refresh-rotation storage,
   audience-binding enforcement (RFC 8707), and the consent UI. Until then,
   tokens come from `AuthService.Login` / `APITokenService.Create`.
-- Open decision (shared with "Phase 5b.1 — drop user-authn IAM, accept
-  OIDC"): whether the AS is PALADIN IAM or a federated OIDC IdP. The RS half is
-  identical either way, which is why it shipped first.
+- ~~Open decision (shared with "Phase 5b.1 — drop user-authn IAM, accept
+  OIDC"): whether the AS is PALADIN IAM or a federated OIDC IdP.~~ **Resolved
+  2026-06-30:** the AS is **PALADIN IAM** ([ADR-0009](0009-oauth-authorization-server.md)).
+  PALADIN is engineer-operated and owns its IAM, so no external IdP is planned
+  (Phase 5b.1 withdrawn — see [ADR-0006](0006-deferred-roadmap.md)). The RS
+  half is IdP-agnostic, so a federated swap stays cheap if a customer ever
+  mandates SSO — but it is not on the roadmap.

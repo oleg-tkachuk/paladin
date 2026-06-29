@@ -10,16 +10,27 @@
 
 ## Decision
 
+> **Amendment 2026-06-30 — IAM direction settled.** PALADIN is an
+> engineer-operated control plane that integrates with other services and
+> exposes an API for bucket access/management. Human authn stays in PALADIN's
+> own IAM (local users + HS256, plus PALADIN-IAM-as-AS per
+> [ADR-0009](0009-oauth-authorization-server.md)); service-to-service stays
+> on `api_keys` + capabilities. **"Phase 5b.1 — drop user-authn IAM, accept
+> OIDC"** and **"Federated IdP via JWKS"** are **withdrawn** from this
+> roadmap — no external IdP is needed now. Both revert to a future swap only
+> on a concrete customer SSO mandate (the OAuth RS/AS halves are
+> IdP-agnostic, so the swap stays cheap). Struck from the lists below.
+
 The following stay in BACKLOG as scoped-but-unscheduled; none blocks
 production readiness, and each needs a product/infra decision or a
 customer ask before it earns an implementation slot:
 
 ### Single-binary multi-mode / role splits
 Extract `event-dispatcher`, `scheduler`, `indexer`/`embedder`,
-`billing-aggregator`, `auth-server` (OAuth/OIDC), and `realtime`
+`billing-aggregator`, `auth-server` (OAuth AS), and `realtime`
 (SSE/WebSocket) from the monolith; streaming RPCs through the inline
-transport; "Phase 5b.1 — drop user-authn IAM, accept OIDC". **Trigger:**
-scale/isolation needs that don't exist yet at current load.
+transport. **Trigger:** scale/isolation needs that don't exist yet at
+current load.
 
 ### Event dispatcher sinks & semantics
 NATS (first non-HTTP sink), Kafka, RabbitMQ, SQS sinks; NATS NKey/JWT
@@ -37,7 +48,7 @@ replication; WAL archiving + PITR runbook; `audit_log` /
 `idempotency_keys` partitioning; per-table autovacuum tuning.
 
 ### Security & platform
-Federated IdP via JWKS; KMS-wrapped capability signing key; NetworkPolicies
+KMS-wrapped capability signing key; NetworkPolicies
 per role; SealedSecrets for prod clusters; audit-log encryption at rest;
 RLS coverage of the remaining cross-tenant tables; per-row Cedar filtering
 in ListObjects; `/system/health.json` auth (coupled with the frontend
