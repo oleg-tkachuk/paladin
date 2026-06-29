@@ -72,13 +72,16 @@ export default function ObjectKeyOverviewPage() {
   const [bucketSelection, setBucketSelection] = useState(ok.bucket);
   const [binding, setBinding] = useState(false);
 
-  // Re-sync editor state when context changes (e.g. another tab
-  // wrote and refreshed the cache, or refetch fired). Reset only
-  // when the canonical name changes — that's our identity key.
-  useEffect(() => {
+  // Re-sync editor state when the context ObjectKey changes (another tab
+  // wrote and refreshed the cache, or refetch fired). Render-phase adjust-on-
+  // change (not set-state-in-effect) — `ok` identity is stable between
+  // renders via TanStack structural sharing.
+  const [seededOk, setSeededOk] = useState(ok);
+  if (ok !== seededOk) {
+    setSeededOk(ok);
     setDisplayName(ok.displayName);
     setBucketSelection(ok.bucket);
-  }, [ok.name, ok.displayName, ok.bucket]);
+  }
 
   useEffect(() => {
     void fetchBuckets();

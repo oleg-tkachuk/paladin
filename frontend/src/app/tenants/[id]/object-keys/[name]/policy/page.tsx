@@ -5,7 +5,7 @@
 // resource scope freely); this surface is the focused one for an
 // operator already inside the ObjectKey context.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
@@ -36,14 +36,16 @@ export default function ObjectKeyPolicyPage() {
     null,
   );
 
-  // Pull fresh editor state when context changes (e.g. another
-  // session bumped the resource and we refetched). Diagnostics
-  // are local-only — clear them so a stale "valid" pill doesn't
-  // linger across edits.
-  useEffect(() => {
+  // Pull fresh editor state when the context ObjectKey changes (another
+  // session bumped the resource and we refetched). Render-phase adjust-on-
+  // change (not set-state-in-effect) — `ok` identity is stable between
+  // renders via TanStack structural sharing. Diagnostics clear on re-seed.
+  const [seededOk, setSeededOk] = useState(ok);
+  if (ok !== seededOk) {
+    setSeededOk(ok);
     setPolicyText(ok.cedarPolicy);
     setDiagnostics(null);
-  }, [ok.name, ok.cedarPolicy, ok.resourceVersion]);
+  }
 
   const handleValidate = useCallback(async () => {
     setValidating(true);

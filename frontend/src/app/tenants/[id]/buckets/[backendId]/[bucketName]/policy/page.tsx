@@ -5,7 +5,7 @@
 // verbatim; the only differences are which client + RPC and which
 // resource the editor maps to.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { ConnectError } from "@connectrpc/connect";
 import {
@@ -36,14 +36,17 @@ export default function BucketPolicyPage() {
     null,
   );
 
-  // Reseed editor state when the context's bucket changes (another
-  // tab wrote and refreshed the cache, or refetch fired). Local-only
-  // diagnostics clear on re-seed so a stale "valid" pill doesn't
-  // linger across edits.
-  useEffect(() => {
+  // Reseed editor state when the context's bucket changes (another tab wrote
+  // and refreshed the cache, or refetch fired). Render-phase adjust-on-change
+  // (not set-state-in-effect) — `bucket` identity is stable between renders
+  // via TanStack structural sharing, so this fires only on a real change.
+  // Diagnostics clear on re-seed so a stale "valid" pill doesn't linger.
+  const [seededBucket, setSeededBucket] = useState(bucket);
+  if (bucket !== seededBucket) {
+    setSeededBucket(bucket);
     setPolicyText(bucket.cedarPolicy);
     setDiagnostics(null);
-  }, [bucket.name, bucket.cedarPolicy, bucket.resourceVersion]);
+  }
 
   const handleValidate = useCallback(async () => {
     setValidating(true);
