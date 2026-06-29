@@ -143,10 +143,20 @@ function buildPlaneRouter(plane: Plane) {
         const auth = ctx.values.get(authKey);
         // Tenant comes from the JWT `tenant` claim — backend resolves it
         // server-side. No X-Tenant-ID forwarding here.
+        //
+        // Forward the browser-minted Idempotency-Key end-to-end. The BFF
+        // re-issues the call to the backend on a fresh internal transport, so
+        // without this the header the browser's idempotencyInterceptor set is
+        // dropped and the backend's RequireOnCreate gate rejects every
+        // Create*/Issue* RPC ("missing Idempotency-Key header"). Preserve the
+        // SAME key (don't mint a new one per hop) so a browser retry collapses
+        // onto the original request server-side.
+        const idempotencyKey = ctx.requestHeader?.get("Idempotency-Key");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return await (internalClient as any)[name](req, {
           headers: {
             ...(auth ? { Authorization: auth } : {}),
+            ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
           },
         });
       };
