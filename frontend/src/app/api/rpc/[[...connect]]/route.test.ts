@@ -1,18 +1,52 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Verifies the BFF re-issues the call to the backend WITH the browser-minted
-// Idempotency-Key (the bug: it forwarded only Authorization, so the backend's
-// RequireOnCreate gate rejected every Create*/Issue*). Mocks the internal
-// backend's fetch so nothing is actually created.
-describe("/api/rpc BFF — Idempotency-Key forwarding", () => {
-  let backendHeaders: Headers | null = null;
+// Integration tests for the BFF RPC router (browser → /api/rpc → backend).
+// The internal backend's fetch is mocked, so nothing is created; each test
+// inspects how the BFF re-issues the call (headers, target URL, gating).
+//
+// This is the seam that the backend hurl e2e bypasses — it hits the backend
+// directly — which is how the dropped-Idempotency-Key bug shipped.
 
+const ADMIN = "https://admin.test";
+const DATA = "https://data.test";
+const IAM = "https://iam.test";
+
+type BackendCall = { url: string; headers: Headers };
+let calls: BackendCall[] = [];
+
+// Minimal unsigned JWT carrying a given `aud` claim — tokenMatchesPlane only
+// base64url-decodes the payload (the backend verifies the signature).
+function jwt(aud: string): string {
+  const payload = Buffer.from(JSON.stringify({ aud })).toString("base64url");
+  return `eyJhbGciOiJIUzI1NiJ9.${payload}.sig`;
+}
+
+function rpc(
+  path: string,
+  headers: Record<string, string>,
+  body: unknown = {},
+): Request {
+  return new Request(`https://app.test${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "connect-protocol-version": "1",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+const BUCKET_CREATE = "/api/rpc/admin/paladin.admin.v1.BucketService/CreateBucket";
+const BUCKET_LIST = "/api/rpc/admin/paladin.admin.v1.BucketService/ListBuckets";
+
+describe("BFF /api/rpc router", () => {
   beforeEach(() => {
-    // planeBackendUrls are read at module load → stub before the dynamic import.
-    vi.stubEnv("PALADIN_ADMIN_URL", "https://backend.test");
-    vi.stubEnv("PALADIN_DATA_URL", "https://backend.test");
-    vi.stubEnv("PALADIN_IAM_URL", "https://backend.test");
-    backendHeaders = null;
+    // planeBackendUrls are read at module load → stub before importing route.
+    vi.stubEnv("PALADIN_ADMIN_URL", ADMIN);
+    vi.stubEnv("PALADIN_DATA_URL", DATA);
+    vi.stubEnv("PALADIN_IAM_URL", IAM);
+    calls = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: unknown, init?: RequestInit) => {
@@ -21,7 +55,9 @@ describe("/api/rpc BFF — Idempotency-Key forwarding", () => {
         const headers = new Headers(
           (init?.headers as HeadersInit | undefined) ?? r.headers,
         );
-        if (url.includes("backend.test")) backendHeaders = headers;
+        if (/admin\.test|data\.test|iam\.test/.test(url)) {
+          calls.push({ url, headers });
+        }
         return new Response(new Uint8Array(), { status: 500 });
       }),
     );
@@ -33,25 +69,92 @@ describe("/api/rpc BFF — Idempotency-Key forwarding", () => {
     vi.resetModules();
   });
 
-  it("forwards the browser Idempotency-Key to the backend on a Create* RPC", async () => {
+  async function post(req: Request) {
     const { POST } = await import("./route");
-    const req = new Request(
-      "https://app.test/api/rpc/admin/paladin.admin.v1.BucketService/CreateBucket",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "connect-protocol-version": "1",
-          "idempotency-key": "test-key-123",
-        },
-        body: JSON.stringify({ parent: "storageBackends/x", bucketName: "b" }),
-      },
+    return POST(req).catch((e) => e as Response);
+  }
+
+  it("forwards the Idempotency-Key to the backend on Create* RPCs", async () => {
+    await post(
+      rpc(BUCKET_CREATE, {
+        authorization: `Bearer ${jwt("paladin-admin")}`,
+        "idempotency-key": "key-123",
+      }),
     );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get("Idempotency-Key")).toBe("key-123");
+  });
 
-    await POST(req).catch(() => {});
+  it("forwards the Authorization header to the backend", async () => {
+    const token = jwt("paladin-admin");
+    await post(rpc(BUCKET_LIST, { authorization: `Bearer ${token}` }));
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get("Authorization")).toBe(`Bearer ${token}`);
+  });
 
-    expect(backendHeaders, "BFF never called the backend").not.toBeNull();
-    // Headers.get is case-insensitive — the browser sends it lowercase.
-    expect(backendHeaders?.get("Idempotency-Key")).toBe("test-key-123");
+  it("does not invent an Idempotency-Key when the browser didn't send one", async () => {
+    await post(
+      rpc(BUCKET_LIST, { authorization: `Bearer ${jwt("paladin-admin")}` }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get("Idempotency-Key")).toBeNull();
+  });
+
+  it("403s and does NOT forward when the token audience mismatches the plane", async () => {
+    const res = await post(
+      // a data-plane token aimed at the admin plane
+      rpc(BUCKET_CREATE, {
+        authorization: `Bearer ${jwt("paladin-data")}`,
+        "idempotency-key": "key-123",
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("403s on a malformed token (fails closed)", async () => {
+    const res = await post(
+      rpc(BUCKET_LIST, { authorization: "Bearer not-a-jwt" }),
+    );
+    expect(res.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("forwards anonymously when no token is present (backend decides)", async () => {
+    await post(rpc("/api/rpc/iam/paladin.iam.v1.UserService/ListUsers", {}));
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("iam.test");
+    expect(calls[0].headers.get("Authorization")).toBeNull();
+  });
+
+  it("routes each plane prefix to its own backend URL", async () => {
+    await post(
+      rpc(BUCKET_LIST, { authorization: `Bearer ${jwt("paladin-admin")}` }),
+    );
+    await post(
+      rpc("/api/rpc/data/paladin.data.v1.ObjectService/ListObjects", {
+        authorization: `Bearer ${jwt("paladin-data")}`,
+      }),
+    );
+    expect(calls.map((c) => new URL(c.url).host)).toEqual([
+      "admin.test",
+      "data.test",
+    ]);
+  });
+
+  it("404s on an unknown plane prefix", async () => {
+    const res = await post(rpc("/api/rpc/bogus/Svc/Method", {}));
+    expect(res.status).toBe(404);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("404s on an unknown method", async () => {
+    const res = await post(
+      rpc("/api/rpc/admin/paladin.admin.v1.BucketService/Nope", {
+        authorization: `Bearer ${jwt("paladin-admin")}`,
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(calls).toHaveLength(0);
   });
 });
