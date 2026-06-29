@@ -94,7 +94,11 @@ function ObjectKeyObjectsContent() {
   // into prior state (never shrink) so applying a tag filter — which narrows
   // `objects` to the matching rows — doesn't collapse the dropdown to the one
   // selected pair. Scoped to this ObjectKey's page session; resets on remount.
-  useEffect(() => {
+  // Render-phase adjust-on-change keyed on `objects` identity (stable between
+  // fetches via useObjects' useMemo) — not a set-state-in-effect.
+  const [seenObjects, setSeenObjects] = useState(objects);
+  if (objects !== seenObjects) {
+    setSeenObjects(objects);
     setTagOptions((prev) => {
       const seen = new Set(prev);
       let changed = false;
@@ -109,7 +113,7 @@ function ObjectKeyObjectsContent() {
       }
       return changed ? Array.from(seen).sort() : prev;
     });
-  }, [objects]);
+  }
 
   // Server list is authoritative; union in any client-accumulated pairs so a
   // freshly-applied tag still shows even if the server fetch hasn't returned.
@@ -420,8 +424,13 @@ function ObjectKeyObjectsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds.size, refresh, registerAction, unregisterAction]);
 
+  // Load persisted saved-views AFTER hydration. Reading localStorage during
+  // render (lazy init) would diverge from the server's empty default and trip
+  // a hydration mismatch, so this is the legitimate "sync with a browser-only
+  // source" exception to set-state-in-effect.
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.savedViews);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-hydration localStorage read; see comment above
     setSavedViews(safeParseJson(z.array(SavedViewSchema), stored) ?? []);
   }, []);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -173,10 +174,13 @@ export default function PoliciesPage() {
     if (scope === "objectKey") void fetchObjectKeys();
   }, [scope, fetchBuckets, fetchObjectKeys]);
 
-  // Reset target when scope changes.
-  useEffect(() => {
+  // Reset the selected target whenever the scope changes — render-phase
+  // adjust-on-change (not set-state-in-effect).
+  const [prevScope, setPrevScope] = useState(scope);
+  if (scope !== prevScope) {
+    setPrevScope(scope);
     setTarget("");
-  }, [scope]);
+  }
 
   const targetOptions = useMemo(() => {
     if (scope === "tenant") {
@@ -200,7 +204,6 @@ export default function PoliciesPage() {
   // ─── policy state ────────────────────────────────────────────────────────
   const [policyText, setPolicyText] = useState("");
   const [resourceVersion, setResourceVersion] = useState("");
-  const [loadingPolicy, setLoadingPolicy] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [diagnostics, setDiagnostics] = useState<PolicyDiagnostic[] | null>(
@@ -225,51 +228,72 @@ export default function PoliciesPage() {
   const [merged, setMerged] = useState<string>("");
   const [loadingEffective, setLoadingEffective] = useState(false);
 
-  const loadPolicyForTarget = useCallback(async () => {
+  const policyQuery = useQuery({
+    queryKey: ["policyForTarget", scope, target],
+    enabled: !!target,
+    retry: false, // queryFn toasts real failures.
+    queryFn: async ({ signal }) => {
+      try {
+        if (scope === "tenant") {
+          const t = await tenantClient.getTenant({ name: target }, { signal });
+          return {
+            policy: t.inheritedCedarPolicy,
+            resourceVersion: t.resourceVersion,
+          };
+        }
+        if (scope === "bucket") {
+          const b = await bucketClient.getBucket({ name: target }, { signal });
+          return { policy: b.cedarPolicy, resourceVersion: b.resourceVersion };
+        }
+        const k = await objectKeyClient.getObjectKey(
+          { name: target },
+          { signal },
+        );
+        return { policy: k.cedarPolicy, resourceVersion: k.resourceVersion };
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Load failed",
+          message:
+            err instanceof ConnectError
+              ? err.rawMessage
+              : "Failed to load policy",
+        });
+        throw err;
+      }
+    },
+  });
+  const loadingPolicy = policyQuery.isFetching;
+  const loadPolicyForTarget = () => policyQuery.refetch();
+
+  // Apply a freshly-loaded snapshot to the editor, or clear when no target is
+  // selected — render-phase adjust-on-change (not set-state-in-effect). Keyed
+  // on target+resourceVersion so a reload re-seeds, while in-flight loads and
+  // post-save local edits aren't clobbered (handleSave bumps the version
+  // locally without a refetch).
+  const snapshot = policyQuery.data;
+  const wantedKey = !target
+    ? ""
+    : snapshot
+      ? `${target}@${snapshot.resourceVersion}`
+      : null; // loading: leave current editor state untouched
+  const [appliedKey, setAppliedKey] = useState<string>("");
+  if (wantedKey !== null && wantedKey !== appliedKey) {
+    setAppliedKey(wantedKey);
     if (!target) {
       setPolicyText("");
       setServerSnapshot("");
       setResourceVersion("");
       setLayers([]);
       setMerged("");
-      return;
-    }
-    setLoadingPolicy(true);
-    try {
-      let loaded = "";
-      if (scope === "tenant") {
-        const t = await tenantClient.getTenant({ name: target });
-        loaded = t.inheritedCedarPolicy;
-        setResourceVersion(t.resourceVersion);
-      } else if (scope === "bucket") {
-        const b = await bucketClient.getBucket({ name: target });
-        loaded = b.cedarPolicy;
-        setResourceVersion(b.resourceVersion);
-      } else {
-        const k = await objectKeyClient.getObjectKey({ name: target });
-        loaded = k.cedarPolicy;
-        setResourceVersion(k.resourceVersion);
-      }
-      setPolicyText(loaded);
-      setServerSnapshot(loaded);
+    } else if (snapshot) {
+      setPolicyText(snapshot.policy);
+      setServerSnapshot(snapshot.policy);
+      setResourceVersion(snapshot.resourceVersion);
       setTemplateId("");
       setDiagnostics(null);
-    } catch (err) {
-      const msg =
-        err instanceof ConnectError ? err.rawMessage : "Failed to load policy";
-      showNotification({
-        type: "error",
-        title: "Load failed",
-        message: msg,
-      });
-    } finally {
-      setLoadingPolicy(false);
     }
-  }, [scope, target, showNotification]);
-
-  useEffect(() => {
-    void loadPolicyForTarget();
-  }, [loadPolicyForTarget]);
+  }
 
   const loadEffective = useCallback(async () => {
     if (!target) return;
