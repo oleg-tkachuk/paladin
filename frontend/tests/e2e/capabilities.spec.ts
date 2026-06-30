@@ -86,18 +86,23 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
       idempotencyKey: sharedKey,
     });
 
-    // The middleware MUST return the same capability ID for
-    // both calls — replay path. If RequireOnCreate were off OR
-    // isMutationMethod stopped matching Issue, the second call
-    // would create a NEW capability (different ID, different
-    // subject because subjectPrefix uniqueSlug runs twice).
+    // The middleware MUST return the same capability ID for both
+    // calls — replay path. Platform-admin tokens are tenant-less, so
+    // this exercises the subject-scoped idempotency fallback
+    // (backend/internal/middleware/idempotency.go): without it the
+    // second Issue creates a NEW capability (different ID + subject,
+    // since the uniqueSlug runs twice).
     expect(second.id).toEqual(first.id);
-    // Belt-and-braces: list UI shows only one row matching
-    // the prefix. If two rows appear, the middleware
-    // memoization regressed.
+    // Belt-and-braces in the UI: browsing the (single) collapsed
+    // subject shows exactly one row. The replayed second response
+    // carries the first's subject, so first.subject is the right
+    // browse key. exact:true matches the ID cell only — not the
+    // "Actions for capability <id>" sr-only label.
     await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
-    const twinRows = page.getByText(/e2e-twin-/);
-    await expect(twinRows).toHaveCount(1, { timeout: 5_000 });
+    await browseCapabilities(page, first.subject);
+    await expect(page.getByText(first.id, { exact: true })).toHaveCount(1, {
+      timeout: 10_000,
+    });
   });
 
   test("revoke flips capability status without removing the row", async ({

@@ -142,7 +142,21 @@ Dropdown.Trigger = function DropdownTrigger({
 
   return (
     <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-disabled={disabled || undefined}
       onClick={() => !disabled && setOpen(!open)}
+      onKeyDown={(e) => {
+        if (disabled) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setOpen(!open);
+        } else if (e.key === "Escape" && open) {
+          setOpen(false);
+        }
+      }}
       className={cn(
         "cursor-pointer",
         className,
@@ -157,8 +171,7 @@ Dropdown.Trigger = function DropdownTrigger({
 
 interface DropdownMenuProps {
   children:
-    | React.ReactNode
-    | ((props: { close: () => void }) => React.ReactNode);
+    React.ReactNode | ((props: { close: () => void }) => React.ReactNode);
   className?: string;
 }
 
@@ -177,6 +190,7 @@ Dropdown.Menu = function DropdownMenu({
   return createPortal(
     <div
       ref={menuRef}
+      role="menu"
       style={{
         position: "absolute",
         top: `${coords.top}px`,
@@ -217,9 +231,18 @@ Dropdown.Item = function DropdownItem({
 
   return (
     <div
+      role="menuitem"
+      tabIndex={-1}
       onClick={() => {
         onClick?.();
         if (closeOnClick) setOpen(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+          if (closeOnClick) setOpen(false);
+        }
       }}
       className={cn(
         "w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between cursor-pointer",

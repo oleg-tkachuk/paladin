@@ -150,11 +150,12 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		apiTokAdmin,
 		connect.UnaryInterceptorFunc(validateInterceptor),
 		// Idempotency-Key gate. RequireOnCreate=true means every
-		// admin-plane Create* RPC must carry an `Idempotency-Key`
+		// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
 		// header — the admin UI (frontend BFF) auto-injects a UUIDv7
 		// per submit, so a double-click or auto-retry collapses on
-		// the same key. Per-handler memoize (response replay) is a
-		// follow-on; today the gate is enforcement-only.
+		// the same key. The interceptor BOTH enforces the header AND
+		// memoizes the response (replay on a repeat key); the memoize
+		// store is scoped per (tenant, method, key).
 		middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
 			RequireOnCreate: true,
 		}),
