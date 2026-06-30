@@ -12,12 +12,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useNotification } from "@/components/ui/Notification";
 import { T } from "@/lib/ui/typography";
+import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 
 interface TenantDeleteDialogProps {
-  // The tenant id pending deletion, or null when closed.
-  deleteTarget: string | null;
+  // The tenant pending deletion, or null when closed. We hold the whole Tenant
+  // (not just the id) because a soft delete needs its resource_version for the
+  // OCC check — DeleteTenant with force=false rejects an empty resource_version
+  // with InvalidArgument ("resource_version is required; pass force=true to
+  // bypass"), which previously made every UI delete silently fail.
+  deleteTarget: Tenant | null;
   onClose: () => void;
-  deleteTenant: (tenantId: string) => Promise<void>;
+  deleteTenant: (tenantId: string, resourceVersion: string) => Promise<void>;
 }
 
 /**
@@ -35,11 +40,11 @@ export function TenantDeleteDialog({
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteTenant(deleteTarget);
+      await deleteTenant(deleteTarget.tenantId, deleteTarget.resourceVersion);
       showNotification({
         type: "success",
         title: "Tenant deleted",
-        message: deleteTarget,
+        message: deleteTarget.slug || deleteTarget.tenantId,
       });
       onClose();
     } catch {
@@ -61,7 +66,7 @@ export function TenantDeleteDialog({
               <p>
                 All data scoped to{" "}
                 <span className="font-mono text-foreground">
-                  {deleteTarget}
+                  {deleteTarget?.slug || deleteTarget?.tenantId}
                 </span>{" "}
                 will become inaccessible.
               </p>

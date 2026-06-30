@@ -24,10 +24,33 @@ import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedBucket } from "./fixtures/seed";
 
+// The ScopePicker is a two-level Radix popover (ScopePicker.tsx): the main
+// trigger ("Scope picker — …") opens a popover holding two ScopeRow buttons —
+// "Switch backend — …" and "Switch bucket — …". Each ScopeRow opens its OWN
+// nested cmdk popover (CommandGroup heading "Backends"/"Buckets") with the
+// selectable options. So bucket options aren't reachable from the main popover
+// directly — you open the bucket sub-row first.
+async function selectBucket(
+  page: import("@playwright/test").Page,
+  bucketName: string,
+) {
+  await page.getByRole("button", { name: /^Scope picker —/ }).click();
+  await page.getByRole("button", { name: /^Switch bucket/ }).click();
+  // Filter the cmdk list down to the seeded bucket — the list accumulates
+  // buckets across runs, so searching keeps the option reliably rendered.
+  await page.getByPlaceholder("Search buckets…").fill(bucketName);
+  await page
+    .getByRole("option", { name: new RegExp(bucketName) })
+    .first()
+    .click();
+}
+
 test.describe("US2 — Backend + bucket scope switching", () => {
-  test("picker opens with Backends + Buckets sections", async ({ page }) => {
+  test("picker opens with backend + bucket switchers", async ({ page }) => {
+    // Seed BEFORE login so the bucket exists when the picker's first
+    // ListBuckets fetch runs (seeding after login races that fetch).
+    await seedBucket();
     await loginAsAdmin(page);
-    await seedBucket(); // ensure ≥1 bucket is selectable
 
     // The picker trigger has an aria-label starting with
     // "Scope picker —" (ScopePicker.tsx:130). Matching on the
@@ -38,55 +61,42 @@ test.describe("US2 — Backend + bucket scope switching", () => {
     await expect(trigger).toBeVisible();
     await trigger.click();
 
-    // Popover sections are headed "Backends" and "Buckets"
-    // (or "Buckets in <backend>" once a backend is selected).
-    await expect(page.getByText(/^Backends$/)).toBeVisible();
-    await expect(page.getByText(/^Buckets( in .+)?$/)).toBeVisible();
+    // The opened popover holds the two scope-axis ScopeRows. Their
+    // aria-labels are "Switch backend — …" / "Switch bucket — …"
+    // (ScopePicker.tsx:527); the "Backends"/"Buckets" group headings
+    // live inside each row's nested popover, not here.
+    await expect(
+      page.getByRole("button", { name: /^Switch backend/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Switch bucket/ }),
+    ).toBeVisible();
   });
 
   test("selecting a bucket updates the topbar breadcrumb", async ({ page }) => {
-    await loginAsAdmin(page);
     const bucket = await seedBucket();
+    await loginAsAdmin(page);
 
-    const trigger = page.getByRole("button", { name: /^Scope picker —/ });
-    await trigger.click();
+    await selectBucket(page, bucket.bucketName);
 
-    // Search the bucket row by its unique name (UUID-
-    // suffixed → no collision with neighbouring tests).
-    // The cmdk list items in ScopePicker render the
-    // bucketName + displayName + backendId, all searchable.
-    const bucketRow = page
-      .getByRole("option", { name: new RegExp(bucket.bucketName) })
-      .first();
-    await bucketRow.click();
-
-    // Popover closes after selection (setOpen(false) in cmdk
-    // onSelect). The trigger's aria-label now embeds the
-    // newly selected bucket name (ScopePicker.tsx:130 — the
-    // pattern is "bucket <bucketName>, tenant <tenantLabel>").
-    await expect(trigger).toHaveAttribute(
-      "aria-label",
-      new RegExp(`bucket ${bucket.bucketName}`),
-    );
+    // Selecting closes the nested row popover; the main trigger's
+    // aria-label now embeds the chosen bucket (ScopePicker.tsx:130 —
+    // "… bucket <bucketName>, tenant <tenantLabel>").
+    await expect(
+      page.getByRole("button", { name: /^Scope picker —/ }),
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
   });
 
   test("reload preserves the selected scope", async ({ page }) => {
-    await loginAsAdmin(page);
     const bucket = await seedBucket();
+    await loginAsAdmin(page);
 
-    // Select the bucket through the picker first.
-    const trigger = page.getByRole("button", { name: /^Scope picker —/ });
-    await trigger.click();
-    await page
-      .getByRole("option", { name: new RegExp(bucket.bucketName) })
-      .first()
-      .click();
+    await selectBucket(page, bucket.bucketName);
 
     // Pre-reload sanity: scope is set.
-    await expect(trigger).toHaveAttribute(
-      "aria-label",
-      new RegExp(`bucket ${bucket.bucketName}`),
-    );
+    await expect(
+      page.getByRole("button", { name: /^Scope picker —/ }),
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
 
     // The localStorage write happens synchronously in
     // setBucket / setScope; reload must round-trip it.
@@ -96,12 +106,8 @@ test.describe("US2 — Backend + bucket scope switching", () => {
     // post-hydration. If safeRead() in ScopeContext skipped
     // the localStorage key, the aria-label would fall back
     // to "bucket any" and the assertion fails.
-    const triggerAfterReload = page.getByRole("button", {
-      name: /^Scope picker —/,
-    });
-    await expect(triggerAfterReload).toHaveAttribute(
-      "aria-label",
-      new RegExp(`bucket ${bucket.bucketName}`),
-    );
+    await expect(
+      page.getByRole("button", { name: /^Scope picker —/ }),
+    ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
   });
 });

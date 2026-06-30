@@ -130,7 +130,13 @@ describe("TenantsPage", () => {
 
   it("deletes a tenant through the row menu + confirmation", async () => {
     h.state.tenants = [
-      { tenantId: "t-1", slug: "acme", displayName: "Acme Corp", labels: {} },
+      {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "Acme Corp",
+        labels: {},
+        resourceVersion: "7",
+      },
     ];
     render(<TenantsPage />);
     await userEvent.click(
@@ -141,6 +147,10 @@ describe("TenantsPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Delete tenant" }),
     );
-    await waitFor(() => expect(h.deleteTenant).toHaveBeenCalledWith("t-1"));
+    // Soft delete must thread the tenant's resource_version (OCC) — passing
+    // "" makes DeleteTenant(force=false) fail server-side.
+    await waitFor(() =>
+      expect(h.deleteTenant).toHaveBeenCalledWith("t-1", "7"),
+    );
   });
 });

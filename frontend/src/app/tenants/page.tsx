@@ -117,7 +117,7 @@ export default function TenantsPage() {
   // which one is open (set by the row menu / New tenant button).
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Tenant | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
 
   useEffect(() => {
     fetchTenants();
@@ -363,7 +363,7 @@ export default function TenantsPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            onSelect={() => setDeleteTarget(tenant.tenantId)}
+                            onSelect={() => setDeleteTarget(tenant)}
                           >
                             <TrashIcon className="size-4" />
                             Delete tenant
