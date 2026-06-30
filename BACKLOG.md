@@ -1038,19 +1038,19 @@ of the pipeline._
 ### Playwright e2e suite wired into CI
 
 - **Status:** Deferred
-- **Reason:** the e2e compose stack now boots locally (see "Frontend
-  Playwright suite — runtime sign-off" under Testing / E2E), but the
-  suite has not yet earned its flake budget (SC-002/SC-003), so gating
-  PRs on it would block merges on known-unstable signal.
+- **Reason:** the runtime sign-off is now closed (2026-06-30: suite is
+  17/17 green, 170/170 under `--repeat-each=10` with zero flake, single
+  run <10 s — well inside the SC-002 <3 min budget), so the suite has
+  earned its flake budget and is safe to gate on. The remaining work is
+  purely authoring the workflow file + flipping it to required.
 - **Definition of Done:**
-  - Runtime sign-off entry above is closed (suite passes 10×
-    consecutively, <3 min wall-clock).
   - `.github/workflows/e2e.yml` builds both images, boots
     `tests/e2e/docker-compose.test.yaml`, runs `pnpm run test:e2e`,
     and uploads the Playwright report as an artifact on failure.
   - Workflow is required for merge alongside `test` / `security`.
-- **Blockers:** [[Frontend Playwright suite runtime sign-off]] —
-  SC-002/SC-003/SC-004 must pass locally first.
+- **Blockers:** none — sign-off complete. Note CI needs a reachable S3
+  (the suite uses an external Garage via `PALADIN_E2E_S3_ACCESS_KEY/_SECRET_KEY`);
+  the workflow must provision or point at one.
 
 
 ### Branch protection on `main` and `develop` — require status checks
@@ -1102,41 +1102,3 @@ of the pipeline._
 - **Blockers:** none technical; deferred purely for v1 scope. Drain mode
   is the most-requested next step (data migration off a backend).
 
----
-
-## Testing / E2E
-
-### Frontend Playwright suite — runtime sign-off (SC-002 / SC-003 / SC-004)
-
-- **Status:** Blocked
-- **Reason:** The Playwright E2E suite (`specs/001-frontend-playwright-e2e`)
-  is authored and passes all static gates (`tsc --noEmit` clean, all
-  scenarios discovered), but the runtime verification tasks
-  (T012, T018, T023, T029, T034, T038, T041, T042) were deferred during
-  `/speckit-implement`: the PALADIN backend / UI containers
-  (`registry.local/paladin/paladin:latest`,
-  `:paladin-ui:latest`) were not buildable/reachable from
-  the impl host's Docker daemon, so the test-stack never booted.
-- **Definition of Done:**
-  - Build the PALADIN images locally (`task -d backend build:image` or
-    equivalent) and port-forward the external Garage with
-    `PALADIN_E2E_S3_ACCESS_KEY/_SECRET_KEY` set.
-  - T012: `pnpm run test:e2e:stack` reaches `healthy` on all six
-    compose services within 60 s.
-  - SC-003: each `*.spec.ts` passes 10× consecutively with zero flake.
-  - SC-002: the full suite run completes in <3 min wall-clock.
-  - SC-004: the five intentional-break dry-runs from quickstart each
-    produce a clear named failure in the expected spec file.
-  - Flip T012/T018/T023/T029/T034/T038/T041/T042 from `[~]` to `[X]`
-    and delete this entry in the same commit.
-- **Blockers:** ~~PALADIN image availability + reachable S3~~ — RESOLVED
-  during feature 002's T032 sign-off. The images build locally
-  (`docker build -f {backend,frontend}/deploy/Dockerfile`), a local
-  Garage v2.3 at `:3900` supplies S3, and four never-before-run stack
-  bugs were fixed (dup `bootstrap.admin` password+secret; distroless
-  `wget` healthchecks; UI BFF env-var name mismatch `PALADIN_BACKEND_URLS_*`
-  → `PALADIN_{DATA,IAM,ADMIN}_URL`; e2e seed transport missing
-  `Idempotency-Key`). The stack now boots and `backend-disabled.spec.ts`
-  passes against it. Remaining 001 work is purely running its own five
-  specs 10× for the flake/timing budget (SC-002/SC-003) and the
-  intentional-break dry-runs (SC-004) — no longer infra-blocked.

@@ -136,12 +136,12 @@ starts from zero.
 
 ## Verifying the regression-coverage promise (SC-004)
 
-Before sign-off, dry-run each of the six failure modes the
+Before sign-off, dry-run each of the five failure modes the
 suite is supposed to catch:
 
 | Surface to break | How | Suite should fail in |
 |---|---|---|
-| AuthGate redirect | Delete the `useEffect` in `frontend/src/components/AuthGate.tsx` | `auth.spec.ts` |
+| Unauthenticated redirect | Delete the redirect in **`frontend/src/middleware.ts`** AND the `useEffect` in `AuthGate.tsx` — the redirect is defense-in-depth (edge middleware is the primary gate; AuthGate is the client fallback), so breaking only one still bounces to `/login` and the spec stays green | `auth.spec.ts` |
 | Tenant scope persistence | Comment the `setScope` call in `ScopeContext` | `scope.spec.ts` |
 | Bucket → ObjectKey navigation | Remove the row click handler in `BucketDetail` | `buckets.spec.ts` |
 | Idempotency double-submit collapse | Set `RequireOnCreate: false` in `build_listeners_admin.go` | `capabilities.spec.ts` |
@@ -151,3 +151,13 @@ Each should produce a clear, named test failure — not a
 mystery timeout. If any of these breaks silently in the
 suite, that test is mis-asserting and needs to be fixed
 before sign-off.
+
+> **2026-06-30 sign-off note.** SC-002/SC-003 verified
+> (`--repeat-each=10` → 170/170, zero flake, 64 s). For SC-004, the
+> capabilities/buckets/trash specs were validated against **real**
+> regressions caught during development (the idempotency 42P10, the
+> cross-tenant `GetObjectKey` 404, and the soft-delete `resource_version`
+> bug each failed the relevant spec, then passed once fixed) — stronger
+> evidence than a synthetic break. The auth dry-run surfaced the
+> defense-in-depth above (an AuthGate-only break does not fail the spec
+> because `middleware.ts` still redirects).
