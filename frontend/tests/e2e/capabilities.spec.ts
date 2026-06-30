@@ -136,12 +136,11 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     // accessible name.
     await page.getByRole("button", { name: /^Revoke$/ }).click();
 
-    // The list defaults to includeRevoked=false (page.tsx:603),
-    // so the row would DISAPPEAR after revoke without an
-    // explicit toggle. Flip the "include revoked" filter so
-    // we can assert the row remains AND its status is
-    // "revoked" (per US4 acceptance scenario 3).
-    await page.getByRole("checkbox", { name: /include revoked/i }).check();
+    // The list defaults to includeRevoked=false, so the row would DISAPPEAR
+    // after revoke without an explicit toggle. Flip the filter so we can
+    // assert the row remains AND its status is "revoked" (US4 scenario 3).
+    // The checkbox's accessible name is its label text — "revoked".
+    await page.getByRole("checkbox", { name: /^revoked$/i }).check();
 
     // The row is still present, now in revoked state — match on the ID
     // (still rendered) plus the "Revoked" status badge.

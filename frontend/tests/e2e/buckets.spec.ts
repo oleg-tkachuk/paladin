@@ -79,7 +79,10 @@ test.describe("US3 — Bucket list & ObjectKey navigation", () => {
     await expect(page.getByRole("heading", { name: "Identity" })).toBeVisible({
       timeout: 5_000,
     });
-    await expect(page.getByText(ok.objectKey)).toBeVisible({
+    // The objectKey string appears in several places (breadcrumb, name
+    // input, canonical resource name); .first() is enough to confirm the
+    // page resolved the (slash-containing) key and rendered.
+    await expect(page.getByText(ok.objectKey).first()).toBeVisible({
       timeout: 5_000,
     });
     // tenants/<id>/objectKeys/<key> is the canonical shape —
