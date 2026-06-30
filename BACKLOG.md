@@ -1077,12 +1077,36 @@ of the pipeline._
   the signature of an exhausted private-repo Actions minutes / spending
   limit. Requiring red checks would block all merges and direct pushes.
 - **Definition of Done:** once Actions runs go green, add
-  `required_status_checks` for `backend` / `frontend` / `gitleaks` /
-  `trivy-fs` (strict) via
-  `gh api -X PUT repos/:owner/:repo/branches/<br>/protection`.
-- **Blockers:** GitHub Actions billing — the runner accepts each job then
-  fails instantly (Settings → Billing → spending limit / payment method).
-  Account-level; only the repo owner can resolve it.
+  `required_status_checks` (strict) for the four check contexts. Use the
+  dedicated sub-resource endpoint so the already-applied protections
+  (force-push off, deletion off, linear history, enforce_admins) are
+  preserved — a full `PUT …/protection` would clobber them:
+
+  ```bash
+  for br in main develop; do
+    gh api -X PATCH "repos/oleg-tkachuk/paladin/branches/$br/protection/required_status_checks" \
+      --input - <<'JSON'
+  { "strict": true,
+    "checks": [ {"context":"backend"}, {"context":"frontend"},
+                {"context":"gitleaks"}, {"context":"trivy-fs"} ] }
+  JSON
+  done
+  ```
+
+  If the PATCH 404s ("required status checks not enabled"), the contexts
+  have never been set on that branch — set them once via the full
+  `PUT …/protection` (echo the current protection back in + add the
+  `required_status_checks` block), then PATCH thereafter. Verified check
+  contexts = the job ids: test.yml → `backend`, `frontend`; security.yml →
+  `gitleaks`, `trivy-fs`, `trivy-image` (DoD covers the first four; add
+  `trivy-image` only if image scans should gate too).
+- **Blockers:** GitHub Actions billing — RE-VERIFIED 2026-06-30: every run
+  still fails with `steps=0` and "The job was not started because recent
+  account payments have failed or your spending limit needs to be
+  increased." Account-level (Settings → Billing → spending limit / payment
+  method); only the repo owner can resolve it. Enabling required checks
+  before this is fixed would block ALL merges + direct pushes on both
+  branches (enforce_admins is on), so it stays OFF until CI goes green.
 
 
 ---
