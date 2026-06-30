@@ -128,34 +128,74 @@ type RotateResult = {
 
 const inflightRotations = new Map<string, Promise<RotateResult>>();
 
+// How long a SUCCESSFUL rotation's result is retained in the dedup map AFTER it
+// settles. The original dedup deleted the entry on settle, so it only collapsed
+// callers that overlapped the in-flight window. But the two BFF rotation entry
+// points — /api/auth/me (AuthProvider) and /api/auth/exchange?audience=paladin-iam
+// (the iam transport, fired by an early iam-plane RPC) — are dispatched by the
+// browser near-simultaneously carrying the SAME cookie, and the browser can't
+// update that cookie between them. Under load they stagger: the first rotates
+// RT1→RT2 and clears the entry; the second then replays the now-consumed RT1.
+// The backend's RefreshToken reads a consumed token as RFC-6819 reuse and
+// revokes the ENTIRE family (RT2 included) — logging the live session out (the
+// "blank page on refresh" symptom; reproduced reliably by the specs/001
+// Playwright suite under parallel workers). Retaining the resolved pair for a
+// grace window lets the staggered sibling JOIN the cached promise and receive
+// RT2 instead of replaying RT1. The key is (audience, token), so the next
+// legitimate rotation (new cookie) uses a different key and is unaffected; a
+// genuine replay outside the window still hits the backend and is detected.
+const ROTATION_RESULT_GRACE_MS = 30_000;
+
+// dedupWithGrace runs factory at most once per key for concurrent callers AND
+// for callers that arrive within graceMs after a SUCCESSFUL settle. Failures
+// are never cached — a rejected attempt is removed immediately so the next
+// caller retries and a genuine reuse/expiry still surfaces. Exported for tests.
+export function dedupWithGrace<T>(
+  map: Map<string, Promise<T>>,
+  key: string,
+  graceMs: number,
+  factory: () => Promise<T>,
+): Promise<T> {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const p = factory();
+  map.set(key, p);
+  p.then(
+    () => {
+      const timer = setTimeout(() => map.delete(key), graceMs);
+      (timer as { unref?: () => void }).unref?.();
+    },
+    () => {
+      map.delete(key);
+    },
+  );
+  return p;
+}
+
 export async function refreshIamChain(
   refreshToken: string,
   audience: Audience,
 ): Promise<RotateResult> {
-  const key = `${audience}::${refreshToken}`;
-  const existing = inflightRotations.get(key);
-  if (existing) return existing;
-
-  const promise = (async () => {
-    const res = await iamAuthClient().refreshToken({
-      refreshToken,
-      requestedAudience: audience,
-    });
-    if (!res.tokens) {
-      throw new Error("IAM RefreshToken returned no token pair");
-    }
-    return {
-      accessToken: res.tokens.accessToken,
-      refreshToken: res.tokens.refreshToken,
-      accessExpiresInSeconds: Number(res.tokens.accessExpiresInSeconds),
-      refreshExpiresInSeconds: Number(res.tokens.refreshExpiresInSeconds),
-    };
-  })().finally(() => {
-    inflightRotations.delete(key);
-  });
-
-  inflightRotations.set(key, promise);
-  return promise;
+  return dedupWithGrace(
+    inflightRotations,
+    `${audience}::${refreshToken}`,
+    ROTATION_RESULT_GRACE_MS,
+    async () => {
+      const res = await iamAuthClient().refreshToken({
+        refreshToken,
+        requestedAudience: audience,
+      });
+      if (!res.tokens) {
+        throw new Error("IAM RefreshToken returned no token pair");
+      }
+      return {
+        accessToken: res.tokens.accessToken,
+        refreshToken: res.tokens.refreshToken,
+        accessExpiresInSeconds: Number(res.tokens.accessExpiresInSeconds),
+        refreshExpiresInSeconds: Number(res.tokens.refreshExpiresInSeconds),
+      };
+    },
+  );
 }
 
 // ────────────────────────── DTO shaping ──────────────────────────
