@@ -73,10 +73,10 @@ export const TEMPLATES: readonly TemplateDef[] = [
 
 export type SinkType = "http" | "nats" | "kafka" | "sqs";
 
-// NATS sits second after HTTP — it's the second wired sink (Kafka/SQS
-// remain "not yet wired" stubs that operator pickers can still see for
-// visibility into roadmap, but EventSubscriptionService.Validate
-// rejects subs targeting them today).
+// HTTP, NATS, Kafka, and SQS sinks are all delivery-wired (2026-06-30) and
+// have no create-time restriction. RabbitMQ is also wired in the backend but
+// has no form fields here yet, so it's omitted from the picker (API-only for
+// now — tracked under the RabbitMQ-sink BACKLOG follow-up).
 export const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "http", label: "HTTP" },
   { id: "nats", label: "NATS" },
