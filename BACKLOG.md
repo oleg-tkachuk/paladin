@@ -706,19 +706,21 @@ open deliberately — each notes why._
     query is acceptable for now — this is a throughput optimization.
 - **Blockers:** none.
 
-### `object_key_format` rejects exactly-2-char path segments
+### Tenant slug rejects exactly-2-char names (same `{1,61}` quirk)
 
 - **Status:** Open (bug) — discovered 2026-06-30.
-- **Reason:** the per-segment regex
-  `[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?` (migrations 001/003/030) matches a
-  segment of length 1 OR ≥3, but NOT exactly 2 — the optional inner group
-  needs ≥2 chars. So an object_key like `eu`, `us`, `q1`, or
-  `invoices/q1/...` is rejected at insert. Two-char region/quarter codes are
-  realistic, so this is a latent usability bug, not just a test curiosity.
-- **Definition of Done:** change the inner quantifier to `{0,61}` (allows the
-  2-char case) in a new migration, re-applied to the per-segment alternation;
-  add a constraint test for 1/2/3/63-char segments.
-- **Blockers:** none — single-line regex fix + migration; low risk.
+- **Reason:** `tenantSlugRE` in `internal/api/v1/apiutil/slug.go`
+  (`^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$`) has the identical quirk that migration
+  045 just fixed for `object_key`: the optional inner group needs ≥2 chars, so
+  a name matches at length 1 OR ≥3 but NOT exactly 2. Realistic 2-char tenant
+  slugs — `eu`, `hq`, `qa` — are rejected at create. (The object_key twin was
+  fixed in 045; this Go-side validator + any matching DB constraint on
+  `tenants.slug` from migration 009 were left untouched to keep that change
+  scoped.)
+- **Definition of Done:** relax the quantifier to `{0,61}` in `tenantSlugRE`
+  AND the `tenants.slug` CHECK constraint (find it — migration 009 region) in
+  a new migration, so both layers agree; unit test for 1/2/3/63-char slugs.
+- **Blockers:** none — mirror of the 045 fix; low risk.
 
 
 
