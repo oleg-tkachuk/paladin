@@ -646,6 +646,31 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
+### Migrate `middleware.ts` → `proxy.ts` (Next 16 convention)
+
+- **Status:** Blocked (on a Next.js version that wires `proxy` into the
+  standalone manifest).
+- **Reason:** Next 16 renamed the edge-`middleware` convention to `proxy`;
+  the build prints a deprecation warning for `src/middleware.ts`. We
+  deliberately keep `middleware.ts` — on the pinned **16.2.6**, a `proxy.ts`
+  compiles (`ƒ Proxy (Middleware)`) but takes the Node-runtime path
+  (`runDependingOnPageType` → `onServer`, vs edge `onEdgeServer`) and is NOT
+  written into `middleware-manifest.json`, so the standalone runtime never
+  executes it — silently disabling the auth/CSRF route gate. The deprecation
+  warning is cosmetic; `middleware.ts` still works (verified in the deployed
+  stack). Switching now would be a silent security regression, so it's parked.
+- **Definition of Done:**
+  - On a future Next upgrade, rename `src/middleware.ts` → `src/proxy.ts` and
+    `export function middleware` → `export function proxy` (config export
+    unchanged).
+  - Re-test the manifest: a `output: standalone` build must write the proxy
+    function into `middleware-manifest.json` AND the standalone server must
+    execute it (confirm the /login redirect + CSRF Origin gate still fire).
+  - Delete this entry once the warning is gone and the gate is verified.
+- **Blockers:** a Next.js release that fixes proxy→standalone-manifest wiring
+  (recheck the 16.2.6 behaviour at the next upgrade — see the rationale block
+  atop `frontend/src/middleware.ts`).
+
 ### Remaining bucket sub-tab: Replication
 
 - **Status:** Deferred (Versioning DONE; Replication blocked on the worker)
