@@ -11,6 +11,15 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 )
 
+// eventDispatcher is the producer-side seam the cross-cutting emitters
+// (charge, audit) depend on. *worker.Dispatcher satisfies it in production;
+// unit tests substitute a fake to assert the emitted event + the drop guards
+// without standing up a DB + NATS stack (the dispatcher → outbox → NATS path
+// itself is covered by tests/integration/lifecycle_events_test.go).
+type eventDispatcher interface {
+	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
+}
+
 // chargeEmitter adapts *worker.Dispatcher to auth.ChargeEventEmitter.
 //
 // Lives here, not in the auth package, because auth must not import
@@ -25,7 +34,7 @@ import (
 // regardless. This matches the semantics of the ledger-row insert
 // in capability/postgres/usage.go::Charge.
 type chargeEmitter struct {
-	dispatcher *worker.Dispatcher
+	dispatcher eventDispatcher
 	log        *zap.Logger
 }
 

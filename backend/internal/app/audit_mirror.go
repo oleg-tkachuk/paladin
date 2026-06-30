@@ -24,7 +24,7 @@ import (
 // fires through here, so an unfiltered NATS / HTTP sink will get
 // the full mutation rate of the cluster.
 type auditMirror struct {
-	dispatcher *worker.Dispatcher
+	dispatcher eventDispatcher
 	log        *zap.Logger
 }
 

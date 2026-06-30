@@ -444,6 +444,18 @@ open deliberately — each notes why._
     `tests/integration` package (stale `NewBackendRepoV2` / `NewBucketRepoV2`
     call sites — the suite is `//go:build integration`, outside the default
     gate, so it had drifted and stopped compiling).
+  - ~~Tests for the cross-cutting emitter classes (capability charge +
+    audit-log mirror).~~ **DONE (2026-06-30):** introduced a small
+    `eventDispatcher` interface seam in `internal/app` (both emitters now
+    depend on it instead of the concrete `*worker.Dispatcher`) and added
+    `charge_emitter_test.go` + `audit_mirror_test.go`. They pin the producer
+    contract with a fake dispatcher — event Type/ResourceName/Payload mapping
+    (`paladin.capability.charged`, `paladin.audit.<action>`), the tenant-less drop
+    guards, best-effort error swallowing, the `auditEventType` action→class
+    derivation (incl. degenerate inputs), and the nil/`optionalAuditMirror`
+    toggle gating. The dispatcher → outbox → NATS transport itself stays
+    covered by `lifecycle_events_test.go`, so this is the right granularity —
+    no redundant integration spin-up.
   - **Adoption check** — once a real subscriber needs charge
     or audit events, flip `cfg.Dispatcher.ChargeEventsEnabled`
     / `audit_mirror_enabled` per overlay and verify the
