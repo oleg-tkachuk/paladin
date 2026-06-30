@@ -475,27 +475,25 @@ open deliberately — each notes why._
 
 ### Event dispatcher: Kafka sink
 
-- **Status:** Deferred
-- **Reason:** [event_dispatcher.go:120](internal/worker/event_dispatcher.go)
-  returns `"sink %q delivery not yet wired (slice 8)"` for `kafka`.
-  Heavier dependency than NATS (~5MB for `franz-go` or
-  `segmentio/kafka-go`) and brings configuration complexity
-  (partition assignment, consumer groups, optional Schema Registry,
-  SASL/SCRAM/mTLS auth). Worth doing only when a customer commits
-  on Kafka — pre-built adapters tend to bake in choices the eventual
-  customer will want changed.
-- **Definition of Done:**
-  - Kafka client library decision (`franz-go` preferred — pure-Go,
-    actively maintained, no CGO).
-  - Proto extension matches the existing `KafkaSink` stub
-    (brokers, topic) plus credentials reference.
-  - Per-tenant topic prefix (e.g. `paladin.{tenant_id}.{event_type}`)
-    or operator-defined topic — pick after customer feedback.
-  - CloudEvents envelope, same as NATS.
-  - Sink-config schema validation at `Create`/`Update` time.
-  - Tests: outbox row → Kafka publish round-trip via testcontainers
-    or embedded redpanda.
-- **Blockers:** customer ask + Kafka client library decision.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; auth/integration
+  follow-ups remain.
+- **Shipped:** `KafkaSink{brokers, topic}` (already in the proto) wired
+  end-to-end — `internal/worker/sink_kafka.go` with `KafkaWriterPool` (one
+  `segmentio/kafka-go` writer cached per (brokers, topic), `RequireAll` acks,
+  `Hash` balancer); `deliverKafka` publishes the CloudEvents 1.0 envelope with
+  the **tenant id as the message key** (per-tenant partition ordering); wired
+  into `deliver()` + the delivery dispatcher; conv.go round-trip already
+  mapped; unit tests (`sink_kafka_test.go`) via a `kafkaWriter` seam covering
+  envelope/key, broker-list trimming, pool reuse, error + missing-config + nil
+  -pool paths. Chose `segmentio/kafka-go` (pure-Go, no CGO) over franz-go.
+- **Definition of Done (remaining):**
+  - Auth: SASL/SCRAM + mTLS via `kafka.Writer.Transport` (today: PLAINTEXT /
+    broker-list only). Credentials reference on the sink config.
+  - Real-broker integration test (testcontainers redpanda / kafka): outbox
+    row → publish round-trip. (Unit tests use a writer seam.)
+  - Optional: per-tenant topic prefix vs operator-defined topic — operator
+    -defined shipped; revisit if a customer needs auto-fan-out by tenant.
+- **Blockers:** none — incremental; driven by a customer's auth posture.
 
 ### Event dispatcher: RabbitMQ sink
 

@@ -148,6 +148,10 @@ type Dispatcher struct {
 	// nil = no rabbitmq subs configured. Owned by the dispatcher pod's main;
 	// closed at shutdown.
 	RabbitMQ *RabbitMQConnPool
+	// Kafka is the optional writer pool used by the Kafka sink. nil = no
+	// kafka subs configured. Owned by the dispatcher pod's main; closed at
+	// shutdown.
+	Kafka *KafkaWriterPool
 	// MaxAttempts caps retry per subscription on the synchronous
 	// DeliverOne path. <=0 → 3. The outbox loop's retry budget is
 	// driven by OutboxRunner.DefaultMaxAttempts instead.
@@ -275,7 +279,7 @@ func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscript
 	case "rabbitmq":
 		return d.deliverRabbitMQ(ctx, sub, evt)
 	case "kafka":
-		return 0, fmt.Errorf("sink %q delivery not yet wired", sub.SinkKind)
+		return d.deliverKafka(ctx, sub, evt)
 	default:
 		return 0, fmt.Errorf("unknown sink kind %q", sub.SinkKind)
 	}

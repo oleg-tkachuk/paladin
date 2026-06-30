@@ -26,6 +26,7 @@ require (
 	github.com/nats-io/nkeys v0.4.16
 	github.com/pressly/goose/v3 v3.27.2
 	github.com/rabbitmq/amqp091-go v1.12.0
+	github.com/segmentio/kafka-go v0.4.51
 	github.com/spf13/cobra v1.10.2
 	github.com/sqlc-dev/sqlc v1.30.0
 	github.com/stretchr/testify v1.11.1
@@ -87,6 +88,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect

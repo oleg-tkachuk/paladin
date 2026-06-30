@@ -108,12 +108,15 @@ var serveDispatcherCmd = &cobra.Command{
 		sqsPool := worker.NewSQSClientPool(l.Named("sqs-pool"))
 		rabbitPool := worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool"))
 		defer rabbitPool.Close()
+		kafkaPool := worker.NewKafkaWriterPool(l.Named("kafka-pool"))
+		defer kafkaPool.Close()
 
 		dispatcher := &worker.Dispatcher{
 			Store:    store,
 			NATS:     natsPool,
 			SQS:      sqsPool,
 			RabbitMQ: rabbitPool,
+			Kafka:    kafkaPool,
 			Logger:   l.Named("event-dispatcher"),
 		}
 
