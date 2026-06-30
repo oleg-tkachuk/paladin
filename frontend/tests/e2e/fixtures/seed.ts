@@ -21,7 +21,12 @@
  * burn two logins.
  */
 import { createClient } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-web";
+// connect-NODE (not -web): this runs in Playwright's Node worker. The web
+// transport's fetch path mis-handles a large (gzip-compressed) unary response
+// in that worker — CreateTenant's multi-KB Cedar-policy body threw
+// "Cannot read properties of undefined (reading 'length')" while the tiny
+// Login response worked. The Node transport uses Node http + zlib directly.
+import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
@@ -55,7 +60,11 @@ async function getAdminToken(): Promise<string> {
   if (cached) return cached;
   const iam = createClient(
     AuthService,
-    createConnectTransport({ baseUrl: IAM_URL }),
+    createConnectTransport({
+      baseUrl: IAM_URL,
+      httpVersion: "1.1",
+      useBinaryFormat: false,
+    }),
   );
   const res = await iam.login({
     subject: SEEDED_ADMIN.subject,
@@ -79,6 +88,8 @@ async function getAdminToken(): Promise<string> {
 function adminTransport() {
   return createConnectTransport({
     baseUrl: ADMIN_URL,
+    httpVersion: "1.1",
+    useBinaryFormat: false, // JSON codec — seed builds plain literals, not create()d messages
     interceptors: [
       (next) => async (req) => {
         const token = await getAdminToken();
@@ -160,6 +171,8 @@ function objectKeyAdminClient() {
 function adminTransportWithKey(key: string) {
   return createConnectTransport({
     baseUrl: ADMIN_URL,
+    httpVersion: "1.1",
+    useBinaryFormat: false, // JSON codec — seed builds plain literals, not create()d messages
     interceptors: [
       (next) => async (req) => {
         const token = await getAdminToken();
@@ -211,7 +224,6 @@ export async function seedTenant(opts?: {
   const res = await client.createTenant({
     tenantId: "", // server-generated UUIDv7
     tenant: {
-      $typeName: "paladin.admin.v1.Tenant",
       tenantId: "",
       name: "",
       slug,
@@ -219,7 +231,7 @@ export async function seedTenant(opts?: {
       inheritedCedarPolicy: "",
       labels: {},
       resourceVersion: "",
-    } as never,
+    },
     defaultBucket: "",
   });
   const created = res;
@@ -277,14 +289,13 @@ export async function seedBucket(opts?: {
     parent: `storageBackends/${backendId}`,
     bucketName,
     bucket: {
-      $typeName: "paladin.admin.v1.Bucket",
       backendId,
       bucketName,
       displayName,
       region: "",
       labels: {},
       cedarPolicy: "",
-    } as never,
+    },
     provisionOnBackend: false,
   });
   return { backendId, bucketName, displayName };
@@ -320,14 +331,13 @@ export async function seedObjectKey(opts: {
     parent: `tenants/${opts.tenantId}`,
     objectKey,
     objectKeyResource: {
-      $typeName: "paladin.admin.v1.ObjectKey",
       name: "",
       tenantId: opts.tenantId,
       objectKey,
       displayName,
       bucket: bucketResourceName,
       cedarPolicy: "",
-    } as never,
+    },
   });
   return {
     tenantId: opts.tenantId,
@@ -370,14 +380,12 @@ export async function seedCapability(opts: {
   });
   const res = await client.issue({
     subject: {
-      $typeName: "paladin.admin.v1.CapabilityPrincipal",
       kind: PrincipalKind.AGENT,
       tenantId: opts.tenantId,
       subject,
-    } as never,
+    },
     audience: ["paladin-data"],
     caveats: {
-      $typeName: "paladin.admin.v1.CapabilityCaveats",
       ops: ["get"],
       resourcePrefixes: [],
       resourceUris: [],
@@ -387,7 +395,7 @@ export async function seedCapability(opts: {
       allowTaintedRead: false,
       idempotencyKeyRequired: false,
       sourceIpCidr: [],
-    } as never,
+    },
     ttlSeconds: BigInt(900),
   });
   const id = (res as { capability?: { id?: string } }).capability?.id;

@@ -188,7 +188,9 @@ services:
       admin:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      # 127.0.0.1 (not localhost): the distroless wget resolves localhost to
+      # ::1 first, but Next binds 0.0.0.0 (IPv4 only) → false "unhealthy".
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 3s
       timeout: 3s
       retries: 30
