@@ -184,6 +184,30 @@ func (q *Queries) ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afte
 	return items, nil
 }
 
+const resolveObjectKeyPrefix = `-- name: ResolveObjectKeyPrefix :one
+SELECT object_key
+FROM object_keys
+WHERE tenant_id = $1
+  AND ($2 = object_key OR $2 LIKE object_key || '/%')
+ORDER BY length(object_key) DESC
+LIMIT 1
+`
+
+// Longest registered object_key that is a prefix of $2 (the recombined
+// "<object_key>/<key>" tail of an ingest event) for the tenant. Multi-segment
+// object_keys (migration 030) make the naive "the OK is the first path
+// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
+// OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
+// `report.pdf`. Longest-prefix gives deterministic precedence (the more
+// specific OK wins). object_key is constrained to `[a-z0-9-]` path segments
+// (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
+func (q *Queries) ResolveObjectKeyPrefix(ctx context.Context, tenantID pgtype.UUID, objectKey string) (string, error) {
+	row := q.db.QueryRow(ctx, resolveObjectKeyPrefix, tenantID, objectKey)
+	var object_key string
+	err := row.Scan(&object_key)
+	return object_key, err
+}
+
 const updateObjectKey = `-- name: UpdateObjectKey :execrows
 UPDATE object_keys
 SET display_name    = COALESCE($3,    display_name),

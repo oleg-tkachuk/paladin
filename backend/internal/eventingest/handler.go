@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,15 @@ type ObjectLookup interface {
 		tenantID pgtype.UUID,
 		objectKey, key string,
 	) (sqlc.LookupObjectByKeyRow, error)
+	// ResolveObjectKeyPrefix returns the longest registered object_key that
+	// prefixes `tail` (the recombined "<object_key>/<key>" path) for the
+	// tenant — disambiguates multi-segment object keys. pgx.ErrNoRows when no
+	// object_key is a prefix.
+	ResolveObjectKeyPrefix(
+		ctx context.Context,
+		tenantID pgtype.UUID,
+		tail string,
+	) (string, error)
 }
 
 // PromoteHandler is the canonical event handler: it resolves the
@@ -84,12 +94,30 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return nil
 	}
 
-	row, err := h.Lookup.LookupObjectByKey(
-		ctx,
-		pgtype.UUID{Bytes: tenantUUID, Valid: true},
-		ev.SubjectFields.ObjectKey,
-		ev.SubjectFields.Key,
-	)
+	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}
+
+	// Disambiguate multi-segment object keys. The source adapters split the
+	// "<object_key>/<key>" tail at the first path segment, which is wrong when
+	// the object_key itself is multi-segment (migration 030). Recombine the
+	// tail and re-derive the real OK by longest-prefix-match so a nested OK
+	// (`invoices/2026/q1`) wins over a shorter sibling (`invoices`).
+	objectKey, key := ev.SubjectFields.ObjectKey, ev.SubjectFields.Key
+	fullTail := objectKey + "/" + key
+	realOK, perr := h.Lookup.ResolveObjectKeyPrefix(ctx, tenantPg, fullTail)
+	switch {
+	case perr == nil && realOK != "" && realOK != fullTail:
+		objectKey = realOK
+		key = strings.TrimPrefix(fullTail, realOK+"/")
+	case perr == nil, errors.Is(perr, pgx.ErrNoRows):
+		// No registered OK prefixes the tail (or it equals the whole tail with
+		// an empty key) → keep the source's split; the lookup below skips it
+		// as an unknown object.
+	default:
+		// Genuine DB error → return so the worker retries the event.
+		return fmt.Errorf("resolve object key prefix: %w", perr)
+	}
+
+	row, err := h.Lookup.LookupObjectByKey(ctx, tenantPg, objectKey, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Race window: event arrived before the data-plane PUT
@@ -127,7 +155,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			ev.SubjectFields.Sequencer,
 			statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
-				return h.emitUploaded(ctx, tx, ev, objectID)
+				return h.emitUploaded(ctx, tx, ev, objectKey, key, objectID)
 			},
 		)
 		if err != nil {
@@ -162,19 +190,21 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 // tx. nil-safe: no producer wired → no-op. Mirrors the data-plane
 // CompleteObject payload so subscribers can't tell which producer promoted
 // the object; the `source: storage_event` discriminator is the only tell.
-func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEvent, objectID uuid.UUID) error {
+func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEvent, objectKey, key string, objectID uuid.UUID) error {
 	if h.Events == nil {
 		return nil
 	}
+	// objectKey/key are the RESOLVED values (post longest-prefix-match), not
+	// the source's naive split — so the emitted event references the real OK.
 	_, err := h.Events.DispatchTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
 		Type:         string(EventTypeUploaded),
 		At:           time.Now().UTC(),
 		TenantID:     ev.SubjectFields.TenantID,
-		ResourceName: fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", ev.SubjectFields.TenantID, ev.SubjectFields.ObjectKey, ev.SubjectFields.Key),
+		ResourceName: fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", ev.SubjectFields.TenantID, objectKey, key),
 		Payload: map[string]any{
 			"tenant_id":    ev.SubjectFields.TenantID,
-			"object_key":   ev.SubjectFields.ObjectKey,
-			"key":          ev.SubjectFields.Key,
+			"object_key":   objectKey,
+			"key":          key,
 			"object_id":    objectID.String(),
 			"size_bytes":   ev.SubjectFields.SizeBytes,
 			"etag":         ev.SubjectFields.Etag,

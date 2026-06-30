@@ -687,28 +687,38 @@ open deliberately — each notes why._
 
 ### Multi-segment ObjectKey: event-ingest path disambiguation
 
-- **Status:** Aspirational
-- **Reason:** Migration 030 relaxed `object_key_format` so paths
-  like `invoices/2026/q1` are valid alongside the old
-  single-segment `assets-prod`. Read-side parsers in
-  `internal/eventingest/source_*.go` still split incoming S3 keys
-  as `<bucket>/<tenant_uuid>/<object_key>/<key>` with the third
-  segment treated as the OK and the rest as the user-key. With
-  multi-segment OK that's ambiguous: an event for path
-  `<tenant>/invoices/2026/q1/report.pdf` could resolve as OK
-  `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1`
-  + key `report.pdf`. Existing single-segment OKs are unaffected
-  (split-on-`/` happens to land on the right segment); the
-  ambiguity surfaces only once an operator creates a multi-segment
-  OK and writes objects to it.
-- **Definition of Done:**
-  - Longest-prefix-match against `object_keys` rows for the tenant
-    (cached per-tenant, invalidated on OK create/delete).
-  - All four ingest sources (seaweedfs, seaweedfs-nats, minio,
-    cloudevents) use the shared resolver.
-  - Integration test covering OK precedence ordering when nested
-    paths collide (e.g. `invoices` + `invoices/2026`).
-- **Blockers:** none — pure backend refactor, no proto change.
+- **Status:** Mostly done (2026-06-30) — only the per-tenant cache remains.
+- **Shipped:** longest-prefix disambiguation lands in the **shared promote
+  handler** (`internal/eventingest/handler.go`) rather than per-source — every
+  source funnels through `PromoteHandler.Handle`, so all four (seaweedfs,
+  seaweedfs-nats, minio, cloudevents) get it for free. Handle recombines the
+  source's naive `<object_key>/<key>` split, calls the new
+  `ResolveObjectKeyPrefix` query (`object_keys.sql` — longest registered OK
+  that prefixes the tail, `ORDER BY length DESC LIMIT 1`; object_key has no
+  LIKE metachars so `|| '/%'` is safe), strips the resolved prefix for the
+  real key, and threads the corrected OK/key into the lookup AND the emitted
+  `paladin.object.uploaded` event. Covered by `handler_disambiguation_test.go`
+  (Go glue) + `tests/integration/objectkey_prefix_test.go` (real-DB precedence
+  incl. `invoices` vs `invoices/archive/2026`).
+- **Definition of Done (remaining):**
+  - Per-tenant prefix cache (invalidated on OK create/delete) so the resolve
+    isn't a per-event query. object_keys is small per tenant, so the uncached
+    query is acceptable for now — this is a throughput optimization.
+- **Blockers:** none.
+
+### `object_key_format` rejects exactly-2-char path segments
+
+- **Status:** Open (bug) — discovered 2026-06-30.
+- **Reason:** the per-segment regex
+  `[a-z0-9]([a-z0-9-]{1,61}[a-z0-9])?` (migrations 001/003/030) matches a
+  segment of length 1 OR ≥3, but NOT exactly 2 — the optional inner group
+  needs ≥2 chars. So an object_key like `eu`, `us`, `q1`, or
+  `invoices/q1/...` is rejected at insert. Two-char region/quarter codes are
+  realistic, so this is a latent usability bug, not just a test curiosity.
+- **Definition of Done:** change the inner quantifier to `{0,61}` (allows the
+  2-char case) in a new migration, re-applied to the per-segment alternation;
+  add a constraint test for 1/2/3/63-char segments.
+- **Blockers:** none — single-line regex fix + migration; low risk.
 
 
 

@@ -11,6 +11,22 @@ SELECT sqlc.embed(object_keys)
 FROM object_keys
 WHERE tenant_id = $1 AND object_key = $2;
 
+-- name: ResolveObjectKeyPrefix :one
+-- Longest registered object_key that is a prefix of $2 (the recombined
+-- "<object_key>/<key>" tail of an ingest event) for the tenant. Multi-segment
+-- object_keys (migration 030) make the naive "the OK is the first path
+-- segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
+-- OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
+-- `report.pdf`. Longest-prefix gives deterministic precedence (the more
+-- specific OK wins). object_key is constrained to `[a-z0-9-]` path segments
+-- (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
+SELECT object_key
+FROM object_keys
+WHERE tenant_id = $1
+  AND ($2 = object_key OR $2 LIKE object_key || '/%')
+ORDER BY length(object_key) DESC
+LIMIT 1;
+
 -- name: UpdateObjectKey :execrows
 -- expected_version=0 disables the OCC guard (force update).
 UPDATE object_keys
