@@ -211,10 +211,24 @@ func (h *Handler) CreateObjectKey(ctx context.Context, args CreateObjectKeyArgs)
 	return &b, nil
 }
 
-func (h *Handler) GetObjectKey(ctx context.Context, objectKey string) (*ObjectKey, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+// GetObjectKey reads one ObjectKey under tenantID. tenantID comes from the
+// resource name (resolve.ResolveObjectKeyName) so a platform-admin can open
+// any tenant's ObjectKey via /tenants/{t}/object-keys/{ok}; uuid.Nil (a bare
+// name) defaults to the caller's tenant. A target tenant other than the
+// caller's is platform.admin-only — the same cross-tenant gate ListObjectKeys
+// enforces, so a regular tenant can't read a sibling's ObjectKey by crafting
+// the name. Cedar then authorizes against the (target) tenant.
+func (h *Handler) GetObjectKey(ctx context.Context, tenantID uuid.UUID, objectKey string) (*ObjectKey, error) {
+	callerTenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if tenantID == uuid.Nil {
+		tenantID = callerTenantID
+	}
+	if tenantID != callerTenantID && !principal.HasRole(apiutil.RolePlatformAdmin) {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("cross-tenant GetObjectKey requires platform.admin"))
 	}
 	if err := h.authorize(ctx, principal, tenantID, objectKey, cedar.ActionManageObjectKey); err != nil {
 		return nil, err

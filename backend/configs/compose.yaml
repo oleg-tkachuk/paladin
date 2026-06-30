@@ -213,7 +213,12 @@ mcp:
 # driven and orthogonal to the "stack composes" claim. Enable per
 # scenario when adding agentic-flow tests.
 capability:
-  enabled: false
+  # Enabled for the Playwright e2e suite (US4 exercises Issue/List/Revoke).
+  # signing_key_path empty → an ephemeral Ed25519 keypair is generated at
+  # boot (fine for the throwaway test stack); trusted_issuers auto-defaults
+  # to [issuer_name].
+  enabled: true
+  issuer_name: paladin-e2e
 api_token:
   enabled: false
 

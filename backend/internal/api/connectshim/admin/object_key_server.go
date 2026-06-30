@@ -49,7 +49,7 @@ func (s *ObjectKeyServer) GetObjectKey(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	out, err := s.H.GetObjectKey(ctx, ref.ObjectKey)
+	out, err := s.H.GetObjectKey(ctx, ref.TenantID, ref.ObjectKey)
 	if err != nil {
 		return nil, err
 	}
