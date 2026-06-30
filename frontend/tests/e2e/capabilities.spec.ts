@@ -25,6 +25,19 @@ import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 import { seedTenant, seedCapability } from "./fixtures/seed";
 
+// /tenants/<id>/capabilities is browse-scoped (CapabilityService.List is
+// principal-scoped at the SQL level): it lists nothing until you pick a
+// (principal_kind, subject). principalKind defaults to AGENT — the kind
+// seedCapability uses — so filling the subject filter is enough to list the
+// seeded principal's capabilities. The result table shows the capability ID
+// (there is no subject column), so assertions match on cap.id, not cap.subject.
+async function browseCapabilities(
+  page: import("@playwright/test").Page,
+  subject: string,
+) {
+  await page.getByPlaceholder(/agent-id/).fill(subject);
+}
+
 test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
   test("seeded capability appears on /tenants/<id>/capabilities", async ({
     page,
@@ -34,11 +47,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
     await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
-    // The capability table renders the subject and the
-    // capability ID. We match on the subject (uniqueSlug —
-    // UUID-suffixed, no collision risk).
-    await expect(page.getByText(cap.subject).first()).toBeVisible({
-      timeout: 5_000,
+    await browseCapabilities(page, cap.subject);
+    // The table renders the capability ID (no subject column); match on it.
+    await expect(page.getByText(cap.id).first()).toBeVisible({
+      timeout: 10_000,
     });
   });
 
@@ -96,8 +108,9 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     const cap = await seedCapability({ tenantId: tenant.tenantId });
 
     await page.goto(`/tenants/${encodeURIComponent(tenant.slug)}/capabilities`);
-    await expect(page.getByText(cap.subject)).toBeVisible({
-      timeout: 5_000,
+    await browseCapabilities(page, cap.subject);
+    await expect(page.getByText(cap.id).first()).toBeVisible({
+      timeout: 10_000,
     });
 
     // Trigger the per-row dropdown. The trigger has an
@@ -125,10 +138,9 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     // "revoked" (per US4 acceptance scenario 3).
     await page.getByRole("checkbox", { name: /include revoked/i }).check();
 
-    // The row is still present, now in revoked state. The
-    // status column shows "Revoked" badge text — page.tsx:
-    // status renderer.
-    await expect(page.getByText(cap.subject)).toBeVisible({
+    // The row is still present, now in revoked state — match on the ID
+    // (still rendered) plus the "Revoked" status badge.
+    await expect(page.getByText(cap.id).first()).toBeVisible({
       timeout: 5_000,
     });
     await expect(page.getByText(/Revoked/i).first()).toBeVisible({
