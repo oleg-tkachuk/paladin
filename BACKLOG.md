@@ -912,31 +912,6 @@ open deliberately — each notes why._
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
-### CNPG HA replicas in the PALADIN chart
-
-- **Status:** Resolved-as-out-of-scope — see [ADR-0005](docs/adr/0005-cnpg-ha-ownership.md). The PALADIN chart does NOT own the CNPG `Cluster` (it lives in gitops); HA config belongs there. The chart's verify-full TLS half shipped. The original premise below ("chart already templates cluster.yaml") was incorrect.
-- **Reason:** Minikube runs a single-instance CNPG `Cluster` and the
-  PALADIN chart accepts that as the default. Production-class deploys
-  need ≥2 replicas with synchronous quorum, a PodDisruptionBudget,
-  and an explicit failover policy. The chart already templates
-  `cluster.yaml` but doesn't expose `instances`, `minSyncReplicas`,
-  `maxSyncReplicas`, or `affinity`/`topologySpreadConstraints` as
-  Helm values — operators today hand-edit the generated cluster.
-- **Definition of Done:**
-  - `values.yaml` adds a `postgres.ha` block:
-    `instances`, `minSyncReplicas`, `maxSyncReplicas`,
-    `synchronousReplication.method`, `pdb.minAvailable`.
-  - `values-prod.yaml` ships sane HA defaults (3 instances, sync
-    quorum 1).
-  - `templates/cluster.yaml` wires the block into the CNPG
-    `Cluster.spec.{instances, minSyncReplicas, maxSyncReplicas,
-    affinity, topologySpreadConstraints}` and adds a sibling
-    PodDisruptionBudget gated by `postgres.ha.pdb.enabled`.
-  - `backend-chart-verify` lefthook task gains a snapshot test
-    that diff's the rendered Cluster against committed golden
-    output for each environment.
-- **Blockers:** none.
-
 ### Per-tenant S3 bucket layout
 
 - **Status:** Deferred — explicitly held for product discussion
