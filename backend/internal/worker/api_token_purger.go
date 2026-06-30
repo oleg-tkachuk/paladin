@@ -43,32 +43,31 @@ func (p *APITokenPurger) Run(ctx context.Context) error {
 		// before the reaper drops it.
 		p.ExpiredFor = 7 * 24 * time.Hour
 	}
-	t := time.NewTicker(p.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
-			if err != nil {
-				p.log().Warn("failed to purge api tokens", zap.Error(err))
-			} else if n > 0 {
-				p.log().Info("purged expired api tokens", zap.Int64("rows", n))
-			}
-			// Rate-bucket sweep — independent of the row purge so a
-			// failure on one doesn't skip the other. Bucket grace is
-			// fixed at 5 minutes inside the limiter (the sliding
-			// window only ever reads back 2 buckets).
-			if p.Limiter != nil {
-				if m, err := p.Limiter.Sweep(ctx, 5*time.Minute); err != nil {
-					p.log().Warn("failed to sweep api token rate buckets", zap.Error(err))
-				} else if m > 0 {
-					p.log().Debug("swept stale rate buckets", zap.Int64("rows", m))
+	return RunTicker(ctx, "api_token_purger", p.Interval, func(ctx context.Context) error {
+		var tickErr error
+		n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
+		if err != nil {
+			p.log().Warn("failed to purge api tokens", zap.Error(err))
+			tickErr = err
+		} else if n > 0 {
+			p.log().Info("purged expired api tokens", zap.Int64("rows", n))
+		}
+		// Rate-bucket sweep — independent of the row purge so a
+		// failure on one doesn't skip the other. Bucket grace is
+		// fixed at 5 minutes inside the limiter (the sliding
+		// window only ever reads back 2 buckets).
+		if p.Limiter != nil {
+			if m, err := p.Limiter.Sweep(ctx, 5*time.Minute); err != nil {
+				p.log().Warn("failed to sweep api token rate buckets", zap.Error(err))
+				if tickErr == nil {
+					tickErr = err
 				}
+			} else if m > 0 {
+				p.log().Debug("swept stale rate buckets", zap.Int64("rows", m))
 			}
 		}
-	}
+		return tickErr
+	})
 }
 
 func (p *APITokenPurger) log() *zap.Logger {

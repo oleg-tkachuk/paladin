@@ -38,23 +38,17 @@ func (r *RefreshTokenPurger) Run(ctx context.Context) error {
 	if r.Interval <= 0 {
 		r.Interval = 1 * time.Hour
 	}
-	t := time.NewTicker(r.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			n, err := r.Repo.PurgeExpired(ctx, time.Now().UTC())
-			if err != nil {
-				r.log().Warn("failed to purge refresh tokens", zap.Error(err))
-				continue
-			}
-			if n > 0 {
-				r.log().Info("purged expired refresh tokens", zap.Int64("rows", n))
-			}
+	return RunTicker(ctx, "refresh_token_reaper", r.Interval, func(ctx context.Context) error {
+		n, err := r.Repo.PurgeExpired(ctx, time.Now().UTC())
+		if err != nil {
+			r.log().Warn("failed to purge refresh tokens", zap.Error(err))
+			return err
 		}
-	}
+		if n > 0 {
+			r.log().Info("purged expired refresh tokens", zap.Int64("rows", n))
+		}
+		return nil
+	})
 }
 
 func (r *RefreshTokenPurger) log() *zap.Logger {
@@ -84,16 +78,10 @@ func (a *ApiKeyExpirer) Run(ctx context.Context) error {
 	if a.Interval <= 0 {
 		a.Interval = 1 * time.Hour
 	}
-	t := time.NewTicker(a.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			a.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "api_key_expirer", a.Interval, func(ctx context.Context) error {
+		a.tick(ctx)
+		return nil
+	})
 }
 
 func (a *ApiKeyExpirer) tick(ctx context.Context) {
@@ -155,17 +143,11 @@ func (r *OperationsReaper) Run(ctx context.Context) error {
 	if r.Interval <= 0 {
 		r.Interval = 6 * time.Hour
 	}
-	t := time.NewTicker(r.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			cutoff := time.Now().UTC().Add(-r.TTL)
-			r.drain(ctx, cutoff)
-		}
-	}
+	return RunTicker(ctx, "operations_purger", r.Interval, func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-r.TTL)
+		r.drain(ctx, cutoff)
+		return nil
+	})
 }
 
 // drain calls the bounded purge in a loop until it returns 0 rows. Each
@@ -222,24 +204,18 @@ func (p *AuditLogPurger) Run(ctx context.Context) error {
 	if p.Interval <= 0 {
 		p.Interval = 24 * time.Hour
 	}
-	t := time.NewTicker(p.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			cutoff := time.Now().UTC().Add(-p.TTL)
-			n, err := p.Purger.PurgeOlderThan(ctx, cutoff)
-			if err != nil {
-				p.log().Warn("failed to purge audit log", zap.Error(err))
-				continue
-			}
-			if n > 0 {
-				p.log().Info("purged audit log entries", zap.Int64("rows", n), zap.Time("older_than", cutoff))
-			}
+	return RunTicker(ctx, "audit_purger", p.Interval, func(ctx context.Context) error {
+		cutoff := time.Now().UTC().Add(-p.TTL)
+		n, err := p.Purger.PurgeOlderThan(ctx, cutoff)
+		if err != nil {
+			p.log().Warn("failed to purge audit log", zap.Error(err))
+			return err
 		}
-	}
+		if n > 0 {
+			p.log().Info("purged audit log entries", zap.Int64("rows", n), zap.Time("older_than", cutoff))
+		}
+		return nil
+	})
 }
 
 func (p *AuditLogPurger) log() *zap.Logger {
@@ -274,32 +250,28 @@ func (p *IdempotencyKeyPurger) Run(ctx context.Context) error {
 	if p.Interval <= 0 {
 		p.Interval = 1 * time.Hour
 	}
-	t := time.NewTicker(p.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			// Drain the backlog in batches; the query caps each DELETE.
-			for {
-				n, err := p.Purger.PurgeExpiredIdempotencyKeys(ctx)
-				if err != nil {
-					p.log().Warn("failed to purge idempotency keys", zap.Error(err))
-					break
-				}
-				if n > 0 {
-					p.log().Info("purged idempotency keys", zap.Int64("rows", n))
-				}
-				if n < idempotencyPurgeBatch { // short batch → drained
-					break
-				}
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
+	return RunTicker(ctx, "idempotency_purger", p.Interval, func(ctx context.Context) error {
+		// Drain the backlog in batches; the query caps each DELETE.
+		var tickErr error
+		for {
+			n, err := p.Purger.PurgeExpiredIdempotencyKeys(ctx)
+			if err != nil {
+				p.log().Warn("failed to purge idempotency keys", zap.Error(err))
+				tickErr = err
+				break
+			}
+			if n > 0 {
+				p.log().Info("purged idempotency keys", zap.Int64("rows", n))
+			}
+			if n < idempotencyPurgeBatch { // short batch → drained
+				break
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
 			}
 		}
-	}
+		return tickErr
+	})
 }
 
 func (p *IdempotencyKeyPurger) log() *zap.Logger {

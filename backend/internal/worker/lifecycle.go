@@ -92,16 +92,10 @@ func (w *LifecycleWorker) Run(ctx context.Context) error {
 	if w.Now == nil {
 		w.Now = time.Now
 	}
-	t := time.NewTicker(w.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			w.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "lifecycle", w.Interval, func(ctx context.Context) error {
+		w.tick(ctx)
+		return nil
+	})
 }
 
 func (w *LifecycleWorker) tick(ctx context.Context) {

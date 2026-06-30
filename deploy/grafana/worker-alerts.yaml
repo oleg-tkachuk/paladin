@@ -1,0 +1,56 @@
+# PALADIN background-worker alerting rules (ADR-0001 observability baseline).
+#
+# Plain Prometheus rule group — drop into `rule_files:` directly, or use it as
+# the `spec.groups` body of a Prometheus-Operator `PrometheusRule` CR. The
+# signal comes from the `paladin_worker_*` metrics emitted by every periodic worker
+# via `internal/worker.RunTicker` (→ `internal/metrics.RecordWorkerTick` /
+# `SetWorkerInterval`), exported over the same OTLP pipeline as the RED metrics.
+#
+# Both rules carry the `worker` label, so a single rule fans out into one alert
+# PER worker (reconciler, audit_purger, refresh_token_reaper, api_token_purger,
+# lifecycle, replication, …) with no per-worker threshold hard-coding — the
+# threshold is N× the worker's own `paladin_worker_interval_seconds`.
+#
+# Runbook: docs/runbooks/worker-stalled.md
+groups:
+  - name: paladin-workers
+    rules:
+      # A worker hasn't completed a tick in more than 5× its configured
+      # interval — it has stalled (deadlocked, wedged on a slow query, or its
+      # lease holder died without a successor taking over). `paladin_worker_*`
+      # series only exist once a worker has run at least once, so a fresh boot
+      # doesn't false-fire; `for:` rides out a single slow tick.
+      - alert: PALADINWorkerStalled
+        expr: |
+          (time() - paladin_worker_last_run_timestamp_seconds)
+            > 5 * paladin_worker_interval_seconds
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PALADIN worker {{ $labels.worker }} stalled"
+          description: >-
+            Worker {{ $labels.worker }} has not completed a tick in over 5× its
+            configured interval ({{ $value | humanizeDuration }} since the last
+            run). Background maintenance it owns (reconciliation, purges,
+            reaping, lifecycle, replication) is not running.
+          runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"
+
+      # Every tick in the last 15m failed (errors, zero successes) — the worker
+      # is running but wedged on a persistent failure (bad migration, perms,
+      # downstream outage), distinct from "not running at all" above.
+      - alert: PALADINWorkerTicksAllFailing
+        expr: |
+          sum by (worker) (increase(paladin_worker_runs_total{outcome="error"}[15m])) > 0
+          unless
+          sum by (worker) (increase(paladin_worker_runs_total{outcome="success"}[15m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PALADIN worker {{ $labels.worker }} failing every tick"
+          description: >-
+            Worker {{ $labels.worker }} has logged only error outcomes and no
+            successes in the last 15m. The loop is alive but every tick is
+            failing.
+          runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"

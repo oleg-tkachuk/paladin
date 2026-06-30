@@ -45,16 +45,10 @@ func (r *MultipartReaper) Run(ctx context.Context) error {
 	if batch <= 0 {
 		batch = 100
 	}
-	t := time.NewTicker(r.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			r.sweep(ctx, batch)
-		}
-	}
+	return RunTicker(ctx, "multipart_reaper", r.Interval, func(ctx context.Context) error {
+		r.sweep(ctx, batch)
+		return nil
+	})
 }
 
 func (r *MultipartReaper) sweep(ctx context.Context, batch int32) {

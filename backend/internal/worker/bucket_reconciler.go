@@ -124,19 +124,13 @@ func NewBucketReconciler(
 // logged and recorded on the row itself; the loop never aborts on a
 // per-row failure.
 func (r *BucketReconciler) Run(ctx context.Context) error {
-	t := time.NewTicker(r.cfg.Interval)
-	defer t.Stop()
 	// Kick once on startup so a fresh restart doesn't leave a row
 	// languishing for a full Interval before the first attempt.
 	r.tick(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			r.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "bucket_reconciler", r.cfg.Interval, func(ctx context.Context) error {
+		r.tick(ctx)
+		return nil
+	})
 }
 
 func (r *BucketReconciler) tick(ctx context.Context) {

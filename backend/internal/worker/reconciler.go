@@ -64,16 +64,10 @@ func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg Reco
 // Concurrent reconciler replicas both try to advance the same rows — both
 // are safe because the underlying SQL uses state guards.
 func (r *ReconcilerV2) Run(ctx context.Context) error {
-	t := time.NewTicker(r.cfg.PollInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			r.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "reconciler", r.cfg.PollInterval, func(ctx context.Context) error {
+		r.tick(ctx)
+		return nil
+	})
 }
 
 func (r *ReconcilerV2) tick(ctx context.Context) {

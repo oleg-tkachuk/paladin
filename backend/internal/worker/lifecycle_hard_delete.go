@@ -75,16 +75,10 @@ func (w *LifecycleHardDeleter) Run(ctx context.Context) error {
 	if w.BatchSize <= 0 {
 		w.BatchSize = 100
 	}
-	t := time.NewTicker(w.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			w.Sweep(ctx)
-		}
-	}
+	return RunTicker(ctx, "lifecycle_hard_delete", w.Interval, func(ctx context.Context) error {
+		w.Sweep(ctx)
+		return nil
+	})
 }
 
 // Sweep drains as many hard-deletable rows as possible per tick, up

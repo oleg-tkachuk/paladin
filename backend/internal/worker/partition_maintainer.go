@@ -147,19 +147,13 @@ func (m *PartitionMaintainer) Run(ctx context.Context) error {
 		// unset. Daily is ample — partitions are created buckets ahead.
 		m.Interval = 24 * time.Hour
 	}
-	t := time.NewTicker(m.Interval)
-	defer t.Stop()
 	// Run once on startup so a fresh deploy provisions ahead immediately
 	// rather than waiting a full Interval.
 	m.tick(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			m.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "partition_maintainer", m.Interval, func(ctx context.Context) error {
+		m.tick(ctx)
+		return nil
+	})
 }
 
 // RunOnce performs a single maintenance sweep (create-ahead + drop-old) and

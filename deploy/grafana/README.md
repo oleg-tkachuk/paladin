@@ -54,3 +54,20 @@ the trace view (filter spans by `paladin.tenant_id`) for per-tenant drill-down;
 metrics stay aggregated by service/method. Exemplars (SDK-default,
 trace-based) link a histogram bucket back to a sampled trace when the
 backend supports them.
+
+## `worker-alerts.yaml` — background-worker alerts
+
+Prometheus alerting rules for the periodic workers (reconciler, purgers,
+reapers, lifecycle, replication). Two rules, each fanned out per `worker`
+label so there is no per-worker threshold to maintain:
+
+- **`PALADINWorkerStalled`** — no completed tick in >5× the worker's own
+  `paladin_worker_interval_seconds`.
+- **`PALADINWorkerTicksAllFailing`** — only `outcome="error"` and zero successes
+  over 15m.
+
+Signal: the `paladin_worker_*` instruments emitted by `internal/worker.RunTicker`
+(tick count + outcome, duration, last-run timestamp, interval). Same OTLP
+caveat as the dashboard — only live when `otel.enabled: true`. Drop the file
+into Prometheus `rule_files:` or wrap it in a `PrometheusRule` CR. Response
+procedure: [`docs/runbooks/worker-stalled.md`](../../docs/runbooks/worker-stalled.md).

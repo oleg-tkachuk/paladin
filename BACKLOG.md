@@ -833,18 +833,6 @@ open deliberately — each notes why._
   time-series, `/events` pagination + Last-test column,
   `/objects` listings.
 
-### Per-worker observability runbooks
-
-- **Status:** Deferred
-- **Reason:** The five workers (reconciler, audit purger, refresh
-  reaper, api-key expirer, lifecycle, replication) emit logs but no
-  metrics or alert rules.
-- **Definition of Done:**
-  - OTel counter/gauge for each worker tick + outcome.
-  - PromQL alert per worker for "stalled > 5× interval".
-  - Runbook entry per alert.
-- **Blockers:** observability stack choice.
-
 ---
 
 ## Architecture (post-review 2026-05)

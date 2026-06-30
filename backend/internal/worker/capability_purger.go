@@ -42,39 +42,35 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 	if p.ExpiredFor <= 0 {
 		p.ExpiredFor = 24 * time.Hour
 	}
-	t := time.NewTicker(p.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
-			if err != nil {
-				p.log().Warn("failed to purge capability revocations", zap.Error(err))
-				continue
-			}
-			if n > 0 {
-				p.log().Info("purged expired capability revocations", zap.Int64("rows", n))
-			}
-			if p.Usage != nil {
-				// Loop until 0 — bounded SQL keeps each statement
-				// short, but a backlog (operator just ran a mass
-				// revoke) needs more than one batch to drain.
-				for {
-					n, err := p.Usage.PurgeOrphans(ctx)
-					if err != nil {
-						p.log().Warn("failed to purge capability usage orphans", zap.Error(err))
-						break
-					}
-					if n == 0 {
-						break
-					}
-					p.log().Info("purged capability usage orphans", zap.Int64("rows", n))
+	return RunTicker(ctx, "capability_purger", p.Interval, func(ctx context.Context) error {
+		n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
+		if err != nil {
+			p.log().Warn("failed to purge capability revocations", zap.Error(err))
+			return err
+		}
+		if n > 0 {
+			p.log().Info("purged expired capability revocations", zap.Int64("rows", n))
+		}
+		var tickErr error
+		if p.Usage != nil {
+			// Loop until 0 — bounded SQL keeps each statement
+			// short, but a backlog (operator just ran a mass
+			// revoke) needs more than one batch to drain.
+			for {
+				n, err := p.Usage.PurgeOrphans(ctx)
+				if err != nil {
+					p.log().Warn("failed to purge capability usage orphans", zap.Error(err))
+					tickErr = err
+					break
 				}
+				if n == 0 {
+					break
+				}
+				p.log().Info("purged capability usage orphans", zap.Int64("rows", n))
 			}
 		}
-	}
+		return tickErr
+	})
 }
 
 func (p *CapabilityPurger) log() *zap.Logger {

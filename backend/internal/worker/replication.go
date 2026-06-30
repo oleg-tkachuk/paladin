@@ -97,16 +97,10 @@ func (r *ReplicationWorker) Run(ctx context.Context) error {
 	if r.watermarks == nil {
 		r.watermarks = map[string]time.Time{}
 	}
-	t := time.NewTicker(r.Interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			r.tick(ctx)
-		}
-	}
+	return RunTicker(ctx, "replication", r.Interval, func(ctx context.Context) error {
+		r.tick(ctx)
+		return nil
+	})
 }
 
 func (r *ReplicationWorker) tick(ctx context.Context) {
