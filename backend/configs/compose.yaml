@@ -90,6 +90,13 @@ auth:
   access_token_ttl: 15m
   refresh_token_ttl: 168h
   scoped_token_max_ttl: 24h
+  # The Playwright e2e suite logs in through the real /login form as the
+  # single bootstrap admin, and across parallel workers that bursts past the
+  # production default (10/min per subject) → CodeResourceExhausted → tests
+  # bounce to /login. The limiter is a credential-stuffing defence, not a
+  # surface these UI tests exercise, so raise both caps out of the way here.
+  login_rate_limit_per_subject_per_minute: 100000
+  login_rate_limit_per_ip_per_minute: 100000
 
 security:
   reject_tenant_mismatch: false

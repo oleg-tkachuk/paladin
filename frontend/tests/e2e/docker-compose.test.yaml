@@ -57,6 +57,11 @@ x-paladin-base: &paladin-base
     PALADIN_BOOTSTRAP_ADMIN_SUBJECT: e2e-admin@local
     PALADIN_BOOTSTRAP_ADMIN_PASSWORD: e2e-not-a-secret-2026
     PALADIN_BOOTSTRAP_ADMIN_MIN_PASSWORD_LENGTH: "16"
+    # NB: the login rate-limiter is relaxed for the suite in the baked config
+    # file (backend/configs/compose.yaml auth.login_rate_limit_*) — NOT here.
+    # koanf's env provider maps PALADIN_FOO_BAR by replacing every "_" with ".",
+    # so a multi-word key like login_rate_limit_per_subject_per_minute can't be
+    # reached via env; only single-word path segments (storage.backends.…) can.
     # ── storage: cluster-shared Garage (gitops) ────────────
     # Default endpoint assumes operator ran
     # `kubectl port-forward -n garage svc/garage-s3 3900:3900`

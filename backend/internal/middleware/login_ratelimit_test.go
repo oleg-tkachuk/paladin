@@ -117,7 +117,7 @@ func TestFirstFwdedIP(t *testing.T) {
 }
 
 func TestLoginRateLimiterProcedureSelection(t *testing.T) {
-	l := NewLoginRateLimiter("")
+	l := NewLoginRateLimiter("", 0, 0)
 	for _, p := range []string{
 		"/paladin.iam.v1.AuthService/Login",
 		"/paladin.iam.v1.AuthService/RefreshToken",

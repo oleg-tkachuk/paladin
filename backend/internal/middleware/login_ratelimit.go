@@ -43,13 +43,22 @@ type LoginRateLimiter struct {
 	now       func() time.Time
 }
 
-// NewLoginRateLimiter constructs a limiter with sensible defaults:
-// 10 attempts/min per (subject, IP), 60 attempts/min per IP. realIPHeader
-// names the header the ingress writes the client IP into (it MUST
+// NewLoginRateLimiter constructs a limiter. perSubjectMax / perIPMax are the
+// per-(subject,IP) and per-IP caps per Window; either <= 0 keeps the built-in
+// default (10 and 60 respectively) so callers that don't tune them get the
+// safe defaults, while a deployment that needs to relax them (e.g. an e2e
+// stack logging in repeatedly as one account) can pass a high value.
+// realIPHeader names the header the ingress writes the client IP into (it MUST
 // overwrite, not append — otherwise a client can spoof the per-IP key);
 // empty falls back to the first X-Forwarded-For hop. procedures lists the
 // RPC paths to throttle; empty defaults to Login + RefreshToken.
-func NewLoginRateLimiter(realIPHeader string, procedures ...string) *LoginRateLimiter {
+func NewLoginRateLimiter(realIPHeader string, perSubjectMax, perIPMax int, procedures ...string) *LoginRateLimiter {
+	if perSubjectMax <= 0 {
+		perSubjectMax = 10
+	}
+	if perIPMax <= 0 {
+		perIPMax = 60
+	}
 	if len(procedures) == 0 {
 		procedures = []string{
 			"/paladin.iam.v1.AuthService/Login",
@@ -61,8 +70,8 @@ func NewLoginRateLimiter(realIPHeader string, procedures ...string) *LoginRateLi
 		procSet[p] = struct{}{}
 	}
 	return &LoginRateLimiter{
-		PerSubjectMax: 10,
-		PerIPMax:      60,
+		PerSubjectMax: perSubjectMax,
+		PerIPMax:      perIPMax,
 		Window:        1 * time.Minute,
 		procedures:    procSet,
 		realIPHeader:  realIPHeader,

@@ -260,6 +260,16 @@ type Auth struct {
 	RefreshTokenTTL   time.Duration `yaml:"refresh_token_ttl" json:"refresh_token_ttl"`
 	ScopedTokenMaxTTL time.Duration `yaml:"scoped_token_max_ttl" json:"scoped_token_max_ttl"`
 
+	// LoginRateLimitPerSubjectPerMinute caps credential-bearing IAM RPCs
+	// (Login + RefreshToken) per (subject, IP) per minute — the credential-
+	// stuffing defence. <= 0 keeps the built-in default (10); set a high value
+	// to effectively disable (e.g. an e2e stack that logs in repeatedly as one
+	// account). Mirrors auth.oauth.token_rate_limit_per_minute.
+	LoginRateLimitPerSubjectPerMinute int `yaml:"login_rate_limit_per_subject_per_minute" json:"login_rate_limit_per_subject_per_minute"`
+	// LoginRateLimitPerIPPerMinute caps the same RPCs per source IP per minute
+	// — the subject-enumeration defence. <= 0 keeps the built-in default (60).
+	LoginRateLimitPerIPPerMinute int `yaml:"login_rate_limit_per_ip_per_minute" json:"login_rate_limit_per_ip_per_minute"`
+
 	// OAuth turns IAM into an OAuth 2.1 Authorization Server (ADR-0009):
 	// the /oauth/authorize + /oauth/token + /oauth/register endpoints that
 	// mint the bearers the MCP Resource Server (ADR-0008) validates.

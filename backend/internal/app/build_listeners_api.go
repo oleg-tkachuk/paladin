@@ -202,7 +202,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			"ExchangeAudience",
 		),
 		apiTokIAM,
-		middleware.NewLoginRateLimiter(cfg.API.Server.IAM.RealIPHeader),
+		middleware.NewLoginRateLimiter(
+			cfg.API.Server.IAM.RealIPHeader,
+			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
+			cfg.Auth.LoginRateLimitPerIPPerMinute,
+		),
 		// Audit IAM mutations (Login, CreateUser, CreateApiKey,
 		// RefreshToken, …). Placed after the permissive interceptor so
 		// anonymous/failed Login attempts are still recorded — a
