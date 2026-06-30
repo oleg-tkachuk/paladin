@@ -706,21 +706,25 @@ open deliberately — each notes why._
     query is acceptable for now — this is a throughput optimization.
 - **Blockers:** none.
 
-### Tenant slug rejects exactly-2-char names (same `{1,61}` quirk)
+### Tenant slug min-length — NOT the object_key 2-char bug (misdiagnosis)
 
-- **Status:** Open (bug) — discovered 2026-06-30.
-- **Reason:** `tenantSlugRE` in `internal/api/v1/apiutil/slug.go`
-  (`^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$`) has the identical quirk that migration
-  045 just fixed for `object_key`: the optional inner group needs ≥2 chars, so
-  a name matches at length 1 OR ≥3 but NOT exactly 2. Realistic 2-char tenant
-  slugs — `eu`, `hq`, `qa` — are rejected at create. (The object_key twin was
-  fixed in 045; this Go-side validator + any matching DB constraint on
-  `tenants.slug` from migration 009 were left untouched to keep that change
-  scoped.)
-- **Definition of Done:** relax the quantifier to `{0,61}` in `tenantSlugRE`
-  AND the `tenants.slug` CHECK constraint (find it — migration 009 region) in
-  a new migration, so both layers agree; unit test for 1/2/3/63-char slugs.
-- **Blockers:** none — mirror of the 045 fix; low risk.
+- **Status:** Won't-do (2026-07-01) — the 2-char rejection is intentional for
+  slugs; only a minor DB-vs-Go drift is worth an eventual tightening.
+- **Reason:** initially flagged as the twin of the object_key 2-char bug, but
+  it is not. `ValidateTenantSlug` (`internal/api/v1/apiutil/slug.go`) has an
+  EXPLICIT `len < 3` check and is documented as "3..63 chars,
+  DNS-label-compatible"; migration 009 states the same intent ("3..63 chars").
+  Tenant slugs double as Cedar `Tenant::"…"` UIDs and subdomain handles, so the
+  3-char floor is deliberate — 2-char slugs (`eu`/`hq`) are rejected ON PURPOSE,
+  not by the `{1,61}` regex accident. Relaxing it (as 045 did for object_key)
+  would WEAKEN a deliberate constraint. No fix made.
+- **Minor drift worth an eventual tightening (low priority):** the DB CHECK
+  `tenants_slug_format` (`^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$`, migration 009)
+  actually accepts a 1-char slug (the group is optional) while the Go validator
+  requires ≥3 — so a direct DB insert could create a slug the API would reject.
+  Tightening the DB CHECK to enforce the same 3-char floor (e.g. add
+  `char_length(slug) >= 3`) would make the layers agree. Defense-in-depth only;
+  the API path already enforces it.
 
 
 
