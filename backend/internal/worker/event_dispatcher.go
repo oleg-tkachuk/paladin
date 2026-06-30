@@ -140,6 +140,14 @@ type Dispatcher struct {
 	// row with a clear error if one shows up). Owned by the
 	// dispatcher pod's main; closed at shutdown.
 	NATS *NatsConnPool
+	// SQS is the optional per-region SQS client pool used by the SQS sink.
+	// nil = no SQS subs configured (deliver() rejects the row with a clear
+	// error if one shows up). Owned by the dispatcher pod's main.
+	SQS *SQSClientPool
+	// RabbitMQ is the optional connection pool used by the RabbitMQ sink.
+	// nil = no rabbitmq subs configured. Owned by the dispatcher pod's main;
+	// closed at shutdown.
+	RabbitMQ *RabbitMQConnPool
 	// MaxAttempts caps retry per subscription on the synchronous
 	// DeliverOne path. <=0 → 3. The outbox loop's retry budget is
 	// driven by OutboxRunner.DefaultMaxAttempts instead.
@@ -262,7 +270,11 @@ func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscript
 		return d.deliverHTTPWithStatus(ctx, sub, evt)
 	case "nats":
 		return d.deliverNATS(ctx, sub, evt)
-	case "kafka", "sqs":
+	case "sqs":
+		return d.deliverSQS(ctx, sub, evt)
+	case "rabbitmq":
+		return d.deliverRabbitMQ(ctx, sub, evt)
+	case "kafka":
 		return 0, fmt.Errorf("sink %q delivery not yet wired", sub.SinkKind)
 	default:
 		return 0, fmt.Errorf("unknown sink kind %q", sub.SinkKind)

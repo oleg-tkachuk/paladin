@@ -333,6 +333,7 @@ message EventSink {
     KafkaSink kafka = 2;
     SqsSink sqs = 3;
     NatsSink nats = 4;
+    RabbitMqSink rabbitmq = 5;
   }
 }
 
@@ -352,6 +353,21 @@ message KafkaSink {
 message SqsSink {
   string queue_url = 1;
   string region = 2;
+}
+
+// RabbitMqSink dispatches CloudEvents-formatted JSON payloads to a RabbitMQ
+// exchange. The dispatcher publishes with publisher-confirms (acked) and
+// persistent delivery mode, so a row only flips to delivered once the broker
+// has durably accepted the message. Connection-pooled by URL.
+message RabbitMqSink {
+  // AMQP URL, e.g. "amqp://user:pass@rabbit.svc:5672/vhost". Credentials
+  // ride in the URL userinfo.
+  string url = 1;
+  // Target exchange. Empty string = the default (nameless) exchange, in
+  // which case routing_key is the destination queue name.
+  string exchange = 2;
+  // Routing key (or queue name when exchange is empty).
+  string routing_key = 3;
 }
 
 // NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS

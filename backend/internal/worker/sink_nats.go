@@ -264,6 +264,30 @@ type cloudEventEnvelope struct {
 // for in-cluster lab deployments where there is no canonical URL.
 const natsDefaultSource = "paladin"
 
+// newCloudEventEnvelope builds the CloudEvents 1.0 envelope shared by every
+// JSON-publishing sink (NATS, SQS, RabbitMQ). The `id` MUST be unique per
+// event for a given source so consumers can dedup: prefer the delivery-row
+// id (stamped by the drain loop, stable across retries) and fall back to the
+// subscription id only on the synchronous DeliverOne test path, which has no
+// delivery row.
+func (d *Dispatcher) newCloudEventEnvelope(sub admindomain.EventSubscription, evt Event) cloudEventEnvelope {
+	eventID := evt.ID
+	if eventID == "" {
+		eventID = sub.SubscriptionID.String()
+	}
+	return cloudEventEnvelope{
+		SpecVersion:     "1.0",
+		Type:            evt.Type,
+		Source:          natsDefaultSource,
+		ID:              eventID,
+		Time:            evt.At.UTC().Format(time.RFC3339Nano),
+		Subject:         evt.ResourceName,
+		TenantID:        evt.TenantID,
+		DataContentType: "application/json",
+		Data:            evt.Payload,
+	}
+}
+
 // deliverNATS publishes a CloudEvents 1.0 envelope to the NATS
 // subject configured on the subscription. Fire-and-forget at the
 // protocol level — there's no broker ack like HTTP's 2xx, so success
@@ -289,22 +313,7 @@ func (d *Dispatcher) deliverNATS(ctx context.Context, sub admindomain.EventSubsc
 	// consumers can dedup. Prefer the delivery-row id (stamped by the drain
 	// loop, stable across retries); fall back to the subscription id only on
 	// the synchronous DeliverOne test path, which has no delivery row.
-	eventID := evt.ID
-	if eventID == "" {
-		eventID = sub.SubscriptionID.String()
-	}
-	envelope := cloudEventEnvelope{
-		SpecVersion:     "1.0",
-		Type:            evt.Type,
-		Source:          natsDefaultSource,
-		ID:              eventID,
-		Time:            evt.At.UTC().Format(time.RFC3339Nano),
-		Subject:         evt.ResourceName,
-		TenantID:        evt.TenantID,
-		DataContentType: "application/json",
-		Data:            evt.Payload,
-	}
-	body, err := json.Marshal(envelope)
+	body, err := json.Marshal(d.newCloudEventEnvelope(sub, evt))
 	if err != nil {
 		return 0, fmt.Errorf("nats sink: marshal envelope: %w", err)
 	}

@@ -497,40 +497,30 @@ open deliberately — each notes why._
 
 ### Event dispatcher: RabbitMQ sink
 
-- **Status:** Deferred
-- **Reason:** Same proto stub returns `"not yet wired"` shape — but
-  RabbitMQ isn't even in the proto today (no `RabbitMQSink` field in
-  `EventSink.oneof`). Library footprint is moderate (~2MB for
-  `rabbitmq/amqp091-go`), middling enterprise prevalence (legacy
-  banking / fintech, slowly migrating off). Lower priority than NATS
-  (cloud-native fit) and Kafka (enterprise standard); only worth
-  building when a customer specifically runs it.
-- **Definition of Done:**
-  - Proto extension: add `RabbitMQSink` to `EventSink.oneof`
-    (URL, exchange, routing_key, optional virtual_host, optional
-    credentials reference).
-  - `internal/worker/sink_rabbitmq.go` — connection-pooled client
-    with `amqp091-go`, channel-per-publisher, reconnect on socket
-    drop, publisher-confirms enabled (so `deliverRabbitMQ` only
-    returns success after the broker ACKs the publish).
-  - `Dispatcher.deliverRabbitMQ` publishes a CloudEvents 1.0
-    envelope to the configured exchange + routing key. JSON body,
-    `content_type: application/cloudevents+json`.
-  - Auth: AMQP URL with embedded user:pass (resolved from SecretRef)
-    or AMQPS with TLS client certs.
-  - `cfg.Dispatcher.RabbitMQ.URL` (default empty = disabled),
-    `MaxReconnect`, `Heartbeat` knobs.
-  - Health probe: dispatcher's `/system/health.json` gains a
-    "rabbitmq:<host>" subsystem check that reports broker
-    connectivity when at least one RabbitMQ sink is configured.
-  - Frontend `/events` connector template: prefilled exchange +
-    routing-key fields + auth-field group for RabbitMQ sinks.
-  - Tests: outbox row → RabbitMQ publish round-trip via
-    testcontainers, reconnect handling, publisher-confirms behaviour
-    when broker drops the channel mid-publish.
-- **Trigger to do:** customer ask — typically banking / fintech
-  enterprise that already has a RabbitMQ cluster as their event bus
-  and won't migrate to NATS / Kafka for one new producer.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; ops/UI
+  follow-ups remain.
+- **Shipped:** `RabbitMqSink{url, exchange, routing_key}` added to the
+  proto `EventSink.oneof` (field 5) + frontend types regenerated;
+  `internal/worker/sink_rabbitmq.go` — `RabbitMQConnPool` (dial-per-URL,
+  cached, redial on a dropped/closed connection), channel-per-publish with
+  **publisher-confirms** (`deliverRabbitMQ` only returns success after the
+  broker ACKs) and persistent delivery mode; wired into `deliver()` + the
+  delivery dispatcher in `serve_dispatcher.go`; conv.go round-trip mapping;
+  unit tests (`sink_rabbitmq_test.go`) via a `rabbitPublisher` seam covering
+  envelope/routing, error mapping, and the redial-on-unhealthy path. Auth
+  rides in the AMQP URL (`amqp(s)://user:pass@host/vhost`).
+- **Definition of Done (remaining):**
+  - Real-broker integration test (testcontainers RabbitMQ): outbox row →
+    publish round-trip + channel-drop-mid-publish behaviour. (The unit
+    tests use a publisher seam, so wire compatibility is unproven.)
+  - AMQPS with TLS **client certs** (today only URL-embedded creds /
+    server-TLS via `amqps://`).
+  - Health probe: dispatcher `/system/health.json` gains a
+    "rabbitmq:<host>" subsystem check when ≥1 RabbitMQ sink is configured.
+  - Frontend `/events` connector form: exchange + routing-key + auth fields
+    for RabbitMQ sinks (the proto/types exist; the form does not).
+- **Trigger to do:** customer ask — banking / fintech enterprise already
+  running a RabbitMQ cluster as their event bus.
 
 ### NATS auth: NKey / JWT support
 
@@ -563,22 +553,26 @@ open deliberately — each notes why._
 
 ### Event dispatcher: SQS sink
 
-- **Status:** Deferred
-- **Reason:** Same proto stub returns `"not yet wired"` for `sqs`.
-  Only matters for AWS-native customers. AWS SDK v2 already in tree
-  (used by `internal/storage/s3.go`); adding `aws-sdk-go-v2/service/sqs`
-  is light. Lower priority than NATS / Kafka because the customer
-  base wanting SQS specifically is small (most AWS customers can use
-  EventBridge or HTTP webhooks).
-- **Definition of Done:**
-  - `SqsSink` populated (queue_url, region, optional role_arn for
-    cross-account delivery).
-  - `deliverSQS` uses `SendMessageBatch` for throughput when the
-    outbox poll returns multiple rows targeting the same queue.
-  - IAM role wiring documented (when running outside EKS / not on
-    AWS, expect explicit access keys via SecretRef).
-  - CloudEvents envelope (encoded as the SQS message body string).
-- **Trigger to do:** AWS-native customer with SQS as their bus.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; throughput/ops
+  follow-ups remain.
+- **Shipped:** `SqsSink{queue_url, region}` (already in the proto) wired
+  end-to-end — `internal/worker/sink_sqs.go` with `SQSClientPool` (one
+  `aws-sdk-go-v2/service/sqs` client cached per region, lazy AWS-config
+  resolution), `deliverSQS` publishes the CloudEvents 1.0 envelope as the
+  SQS message body and sets `MessageGroupId`(tenant) + `MessageDeduplicationId`
+  (stable delivery-row id) for **`.fifo`** queues; wired into `deliver()` +
+  the delivery dispatcher; unit tests (`sink_sqs_test.go`) via an `sqsSender`
+  seam covering standard + FIFO + error/missing-config paths. Auth = the
+  default AWS credential chain (IRSA / env / shared config).
+- **Definition of Done (remaining):**
+  - Real-queue integration test (elasticmq / localstack testcontainer):
+    outbox row → SendMessage round-trip. (Unit tests use a sender seam.)
+  - `SendMessageBatch` when an outbox poll returns multiple rows targeting
+    the same queue (today one SendMessage per row).
+  - `role_arn` for cross-account delivery (today: ambient creds only).
+  - Doc: IAM wiring for non-EKS / off-AWS (explicit keys via SecretRef).
+- **Trigger to do:** AWS-native customer with SQS as their bus + a
+  throughput profile that warrants batching.
 
 ### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
 
@@ -756,6 +750,15 @@ open deliberately — each notes why._
   optionally fold the data-plane object-name parse into the resolver.
 - **Blockers:** needs a real (non-lab) deployment emitting the metric over
   OTLP, then ≥1 week of traffic.
+- **2026-06-30 — reviewed, still blocked.** Both halves were re-assessed:
+  the shape-deprecation decision is unchanged (data-gated — no real traffic).
+  The optional data-plane parser-fold was examined: `conv.go`'s
+  `objectKeyNameParts` parses ONLY the C-shape with an INLINE `assertJWTTenant`
+  cross-tenant guard, whereas the central resolver accepts all three shapes
+  and defers authz to handlers. Folding them is therefore a wire-contract +
+  authz-placement change, not a mechanical dedupe — security-sensitive (cf.
+  the cross-tenant `GetObjectKey` fix), so it stays optional/deferred rather
+  than risk a regression for marginal dedup.
 
 ### Cedar policy templates: canonical resource literals
 

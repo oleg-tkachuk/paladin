@@ -101,10 +101,20 @@ var serveDispatcherCmd = &cobra.Command{
 		natsPool := worker.NewNatsConnPool(l.Named("nats-pool"))
 		defer natsPool.Close()
 
+		// SQS + RabbitMQ sink clients, same lazy contract as the NATS pool:
+		// empty until the first sqs/rabbitmq-sink delivery dials. The SQS
+		// pool holds stateless HTTP clients (no Close); the RabbitMQ pool
+		// holds live AMQP connections, drained on shutdown.
+		sqsPool := worker.NewSQSClientPool(l.Named("sqs-pool"))
+		rabbitPool := worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool"))
+		defer rabbitPool.Close()
+
 		dispatcher := &worker.Dispatcher{
-			Store:  store,
-			NATS:   natsPool,
-			Logger: l.Named("event-dispatcher"),
+			Store:    store,
+			NATS:     natsPool,
+			SQS:      sqsPool,
+			RabbitMQ: rabbitPool,
+			Logger:   l.Named("event-dispatcher"),
 		}
 
 		// Pre-warm: scan event_subscriptions WHERE sink_kind='nats'
