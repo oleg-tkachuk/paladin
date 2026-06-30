@@ -315,6 +315,7 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 		ResourceVersion:      resourceVersion(t.ResourceVersion),
 		CreatedAt:            tsProto(t.CreatedAt),
 		UpdatedAt:            tsProto(t.UpdatedAt),
+		DefaultBucket:        t.DefaultBucket,
 	}
 	if !t.DeletedAt.IsZero() {
 		out.DeletedAt = tsProto(t.DeletedAt)

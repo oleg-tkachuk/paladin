@@ -148,7 +148,9 @@ func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid
 	if err != nil {
 		return tenant.Tenant{}, err
 	}
-	return tenantFromSQLC(row.Tenant), nil
+	t := tenantFromSQLC(row.Tenant)
+	t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+	return t, nil
 }
 
 // GetBySlug — slug → tenant row. Used by handlers accepting the
@@ -163,7 +165,9 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 		}
 		return tenant.Tenant{}, err
 	}
-	return tenantFromSQLC(row.Tenant), nil
+	t := tenantFromSQLC(row.Tenant)
+	t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+	return t, nil
 }
 
 func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
@@ -337,7 +341,9 @@ func (r *TenantRepo) List(ctx context.Context, args tenant.ListTenantsArgs) ([]t
 	}
 	out := make([]tenant.Tenant, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, tenantFromSQLC(row.Tenant))
+		t := tenantFromSQLC(row.Tenant)
+		t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+		out = append(out, t)
 	}
 	var next string
 	if int32(len(out)) == pageSize && len(out) > 0 {
@@ -406,7 +412,9 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenant.RenameTenantSlugArg
 		if err != nil {
 			return tenant.Tenant{}, err
 		}
-		return tenantFromSQLC(row.Tenant), nil
+		t := tenantFromSQLC(row.Tenant)
+		t.DefaultBucket = defaultBucketName(row.BackendID, row.BucketName)
+		return t, nil
 	}
 
 	newPolicy := rewriteTenantSlugRefs(oldPolicy, oldSlug, args.NewSlug)
@@ -558,6 +566,16 @@ func rewriteTenantSlugRefs(policy, oldSlug, newSlug string) string {
 	oldRef := `Tenant::"` + oldSlug + `"`
 	newRef := `Tenant::"` + newSlug + `"`
 	return strings.ReplaceAll(policy, oldRef, newRef)
+}
+
+// defaultBucketName composes the tenant's default-binding resource name from
+// the LEFT-JOINed tenant_default_bindings columns. Both are NULL (→ nil) when
+// the tenant has no binding, yielding "" (no default).
+func defaultBucketName(backendID, bucketName *string) string {
+	if backendID == nil || bucketName == nil || *backendID == "" || *bucketName == "" {
+		return ""
+	}
+	return fmt.Sprintf("storageBackends/%s/buckets/%s", *backendID, *bucketName)
 }
 
 func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {

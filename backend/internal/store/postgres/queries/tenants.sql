@@ -5,14 +5,18 @@ INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_poli
 VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetTenant :one
-SELECT sqlc.embed(tenants)
+-- LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+-- so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
+SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE tenant_id = $1;
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE tenants.tenant_id = $1;
 
 -- name: GetTenantBySlug :one
-SELECT sqlc.embed(tenants)
+SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE slug = $1;
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE tenants.slug = $1;
 
 -- name: UpdateTenant :execrows
 UPDATE tenants
@@ -31,17 +35,18 @@ WHERE tenant_id = $1
 -- The boolean gating is inline-CASE so sqlc emits a single prepared
 -- statement; planner uses the partial idx_tenants_active index on
 -- the common path.
-SELECT sqlc.embed(tenants)
+SELECT sqlc.embed(tenants), tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenant_id > sqlc.narg('after_id')::uuid)
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.tenant_id > sqlc.narg('after_id')::uuid)
   AND (
     CASE
-      WHEN sqlc.arg('only_trashed')::bool      THEN deleted_at IS NOT NULL
+      WHEN sqlc.arg('only_trashed')::bool      THEN tenants.deleted_at IS NOT NULL
       WHEN sqlc.arg('include_trashed')::bool   THEN TRUE
-      ELSE                                          deleted_at IS NULL
+      ELSE                                          tenants.deleted_at IS NULL
     END
   )
-ORDER BY tenant_id
+ORDER BY tenants.tenant_id
 LIMIT sqlc.arg('page_size');
 
 -- name: SoftDeleteTenant :execrows

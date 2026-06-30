@@ -126,6 +126,8 @@ type Querier interface {
 	GetReplicationWatermark(ctx context.Context, backendID string, bucketName string) (pgtype.Timestamptz, error)
 	GetStorageBackend(ctx context.Context, id string) (GetStorageBackendRow, error)
 	GetStorageBackendV2(ctx context.Context, id string) (GetStorageBackendV2Row, error)
+	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)

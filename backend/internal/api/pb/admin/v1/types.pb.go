@@ -1250,7 +1250,13 @@ type Tenant struct {
 	// out of ListTenants by default (set include_trashed or only_trashed
 	// to see them). Hard-delete (PurgeTenant / DeleteTenant force=true)
 	// removes the row physically.
-	DeletedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	// default_bucket — resource name of the (backend, bucket) this tenant is
+	// bound to by default: "storageBackends/{backend_id}/buckets/{bucket_name}".
+	// Sourced from the tenant_default_bindings row written at CreateTenant time;
+	// empty when the tenant has no default binding (legacy / never set).
+	// Read-only here — set the binding via CreateTenant.default_bucket.
+	DefaultBucket string `protobuf:"bytes,11,opt,name=default_bucket,json=defaultBucket,proto3" json:"default_bucket,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1353,6 +1359,13 @@ func (x *Tenant) GetDeletedAt() *timestamppb.Timestamp {
 		return x.DeletedAt
 	}
 	return nil
+}
+
+func (x *Tenant) GetDefaultBucket() string {
+	if x != nil {
+		return x.DefaultBucket
+	}
+	return ""
 }
 
 type ObjectKey struct {
@@ -2397,7 +2410,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x11BucketReplication\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
 	"\x12destination_bucket\x18\x02 \x01(\tR\x11destinationBucket\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xf7\x03\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"\x9e\x04\n" +
 	"\x06Tenant\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12!\n" +
@@ -2412,7 +2425,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x04slug\x18\t \x01(\tR\x04slug\x129\n" +
 	"\n" +
 	"deleted_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x1a9\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12%\n" +
+	"\x0edefault_bucket\x18\v \x01(\tR\rdefaultBucket\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x03\n" +

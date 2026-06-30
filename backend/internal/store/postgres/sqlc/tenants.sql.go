@@ -30,15 +30,20 @@ func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug s
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE tenant_id = $1
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE tenants.tenant_id = $1
 `
 
 type GetTenantRow struct {
-	Tenant Tenant `json:"tenant"`
+	Tenant     Tenant  `json:"tenant"`
+	BackendID  *string `json:"backend_id"`
+	BucketName *string `json:"bucket_name"`
 }
 
+// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),
+// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenantRow, error) {
 	row := q.db.QueryRow(ctx, getTenant, tenantID)
 	var i GetTenantRow
@@ -53,18 +58,23 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
+		&i.BackendID,
+		&i.BucketName,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE slug = $1
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE tenants.slug = $1
 `
 
 type GetTenantBySlugRow struct {
-	Tenant Tenant `json:"tenant"`
+	Tenant     Tenant  `json:"tenant"`
+	BackendID  *string `json:"backend_id"`
+	BucketName *string `json:"bucket_name"`
 }
 
 func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error) {
@@ -81,6 +91,8 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
+		&i.BackendID,
+		&i.BucketName,
 	)
 	return i, err
 }
@@ -103,22 +115,25 @@ func (q *Queries) HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, ex
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
 FROM tenants
-WHERE ($1::uuid IS NULL OR tenant_id > $1::uuid)
+LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
+WHERE ($1::uuid IS NULL OR tenants.tenant_id > $1::uuid)
   AND (
     CASE
-      WHEN $2::bool      THEN deleted_at IS NOT NULL
+      WHEN $2::bool      THEN tenants.deleted_at IS NOT NULL
       WHEN $3::bool   THEN TRUE
-      ELSE                                          deleted_at IS NULL
+      ELSE                                          tenants.deleted_at IS NULL
     END
   )
-ORDER BY tenant_id
+ORDER BY tenants.tenant_id
 LIMIT $4
 `
 
 type ListTenantsRow struct {
-	Tenant Tenant `json:"tenant"`
+	Tenant     Tenant  `json:"tenant"`
+	BackendID  *string `json:"backend_id"`
+	BucketName *string `json:"bucket_name"`
 }
 
 // include_trashed = false → active rows only; true → both;
@@ -151,6 +166,8 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 			&i.Tenant.UpdatedAt,
 			&i.Tenant.Slug,
 			&i.Tenant.DeletedAt,
+			&i.BackendID,
+			&i.BucketName,
 		); err != nil {
 			return nil, err
 		}

@@ -49,6 +49,17 @@ import { T } from "@/lib/ui/typography";
 
 type SortColumn = "slug" | "displayName";
 
+// Tenant.default_bucket is the resource name of the (backend, bucket) the
+// tenant is bound to: "storageBackends/{backend}/buckets/{bucket}". Empty when
+// the tenant has no default bucket set. Split it into the two parts so the
+// list can show them as separate columns.
+function parseDefaultBucket(
+  name: string,
+): { backend: string; bucket: string } | null {
+  const m = /^storageBackends\/([^/]+)\/buckets\/(.+)$/.exec(name);
+  return m ? { backend: m[1], bucket: m[2] } : null;
+}
+
 function SortHeader({
   label,
   column,
@@ -201,6 +212,8 @@ export default function TenantsPage() {
                   onSort={handleSort}
                 />
               </TableHead>
+              <TableHead className="hidden md:table-cell">Backend</TableHead>
+              <TableHead className="hidden md:table-cell">Bucket</TableHead>
               <TableHead className="hidden md:table-cell">Labels</TableHead>
               <TableHead className="hidden lg:table-cell w-[280px]">
                 Tenant ID
@@ -214,14 +227,14 @@ export default function TenantsPage() {
             {loading && tenants.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={5} className="py-3">
+                  <TableCell colSpan={7} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-48 text-center">
+                <TableCell colSpan={7} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <BuildingOfficeIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -245,6 +258,7 @@ export default function TenantsPage() {
             ) : (
               filtered.map((tenant) => {
                 const labelEntries = Object.entries(tenant.labels);
+                const db = parseDefaultBucket(tenant.defaultBucket);
                 // Slug is the canonical handle in URLs; UUID is the
                 // safety net when slug is empty (legacy rows). Phase 0
                 // makes slug NOT NULL UNIQUE, so the fallback only
@@ -281,6 +295,20 @@ export default function TenantsPage() {
                           </span>
                         )}
                       </Link>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {db ? (
+                        <span className="font-mono text-xs">{db.backend}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {db ? (
+                        <span className="font-mono text-xs">{db.bucket}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {labelEntries.length === 0 ? (

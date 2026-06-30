@@ -61,6 +61,11 @@ type Tenant struct {
 	// 036 added the underlying column; the soft-delete RPCs populate
 	// it; restore clears it back to zero.
 	DeletedAt time.Time
+	// DefaultBucket is the resource name of the tenant's default (backend,
+	// bucket) binding — "storageBackends/{backend_id}/buckets/{bucket_name}"
+	// — sourced from tenant_default_bindings on read. Empty when unbound.
+	// Populated only by the read paths (Get / GetBySlug / List).
+	DefaultBucket string
 }
 
 type CreateTenantArgs struct {

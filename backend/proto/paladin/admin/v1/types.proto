@@ -213,6 +213,12 @@ message Tenant {
   // to see them). Hard-delete (PurgeTenant / DeleteTenant force=true)
   // removes the row physically.
   google.protobuf.Timestamp deleted_at = 10;
+  // default_bucket — resource name of the (backend, bucket) this tenant is
+  // bound to by default: "storageBackends/{backend_id}/buckets/{bucket_name}".
+  // Sourced from the tenant_default_bindings row written at CreateTenant time;
+  // empty when the tenant has no default binding (legacy / never set).
+  // Read-only here — set the binding via CreateTenant.default_bucket.
+  string default_bucket = 11;
 }
 
 // ─── ObjectKey ──────────────────────────────────────────────────────────────
