@@ -59,6 +59,7 @@ const makeSub = (name: string, url: string) => ({
         url,
         signingSecretRef: "",
         maxAttempts: 5,
+        format: "",
       },
     },
   },

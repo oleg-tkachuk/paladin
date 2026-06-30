@@ -2082,7 +2082,18 @@ type HttpSink struct {
 	// HMAC-SHA256 signing secret reference; PALADIN signs each delivery with this.
 	SigningSecretRef string `protobuf:"bytes,2,opt,name=signing_secret_ref,json=signingSecretRef,proto3" json:"signing_secret_ref,omitempty"`
 	// Server applies exponential backoff up to max_attempts.
-	MaxAttempts   int32 `protobuf:"varint,3,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	MaxAttempts int32 `protobuf:"varint,3,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	// Wire format for the POST body:
+	//
+	//	"" / "raw"        → the legacy raw Event JSON (Content-Type
+	//	                    application/json). Default — does not break
+	//	                    existing webhook subscribers.
+	//	"cloudevents"     → a CloudEvents 1.0 envelope (Content-Type
+	//	                    application/cloudevents+json), identical to what
+	//	                    the NATS / SQS / RabbitMQ / Kafka sinks emit.
+	//
+	// New subscribers should pick "cloudevents" so HTTP matches the brokers.
+	Format        string `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2136,6 +2147,13 @@ func (x *HttpSink) GetMaxAttempts() int32 {
 		return x.MaxAttempts
 	}
 	return 0
+}
+
+func (x *HttpSink) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
 }
 
 type KafkaSink struct {
@@ -2585,11 +2603,12 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x03sqs\x18\x03 \x01(\v2\x15.paladin.admin.v1.SqsSinkH\x00R\x03sqs\x12,\n" +
 	"\x04nats\x18\x04 \x01(\v2\x16.paladin.admin.v1.NatsSinkH\x00R\x04nats\x128\n" +
 	"\brabbitmq\x18\x05 \x01(\v2\x1a.paladin.admin.v1.RabbitMqSinkH\x00R\brabbitmqB\b\n" +
-	"\x06target\"m\n" +
+	"\x06target\"\x85\x01\n" +
 	"\bHttpSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
 	"\x12signing_secret_ref\x18\x02 \x01(\tR\x10signingSecretRef\x12!\n" +
-	"\fmax_attempts\x18\x03 \x01(\x05R\vmaxAttempts\";\n" +
+	"\fmax_attempts\x18\x03 \x01(\x05R\vmaxAttempts\x12\x16\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\";\n" +
 	"\tKafkaSink\x12\x18\n" +
 	"\abrokers\x18\x01 \x01(\tR\abrokers\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\">\n" +

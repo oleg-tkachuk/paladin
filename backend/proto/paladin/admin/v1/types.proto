@@ -343,6 +343,15 @@ message HttpSink {
   string signing_secret_ref = 2;
   // Server applies exponential backoff up to max_attempts.
   int32 max_attempts = 3;
+  // Wire format for the POST body:
+  //   "" / "raw"        → the legacy raw Event JSON (Content-Type
+  //                       application/json). Default — does not break
+  //                       existing webhook subscribers.
+  //   "cloudevents"     → a CloudEvents 1.0 envelope (Content-Type
+  //                       application/cloudevents+json), identical to what
+  //                       the NATS / SQS / RabbitMQ / Kafka sinks emit.
+  // New subscribers should pick "cloudevents" so HTTP matches the brokers.
+  string format = 4;
 }
 
 message KafkaSink {

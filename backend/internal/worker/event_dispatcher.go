@@ -298,6 +298,7 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 		URL              string `json:"url"`
 		SigningSecretRef string `json:"signing_secret_ref"`
 		MaxAttempts      int32  `json:"max_attempts"`
+		Format           string `json:"format"`
 	}
 	if err := json.Unmarshal(sub.SinkConfig, &sink); err != nil {
 		return 0, fmt.Errorf("decode sink config: %w", err)
@@ -305,7 +306,21 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 	if sink.URL == "" {
 		return 0, errors.New("http sink missing url")
 	}
-	body, err := json.Marshal(evt)
+	// Wire format: "cloudevents" sends the same CloudEvents 1.0 envelope the
+	// broker sinks emit (symmetry); anything else keeps the legacy raw Event
+	// shape so existing webhook subscribers don't break. The HMAC signature
+	// (below) covers whichever body we send, so verification is unaffected.
+	contentType := "application/json"
+	var (
+		body []byte
+		err  error
+	)
+	if sink.Format == "cloudevents" {
+		contentType = "application/cloudevents+json"
+		body, err = json.Marshal(d.newCloudEventEnvelope(sub, evt))
+	} else {
+		body, err = json.Marshal(evt)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("marshal event: %w", err)
 	}
@@ -335,7 +350,7 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 		if err != nil {
 			return 0, fmt.Errorf("new request: %w", err)
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("X-PALADIN-Event-Type", evt.Type)
 		req.Header.Set("X-PALADIN-Subscription-Id", sub.SubscriptionID.String())
 		// Slice 8: resolve sink.SigningSecretRef from the secret manager

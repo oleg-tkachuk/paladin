@@ -576,34 +576,25 @@ open deliberately — each notes why._
 
 ### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
 
-- **Status:** Aspirational
-- **Reason:** Outbound payload format is currently the raw `Event`
-  struct. CloudEvents 1.0 is the CNCF-graduated standard for
-  event-driven systems; consumers route / filter / dead-letter on
-  attributes (`type`, `source`, `subject`) without parsing the
-  body. The inbound ingest path
-  (`internal/eventingest/source_cloudevents.go`) already speaks
-  CloudEvents — outbound symmetry simplifies operator mental model.
-- **Definition of Done:**
-  - Decision: pick **JSON event format** (RFC 7159) for the wire,
-    not Protobuf — broader consumer compatibility, easier debugging.
-  - Outbound HTTP sink switches to `Content-Type:
-    application/cloudevents+json`, body is the envelope.
-  - NATS / Kafka / SQS sinks use the same envelope as the message
-    body.
-  - `type` follows `paladin.<resource>.<action>` convention
-    (e.g. `paladin.object.uploaded`, `paladin.tenant.created`,
-    `paladin.capability.revoked`).
-  - `source` is the PALADIN deployment URL.
-  - `subject` is the resource name when applicable.
-  - `data` carries the existing `Event.Payload` map.
-  - Existing webhook subscribers may break if they parsed the raw
-    JSON shape — coordinate with operators or version the sink
-    config (`v1` raw, `v2` cloudevents) for backward compat.
-- **Trigger to do:** when the first non-HTTP sink lands (NATS most
-  likely). Sink-side broker consumers expect CloudEvents — the
-  format dichotomy "HTTP gets raw, NATS gets envelope" is the wrong
-  thing to ship.
+- **Status:** Mostly done (2026-06-30) — only a UI selector + a default-flip
+  decision remain.
+- **Shipped:** JSON-format CloudEvents 1.0 envelope (`newCloudEventEnvelope`
+  in `sink_nats.go`) is the body of every broker sink — NATS, SQS, RabbitMQ,
+  Kafka. `type` = `paladin.<resource>.<action>`, `source` = "paladin", `subject` =
+  resource name, `data` = `Event.Payload`. The HTTP sink gained a `format`
+  field (proto `HttpSink.format`): `""`/`"raw"` keeps the legacy raw Event
+  JSON (Content-Type application/json) so existing webhook subscribers are
+  unaffected, `"cloudevents"` sends the envelope with Content-Type
+  application/cloudevents+json — the DoD's "version the sink config" backward
+  -compat path. Unit-tested both HTTP formats (`sink_http_format_test.go`).
+- **Definition of Done (remaining):**
+  - UI: a format selector on the HTTP connector form (`event-subscriptions/
+    _form.ts` hard-codes `format: ""` today; cloudevents is API-reachable only).
+  - Decide whether to flip the HTTP default `""` → `"cloudevents"` once it's
+    confirmed no raw-shape webhook consumers remain (a breaking change, so
+    gated on operator coordination).
+- **Trigger to do:** before onboarding an HTTP subscriber that wants
+  CloudEvents from the UI, or when retiring the legacy raw shape.
 
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 

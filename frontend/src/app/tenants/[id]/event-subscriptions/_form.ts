@@ -17,11 +17,7 @@ import type {
 // of "template"; it's just an HttpSink with whatever URL the user
 // pastes. "custom" is the no-prefill option for everything else.
 export type TemplateId =
-  | "slack"
-  | "discord"
-  | "pagerduty"
-  | "plain-http"
-  | "custom";
+  "slack" | "discord" | "pagerduty" | "plain-http" | "custom";
 
 export interface TemplateDef {
   id: TemplateId;
@@ -221,6 +217,10 @@ export function buildSink(form: FormState): EventSink {
       url: form.httpUrl.trim(),
       signingSecretRef: form.httpSecret.trim(),
       maxAttempts: Number.parseInt(form.httpMaxAttempts, 10) || 5,
+      // "" = legacy raw Event JSON (unchanged behavior). The "cloudevents"
+      // opt-in (envelope, matching the broker sinks) is API-reachable today;
+      // a UI selector for it is a follow-up.
+      format: "",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",
