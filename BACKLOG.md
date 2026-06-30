@@ -396,14 +396,16 @@ open deliberately — each notes why._
 
 ### `ResetPassword` — self-service email delivery
 
-- **Status:** Deferred
-- **Reason:** [userh/handler.go](internal/api/iam/v1/userh/handler.go)
-  `ResetPassword` returns the new password to the caller (admin) so
-  they can hand it off out-of-band. Self-service reset via an email link
-  is the natural production model for PALADIN's own `users` but isn't wired.
-- **Definition of Done:**
-  - Email-link reset flow with single-use signed token.
-- **Blockers:** Email sender selection (SES / Sendgrid / SMTP).
+- **Status:** Won't-do (2026-06-30) — out of scope by product direction.
+- **Reason:** PALADIN is an **engineer-operated** service: its `users` are
+  operators, not end-customers, so password resets are an operational task,
+  not a self-service flow. An admin already calls
+  [userh/handler.go](internal/api/iam/v1/userh/handler.go) `ResetPassword`,
+  which returns the new password to hand off out-of-band — that is the
+  intended model and it is sufficient. Same direction as withdrawing the
+  external/federated IdP: human auth stays PALADIN's own IAM, kept deliberately
+  minimal. Wiring an email-link self-service flow (and an email sender) would
+  add surface area PALADIN's audience doesn't need.
 
 ### Event dispatcher: producer wiring — handler-class integration tests + adoption
 
