@@ -787,20 +787,37 @@ open deliberately — each notes why._
 - **Blockers:** none technical; needs a deploy window so the
   policy-rewrite pass can run before clients start receiving
   canonical-EUID authz decisions.
+- **2026-06-30 — reviewed, stays deferred (do NOT batch).** This is a
+  coordinated, security-sensitive migration, not a code change: the
+  `cedar.Resource` EUID-shape switch and the policy rewrite MUST land
+  atomically — flipping the builder to the A-shape without rewriting the
+  C-shape operator policies in `tenants.inherited_cedar_policy` +
+  `object_keys.cedar_policy` makes every such policy stop matching, i.e.
+  authz starts denying legitimate access. It needs a deploy window + real
+  operator-policy data to validate the rewrite (and a shadow-eval comparing
+  old vs new decisions), and it's coupled to the data-gated Phase 3. Today's
+  C-shape is self-consistent (builder + policies agree) and operator policies
+  keep working, so there is no correctness pressure. Land it as a dedicated,
+  staged change — not folded into a feature batch.
 
 ### `pg_cron` integration as alternative to in-process reapers
 
-- **Status:** Deferred
-- **Reason:** Reapers in `internal/worker/housekeeping.go` are
-  Go-loops by design (works on managed-PG without extensions). On
-  self-hosted PG with `pg_cron` available, native scheduling is
-  cheaper.
-- **Definition of Done:**
-  - Optional `housekeeping.engine: postgres-cron` mode that schedules
-    the same purge SQL via `pg_cron`.
-  - Worker exits cleanly when DB-side scheduling is enabled.
-- **Blockers:** demand. Self-hosted PG with `pg_cron` extension is
-  not the default PALADIN environment.
+- **Status:** Won't-do (2026-06-30) — in-process reapers are the right model
+  for PALADIN; `pg_cron` is not an improvement here.
+- **Reason:** Reviewed against PALADIN's actual deployment. PALADIN runs on **CNPG**,
+  which does not ship `pg_cron` (confirmed: `pg_available_extensions` has no
+  row) — enabling it needs a custom image + `shared_preload_libraries`, an
+  infra dependency PALADIN doesn't carry. The in-process reapers
+  (`housekeeping.go`: RefreshTokenPurger, AuditLogPurger, IdempotencyKeyPurger,
+  OperationsReaper) are partition-aware (DROP PARTITION on the partitioned
+  tables), bounded-batch, observable via the app's OTel metrics/logs, unit +
+  integration tested, and run in the worker's own process/credentials.
+  `pg_cron` would split cleanup logic into raw SQL (away from Go and its
+  tests), need separate observability (`cron.job_run_details`), and add a
+  "worker exits when DB-side scheduling is on" mode — real complexity for a
+  marginal "cheaper scheduling" win on an environment PALADIN doesn't run. If a
+  self-hosted-PG-with-pg_cron customer ever appears, revisit; until then the
+  Go reapers are correct by design, not a stopgap.
 
 ### WAL archiving + PITR runbook
 
