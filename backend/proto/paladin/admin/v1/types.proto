@@ -381,6 +381,11 @@ message KafkaSink {
 message SqsSink {
   string queue_url = 1;
   string region = 2;
+  // Optional IAM role to assume for cross-account delivery: the dispatcher's
+  // ambient credentials (IRSA / env / shared config) sts:AssumeRole into this
+  // role before sending, so a queue in another AWS account is reachable.
+  // Empty = deliver with the ambient credentials directly (same-account).
+  string role_arn = 3;
 }
 
 // RabbitMqSink dispatches CloudEvents-formatted JSON payloads to a RabbitMQ

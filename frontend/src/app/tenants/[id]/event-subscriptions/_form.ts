@@ -180,6 +180,7 @@ export type FormState = {
   // SQS
   sqsQueueUrl: string;
   sqsRegion: string;
+  sqsRoleArn: string;
   // RabbitMQ (auth rides in the AMQP URL userinfo)
   rabbitmqUrl: string;
   rabbitmqExchange: string;
@@ -203,6 +204,7 @@ export const EMPTY_FORM: FormState = {
   kafkaTopic: "",
   sqsQueueUrl: "",
   sqsRegion: "",
+  sqsRoleArn: "",
   rabbitmqUrl: "amqp://guest:guest@rabbitmq.rabbitmq.svc.cluster.local:5672/",
   rabbitmqExchange: "",
   rabbitmqRoutingKey: "paladin.events",
@@ -236,6 +238,7 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.sinkType = "sqs";
     next.sqsQueueUrl = t.value.queueUrl;
     next.sqsRegion = t.value.region;
+    next.sqsRoleArn = t.value.roleArn;
   } else if (t?.case === "rabbitmq") {
     next.sinkType = "rabbitmq";
     next.rabbitmqUrl = t.value.url;
@@ -300,6 +303,7 @@ export function buildSink(form: FormState): EventSink {
     $typeName: "paladin.admin.v1.SqsSink",
     queueUrl: form.sqsQueueUrl.trim(),
     region: form.sqsRegion.trim(),
+    roleArn: form.sqsRoleArn.trim(),
   };
   return {
     $typeName: "paladin.admin.v1.EventSink",

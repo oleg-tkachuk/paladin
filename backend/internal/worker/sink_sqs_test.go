@@ -28,7 +28,7 @@ func (f *fakeSQS) SendMessage(_ context.Context, in *sqs.SendMessageInput, _ ...
 
 func sqsTestDispatcher(fake sqsSender) *Dispatcher {
 	pool := NewSQSClientPool(nil)
-	pool.newClient = func(context.Context, string) (sqsSender, error) { return fake, nil }
+	pool.newClient = func(context.Context, string, string) (sqsSender, error) { return fake, nil }
 	return &Dispatcher{SQS: pool}
 }
 

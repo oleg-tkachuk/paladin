@@ -10,7 +10,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -29,50 +31,71 @@ type sqsSender interface {
 type sqsSinkConfig struct {
 	QueueURL string `json:"queue_url"`
 	Region   string `json:"region"`
+	// RoleArn, when set, is sts:AssumeRole'd before delivery for cross-account
+	// queues. Empty = ambient credentials (same-account).
+	RoleArn string `json:"role_arn"`
 }
 
-// SQSClientPool lazily builds + caches one SQS client per AWS region. Mirrors
-// NatsConnPool's contract: empty until the first sqs-sink delivery, safe for
-// concurrent use, owned by the dispatcher pod. There are no sockets to close
-// (the SDK clients are stateless HTTP), so it needs no Close().
+// SQSClientPool lazily builds + caches one SQS client per (region, roleArn).
+// Mirrors NatsConnPool's contract: empty until the first sqs-sink delivery,
+// safe for concurrent use, owned by the dispatcher pod. There are no sockets
+// to close (the SDK clients are stateless HTTP), so it needs no Close().
+//
+// Keying by (region, roleArn) means a same-account sink and a cross-account
+// sink to the same region get distinct cached clients — each with its own
+// (possibly AssumeRole'd) credential provider.
 type SQSClientPool struct {
 	mu      sync.Mutex
 	clients map[string]sqsSender
 	log     *zap.Logger
-	// newClient builds a region-bound client. Overridable in tests so the
-	// pool can hand back a fake without touching AWS credential resolution.
-	newClient func(ctx context.Context, region string) (sqsSender, error)
+	// newClient builds a region-bound client, assuming roleArn when non-empty.
+	// Overridable in tests so the pool can hand back a fake without touching
+	// AWS credential resolution.
+	newClient func(ctx context.Context, region, roleArn string) (sqsSender, error)
 }
 
 // NewSQSClientPool returns an empty pool whose clients resolve AWS config
-// (credentials chain, region) on first use per region.
+// (credentials chain, region) on first use per (region, roleArn).
 func NewSQSClientPool(log *zap.Logger) *SQSClientPool {
 	return &SQSClientPool{
 		clients: map[string]sqsSender{},
 		log:     log,
-		newClient: func(ctx context.Context, region string) (sqsSender, error) {
+		newClient: func(ctx context.Context, region, roleArn string) (sqsSender, error) {
 			cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
 			if err != nil {
 				return nil, fmt.Errorf("load aws config: %w", err)
+			}
+			if roleArn != "" {
+				// Cross-account: assume the target role off the ambient
+				// (IRSA / env) credentials. Cached so the STS AssumeRole is
+				// re-called only when the SDK refreshes the ~1h credentials.
+				stsClient := sts.NewFromConfig(cfg)
+				cfg.Credentials = aws.NewCredentialsCache(
+					stscreds.NewAssumeRoleProvider(stsClient, roleArn))
 			}
 			return sqs.NewFromConfig(cfg), nil
 		},
 	}
 }
 
-func (p *SQSClientPool) get(ctx context.Context, region string) (sqsSender, error) {
+// clientKey namespaces the cache by region AND assumed role so a same-account
+// and a cross-account sink to one region don't share a client.
+func clientKey(region, roleArn string) string { return region + "\x00" + roleArn }
+
+func (p *SQSClientPool) get(ctx context.Context, region, roleArn string) (sqsSender, error) {
+	key := clientKey(region, roleArn)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if c, ok := p.clients[region]; ok {
+	if c, ok := p.clients[key]; ok {
 		return c, nil
 	}
-	c, err := p.newClient(ctx, region)
+	c, err := p.newClient(ctx, region, roleArn)
 	if err != nil {
 		return nil, err
 	}
-	p.clients[region] = c
+	p.clients[key] = c
 	if p.log != nil {
-		p.log.Info("sqs client built", zap.String("region", region))
+		p.log.Info("sqs client built", zap.String("region", region), zap.Bool("assume_role", roleArn != ""))
 	}
 	return c, nil
 }
@@ -118,7 +141,7 @@ func (d *Dispatcher) deliverSQS(ctx context.Context, sub admindomain.EventSubscr
 		in.MessageDeduplicationId = aws.String(dedup)
 	}
 
-	client, err := d.SQS.get(ctx, cfg.Region)
+	client, err := d.SQS.get(ctx, cfg.Region, cfg.RoleArn)
 	if err != nil {
 		return 0, err
 	}

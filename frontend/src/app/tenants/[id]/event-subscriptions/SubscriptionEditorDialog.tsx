@@ -435,6 +435,21 @@ export function SubscriptionEditorDialog({
                     }
                   />
                 </Field>
+                <Field
+                  label="Assume-role ARN"
+                  htmlFor="sub-sqs-role-arn"
+                  optional
+                  hint="For cross-account delivery: the dispatcher sts:AssumeRole's into this role before sending. Empty = deliver with the dispatcher's ambient (IRSA / env) credentials."
+                >
+                  <Input
+                    id="sub-sqs-role-arn"
+                    value={form.sqsRoleArn}
+                    placeholder="arn:aws:iam::123456789012:role/paladin-sqs-delivery"
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, sqsRoleArn: e.target.value }))
+                    }
+                  />
+                </Field>
               </>
             )}
 

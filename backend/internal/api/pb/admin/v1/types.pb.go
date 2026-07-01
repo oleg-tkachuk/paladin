@@ -2263,9 +2263,14 @@ func (x *KafkaSink) GetTopic() string {
 }
 
 type SqsSink struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QueueUrl      string                 `protobuf:"bytes,1,opt,name=queue_url,json=queueUrl,proto3" json:"queue_url,omitempty"`
-	Region        string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	QueueUrl string                 `protobuf:"bytes,1,opt,name=queue_url,json=queueUrl,proto3" json:"queue_url,omitempty"`
+	Region   string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	// Optional IAM role to assume for cross-account delivery: the dispatcher's
+	// ambient credentials (IRSA / env / shared config) sts:AssumeRole into this
+	// role before sending, so a queue in another AWS account is reachable.
+	// Empty = deliver with the ambient credentials directly (same-account).
+	RoleArn       string `protobuf:"bytes,3,opt,name=role_arn,json=roleArn,proto3" json:"role_arn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2310,6 +2315,13 @@ func (x *SqsSink) GetQueueUrl() string {
 func (x *SqsSink) GetRegion() string {
 	if x != nil {
 		return x.Region
+	}
+	return ""
+}
+
+func (x *SqsSink) GetRoleArn() string {
+	if x != nil {
+		return x.RoleArn
 	}
 	return ""
 }
@@ -2670,10 +2682,11 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x06format\x18\x04 \x01(\tR\x06format\";\n" +
 	"\tKafkaSink\x12\x18\n" +
 	"\abrokers\x18\x01 \x01(\tR\abrokers\x12\x14\n" +
-	"\x05topic\x18\x02 \x01(\tR\x05topic\">\n" +
+	"\x05topic\x18\x02 \x01(\tR\x05topic\"Y\n" +
 	"\aSqsSink\x12\x1b\n" +
 	"\tqueue_url\x18\x01 \x01(\tR\bqueueUrl\x12\x16\n" +
-	"\x06region\x18\x02 \x01(\tR\x06region\"]\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\x12\x19\n" +
+	"\brole_arn\x18\x03 \x01(\tR\aroleArn\"]\n" +
 	"\fRabbitMqSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1a\n" +
 	"\bexchange\x18\x02 \x01(\tR\bexchange\x12\x1f\n" +

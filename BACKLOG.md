@@ -563,8 +563,8 @@ open deliberately — each notes why._
 
 ### Event dispatcher: SQS sink
 
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; throughput/ops
-  follow-ups remain.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; cross-account
+  `role_arn` SHIPPED 2026-07-01; batching + integration test + doc remain.
 - **Shipped:** `SqsSink{queue_url, region}` (already in the proto) wired
   end-to-end — `internal/worker/sink_sqs.go` with `SQSClientPool` (one
   `aws-sdk-go-v2/service/sqs` client cached per region, lazy AWS-config
@@ -574,12 +574,22 @@ open deliberately — each notes why._
   the delivery dispatcher; unit tests (`sink_sqs_test.go`) via an `sqsSender`
   seam covering standard + FIFO + error/missing-config paths. Auth = the
   default AWS credential chain (IRSA / env / shared config).
+- **Shipped (2026-07-01) — cross-account `role_arn`:** `SqsSink.role_arn`
+  (proto field 3). When set, `SQSClientPool.newClient` wraps the ambient
+  credentials in an `stscreds.AssumeRoleProvider` (cached) so a queue in
+  another AWS account is reachable; the pool now keys clients by
+  `(region, role_arn)` so same- and cross-account sinks to one region don't
+  share a client. `deliverSQS` threads `cfg.RoleArn`; the `/events` SQS
+  connector form gains an optional "Assume-role ARN" field. Unit-tested via
+  the `newClient` seam (pool keying + threading); the actual STS AssumeRole is
+  only reachable against live AWS.
 - **Definition of Done (remaining):**
   - Real-queue integration test (elasticmq / localstack testcontainer):
     outbox row → SendMessage round-trip. (Unit tests use a sender seam.)
   - `SendMessageBatch` when an outbox poll returns multiple rows targeting
-    the same queue (today one SendMessage per row).
-  - `role_arn` for cross-account delivery (today: ambient creds only).
+    the same queue (today one SendMessage per row) — deferred: it restructures
+    the correctness-critical OutboxRunner tick loop, which is integration-only
+    testable, so it wants the elasticmq test landed first.
   - Doc: IAM wiring for non-EKS / off-AWS (explicit keys via SecretRef).
 - **Trigger to do:** AWS-native customer with SQS as their bus + a
   throughput profile that warrants batching.

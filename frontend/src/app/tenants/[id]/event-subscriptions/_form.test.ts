@@ -151,3 +151,57 @@ describe("RabbitMQ sink", () => {
     expect(errs.rabbitmqRoutingKey).toBeUndefined();
   });
 });
+
+// SQS cross-account role_arn — optional; round-trips through build + hydrate.
+describe("SQS sink role_arn (cross-account)", () => {
+  const sqsTarget = (sink: ReturnType<typeof buildSink>) =>
+    sink.target.case === "sqs" ? sink.target.value : undefined;
+
+  it("builds the optional roleArn (trimmed); empty stays empty", () => {
+    const withRole = sqsTarget(
+      buildSink({
+        ...EMPTY_FORM,
+        sinkType: "sqs",
+        sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/999/q",
+        sqsRegion: "us-east-1",
+        sqsRoleArn: "  arn:aws:iam::999:role/deliver  ",
+      }),
+    );
+    expect(withRole?.roleArn).toBe("arn:aws:iam::999:role/deliver");
+
+    const noRole = sqsTarget(
+      buildSink({
+        ...EMPTY_FORM,
+        sinkType: "sqs",
+        sqsQueueUrl: "https://sqs.us-east-1.amazonaws.com/123/q",
+        sqsRegion: "us-east-1",
+      }),
+    );
+    expect(noRole?.roleArn).toBe("");
+  });
+
+  it("hydrates roleArn from an existing subscription", () => {
+    const f = formFromSubscription({
+      $typeName: "paladin.admin.v1.EventSubscription",
+      name: "tenants/t-1/eventSubscriptions/s1",
+      tenantId: "t-1",
+      filter: "",
+      disabled: false,
+      resourceVersion: "v1",
+      sink: {
+        $typeName: "paladin.admin.v1.EventSink",
+        target: {
+          case: "sqs",
+          value: {
+            $typeName: "paladin.admin.v1.SqsSink",
+            queueUrl: "https://sqs.eu-west-1.amazonaws.com/999/q",
+            region: "eu-west-1",
+            roleArn: "arn:aws:iam::999:role/deliver",
+          },
+        },
+      },
+    } as EventSubscription);
+    expect(f.sinkType).toBe("sqs");
+    expect(f.sqsRoleArn).toBe("arn:aws:iam::999:role/deliver");
+  });
+});
