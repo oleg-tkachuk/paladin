@@ -79,6 +79,33 @@ func (p *RabbitMQConnPool) get(url string) (rabbitPublisher, error) {
 	return pub, nil
 }
 
+// Statuses returns a snapshot of (url → healthy) for every pooled connection.
+// The dispatcher's health probe walks this to surface per-broker connectivity
+// in /system/health.json. An empty map means no RabbitMQ sink has dialed yet
+// (nothing to report), which the probe treats as healthy-but-empty.
+func (p *RabbitMQConnPool) Statuses() map[string]bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]bool, len(p.pubs))
+	for url, pub := range p.pubs {
+		out[url] = pub.healthy()
+	}
+	return out
+}
+
+// Warmup dials each URL once (best-effort) so the health probe has something
+// to report before the first delivery — mirrors the NATS pool. Dial failures
+// are logged, not returned; the per-row deliver path retries under the row's
+// normal budget.
+func (p *RabbitMQConnPool) Warmup(urls []string) {
+	for _, url := range urls {
+		if _, err := p.get(url); err != nil && p.log != nil {
+			p.log.Warn("rabbitmq: pre-warm dial failed",
+				zap.String("url", url), zap.Error(err))
+		}
+	}
+}
+
 // Close drains every pooled connection. Safe to call from a defer in the
 // dispatcher pod's main.
 func (p *RabbitMQConnPool) Close() {

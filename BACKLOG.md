@@ -497,8 +497,8 @@ open deliberately — each notes why._
 
 ### Event dispatcher: RabbitMQ sink
 
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; ops/UI
-  follow-ups remain.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; health probe
+  SHIPPED 2026-07-01; integration test + AMQPS client-certs + UI form remain.
 - **Shipped:** `RabbitMqSink{url, exchange, routing_key}` added to the
   proto `EventSink.oneof` (field 5) + frontend types regenerated;
   `internal/worker/sink_rabbitmq.go` — `RabbitMQConnPool` (dial-per-URL,
@@ -509,16 +509,22 @@ open deliberately — each notes why._
   unit tests (`sink_rabbitmq_test.go`) via a `rabbitPublisher` seam covering
   envelope/routing, error mapping, and the redial-on-unhealthy path. Auth
   rides in the AMQP URL (`amqp(s)://user:pass@host/vhost`).
+- **Shipped (2026-07-01) — health probe:** the dispatcher's
+  `/system/health.json` gains a non-critical `rabbitmq` subsystem check
+  (mirrors the `nats` one): `RabbitMQConnPool.Statuses()` reports each dialed
+  broker's connection health, and a dropped/closed connection fails the probe
+  (empty pool → healthy-but-empty). `preWarmRabbitMQ` scans rabbitmq-sink
+  subscriptions at boot and dials each broker so the row is populated before
+  the first delivery. `RabbitMQConnPool.Warmup` + `Statuses` unit-tested.
 - **Definition of Done (remaining):**
   - Real-broker integration test (testcontainers RabbitMQ): outbox row →
     publish round-trip + channel-drop-mid-publish behaviour. (The unit
     tests use a publisher seam, so wire compatibility is unproven.)
   - AMQPS with TLS **client certs** (today only URL-embedded creds /
     server-TLS via `amqps://`).
-  - Health probe: dispatcher `/system/health.json` gains a
-    "rabbitmq:<host>" subsystem check when ≥1 RabbitMQ sink is configured.
   - Frontend `/events` connector form: exchange + routing-key + auth fields
-    for RabbitMQ sinks (the proto/types exist; the form does not).
+    for RabbitMQ sinks (the proto/types exist; the form does not — RabbitMQ
+    isn't even in the SinkType selector).
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 

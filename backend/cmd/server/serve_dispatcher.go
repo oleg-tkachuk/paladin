@@ -130,6 +130,7 @@ var serveDispatcherCmd = &cobra.Command{
 		// still boots and per-row deliver will retry the dial under
 		// the row's normal retry budget.
 		preWarmNATS(ctx, dispatcherPool, natsPool, l)
+		preWarmRabbitMQ(ctx, dispatcherPool, rabbitPool, l)
 
 		runner := &worker.OutboxRunner{
 			Pool:               dispatcherPool,
@@ -146,7 +147,7 @@ var serveDispatcherCmd = &cobra.Command{
 		if opsAddr == "" {
 			opsAddr = ":8099"
 		}
-		opsMux, _ := dispatcherOpsMux(deps, runner, natsPool, l)
+		opsMux, _ := dispatcherOpsMux(deps, runner, natsPool, rabbitPool, l)
 		opsSrv := &http.Server{
 			Addr:              opsAddr,
 			ReadHeaderTimeout: 5 * time.Second,
@@ -222,7 +223,7 @@ func newDispatcherPool(ctx context.Context, dsn, password string, l *zap.Logger)
 //     non-required so a temporary NATS outage flips the JSON to
 //     degraded but does NOT take /readyz to 503 — the rest of the
 //     pod (HTTP delivery, outbox writes) is still healthy.
-func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPool *worker.NatsConnPool, l *zap.Logger) (http.Handler, *health.Handler) {
+func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPool *worker.NatsConnPool, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) (http.Handler, *health.Handler) {
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("dispatcher")
 	app.AddSubsystemCheck(healthH, "outbox", true, func(ctx context.Context) error {
 		_, err := runner.PendingCount(ctx)
@@ -238,6 +239,18 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPoo
 		for url, status := range st {
 			if status != nats.CONNECTED {
 				return fmt.Errorf("nats %s: status=%s", url, status)
+			}
+		}
+		return nil
+	})
+	// Non-critical, mirrors the nats check: a dropped/closed RabbitMQ
+	// connection the dispatcher was using fails the probe (surfaced on
+	// /system/health.json) without gating readiness. Empty pool (no
+	// rabbitmq sub dialed / warmed) → healthy-but-empty.
+	app.AddSubsystemCheck(healthH, "rabbitmq", false, func(ctx context.Context) error {
+		for url, healthy := range rabbitPool.Statuses() {
+			if !healthy {
+				return fmt.Errorf("rabbitmq %s: connection unhealthy", url)
 			}
 		}
 		return nil
@@ -299,6 +312,46 @@ func preWarmNATS(ctx context.Context, pool *pgxpool.Pool, natsPool *worker.NatsC
 	}
 	l.Info("nats pre-warm: dialing servers", zap.Int("targets", len(targets)))
 	natsPool.Warmup(targets)
+}
+
+// preWarmRabbitMQ scans every rabbitmq-sink subscription once at boot and
+// dials the pool for each unique broker URL, so the /system/health.json
+// "rabbitmq" check reports on configured brokers before the first delivery.
+// Best-effort, mirroring preWarmNATS: dial failures are logged, never fatal.
+func preWarmRabbitMQ(ctx context.Context, pool *pgxpool.Pool, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) {
+	rows, err := pool.Query(ctx,
+		`SELECT sink_config FROM event_subscriptions
+		  WHERE sink_kind = 'rabbitmq' AND disabled = false`)
+	if err != nil {
+		l.Warn("rabbitmq pre-warm: scan failed", zap.Error(err))
+		return
+	}
+	defer rows.Close()
+	seen := make(map[string]struct{})
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			l.Warn("rabbitmq pre-warm: row scan failed", zap.Error(err))
+			continue
+		}
+		var cfg struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(raw, &cfg); err != nil || cfg.URL == "" {
+			continue
+		}
+		seen[cfg.URL] = struct{}{}
+	}
+	if len(seen) == 0 {
+		l.Info("rabbitmq pre-warm: no rabbitmq-sink subscriptions configured")
+		return
+	}
+	urls := make([]string, 0, len(seen))
+	for u := range seen {
+		urls = append(urls, u)
+	}
+	l.Info("rabbitmq pre-warm: dialing brokers", zap.Int("targets", len(urls)))
+	rabbitPool.Warmup(urls)
 }
 
 // dispatcherSubStore satisfies worker.SubscriptionStore over the admin
