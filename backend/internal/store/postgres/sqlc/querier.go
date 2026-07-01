@@ -381,6 +381,15 @@ type Querier interface {
 	// difference back as future budget).
 	RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) error
 	ResetQuotaDaily(ctx context.Context, quotaID pgtype.UUID, lastResetAt pgtype.Timestamptz) error
+	// Longest registered object_key that is a prefix of $2 (the recombined
+	// "<object_key>/<key>" tail of an ingest event) for the tenant. Multi-segment
+	// object_keys (migration 030) make the naive "the OK is the first path
+	// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
+	// OK `invoices` + key `2026/q1/report.pdf` OR OK `invoices/2026/q1` + key
+	// `report.pdf`. Longest-prefix gives deterministic precedence (the more
+	// specific OK wins). object_key is constrained to `[a-z0-9-]` path segments
+	// (migration 030 / 001) — no LIKE metacharacters — so `|| '/%'` is safe.
+	ResolveObjectKeyPrefix(ctx context.Context, tenantID pgtype.UUID, objectKey string) (string, error)
 	// Undeletes a soft-deleted object iff no live row exists with the same
 	// (tenant, object_key, key). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.
