@@ -13,8 +13,17 @@
 //	demo    1 tenant, 4 EventSubscriptions (HTTP / NATS / disabled / filtered).
 //	        Hand-curated so screenshots stay readable. ~1 second to apply.
 //
-//	load    not yet implemented — placeholder per the BACKLOG entry
-//	stress  not yet implemented — placeholder per the BACKLOG entry
+//	load    N objects (default 500) seeded under an existing objectKey via the
+//	        real UploadObject → PUT → CompleteObject flow, so /objects listings
+//	        and the object.* event fan-out have realistic data.
+//	stress  same, defaulting to 1001 objects — just past a 1000-row page so the
+//	        cursor pagination logic gets exercised across a boundary.
+//
+// load / stress take --object-key (an existing objectKey bound to a bucket,
+// like smoke-upload), --tenant (slug for the parent name), and --count (0 =
+// the flavour default). Objects are stamped at the current time — the API
+// can't backdate created_at, so the "/billing 24h time-series spread" remains
+// a separate concern (see BACKLOG).
 //
 // Idempotency: every fixture resource is keyed on a stable display name
 // prefix (`Fixture: <flavour>:`). Re-running `up` is a no-op for
@@ -107,6 +116,14 @@ func main() {
 	}
 	for _, c := range []*cobra.Command{upCmd, downCmd} {
 		c.Flags().String("flavour", "demo", "demo | load | stress")
+		// load / stress seed objects under an existing objectKey (like
+		// smoke-upload). demo ignores these.
+		c.Flags().String("object-key", "test",
+			"load/stress: existing objectKey (bound to a bucket) to seed objects under")
+		c.Flags().String("tenant", "platform",
+			"load/stress: tenant slug for the parent resource name")
+		c.Flags().Int("count", 0,
+			"load/stress: number of objects to seed (0 = flavour default: load 500, stress 1001)")
 	}
 	smokeCmd.Flags().String("object-key", "test",
 		"existing objectKey on the caller's tenant — must already be bound to a bucket")
@@ -167,6 +184,46 @@ func login(ctx context.Context, iamURL, user, password, audience string) (string
 	return tok, nil
 }
 
+// ─── load / stress planning (pure, unit-tested) ────────────────────────────
+
+// fixtureObjectPrefix is the user-key prefix every load/stress object gets, so
+// tear-down can find them and re-runs can count existing ones. Per-flavour so
+// load and stress don't clobber each other under the same objectKey.
+func fixtureObjectPrefix(flavour string) string {
+	return "fixture/" + flavour + "/"
+}
+
+// fixtureObjectKey builds the deterministic, zero-padded user key for the i-th
+// (0-based) seeded object. Zero-padding keeps lexical == numeric order so the
+// UI's cursor pagination walks them predictably.
+func fixtureObjectKey(flavour string, i int) string {
+	return fmt.Sprintf("%s%06d.txt", fixtureObjectPrefix(flavour), i)
+}
+
+// isFixtureObjectKey reports whether a user key was written by this seeder for
+// the flavour — the tear-down predicate.
+func isFixtureObjectKey(flavour, key string) bool {
+	return strings.HasPrefix(key, fixtureObjectPrefix(flavour))
+}
+
+// flavourObjectCount resolves the requested object count: an explicit override
+// (>0) wins, else the per-flavour default. load favours volume; stress sits
+// just past a 1000-row page so the cursor logic gets exercised across a
+// boundary. Any other flavour → 0 (no objects).
+func flavourObjectCount(flavour string, override int) int {
+	if override > 0 {
+		return override
+	}
+	switch flavour {
+	case "load":
+		return 500
+	case "stress":
+		return 1001
+	default:
+		return 0
+	}
+}
+
 // ─── up / down dispatch ───────────────────────────────────────────────────
 
 func runUp(cmd *cobra.Command) error {
@@ -191,16 +248,33 @@ func runUp(cmd *cobra.Command) error {
 	switch flavour {
 	case "demo":
 		return seedDemo(ctx, clients)
-	case "load":
-		fmt.Println("flavour=load is not implemented yet (BACKLOG: API-test fixture for UI/UX). " +
-			"Demo flavour is the only flavour with content today.")
-		return nil
-	case "stress":
-		fmt.Println("flavour=stress is not implemented yet (BACKLOG: API-test fixture for UI/UX).")
-		return nil
+	case "load", "stress":
+		return runObjectSeed(cmd, ctx, iamURL, dataURL, user, password, flavour, true)
 	default:
 		return fmt.Errorf("unknown flavour %q (use demo, load, or stress)", flavour)
 	}
+}
+
+// runObjectSeed applies (seed=true) or removes (seed=false) the load / stress
+// object fixture. Objects live on the data plane, so this logs in for a data
+// token separately from the admin token runUp/runDown already hold (mirrors
+// smoke-upload's rationale).
+func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, user, password, flavour string, seed bool) error {
+	objectKey, _ := cmd.Flags().GetString("object-key")
+	tenant, _ := cmd.Flags().GetString("tenant")
+	countOverride, _ := cmd.Flags().GetInt("count")
+
+	dataTok, err := login(ctx, iamURL, user, password, string(auth.AudienceData))
+	if err != nil {
+		return fmt.Errorf("data login: %w", err)
+	}
+	dc := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, "", dataURL, iamURL, dataTok)
+	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenant, objectKey)
+
+	if !seed {
+		return teardownObjects(ctx, dc, parent, flavour)
+	}
+	return seedObjects(ctx, dc, parent, flavour, flavourObjectCount(flavour, countOverride))
 }
 
 func runDown(cmd *cobra.Command) error {
@@ -222,11 +296,14 @@ func runDown(cmd *cobra.Command) error {
 	}
 	clients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, dataURL, iamURL, tok)
 
-	if flavour != "demo" {
-		fmt.Printf("flavour=%s tear-down is a no-op (only demo populates resources today)\n", flavour)
-		return nil
+	switch flavour {
+	case "demo":
+		return teardownDemo(ctx, clients)
+	case "load", "stress":
+		return runObjectSeed(cmd, ctx, iamURL, dataURL, user, password, flavour, false)
+	default:
+		return fmt.Errorf("unknown flavour %q (use demo, load, or stress)", flavour)
 	}
-	return teardownDemo(ctx, clients)
 }
 
 // ─── Demo flavour ─────────────────────────────────────────────────────────
@@ -341,6 +418,138 @@ func teardownDemo(ctx context.Context, c *mcp.Clients) error {
 		}
 	}
 	fmt.Printf("demo flavour torn down (deleted %d subscriptions)\n", deleted)
+	return nil
+}
+
+// ─── Load / stress flavours: object seeding ───────────────────────────────
+
+// seedObjects seeds `count` fixture objects under `parent` (an existing
+// objectKey resource name) through the real UploadObject → PUT → CompleteObject
+// flow, so /objects listings + cursor pagination + the object.* event fan-out
+// see realistic data. Idempotent: it counts the fixture objects already present
+// and creates only the remainder, so re-running converges to `count`.
+//
+// NOTE: objects are stamped at the current time — the public API can't backdate
+// created_at, so the "/billing time-series spread across 24h" part of the DoD
+// is out of reach here (it needs a server test-hook or a direct-SQL seeder).
+func seedObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string, count int) error {
+	if count <= 0 {
+		return fmt.Errorf("flavour %q resolved to a non-positive object count", flavour)
+	}
+	existing, err := countFixtureObjects(ctx, dc, parent, flavour)
+	if err != nil {
+		return fmt.Errorf("count existing fixture objects: %w", err)
+	}
+	if existing >= count {
+		fmt.Printf("%s: %d fixture objects already present (target %d) — nothing to do\n",
+			flavour, existing, count)
+		return nil
+	}
+	fmt.Printf("%s: seeding objects [%d, %d) under %s\n", flavour, existing, count, parent)
+	for i := existing; i < count; i++ {
+		if err := uploadFixtureObject(ctx, dc, parent, fixtureObjectKey(flavour, i)); err != nil {
+			return fmt.Errorf("object %d: %w", i, err)
+		}
+		if (i+1)%100 == 0 {
+			fmt.Printf("  … %d/%d\n", i+1, count)
+		}
+	}
+	fmt.Printf("%s flavour applied — %d objects under %s (visit /objects)\n", flavour, count, parent)
+	return nil
+}
+
+// uploadFixtureObject runs one UploadObject → presigned PUT → CompleteObject
+// cycle, materialising an AVAILABLE object (unlike smoke-upload, which skips
+// completion and relies on the ingest pod).
+func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key string) error {
+	payload := []byte("paladin-fixture " + key + "\n")
+	uresp, err := dc.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent:            parent,
+		Key:               key,
+		ContentType:       "text/plain",
+		SizeHintBytes:     int64(len(payload)),
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+	}))
+	if err != nil {
+		return fmt.Errorf("UploadObject: %w", err)
+	}
+	obj := uresp.Msg.GetObject()
+	u := uresp.Msg.GetUploadUrl()
+	req, err := http.NewRequestWithContext(ctx, u.GetMethod(), u.GetUrl(), bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("PUT build: %w", err)
+	}
+	for k, v := range u.GetRequiredHeaders() {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("PUT do: %w", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("PUT %d: %s", resp.StatusCode, string(body))
+	}
+	if _, err := dc.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+		Name: obj.GetName(),
+		Etag: strings.Trim(resp.Header.Get("ETag"), `"`),
+	})); err != nil {
+		return fmt.Errorf("CompleteObject: %w", err)
+	}
+	return nil
+}
+
+// countFixtureObjects pages the objectKey's objects and counts the ones this
+// seeder wrote for the flavour (by user-key prefix).
+func countFixtureObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) (int, error) {
+	names, err := listFixtureObjectNames(ctx, dc, parent, flavour)
+	return len(names), err
+}
+
+// listFixtureObjectNames returns the resource names of every fixture object
+// under `parent` for the flavour, walking all pages.
+func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavour string) ([]string, error) {
+	var names []string
+	token := ""
+	for {
+		resp, err := dc.Object.ListObjects(ctx, connect.NewRequest(&datav1.ListObjectsRequest{
+			Parent: parent,
+			Page:   &commonv1.PageRequest{PageSize: 1000, PageToken: token},
+		}))
+		if err != nil {
+			return nil, fmt.Errorf("ListObjects: %w", err)
+		}
+		for _, o := range resp.Msg.GetObjects() {
+			if isFixtureObjectKey(flavour, o.GetKey()) {
+				names = append(names, o.GetName())
+			}
+		}
+		token = resp.Msg.GetPage().GetNextPageToken()
+		if token == "" {
+			break
+		}
+	}
+	return names, nil
+}
+
+// teardownObjects permanently deletes every fixture object the flavour wrote
+// under `parent`. Collect-then-delete (rather than delete-while-paging) so the
+// cursor isn't invalidated mid-walk.
+func teardownObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) error {
+	names, err := listFixtureObjectNames(ctx, dc, parent, flavour)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		if _, err := dc.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+			Name:      name,
+			Permanent: true, // hard-delete so /objects is actually cleared
+		})); err != nil {
+			return fmt.Errorf("delete %s: %w", name, err)
+		}
+	}
+	fmt.Printf("%s flavour torn down (deleted %d objects under %s)\n", flavour, len(names), parent)
 	return nil
 }
 

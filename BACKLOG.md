@@ -850,7 +850,9 @@ open deliberately — each notes why._
 
 ### API-test fixture for UI/UX with real-shape data
 
-- **Status:** Deferred
+- **Status:** Mostly done — demo + load + stress flavours ship; only the
+  `/billing` 24h time-series spread (API-infeasible) + a `task seed:up`
+  port-forward wrapper remain.
 - **Reason:** Most admin pages render gracefully when empty —
   `/events`, `/billing`, `/policies`, `/buckets`, `/objects`,
   `/audit`, `/capabilities` — but designing the populated state
@@ -875,15 +877,22 @@ open deliberately — each notes why._
   `tenant_id = paladin_session_tenant_id()` on WITH CHECK and
   cross-tenant create from platform.admin would fail there
   even though the handler-level guard passes.
-- **Outstanding (load + stress flavours):**
-  - `--flavour=load` — ~10k objects, ~100 deliveries spread
-    across 24h so `/billing` time-series buckets look real
-    and `/events` Last-test column has a population to truncate.
-    Requires bucket + objectKey + UploadObject + CompleteObject
-    flow that demo doesn't exercise yet.
-  - `--flavour=stress` — pagination boundaries (1000 / 1001 /
-    1099 rows so the cursor logic gets exercised). Same
-    upload-flow gap.
+- **Shipped (2026-07-01) — load + stress object seeding:** `--flavour=load`
+  (default 500 objects) and `--flavour=stress` (default 1001 — just past a
+  1000-row page) seed objects under an operator-supplied `--object-key` through
+  the real UploadObject → PUT → CompleteObject flow (`seedObjects` /
+  `uploadFixtureObject` in `cmd/seed-fixture`). Deterministic zero-padded user
+  keys (`fixture/{flavour}/{NNNNNN}.txt`) so lexical == cursor order; idempotent
+  (counts existing fixture objects, seeds the remainder); `down` hard-deletes
+  them. `--count` overrides the default. So `/objects` listings + cursor
+  pagination + the `object.*` event fan-out now have real data. Pure planners
+  (`flavourObjectCount`, `fixtureObjectKey`, `isFixtureObjectKey`) are
+  unit-tested.
+- **Outstanding:**
+  - `/billing` **time-series spread across 24h** — NOT reachable via the public
+    API (it stamps `created_at = now()`; no backdating). Needs a server
+    test-hook or a direct-SQL seeder — a separate concern from the API-driven
+    fixture, deliberately out of scope here.
   - First-run UX: today the CLI requires `--admin-url=` etc.
     when run from outside the cluster (DNS doesn't resolve
     cluster-internal Service names). A `task seed:up` wrapper
