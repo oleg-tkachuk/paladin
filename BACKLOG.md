@@ -134,41 +134,27 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Role split: `event-dispatcher` (extract webhook delivery from admin)
+### Role split: `event-dispatcher` — observability follow-up only
 
-- **Status:** Deferred
-- **Reason:** `worker.Dispatcher` lives in-process inside the admin
-  pod today (mounted in `build_listeners_admin.go`). Webhook delivery
-  is egress-heavy work with a fundamentally different failure mode
-  from inbound admin RPC: a slow / flaky customer endpoint can hold
-  HTTP connections open and starve the admin pod's connection pool.
-  NetworkPolicy posture is also opposite — admin should have closed
-  egress (Postgres + storage only), dispatcher needs egress=any:443.
-  Splitting also lets you scale dispatchers independently when one
-  tenant has 1000 webhook subscriptions to flaky endpoints without
-  scaling admin.
-- **Definition of Done:**
-  - `cmd/server/serve_dispatcher.go` — new subcommand. Reads
-    EventSubscription store, consumes undelivered events from an
-    outbox table (or the existing in-memory dispatcher loop made
-    durable), POSTs to sink, retries with exponential backoff,
-    updates delivery status. Same role-port shape as worker (ops
-    listener with /healthz + /readyz + /system/health.json).
-  - Helm: `deployments.dispatcher.enabled: true` (default), single
-    replica baseline, HPA-friendly (CPU + queue-depth metric when
-    available).
-  - NetworkPolicy: egress 0.0.0.0/0:443 + Postgres + storage; ingress
-    only kube-proxy on /healthz.
-  - admin pod stops mounting `worker.Dispatcher`; the existing
-    `EventSubscriptionService.TestSubscription` RPC stays where it
-    is (it's a synchronous one-shot that's fine on admin).
-  - MCPInspectService gains a "dispatcher" component view (delivery
-    queue depth, last error per subscription).
-- **Trigger to do:** when webhook delivery latency starts impacting
-  admin RPC p99, OR when one tenant's subscription failures begin
-  starving the dispatcher loop in admin. Also worth doing
-  pre-emptively before the first paying customer's webhooks land —
-  avoid the on-call regret of "one subscription took down admin".
+- **Status:** Core split SHIPPED — only a minor ops-view remains.
+- **Shipped:** the async webhook/broker delivery loop runs in its own
+  `serve dispatcher` pod (`cmd/server/serve_dispatcher.go`): an
+  `OutboxRunner` drains `event_deliveries` via `FOR UPDATE SKIP LOCKED`
+  (multi-replica safe), retries with backoff, and POSTs to the sinks.
+  The admin pod is a pure producer — handlers `Dispatch()` one
+  `event_deliveries` row per matching subscription and return with no
+  egress I/O; admin keeps in-process sink pools ONLY for the synchronous
+  `TestSubscription` RPC (see `build_listeners_admin.go`). Helm ships a
+  dedicated `dispatcher` Deployment + ServiceAccount + Service (ops
+  listener :8099 with health). So a flaky customer endpoint can no longer
+  starve admin, and dispatchers scale independently.
+- **Definition of Done (remaining):**
+  - `MCPInspectService` gains a "dispatcher" component view (delivery
+    queue depth, last error per subscription) for at-a-glance ops.
+  - Per-role NetworkPolicy for the dispatcher (egress any:443 + Postgres,
+    ingress kube-proxy only) — tracked under *NetworkPolicies per role*.
+- **Trigger to do:** when an operator needs delivery-queue visibility
+  beyond logs/metrics, or when the NetworkPolicy item lands.
 
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
@@ -979,28 +965,6 @@ open deliberately — each notes why._
   on PurgeTenant.
 - **Blockers:** product decision. Do NOT start design without an
   explicit user request.
-
-### paladin-worker split out of the monolith
-
-- **Status:** Aspirational
-- **Reason:** Today all planes — api, admin, iam, mcp, worker,
-  ingest — run inside one Go binary, multiplexed by HTTP listener.
-  The worker is the obvious first candidate to peel off: it owns
-  the SKIP-LOCKED outbox loop, it scales orthogonally to RPC
-  traffic, and a stuck dispatcher today can starve RPC handlers'
-  goroutines in the same process. Splitting it gives independent
-  rollout, independent HPA, and clearer ownership boundaries.
-- **Definition of Done:**
-  - New `cmd/worker` binary (or reuse `cmd/server --mode=worker`
-    via the existing mode flag).
-  - Helm chart adds a dedicated Deployment + ServiceAccount with
-    only the outbox-write / event-publish IAM the worker needs
-    (no public RPC roles).
-  - Health probes wired to the dispatcher loop, not just /healthz.
-  - The in-process worker shim in `cmd/server/serve_dispatcher.go`
-    becomes opt-in for dev/minikube only.
-- **Blockers:** none — but sequence after audit-outbox lands so we
-  don't ship two competing dispatchers.
 
 ### Redis capability counter cache
 
