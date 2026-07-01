@@ -27,6 +27,15 @@ WHERE tenant_id = $1
 ORDER BY length(object_key) DESC
 LIMIT 1;
 
+-- name: ListObjectKeyNamesForTenant :many
+-- Every registered object_key name for the tenant. Backs the in-process
+-- longest-prefix cache (eventingest.CachingLookup) so ResolveObjectKeyPrefix is
+-- not a per-event query on the ingest hot path. object_keys is small per tenant
+-- (bounded by the tenant's namespace layout), so the unbounded read is cheap.
+SELECT object_key
+FROM object_keys
+WHERE tenant_id = $1;
+
 -- name: UpdateObjectKey :execrows
 -- expected_version=0 disables the OCC guard (force update).
 UPDATE object_keys

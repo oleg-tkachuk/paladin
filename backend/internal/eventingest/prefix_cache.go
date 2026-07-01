@@ -1,0 +1,177 @@
+package eventingest
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
+)
+
+// DefaultPrefixCacheTTL bounds how stale the per-tenant object_key set backing
+// ResolveObjectKeyPrefix may be. See CachingLookup for the staleness contract.
+const DefaultPrefixCacheTTL = 30 * time.Second
+
+// prefixBackend is the store surface CachingLookup needs: the two object
+// lookups it passes straight through, plus the full per-tenant object_key name
+// list it caches for longest-prefix resolution. *sqlc.Queries satisfies it.
+type prefixBackend interface {
+	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error)
+	GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (sqlc.GetObjectKeyRow, error)
+	ListObjectKeyNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
+}
+
+// CachingLookup is an ObjectLookup that resolves the longest-prefix object_key
+// (multi-segment disambiguation, migration 030) from an in-process per-tenant
+// cache instead of a per-event SQL query. LookupObjectByKey / GetObjectKey pass
+// straight through — only ResolveObjectKeyPrefix is cached.
+//
+// Staleness contract: the cached object_key set for a tenant is at most `ttl`
+// old. object_key create/delete happens in the admin pod while this cache lives
+// in the ingest/dispatcher pod, so there is no cross-pod invalidation — TTL is
+// the only freshness bound. Two consequences, both benign:
+//
+//   - A brand-new object_key that is NOT nested under an already-cached key is
+//     picked up immediately: a resolve miss forces one refresh before giving up
+//     (see ResolveObjectKeyPrefix), so the first storage event to a new
+//     top-level OK resolves without waiting out the TTL.
+//   - A brand-new object_key nested UNDER an already-cached key (e.g. adding
+//     `invoices/2026/q1` while `invoices` is cached) can, within the TTL window,
+//     resolve to the shorter cached parent. The subsequent LookupObjectByKey
+//     then finds no row and the event is skipped — the data-plane Reconciler
+//     promotes the orphaned PENDING object, so the upload is eventually
+//     consistent, not lost. This is the same eventual-consistency posture the
+//     handler already relies on for the presign/upload race.
+//
+// The cache map holds one small string slice per tenant and is never evicted
+// (entries are refreshed in place). Tenant cardinality on a control plane is
+// bounded, so unbounded growth is a non-issue in practice.
+type CachingLookup struct {
+	src prefixBackend
+	ttl time.Duration
+	log *zap.Logger
+
+	mu    sync.Mutex
+	cache map[pgtype.UUID]cachedKeys
+	// now is overridable in tests; nil → time.Now.
+	now func() time.Time
+}
+
+type cachedKeys struct {
+	keys []string
+	at   time.Time
+}
+
+// NewCachingLookup wraps a backend (typically *sqlc.Queries) with the
+// per-tenant longest-prefix cache. ttl <= 0 falls back to DefaultPrefixCacheTTL;
+// a nil logger is tolerated.
+func NewCachingLookup(src prefixBackend, ttl time.Duration, log *zap.Logger) *CachingLookup {
+	if ttl <= 0 {
+		ttl = DefaultPrefixCacheTTL
+	}
+	if log == nil {
+		log = zap.NewNop()
+	}
+	return &CachingLookup{
+		src:   src,
+		ttl:   ttl,
+		log:   log,
+		cache: map[pgtype.UUID]cachedKeys{},
+	}
+}
+
+// LookupObjectByKey passes through untouched — object resolution stays a direct
+// query keyed by the (tenant, object_key, key) unique index.
+func (c *CachingLookup) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error) {
+	return c.src.LookupObjectByKey(ctx, tenantID, objectKey, key)
+}
+
+// GetObjectKey passes through untouched.
+func (c *CachingLookup) GetObjectKey(ctx context.Context, tenantID pgtype.UUID, objectKey string) (sqlc.GetObjectKeyRow, error) {
+	return c.src.GetObjectKey(ctx, tenantID, objectKey)
+}
+
+// ResolveObjectKeyPrefix returns the longest registered object_key that is a
+// "/"-delimited prefix of `tail`, resolved from the cached per-tenant key set.
+// pgx.ErrNoRows when none match — the same contract the SQL query has, so the
+// handler's switch is unchanged.
+func (c *CachingLookup) ResolveObjectKeyPrefix(ctx context.Context, tenantID pgtype.UUID, tail string) (string, error) {
+	keys, fresh, err := c.keysFor(ctx, tenantID, false)
+	if err != nil {
+		return "", err
+	}
+	if m := longestPrefixMatch(keys, tail); m != "" {
+		return m, nil
+	}
+	// Miss on a possibly-stale cache: a newly-registered top-level object_key
+	// wouldn't be here yet. Unless we just loaded fresh, force one refresh and
+	// retry so a new OK's first event resolves without waiting out the TTL.
+	if !fresh {
+		keys, _, err = c.keysFor(ctx, tenantID, true)
+		if err != nil {
+			return "", err
+		}
+		if m := longestPrefixMatch(keys, tail); m != "" {
+			return m, nil
+		}
+	}
+	return "", pgx.ErrNoRows
+}
+
+// keysFor returns the tenant's object_key set, loading from the backend when the
+// cache is cold, expired, or force is set. `fresh` reports whether this call hit
+// the backend (vs served the cache) so the caller can avoid a redundant refresh.
+func (c *CachingLookup) keysFor(ctx context.Context, tenantID pgtype.UUID, force bool) (keys []string, fresh bool, err error) {
+	now := c.clock()
+
+	c.mu.Lock()
+	entry, ok := c.cache[tenantID]
+	stale := !ok || now.Sub(entry.at) >= c.ttl
+	if !force && !stale {
+		keys = entry.keys
+		c.mu.Unlock()
+		return keys, false, nil
+	}
+	c.mu.Unlock()
+
+	// Load outside the lock — the SQL round-trip must not block other tenants'
+	// resolves. A concurrent duplicate load for the same tenant is acceptable
+	// (idempotent, rare) and simpler than single-flight bookkeeping.
+	loaded, err := c.src.ListObjectKeyNamesForTenant(ctx, tenantID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	c.mu.Lock()
+	c.cache[tenantID] = cachedKeys{keys: loaded, at: now}
+	c.mu.Unlock()
+	return loaded, true, nil
+}
+
+func (c *CachingLookup) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
+// longestPrefixMatch returns the longest key in `keys` that equals `tail` or is
+// a "/"-delimited prefix of it — the same precedence the ResolveObjectKeyPrefix
+// SQL gives (ORDER BY length(object_key) DESC). object_key is ASCII, so byte
+// length equals character length. "" when none match.
+func longestPrefixMatch(keys []string, tail string) string {
+	best := ""
+	for _, k := range keys {
+		if k == tail || strings.HasPrefix(tail, k+"/") {
+			if len(k) > len(best) {
+				best = k
+			}
+		}
+	}
+	return best
+}

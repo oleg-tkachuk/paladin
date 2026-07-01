@@ -723,27 +723,6 @@ open deliberately — each notes why._
     lands.
 - **Blockers:** the StorageReplicator worker.
 
-### Multi-segment ObjectKey: event-ingest path disambiguation
-
-- **Status:** Mostly done (2026-06-30) — only the per-tenant cache remains.
-- **Shipped:** longest-prefix disambiguation lands in the **shared promote
-  handler** (`internal/eventingest/handler.go`) rather than per-source — every
-  source funnels through `PromoteHandler.Handle`, so all four (seaweedfs,
-  seaweedfs-nats, minio, cloudevents) get it for free. Handle recombines the
-  source's naive `<object_key>/<key>` split, calls the new
-  `ResolveObjectKeyPrefix` query (`object_keys.sql` — longest registered OK
-  that prefixes the tail, `ORDER BY length DESC LIMIT 1`; object_key has no
-  LIKE metachars so `|| '/%'` is safe), strips the resolved prefix for the
-  real key, and threads the corrected OK/key into the lookup AND the emitted
-  `paladin.object.uploaded` event. Covered by `handler_disambiguation_test.go`
-  (Go glue) + `tests/integration/objectkey_prefix_test.go` (real-DB precedence
-  incl. `invoices` vs `invoices/archive/2026`).
-- **Definition of Done (remaining):**
-  - Per-tenant prefix cache (invalidated on OK create/delete) so the resolve
-    isn't a per-event query. object_keys is small per tenant, so the uncached
-    query is acceptable for now — this is a throughput optimization.
-- **Blockers:** none.
-
 ### Tenant slug min-length — NOT the object_key 2-char bug (misdiagnosis)
 
 - **Status:** Resolved (2026-07-01) — decision recorded + DB drift fixed.

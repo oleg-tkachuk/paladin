@@ -104,7 +104,10 @@ var serveIngestCmd = &cobra.Command{
 		}
 
 		handler := &eventingest.PromoteHandler{
-			Lookup:       ingestQueries,
+			// Wrap the queries in the per-tenant longest-prefix cache so
+			// ResolveObjectKeyPrefix isn't a SQL round-trip on every storage
+			// event (bounded-staleness — see eventingest.CachingLookup).
+			Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
 			Transitioner: ingestSM,
 			Events:       ingestDispatcher,
 			Logger:       l.Named("ingest.handler"),

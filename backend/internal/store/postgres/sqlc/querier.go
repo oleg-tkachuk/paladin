@@ -235,6 +235,11 @@ type Querier interface {
 	// Lists every (tenant_id, object_key) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.
 	ListObjectKeyBindingsForBucket(ctx context.Context, backendID string, bucketName string) ([]ListObjectKeyBindingsForBucketRow, error)
+	// Every registered object_key name for the tenant. Backs the in-process
+	// longest-prefix cache (eventingest.CachingLookup) so ResolveObjectKeyPrefix is
+	// not a per-event query on the ingest hot path. object_keys is small per tenant
+	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
+	ListObjectKeyNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
 	ListObjectKeys(ctx context.Context, tenantID pgtype.UUID, afterID *string, pageSize int32) ([]ListObjectKeysRow, error)
 	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, version_id).

@@ -138,6 +138,36 @@ func (q *Queries) GetObjectKey(ctx context.Context, tenantID pgtype.UUID, object
 	return i, err
 }
 
+const listObjectKeyNamesForTenant = `-- name: ListObjectKeyNamesForTenant :many
+SELECT object_key
+FROM object_keys
+WHERE tenant_id = $1
+`
+
+// Every registered object_key name for the tenant. Backs the in-process
+// longest-prefix cache (eventingest.CachingLookup) so ResolveObjectKeyPrefix is
+// not a per-event query on the ingest hot path. object_keys is small per tenant
+// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
+func (q *Queries) ListObjectKeyNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listObjectKeyNamesForTenant, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listObjectKeys = `-- name: ListObjectKeys :many
 SELECT object_keys.tenant_id, object_keys.object_key, object_keys.display_name, object_keys.backend_id, object_keys.cedar_policy, object_keys.cedar_policy_hash, object_keys.lifecycle_rules, object_keys.resource_version, object_keys.created_at, object_keys.updated_at, object_keys.bucket_name, object_keys.constraints
 FROM object_keys
