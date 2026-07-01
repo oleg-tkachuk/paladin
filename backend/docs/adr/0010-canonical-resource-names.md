@@ -4,9 +4,10 @@
   in [docs/canonical-resource-names.md](../canonical-resource-names.md)
   (Status/Owner had been "proposed / TBD"). This ADR is the authoritative
   record; the plan doc remains the detailed phase-by-phase reference.
-  Implementation is **phased and mostly not yet done** — see *Implementation
-  status* below. This ADR exists so the remaining phases can be executed
-  coherently instead of piecemeal, which the invariants forbid.
+  Implementation is **phased and already partly landed** — Phase 2 plus most
+  of Phase 1 are live; see *Implementation status* below. This ADR exists so
+  the remaining phases (chiefly the Cedar-EUID switch + the backfill) can be
+  executed coherently instead of piecemeal, which the invariants forbid.
 
 - **Context.** An ObjectKey-rooted resource is addressable three ways today,
   and the codebase is inconsistent about which it uses where:
@@ -93,6 +94,26 @@ It does not implement any phase. It ratifies the direction, fixes the
 authoritative phase numbering, and records the two non-obvious constraints
 (canonical Cedar EUID needs backend+bucket; deprecation is data-gated) so the
 next implementer does not discover them the hard way.
+
+## Implementation status (2026-07-01)
+
+Verified against the tree, not assumed:
+
+| Piece | State |
+|---|---|
+| **Phase 2** — central resolver (`ResolveObjectKeyName`, A\|C\|B detect, cross-tenant guard, shape metric) | **Done** |
+| Phase 1 — `CanonicalName()` / `ParseCanonical()` helpers + round-trip tests (`object_key/canonical.go`) | **Done** |
+| Phase 1 — audit `resource_name` canonical for objectKey ops (handler stashes `CanonicalName` for the audit interceptor) | **Done** |
+| Phase 1 — event `resource_name` canonical for objectKey Create/Update/Delete | **Done** |
+| Phase 1 — Cedar authoring docs steer policies off EUID literals | **Done** (this commit) |
+| Phase 1 — **Cedar ObjectKey EUID → canonical** | **Remaining.** Needs `(backend, bucket)` at every objectKey authz site — but e.g. `GetObjectKey` authorizes *before* reading the row, so this is a multi-site threading change (resolver-enrich or read-then-authorize), landed behind a shadow-eval/soak per the rollback note. Deployed policies use no EUID literals, so it is behaviourally safe once threaded. |
+| Phase 1 — **backfill migration** for existing `audit_log` / `event_deliveries` C-shape rows | **Remaining.** Risky (partitioned history); deterministic join on `object_keys(tenant_id, backend_id, bucket_name)`. |
+| Phase 1 — data-plane / ingest object-event `resource_name` (`…/objects-by-key/…`) canonicalization | **Remaining** (object-level, not objectKey CRUD). |
+| Phases 3 (B alias), 4 (WhoAmI), 5 (soft-deprecate C) | **Not started** (5 is data-gated). |
+
+So Phase 1 is largely live for the objectKey API surface; the two coordinated
+risky pieces (Cedar EUID + backfill) are what a Phase-1 completion PR must do
+together in one deploy window.
 
 ## Consequences
 

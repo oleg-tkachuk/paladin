@@ -154,6 +154,34 @@ Resource side (the user being managed):
 - `bucket_name`, `backend_id`, `owner_tenant_id` (empty = shared).
 - `labels: Set<String>`.
 
+### Resource identifiers (EUIDs) — prefer attributes over literals
+
+Each resource is a Cedar entity with a UID. Today the ObjectKey UID is
+`ObjectKey::"{tenant_uuid}/{object_key}"` and the Tenant UID is
+`Tenant::"{slug}"`. Under [ADR-0010](adr/0010-canonical-resource-names.md)
+the ObjectKey UID is migrating to the **canonical A-shape** name:
+
+```
+ObjectKey::"storageBackends/{backend}/buckets/{bucket}/tenants/{tid}/objectKeys/{ok}"
+```
+
+**Do not hardcode a resource EUID literal** (`resource == ObjectKey::"…"`).
+It ties the policy to one identifier form and will break across the canonical
+migration; it is also brittle (object keys are multi-segment and tenant-scoped).
+Gate on **attributes and parents** instead — they are stable across UID changes:
+
+```cedar
+// Good — attribute / parent conditions (survive the EUID migration):
+permit (principal in Tenant::"acme", action in [Action::"GetObject"], resource)
+when { resource.object_key == "invoices" && resource.tenant_id == principal.tenant_id };
+
+// Avoid — a hardcoded resource UID literal:
+permit (principal, action, resource == ObjectKey::"…/objectKeys/invoices");
+```
+
+The default template and every policy PALADIN ships use unconstrained `resource` +
+attribute conditions, so the canonical-EUID switch is transparent to them.
+
 ---
 
 ## 5. Context attributes
@@ -275,6 +303,10 @@ the regression").
 - **Empty default policy.** A tenant with no policy is deny-all. The
   default seeded at tenant creation is the floor — start there, narrow
   later.
+
+- **Hardcoding a resource EUID literal.** `resource == ObjectKey::"…"` ties
+  the policy to one identifier form and breaks across the canonical-name
+  migration (ADR-0010). Gate on attributes/parents instead — see §4.
 
 ---
 
