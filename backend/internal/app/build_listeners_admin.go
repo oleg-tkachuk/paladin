@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/internal/auth"
 	"github.com/oleg-tkachuk/paladin/internal/capability"
 	"github.com/oleg-tkachuk/paladin/internal/health"
@@ -243,6 +244,16 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath)),
 		adminOpts,
 	))
+
+	// Live audit feed — raw-HTTP SSE endpoint (EventSource can't speak
+	// Connect). Auth: the same admin-audience bearer the console's RPCs
+	// use, verified inline by the handler; the stream is scoped to the
+	// JWT's tenant claim like ListAuditLog. One LISTEN connection per pod
+	// (migration 050's trigger NOTIFYs on every audit_log insert); the
+	// hub goroutine lives for the mux ctx.
+	auditHub := auditstream.NewHub(l.Named("audit-stream"))
+	go auditHub.Run(ctx, deps.Pool)
+	mux.Handle("/audit/stream", auditHub.SSEHandler(verifierAdmin))
 
 	// JWKS endpoint — public, unauthenticated. Verifiers in other pods
 	// fetch and cache the issuer's public key set so capability checks
