@@ -84,6 +84,16 @@ export const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "sqs", label: "SQS" },
 ] as const;
 
+// HTTP sink payload format (HttpSink.format). "" is the legacy raw Event JSON;
+// "cloudevents" wraps it in the CloudEvents 1.0 envelope like the broker sinks.
+export const HTTP_FORMAT_OPTIONS: readonly {
+  id: "" | "cloudevents";
+  label: string;
+}[] = [
+  { id: "", label: "Raw JSON" },
+  { id: "cloudevents", label: "CloudEvents 1.0" },
+] as const;
+
 export type TestResult = {
   delivered: boolean;
   statusCode: number;
@@ -149,6 +159,9 @@ export type FormState = {
   httpUrl: string;
   httpSecret: string;
   httpMaxAttempts: string;
+  // "" (raw legacy Event JSON) | "cloudevents" (CloudEvents 1.0 envelope,
+  // matching the broker sinks). See HttpSink.format.
+  httpFormat: string;
   // NATS
   natsUrl: string;
   natsSubject: string;
@@ -170,6 +183,7 @@ export const EMPTY_FORM: FormState = {
   httpUrl: "",
   httpSecret: "",
   httpMaxAttempts: "5",
+  httpFormat: "",
   natsUrl: "nats://nats.nats.svc.cluster.local:4222",
   natsSubject: "paladin.events",
   natsCredentialsRef: "",
@@ -193,6 +207,7 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.httpUrl = t.value.url;
     next.httpSecret = t.value.signingSecretRef;
     next.httpMaxAttempts = String(t.value.maxAttempts || 5);
+    next.httpFormat = t.value.format || "";
   } else if (t?.case === "nats") {
     next.sinkType = "nats";
     next.natsUrl = t.value.url;
@@ -217,10 +232,9 @@ export function buildSink(form: FormState): EventSink {
       url: form.httpUrl.trim(),
       signingSecretRef: form.httpSecret.trim(),
       maxAttempts: Number.parseInt(form.httpMaxAttempts, 10) || 5,
-      // "" = legacy raw Event JSON (unchanged behavior). The "cloudevents"
-      // opt-in (envelope, matching the broker sinks) is API-reachable today;
-      // a UI selector for it is a follow-up.
-      format: "",
+      // "" = legacy raw Event JSON (default, unchanged behavior).
+      // "cloudevents" = CloudEvents 1.0 envelope, matching the broker sinks.
+      format: form.httpFormat === "cloudevents" ? "cloudevents" : "",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",

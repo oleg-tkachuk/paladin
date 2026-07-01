@@ -29,6 +29,7 @@ import type { EventSubscription } from "@/gen/paladin/admin/v1/types_pb";
 import {
   TEMPLATES,
   SINK_OPTIONS,
+  HTTP_FORMAT_OPTIONS,
   EMPTY_FORM,
   formFromSubscription,
   buildSink,
@@ -293,6 +294,20 @@ export function SubscriptionEditorDialog({
                         ...p,
                         httpMaxAttempts: e.target.value,
                       }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Payload format"
+                  hint="Raw JSON posts the bare Event (legacy, unchanged). CloudEvents 1.0 wraps it in the same envelope the NATS/Kafka/SQS sinks emit (Content-Type application/cloudevents+json)."
+                >
+                  <ToggleRow
+                    options={HTTP_FORMAT_OPTIONS}
+                    selected={
+                      form.httpFormat === "cloudevents" ? "cloudevents" : ""
+                    }
+                    onSelect={(id) =>
+                      setForm((p) => ({ ...p, httpFormat: id }))
                     }
                   />
                 </Field>

@@ -576,8 +576,9 @@ open deliberately — each notes why._
 
 ### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
 
-- **Status:** Mostly done (2026-06-30) — only a UI selector + a default-flip
-  decision remain.
+- **Status:** Mostly done — UI selector SHIPPED (2026-07-01); only the
+  default-flip decision remains (a breaking change, gated on operator
+  coordination).
 - **Shipped:** JSON-format CloudEvents 1.0 envelope (`newCloudEventEnvelope`
   in `sink_nats.go`) is the body of every broker sink — NATS, SQS, RabbitMQ,
   Kafka. `type` = `paladin.<resource>.<action>`, `source` = "paladin", `subject` =
@@ -587,9 +588,12 @@ open deliberately — each notes why._
   unaffected, `"cloudevents"` sends the envelope with Content-Type
   application/cloudevents+json — the DoD's "version the sink config" backward
   -compat path. Unit-tested both HTTP formats (`sink_http_format_test.go`).
+- **Shipped (2026-07-01) — UI selector:** the HTTP connector form gains a
+  "Payload format" toggle (Raw JSON / CloudEvents 1.0) wired to
+  `HttpSink.format` (`_form.ts` `HTTP_FORMAT_OPTIONS` + `buildSink` +
+  `formFromSubscription` round-trip; `SubscriptionEditorDialog`). Unknown
+  format strings fall back to raw. `_form.test.ts` covers the build + hydrate.
 - **Definition of Done (remaining):**
-  - UI: a format selector on the HTTP connector form (`event-subscriptions/
-    _form.ts` hard-codes `format: ""` today; cloudevents is API-reachable only).
   - Decide whether to flip the HTTP default `""` → `"cloudevents"` once it's
     confirmed no raw-shape webhook consumers remain (a breaking change, so
     gated on operator coordination).
