@@ -170,6 +170,66 @@ func (r *TenantRepo) GetBySlug(ctx context.Context, slug string) (tenant.Tenant,
 	return t, nil
 }
 
+// TenantDefaultBinding returns the tenant's default (backend, bucket) route,
+// with found=false (nil error) when none is set. Implements
+// resolve.DefaultBindingLookup — completes the bare (B) object_key shape to
+// canonical (ADR-0010 Phase 3 / migration 034).
+func (r *TenantRepo) TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (string, string, bool, error) {
+	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, nil
+		}
+		return "", "", false, err
+	}
+	return row.BackendID, row.BucketName, true, nil
+}
+
+// GetDefaultBinding — the richer domain read used by GetTenantDefaultBinding.
+func (r *TenantRepo) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error) {
+	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tenant.DefaultBinding{}, tenant.ErrNotFound
+		}
+		return tenant.DefaultBinding{}, err
+	}
+	return defaultBindingFromSQLC(row), nil
+}
+
+// SetDefaultBinding upserts + reads back (the query is :exec). A bad bucket
+// trips the composite FK → ErrDefaultBindingBucketMissing (InvalidArgument).
+func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName, setBy string) (tenant.DefaultBinding, error) {
+	if err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendID, bucketName, setBy); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == schema.TenantDefaultBindingsBucketFK {
+			return tenant.DefaultBinding{}, tenant.ErrDefaultBindingBucketMissing
+		}
+		return tenant.DefaultBinding{}, err
+	}
+	row, err := r.q.GetTenantDefaultBinding(ctx, pgUUID(tenantID))
+	if err != nil {
+		return tenant.DefaultBinding{}, err
+	}
+	return defaultBindingFromSQLC(row), nil
+}
+
+// ClearDefaultBinding is idempotent — 0 rows affected is a no-op success.
+func (r *TenantRepo) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := r.q.ClearTenantDefaultBinding(ctx, pgUUID(tenantID))
+	return err
+}
+
+func defaultBindingFromSQLC(row sqlc.TenantDefaultBinding) tenant.DefaultBinding {
+	return tenant.DefaultBinding{
+		TenantID:   uuid.UUID(row.TenantID.Bytes),
+		BackendID:  row.BackendID,
+		BucketName: row.BucketName,
+		SetAt:      row.SetAt.Time,
+		SetBy:      row.SetBy,
+	}
+}
+
 func (r *TenantRepo) Update(ctx context.Context, args tenant.UpdateTenantArgs) (tenant.Tenant, error) {
 	return r.updateWith(ctx, r.q, args)
 }

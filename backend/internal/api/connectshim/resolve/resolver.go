@@ -7,6 +7,7 @@ package resolve
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,7 +30,8 @@ const (
 )
 
 // CanonicalRef is the resolved object_key reference. BackendID / BucketName
-// are populated only when the canonical (A) shape carried them.
+// are populated when the canonical (A) shape carried them, or when a bare (B)
+// name was enriched via ResolveObjectKeyNameWithBinding.
 type CanonicalRef struct {
 	TenantID   uuid.UUID
 	ObjectKey  string
@@ -37,6 +39,18 @@ type CanonicalRef struct {
 	BucketName string
 	Shape      Shape
 }
+
+// DefaultBindingLookup resolves a tenant's default (backend, bucket) route,
+// used to complete the bare (B) object_key shape to canonical. Implemented by
+// the tenant store adapter (ADR-0010 Phase 3 / migration 034).
+type DefaultBindingLookup interface {
+	TenantDefaultBinding(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, found bool, err error)
+}
+
+// ErrNoDefaultBinding is returned when a bare (B) object_key name is used but
+// the caller's tenant has no default binding set. Callers map it to
+// CodeFailedPrecondition (structured reason NO_DEFAULT_BINDING).
+var ErrNoDefaultBinding = errors.New("bare object_key name requires a tenant default binding; none is set")
 
 // The shape distribution is recorded via metrics.RecordResourceNameShape so
 // it flows over the OTLP pipeline PALADIN actually exports — the previous
@@ -82,6 +96,32 @@ func ResolveObjectKeyName(ctx context.Context, name string) (CanonicalRef, error
 		metrics.RecordResourceNameShape(ctx, string(ShapeBare))
 		return CanonicalRef{TenantID: tid, ObjectKey: name, Shape: ShapeBare}, nil
 	}
+}
+
+// ResolveObjectKeyNameWithBinding is ResolveObjectKeyName plus bare-shape (B)
+// enrichment: a bare name carries no (backend, bucket), so it is completed to
+// canonical using the caller-tenant's default binding (ADR-0010 Phase 3). The
+// A and C shapes are returned unchanged — the lookup is consulted only for B,
+// and only when the binding isn't already populated. A tenant with no default
+// binding gets ErrNoDefaultBinding.
+func ResolveObjectKeyNameWithBinding(ctx context.Context, name string, bindings DefaultBindingLookup) (CanonicalRef, error) {
+	ref, err := ResolveObjectKeyName(ctx, name)
+	if err != nil {
+		return CanonicalRef{}, err
+	}
+	if ref.Shape != ShapeBare || (ref.BackendID != "" && ref.BucketName != "") {
+		return ref, nil
+	}
+	backend, bucket, found, err := bindings.TenantDefaultBinding(ctx, ref.TenantID)
+	if err != nil {
+		return CanonicalRef{}, fmt.Errorf("resolve default binding for %s: %w", ref.TenantID, err)
+	}
+	if !found {
+		return CanonicalRef{}, ErrNoDefaultBinding
+	}
+	ref.BackendID = backend
+	ref.BucketName = bucket
+	return ref, nil
 }
 
 // ResolveTenantParent parses the `parent` field shape "tenants/{t}" into a

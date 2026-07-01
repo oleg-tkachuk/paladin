@@ -196,7 +196,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH), adminOpts))
+	mux.Handle(paladinadminv1connect.NewObjectKeyServiceHandler(admin.NewObjectKeyServer(objectKeyH, repos.Tenant), adminOpts))
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
 	// CELService — stateless validator for CEL filter / match expressions
 	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,

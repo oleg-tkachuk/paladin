@@ -374,7 +374,14 @@ type WhoAmIResponse struct {
 	// `tenant_slug` claim minted by the issuer. SPAs use this to render
 	// slug-form URLs (`/tenants/<slug>/...`) without a follow-up
 	// GetTenant lookup.
-	TenantSlug    string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
+	TenantSlug string `protobuf:"bytes,3,opt,name=tenant_slug,json=tenantSlug,proto3" json:"tenant_slug,omitempty"`
+	// routes is the caller's ObjectKey route table (ADR-0010 Phase 4): every
+	// ObjectKey the caller can read, in all three name shapes, so clients and
+	// SDKs normalize to canonical (A) before sending rather than constructing
+	// it themselves. Empty when the server has no route source wired or the
+	// caller has no readable ObjectKeys. The list is capped server-side and is
+	// not paginated — see BACKLOG for the large-tenant follow-up.
+	Routes        []*ObjectKeyRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -430,6 +437,99 @@ func (x *WhoAmIResponse) GetTenantSlug() string {
 	return ""
 }
 
+func (x *WhoAmIResponse) GetRoutes() []*ObjectKeyRoute {
+	if x != nil {
+		return x.Routes
+	}
+	return nil
+}
+
+// ObjectKeyRoute is one addressable ObjectKey expressed in all three
+// ADR-0010 name shapes plus its (backend, bucket) binding. A client that
+// holds this table can accept any shape from the end user and normalize to
+// canonical (A) on the wire.
+type ObjectKeyRoute struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}.
+	Canonical string `protobuf:"bytes,1,opt,name=canonical,proto3" json:"canonical,omitempty"`
+	// tenant_path (C): tenants/{tid}/objectKeys/{ok}.
+	TenantPath string `protobuf:"bytes,2,opt,name=tenant_path,json=tenantPath,proto3" json:"tenant_path,omitempty"`
+	// bare_alias (B): the bare object_key. Populated ONLY when this ObjectKey
+	// sits in the tenant's default binding — a bare name resolves through that
+	// binding, so it round-trips to canonical only for the default route.
+	// Empty otherwise.
+	BareAlias     string `protobuf:"bytes,3,opt,name=bare_alias,json=bareAlias,proto3" json:"bare_alias,omitempty"`
+	Backend       string `protobuf:"bytes,4,opt,name=backend,proto3" json:"backend,omitempty"`
+	Bucket        string `protobuf:"bytes,5,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectKeyRoute) Reset() {
+	*x = ObjectKeyRoute{}
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectKeyRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectKeyRoute) ProtoMessage() {}
+
+func (x *ObjectKeyRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectKeyRoute.ProtoReflect.Descriptor instead.
+func (*ObjectKeyRoute) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ObjectKeyRoute) GetCanonical() string {
+	if x != nil {
+		return x.Canonical
+	}
+	return ""
+}
+
+func (x *ObjectKeyRoute) GetTenantPath() string {
+	if x != nil {
+		return x.TenantPath
+	}
+	return ""
+}
+
+func (x *ObjectKeyRoute) GetBareAlias() string {
+	if x != nil {
+		return x.BareAlias
+	}
+	return ""
+}
+
+func (x *ObjectKeyRoute) GetBackend() string {
+	if x != nil {
+		return x.Backend
+	}
+	return ""
+}
+
+func (x *ObjectKeyRoute) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
 type ChangePasswordRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OldPassword   string                 `protobuf:"bytes,1,opt,name=old_password,json=oldPassword,proto3" json:"old_password,omitempty"`
@@ -440,7 +540,7 @@ type ChangePasswordRequest struct {
 
 func (x *ChangePasswordRequest) Reset() {
 	*x = ChangePasswordRequest{}
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +552,7 @@ func (x *ChangePasswordRequest) String() string {
 func (*ChangePasswordRequest) ProtoMessage() {}
 
 func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[8]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +565,7 @@ func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordRequest.ProtoReflect.Descriptor instead.
 func (*ChangePasswordRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{8}
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ChangePasswordRequest) GetOldPassword() string {
@@ -490,7 +590,7 @@ type ChangePasswordResponse struct {
 
 func (x *ChangePasswordResponse) Reset() {
 	*x = ChangePasswordResponse{}
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[9]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -502,7 +602,7 @@ func (x *ChangePasswordResponse) String() string {
 func (*ChangePasswordResponse) ProtoMessage() {}
 
 func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[9]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -515,7 +615,7 @@ func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordResponse.ProtoReflect.Descriptor instead.
 func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{9}
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{10}
 }
 
 type ExchangeAudienceRequest struct {
@@ -530,7 +630,7 @@ type ExchangeAudienceRequest struct {
 
 func (x *ExchangeAudienceRequest) Reset() {
 	*x = ExchangeAudienceRequest{}
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +642,7 @@ func (x *ExchangeAudienceRequest) String() string {
 func (*ExchangeAudienceRequest) ProtoMessage() {}
 
 func (x *ExchangeAudienceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[10]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +655,7 @@ func (x *ExchangeAudienceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeAudienceRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeAudienceRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{10}
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ExchangeAudienceRequest) GetRefreshToken() string {
@@ -586,7 +686,7 @@ type ExchangeAudienceResponse struct {
 
 func (x *ExchangeAudienceResponse) Reset() {
 	*x = ExchangeAudienceResponse{}
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +698,7 @@ func (x *ExchangeAudienceResponse) String() string {
 func (*ExchangeAudienceResponse) ProtoMessage() {}
 
 func (x *ExchangeAudienceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[11]
+	mi := &file_paladin_iam_v1_auth_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +711,7 @@ func (x *ExchangeAudienceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeAudienceResponse.ProtoReflect.Descriptor instead.
 func (*ExchangeAudienceResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{11}
+	return file_paladin_iam_v1_auth_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ExchangeAudienceResponse) GetAccessToken() string {
@@ -657,12 +757,21 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\rRevokeRequest\x12\x1d\n" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"\x0f\n" +
-	"\rWhoAmIRequest\"s\n" +
+	"\rWhoAmIRequest\"\xa7\x01\n" +
 	"\x0eWhoAmIResponse\x12$\n" +
 	"\x04user\x18\x01 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
 	"\vtenant_slug\x18\x03 \x01(\tR\n" +
-	"tenantSlug\"o\n" +
+	"tenantSlug\x122\n" +
+	"\x06routes\x18\x04 \x03(\v2\x1a.paladin.iam.v1.ObjectKeyRouteR\x06routes\"\xa0\x01\n" +
+	"\x0eObjectKeyRoute\x12\x1c\n" +
+	"\tcanonical\x18\x01 \x01(\tR\tcanonical\x12\x1f\n" +
+	"\vtenant_path\x18\x02 \x01(\tR\n" +
+	"tenantPath\x12\x1d\n" +
+	"\n" +
+	"bare_alias\x18\x03 \x01(\tR\tbareAlias\x12\x18\n" +
+	"\abackend\x18\x04 \x01(\tR\abackend\x12\x16\n" +
+	"\x06bucket\x18\x05 \x01(\tR\x06bucket\"o\n" +
 	"\x15ChangePasswordRequest\x12*\n" +
 	"\fold_password\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\voldPassword\x12*\n" +
 	"\fnew_password\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\fR\vnewPassword\"\x18\n" +
@@ -695,7 +804,7 @@ func file_paladin_iam_v1_auth_service_proto_rawDescGZIP() []byte {
 	return file_paladin_iam_v1_auth_service_proto_rawDescData
 }
 
-var file_paladin_iam_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_paladin_iam_v1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_paladin_iam_v1_auth_service_proto_goTypes = []any{
 	(*LoginRequest)(nil),             // 0: paladin.iam.v1.LoginRequest
 	(*LoginResponse)(nil),            // 1: paladin.iam.v1.LoginResponse
@@ -705,35 +814,37 @@ var file_paladin_iam_v1_auth_service_proto_goTypes = []any{
 	(*RevokeResponse)(nil),           // 5: paladin.iam.v1.RevokeResponse
 	(*WhoAmIRequest)(nil),            // 6: paladin.iam.v1.WhoAmIRequest
 	(*WhoAmIResponse)(nil),           // 7: paladin.iam.v1.WhoAmIResponse
-	(*ChangePasswordRequest)(nil),    // 8: paladin.iam.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil),   // 9: paladin.iam.v1.ChangePasswordResponse
-	(*ExchangeAudienceRequest)(nil),  // 10: paladin.iam.v1.ExchangeAudienceRequest
-	(*ExchangeAudienceResponse)(nil), // 11: paladin.iam.v1.ExchangeAudienceResponse
-	(*TokenPair)(nil),                // 12: paladin.iam.v1.TokenPair
-	(*User)(nil),                     // 13: paladin.iam.v1.User
+	(*ObjectKeyRoute)(nil),           // 8: paladin.iam.v1.ObjectKeyRoute
+	(*ChangePasswordRequest)(nil),    // 9: paladin.iam.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),   // 10: paladin.iam.v1.ChangePasswordResponse
+	(*ExchangeAudienceRequest)(nil),  // 11: paladin.iam.v1.ExchangeAudienceRequest
+	(*ExchangeAudienceResponse)(nil), // 12: paladin.iam.v1.ExchangeAudienceResponse
+	(*TokenPair)(nil),                // 13: paladin.iam.v1.TokenPair
+	(*User)(nil),                     // 14: paladin.iam.v1.User
 }
 var file_paladin_iam_v1_auth_service_proto_depIdxs = []int32{
-	12, // 0: paladin.iam.v1.LoginResponse.tokens:type_name -> paladin.iam.v1.TokenPair
-	13, // 1: paladin.iam.v1.LoginResponse.user:type_name -> paladin.iam.v1.User
-	12, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
-	13, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
-	0,  // 4: paladin.iam.v1.AuthService.Login:input_type -> paladin.iam.v1.LoginRequest
-	2,  // 5: paladin.iam.v1.AuthService.RefreshToken:input_type -> paladin.iam.v1.RefreshTokenRequest
-	4,  // 6: paladin.iam.v1.AuthService.Revoke:input_type -> paladin.iam.v1.RevokeRequest
-	6,  // 7: paladin.iam.v1.AuthService.WhoAmI:input_type -> paladin.iam.v1.WhoAmIRequest
-	8,  // 8: paladin.iam.v1.AuthService.ChangePassword:input_type -> paladin.iam.v1.ChangePasswordRequest
-	10, // 9: paladin.iam.v1.AuthService.ExchangeAudience:input_type -> paladin.iam.v1.ExchangeAudienceRequest
-	1,  // 10: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
-	3,  // 11: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
-	5,  // 12: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
-	7,  // 13: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
-	9,  // 14: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
-	11, // 15: paladin.iam.v1.AuthService.ExchangeAudience:output_type -> paladin.iam.v1.ExchangeAudienceResponse
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	13, // 0: paladin.iam.v1.LoginResponse.tokens:type_name -> paladin.iam.v1.TokenPair
+	14, // 1: paladin.iam.v1.LoginResponse.user:type_name -> paladin.iam.v1.User
+	13, // 2: paladin.iam.v1.RefreshTokenResponse.tokens:type_name -> paladin.iam.v1.TokenPair
+	14, // 3: paladin.iam.v1.WhoAmIResponse.user:type_name -> paladin.iam.v1.User
+	8,  // 4: paladin.iam.v1.WhoAmIResponse.routes:type_name -> paladin.iam.v1.ObjectKeyRoute
+	0,  // 5: paladin.iam.v1.AuthService.Login:input_type -> paladin.iam.v1.LoginRequest
+	2,  // 6: paladin.iam.v1.AuthService.RefreshToken:input_type -> paladin.iam.v1.RefreshTokenRequest
+	4,  // 7: paladin.iam.v1.AuthService.Revoke:input_type -> paladin.iam.v1.RevokeRequest
+	6,  // 8: paladin.iam.v1.AuthService.WhoAmI:input_type -> paladin.iam.v1.WhoAmIRequest
+	9,  // 9: paladin.iam.v1.AuthService.ChangePassword:input_type -> paladin.iam.v1.ChangePasswordRequest
+	11, // 10: paladin.iam.v1.AuthService.ExchangeAudience:input_type -> paladin.iam.v1.ExchangeAudienceRequest
+	1,  // 11: paladin.iam.v1.AuthService.Login:output_type -> paladin.iam.v1.LoginResponse
+	3,  // 12: paladin.iam.v1.AuthService.RefreshToken:output_type -> paladin.iam.v1.RefreshTokenResponse
+	5,  // 13: paladin.iam.v1.AuthService.Revoke:output_type -> paladin.iam.v1.RevokeResponse
+	7,  // 14: paladin.iam.v1.AuthService.WhoAmI:output_type -> paladin.iam.v1.WhoAmIResponse
+	10, // 15: paladin.iam.v1.AuthService.ChangePassword:output_type -> paladin.iam.v1.ChangePasswordResponse
+	12, // 16: paladin.iam.v1.AuthService.ExchangeAudience:output_type -> paladin.iam.v1.ExchangeAudienceResponse
+	11, // [11:17] is the sub-list for method output_type
+	5,  // [5:11] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_auth_service_proto_init() }
@@ -748,7 +859,7 @@ func file_paladin_iam_v1_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_auth_service_proto_rawDesc), len(file_paladin_iam_v1_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

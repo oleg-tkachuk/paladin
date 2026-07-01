@@ -758,6 +758,13 @@ type Reconciler struct {
 
 type Cedar struct {
 	PolicyCacheTTL time.Duration `yaml:"policy_cache_ttl" json:"policy_cache_ttl"`
+	// CanonicalObjectKeyEUID switches the Cedar ObjectKey entity UID from the
+	// legacy `{tenant_uuid}/{object_key}` form to the canonical A-shape name
+	// (ADR-0010, Phase 1). Default false. Only applies where (backend, bucket)
+	// are in scope on the authz request; attribute/parent-based policies are
+	// unaffected by the UID string. Flip per-environment only after confirming
+	// no policy hardcodes a `resource == ObjectKey::"…"` literal.
+	CanonicalObjectKeyEUID bool `yaml:"canonical_object_key_euid" json:"canonical_object_key_euid"`
 }
 
 // MCP gates the Model Context Protocol bridges (the LLM-facing entry points).

@@ -106,14 +106,19 @@ Verified against the tree, not assumed:
 | Phase 1 — audit `resource_name` canonical for objectKey ops (handler stashes `CanonicalName` for the audit interceptor) | **Done** |
 | Phase 1 — event `resource_name` canonical for objectKey Create/Update/Delete | **Done** |
 | Phase 1 — Cedar authoring docs steer policies off EUID literals | **Done** (this commit) |
-| Phase 1 — **Cedar ObjectKey EUID → canonical** | **Remaining.** Needs `(backend, bucket)` at every objectKey authz site — but e.g. `GetObjectKey` authorizes *before* reading the row, so this is a multi-site threading change (resolver-enrich or read-then-authorize), landed behind a shadow-eval/soak per the rollback note. Deployed policies use no EUID literals, so it is behaviourally safe once threaded. |
-| Phase 1 — **backfill migration** for existing `audit_log` / `event_deliveries` C-shape rows | **Remaining.** Risky (partitioned history); deterministic join on `object_keys(tenant_id, backend_id, bucket_name)`. |
-| Phase 1 — data-plane / ingest object-event `resource_name` (`…/objects-by-key/…`) canonicalization | **Remaining** (object-level, not objectKey CRUD). |
-| Phases 3 (B alias), 4 (WhoAmI), 5 (soft-deprecate C) | **Not started** (5 is data-gated). |
+| Phase 1 — **Cedar ObjectKey EUID → canonical** | **Done — enabled by default** (`cedar.canonical_object_key_euid: true` in the shipped configs + chart values). The engine emits the canonical A-shape ObjectKey UID where `(backend, bucket)` are in scope; `WithCanonicalObjectKeyEUID` option + config flag. Enabling is behaviourally inert **by construction**: PALADIN ships no policy that pins a `resource == ObjectKey::"…"` literal (the default template is attribute/parent-based, `defaultpolicy.go`), so nothing matches on the UID string — proven in `canonical_euid_test.go`. buildEntities + resourceUID share one `objectKeyUIDFor`, so attributes/parents are identical either way. **Design constraint (not a gap):** only Create + BindObjectKeyToBucket carry the binding pre-authz, so only they canonicalize. Get/Update/Delete/Stats authorize *before* reading the row on purpose (reading first leaks existence: PermissionDenied-vs-NotFound), so they keep the legacy `{tid}/{ok}` UID. The canonical EUID is therefore inherently *partial by call class* — fine, because PALADIN's policies are UID-agnostic. The flag stays so an operator who (against `cedar-authoring.md`) hardcodes an EUID literal can turn it off. |
+| Phase 1 — backfill of existing `audit_log` / `event_deliveries` C-shape rows | **Done / out-of-scope.** `audit_log` was rewritten C→A by **migration 035** (deterministic join on `object_keys(tenant_id, object_key)`; reversible). `event_deliveries` is deliberately **not** backfilled: its `resource_name` lives inside the `event_payload` JSONB (not a column) and rows are ephemeral (reaped minutes-hours after delivery), so a JSONB rewrite of soon-to-be-pruned rows is all cost, no value — new deliveries already ship canonical. |
+| Phase 1 — data-plane / ingest object-event `resource_name` (`…/objects-by-key/…`) canonicalization | **Done.** Both producers emit canonical A: the data-plane object handler (uploaded/updated/deleted/restored/copy — resolves the objectKey prefix once before the mutation tx) and the storage-event ingest emitter (`eventingest.PromoteHandler`, so implicit-mode uploads match explicit CompleteObject). Both fall back to the C-shape name on a binding-resolve miss. |
+| **Phase 3** — B alias + `tenant_default_bindings` (migration 034, 3 RPCs, resolver `ResolveObjectKeyNameWithBinding`, CreateObjectKey routing, settings UI "Default Route" tab) | **Done** |
+| **Phase 4** — WhoAmI surfaces all three name shapes (`repeated ObjectKeyRoute routes`; `wire.objectKeyRouteLister` reuses `ListObjectKeys` authz + tenant default binding; capped, best-effort) | **Done** |
+| Phase 5 (soft-deprecate C on the wire) | **Not started** (data-gated — needs ≥1 week of real `paladin_resource_name_shape_total`). |
 
-So Phase 1 is largely live for the objectKey API surface; the two coordinated
-risky pieces (Cedar EUID + backfill) are what a Phase-1 completion PR must do
-together in one deploy window.
+So Phase 1 is complete for the objectKey API surface. The two pieces once
+flagged as a coordinated deploy-window risk are resolved: the Cedar EUID is
+canonical and enabled by default (behaviourally inert — no policy matches the
+UID string), and the `audit_log` backfill landed in migration 035 while
+`event_deliveries` is intentionally left C-shape (ephemeral JSONB). No further
+deploy-window coordination is required for Phase 1.
 
 ## Consequences
 
@@ -123,13 +128,20 @@ together in one deploy window.
 - **Breaking (Phase 1).** Outbound event `resource_name` changes C → A — event
   subscribers must be told (changelog + a version bump on the sink config, per
   the CloudEvents work). Audit rows change shape after the backfill.
-- **Cost.** Canonical Cedar EUID adds a `(backend, bucket)` binding lookup to
-  the objectKey authz path (cacheable per objectKey). Phase 1 is a
-  multi-surface change requiring a coordinated deploy + backfill, not a batch.
+- **Cost.** Canonical Cedar EUID reuses the `(backend, bucket)` already carried
+  on the authz request at the Create/Bind call class — no extra lookup — and
+  only changes the UID *string*, which no policy matches. Effectively free.
 - **Rollback.** Each phase's migration is reversible (Down restores the prior
-  `resource_name`/EUID form). Phase 1's Cedar-EUID switch is the only one that
-  is authz-visible; gate it behind a shadow-eval (log old-vs-new decisions for
-  a soak period before enforcing) so a divergence is caught before it denies.
+  `resource_name`/EUID form). Phase 1's Cedar-EUID switch is the only
+  authz-visible one; it ships behind the `cedar.canonical_object_key_euid` flag
+  (**now default on in the shipped configs**), so rollback is flipping the flag
+  back to false — no redeploy of the policy set. We chose the config-flag gate
+  over the shadow-eval the plan originally suggested: verification showed **no
+  deployed policy uses an ObjectKey EUID literal**, and attribute/parent
+  policies are provably unaffected by the UID string (`canonical_euid_test.go`),
+  so divergence for current policies is zero by construction — a shadow-eval
+  would only confirm that. Operators inheriting unknown policies should still
+  diff decisions in a staging environment before enabling it.
 
 ## Alternatives considered
 

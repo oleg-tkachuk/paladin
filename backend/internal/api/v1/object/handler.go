@@ -396,8 +396,38 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	return err
 }
 
+// objectResourceName is the C-shape (tenant-first) object resource name. Kept
+// as the fallback the canonical builders degrade to when the (backend, bucket)
+// binding can't be resolved.
 func objectResourceName(tenantID uuid.UUID, objectKey, key string) string {
 	return fmt.Sprintf("tenants/%s/objectKeys/%s/objects-by-key/%s", tenantID, objectKey, key)
+}
+
+// canonicalObjectPrefix resolves the canonical (A-shape) objectKey prefix
+// `storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}` used to build
+// object-level event resource names (ADR-0010 Phase 1). The (backend, bucket)
+// binding depends only on the objectKey, so callers resolve it ONCE before the
+// mutation tx and pass it into the dispatch — never a pool read inside an open
+// tx. On a lookup miss it returns "" and the caller falls back to the C-shape
+// name; a transient resolve blip must never block the event.
+func (h *Handler) canonicalObjectPrefix(ctx context.Context, tenantID uuid.UUID, objectKey string) string {
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, objectKey)
+	if err != nil || meta.BackendID == "" || meta.BucketName == "" {
+		return ""
+	}
+	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/objectKeys/%s",
+		meta.BackendID, meta.BucketName, tenantID, objectKey)
+}
+
+// objectResourceNameFrom builds the object event resource name: canonical (A)
+// when the pre-resolved prefix is non-empty, else the C-shape fallback. The
+// `/objects-by-key/` anchor + user key are appended verbatim (the user key may
+// contain '/').
+func objectResourceNameFrom(canonicalPrefix string, tenantID uuid.UUID, objectKey, key string) string {
+	if canonicalPrefix == "" {
+		return objectResourceName(tenantID, objectKey, key)
+	}
+	return canonicalPrefix + "/objects-by-key/" + key
 }
 
 type PresignConfig struct {
@@ -663,10 +693,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// re-emits — consistent, never half-done. Payload is built from the
 	// pre-promote read + the authoritative inputs (which are exactly the
 	// post-promote etag/size), so no in-tx re-read is needed.
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.ObjectKey)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+				objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
 				map[string]any{
 					"tenant_id":    tenantID.String(),
 					"object_key":   obj.ObjectKey,
@@ -1003,6 +1034,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	// Update + paladin.object.updated fan-out in one tx (ADR-0003): a dispatch
 	// failure rolls back the metadata change, so the client's at-least-once
 	// retry re-applies both rather than silently dropping the event.
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.ObjectKey)
 	var obj Object
 	err = h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var uerr error
@@ -1020,7 +1052,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 			return uerr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.updated",
-			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
 			map[string]any{
 				"tenant_id":      tenantID.String(),
 				"object_key":     obj.ObjectKey,
@@ -1072,12 +1104,13 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 		return connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, objectKey)
 	if !permanent {
 		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
 		// the event is atomic with the AVAILABLE→DELETED flip.
 		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
-				objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+				objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
 				map[string]any{
 					"tenant_id":  tenantID.String(),
 					"object_key": obj.ObjectKey,
@@ -1151,7 +1184,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 			return derr
 		}
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
-			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
 			map[string]any{
 				"tenant_id":         tenantID.String(),
 				"object_key":        obj.ObjectKey,
@@ -1251,9 +1284,10 @@ func (h *Handler) RestoreObject(ctx context.Context, objectKey, objectIDStr, res
 	// Restore + paladin.object.restored fan-out in one tx (ADR-0003). Resource
 	// identity (object_key/key/object_id) is unchanged by restore, so the
 	// payload is built from the pre-restore `obj`.
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, objectKey)
 	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
 		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.restored",
-			objectResourceName(tenantID, obj.ObjectKey, obj.Key),
+			objectResourceNameFrom(okPrefix, tenantID, obj.ObjectKey, obj.Key),
 			map[string]any{
 				"tenant_id":  tenantID.String(),
 				"object_key": obj.ObjectKey,
@@ -1373,11 +1407,12 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// inputs (== the post-promote row) so the event can be enqueued inside
 	// the promote tx without a read. A dispatch error rolls the promote
 	// back; the client's at-least-once retry re-runs both.
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.DestObjectKey)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
 		src.Checksum, "", statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceName(tenantID, in.DestObjectKey, destKey),
+				objectResourceNameFrom(okPrefix, tenantID, in.DestObjectKey, destKey),
 				map[string]any{
 					"tenant_id":         tenantID.String(),
 					"object_key":        in.DestObjectKey,

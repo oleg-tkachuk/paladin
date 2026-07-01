@@ -119,7 +119,8 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 
 	polStore := policy.NewPostgresStore(pool)
-	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL)
+	polEngine := policy.NewEngine(polStore, cfg.Cedar.PolicyCacheTTL,
+		policy.WithCanonicalObjectKeyEUID(cfg.Cedar.CanonicalObjectKeyEUID))
 	if err := polEngine.Start(ctx); err != nil {
 		return nil, fmt.Errorf("app: policy engine start: %w", err)
 	}

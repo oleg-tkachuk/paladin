@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIn0KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkSFwoPaW5jbHVkZV90cmFzaGVkGAMgASgIEhQKDG9ubHlfdHJhc2hlZBgEIAEoCCJnChNMaXN0VGVuYW50c1Jlc3BvbnNlEiUKB3RlbmFudHMYASADKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJiChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQASI2ChlSZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0EhkKCG9sZF9zbHVnGAEgASgJQge6SARyAhABIl4KGlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlEhAKCG5ld19zbHVnGAEgASgJEi4KCnJlbmFtZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wMr0GCg1UZW5hbnRTZXJ2aWNlEkcKDENyZWF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5DcmVhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJBCglHZXRUZW5hbnQSHi5vY3AuYWRtaW4udjEuR2V0VGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSRwoMVXBkYXRlVGVuYW50EiEub2NwLmFkbWluLnYxLlVwZGF0ZVRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50ElUKDERlbGV0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiIub2NwLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlc3BvbnNlElIKC0xpc3RUZW5hbnRzEiAub2NwLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVxdWVzdBohLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1Jlc3BvbnNlElMKElNldEluaGVyaXRlZFBvbGljeRInLm9jcC5hZG1pbi52MS5TZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJJCg1SZXN0b3JlVGVuYW50EiIub2NwLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJSCgtQdXJnZVRlbmFudBIgLm9jcC5hZG1pbi52MS5QdXJnZVRlbmFudFJlcXVlc3QaIS5vY3AuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZRJPChBSZW5hbWVUZW5hbnRTbHVnEiUub2NwLmFkbWluLnYxLlJlbmFtZVRlbmFudFNsdWdSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJnChJSZXNvbHZlUmVuYW1lZFNsdWcSJy5vY3AuYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBooLm9jcC5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    "CiFvY3AvYWRtaW4vdjEvdGVuYW50X3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSJuChNDcmVhdGVUZW5hbnRSZXF1ZXN0EhEKCXRlbmFudF9pZBgBIAEoCRIsCgZ0ZW5hbnQYAiABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIqUBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIkCgZ0ZW5hbnQYBCABKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50IlUKE0RlbGV0ZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEg0KBWZvcmNlGAMgASgIIhYKFERlbGV0ZVRlbmFudFJlc3BvbnNlIn0KEkxpc3RUZW5hbnRzUmVxdWVzdBIoCgRwYWdlGAEgASgLMhoub2NwLmNvbW1vbi52MS5QYWdlUmVxdWVzdBIOCgZmaWx0ZXIYAiABKAkSFwoPaW5jbHVkZV90cmFzaGVkGAMgASgIEhQKDG9ubHlfdHJhc2hlZBgEIAEoCCJnChNMaXN0VGVuYW50c1Jlc3BvbnNlEiUKB3RlbmFudHMYASADKAsyFC5vY3AuYWRtaW4udjEuVGVuYW50EikKBHBhZ2UYAiABKAsyGy5vY3AuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJiChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlImUKF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCRIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQASI2ChlSZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0EhkKCG9sZF9zbHVnGAEgASgJQge6SARyAhABIl4KGlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlEhAKCG5ld19zbHVnGAEgASgJEi4KCnJlbmFtZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIokBChRUZW5hbnREZWZhdWx0QmluZGluZxIMCgRuYW1lGAEgASgJEhIKCmJhY2tlbmRfaWQYAiABKAkSEwoLYnVja2V0X25hbWUYAyABKAkSKgoGc2V0X2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEicgoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGwoKYmFja2VuZF9pZBgCIAEoCUIHukgEcgIQARIcCgtidWNrZXRfbmFtZRgDIAEoCUIHukgEcgIQASI5CiBDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIiMKIUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZTKVCQoNVGVuYW50U2VydmljZRJHCgxDcmVhdGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSQQoJR2V0VGVuYW50Eh4ub2NwLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaFC5vY3AuYWRtaW4udjEuVGVuYW50EkcKDFVwZGF0ZVRlbmFudBIhLm9jcC5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhQub2NwLmFkbWluLnYxLlRlbmFudBJVCgxEZWxldGVUZW5hbnQSIS5vY3AuYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBoiLm9jcC5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZRJSCgtMaXN0VGVuYW50cxIgLm9jcC5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaIS5vY3AuYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZRJTChJTZXRJbmhlcml0ZWRQb2xpY3kSJy5vY3AuYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSSQoNUmVzdG9yZVRlbmFudBIiLm9jcC5hZG1pbi52MS5SZXN0b3JlVGVuYW50UmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSUgoLUHVyZ2VUZW5hbnQSIC5vY3AuYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXF1ZXN0GiEub2NwLmFkbWluLnYxLlB1cmdlVGVuYW50UmVzcG9uc2USTwoQUmVuYW1lVGVuYW50U2x1ZxIlLm9jcC5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoULm9jcC5hZG1pbi52MS5UZW5hbnQSZwoSUmVzb2x2ZVJlbmFtZWRTbHVnEicub2NwLmFkbWluLnYxLlJlc29sdmVSZW5hbWVkU2x1Z1JlcXVlc3QaKC5vY3AuYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVzcG9uc2USawoXR2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSLC5vY3AuYWRtaW4udjEuR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiIub2NwLmFkbWluLnYxLlRlbmFudERlZmF1bHRCaW5kaW5nEmsKF1NldFRlbmFudERlZmF1bHRCaW5kaW5nEiwub2NwLmFkbWluLnYxLlNldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBoiLm9jcC5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZxJ8ChlDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nEi4ub2NwLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0Gi8ub2NwLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -422,6 +422,139 @@ export const ResolveRenamedSlugResponseSchema: GenMessage<ResolveRenamedSlugResp
   messageDesc(file_paladin_admin_v1_tenant_service, 13);
 
 /**
+ * TenantDefaultBinding is a tenant's default (backend, bucket) route for the
+ * bare object_key name shape (ADR-0010 Phase 3 / migration 034).
+ *
+ * @generated from message paladin.admin.v1.TenantDefaultBinding
+ */
+export type TenantDefaultBinding =
+  Message<"paladin.admin.v1.TenantDefaultBinding"> & {
+    /**
+     * name — "tenants/{tenant_id}/defaultBinding".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: string backend_id = 2;
+     */
+    backendId: string;
+
+    /**
+     * @generated from field: string bucket_name = 3;
+     */
+    bucketName: string;
+
+    /**
+     * set_at / set_by — audit of the last change.
+     *
+     * @generated from field: google.protobuf.Timestamp set_at = 4;
+     */
+    setAt?: Timestamp | undefined;
+
+    /**
+     * @generated from field: string set_by = 5;
+     */
+    setBy: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantDefaultBinding.
+ * Use `create(TenantDefaultBindingSchema)` to create a new message.
+ */
+export const TenantDefaultBindingSchema: GenMessage<TenantDefaultBinding> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 14);
+
+/**
+ * @generated from message paladin.admin.v1.GetTenantDefaultBindingRequest
+ */
+export type GetTenantDefaultBindingRequest =
+  Message<"paladin.admin.v1.GetTenantDefaultBindingRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GetTenantDefaultBindingRequest.
+ * Use `create(GetTenantDefaultBindingRequestSchema)` to create a new message.
+ */
+export const GetTenantDefaultBindingRequestSchema: GenMessage<GetTenantDefaultBindingRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 15);
+
+/**
+ * @generated from message paladin.admin.v1.SetTenantDefaultBindingRequest
+ */
+export type SetTenantDefaultBindingRequest =
+  Message<"paladin.admin.v1.SetTenantDefaultBindingRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: string backend_id = 2;
+     */
+    backendId: string;
+
+    /**
+     * @generated from field: string bucket_name = 3;
+     */
+    bucketName: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.SetTenantDefaultBindingRequest.
+ * Use `create(SetTenantDefaultBindingRequestSchema)` to create a new message.
+ */
+export const SetTenantDefaultBindingRequestSchema: GenMessage<SetTenantDefaultBindingRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 16);
+
+/**
+ * @generated from message paladin.admin.v1.ClearTenantDefaultBindingRequest
+ */
+export type ClearTenantDefaultBindingRequest =
+  Message<"paladin.admin.v1.ClearTenantDefaultBindingRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ClearTenantDefaultBindingRequest.
+ * Use `create(ClearTenantDefaultBindingRequestSchema)` to create a new message.
+ */
+export const ClearTenantDefaultBindingRequestSchema: GenMessage<ClearTenantDefaultBindingRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 17);
+
+/**
+ * @generated from message paladin.admin.v1.ClearTenantDefaultBindingResponse
+ */
+export type ClearTenantDefaultBindingResponse =
+  Message<"paladin.admin.v1.ClearTenantDefaultBindingResponse"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.ClearTenantDefaultBindingResponse.
+ * Use `create(ClearTenantDefaultBindingResponseSchema)` to create a new message.
+ */
+export const ClearTenantDefaultBindingResponseSchema: GenMessage<ClearTenantDefaultBindingResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 18);
+
+/**
  * TenantService manages tenants. Platform-admin only.
  *
  * @generated from service paladin.admin.v1.TenantService
@@ -538,5 +671,39 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof ResolveRenamedSlugRequestSchema;
     output: typeof ResolveRenamedSlugResponseSchema;
+  };
+  /**
+   * GetTenantDefaultBinding returns the tenant's default (backend, bucket)
+   * route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+   * NOT_FOUND when the tenant has no binding set.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.GetTenantDefaultBinding
+   */
+  getTenantDefaultBinding: {
+    methodKind: "unary";
+    input: typeof GetTenantDefaultBindingRequestSchema;
+    output: typeof TenantDefaultBindingSchema;
+  };
+  /**
+   * SetTenantDefaultBinding upserts the tenant's default route. The
+   * (backend, bucket) MUST reference an existing bucket.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.SetTenantDefaultBinding
+   */
+  setTenantDefaultBinding: {
+    methodKind: "unary";
+    input: typeof SetTenantDefaultBindingRequestSchema;
+    output: typeof TenantDefaultBindingSchema;
+  };
+  /**
+   * ClearTenantDefaultBinding removes the tenant's default route; bare
+   * object_key names for that tenant then fail with FAILED_PRECONDITION.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.ClearTenantDefaultBinding
+   */
+  clearTenantDefaultBinding: {
+    methodKind: "unary";
+    input: typeof ClearTenantDefaultBindingRequestSchema;
+    output: typeof ClearTenantDefaultBindingResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_service, 0);

@@ -772,6 +772,29 @@ open deliberately — each notes why._
   the cross-tenant `GetObjectKey` fix), so it stays optional/deferred rather
   than risk a regression for marginal dedup.
 
+### Phase 4: WhoAmI route table is capped, not paginated
+
+- **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)
+  (2026-07-01), plan Phase 4.** `AuthService.WhoAmI` now returns
+  `repeated ObjectKeyRoute routes` — every ObjectKey the caller can read, in
+  all three name shapes (A/C/B) plus (backend, bucket) — so clients normalize
+  to canonical before sending (`internal/wire/objectkey_routes.go`).
+- **Status:** Deferred (shipped with a hard cap). The lister pulls
+  `ListObjectKeys` in pages of `whoAmIRoutePageSize` (200) and stops at
+  `whoAmIMaxRoutes` (1000); beyond that the route table is silently truncated.
+  There is no page token on the wire — WhoAmI returns one shot.
+- **Reason:** WhoAmI's primary job is identity; an unbounded per-ObjectKey dump
+  in the identity call is a response-size hazard for large tenants. The cap
+  keeps the common case (tens–hundreds of ObjectKeys) correct and cheap. Route
+  lookup is also best-effort: a failure (incl. a Cedar denial for a caller who
+  can't list ObjectKeys) degrades to an empty table, never a WhoAmI 5xx.
+- **Definition of Done:** either (a) paginate the route table (WhoAmI page
+  token, or a dedicated `ListObjectKeyRoutes` RPC) so large tenants get a
+  complete table, or (b) confirm from real usage that the 1000 cap is never
+  hit and make the truncation explicit to clients (a `routes_truncated` flag).
+- **Blockers:** needs real tenant-size distribution — same data gap as the
+  shape-deprecation decision above. Until then the cap is a safe default.
+
 ### Cedar policy templates: canonical resource literals
 
 - **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)

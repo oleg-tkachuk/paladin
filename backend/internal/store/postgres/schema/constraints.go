@@ -54,8 +54,11 @@ const (
 	// ON DELETE CASCADE.
 	TenantDefaultBindingsTenantFK = "tenant_default_bindings_tenant_id_fkey"
 	// TenantDefaultBindingsBucketFK — composite FK to
-	// buckets(backend_id, bucket_name) ON DELETE RESTRICT.
-	TenantDefaultBindingsBucketFK = "tenant_default_bindings_backend_id_fkey"
+	// buckets(backend_id, bucket_name) ON DELETE RESTRICT. Postgres auto-names
+	// a composite FK after ALL its columns, so it's `…_backend_id_bucket_name_fkey`
+	// — not `…_backend_id_fkey`. The shorter name never matched, so the FK
+	// violation was surfacing raw instead of as ErrDefaultBindingBucketMissing.
+	TenantDefaultBindingsBucketFK = "tenant_default_bindings_backend_id_bucket_name_fkey"
 )
 
 // buckets table constraint names — see migration 003.

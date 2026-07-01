@@ -34,6 +34,7 @@ const TABS: TabSpec[] = [
   { slug: "", label: "Overview", exact: true },
   { slug: "buckets", label: "Buckets" },
   { slug: "object-keys", label: "Object Keys" },
+  { slug: "default-binding", label: "Default Route" },
   { slug: "policies", label: "Policies" },
   { slug: "quotas", label: "Quotas" },
   { slug: "capabilities", label: "Capabilities" },

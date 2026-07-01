@@ -54,6 +54,19 @@ service TenantService {
   // read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
   // enumerate slug→tenant mappings.
   rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse);
+
+  // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
+  // route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+  // NOT_FOUND when the tenant has no binding set.
+  rpc GetTenantDefaultBinding(GetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
+
+  // SetTenantDefaultBinding upserts the tenant's default route. The
+  // (backend, bucket) MUST reference an existing bucket.
+  rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefaultBinding);
+
+  // ClearTenantDefaultBinding removes the tenant's default route; bare
+  // object_key names for that tenant then fail with FAILED_PRECONDITION.
+  rpc ClearTenantDefaultBinding(ClearTenantDefaultBindingRequest) returns (ClearTenantDefaultBindingResponse);
 }
 
 message CreateTenantRequest {
@@ -157,3 +170,34 @@ message ResolveRenamedSlugResponse {
   // renamed_at — when the rotation happened (for a "renamed N days ago" hint).
   google.protobuf.Timestamp renamed_at = 2;
 }
+
+// TenantDefaultBinding is a tenant's default (backend, bucket) route for the
+// bare object_key name shape (ADR-0010 Phase 3 / migration 034).
+message TenantDefaultBinding {
+  // name — "tenants/{tenant_id}/defaultBinding".
+  string name = 1;
+  string backend_id = 2;
+  string bucket_name = 3;
+  // set_at / set_by — audit of the last change.
+  google.protobuf.Timestamp set_at = 4;
+  string set_by = 5;
+}
+
+message GetTenantDefaultBindingRequest {
+  // name — "tenants/{tenant_id_or_slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message SetTenantDefaultBindingRequest {
+  // name — "tenants/{tenant_id_or_slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string backend_id = 2 [(buf.validate.field).string.min_len = 1];
+  string bucket_name = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message ClearTenantDefaultBindingRequest {
+  // name — "tenants/{tenant_id_or_slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ClearTenantDefaultBindingResponse {}

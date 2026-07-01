@@ -225,7 +225,24 @@ type Engine struct {
 	// Set short (~30s) so a missed invalidation event self-corrects.
 	ttl time.Duration
 
+	// canonicalObjectKeyEUID switches the ObjectKey entity UID from the legacy
+	// `{tenant_uuid}/{object_key}` form to the canonical A-shape name
+	// (ADR-0010). Only takes effect where (backend, bucket) are in scope on the
+	// request; attribute/parent-based policies are unaffected by the UID string
+	// either way. Default off; flip per-environment after confirming no policy
+	// hardcodes a `resource == ObjectKey::"…"` literal.
+	canonicalObjectKeyEUID bool
+
 	m metrics
+}
+
+// EngineOption configures an Engine at construction.
+type EngineOption func(*Engine)
+
+// WithCanonicalObjectKeyEUID enables the canonical A-shape ObjectKey entity
+// UID (ADR-0010, Phase 1). Off by default.
+func WithCanonicalObjectKeyEUID(on bool) EngineOption {
+	return func(e *Engine) { e.canonicalObjectKeyEUID = on }
 }
 
 type cacheKey struct {
@@ -240,11 +257,15 @@ type compiledPolicy struct {
 }
 
 // NewEngine constructs an Engine. Call Start to kick off the invalidation loop.
-func NewEngine(store Store, ttl time.Duration) *Engine {
+func NewEngine(store Store, ttl time.Duration, opts ...EngineOption) *Engine {
 	if ttl == 0 {
 		ttl = 30 * time.Second
 	}
-	return &Engine{store: store, ttl: ttl}
+	e := &Engine{store: store, ttl: ttl}
+	for _, o := range opts {
+		o(e)
+	}
+	return e
 }
 
 // Start begins watching the Store for policy changes. Cancel ctx to stop.
@@ -286,11 +307,11 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 		return DecisionDeny, err
 	}
 
-	entities := buildEntities(p, r)
+	entities := e.buildEntities(p, r)
 	req := cedartypes.Request{
 		Principal: userUID(p),
 		Action:    actionUID(action),
-		Resource:  resourceUID(r),
+		Resource:  e.resourceUID(r),
 		Context:   buildContext(rc),
 	}
 
@@ -404,6 +425,33 @@ func objectKeyUID(tenantID uuid.UUID, objectKey string) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(tenantID.String()+"/"+objectKey))
 }
 
+// Canonical A-shape ObjectKey name segments (ADR-0010). Inlined here rather
+// than importing internal/api/v1/object_key (that package imports cedar —
+// importing it back would cycle).
+const (
+	cedarCanonBackendPrefix = "storageBackends/"
+	cedarCanonBucketSep     = "/buckets/"
+	cedarCanonTenantSep     = "/tenants/"
+	cedarCanonObjectKeySep  = "/objectKeys/"
+)
+
+// objectKeyUIDFor returns the ObjectKey entity UID for the resource. When the
+// canonical-EUID flag is on AND (backend, bucket) are in scope, it emits the
+// canonical A-shape name; otherwise the legacy `{tenant_uuid}/{object_key}`
+// form. Both keep identical entity attributes/parents, so attribute/parent
+// policies are unaffected — only a hardcoded `resource == ObjectKey::"literal"`
+// would see the difference (PALADIN ships none; see cedar-authoring.md §4).
+func (e *Engine) objectKeyUIDFor(r *Resource) cedartypes.EntityUID {
+	if e.canonicalObjectKeyEUID && r.BackendID != "" && r.BucketName != "" {
+		name := cedarCanonBackendPrefix + r.BackendID +
+			cedarCanonBucketSep + r.BucketName +
+			cedarCanonTenantSep + r.TenantID.String() +
+			cedarCanonObjectKeySep + r.ObjectKey
+		return cedartypes.NewEntityUID(entityTypeObjectKey, cedartypes.String(name))
+	}
+	return objectKeyUID(r.TenantID, r.ObjectKey)
+}
+
 func physicalBucketUID(backendID, bucketName string) cedartypes.EntityUID {
 	return cedartypes.NewEntityUID(entityTypeBucket, cedartypes.String(backendID+"/"+bucketName))
 }
@@ -420,7 +468,7 @@ func storageBackendUID(backendID string) cedartypes.EntityUID {
 //   - ApiKey         when TargetApiKeyID set
 //   - User           when TargetUserID or TargetSubject set
 //   - Tenant         when only TenantID set (admin tenant ops)
-func resourceUID(r *Resource) cedartypes.EntityUID {
+func (e *Engine) resourceUID(r *Resource) cedartypes.EntityUID {
 	if r.Key != "" || r.ObjectID != uuid.Nil {
 		id := r.ObjectID.String()
 		if r.ObjectID == uuid.Nil {
@@ -429,7 +477,7 @@ func resourceUID(r *Resource) cedartypes.EntityUID {
 		return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
 	}
 	if r.ObjectKey != "" {
-		return objectKeyUID(r.TenantID, r.ObjectKey)
+		return e.objectKeyUIDFor(r)
 	}
 	if r.BackendID != "" && r.BucketName != "" {
 		return physicalBucketUID(r.BackendID, r.BucketName)
@@ -475,7 +523,7 @@ func actionUID(name string) cedartypes.EntityUID {
 // Entities are emitted only when the corresponding resource fields are
 // populated, so admin-plane requests against a StorageBackend don't bring
 // along an unrelated Tenant entity that the policy never references.
-func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
+func (e *Engine) buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 	uUID := userUID(p)
 	rolesSet := make([]cedartypes.Value, 0, len(p.Roles))
 	for _, role := range p.Roles {
@@ -557,7 +605,7 @@ func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 	// ObjectKey — child of Tenant (and Bucket when bucket is in scope).
 	var okUID cedartypes.EntityUID
 	if r.ObjectKey != "" && r.TenantID != uuid.Nil {
-		okUID = objectKeyUID(r.TenantID, r.ObjectKey)
+		okUID = e.objectKeyUIDFor(r)
 		parents := cedartypes.NewEntityUIDSet(tUID)
 		if r.BackendID != "" && r.BucketName != "" {
 			parents = cedartypes.NewEntityUIDSet(tUID, bUID)
@@ -576,7 +624,7 @@ func buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 
 	// Object — child of ObjectKey.
 	if r.Key != "" || r.ObjectID != uuid.Nil {
-		oUID := resourceUID(r)
+		oUID := e.resourceUID(r)
 		tagsSet := make([]cedartypes.Value, 0, len(r.Tags))
 		for k := range r.Tags {
 			tagsSet = append(tagsSet, cedartypes.String(k))

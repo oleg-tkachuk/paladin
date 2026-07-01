@@ -308,6 +308,83 @@ func TestRefreshToken_DecoderError(t *testing.T) {
 	}
 }
 
+// ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
+
+type stubRouteLister struct {
+	routes []ObjectKeyRoute
+	err    error
+	calls  int
+	gotTID uuid.UUID
+}
+
+func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID) ([]ObjectKeyRoute, error) {
+	s.calls++
+	s.gotTID = tid
+	return s.routes, s.err
+}
+
+// whoAmICtx builds a context carrying a principal whose subject is the given
+// user id, as the auth middleware would install post-authn.
+func whoAmICtx(u authstore.User) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject:  u.UserID.String(),
+		TenantID: u.TenantID,
+		Audience: auth.AudienceIAM,
+	})
+}
+
+func TestWhoAmI_NoRouteListerReturnsIdentityOnly(t *testing.T) {
+	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{})
+	out, err := h.WhoAmI(whoAmICtx(u))
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	if len(out.Routes) != 0 {
+		t.Fatalf("routes = %d, want 0 when no lister wired", len(out.Routes))
+	}
+}
+
+func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
+	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
+	want := []ObjectKeyRoute{{
+		Canonical:  "storageBackends/primary/buckets/paladin/tenants/" + u.TenantID.String() + "/objectKeys/invoices",
+		TenantPath: "tenants/" + u.TenantID.String() + "/objectKeys/invoices",
+		BareAlias:  "invoices",
+		Backend:    "primary",
+		Bucket:     "paladin",
+	}}
+	lister := &stubRouteLister{routes: want}
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+
+	out, err := h.WhoAmI(whoAmICtx(u))
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	if lister.calls != 1 || lister.gotTID != u.TenantID {
+		t.Fatalf("lister calls=%d tid=%s, want 1 call for tenant %s", lister.calls, lister.gotTID, u.TenantID)
+	}
+	if len(out.Routes) != 1 || out.Routes[0] != want[0] {
+		t.Fatalf("routes = %+v, want %+v", out.Routes, want)
+	}
+}
+
+func TestWhoAmI_RouteListerErrorDegradesToEmpty(t *testing.T) {
+	// A route-source failure (incl. a Cedar denial) must not fail WhoAmI —
+	// identity still returns, just without routes.
+	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
+	lister := &stubRouteLister{err: connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))}
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+
+	out, err := h.WhoAmI(whoAmICtx(u))
+	if err != nil {
+		t.Fatalf("WhoAmI should not fail on route error: %v", err)
+	}
+	if len(out.Routes) != 0 {
+		t.Fatalf("routes = %d, want 0 on lister error", len(out.Routes))
+	}
+}
+
 // Compile-time interface assertions — including the new minter seam.
 var (
 	_ tokenMinter                      = (*stubMinter)(nil)
@@ -315,4 +392,5 @@ var (
 	_ authstore.RefreshTokenRepository = (*fakeRefresh)(nil)
 	_ RefreshTokenDecoder              = stubDecoder{}
 	_ cedar.Authorizer                 = allowAuthorizer{}
+	_ ObjectKeyRouteLister             = (*stubRouteLister)(nil)
 )

@@ -21,10 +21,16 @@ type fakeLookup struct {
 	gotObjectKey  string
 	gotKey        string
 	lookupCalled  bool
+	binding       sqlc.GetObjectKeyRow
+	bindingErr    error
 }
 
 func (f *fakeLookup) ResolveObjectKeyPrefix(_ context.Context, _ pgtype.UUID, _ string) (string, error) {
 	return f.resolveReturn, f.resolveErr
+}
+
+func (f *fakeLookup) GetObjectKey(_ context.Context, _ pgtype.UUID, _ string) (sqlc.GetObjectKeyRow, error) {
+	return f.binding, f.bindingErr
 }
 
 func (f *fakeLookup) LookupObjectByKey(_ context.Context, _ pgtype.UUID, objectKey, key string) (sqlc.LookupObjectByKeyRow, error) {

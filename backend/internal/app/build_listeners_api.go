@@ -90,7 +90,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		return nil, nil, nil, err
 	}
 	dec := wire.ProvideRefreshDecoder(cfg)
-	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).WithReuseAudit(repos.Audit, l)
+	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).
+		WithReuseAudit(repos.Audit, l).
+		WithObjectKeyRoutes(wire.ProvideObjectKeyRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	apikH := wire.ProvideApiKeyHandler(repos, iss, polEngine)
 	userSettingsH := usersettingsh.NewHandler(

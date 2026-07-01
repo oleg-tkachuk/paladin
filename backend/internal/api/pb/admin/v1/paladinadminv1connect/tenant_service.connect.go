@@ -63,6 +63,15 @@ const (
 	// TenantServiceResolveRenamedSlugProcedure is the fully-qualified name of the TenantService's
 	// ResolveRenamedSlug RPC.
 	TenantServiceResolveRenamedSlugProcedure = "/paladin.admin.v1.TenantService/ResolveRenamedSlug"
+	// TenantServiceGetTenantDefaultBindingProcedure is the fully-qualified name of the TenantService's
+	// GetTenantDefaultBinding RPC.
+	TenantServiceGetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/GetTenantDefaultBinding"
+	// TenantServiceSetTenantDefaultBindingProcedure is the fully-qualified name of the TenantService's
+	// SetTenantDefaultBinding RPC.
+	TenantServiceSetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/SetTenantDefaultBinding"
+	// TenantServiceClearTenantDefaultBindingProcedure is the fully-qualified name of the
+	// TenantService's ClearTenantDefaultBinding RPC.
+	TenantServiceClearTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/ClearTenantDefaultBinding"
 )
 
 // TenantServiceClient is a client for the paladin.admin.v1.TenantService service.
@@ -104,6 +113,16 @@ type TenantServiceClient interface {
 	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
+	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
+	// route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+	// NOT_FOUND when the tenant has no binding set.
+	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	// SetTenantDefaultBinding upserts the tenant's default route. The
+	// (backend, bucket) MUST reference an existing bucket.
+	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	// ClearTenantDefaultBinding removes the tenant's default route; bare
+	// object_key names for that tenant then fail with FAILED_PRECONDITION.
+	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
 }
 
 // NewTenantServiceClient constructs a client for the paladin.admin.v1.TenantService service. By
@@ -177,21 +196,42 @@ func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
 			connect.WithClientOptions(opts...),
 		),
+		getTenantDefaultBinding: connect.NewClient[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
+			httpClient,
+			baseURL+TenantServiceGetTenantDefaultBindingProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
+			connect.WithClientOptions(opts...),
+		),
+		setTenantDefaultBinding: connect.NewClient[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
+			httpClient,
+			baseURL+TenantServiceSetTenantDefaultBindingProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
+			connect.WithClientOptions(opts...),
+		),
+		clearTenantDefaultBinding: connect.NewClient[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse](
+			httpClient,
+			baseURL+TenantServiceClearTenantDefaultBindingProcedure,
+			connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tenantServiceClient implements TenantServiceClient.
 type tenantServiceClient struct {
-	createTenant       *connect.Client[v1.CreateTenantRequest, v1.Tenant]
-	getTenant          *connect.Client[v1.GetTenantRequest, v1.Tenant]
-	updateTenant       *connect.Client[v1.UpdateTenantRequest, v1.Tenant]
-	deleteTenant       *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
-	listTenants        *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
-	setInheritedPolicy *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
-	restoreTenant      *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
-	purgeTenant        *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
-	renameTenantSlug   *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
-	resolveRenamedSlug *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
+	createTenant              *connect.Client[v1.CreateTenantRequest, v1.Tenant]
+	getTenant                 *connect.Client[v1.GetTenantRequest, v1.Tenant]
+	updateTenant              *connect.Client[v1.UpdateTenantRequest, v1.Tenant]
+	deleteTenant              *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
+	listTenants               *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
+	setInheritedPolicy        *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
+	restoreTenant             *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
+	purgeTenant               *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
+	renameTenantSlug          *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
+	resolveRenamedSlug        *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
+	getTenantDefaultBinding   *connect.Client[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
+	setTenantDefaultBinding   *connect.Client[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
+	clearTenantDefaultBinding *connect.Client[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse]
 }
 
 // CreateTenant calls paladin.admin.v1.TenantService.CreateTenant.
@@ -244,6 +284,21 @@ func (c *tenantServiceClient) ResolveRenamedSlug(ctx context.Context, req *conne
 	return c.resolveRenamedSlug.CallUnary(ctx, req)
 }
 
+// GetTenantDefaultBinding calls paladin.admin.v1.TenantService.GetTenantDefaultBinding.
+func (c *tenantServiceClient) GetTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
+	return c.getTenantDefaultBinding.CallUnary(ctx, req)
+}
+
+// SetTenantDefaultBinding calls paladin.admin.v1.TenantService.SetTenantDefaultBinding.
+func (c *tenantServiceClient) SetTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
+	return c.setTenantDefaultBinding.CallUnary(ctx, req)
+}
+
+// ClearTenantDefaultBinding calls paladin.admin.v1.TenantService.ClearTenantDefaultBinding.
+func (c *tenantServiceClient) ClearTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error) {
+	return c.clearTenantDefaultBinding.CallUnary(ctx, req)
+}
+
 // TenantServiceHandler is an implementation of the paladin.admin.v1.TenantService service.
 type TenantServiceHandler interface {
 	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
@@ -283,6 +338,16 @@ type TenantServiceHandler interface {
 	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
 	// enumerate slug→tenant mappings.
 	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
+	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
+	// route used to complete the bare object_key name shape (ADR-0010 Phase 3).
+	// NOT_FOUND when the tenant has no binding set.
+	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	// SetTenantDefaultBinding upserts the tenant's default route. The
+	// (backend, bucket) MUST reference an existing bucket.
+	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	// ClearTenantDefaultBinding removes the tenant's default route; bare
+	// object_key names for that tenant then fail with FAILED_PRECONDITION.
+	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
 }
 
 // NewTenantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -352,6 +417,24 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tenantServiceGetTenantDefaultBindingHandler := connect.NewUnaryHandler(
+		TenantServiceGetTenantDefaultBindingProcedure,
+		svc.GetTenantDefaultBinding,
+		connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tenantServiceSetTenantDefaultBindingHandler := connect.NewUnaryHandler(
+		TenantServiceSetTenantDefaultBindingProcedure,
+		svc.SetTenantDefaultBinding,
+		connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tenantServiceClearTenantDefaultBindingHandler := connect.NewUnaryHandler(
+		TenantServiceClearTenantDefaultBindingProcedure,
+		svc.ClearTenantDefaultBinding,
+		connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.TenantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TenantServiceCreateTenantProcedure:
@@ -374,6 +457,12 @@ func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOp
 			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
 		case TenantServiceResolveRenamedSlugProcedure:
 			tenantServiceResolveRenamedSlugHandler.ServeHTTP(w, r)
+		case TenantServiceGetTenantDefaultBindingProcedure:
+			tenantServiceGetTenantDefaultBindingHandler.ServeHTTP(w, r)
+		case TenantServiceSetTenantDefaultBindingProcedure:
+			tenantServiceSetTenantDefaultBindingHandler.ServeHTTP(w, r)
+		case TenantServiceClearTenantDefaultBindingProcedure:
+			tenantServiceClearTenantDefaultBindingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -421,4 +510,16 @@ func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *conn
 
 func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ResolveRenamedSlug is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.GetTenantDefaultBinding is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.SetTenantDefaultBinding is not implemented"))
+}
+
+func (UnimplementedTenantServiceHandler) ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ClearTenantDefaultBinding is not implemented"))
 }

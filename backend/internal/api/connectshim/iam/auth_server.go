@@ -103,7 +103,27 @@ func (s *AuthServer) WhoAmI(ctx context.Context, _ *connect.Request[pb.WhoAmIReq
 		User:       userToProto(&out.User),
 		Audience:   out.Audience,
 		TenantSlug: tenantSlug,
+		Routes:     objectKeyRoutesToProto(out.Routes),
 	}), nil
+}
+
+// objectKeyRoutesToProto maps the handler's route table (ADR-0010 Phase 4)
+// onto the wire message. nil/empty in → nil out (omitted field).
+func objectKeyRoutesToProto(routes []authh.ObjectKeyRoute) []*pb.ObjectKeyRoute {
+	if len(routes) == 0 {
+		return nil
+	}
+	out := make([]*pb.ObjectKeyRoute, len(routes))
+	for i, r := range routes {
+		out[i] = &pb.ObjectKeyRoute{
+			Canonical:  r.Canonical,
+			TenantPath: r.TenantPath,
+			BareAlias:  r.BareAlias,
+			Backend:    r.Backend,
+			Bucket:     r.Bucket,
+		}
+	}
+	return out
 }
 
 func (s *AuthServer) ChangePassword(ctx context.Context, req *connect.Request[pb.ChangePasswordRequest]) (*connect.Response[pb.ChangePasswordResponse], error) {

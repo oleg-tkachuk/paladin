@@ -3,23 +3,36 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/connectshim/resolve"
 	pb "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
 	"github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1/paladinadminv1connect"
 	objectkey "github.com/oleg-tkachuk/paladin/internal/api/v1/object_key"
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
 )
+
+// defaultBindingSource resolves a tenant's default (backend, bucket) route so
+// CreateObjectKey can route a NEW objectKey when the caller omits the bucket
+// (ADR-0010 Phase 3). Satisfied by tenant.Repository.
+type defaultBindingSource interface {
+	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (tenant.DefaultBinding, error)
+}
 
 type ObjectKeyServer struct {
 	paladinadminv1connect.UnimplementedObjectKeyServiceHandler
-	H *objectkey.Handler
+	H        *objectkey.Handler
+	bindings defaultBindingSource
 }
 
-func NewObjectKeyServer(h *objectkey.Handler) *ObjectKeyServer { return &ObjectKeyServer{H: h} }
+func NewObjectKeyServer(h *objectkey.Handler, bindings defaultBindingSource) *ObjectKeyServer {
+	return &ObjectKeyServer{H: h, bindings: bindings}
+}
 
 func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Request[pb.CreateObjectKeyRequest]) (*connect.Response[pb.ObjectKey], error) {
 	m := req.Msg
@@ -29,6 +42,22 @@ func (s *ObjectKeyServer) CreateObjectKey(ctx context.Context, req *connect.Requ
 	}
 	src := m.GetObjectKeyResource()
 	backend, bucket, _ := bucketRef(src.GetBucket())
+	// Bare-name ergonomics (ADR-0010 Phase 3): if the caller creates an
+	// objectKey without naming a bucket, route it to the tenant's default
+	// binding. This is the CREATION case only — an existing objectKey keeps its
+	// own (backend, bucket), which the Get/Update/Delete paths resolve from the
+	// row, never from the tenant default.
+	if bucket == "" {
+		db, err := s.bindings.GetDefaultBinding(ctx, tenantID)
+		if err != nil {
+			if errors.Is(err, tenant.ErrNotFound) {
+				return nil, connect.NewError(connect.CodeFailedPrecondition,
+					errors.New("no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket"))
+			}
+			return nil, err
+		}
+		backend, bucket = db.BackendID, db.BucketName
+	}
 	args := objectkey.CreateObjectKeyArgs{
 		TenantID:    tenantID,
 		ObjectKey:   m.GetObjectKey(),

@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_auth_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QiVwoOV2hvQW1JUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLm9jcC5pYW0udjEuVXNlchIQCghhdWRpZW5jZRgCIAEoCRITCgt0ZW5hbnRfc2x1ZxgDIAEoCSJVChVDaGFuZ2VQYXNzd29yZFJlcXVlc3QSHQoMb2xkX3Bhc3N3b3JkGAEgASgJQge6SARyAhABEh0KDG5ld19wYXNzd29yZBgCIAEoCUIHukgEcgIQDCIYChZDaGFuZ2VQYXNzd29yZFJlc3BvbnNlIlsKF0V4Y2hhbmdlQXVkaWVuY2VSZXF1ZXN0Eh4KDXJlZnJlc2hfdG9rZW4YASABKAlCB7pIBHICEAESIAoPdGFyZ2V0X2F1ZGllbmNlGAIgASgJQge6SARyAhABImcKGEV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSIQoZYWNjZXNzX2V4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBRISCgp0b2tlbl90eXBlGAMgASgJMtgDCgtBdXRoU2VydmljZRI8CgVMb2dpbhIYLm9jcC5pYW0udjEuTG9naW5SZXF1ZXN0Ghkub2NwLmlhbS52MS5Mb2dpblJlc3BvbnNlElEKDFJlZnJlc2hUb2tlbhIfLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVxdWVzdBogLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVzcG9uc2USPwoGUmV2b2tlEhkub2NwLmlhbS52MS5SZXZva2VSZXF1ZXN0Ghoub2NwLmlhbS52MS5SZXZva2VSZXNwb25zZRI/CgZXaG9BbUkSGS5vY3AuaWFtLnYxLldob0FtSVJlcXVlc3QaGi5vY3AuaWFtLnYxLldob0FtSVJlc3BvbnNlElcKDkNoYW5nZVBhc3N3b3JkEiEub2NwLmlhbS52MS5DaGFuZ2VQYXNzd29yZFJlcXVlc3QaIi5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVzcG9uc2USXQoQRXhjaGFuZ2VBdWRpZW5jZRIjLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QaJC5vY3AuaWFtLnYxLkV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
+    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QigwEKDldob0FtSVJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC5vY3AuaWFtLnYxLlVzZXISEAoIYXVkaWVuY2UYAiABKAkSEwoLdGVuYW50X3NsdWcYAyABKAkSKgoGcm91dGVzGAQgAygLMhoub2NwLmlhbS52MS5PYmplY3RLZXlSb3V0ZSJtCg5PYmplY3RLZXlSb3V0ZRIRCgljYW5vbmljYWwYASABKAkSEwoLdGVuYW50X3BhdGgYAiABKAkSEgoKYmFyZV9hbGlhcxgDIAEoCRIPCgdiYWNrZW5kGAQgASgJEg4KBmJ1Y2tldBgFIAEoCSJVChVDaGFuZ2VQYXNzd29yZFJlcXVlc3QSHQoMb2xkX3Bhc3N3b3JkGAEgASgJQge6SARyAhABEh0KDG5ld19wYXNzd29yZBgCIAEoCUIHukgEcgIQDCIYChZDaGFuZ2VQYXNzd29yZFJlc3BvbnNlIlsKF0V4Y2hhbmdlQXVkaWVuY2VSZXF1ZXN0Eh4KDXJlZnJlc2hfdG9rZW4YASABKAlCB7pIBHICEAESIAoPdGFyZ2V0X2F1ZGllbmNlGAIgASgJQge6SARyAhABImcKGEV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSIQoZYWNjZXNzX2V4cGlyZXNfaW5fc2Vjb25kcxgCIAEoBRISCgp0b2tlbl90eXBlGAMgASgJMtgDCgtBdXRoU2VydmljZRI8CgVMb2dpbhIYLm9jcC5pYW0udjEuTG9naW5SZXF1ZXN0Ghkub2NwLmlhbS52MS5Mb2dpblJlc3BvbnNlElEKDFJlZnJlc2hUb2tlbhIfLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVxdWVzdBogLm9jcC5pYW0udjEuUmVmcmVzaFRva2VuUmVzcG9uc2USPwoGUmV2b2tlEhkub2NwLmlhbS52MS5SZXZva2VSZXF1ZXN0Ghoub2NwLmlhbS52MS5SZXZva2VSZXNwb25zZRI/CgZXaG9BbUkSGS5vY3AuaWFtLnYxLldob0FtSVJlcXVlc3QaGi5vY3AuaWFtLnYxLldob0FtSVJlc3BvbnNlElcKDkNoYW5nZVBhc3N3b3JkEiEub2NwLmlhbS52MS5DaGFuZ2VQYXNzd29yZFJlcXVlc3QaIi5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVzcG9uc2USXQoQRXhjaGFuZ2VBdWRpZW5jZRIjLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QaJC5vY3AuaWFtLnYxLkV4Y2hhbmdlQXVkaWVuY2VSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
     [file_buf_validate_validate, file_paladin_iam_v1_types],
   );
 
@@ -211,6 +211,18 @@ export type WhoAmIResponse = Message<"paladin.iam.v1.WhoAmIResponse"> & {
    * @generated from field: string tenant_slug = 3;
    */
   tenantSlug: string;
+
+  /**
+   * routes is the caller's ObjectKey route table (ADR-0010 Phase 4): every
+   * ObjectKey the caller can read, in all three name shapes, so clients and
+   * SDKs normalize to canonical (A) before sending rather than constructing
+   * it themselves. Empty when the server has no route source wired or the
+   * caller has no readable ObjectKeys. The list is capped server-side and is
+   * not paginated — see BACKLOG for the large-tenant follow-up.
+   *
+   * @generated from field: repeated paladin.iam.v1.ObjectKeyRoute routes = 4;
+   */
+  routes: ObjectKeyRoute[];
 };
 
 /**
@@ -220,6 +232,58 @@ export type WhoAmIResponse = Message<"paladin.iam.v1.WhoAmIResponse"> & {
 export const WhoAmIResponseSchema: GenMessage<WhoAmIResponse> =
   /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_auth_service, 7);
+
+/**
+ * ObjectKeyRoute is one addressable ObjectKey expressed in all three
+ * ADR-0010 name shapes plus its (backend, bucket) binding. A client that
+ * holds this table can accept any shape from the end user and normalize to
+ * canonical (A) on the wire.
+ *
+ * @generated from message paladin.iam.v1.ObjectKeyRoute
+ */
+export type ObjectKeyRoute = Message<"paladin.iam.v1.ObjectKeyRoute"> & {
+  /**
+   * canonical (A): storageBackends/{b}/buckets/{bk}/tenants/{tid}/objectKeys/{ok}.
+   *
+   * @generated from field: string canonical = 1;
+   */
+  canonical: string;
+
+  /**
+   * tenant_path (C): tenants/{tid}/objectKeys/{ok}.
+   *
+   * @generated from field: string tenant_path = 2;
+   */
+  tenantPath: string;
+
+  /**
+   * bare_alias (B): the bare object_key. Populated ONLY when this ObjectKey
+   * sits in the tenant's default binding — a bare name resolves through that
+   * binding, so it round-trips to canonical only for the default route.
+   * Empty otherwise.
+   *
+   * @generated from field: string bare_alias = 3;
+   */
+  bareAlias: string;
+
+  /**
+   * @generated from field: string backend = 4;
+   */
+  backend: string;
+
+  /**
+   * @generated from field: string bucket = 5;
+   */
+  bucket: string;
+};
+
+/**
+ * Describes the message paladin.iam.v1.ObjectKeyRoute.
+ * Use `create(ObjectKeyRouteSchema)` to create a new message.
+ */
+export const ObjectKeyRouteSchema: GenMessage<ObjectKeyRoute> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 8);
 
 /**
  * @generated from message paladin.iam.v1.ChangePasswordRequest
@@ -243,7 +307,7 @@ export type ChangePasswordRequest =
  */
 export const ChangePasswordRequestSchema: GenMessage<ChangePasswordRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_iam_v1_auth_service, 8);
+  messageDesc(file_paladin_iam_v1_auth_service, 9);
 
 /**
  * @generated from message paladin.iam.v1.ChangePasswordResponse
@@ -257,7 +321,7 @@ export type ChangePasswordResponse =
  */
 export const ChangePasswordResponseSchema: GenMessage<ChangePasswordResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_iam_v1_auth_service, 9);
+  messageDesc(file_paladin_iam_v1_auth_service, 10);
 
 /**
  * @generated from message paladin.iam.v1.ExchangeAudienceRequest
@@ -285,7 +349,7 @@ export type ExchangeAudienceRequest =
  */
 export const ExchangeAudienceRequestSchema: GenMessage<ExchangeAudienceRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_iam_v1_auth_service, 10);
+  messageDesc(file_paladin_iam_v1_auth_service, 11);
 
 /**
  * @generated from message paladin.iam.v1.ExchangeAudienceResponse
@@ -319,7 +383,7 @@ export type ExchangeAudienceResponse =
  */
 export const ExchangeAudienceResponseSchema: GenMessage<ExchangeAudienceResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_iam_v1_auth_service, 11);
+  messageDesc(file_paladin_iam_v1_auth_service, 12);
 
 /**
  * AuthService handles login + token lifecycle. Public-facing endpoints

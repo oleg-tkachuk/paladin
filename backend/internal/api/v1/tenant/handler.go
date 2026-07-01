@@ -93,8 +93,28 @@ type UpdateTenantArgs struct {
 	InheritedCedarPolicy *string
 }
 
+// DefaultBinding is a tenant's default (backend, bucket) route for the bare
+// object_key name shape (ADR-0010 Phase 3 / migration 034).
+type DefaultBinding struct {
+	TenantID   uuid.UUID
+	BackendID  string
+	BucketName string
+	SetAt      time.Time
+	SetBy      string
+}
+
 type Repository interface {
 	Create(ctx context.Context, args CreateTenantArgs) (Tenant, error)
+	// GetDefaultBinding returns the tenant's default (backend, bucket) route.
+	// ErrNotFound when none is set.
+	GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (DefaultBinding, error)
+	// SetDefaultBinding upserts the tenant's default route and returns it.
+	// ErrDefaultBindingBucketMissing when (backend, bucket) is not a real
+	// bucket (the FK rejects it).
+	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName, setBy string) (DefaultBinding, error)
+	// ClearDefaultBinding removes the tenant's default route. Idempotent —
+	// clearing an absent binding is a no-op success.
+	ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) error
 	Get(ctx context.Context, tenantID uuid.UUID) (Tenant, error)
 	// GetBySlug looks up a tenant by its kebab-case slug. ErrNotFound
 	// when no row matches. Used by handlers accepting the slug-form
@@ -230,6 +250,45 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		Payload:      payload,
 	})
 	return err
+}
+
+// GetDefaultBinding returns the tenant's default (backend, bucket) route.
+// Gated on read access to the tenant.
+func (h *Handler) GetDefaultBinding(ctx context.Context, tenantID uuid.UUID) (*DefaultBinding, error) {
+	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
+		return nil, err
+	}
+	b, err := h.repo.GetDefaultBinding(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
+// SetDefaultBinding upserts the tenant's default route. Gated on manage access;
+// set_by is the calling principal's subject.
+func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, backendID, bucketName string) (*DefaultBinding, error) {
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return nil, err
+	}
+	setBy := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		setBy = p.Subject
+	}
+	b, err := h.repo.SetDefaultBinding(ctx, tenantID, backendID, bucketName, setBy)
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
+
+// ClearDefaultBinding removes the tenant's default route. Gated on manage
+// access; idempotent.
+func (h *Handler) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) error {
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return err
+	}
+	return h.repo.ClearDefaultBinding(ctx, tenantID)
 }
 
 // authorize evaluates Cedar against the Tenant resource.

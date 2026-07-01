@@ -328,3 +328,67 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 	}
 	return out
 }
+
+// ─── Tenant default binding (ADR-0010 Phase 3) ──────────────────────────────
+
+// resolveTenantID maps a "tenants/{id_or_slug}" name to a tenant UUID, using
+// GetTenantBySlug for the slug form (its authz layer gates visibility).
+func (s *TenantServer) resolveTenantID(ctx context.Context, name string) (uuid.UUID, error) {
+	ref, err := apiutil.ParseTenantNameRef(name)
+	if err != nil {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if ref.HasID() {
+		return ref.ID, nil
+	}
+	t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return t.TenantID, nil
+}
+
+func (s *TenantServer) GetTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.GetTenantDefaultBindingRequest]) (*connect.Response[pb.TenantDefaultBinding], error) {
+	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.H.GetDefaultBinding(ctx, tid)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(defaultBindingToProto(b)), nil
+}
+
+func (s *TenantServer) SetTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.SetTenantDefaultBindingRequest]) (*connect.Response[pb.TenantDefaultBinding], error) {
+	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.H.SetDefaultBinding(ctx, tid, req.Msg.GetBackendId(), req.Msg.GetBucketName())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(defaultBindingToProto(b)), nil
+}
+
+func (s *TenantServer) ClearTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.ClearTenantDefaultBindingRequest]) (*connect.Response[pb.ClearTenantDefaultBindingResponse], error) {
+	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.H.ClearDefaultBinding(ctx, tid); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.ClearTenantDefaultBindingResponse{}), nil
+}
+
+func defaultBindingToProto(b *tenant.DefaultBinding) *pb.TenantDefaultBinding {
+	return &pb.TenantDefaultBinding{
+		Name:       "tenants/" + b.TenantID.String() + "/defaultBinding",
+		BackendId:  b.BackendID,
+		BucketName: b.BucketName,
+		SetAt:      timestamppb.New(b.SetAt),
+		SetBy:      b.SetBy,
+	}
+}

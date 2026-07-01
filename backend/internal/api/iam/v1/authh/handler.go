@@ -51,6 +51,28 @@ type tokenMinter interface {
 	MintRefresh(c issuer.RefreshClaims) (string, time.Time, error)
 }
 
+// ObjectKeyRoute is one addressable ObjectKey in all three ADR-0010 name
+// shapes (A canonical, C tenant-path, B bare alias) plus its (backend,
+// bucket) binding. WhoAmI returns these so clients normalize to canonical
+// before sending rather than constructing it themselves (Phase 4).
+type ObjectKeyRoute struct {
+	Canonical  string // A
+	TenantPath string // C
+	BareAlias  string // B — empty unless this OK sits in the default binding
+	Backend    string
+	Bucket     string
+}
+
+// ObjectKeyRouteLister returns the caller's ObjectKey route table for a
+// tenant — the ObjectKeys the caller can read, in all three name shapes.
+// Optional dependency (WithObjectKeyRoutes); when unset WhoAmI returns no
+// routes. Lives behind an interface so the plane-agnostic auth handler stays
+// free of admin-plane (objectKey / tenant-binding) imports; the concrete
+// implementation is wired in the composition root.
+type ObjectKeyRouteLister interface {
+	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) ([]ObjectKeyRoute, error)
+}
+
 type Handler struct {
 	users          authstore.UserRepository
 	refresh        authstore.RefreshTokenRepository
@@ -60,9 +82,21 @@ type Handler struct {
 	tenantSlug     TenantSlugLookup
 	now            func() time.Time
 
+	// Optional: WhoAmI ObjectKey route table (ADR-0010 Phase 4). nil → no
+	// routes in the response.
+	routes ObjectKeyRouteLister
+
 	// Optional: refresh-token reuse-detection observability.
 	audit reuseAuditor
 	log   *zap.Logger
+}
+
+// WithObjectKeyRoutes installs the source of the WhoAmI ObjectKey route table
+// (ADR-0010 Phase 4). Builder-style + optional so existing wire-up and tests
+// keep working; unset means WhoAmI returns identity with no routes.
+func (h *Handler) WithObjectKeyRoutes(l ObjectKeyRouteLister) *Handler {
+	h.routes = l
+	return h
 }
 
 // WithReuseAudit wires the audit log + logger used to surface refresh-token
@@ -355,6 +389,9 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 type WhoAmIOutput struct {
 	User     authstore.User
 	Audience string
+	// Routes is the caller's ObjectKey route table (ADR-0010 Phase 4). Empty
+	// when no route source is wired or the caller has no readable ObjectKeys.
+	Routes []ObjectKeyRoute
 }
 
 func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
@@ -372,7 +409,23 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return &WhoAmIOutput{User: u, Audience: p.Audience}, nil
+	out := &WhoAmIOutput{User: u, Audience: p.Audience}
+	// Route table is best-effort: WhoAmI's primary job is identity, so a
+	// route-source failure (incl. a Cedar denial for a caller who can't list
+	// ObjectKeys) degrades to an empty table rather than failing the call.
+	if h.routes != nil && u.TenantID != uuid.Nil {
+		routes, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID)
+		if rErr != nil {
+			if h.log != nil {
+				h.log.Warn("whoami: object-key route lookup failed; returning identity without routes",
+					zap.String("tenant_id", u.TenantID.String()),
+					zap.Error(rErr))
+			}
+		} else {
+			out.Routes = routes
+		}
+	}
+	return out, nil
 }
 
 // ─── ChangePassword ─────────────────────────────────────────────────────────
