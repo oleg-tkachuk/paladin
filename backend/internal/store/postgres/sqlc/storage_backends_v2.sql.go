@@ -45,9 +45,13 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled, read_only,
+       COALESCE(h.status, 'unknown') AS health_status,
+       COALESCE(h.message, '') AS health_message,
+       h.checked_at AS health_checked_at,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
+LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE id = $1
 `
 
@@ -70,6 +74,9 @@ type GetStorageBackendV2Row struct {
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
 	ReadOnly                      bool               `json:"read_only"`
+	HealthStatus                  string             `json:"health_status"`
+	HealthMessage                 string             `json:"health_message"`
+	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
 	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ResourceVersion               int64              `json:"resource_version"`
@@ -99,6 +106,9 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 		&i.CedarPolicyHash,
 		&i.Enabled,
 		&i.ReadOnly,
+		&i.HealthStatus,
+		&i.HealthMessage,
+		&i.HealthCheckedAt,
 		&i.PreviousCredentialsSecretRef,
 		&i.PreviousCredentialsValidUntil,
 		&i.ResourceVersion,
@@ -114,9 +124,13 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled, read_only,
+       COALESCE(h.status, 'unknown') AS health_status,
+       COALESCE(h.message, '') AS health_message,
+       h.checked_at AS health_checked_at,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
+LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE ($1::text IS NULL
        OR id > $1::text)
 ORDER BY id ASC
@@ -142,6 +156,9 @@ type ListStorageBackendsRow struct {
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
 	ReadOnly                      bool               `json:"read_only"`
+	HealthStatus                  string             `json:"health_status"`
+	HealthMessage                 string             `json:"health_message"`
+	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
 	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ResourceVersion               int64              `json:"resource_version"`
@@ -182,6 +199,9 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 			&i.CedarPolicyHash,
 			&i.Enabled,
 			&i.ReadOnly,
+			&i.HealthStatus,
+			&i.HealthMessage,
+			&i.HealthCheckedAt,
 			&i.PreviousCredentialsSecretRef,
 			&i.PreviousCredentialsValidUntil,
 			&i.ResourceVersion,
@@ -300,6 +320,29 @@ func (q *Queries) UpdateStorageBackend(ctx context.Context, displayName *string,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertStorageBackendHealth = `-- name: UpsertStorageBackendHealth :exec
+INSERT INTO storage_backend_health (backend_id, status, message, checked_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (backend_id) DO UPDATE
+SET status     = EXCLUDED.status,
+    message    = EXCLUDED.message,
+    checked_at = EXCLUDED.checked_at
+`
+
+// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+// state in its own 1:1 table — writing it does NOT touch storage_backends, so
+// it never fires the bump_rv trigger (no resource_version / updated_at churn)
+// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
+func (q *Queries) UpsertStorageBackendHealth(ctx context.Context, backendID string, status string, message string, checkedAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, upsertStorageBackendHealth,
+		backendID,
+		status,
+		message,
+		checkedAt,
+	)
+	return err
 }
 
 const upsertStorageBackendV2 = `-- name: UpsertStorageBackendV2 :exec

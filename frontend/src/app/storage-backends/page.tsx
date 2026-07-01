@@ -388,6 +388,29 @@ export default function StorageBackendsPage() {
                             Draining
                           </Badge>
                         )}
+                        {/* Derived health from the last TestBackend probe
+                            (migration 048). Advisory — does not gate ops. */}
+                        {b.healthStatus === "error" ? (
+                          <Badge
+                            variant="destructive"
+                            className={T.labelTight}
+                            title={b.healthMessage || "Last probe failed"}
+                          >
+                            Probe failed
+                          </Badge>
+                        ) : b.healthStatus === "ok" ? (
+                          <Badge variant="outline" className={T.labelTight}>
+                            Healthy
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className={T.labelTight}
+                            title="Run Test to probe connectivity"
+                          >
+                            Untested
+                          </Badge>
+                        )}
                         {/* Drain toggle — only meaningful on an enabled
                             backend (a disabled one already rejects all ops). */}
                         {b.enabled && (

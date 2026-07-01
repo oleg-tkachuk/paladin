@@ -3,6 +3,7 @@ package backendh
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -21,6 +22,21 @@ type stateBackendRepo struct {
 	notFound       bool // when true, SetEnabled/SetReadOnly returns ErrNotFound
 	setEnabledHit  int
 	setReadOnlyHit int
+	// Health probe recording (migration 048).
+	healthStatus  string
+	healthMessage string
+	setHealthHit  int
+	setHealthErr  error // when set, SetHealth returns it (best-effort path)
+}
+
+func (r *stateBackendRepo) SetHealth(_ context.Context, _ string, status, message string, _ time.Time) error {
+	r.setHealthHit++
+	if r.setHealthErr != nil {
+		return r.setHealthErr
+	}
+	r.healthStatus = status
+	r.healthMessage = message
+	return nil
 }
 
 func (r *stateBackendRepo) SetEnabled(_ context.Context, _ string, enabled bool, _ int64) error {

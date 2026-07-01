@@ -40,6 +40,10 @@ type BackendRepository interface {
 	// SetReadOnly flips the drain (read-only) state (migration 047). Same
 	// OCC + operator-managed contract as SetEnabled.
 	SetReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) error
+	// SetHealth records the outcome of a TestBackend probe (migration 048).
+	// DERIVED/advisory: no OCC, writes a separate 1:1 table so it never
+	// bumps the backend's resource_version. status is "ok" | "error".
+	SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error
 	// RotateCredentials swaps credentials_secret_ref to secretRef. When
 	// graceSeconds > 0 it preserves the prior ref in
 	// previous_credentials_secret_ref with a now()+grace validity horizon so

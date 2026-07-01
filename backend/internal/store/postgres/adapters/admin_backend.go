@@ -122,6 +122,9 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 		CedarPolicy:                   row.CedarPolicy,
 		Enabled:                       row.Enabled,
 		ReadOnly:                      row.ReadOnly,
+		HealthStatus:                  row.HealthStatus,
+		HealthMessage:                 row.HealthMessage,
+		HealthCheckedAt:               timeFrom(row.HealthCheckedAt),
 		PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
 		PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
 		ResourceVersion:               row.ResourceVersion,
@@ -282,6 +285,18 @@ func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readO
 			return admindomain.ErrNotFound
 		}
 		return admindomain.ErrVersionMismatch
+	}
+	return nil
+}
+
+// SetHealth upserts the derived health state (migration 048). No OCC and no
+// resource_version churn — it writes the separate storage_backend_health
+// table. The FK is ON DELETE CASCADE, so a probe racing a backend delete
+// simply no-ops (or the row is cleaned up); a missing backend surfaces as an
+// FK violation, which the caller (TestBackend, best-effort) swallows.
+func (r *BackendRepoV2) SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error {
+	if err := r.q.UpsertStorageBackendHealth(ctx, backendID, status, message, pgTS(checkedAt)); err != nil {
+		return fmt.Errorf("set backend health: %w", err)
 	}
 	return nil
 }

@@ -492,6 +492,13 @@ type StorageBackend struct {
 	ReadOnly                      bool               `json:"read_only"`
 }
 
+type StorageBackendHealth struct {
+	BackendID string             `json:"backend_id"`
+	Status    string             `json:"status"`
+	Message   string             `json:"message"`
+	CheckedAt pgtype.Timestamptz `json:"checked_at"`
+}
+
 type Tenant struct {
 	TenantID             pgtype.UUID        `json:"tenant_id"`
 	DisplayName          string             `json:"display_name"`

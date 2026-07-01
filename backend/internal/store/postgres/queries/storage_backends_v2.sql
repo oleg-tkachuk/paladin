@@ -32,9 +32,13 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled, read_only,
+       COALESCE(h.status, 'unknown') AS health_status,
+       COALESCE(h.message, '') AS health_message,
+       h.checked_at AS health_checked_at,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
+LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE id = $1;
 
 -- name: ListStorageBackends :many
@@ -48,9 +52,13 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
        cedar_policy, cedar_policy_hash, enabled, read_only,
+       COALESCE(h.status, 'unknown') AS health_status,
+       COALESCE(h.message, '') AS health_message,
+       h.checked_at AS health_checked_at,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
+LEFT JOIN storage_backend_health h ON h.backend_id = storage_backends.id
 WHERE (sqlc.narg('after_id')::text IS NULL
        OR id > sqlc.narg('after_id')::text)
 ORDER BY id ASC
@@ -94,6 +102,18 @@ SET read_only = sqlc.arg('read_only')
 WHERE id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: UpsertStorageBackendHealth :exec
+-- Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+-- state in its own 1:1 table — writing it does NOT touch storage_backends, so
+-- it never fires the bump_rv trigger (no resource_version / updated_at churn)
+-- and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
+INSERT INTO storage_backend_health (backend_id, status, message, checked_at)
+VALUES (sqlc.arg('backend_id'), sqlc.arg('status'), sqlc.arg('message'), sqlc.arg('checked_at'))
+ON CONFLICT (backend_id) DO UPDATE
+SET status     = EXCLUDED.status,
+    message    = EXCLUDED.message,
+    checked_at = EXCLUDED.checked_at;
 
 -- name: RotateStorageBackendCredentials :execrows
 -- Dual-write rotation: stash the current ref as the previous one with a

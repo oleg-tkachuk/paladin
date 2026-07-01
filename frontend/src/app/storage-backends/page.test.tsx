@@ -62,6 +62,8 @@ const makeBackend = (over: Record<string, unknown> = {}) => ({
   readOnly: false,
   resourceVersion: "7",
   name: "storageBackends/primary",
+  healthStatus: "unknown",
+  healthMessage: "",
   ...over,
 });
 
@@ -103,5 +105,31 @@ describe("StorageBackendsPage", () => {
     h.backends = [makeBackend({ enabled: false, readOnly: false })];
     render(<StorageBackendsPage />);
     expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
+  });
+
+  // Health badges (migration 048) — derived from the last TestBackend probe.
+  it("shows a Healthy badge when the last probe succeeded", () => {
+    h.backends = [makeBackend({ healthStatus: "ok" })];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
+  });
+
+  it("shows a Probe-failed badge (with the error) when the last probe failed", () => {
+    h.backends = [
+      makeBackend({
+        healthStatus: "error",
+        healthMessage: "connection refused",
+      }),
+    ];
+    render(<StorageBackendsPage />);
+    const badge = screen.getByText("Probe failed");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "connection refused");
+  });
+
+  it("shows an Untested badge when the backend has never been probed", () => {
+    h.backends = [makeBackend({ healthStatus: "unknown" })];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Untested")).toBeInTheDocument();
   });
 });

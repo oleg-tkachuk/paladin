@@ -37,7 +37,16 @@ type StorageBackend struct {
 	// (PUT / POST / multipart-init / copy-dest / update / delete / version
 	// writes) are refused, so an operator can migrate data off before fully
 	// disabling. Operator-managed via SetBackendReadOnly; not config-mirrored.
-	ReadOnly        bool
+	ReadOnly bool
+	// Health is the DERIVED, advisory health state (migration 048): the
+	// outcome of the last TestBackend probe. "unknown" | "ok" | "error".
+	// Surfaced in the UI but NOT a gate — the operator decides whether to
+	// disable/drain in response. HealthMessage carries the probe error when
+	// status is "error"; HealthCheckedAt is the instant of the last probe
+	// (zero until first probed).
+	HealthStatus    string
+	HealthMessage   string
+	HealthCheckedAt time.Time
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

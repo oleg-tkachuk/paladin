@@ -388,11 +388,22 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	start := time.Now()
 	perr := h.prober.Probe(pctx, got)
 	out := &TestBackendOutput{LatencyMs: int32(time.Since(start).Milliseconds())}
+	status := "ok"
 	if perr != nil {
 		out.Reachable = false
 		out.ErrorMessage = perr.Error()
+		status = "error"
 	} else {
 		out.Reachable = true
+	}
+	// Persist the probe outcome as the backend's derived health (migration
+	// 048), surfaced in the UI. Best-effort: a health-write failure must not
+	// fail the probe response, and it uses a fresh (non-probe-timeout) context
+	// so a slow probe doesn't also lose the recording. Writes a separate table
+	// — no resource_version churn, so TestBackend stays read-only w.r.t. config.
+	if err := h.repo.SetHealth(ctx, backendID, status, out.ErrorMessage, time.Now().UTC()); err != nil {
+		h.log.Warn("failed to record backend health probe outcome",
+			zap.String("backend_id", backendID), zap.String("status", status), zap.Error(err))
 	}
 	return out, nil
 }

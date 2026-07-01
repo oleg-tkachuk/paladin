@@ -54,6 +54,13 @@ message StorageBackend {
   // off before disabling. Operator-managed via SetBackendReadOnly; NOT
   // mirrored from static config.
   bool read_only = 19;
+  // Derived, advisory health from the last TestBackend probe (migration 048).
+  // "unknown" | "ok" | "error". Surfaced in the UI; NOT a gate. health_message
+  // carries the probe error when status is "error"; health_checked_at is the
+  // instant of the last probe (unset until first probed).
+  string health_status = 20;
+  string health_message = 21;
+  google.protobuf.Timestamp health_checked_at = 22;
 }
 
 enum StorageKind {

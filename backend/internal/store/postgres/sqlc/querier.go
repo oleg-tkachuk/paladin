@@ -477,6 +477,11 @@ type Querier interface {
 	// replicas may try to advance with stale values; the GREATEST() guard
 	// preserves the highest seen committed_at.
 	UpsertReplicationWatermark(ctx context.Context, backendID string, bucketName string, watermark pgtype.Timestamptz) error
+	// Record the outcome of a TestBackend probe (migration 048). DERIVED, advisory
+	// state in its own 1:1 table — writing it does NOT touch storage_backends, so
+	// it never fires the bump_rv trigger (no resource_version / updated_at churn)
+	// and TestBackend stays read-only w.r.t. the config row. Last-writer-wins.
+	UpsertStorageBackendHealth(ctx context.Context, backendID string, status string, message string, checkedAt pgtype.Timestamptz) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
 	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string) error

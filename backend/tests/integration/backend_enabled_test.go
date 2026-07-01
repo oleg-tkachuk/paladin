@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -142,6 +143,53 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	}
 	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
 		t.Errorf("re-enabled LookupBucket: %v", err)
+	}
+}
+
+// TestBackendHealth_RecordAndSurface proves the derived-health round-trip
+// (migration 048): Get/List start at "unknown" (LEFT JOIN COALESCE), SetHealth
+// upserts into the separate storage_backend_health table, and the outcome
+// surfaces on the backend read — WITHOUT bumping resource_version (health is
+// not an operator config change).
+func TestBackendHealth_RecordAndSurface(t *testing.T) {
+	h := pgharness.Setup(t)
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	ctx := context.Background()
+
+	seedBackend(t, h.PoolMigrate, "health-be")
+
+	got, err := be.Get(ctx, "health-be")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.HealthStatus != "unknown" {
+		t.Errorf("initial health = %q, want unknown", got.HealthStatus)
+	}
+	rvBefore := got.ResourceVersion
+
+	// Record a failed probe.
+	if err := be.SetHealth(ctx, "health-be", "error", "dial tcp: refused", time.Now().UTC()); err != nil {
+		t.Fatalf("set health error: %v", err)
+	}
+	got, _ = be.Get(ctx, "health-be")
+	if got.HealthStatus != "error" || got.HealthMessage != "dial tcp: refused" {
+		t.Errorf("after error probe: status=%q message=%q", got.HealthStatus, got.HealthMessage)
+	}
+	if got.HealthCheckedAt.IsZero() {
+		t.Error("health_checked_at should be set after a probe")
+	}
+	// Health is NOT a config change — resource_version must not move.
+	if got.ResourceVersion != rvBefore {
+		t.Errorf("resource_version moved on health write: %d → %d", rvBefore, got.ResourceVersion)
+	}
+
+	// A subsequent OK probe overwrites (upsert) and clears the message.
+	if err := be.SetHealth(ctx, "health-be", "ok", "", time.Now().UTC()); err != nil {
+		t.Fatalf("set health ok: %v", err)
+	}
+	got, _ = be.Get(ctx, "health-be")
+	if got.HealthStatus != "ok" || got.HealthMessage != "" {
+		t.Errorf("after ok probe: status=%q message=%q, want ok/empty", got.HealthStatus, got.HealthMessage)
 	}
 }
 

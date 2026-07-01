@@ -1184,7 +1184,8 @@ of the pipeline._
 
 ### Backend states beyond enable/disable (maintenance/error, bulk)
 
-- **Status:** Aspirational (read-only drain SHIPPED; two follow-ups remain).
+- **Status:** Aspirational (read-only drain + health auto-states SHIPPED; bulk
+  + operator-set maintenance remain).
 - **Reason:** Feature 002 (`specs/002-backend-enable-disable`) shipped a
   two-value `enabled` flag with strict reject semantics: a disabled
   backend refuses ALL PALADIN-mediated ops. Richer behaviours were
@@ -1200,10 +1201,22 @@ of the pipeline._
   on `/storage-backends`. NOTE: this also closed a latent feature-002 gap — the
   presign/multipart adapters never JOINed `storage_backends`, so they didn't
   enforce the `enabled` gate either; they do now.
+- **Shipped (2026-07-01) — health auto-states:** `TestBackend` now records its
+  probe outcome as derived health (migration 048, a separate 1:1
+  `storage_backend_health` table so it never churns `resource_version` or
+  fires the bump_rv trigger — TestBackend stays read-only w.r.t. config).
+  `unknown|ok|error` (+ message + checked_at) surfaces on `StorageBackend`
+  (Get/List LEFT JOIN) and as a Healthy / Probe-failed / Untested badge on
+  `/storage-backends`. Advisory only — health does NOT gate ops (a transient
+  probe failure must never silently take a backend offline). Best-effort write:
+  a health-write failure never fails the probe response.
 - **Definition of Done (remaining):**
-  - **Richer lifecycle states** — maintenance / error; e.g. auto-set `error`
-    when `TestBackend` fails, surfaced in the UI. (Drain is done; this is the
-    auto/derived-state part.)
+  - **Operator-set `maintenance`** — a manually-set advisory state (distinct
+    from the auto `error`), so an operator can flag "under maintenance" in the
+    UI. The auto/derived health from `TestBackend` is done; this is the
+    manual-set half. Needs a value + a `SetBackendMaintenance`-style RPC (or
+    fold into the health table with a `source` discriminator so an auto `ok`
+    probe doesn't clobber an operator's `maintenance` flag).
   - **Bulk enable/disable/drain** — toggle multiple backends in one action
     (admin UI multi-select + a batch RPC or client-side fan-out).
 - **Blockers:** none technical; deferred purely for scope.
