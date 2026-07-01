@@ -19,6 +19,7 @@ func TestErrorRegistration(t *testing.T) {
 	}{
 		{"ErrVersionMismatch", ErrVersionMismatch, connect.CodeAborted},
 		{"ErrBackendDisabled", ErrBackendDisabled, connect.CodeFailedPrecondition},
+		{"ErrBackendReadOnly", ErrBackendReadOnly, connect.CodeFailedPrecondition},
 		{"ErrVersionNotFound", ErrVersionNotFound, connect.CodeNotFound},
 	}
 	for _, tc := range cases {

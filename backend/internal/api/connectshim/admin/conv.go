@@ -75,6 +75,7 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		Events:                        eventsToProto(b.Events),
 		CedarPolicy:                   b.CedarPolicy,
 		Enabled:                       b.Enabled,
+		ReadOnly:                      b.ReadOnly,
 		PreviousCredentialsSecretRef:  b.PreviousCredentialsSecretRef,
 		PreviousCredentialsValidUntil: tsProto(b.PreviousCredentialsValidUntil),
 		ResourceVersion:               resourceVersion(b.ResourceVersion),

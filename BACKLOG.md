@@ -1182,24 +1182,29 @@ of the pipeline._
 
 ## Storage backends
 
-### Backend states beyond enable/disable (drain, maintenance, bulk)
+### Backend states beyond enable/disable (maintenance/error, bulk)
 
-- **Status:** Aspirational
+- **Status:** Aspirational (read-only drain SHIPPED; two follow-ups remain).
 - **Reason:** Feature 002 (`specs/002-backend-enable-disable`) shipped a
   two-value `enabled` flag with strict reject semantics: a disabled
-  backend refuses ALL PALADIN-mediated ops. Three richer behaviours were
+  backend refuses ALL PALADIN-mediated ops. Richer behaviours were
   deliberately scoped out to keep v1 small and unambiguous.
-- **Definition of Done:**
-  - **Read-only drain mode** — a distinct backend state that blocks
-    writes / presign-PUT / multipart-init but still allows reads /
-    presign-GET, so an operator can migrate data off a backend before
-    fully disabling it. Needs a tri-state (or separate column) on
-    `storage_backends` and a split in the resolver gate
-    (`object.MapResolveErr`) by operation class.
-  - **Richer lifecycle states** — draining / maintenance / error;
-    e.g. auto-set `error` when `TestBackend` fails, surfaced in the UI.
-  - **Bulk enable/disable** — toggle multiple backends in one action
+- **Shipped (2026-07-01) — read-only drain mode:** `storage_backends.read_only`
+  (migration 047) layered on `enabled`. The object-resolution chokepoint
+  (`LookupBucket` / `LookupBucketMeta` in the object / presign / multipart
+  adapters) takes a `write bool` and refuses mutations against a read-only
+  backend with `object.ErrBackendReadOnly` (→ FailedPrecondition) while reads /
+  presign-GET / HEAD / list still resolve. Operator-managed via
+  `BackendService.SetBackendReadOnly` (OCC-guarded; the default backend MAY be
+  drained, unlike disable). Admin UI: Drain/Undrain button + "Draining" badge
+  on `/storage-backends`. NOTE: this also closed a latent feature-002 gap — the
+  presign/multipart adapters never JOINed `storage_backends`, so they didn't
+  enforce the `enabled` gate either; they do now.
+- **Definition of Done (remaining):**
+  - **Richer lifecycle states** — maintenance / error; e.g. auto-set `error`
+    when `TestBackend` fails, surfaced in the UI. (Drain is done; this is the
+    auto/derived-state part.)
+  - **Bulk enable/disable/drain** — toggle multiple backends in one action
     (admin UI multi-select + a batch RPC or client-side fan-out).
-- **Blockers:** none technical; deferred purely for v1 scope. Drain mode
-  is the most-requested next step (data migration off a backend).
+- **Blockers:** none technical; deferred purely for scope.
 

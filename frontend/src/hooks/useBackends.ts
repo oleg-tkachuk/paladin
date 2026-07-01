@@ -123,6 +123,37 @@ export function useBackends(autoFetch: boolean = true) {
     [bumpRefresh],
   );
 
+  // setBackendReadOnly — flips a backend's read-only "drain" state via
+  // BackendService.SetBackendReadOnly (migration 047). OCC-guarded on
+  // resourceVersion. Draining keeps reads working while refusing mutations,
+  // so an operator can migrate data off before disabling. Unlike disable,
+  // the default backend may be drained.
+  const setBackendReadOnly = useCallback(
+    async (
+      backendId: string,
+      readOnly: boolean,
+      resourceVersion: string,
+    ): Promise<StorageBackend> => {
+      try {
+        setError(null);
+        const updated = await backendClient.setBackendReadOnly({
+          name: `storageBackends/${backendId}`,
+          readOnly,
+          resourceVersion,
+        });
+        setBackends((prev) =>
+          prev.map((b) => (b.backendId === backendId ? updated : b)),
+        );
+        bumpRefresh("backends");
+        return updated;
+      } catch (err) {
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
+        throw err;
+      }
+    },
+    [bumpRefresh],
+  );
+
   const refreshSignal = useRefreshSignal("backends");
   useEffect(() => {
     // Fetch-on-mount / on-refresh: this is a deliberate sync with an
@@ -140,5 +171,6 @@ export function useBackends(autoFetch: boolean = true) {
     fetchBackends,
     createBackend,
     setBackendEnabled,
+    setBackendReadOnly,
   };
 }

@@ -44,7 +44,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled,
+       cedar_policy, cedar_policy_hash, enabled, read_only,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
@@ -69,6 +69,7 @@ type GetStorageBackendV2Row struct {
 	CedarPolicy                   string             `json:"cedar_policy"`
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
+	ReadOnly                      bool               `json:"read_only"`
 	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ResourceVersion               int64              `json:"resource_version"`
@@ -97,6 +98,7 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 		&i.CedarPolicy,
 		&i.CedarPolicyHash,
 		&i.Enabled,
+		&i.ReadOnly,
 		&i.PreviousCredentialsSecretRef,
 		&i.PreviousCredentialsValidUntil,
 		&i.ResourceVersion,
@@ -111,7 +113,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled,
+       cedar_policy, cedar_policy_hash, enabled, read_only,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
@@ -139,6 +141,7 @@ type ListStorageBackendsRow struct {
 	CedarPolicy                   string             `json:"cedar_policy"`
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
+	ReadOnly                      bool               `json:"read_only"`
 	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ResourceVersion               int64              `json:"resource_version"`
@@ -178,6 +181,7 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 			&i.CedarPolicy,
 			&i.CedarPolicyHash,
 			&i.Enabled,
+			&i.ReadOnly,
 			&i.PreviousCredentialsSecretRef,
 			&i.PreviousCredentialsValidUntil,
 			&i.ResourceVersion,
@@ -230,6 +234,24 @@ WHERE id = $2
 // config-mirror must never touch this operator-managed column.
 func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendEnabled, enabled, iD, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setStorageBackendReadOnly = `-- name: SetStorageBackendReadOnly :execrows
+UPDATE storage_backends
+SET read_only = $1
+WHERE id = $2
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
+`
+
+// Flip the read-only (drain) state. Same OCC + operator-managed contract as
+// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
+func (q *Queries) SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageBackendReadOnly, readOnly, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}

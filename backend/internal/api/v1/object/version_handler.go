@@ -156,7 +156,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey)
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
 	if err != nil {
 		// Best-effort: a missing bucket-meta lookup must not abort the
 		// already-successful promote. Log via the caller.
@@ -187,7 +187,7 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey)
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
 	if err != nil {
 		// Don't block restore on a meta lookup failure — the state machine
 		// will still flip the row visible. Surfaces as a Warning at the call
@@ -236,7 +236,7 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 	if h == nil || h.objects == nil || h.versions == nil {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey)
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.ObjectKey, false) // versioning-config read; primary op already gated
 	if err != nil {
 		return fmt.Errorf("on soft delete: lookup meta: %w", err)
 	}

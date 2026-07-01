@@ -7,15 +7,20 @@ import userEvent from "@testing-library/user-event";
 const h = vi.hoisted(() => ({
   fetchBackends: vi.fn(),
   createBackend: vi.fn(() => Promise.resolve()),
+  setBackendEnabled: vi.fn(() => Promise.resolve({})),
+  setBackendReadOnly: vi.fn(() => Promise.resolve({})),
   showNotification: vi.fn(),
+  backends: [] as unknown[],
 }));
 
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({
-    backends: [],
+    backends: h.backends,
     loading: false,
     fetchBackends: h.fetchBackends,
     createBackend: h.createBackend,
+    setBackendEnabled: h.setBackendEnabled,
+    setBackendReadOnly: h.setBackendReadOnly,
   }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -41,7 +46,23 @@ import StorageBackendsPage from "./page";
 beforeEach(() => {
   h.fetchBackends.mockClear();
   h.createBackend.mockClear();
+  h.setBackendEnabled.mockClear();
+  h.setBackendReadOnly.mockClear();
   h.showNotification.mockClear();
+  h.backends = [];
+});
+
+const makeBackend = (over: Record<string, unknown> = {}) => ({
+  backendId: "primary",
+  displayName: "Primary",
+  kind: 2,
+  endpoint: "https://s3.local",
+  region: "us-east-1",
+  enabled: true,
+  readOnly: false,
+  resourceVersion: "7",
+  name: "storageBackends/primary",
+  ...over,
 });
 
 describe("StorageBackendsPage", () => {
@@ -62,5 +83,25 @@ describe("StorageBackendsPage", () => {
     expect(
       screen.getByPlaceholderText("aws-eu, r2-global, minio-dev"),
     ).toBeInTheDocument();
+  });
+
+  it("drains an enabled backend via setBackendReadOnly (migration 047)", async () => {
+    h.backends = [makeBackend({ enabled: true, readOnly: false })];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Drain" }));
+    expect(h.setBackendReadOnly).toHaveBeenCalledWith("primary", true, "7");
+  });
+
+  it("shows a Draining badge + Undrain for a read-only backend", () => {
+    h.backends = [makeBackend({ enabled: true, readOnly: true })];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Draining")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undrain" })).toBeInTheDocument();
+  });
+
+  it("hides the drain control for a disabled backend", () => {
+    h.backends = [makeBackend({ enabled: false, readOnly: false })];
+    render(<StorageBackendsPage />);
+    expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
   });
 });

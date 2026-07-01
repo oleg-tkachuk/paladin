@@ -93,11 +93,11 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 
 	// Bucket lookups are batch-invariant: same source / dest object_key
 	// across the whole batch ⇒ resolve once.
-	srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcObjectKey)
+	srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcObjectKey, false) // copy source (read)
 	if err != nil {
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
-	dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstObjectKey)
+	dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstObjectKey, true) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
 	}

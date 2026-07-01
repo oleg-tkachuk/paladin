@@ -48,10 +48,10 @@ func (*copyFakeRepo) CountObjects(context.Context, object.CountObjectsArgs) (int
 func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string) (map[string][]string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string) (string, error) {
+func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string) (object.BucketMeta, error) {
+func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (object.BucketMeta, error) {
 	panic("unused")
 }
 func (*copyFakeRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error { panic("unused") }

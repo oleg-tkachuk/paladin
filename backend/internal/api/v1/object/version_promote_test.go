@@ -19,7 +19,7 @@ type fakeObjectRepo struct {
 	err  error
 }
 
-func (f *fakeObjectRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string) (BucketMeta, error) {
+func (f *fakeObjectRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bool) (BucketMeta, error) {
 	return f.meta, f.err
 }
 
@@ -51,7 +51,7 @@ func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Obj
 func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLock, error) {
 	panic("not used")
 }
-func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string) (string, error) {
+func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, error) {
 	panic("not used")
 }
 func (*fakeObjectRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error {

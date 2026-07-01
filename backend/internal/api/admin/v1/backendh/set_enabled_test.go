@@ -14,11 +14,13 @@ import (
 // behaviour can be asserted without a database.
 type stateBackendRepo struct {
 	fakeBackendRepo
-	enabled       bool
-	rv            int64
-	mismatch      bool // when true, SetEnabled returns ErrVersionMismatch
-	notFound      bool // when true, SetEnabled returns ErrNotFound
-	setEnabledHit int
+	enabled        bool
+	readOnly       bool
+	rv             int64
+	mismatch       bool // when true, SetEnabled/SetReadOnly returns ErrVersionMismatch
+	notFound       bool // when true, SetEnabled/SetReadOnly returns ErrNotFound
+	setEnabledHit  int
+	setReadOnlyHit int
 }
 
 func (r *stateBackendRepo) SetEnabled(_ context.Context, _ string, enabled bool, _ int64) error {
@@ -34,10 +36,23 @@ func (r *stateBackendRepo) SetEnabled(_ context.Context, _ string, enabled bool,
 	return nil
 }
 
+func (r *stateBackendRepo) SetReadOnly(_ context.Context, _ string, readOnly bool, _ int64) error {
+	r.setReadOnlyHit++
+	if r.notFound {
+		return admindomain.ErrNotFound
+	}
+	if r.mismatch {
+		return admindomain.ErrVersionMismatch
+	}
+	r.readOnly = readOnly
+	r.rv++
+	return nil
+}
+
 func (r *stateBackendRepo) Get(_ context.Context, _ string) (admindomain.StorageBackend, error) {
 	return admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
-		Enabled: r.enabled, ResourceVersion: r.rv,
+		Enabled: r.enabled, ReadOnly: r.readOnly, ResourceVersion: r.rv,
 	}, nil
 }
 

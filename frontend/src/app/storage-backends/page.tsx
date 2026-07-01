@@ -74,12 +74,19 @@ const KIND_LABELS: Record<number, string> = {
 };
 
 export default function StorageBackendsPage() {
-  const { backends, loading, fetchBackends, createBackend, setBackendEnabled } =
-    useBackends();
+  const {
+    backends,
+    loading,
+    fetchBackends,
+    createBackend,
+    setBackendEnabled,
+    setBackendReadOnly,
+  } = useBackends();
   const { showNotification } = useNotification();
 
   const [search, setSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [drainingId, setDrainingId] = useState<string | null>(null);
 
   // handleToggle flips a backend's enabled state. The server refuses to
   // disable the configured default backend (FailedPrecondition) and a
@@ -111,6 +118,40 @@ export default function StorageBackendsPage() {
       });
     } finally {
       setTogglingId(null);
+    }
+  };
+
+  // handleDrain flips a backend's read-only "drain" state (migration 047).
+  // Draining keeps reads working while refusing mutations, so an operator can
+  // migrate data off before disabling. OCC-guarded like enable/disable.
+  const handleDrain = async (
+    backendId: string,
+    nextReadOnly: boolean,
+    resourceVersion: string,
+  ) => {
+    try {
+      setDrainingId(backendId);
+      await setBackendReadOnly(backendId, nextReadOnly, resourceVersion);
+      showNotification({
+        type: "success",
+        title: nextReadOnly
+          ? "Backend draining (read-only)"
+          : "Backend writable",
+        message: backendId,
+      });
+    } catch (err) {
+      showNotification({
+        type: "error",
+        title: "Could not change drain state",
+        message:
+          err instanceof ConnectError
+            ? err.rawMessage
+            : err instanceof Error
+              ? err.message
+              : String(err),
+      });
+    } finally {
+      setDrainingId(null);
     }
   };
 
@@ -342,6 +383,33 @@ export default function StorageBackendsPage() {
                         >
                           {b.enabled ? "Enabled" : "Disabled"}
                         </Badge>
+                        {b.enabled && b.readOnly && (
+                          <Badge variant="secondary" className={T.labelTight}>
+                            Draining
+                          </Badge>
+                        )}
+                        {/* Drain toggle — only meaningful on an enabled
+                            backend (a disabled one already rejects all ops). */}
+                        {b.enabled && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={drainingId === b.backendId}
+                            onClick={() =>
+                              void handleDrain(
+                                b.backendId,
+                                !b.readOnly,
+                                b.resourceVersion,
+                              )
+                            }
+                          >
+                            {drainingId === b.backendId
+                              ? "…"
+                              : b.readOnly
+                                ? "Undrain"
+                                : "Drain"}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

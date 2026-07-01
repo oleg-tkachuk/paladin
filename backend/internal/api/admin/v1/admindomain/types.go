@@ -31,7 +31,13 @@ type StorageBackend struct {
 	// Enabled is the durable enable/disable state. false → the backend
 	// rejects every PALADIN-mediated operation that resolves to it. Operator
 	// managed via SetBackendEnabled; never mirrored from static config.
-	Enabled         bool
+	Enabled bool
+	// ReadOnly is the drain state (migration 047). When true on an enabled
+	// backend, reads / presign-GET / HEAD / list still resolve but mutations
+	// (PUT / POST / multipart-init / copy-dest / update / delete / version
+	// writes) are refused, so an operator can migrate data off before fully
+	// disabling. Operator-managed via SetBackendReadOnly; not config-mirrored.
+	ReadOnly        bool
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

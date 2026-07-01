@@ -31,7 +31,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled,
+       cedar_policy, cedar_policy_hash, enabled, read_only,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
@@ -47,7 +47,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled,
+       cedar_policy, cedar_policy_hash, enabled, read_only,
        previous_credentials_secret_ref, previous_credentials_valid_until,
        resource_version, created_at, updated_at
 FROM storage_backends
@@ -82,6 +82,15 @@ WHERE id = sqlc.arg('id')
 -- config-mirror must never touch this operator-managed column.
 UPDATE storage_backends
 SET enabled = sqlc.arg('enabled')
+WHERE id = sqlc.arg('id')
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: SetStorageBackendReadOnly :execrows
+-- Flip the read-only (drain) state. Same OCC + operator-managed contract as
+-- SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
+UPDATE storage_backends
+SET read_only = sqlc.arg('read_only')
 WHERE id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);

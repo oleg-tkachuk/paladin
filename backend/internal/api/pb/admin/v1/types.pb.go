@@ -268,8 +268,15 @@ type StorageBackend struct {
 	// render "rotated — old key valid for another N".
 	PreviousCredentialsSecretRef  string                 `protobuf:"bytes,17,opt,name=previous_credentials_secret_ref,json=previousCredentialsSecretRef,proto3" json:"previous_credentials_secret_ref,omitempty"`
 	PreviousCredentialsValidUntil *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=previous_credentials_valid_until,json=previousCredentialsValidUntil,proto3" json:"previous_credentials_valid_until,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// Read-only "drain" state (migration 047). Only meaningful when enabled=true:
+	// reads / presign-GET / HEAD / list still resolve, but mutations
+	// (PUT / POST / multipart-init / copy-dest / update / delete / version
+	// writes) are refused (FailedPrecondition) so an operator can migrate data
+	// off before disabling. Operator-managed via SetBackendReadOnly; NOT
+	// mirrored from static config.
+	ReadOnly      bool `protobuf:"varint,19,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StorageBackend) Reset() {
@@ -426,6 +433,13 @@ func (x *StorageBackend) GetPreviousCredentialsValidUntil() *timestamppb.Timesta
 		return x.PreviousCredentialsValidUntil
 	}
 	return nil
+}
+
+func (x *StorageBackend) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
 }
 
 type ServerSideEncryption struct {
@@ -2417,7 +2431,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\xcb\x06\n" +
+	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\xe8\x06\n" +
 	"\x0eStorageBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2440,7 +2454,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x18\n" +
 	"\aenabled\x18\x10 \x01(\bR\aenabled\x12E\n" +
 	"\x1fprevious_credentials_secret_ref\x18\x11 \x01(\tR\x1cpreviousCredentialsSecretRef\x12c\n" +
-	" previous_credentials_valid_until\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x1dpreviousCredentialsValidUntil\"X\n" +
+	" previous_credentials_valid_until\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x1dpreviousCredentialsValidUntil\x12\x1b\n" +
+	"\tread_only\x18\x13 \x01(\bR\breadOnly\"X\n" +
 	"\x14ServerSideEncryption\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xbd\x01\n" +

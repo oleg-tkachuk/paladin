@@ -121,6 +121,7 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 		},
 		CedarPolicy:                   row.CedarPolicy,
 		Enabled:                       row.Enabled,
+		ReadOnly:                      row.ReadOnly,
 		PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
 		PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
 		ResourceVersion:               row.ResourceVersion,
@@ -167,6 +168,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 			},
 			CedarPolicy:                   row.CedarPolicy,
 			Enabled:                       row.Enabled,
+			ReadOnly:                      row.ReadOnly,
 			PreviousCredentialsSecretRef:  derefStr(row.PreviousCredentialsSecretRef),
 			PreviousCredentialsValidUntil: timeFrom(row.PreviousCredentialsValidUntil),
 			ResourceVersion:               row.ResourceVersion,
@@ -259,6 +261,23 @@ func (r *BackendRepoV2) SetEnabled(ctx context.Context, backendID string, enable
 		// Distinguish "no such backend" from "version mismatch": a
 		// missing row is ErrNotFound; an existing row whose version
 		// moved on is ErrVersionMismatch.
+		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
+			return admindomain.ErrNotFound
+		}
+		return admindomain.ErrVersionMismatch
+	}
+	return nil
+}
+
+// SetReadOnly flips the backend's drain (read-only) state under OCC
+// (migration 047). Same NotFound / VersionMismatch disambiguation as
+// SetEnabled.
+func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) error {
+	rows, err := r.q.SetStorageBackendReadOnly(ctx, readOnly, backendID, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("set backend read_only: %w", err)
+	}
+	if rows == 0 {
 		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
 			return admindomain.ErrNotFound
 		}

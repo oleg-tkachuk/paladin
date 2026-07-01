@@ -48,7 +48,7 @@ type Repository interface {
 	LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, objectKey, key string, err error)
 	// LookupBucket returns the physical S3 bucket bound to an ObjectKey.
 	// Used to route presign URLs to the correct bucket.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error)
 }
 
 type Handler struct {
@@ -105,7 +105,7 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // presign GET (read)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
@@ -151,7 +151,7 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign PUT (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
@@ -180,7 +180,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign part upload (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}

@@ -37,6 +37,9 @@ type BackendRepository interface {
 	List(ctx context.Context, pageSize int32, afterID string) ([]StorageBackend, string, error)
 	Update(ctx context.Context, b StorageBackend, expectedVersion int64, mask []string) error
 	SetEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) error
+	// SetReadOnly flips the drain (read-only) state (migration 047). Same
+	// OCC + operator-managed contract as SetEnabled.
+	SetReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) error
 	// RotateCredentials swaps credentials_secret_ref to secretRef. When
 	// graceSeconds > 0 it preserves the prior ref in
 	// previous_credentials_secret_ref with a now()+grace validity horizon so

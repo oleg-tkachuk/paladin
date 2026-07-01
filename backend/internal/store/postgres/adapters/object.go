@@ -327,19 +327,23 @@ func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, o
 // ObjectKey. Hits idx_object_keys_bucket_routing. After migration 005
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
-func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error) {
+func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error) {
 	// JOIN storage_backends so a disabled backend is refused at the single
-	// resolution chokepoint (feature 002) — zero extra round trip.
+	// resolution chokepoint (feature 002) — zero extra round trip. The
+	// read_only (drain) state is split by operation class here (migration
+	// 047): a mutation (`write`) against a read-only backend is refused;
+	// reads still resolve.
 	const q = `
-		SELECT ok.bucket_name, sb.enabled
+		SELECT ok.bucket_name, sb.enabled, sb.read_only
 		FROM object_keys ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
 		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
 	var (
-		bucket  string
-		enabled bool
+		bucket   string
+		enabled  bool
+		readOnly bool
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled, &readOnly); err != nil {
 		if isNoRows(err) {
 			return "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
@@ -347,6 +351,9 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 	}
 	if !enabled {
 		return "", object.ErrBackendDisabled
+	}
+	if write && readOnly {
+		return "", object.ErrBackendReadOnly
 	}
 	return bucket, nil
 }
@@ -367,14 +374,15 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 //
 // This lets a tenant turn versioning on for one namespace within a
 // shared bucket without touching the bucket's global config.
-func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (object.BucketMeta, error) {
+func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (object.BucketMeta, error) {
 	// JOIN storage_backends so a disabled backend is refused here too —
 	// the resolution chokepoint covers every promote/delete/version path.
+	// `write` splits the read_only (drain) gate by operation class (047).
 	const q = `
 		SELECT b.backend_id, b.bucket_name,
 		       COALESCE(bk.versioning_enabled, false),
 		       COALESCE(bk.object_lock_enabled, false),
-		       b.constraints, sb.enabled, sb.events_enabled
+		       b.constraints, sb.enabled, sb.read_only, sb.events_enabled
 		FROM object_keys b
 		JOIN storage_backends sb ON sb.id = b.backend_id
 		LEFT JOIN buckets bk
@@ -385,10 +393,11 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		meta            object.BucketMeta
 		constraintsJSON []byte
 		enabled         bool
+		readOnly        bool
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
-		&constraintsJSON, &enabled, &meta.EventsEnabled,
+		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled,
 	); err != nil {
 		if isNoRows(err) {
 			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
@@ -397,6 +406,9 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 	}
 	if !enabled {
 		return object.BucketMeta{}, object.ErrBackendDisabled
+	}
+	if write && readOnly {
+		return object.BucketMeta{}, object.ErrBackendReadOnly
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v

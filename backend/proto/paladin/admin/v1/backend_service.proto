@@ -30,6 +30,12 @@ service BackendService {
   // resource_version. Disabling the configured default backend is
   // refused (FailedPrecondition).
   rpc SetBackendEnabled(SetBackendEnabledRequest) returns (StorageBackend);
+
+  // SetBackendReadOnly flips the backend's read-only "drain" state
+  // (migration 047). Idempotent, OCC-guarded via resource_version. Only
+  // meaningful on an enabled backend: reads keep working, mutations are
+  // refused so an operator can migrate data off before disabling.
+  rpc SetBackendReadOnly(SetBackendReadOnlyRequest) returns (StorageBackend);
 }
 
 message CreateBackendRequest {
@@ -87,5 +93,11 @@ message TestBackendResponse {
 message SetBackendEnabledRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
   bool enabled = 2;
+  string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
+}
+
+message SetBackendReadOnlyRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
+  bool read_only = 2;
   string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
 }

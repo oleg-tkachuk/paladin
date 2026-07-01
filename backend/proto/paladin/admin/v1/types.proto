@@ -47,6 +47,13 @@ message StorageBackend {
   // render "rotated — old key valid for another N".
   string previous_credentials_secret_ref = 17;
   google.protobuf.Timestamp previous_credentials_valid_until = 18;
+  // Read-only "drain" state (migration 047). Only meaningful when enabled=true:
+  // reads / presign-GET / HEAD / list still resolve, but mutations
+  // (PUT / POST / multipart-init / copy-dest / update / delete / version
+  // writes) are refused (FailedPrecondition) so an operator can migrate data
+  // off before disabling. Operator-managed via SetBackendReadOnly; NOT
+  // mirrored from static config.
+  bool read_only = 19;
 }
 
 enum StorageKind {

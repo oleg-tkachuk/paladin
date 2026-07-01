@@ -274,6 +274,30 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	return &got, nil
 }
 
+// ─── SetBackendReadOnly ──────────────────────────────────────────────────────
+
+// SetBackendReadOnly flips the backend's read-only "drain" state (migration
+// 047). Same platform-admin + Cedar gate, OCC, and idempotency as
+// SetBackendEnabled. Unlike disable, draining the configured default backend
+// is ALLOWED: it's a deliberate migration step (reads keep working), and
+// refusing it would make the default backend un-drainable.
+func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
+	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+		return nil, err
+	}
+	if err := h.repo.SetReadOnly(ctx, backendID, readOnly, expectedVersion); err != nil {
+		return nil, apiutil.MapError(err)
+	}
+	got, err := h.repo.Get(ctx, backendID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &got, nil
+}
+
 func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, grace time.Duration) (*admindomain.StorageBackend, error) {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err

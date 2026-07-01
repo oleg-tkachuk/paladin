@@ -489,6 +489,7 @@ type StorageBackend struct {
 	Enabled                       bool               `json:"enabled"`
 	PreviousCredentialsSecretRef  *string            `json:"previous_credentials_secret_ref"`
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
+	ReadOnly                      bool               `json:"read_only"`
 }
 
 type Tenant struct {

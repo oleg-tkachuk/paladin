@@ -119,6 +119,28 @@ func (s *BackendServer) SetBackendEnabled(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(backendToProto(out)), nil
 }
 
+func (s *BackendServer) SetBackendReadOnly(ctx context.Context, req *connect.Request[pb.SetBackendReadOnlyRequest]) (*connect.Response[pb.StorageBackend], error) {
+	id, err := backendIDFromName(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	// Same OCC contract as SetBackendEnabled: rv=0 is rejected so a drain
+	// flip can never clobber a concurrent change.
+	if rv == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version required"))
+	}
+	out, err := s.H.SetBackendReadOnly(ctx, id, req.Msg.GetReadOnly(), rv)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(backendToProto(out)), nil
+}
+
 func (s *BackendServer) RotateCredentials(ctx context.Context, req *connect.Request[pb.RotateCredentialsRequest]) (*connect.Response[pb.StorageBackend], error) {
 	id, err := backendIDFromName(req.Msg.GetName())
 	if err != nil {

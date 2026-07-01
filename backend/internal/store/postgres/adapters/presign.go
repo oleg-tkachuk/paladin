@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
@@ -58,14 +59,32 @@ func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID strin
 // LookupBucket reads the physical S3 bucket bound to an ObjectKey via
 // idx_object_keys_bucket_routing. bucket_name is NOT NULL after
 // migration 005 so a successful lookup always returns a non-empty value.
-func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error) {
-	const q = `SELECT bucket_name FROM object_keys WHERE tenant_id = $1 AND object_key = $2`
-	var bucket string
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket); err != nil {
+// `write` splits the read-only-drain gate (migration 047): presign-GET is a
+// read, presign-PUT / presign-part are writes. Both the disabled (feature
+// 002) and drain gates are enforced here so a presign URL is never issued
+// against a backend that can't serve the op.
+func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error) {
+	const q = `
+		SELECT ok.bucket_name, sb.enabled, sb.read_only
+		FROM object_keys ok
+		JOIN storage_backends sb ON sb.id = ok.backend_id
+		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
+	var (
+		bucket   string
+		enabled  bool
+		readOnly bool
+	)
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled, &readOnly); err != nil {
 		if isNoRows(err) {
 			return "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
 		return "", fmt.Errorf("lookup bucket: %w", err)
+	}
+	if !enabled {
+		return "", object.ErrBackendDisabled
+	}
+	if write && readOnly {
+		return "", object.ErrBackendReadOnly
 	}
 	return bucket, nil
 }

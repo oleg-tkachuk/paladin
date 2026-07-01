@@ -134,12 +134,20 @@ func (l ObjectLock) Reason() string {
 // Disabling only blocks issuance of NEW presigns and PALADIN-mediated ops.
 var ErrBackendDisabled = errors.New("storage backend is disabled")
 
+// ErrBackendReadOnly is returned by the resolution path for a MUTATION
+// (write=true) when the resolved backend is in the read-only drain state
+// (migration 047): enabled, so reads/presign-GET/HEAD/list still resolve,
+// but PUT/POST/multipart-init/copy-dest/update/delete/version writes are
+// refused so an operator can migrate data off before disabling. Same
+// chokepoint + FailedPrecondition mapping as ErrBackendDisabled.
+var ErrBackendReadOnly = errors.New("storage backend is read-only (draining)")
+
 // mapResolveErr maps a bucket-resolution error to the right Connect code:
-// a disabled backend is FailedPrecondition (the resource exists but is
-// not in a state that permits the op); anything else is treated as
-// NotFound (the historical behaviour for an unresolved object key).
+// a disabled or read-only backend is FailedPrecondition (the resource
+// exists but is not in a state that permits the op); anything else is
+// treated as NotFound (the historical behaviour for an unresolved object key).
 func MapResolveErr(err error) error {
-	if errors.Is(err, ErrBackendDisabled) {
+	if errors.Is(err, ErrBackendDisabled) || errors.Is(err, ErrBackendReadOnly) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeNotFound, err)
@@ -221,11 +229,16 @@ type Repository interface {
 	// Cheap lookup (covered by idx_object_keys_bucket_routing). Empty
 	// string means the row exists but no bucket has been bound — the
 	// storage adapter falls back to its configured default in that case.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string) (string, error)
+	// `write` classifies the operation for the read-only (drain) gate
+	// (migration 047): pass true for mutations (PUT/POST/multipart-init/
+	// copy-dest/delete/version-write), false for reads (GET/HEAD/list). A
+	// write against a read-only backend returns ErrBackendReadOnly.
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error)
 	// LookupBucketMeta returns the bucket binding plus the metadata needed for
 	// versioning / lock decisions on the hot path. Implementations should
 	// satisfy this with a single query — handlers call it on every promote.
-	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string) (BucketMeta, error)
+	// `write` gates the read-only drain state as in LookupBucket.
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (BucketMeta, error)
 	// ObjectLock returns the object row's lock state so the delete path
 	// can refuse (and report) a locked object before touching storage.
 	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
@@ -411,7 +424,7 @@ func objectResourceName(tenantID uuid.UUID, objectKey, key string) string {
 // tx. On a lookup miss it returns "" and the caller falls back to the C-shape
 // name; a transient resolve blip must never block the event.
 func (h *Handler) canonicalObjectPrefix(ctx context.Context, tenantID uuid.UUID, objectKey string) string {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, objectKey)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, objectKey, false) // naming read
 	if err != nil || meta.BackendID == "" || meta.BucketName == "" {
 		return ""
 	}
@@ -531,7 +544,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	//    Empty BucketName means "row exists but bucket_name is NULL" —
 	//    the storage adapter falls back to its configured default; after
 	//    migration 005 / startup backfill this case is impossible.
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.ObjectKey, true) // upload (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -669,7 +682,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	}
 
 	// Materialize authoritative values via HEAD against the object's bucket.
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -970,7 +983,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // download (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -1138,7 +1151,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey)
+	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -1359,11 +1372,11 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, err
 	}
 
-	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey)
+	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey, false) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey)
+	dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -1529,5 +1542,6 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
 	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition)
+	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition)
 	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound)
 }
