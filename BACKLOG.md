@@ -783,10 +783,15 @@ open deliberately — each notes why._
   `repeated ObjectKeyRoute routes` — every ObjectKey the caller can read, in
   all three name shapes (A/C/B) plus (backend, bucket) — so clients normalize
   to canonical before sending (`internal/wire/objectkey_routes.go`).
-- **Status:** Deferred (shipped with a hard cap). The lister pulls
-  `ListObjectKeys` in pages of `whoAmIRoutePageSize` (200) and stops at
-  `whoAmIMaxRoutes` (1000); beyond that the route table is silently truncated.
-  There is no page token on the wire — WhoAmI returns one shot.
+- **Status:** Deferred (shipped with a hard cap; truncation is now EXPLICIT).
+  The lister pulls `ListObjectKeys` in pages of `whoAmIRoutePageSize` (200) and
+  stops at `whoAmIMaxRoutes` (1000). **Update (2026-07-01):** `WhoAmIResponse`
+  gained `routes_truncated` (set true iff more readable ObjectKeys exist than
+  the cap), so a client knows the table is an incomplete prefix and must fall
+  back to `ListObjectKeys` — no longer *silently* truncated (DoD option b, the
+  observable half). Full pagination of the route table (DoD option a) is still
+  deferred — a page token on an identity RPC is awkward, and the cap is a safe
+  default for tens–hundreds of ObjectKeys.
 - **Reason:** WhoAmI's primary job is identity; an unbounded per-ObjectKey dump
   in the identity call is a response-size hazard for large tenants. The cap
   keeps the common case (tens–hundreds of ObjectKeys) correct and cheap. Route

@@ -55,7 +55,7 @@ func ProvideObjectKeyRouteLister(repos Repos, pe *policy.Engine, cfg config.Conf
 	}
 }
 
-func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) ([]authh.ObjectKeyRoute, error) {
+func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) ([]authh.ObjectKeyRoute, bool, error) {
 	// The default binding decides which ObjectKeys expose a bare (B) alias: a
 	// bare name resolves through the binding, so it round-trips to canonical
 	// only for ObjectKeys in the default (backend, bucket). No binding → no
@@ -64,23 +64,32 @@ func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID 
 	if db, err := l.tenants.GetDefaultBinding(ctx, tenantID); err == nil {
 		dbBackend, dbBucket = db.BackendID, db.BucketName
 	} else if !errors.Is(err, tenant.ErrNotFound) {
-		return nil, err
+		return nil, false, err
 	}
 
 	var (
 		routes    []authh.ObjectKeyRoute
 		pageToken string
+		truncated bool
 	)
-	for len(routes) < whoAmIMaxRoutes {
+	// truncated is set only when we encounter a key while already at the cap,
+	// i.e. there is at least one ObjectKey we did NOT include — never when the
+	// last page fills exactly to the cap with nothing left.
+loop:
+	for {
 		keys, next, err := l.okH.ListObjectKeys(ctx, objectkey.ListObjectKeysArgs{
 			TenantID:  tenantID,
 			PageSize:  whoAmIRoutePageSize,
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		for i := range keys {
+			if len(routes) >= whoAmIMaxRoutes {
+				truncated = true // more readable ObjectKeys exist than the cap allows
+				break loop
+			}
 			k := keys[i]
 			bare := ""
 			if dbBackend != "" && k.BackendID == dbBackend && k.BucketName == dbBucket {
@@ -93,14 +102,11 @@ func (l objectKeyRouteLister) ListObjectKeyRoutes(ctx context.Context, tenantID 
 				Backend:    k.BackendID,
 				Bucket:     k.BucketName,
 			})
-			if len(routes) >= whoAmIMaxRoutes {
-				break
-			}
 		}
 		if next == "" {
 			break
 		}
 		pageToken = next
 	}
-	return routes, nil
+	return routes, truncated, nil
 }

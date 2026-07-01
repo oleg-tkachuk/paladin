@@ -381,9 +381,15 @@ type WhoAmIResponse struct {
 	// it themselves. Empty when the server has no route source wired or the
 	// caller has no readable ObjectKeys. The list is capped server-side and is
 	// not paginated — see BACKLOG for the large-tenant follow-up.
-	Routes        []*ObjectKeyRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Routes []*ObjectKeyRoute `protobuf:"bytes,4,rep,name=routes,proto3" json:"routes,omitempty"`
+	// routes_truncated is true when the caller has MORE readable ObjectKeys than
+	// the server-side cap, so `routes` is an incomplete prefix. A client that
+	// sees this must not treat the table as exhaustive — fall back to resolving
+	// any name it can't find via ListObjectKeys. False when the table is
+	// complete (the common case) or empty.
+	RoutesTruncated bool `protobuf:"varint,5,opt,name=routes_truncated,json=routesTruncated,proto3" json:"routes_truncated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WhoAmIResponse) Reset() {
@@ -442,6 +448,13 @@ func (x *WhoAmIResponse) GetRoutes() []*ObjectKeyRoute {
 		return x.Routes
 	}
 	return nil
+}
+
+func (x *WhoAmIResponse) GetRoutesTruncated() bool {
+	if x != nil {
+		return x.RoutesTruncated
+	}
+	return false
 }
 
 // ObjectKeyRoute is one addressable ObjectKey expressed in all three
@@ -757,13 +770,14 @@ const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\rRevokeRequest\x12\x1d\n" +
 	"\x05token\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05token\"\x10\n" +
 	"\x0eRevokeResponse\"\x0f\n" +
-	"\rWhoAmIRequest\"\xa7\x01\n" +
+	"\rWhoAmIRequest\"\xd2\x01\n" +
 	"\x0eWhoAmIResponse\x12$\n" +
 	"\x04user\x18\x01 \x01(\v2\x10.paladin.iam.v1.UserR\x04user\x12\x1a\n" +
 	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1f\n" +
 	"\vtenant_slug\x18\x03 \x01(\tR\n" +
 	"tenantSlug\x122\n" +
-	"\x06routes\x18\x04 \x03(\v2\x1a.paladin.iam.v1.ObjectKeyRouteR\x06routes\"\xa0\x01\n" +
+	"\x06routes\x18\x04 \x03(\v2\x1a.paladin.iam.v1.ObjectKeyRouteR\x06routes\x12)\n" +
+	"\x10routes_truncated\x18\x05 \x01(\bR\x0froutesTruncated\"\xa0\x01\n" +
 	"\x0eObjectKeyRoute\x12\x1c\n" +
 	"\tcanonical\x18\x01 \x01(\tR\tcanonical\x12\x1f\n" +
 	"\vtenant_path\x18\x02 \x01(\tR\n" +

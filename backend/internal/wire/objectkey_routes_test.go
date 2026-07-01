@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func TestListObjectKeyRoutes_ShapesAndBareAlias(t *testing.T) {
 		tenants: fakeBindingReader{db: tenant.DefaultBinding{BackendID: "primary", BucketName: "paladin"}},
 	}
 
-	routes, err := lister.ListObjectKeyRoutes(context.Background(), tid)
+	routes, _, err := lister.ListObjectKeyRoutes(context.Background(), tid)
 	if err != nil {
 		t.Fatalf("ListObjectKeyRoutes: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestListObjectKeyRoutes_NoBindingNoBareAliases(t *testing.T) {
 		tenants: fakeBindingReader{err: tenant.ErrNotFound},
 	}
 
-	routes, err := lister.ListObjectKeyRoutes(context.Background(), tid)
+	routes, _, err := lister.ListObjectKeyRoutes(context.Background(), tid)
 	if err != nil {
 		t.Fatalf("no binding must not error: %v", err)
 	}
@@ -111,16 +112,65 @@ func TestListObjectKeyRoutes_PaginatesAcrossPages(t *testing.T) {
 	}
 	lister := objectKeyRouteLister{okH: f, tenants: fakeBindingReader{err: tenant.ErrNotFound}}
 
-	routes, err := lister.ListObjectKeyRoutes(context.Background(), tid)
+	routes, truncated, err := lister.ListObjectKeyRoutes(context.Background(), tid)
 	if err != nil {
 		t.Fatalf("ListObjectKeyRoutes: %v", err)
 	}
 	if len(routes) != 2 {
 		t.Fatalf("routes = %d, want 2 across pages", len(routes))
 	}
+	if truncated {
+		t.Error("truncated should be false — the full table fit under the cap")
+	}
 	// Second page must be requested with the token the first page returned.
 	if len(f.gotArgs) != 2 || f.gotArgs[1].PageToken != "next-1" {
 		t.Fatalf("page tokens = %+v, want second call to carry next-1", f.gotArgs)
+	}
+}
+
+// TestListObjectKeyRoutes_TruncatesAtCap: more readable ObjectKeys than the
+// server cap → routes is exactly the cap and truncated=true.
+func TestListObjectKeyRoutes_TruncatesAtCap(t *testing.T) {
+	tid := uuid.New()
+	keys := make([]objectkey.ObjectKey, whoAmIMaxRoutes+3)
+	for i := range keys {
+		keys[i] = ok(tid, "primary", "paladin", fmt.Sprintf("k%d", i))
+	}
+	lister := objectKeyRouteLister{
+		okH:     &fakeOKLister{pages: [][]objectkey.ObjectKey{keys}, tokens: []string{""}},
+		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+	}
+
+	routes, truncated, err := lister.ListObjectKeyRoutes(context.Background(), tid)
+	if err != nil {
+		t.Fatalf("ListObjectKeyRoutes: %v", err)
+	}
+	if len(routes) != whoAmIMaxRoutes {
+		t.Errorf("routes = %d, want exactly the cap %d", len(routes), whoAmIMaxRoutes)
+	}
+	if !truncated {
+		t.Error("truncated should be true when more ObjectKeys exist than the cap")
+	}
+}
+
+// A table that fills EXACTLY to the cap with nothing left is NOT truncated.
+func TestListObjectKeyRoutes_ExactCapNotTruncated(t *testing.T) {
+	tid := uuid.New()
+	keys := make([]objectkey.ObjectKey, whoAmIMaxRoutes)
+	for i := range keys {
+		keys[i] = ok(tid, "primary", "paladin", fmt.Sprintf("k%d", i))
+	}
+	lister := objectKeyRouteLister{
+		okH:     &fakeOKLister{pages: [][]objectkey.ObjectKey{keys}, tokens: []string{""}},
+		tenants: fakeBindingReader{err: tenant.ErrNotFound},
+	}
+
+	routes, truncated, err := lister.ListObjectKeyRoutes(context.Background(), tid)
+	if err != nil {
+		t.Fatalf("ListObjectKeyRoutes: %v", err)
+	}
+	if len(routes) != whoAmIMaxRoutes || truncated {
+		t.Errorf("routes=%d truncated=%v, want %d/false (exact fit)", len(routes), truncated, whoAmIMaxRoutes)
 	}
 }
 
@@ -131,7 +181,7 @@ func TestListObjectKeyRoutes_BindingReadErrorPropagates(t *testing.T) {
 		okH:     &fakeOKLister{},
 		tenants: fakeBindingReader{err: errors.New("db down")},
 	}
-	if _, err := lister.ListObjectKeyRoutes(context.Background(), uuid.New()); err == nil {
+	if _, _, err := lister.ListObjectKeyRoutes(context.Background(), uuid.New()); err == nil {
 		t.Fatal("want error when the binding read fails hard")
 	}
 }

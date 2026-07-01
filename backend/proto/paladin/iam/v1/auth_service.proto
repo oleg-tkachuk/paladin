@@ -94,6 +94,12 @@ message WhoAmIResponse {
   // caller has no readable ObjectKeys. The list is capped server-side and is
   // not paginated — see BACKLOG for the large-tenant follow-up.
   repeated ObjectKeyRoute routes = 4;
+  // routes_truncated is true when the caller has MORE readable ObjectKeys than
+  // the server-side cap, so `routes` is an incomplete prefix. A client that
+  // sees this must not treat the table as exhaustive — fall back to resolving
+  // any name it can't find via ListObjectKeys. False when the table is
+  // complete (the common case) or empty.
+  bool routes_truncated = 5;
 }
 
 // ObjectKeyRoute is one addressable ObjectKey expressed in all three

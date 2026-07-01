@@ -311,16 +311,17 @@ func TestRefreshToken_DecoderError(t *testing.T) {
 // ─── WhoAmI route table (ADR-0010 Phase 4) ──────────────────────────────────
 
 type stubRouteLister struct {
-	routes []ObjectKeyRoute
-	err    error
-	calls  int
-	gotTID uuid.UUID
+	routes    []ObjectKeyRoute
+	truncated bool
+	err       error
+	calls     int
+	gotTID    uuid.UUID
 }
 
-func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID) ([]ObjectKeyRoute, error) {
+func (s *stubRouteLister) ListObjectKeyRoutes(_ context.Context, tid uuid.UUID) ([]ObjectKeyRoute, bool, error) {
 	s.calls++
 	s.gotTID = tid
-	return s.routes, s.err
+	return s.routes, s.truncated, s.err
 }
 
 // whoAmICtx builds a context carrying a principal whose subject is the given
@@ -366,6 +367,26 @@ func TestWhoAmI_ReturnsRoutesFromLister(t *testing.T) {
 	}
 	if len(out.Routes) != 1 || out.Routes[0] != want[0] {
 		t.Fatalf("routes = %+v, want %+v", out.Routes, want)
+	}
+	if out.RoutesTruncated {
+		t.Error("RoutesTruncated should be false for a complete table")
+	}
+}
+
+func TestWhoAmI_PropagatesRoutesTruncated(t *testing.T) {
+	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
+	lister := &stubRouteLister{
+		routes:    []ObjectKeyRoute{{Canonical: "c", TenantPath: "t", Backend: "b", Bucket: "bk"}},
+		truncated: true,
+	}
+	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithObjectKeyRoutes(lister)
+
+	out, err := h.WhoAmI(whoAmICtx(u))
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	if !out.RoutesTruncated {
+		t.Error("RoutesTruncated should propagate from the lister")
 	}
 }
 

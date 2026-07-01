@@ -100,10 +100,11 @@ func (s *AuthServer) WhoAmI(ctx context.Context, _ *connect.Request[pb.WhoAmIReq
 		tenantSlug = p.TenantSlug
 	}
 	return connect.NewResponse(&pb.WhoAmIResponse{
-		User:       userToProto(&out.User),
-		Audience:   out.Audience,
-		TenantSlug: tenantSlug,
-		Routes:     objectKeyRoutesToProto(out.Routes),
+		User:            userToProto(&out.User),
+		Audience:        out.Audience,
+		TenantSlug:      tenantSlug,
+		Routes:          objectKeyRoutesToProto(out.Routes),
+		RoutesTruncated: out.RoutesTruncated,
 	}), nil
 }
 

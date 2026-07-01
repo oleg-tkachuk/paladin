@@ -70,7 +70,10 @@ type ObjectKeyRoute struct {
 // free of admin-plane (objectKey / tenant-binding) imports; the concrete
 // implementation is wired in the composition root.
 type ObjectKeyRouteLister interface {
-	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) ([]ObjectKeyRoute, error)
+	// Returns the route table plus `truncated` — true when the caller has more
+	// readable ObjectKeys than the server cap, so the table is an incomplete
+	// prefix (ADR-0010 Phase 4).
+	ListObjectKeyRoutes(ctx context.Context, tenantID uuid.UUID) (routes []ObjectKeyRoute, truncated bool, err error)
 }
 
 type Handler struct {
@@ -392,6 +395,9 @@ type WhoAmIOutput struct {
 	// Routes is the caller's ObjectKey route table (ADR-0010 Phase 4). Empty
 	// when no route source is wired or the caller has no readable ObjectKeys.
 	Routes []ObjectKeyRoute
+	// RoutesTruncated is true when Routes is an incomplete prefix (the caller
+	// has more readable ObjectKeys than the server cap).
+	RoutesTruncated bool
 }
 
 func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
@@ -414,7 +420,7 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 	// route-source failure (incl. a Cedar denial for a caller who can't list
 	// ObjectKeys) degrades to an empty table rather than failing the call.
 	if h.routes != nil && u.TenantID != uuid.Nil {
-		routes, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID)
+		routes, truncated, rErr := h.routes.ListObjectKeyRoutes(ctx, u.TenantID)
 		if rErr != nil {
 			if h.log != nil {
 				h.log.Warn("whoami: object-key route lookup failed; returning identity without routes",
@@ -423,6 +429,7 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 			}
 		} else {
 			out.Routes = routes
+			out.RoutesTruncated = truncated
 		}
 	}
 	return out, nil
