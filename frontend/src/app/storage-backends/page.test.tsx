@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the storage-backends page. useBackends auto-fetches
@@ -131,5 +131,71 @@ describe("StorageBackendsPage", () => {
     h.backends = [makeBackend({ healthStatus: "unknown" })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Untested")).toBeInTheDocument();
+  });
+
+  // Bulk actions — multi-select + client-side fan-out over the per-backend RPCs.
+  it("bulk-disables the selected backends, each with its own resource_version", async () => {
+    h.backends = [
+      makeBackend({ backendId: "a", enabled: true, resourceVersion: "1" }),
+      makeBackend({ backendId: "b", enabled: true, resourceVersion: "2" }),
+    ];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByLabelText("Select a"));
+    await userEvent.click(screen.getByLabelText("Select b"));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
+
+    await waitFor(() => expect(h.setBackendEnabled).toHaveBeenCalledTimes(2));
+    expect(h.setBackendEnabled).toHaveBeenCalledWith("a", false, "1");
+    expect(h.setBackendEnabled).toHaveBeenCalledWith("b", false, "2");
+  });
+
+  it("select-all then bulk-drain fans out to enabled backends only (skips no-ops)", async () => {
+    h.backends = [
+      makeBackend({
+        backendId: "a",
+        enabled: true,
+        readOnly: false,
+        resourceVersion: "1",
+      }),
+      // already draining → drain is a no-op, skipped
+      makeBackend({
+        backendId: "b",
+        enabled: true,
+        readOnly: true,
+        resourceVersion: "2",
+      }),
+      // disabled → drain does not apply, skipped
+      makeBackend({
+        backendId: "c",
+        enabled: false,
+        readOnly: false,
+        resourceVersion: "3",
+      }),
+    ];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByLabelText("Select all backends"));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk drain" }));
+
+    await waitFor(() => expect(h.setBackendReadOnly).toHaveBeenCalledTimes(1));
+    expect(h.setBackendReadOnly).toHaveBeenCalledWith("a", true, "1");
+  });
+
+  it("bulk action with no applicable backend is a no-op (no RPC)", async () => {
+    // A single disabled backend: 'Bulk disable' has nothing to change.
+    h.backends = [makeBackend({ backendId: "a", enabled: false })];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByLabelText("Select a"));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
+
+    expect(h.setBackendEnabled).not.toHaveBeenCalled();
+    expect(h.showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Nothing to do" }),
+    );
+  });
+
+  it("hides the bulk bar until something is selected", () => {
+    h.backends = [makeBackend({ backendId: "a" })];
+    render(<StorageBackendsPage />);
+    expect(screen.queryByRole("button", { name: "Bulk disable" })).toBeNull();
   });
 });

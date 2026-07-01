@@ -1184,8 +1184,8 @@ of the pipeline._
 
 ### Backend states beyond enable/disable (maintenance/error, bulk)
 
-- **Status:** Aspirational (read-only drain + health auto-states SHIPPED; bulk
-  + operator-set maintenance remain).
+- **Status:** Aspirational (read-only drain + health auto-states + bulk actions
+  SHIPPED; only operator-set `maintenance` remains).
 - **Reason:** Feature 002 (`specs/002-backend-enable-disable`) shipped a
   two-value `enabled` flag with strict reject semantics: a disabled
   backend refuses ALL PALADIN-mediated ops. Richer behaviours were
@@ -1210,6 +1210,15 @@ of the pipeline._
   `/storage-backends`. Advisory only — health does NOT gate ops (a transient
   probe failure must never silently take a backend offline). Best-effort write:
   a health-write failure never fails the probe response.
+- **Shipped (2026-07-01) — bulk enable/disable/drain:** `/storage-backends`
+  gains per-row + select-all checkboxes and a bulk-action bar (Enable /
+  Disable / Drain / Undrain). Implemented as **client-side fan-out** over the
+  existing per-backend OCC-guarded RPCs (each backend carries its own
+  `resource_version`, so a single "batch RPC" would still be N guarded updates
+  — no server change needed). No-ops are skipped (e.g. draining an already-
+  draining or disabled backend); `Promise.allSettled` so one rejection (e.g.
+  disabling the default backend) doesn't abort the rest, and the summary toast
+  reports `N ok / M failed / K skipped` with the failed backend ids.
 - **Definition of Done (remaining):**
   - **Operator-set `maintenance`** — a manually-set advisory state (distinct
     from the auto `error`), so an operator can flag "under maintenance" in the
@@ -1217,7 +1226,5 @@ of the pipeline._
     manual-set half. Needs a value + a `SetBackendMaintenance`-style RPC (or
     fold into the health table with a `source` discriminator so an auto `ok`
     probe doesn't clobber an operator's `maintenance` flag).
-  - **Bulk enable/disable/drain** — toggle multiple backends in one action
-    (admin UI multi-select + a batch RPC or client-side fan-out).
 - **Blockers:** none technical; deferred purely for scope.
 

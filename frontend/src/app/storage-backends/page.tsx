@@ -87,6 +87,10 @@ export default function StorageBackendsPage() {
   const [search, setSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [drainingId, setDrainingId] = useState<string | null>(null);
+  // Multi-select for bulk actions (client-side fan-out over the per-backend
+  // OCC-guarded RPCs — each backend carries its own resource_version).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // handleToggle flips a backend's enabled state. The server refuses to
   // disable the configured default backend (FailedPrecondition) and a
@@ -153,6 +157,86 @@ export default function StorageBackendsPage() {
     } finally {
       setDrainingId(null);
     }
+  };
+
+  // ── bulk actions (multi-select → client-side fan-out) ────────────────────
+  type BulkAction = "enable" | "disable" | "drain" | "undrain";
+
+  const toggleSelect = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const clearSelection = () => setSelected(new Set());
+
+  // applies reports whether an action changes a given backend's state (so a
+  // no-op is skipped rather than firing a pointless RPC). Enable/disable gate
+  // on `enabled`; drain/undrain only apply to an ENABLED backend (a disabled
+  // one already rejects everything, so draining it is meaningless).
+  const applies = (
+    b: (typeof backends)[number],
+    action: BulkAction,
+  ): boolean => {
+    switch (action) {
+      case "enable":
+        return !b.enabled;
+      case "disable":
+        return b.enabled;
+      case "drain":
+        return b.enabled && !b.readOnly;
+      case "undrain":
+        return b.enabled && b.readOnly;
+    }
+  };
+
+  const runBulk = async (action: BulkAction) => {
+    const targets = backends.filter((b) => selected.has(b.backendId));
+    const applicable = targets.filter((b) => applies(b, action));
+    if (applicable.length === 0) {
+      showNotification({
+        type: "success",
+        title: "Nothing to do",
+        message: "No selected backend is in a state this action changes.",
+      });
+      return;
+    }
+    setBulkBusy(true);
+    // Fan out over the existing OCC-guarded per-backend RPCs. allSettled so one
+    // rejection (e.g. disabling the default backend → FailedPrecondition)
+    // doesn't abort the rest; failures are reported per backend.
+    const results = await Promise.allSettled(
+      applicable.map((b) => {
+        switch (action) {
+          case "enable":
+            return setBackendEnabled(b.backendId, true, b.resourceVersion);
+          case "disable":
+            return setBackendEnabled(b.backendId, false, b.resourceVersion);
+          case "drain":
+            return setBackendReadOnly(b.backendId, true, b.resourceVersion);
+          case "undrain":
+            return setBackendReadOnly(b.backendId, false, b.resourceVersion);
+        }
+      }),
+    );
+    const failedIds = applicable
+      .filter((_, i) => results[i].status === "rejected")
+      .map((b) => b.backendId);
+    const ok = results.length - failedIds.length;
+    const skipped = targets.length - applicable.length;
+    showNotification({
+      type: failedIds.length > 0 ? "error" : "success",
+      title:
+        `Bulk ${action}: ${ok} ok` +
+        (failedIds.length ? `, ${failedIds.length} failed` : "") +
+        (skipped ? `, ${skipped} skipped` : ""),
+      message: failedIds.length ? failedIds.join(", ") : undefined,
+    });
+    setBulkBusy(false);
+    clearSelection();
+    void fetchBackends();
   };
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -286,10 +370,81 @@ export default function StorageBackendsPage() {
         </Button>
       </div>
 
+      {/* Bulk-action bar — shown once ≥1 backend is selected. Each action
+          fans out over the selection via the per-backend OCC-guarded RPCs and
+          skips no-ops (see runBulk). */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk enable"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("enable")}
+            >
+              Enable
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk disable"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("disable")}
+            >
+              Disable
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk drain"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("drain")}
+            >
+              Drain
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk undrain"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("undrain")}
+            >
+              Undrain
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={bulkBusy}
+            onClick={clearSelection}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  aria-label="Select all backends"
+                  checked={
+                    filtered.length > 0 &&
+                    filtered.every((b) => selected.has(b.backendId))
+                  }
+                  onCheckedChange={(v) =>
+                    setSelected(
+                      v === true
+                        ? new Set(filtered.map((b) => b.backendId))
+                        : new Set(),
+                    )
+                  }
+                />
+              </TableHead>
               <TableHead className="w-[220px]">Backend ID</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
@@ -302,14 +457,14 @@ export default function StorageBackendsPage() {
             {loading && backends.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={6} className="py-3">
+                  <TableCell colSpan={7} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
+                <TableCell colSpan={7} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -335,6 +490,15 @@ export default function StorageBackendsPage() {
                 const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}`;
                 return (
                   <TableRow key={b.backendId} className="group">
+                    <TableCell className="w-[40px]">
+                      <Checkbox
+                        aria-label={`Select ${b.backendId}`}
+                        checked={selected.has(b.backendId)}
+                        onCheckedChange={(v) =>
+                          toggleSelect(b.backendId, v === true)
+                        }
+                      />
+                    </TableCell>
                     <TableCell>
                       <Link
                         href={detailHref}
