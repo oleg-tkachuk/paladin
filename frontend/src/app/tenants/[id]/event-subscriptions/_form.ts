@@ -7,6 +7,7 @@ import type {
   HttpSink,
   KafkaSink,
   NatsSink,
+  RabbitMqSink,
   SqsSink,
 } from "@/gen/paladin/admin/v1/types_pb";
 
@@ -71,7 +72,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
   },
 ] as const;
 
-export type SinkType = "http" | "nats" | "kafka" | "sqs";
+export type SinkType = "http" | "nats" | "kafka" | "sqs" | "rabbitmq";
 
 // HTTP, NATS, Kafka, and SQS sinks are all delivery-wired (2026-06-30) and
 // have no create-time restriction. RabbitMQ is also wired in the backend but
@@ -82,6 +83,7 @@ export const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "nats", label: "NATS" },
   { id: "kafka", label: "Kafka" },
   { id: "sqs", label: "SQS" },
+  { id: "rabbitmq", label: "RabbitMQ" },
 ] as const;
 
 // HTTP sink payload format (HttpSink.format). "" is the legacy raw Event JSON;
@@ -143,6 +145,12 @@ export function sinkSummary(sub: EventSubscription): {
   if (t?.case === "sqs") {
     return { badge: "SQS", detail: t.value.queueUrl };
   }
+  if (t?.case === "rabbitmq") {
+    const r = t.value;
+    // routing_key is what a subscriber binds their queue on; exchange is
+    // auxiliary (empty = default exchange, routing_key = queue name).
+    return { badge: "RabbitMQ", detail: `${r.routingKey || "—"} @ ${r.url}` };
+  }
   return { badge: "—", detail: "—" };
 }
 
@@ -172,6 +180,10 @@ export type FormState = {
   // SQS
   sqsQueueUrl: string;
   sqsRegion: string;
+  // RabbitMQ (auth rides in the AMQP URL userinfo)
+  rabbitmqUrl: string;
+  rabbitmqExchange: string;
+  rabbitmqRoutingKey: string;
   // Common
   filter: string;
   disabled: boolean;
@@ -191,6 +203,9 @@ export const EMPTY_FORM: FormState = {
   kafkaTopic: "",
   sqsQueueUrl: "",
   sqsRegion: "",
+  rabbitmqUrl: "amqp://guest:guest@rabbitmq.rabbitmq.svc.cluster.local:5672/",
+  rabbitmqExchange: "",
+  rabbitmqRoutingKey: "paladin.events",
   filter: "",
   disabled: false,
 };
@@ -221,6 +236,11 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.sinkType = "sqs";
     next.sqsQueueUrl = t.value.queueUrl;
     next.sqsRegion = t.value.region;
+  } else if (t?.case === "rabbitmq") {
+    next.sinkType = "rabbitmq";
+    next.rabbitmqUrl = t.value.url;
+    next.rabbitmqExchange = t.value.exchange;
+    next.rabbitmqRoutingKey = t.value.routingKey;
   }
   return next;
 }
@@ -264,6 +284,18 @@ export function buildSink(form: FormState): EventSink {
       target: { case: "kafka", value: kafka },
     };
   }
+  if (form.sinkType === "rabbitmq") {
+    const rabbitmq: RabbitMqSink = {
+      $typeName: "paladin.admin.v1.RabbitMqSink",
+      url: form.rabbitmqUrl.trim(),
+      exchange: form.rabbitmqExchange.trim(),
+      routingKey: form.rabbitmqRoutingKey.trim(),
+    };
+    return {
+      $typeName: "paladin.admin.v1.EventSink",
+      target: { case: "rabbitmq", value: rabbitmq },
+    };
+  }
   const sqs: SqsSink = {
     $typeName: "paladin.admin.v1.SqsSink",
     queueUrl: form.sqsQueueUrl.trim(),
@@ -284,6 +316,8 @@ export interface FormErrors {
   kafkaTopic?: string;
   sqsQueueUrl?: string;
   sqsRegion?: string;
+  rabbitmqUrl?: string;
+  rabbitmqRoutingKey?: string;
 }
 
 export function validateForm(form: FormState): FormErrors {
@@ -313,6 +347,16 @@ export function validateForm(form: FormState): FormErrors {
     if (!isValidUrl(form.sqsQueueUrl.trim()))
       e.sqsQueueUrl = "Must be a valid URL.";
     if (!form.sqsRegion.trim()) e.sqsRegion = "Required.";
+  } else if (form.sinkType === "rabbitmq") {
+    // AMQP URL: amqp:// or amqps://. Loose check — the dispatcher's
+    // connect-time error surfaces on the row's last_error for the rest.
+    if (!/^amqps?:\/\//.test(form.rabbitmqUrl.trim())) {
+      e.rabbitmqUrl = "Must start with amqp:// or amqps://";
+    }
+    // routing_key is required: with the default (empty) exchange it IS the
+    // destination queue name, and even on a named exchange an empty key
+    // usually means "nothing matches".
+    if (!form.rabbitmqRoutingKey.trim()) e.rabbitmqRoutingKey = "Required.";
   }
   return e;
 }

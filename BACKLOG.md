@@ -497,8 +497,9 @@ open deliberately — each notes why._
 
 ### Event dispatcher: RabbitMQ sink
 
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; health probe
-  SHIPPED 2026-07-01; integration test + AMQPS client-certs + UI form remain.
+- **Status:** Partially done — core sink + health probe + UI form SHIPPED
+  (through 2026-07-01); only the real-broker integration test + AMQPS
+  client-certs remain.
 - **Shipped:** `RabbitMqSink{url, exchange, routing_key}` added to the
   proto `EventSink.oneof` (field 5) + frontend types regenerated;
   `internal/worker/sink_rabbitmq.go` — `RabbitMQConnPool` (dial-per-URL,
@@ -516,15 +517,18 @@ open deliberately — each notes why._
   (empty pool → healthy-but-empty). `preWarmRabbitMQ` scans rabbitmq-sink
   subscriptions at boot and dials each broker so the row is populated before
   the first delivery. `RabbitMQConnPool.Warmup` + `Statuses` unit-tested.
+- **Shipped (2026-07-01) — UI connector form:** RabbitMQ is now a `SinkType`
+  option in the `/events` subscription editor (it wasn't even selectable
+  before). AMQP URL + exchange + routing-key fields wired to `RabbitMqSink`
+  (`_form.ts` build/hydrate/validate + `SubscriptionEditorDialog`); the stale
+  "Kafka/SQS are roadmap stubs" Target hint was corrected (all sinks are
+  delivery-wired). `_form.test.ts` covers build + hydrate + validation.
 - **Definition of Done (remaining):**
   - Real-broker integration test (testcontainers RabbitMQ): outbox row →
     publish round-trip + channel-drop-mid-publish behaviour. (The unit
     tests use a publisher seam, so wire compatibility is unproven.)
   - AMQPS with TLS **client certs** (today only URL-embedded creds /
     server-TLS via `amqps://`).
-  - Frontend `/events` connector form: exchange + routing-key + auth fields
-    for RabbitMQ sinks (the proto/types exist; the form does not — RabbitMQ
-    isn't even in the SinkType selector).
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 

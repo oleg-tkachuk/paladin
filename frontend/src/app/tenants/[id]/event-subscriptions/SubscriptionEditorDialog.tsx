@@ -228,7 +228,7 @@ export function SubscriptionEditorDialog({
           <FormSection title="Sink type">
             <Field
               label="Target"
-              hint="HTTP delivers an HMAC-signed POST. NATS publishes a CloudEvents 1.0 JSON message to a subject. Kafka / SQS are roadmap stubs — selectable for visibility, but the dispatcher rejects subscriptions targeting them today."
+              hint="HTTP delivers an HMAC-signed POST (raw or CloudEvents). NATS / Kafka / SQS / RabbitMQ publish the CloudEvents 1.0 envelope — to a subject, topic (keyed by tenant), FIFO queue, or exchange/routing-key respectively. All are delivery-wired."
             >
               <ToggleRow
                 options={SINK_OPTIONS}
@@ -432,6 +432,60 @@ export function SubscriptionEditorDialog({
                     placeholder="us-east-1"
                     onChange={(e) =>
                       setForm((p) => ({ ...p, sqsRegion: e.target.value }))
+                    }
+                  />
+                </Field>
+              </>
+            )}
+
+            {form.sinkType === "rabbitmq" && (
+              <>
+                <Field
+                  label="AMQP URL"
+                  htmlFor="sub-rabbitmq-url"
+                  hint="amqp:// or amqps://. Credentials ride in the URL userinfo (amqp://user:pass@host:5672/vhost)."
+                  error={errors.rabbitmqUrl}
+                >
+                  <Input
+                    id="sub-rabbitmq-url"
+                    value={form.rabbitmqUrl}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, rabbitmqUrl: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Exchange"
+                  htmlFor="sub-rabbitmq-exchange"
+                  optional
+                  hint="Empty = the default (nameless) exchange, in which case the routing key is the destination queue name."
+                >
+                  <Input
+                    id="sub-rabbitmq-exchange"
+                    value={form.rabbitmqExchange}
+                    placeholder="(default exchange)"
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        rabbitmqExchange: e.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Routing key"
+                  htmlFor="sub-rabbitmq-routing-key"
+                  error={errors.rabbitmqRoutingKey}
+                >
+                  <Input
+                    id="sub-rabbitmq-routing-key"
+                    value={form.rabbitmqRoutingKey}
+                    placeholder="paladin.events"
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        rabbitmqRoutingKey: e.target.value,
+                      }))
                     }
                   />
                 </Field>
