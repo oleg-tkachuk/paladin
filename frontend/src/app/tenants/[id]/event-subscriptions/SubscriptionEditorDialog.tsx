@@ -300,13 +300,11 @@ export function SubscriptionEditorDialog({
                 </Field>
                 <Field
                   label="Payload format"
-                  hint="Raw JSON posts the bare Event (legacy, unchanged). CloudEvents 1.0 wraps it in the same envelope the NATS/Kafka/SQS sinks emit (Content-Type application/cloudevents+json)."
+                  hint="CloudEvents 1.0 (default) wraps the event in the same envelope the NATS/Kafka/SQS sinks emit (Content-Type application/cloudevents+json). Raw JSON posts the bare Event — legacy shape, for subscribers that predate the default."
                 >
                   <ToggleRow
                     options={HTTP_FORMAT_OPTIONS}
-                    selected={
-                      form.httpFormat === "cloudevents" ? "cloudevents" : ""
-                    }
+                    selected={form.httpFormat}
                     onSelect={(id) =>
                       setForm((p) => ({ ...p, httpFormat: id }))
                     }

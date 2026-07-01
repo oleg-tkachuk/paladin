@@ -1158,13 +1158,14 @@ export type HttpSink = Message<"paladin.admin.v1.HttpSink"> & {
 
   /**
    * Wire format for the POST body:
-   *   "" / "raw"        → the legacy raw Event JSON (Content-Type
-   *                       application/json). Default — does not break
-   *                       existing webhook subscribers.
-   *   "cloudevents"     → a CloudEvents 1.0 envelope (Content-Type
-   *                       application/cloudevents+json), identical to what
-   *                       the NATS / SQS / RabbitMQ / Kafka sinks emit.
-   * New subscribers should pick "cloudevents" so HTTP matches the brokers.
+   *   "" / "cloudevents" → a CloudEvents 1.0 envelope (Content-Type
+   *                        application/cloudevents+json), identical to what
+   *                        the NATS / SQS / RabbitMQ / Kafka sinks emit. This
+   *                        is the DEFAULT — HTTP is symmetric with the brokers.
+   *   "raw"              → the legacy bare Event JSON (Content-Type
+   *                        application/json), for a webhook subscriber that
+   *                        predates the default flip and still parses the old
+   *                        shape.
    *
    * @generated from field: string format = 4;
    */

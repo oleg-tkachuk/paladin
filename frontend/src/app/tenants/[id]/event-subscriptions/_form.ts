@@ -86,14 +86,15 @@ export const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "rabbitmq", label: "RabbitMQ" },
 ] as const;
 
-// HTTP sink payload format (HttpSink.format). "" is the legacy raw Event JSON;
-// "cloudevents" wraps it in the CloudEvents 1.0 envelope like the broker sinks.
+// HTTP sink payload format (HttpSink.format). "cloudevents" (the DEFAULT) wraps
+// the event in the CloudEvents 1.0 envelope like every broker sink; "raw" is the
+// legacy bare Event JSON, kept for subscribers that predate the default flip.
 export const HTTP_FORMAT_OPTIONS: readonly {
-  id: "" | "cloudevents";
+  id: "cloudevents" | "raw";
   label: string;
 }[] = [
-  { id: "", label: "Raw JSON" },
   { id: "cloudevents", label: "CloudEvents 1.0" },
+  { id: "raw", label: "Raw JSON" },
 ] as const;
 
 // Kafka SASL mechanism (KafkaSink.sasl_mechanism). "" = no SASL. mTLS client
@@ -179,9 +180,9 @@ export type FormState = {
   httpUrl: string;
   httpSecret: string;
   httpMaxAttempts: string;
-  // "" (raw legacy Event JSON) | "cloudevents" (CloudEvents 1.0 envelope,
-  // matching the broker sinks). See HttpSink.format.
-  httpFormat: string;
+  // "cloudevents" (default — CloudEvents 1.0 envelope, matching the broker
+  // sinks) | "raw" (legacy bare Event JSON). See HttpSink.format.
+  httpFormat: "cloudevents" | "raw";
   // NATS
   natsUrl: string;
   natsSubject: string;
@@ -212,7 +213,7 @@ export const EMPTY_FORM: FormState = {
   httpUrl: "",
   httpSecret: "",
   httpMaxAttempts: "5",
-  httpFormat: "",
+  httpFormat: "cloudevents",
   natsUrl: "nats://nats.nats.svc.cluster.local:4222",
   natsSubject: "paladin.events",
   natsCredentialsRef: "",
@@ -244,7 +245,9 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.httpUrl = t.value.url;
     next.httpSecret = t.value.signingSecretRef;
     next.httpMaxAttempts = String(t.value.maxAttempts || 5);
-    next.httpFormat = t.value.format || "";
+    // Backend default (empty/unset) is now CloudEvents; only an explicit "raw"
+    // maps to the raw toggle. Mirrors the flipped HttpSink.format default.
+    next.httpFormat = t.value.format === "raw" ? "raw" : "cloudevents";
   } else if (t?.case === "nats") {
     next.sinkType = "nats";
     next.natsUrl = t.value.url;
@@ -279,9 +282,10 @@ export function buildSink(form: FormState): EventSink {
       url: form.httpUrl.trim(),
       signingSecretRef: form.httpSecret.trim(),
       maxAttempts: Number.parseInt(form.httpMaxAttempts, 10) || 5,
-      // "" = legacy raw Event JSON (default, unchanged behavior).
-      // "cloudevents" = CloudEvents 1.0 envelope, matching the broker sinks.
-      format: form.httpFormat === "cloudevents" ? "cloudevents" : "",
+      // Send the format explicitly (never ""): "cloudevents" is the default
+      // envelope, "raw" is the legacy bare Event JSON opt-out. Explicit values
+      // stay unambiguous even if the wire default shifts again.
+      format: form.httpFormat === "raw" ? "raw" : "cloudevents",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",

@@ -58,11 +58,11 @@ func TestDeliverHTTP_CloudEventsFormat(t *testing.T) {
 	}
 }
 
-// TestDeliverHTTP_RawFormatDefault: an empty/absent format keeps the legacy
-// raw Event JSON (Content-Type application/json) — existing subscribers are
-// unaffected. The raw shape has a top-level "type" but no "specversion".
-func TestDeliverHTTP_RawFormatDefault(t *testing.T) {
-	d, sub, ct, body := captureHTTPSink(t, "")
+// TestDeliverHTTP_RawFormatExplicit: format="raw" keeps the legacy bare Event
+// JSON (Content-Type application/json) for a pre-flip subscriber that opts back
+// in. The raw shape has a top-level "type" but no "specversion".
+func TestDeliverHTTP_RawFormatExplicit(t *testing.T) {
+	d, sub, ct, body := captureHTTPSink(t, "raw")
 	if err := d.DeliverOne(context.Background(), sub, "paladin.bucket.updated"); err != nil {
 		t.Fatalf("DeliverOne: %v", err)
 	}
@@ -78,5 +78,24 @@ func TestDeliverHTTP_RawFormatDefault(t *testing.T) {
 	}
 	if raw["type"] != "paladin.bucket.updated" {
 		t.Errorf("raw event type = %v, want paladin.bucket.updated", raw["type"])
+	}
+}
+
+// TestDeliverHTTP_DefaultIsCloudEvents: an empty/absent format now defaults to
+// the CloudEvents 1.0 envelope (the flip) — symmetric with the broker sinks.
+func TestDeliverHTTP_DefaultIsCloudEvents(t *testing.T) {
+	d, sub, ct, body := captureHTTPSink(t, "")
+	if err := d.DeliverOne(context.Background(), sub, "paladin.bucket.updated"); err != nil {
+		t.Fatalf("DeliverOne: %v", err)
+	}
+	if *ct != "application/cloudevents+json" {
+		t.Errorf("Content-Type = %q, want application/cloudevents+json (default flipped)", *ct)
+	}
+	var env cloudEventEnvelope
+	if err := json.Unmarshal(*body, &env); err != nil {
+		t.Fatalf("default body is not a CloudEvents envelope: %v", err)
+	}
+	if env.SpecVersion != "1.0" || env.Type != "paladin.bucket.updated" {
+		t.Errorf("envelope mismatch: %+v", env)
 	}
 }

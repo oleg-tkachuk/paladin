@@ -39,35 +39,39 @@ const httpTarget = (sink: ReturnType<typeof buildSink>) =>
   sink.target.case === "http" ? sink.target.value : undefined;
 
 describe("HTTP sink payload format", () => {
-  it("defaults to raw ('') when the operator doesn't choose CloudEvents", () => {
-    const sink = buildSink({ ...EMPTY_FORM, sinkType: "http", httpFormat: "" });
-    expect(httpTarget(sink)?.format).toBe("");
+  it("defaults to CloudEvents when the operator doesn't opt into raw", () => {
+    const sink = buildSink({ ...EMPTY_FORM, sinkType: "http" });
+    expect(httpTarget(sink)?.format).toBe("cloudevents");
   });
 
-  it("builds the CloudEvents envelope format when selected", () => {
+  it("builds the raw format when explicitly selected", () => {
     const sink = buildSink({
       ...EMPTY_FORM,
       sinkType: "http",
-      httpFormat: "cloudevents",
+      httpFormat: "raw",
     });
-    expect(httpTarget(sink)?.format).toBe("cloudevents");
+    expect(httpTarget(sink)?.format).toBe("raw");
   });
 
   it("never emits an unknown format string (guards against stray values)", () => {
     const sink = buildSink({
       ...EMPTY_FORM,
       sinkType: "http",
-      httpFormat: "garbage",
+      // Force an out-of-band value past the type to prove the guard.
+      httpFormat: "garbage" as never,
     });
-    // Only "" or "cloudevents" are valid; anything else falls back to raw.
-    expect(httpTarget(sink)?.format).toBe("");
+    // Only "raw" opts out; anything else (incl. stray values) → cloudevents.
+    expect(httpTarget(sink)?.format).toBe("cloudevents");
   });
 
   it("hydrates httpFormat from an existing subscription (edit round-trip)", () => {
     expect(formFromSubscription(httpSub("cloudevents")).httpFormat).toBe(
       "cloudevents",
     );
-    expect(formFromSubscription(httpSub("")).httpFormat).toBe("");
+    expect(formFromSubscription(httpSub("raw")).httpFormat).toBe("raw");
+    // A pre-flip sub with an unset format now hydrates as CloudEvents — the
+    // backend already treats "" as the envelope, so the UI must match.
+    expect(formFromSubscription(httpSub("")).httpFormat).toBe("cloudevents");
   });
 });
 

@@ -306,20 +306,24 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 	if sink.URL == "" {
 		return 0, errors.New("http sink missing url")
 	}
-	// Wire format: "cloudevents" sends the same CloudEvents 1.0 envelope the
-	// broker sinks emit (symmetry); anything else keeps the legacy raw Event
-	// shape so existing webhook subscribers don't break. The HMAC signature
-	// (below) covers whichever body we send, so verification is unaffected.
-	contentType := "application/json"
+	// Wire format: the default (empty / unset) is now the CloudEvents 1.0
+	// envelope the broker sinks emit — HTTP is symmetric with every other sink.
+	// Only an explicit "raw" keeps the legacy bare Event JSON, for a webhook
+	// subscriber that predates the flip and still parses the old shape. The HMAC
+	// signature (below) covers whichever body we send, so verification is
+	// unaffected. (Default flipped from "raw" → "cloudevents"; the UI now sends
+	// an explicit "raw"/"cloudevents", so this only affects API-created subs
+	// that left format unset.)
+	contentType := "application/cloudevents+json"
 	var (
 		body []byte
 		err  error
 	)
-	if sink.Format == "cloudevents" {
-		contentType = "application/cloudevents+json"
-		body, err = json.Marshal(d.newCloudEventEnvelope(sub, evt))
-	} else {
+	if sink.Format == "raw" {
+		contentType = "application/json"
 		body, err = json.Marshal(evt)
+	} else {
+		body, err = json.Marshal(d.newCloudEventEnvelope(sub, evt))
 	}
 	if err != nil {
 		return 0, fmt.Errorf("marshal event: %w", err)

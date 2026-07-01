@@ -608,32 +608,6 @@ open deliberately — each notes why._
 - **Trigger to do:** AWS-native customer with SQS as their bus + a
   throughput profile that warrants batching.
 
-### Event dispatcher: CloudEvents 1.0 envelope (cross-cutting)
-
-- **Status:** Mostly done — UI selector SHIPPED (2026-07-01); only the
-  default-flip decision remains (a breaking change, gated on operator
-  coordination).
-- **Shipped:** JSON-format CloudEvents 1.0 envelope (`newCloudEventEnvelope`
-  in `sink_nats.go`) is the body of every broker sink — NATS, SQS, RabbitMQ,
-  Kafka. `type` = `paladin.<resource>.<action>`, `source` = "paladin", `subject` =
-  resource name, `data` = `Event.Payload`. The HTTP sink gained a `format`
-  field (proto `HttpSink.format`): `""`/`"raw"` keeps the legacy raw Event
-  JSON (Content-Type application/json) so existing webhook subscribers are
-  unaffected, `"cloudevents"` sends the envelope with Content-Type
-  application/cloudevents+json — the DoD's "version the sink config" backward
-  -compat path. Unit-tested both HTTP formats (`sink_http_format_test.go`).
-- **Shipped (2026-07-01) — UI selector:** the HTTP connector form gains a
-  "Payload format" toggle (Raw JSON / CloudEvents 1.0) wired to
-  `HttpSink.format` (`_form.ts` `HTTP_FORMAT_OPTIONS` + `buildSink` +
-  `formFromSubscription` round-trip; `SubscriptionEditorDialog`). Unknown
-  format strings fall back to raw. `_form.test.ts` covers the build + hydrate.
-- **Definition of Done (remaining):**
-  - Decide whether to flip the HTTP default `""` → `"cloudevents"` once it's
-    confirmed no raw-shape webhook consumers remain (a breaking change, so
-    gated on operator coordination).
-- **Trigger to do:** before onboarding an HTTP subscriber that wants
-  CloudEvents from the UI, or when retiring the legacy raw shape.
-
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
