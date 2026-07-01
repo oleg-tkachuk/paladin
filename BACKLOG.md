@@ -883,43 +883,24 @@ open deliberately — each notes why._
 
 ### Cross-tenant scope switcher (ListMyMemberships + SwitchTenant)
 
-- **Status:** Aspirational
-- **Reason:** Today's UI ties an operator session to exactly one
-  tenant — the `tenant` claim on their JWT (`frontend/src/
-  context/ScopeContext.tsx:23–29` calls this out: *"the 1:1
-  user-tenant model means switching tenants requires a different
-  login"*). The `<ScopePicker>` shows the tenant as read-only
-  metadata; backend + bucket are the only selectable axes.
-  Platform-admin operators routinely need to inspect or operate
-  on multiple tenants. Today they handle this by logging out and
-  back in with a per-tenant credential, which is slow and burns
-  audit-log noise per switch.
-- **Definition of Done:**
-  - New IAM RPC `ListMyMemberships() returns
-    (repeated Membership { tenant_id, tenant_slug, roles[] })`
-    — returns every tenant the caller's subject has a row in.
-  - New IAM RPC `SwitchTenant(target_tenant_id) returns
-    (TokenPair)` — mints a fresh access + refresh pair scoped
-    to `target_tenant_id`. Authz: caller MUST be a member of
-    the target tenant (i.e. ListMyMemberships includes it).
-  - `<ScopePicker>` tenant row becomes interactive; selecting a
-    different tenant calls SwitchTenant, swaps the cached
-    tokens via the existing tokenStore, and triggers
-    `AuthContext.refreshTenant()` so every downstream consumer
-    sees the new scope.
-  - Frontend Playwright e2e suite's US2 reverts to its
-    original "Tenant scope switching" wording (the
-    backend/bucket-scoped tests added in this branch remain
-    as a complementary regression guard for the picker
-    plumbing).
-  - Audit-log Action recorded for every SwitchTenant call so
-    operator session-scope changes are observable.
-- **Blockers:** Cedar policy decision — does a SwitchTenant on
-  an existing platform-admin require fresh consent for the
-  target tenant, or is platform-admin transitive across all
-  tenants? Settle before implementing; today's bootstrap
-  bakes a per-tenant `platform.admin` row, which suggests
-  per-tenant consent is the intent.
+- **Status:** SHIPPED (backend + UI) — only a Playwright e2e revert remains.
+- **Shipped:** `AuthService.ListMyMemberships` + `SwitchTenant` (backend, #99)
+  and the interactive `<ScopePicker>` tenant switcher (UI). Built on the
+  existing schema (a subject can hold a `users` row per tenant, so a
+  "membership" IS a row — no join table / migration). The Cedar blocker
+  dissolved: membership is per-tenant (you can only switch into a tenant where
+  you hold an explicit row), so `platform.admin` is naturally non-transitive.
+  SwitchTenant mints a fresh iam pair (new refresh family) with **no password
+  re-check** (the caller could log in there directly) and writes an
+  `iam.TenantSwitched` audit row. The BFF gained `/api/auth/memberships` +
+  `/api/auth/switch-tenant`; `AuthContext.switchTenant` reseeds the token cache
+  and `ScopeContext` resets the tenant-specific soft scope (backend/bucket/
+  objectKey) on a switch.
+- **Definition of Done (remaining):**
+  - Frontend Playwright e2e suite's US2 reverts to its original "Tenant scope
+    switching" wording — gated on a 2-tenant e2e fixture (a subject with a
+    users row in two tenants) so the switch is exercisable end-to-end.
+- **Blockers:** none — the Cedar question is resolved (per-tenant membership).
 
 ### Audit form (B): staging table + projector (latency mitigation only)
 

@@ -55,6 +55,12 @@ type AuthContextValue = {
     password: string,
     upstreamCode?: string,
   ) => Promise<void>;
+  // switchTenant re-scopes the session to another tenant the subject is a
+  // member of (AuthService.SwitchTenant via the BFF). On success the token
+  // cache is cleared (old-tenant data/admin tokens are stale) and reseeded
+  // with the new tenant's iam token; the user record is swapped so Scope
+  // consumers re-derive. Throws on PermissionDenied (not a member / disabled).
+  switchTenant: (tenantId: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -176,6 +182,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const switchTenant = useCallback(async (tenantId: string) => {
+    const res = await fetch("/api/auth/switch-tenant", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetTenantId: tenantId }),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}) as { error?: string });
+      throw new Error(errBody?.error || `tenant switch failed (${res.status})`);
+    }
+    const body = (await res.json()) as {
+      user: AuthUser;
+      accessTokens: AccessTokenDTO[];
+    };
+    // Drop every cached token BEFORE reseeding: the old tenant's data/admin
+    // access tokens (and any in-flight fetches) are scoped to the previous
+    // tenant and must not leak into the new scope.
+    clearAllTokens();
+    seedTokens(body.accessTokens);
+    setUser(body.user);
+    setStatus("authenticated");
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await fetch("/api/auth/logout", {
@@ -190,8 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, error, login, logout }),
-    [user, status, error, login, logout],
+    () => ({ user, status, error, login, switchTenant, logout }),
+    [user, status, error, login, switchTenant, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

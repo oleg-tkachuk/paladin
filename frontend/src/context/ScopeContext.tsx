@@ -4,7 +4,9 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -22,11 +24,11 @@ import { useAuth } from "@/context/AuthContext";
  *
  * Hard scope (derived from the JWT, not user-selectable):
  *   tenantId  → useAuth().user.tenantId — comes from the JWT `tenant`
- *               claim via WhoAmI, never from localStorage. The 1:1
- *               user-tenant model means switching tenants requires a
- *               different login. ListMyMemberships + SwitchTenant on
- *               the backend would relax that; until then the tenant
- *               row in <ScopePicker> is read-only.
+ *               claim via WhoAmI, never from localStorage. It changes
+ *               only via useAuth().switchTenant (AuthService.SwitchTenant),
+ *               which re-mints the session for another tenant the subject
+ *               is a member of; when it changes, the soft scope below is
+ *               reset (backend/bucket/objectKey are tenant-specific).
  *   tenant    → full record fetched once via TenantService.GetTenant.
  *
  * Soft scope (user-selectable, persisted to localStorage):
@@ -165,6 +167,25 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setObjectKeyState(normalized);
     localStorage.setItem(STORAGE_KEYS.scopeObjectKey, normalized);
   }, []);
+
+  // Reset the soft scope when the tenant changes under us (SwitchTenant).
+  // backend / bucket / objectKey are tenant-specific, so carrying them across
+  // a switch would point the UI at resources that live in the previous tenant.
+  // Fires only on a genuine change (prev + next both set and different) — not
+  // on the initial mount or on logout (tenantId → null).
+  const prevTenantRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevTenantRef.current;
+    prevTenantRef.current = tenantId;
+    if (prev && tenantId && prev !== tenantId) {
+      setBackendIdState(null);
+      localStorage.removeItem(STORAGE_KEYS.scopeBackend);
+      setBucketNameState(null);
+      localStorage.removeItem(STORAGE_KEYS.scopeBucket);
+      setObjectKeyState(DEFAULT_OBJECT_KEY);
+      localStorage.removeItem(STORAGE_KEYS.scopeObjectKey);
+    }
+  }, [tenantId]);
 
   // ── UI bus ─────────────────────────────────────────────────────────────
   const [isPickerOpen, setIsPickerOpen] = useState(false);

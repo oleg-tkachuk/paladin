@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArchiveBoxIcon,
@@ -12,6 +12,9 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useScope } from "@/context/ScopeContext";
+import { useAuth } from "@/context/AuthContext";
+import { useMemberships } from "@/hooks/useMemberships";
+import { useNotification } from "@/components/ui/Notification";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
 import { cn } from "@/lib/utils";
@@ -50,11 +53,11 @@ import {
  *   Bucket   → filtered to the active backend. Picking one auto-pivots
  *              backend via setScope so the two coordinates stay
  *              consistent.
- *   Tenant   → READ-ONLY. Sourced from the JWT `tenant` claim, not
- *              user-selectable in the 1:1 user-tenant model. When the
- *              backend ships ListMyMemberships + SwitchTenant for true
- *              multi-tenant users, this row becomes a picker again.
- *              The displayed tenant comes straight from
+ *   Tenant   → Switcher. Lists every tenant the subject is a member of
+ *              (AuthService.ListMyMemberships); selecting one calls
+ *              SwitchTenant, which re-mints the session for it (a new
+ *              refresh family). The signed-in + disabled memberships are
+ *              inert. The active tenant still comes from
  *              useAuth().user.tenantId via ScopeContext.
  *
  * The panel is also opened programmatically by clicking a segment in
@@ -74,6 +77,46 @@ export const ScopePicker: React.FC = () => {
     isPickerOpen,
     setPickerOpen,
   } = useScope();
+
+  const { switchTenant } = useAuth();
+  const {
+    memberships,
+    loading: membershipsLoading,
+    load: loadMemberships,
+  } = useMemberships();
+  const { showNotification } = useNotification();
+  const [switching, setSwitching] = useState<string | null>(null);
+
+  // Fetch the tenant list lazily when the picker opens — an operator who
+  // never switches pays nothing.
+  useEffect(() => {
+    if (isPickerOpen) void loadMemberships();
+  }, [isPickerOpen, loadMemberships]);
+
+  const doSwitch = useCallback(
+    async (targetId: string) => {
+      if (!targetId || targetId === tenantId || switching) return;
+      setSwitching(targetId);
+      setPickerOpen(false);
+      try {
+        await switchTenant(targetId);
+        showNotification({
+          type: "success",
+          title: "Tenant switched",
+          message: "Your session is now scoped to the selected tenant.",
+        });
+      } catch (e) {
+        showNotification({
+          type: "error",
+          title: "Switch failed",
+          message: (e as Error).message,
+        });
+      } finally {
+        setSwitching(null);
+      }
+    },
+    [tenantId, switching, switchTenant, showNotification, setPickerOpen],
+  );
 
   const { buckets, fetchBuckets, loading: bucketsLoading } = useBuckets();
   const { backends: backendRows } = useBackends();
@@ -121,6 +164,129 @@ export const ScopePicker: React.FC = () => {
   const tenantLabel =
     tenant?.displayName?.trim() ||
     (tenantId ? `${tenantId.slice(0, 8)}…` : "no tenant");
+
+  // Tenant switcher rows. Once memberships load, one row per tenant the
+  // subject belongs to (the current one marked, disabled ones inert,
+  // switchable ones call doSwitch). Before they load we show just the
+  // signed-in tenant so the row is never empty. A bucket-owner row is appended
+  // (informational, no-op) when the selected bucket is owned by a different
+  // tenant than the session.
+  const tenantItems = useMemo<ScopeRowItem[]>(() => {
+    const rows: ScopeRowItem[] =
+      memberships.length > 0
+        ? memberships.map((m) => {
+            const isCurrent = m.current || m.tenantId === tenantId;
+            const label =
+              m.tenantSlug?.trim() ||
+              `${m.tenantId.slice(0, 8)}…${m.tenantId.slice(-4)}`;
+            const inert = isCurrent || m.disabled;
+            return {
+              key: m.tenantId,
+              searchValue: `${m.tenantSlug} ${m.tenantId} ${m.roles.join(" ")}`,
+              isActive: isCurrent,
+              onSelect: inert ? () => {} : () => void doSwitch(m.tenantId),
+              render: () => (
+                <>
+                  <BuildingOfficeIcon
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground",
+                      m.disabled && "opacity-50",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "truncate text-sm",
+                        m.disabled && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {label}{" "}
+                      {isCurrent && (
+                        <span className="text-[10px] text-muted-foreground">
+                          (signed in)
+                        </span>
+                      )}
+                      {switching === m.tenantId && (
+                        <span className="text-[10px] text-muted-foreground">
+                          (switching…)
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate font-mono text-[10px] text-muted-foreground">
+                      {m.tenantId}
+                      {m.roles.length > 0 ? ` · ${m.roles.join(", ")}` : ""}
+                    </div>
+                  </div>
+                  {m.disabled && (
+                    <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                      Disabled
+                    </span>
+                  )}
+                </>
+              ),
+            };
+          })
+        : tenantId
+          ? [
+              {
+                key: tenantId,
+                searchValue: `${tenant?.displayName ?? ""} ${tenantId}`,
+                isActive: true,
+                onSelect: () => {},
+                render: () => (
+                  <>
+                    <BuildingOfficeIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm">
+                        {tenant?.displayName?.trim() || "Untitled tenant"}{" "}
+                        <span className="text-[10px] text-muted-foreground">
+                          (signed in)
+                        </span>
+                      </div>
+                      <div className="truncate font-mono text-[10px] text-muted-foreground">
+                        {tenantId}
+                      </div>
+                    </div>
+                  </>
+                ),
+              },
+            ]
+          : [];
+
+    if (scopedOwnerTenantId && tenantMismatch) {
+      rows.push({
+        key: `__owner__${scopedOwnerTenantId}`,
+        searchValue: scopedOwnerTenantId,
+        isActive: false,
+        onSelect: () => {},
+        render: () => (
+          <>
+            <BuildingOfficeIcon className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm">
+                Bucket owner{" "}
+                <span className="text-[10px] text-muted-foreground">
+                  (scope)
+                </span>
+              </div>
+              <div className="truncate font-mono text-[10px] text-muted-foreground">
+                {scopedOwnerTenantId}
+              </div>
+            </div>
+          </>
+        ),
+      });
+    }
+    return rows;
+  }, [
+    memberships,
+    tenantId,
+    tenant,
+    switching,
+    doSwitch,
+    scopedOwnerTenantId,
+    tenantMismatch,
+  ]);
 
   return (
     <Popover open={isPickerOpen} onOpenChange={setPickerOpen}>
@@ -329,12 +495,13 @@ export const ScopePicker: React.FC = () => {
           />
 
           {/* ── Tenant ────────────────────────────────────────────────────
-                Read-only in the 1:1 user-tenant model — the tenant
-                comes from the JWT `tenant` claim and switching
-                requires a different login. The row stays interactive
-                so the operator can confirm "this bucket is owned by
-                N" via the bucket cascade above; selecting the JWT
-                tenant is a no-op. */}
+                Now a real switcher: memberships come from
+                AuthService.ListMyMemberships (via useMemberships, loaded
+                when the picker opens). Selecting another tenant calls
+                SwitchTenant, which re-mints the session for it. The
+                signed-in tenant + disabled memberships are inert. A
+                bucket-owner row is appended (informational) when the
+                selected bucket belongs to a different tenant. */}
           <ScopeRow
             label="Tenant"
             icon={BuildingOfficeIcon}
@@ -343,7 +510,7 @@ export const ScopePicker: React.FC = () => {
                 <AvatarFallback className="rounded-md bg-primary text-[9px] font-semibold text-primary-foreground">
                   {tenantMonogram(
                     scopedOwnerTenantId
-                      ? null /* unknown name — show "?" until membership API lands */
+                      ? null /* unknown name — show "?" for the bucket-owner scope */
                       : (tenant?.displayName ?? null),
                   )}
                 </AvatarFallback>
@@ -366,63 +533,11 @@ export const ScopePicker: React.FC = () => {
                   : "no tenant"
             }
             muted={!tenantId && !scopedOwnerTenantId}
+            loading={membershipsLoading && memberships.length === 0}
             searchPlaceholder="Search tenants…"
             emptyMessage="No tenants match."
-            groupHeading="Tenant (from your token, can't switch without re-login)"
-            items={
-              tenantId
-                ? [
-                    {
-                      key: tenantId,
-                      searchValue: `${tenant?.displayName ?? ""} ${tenantId}`,
-                      isActive: !scopedOwnerTenantId || !tenantMismatch,
-                      onSelect: () => {},
-                      render: () => (
-                        <>
-                          <BuildingOfficeIcon className="size-4 shrink-0 text-muted-foreground" />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm">
-                              {tenant?.displayName?.trim() || "Untitled tenant"}{" "}
-                              <span className="text-[10px] text-muted-foreground">
-                                (signed in)
-                              </span>
-                            </div>
-                            <div className="truncate font-mono text-[10px] text-muted-foreground">
-                              {tenantId}
-                            </div>
-                          </div>
-                        </>
-                      ),
-                    },
-                    ...(scopedOwnerTenantId && tenantMismatch
-                      ? [
-                          {
-                            key: `__owner__${scopedOwnerTenantId}`,
-                            searchValue: scopedOwnerTenantId,
-                            isActive: true,
-                            onSelect: () => {},
-                            render: () => (
-                              <>
-                                <BuildingOfficeIcon className="size-4 shrink-0 text-muted-foreground" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm">
-                                    Bucket owner{" "}
-                                    <span className="text-[10px] text-muted-foreground">
-                                      (scope)
-                                    </span>
-                                  </div>
-                                  <div className="truncate font-mono text-[10px] text-muted-foreground">
-                                    {scopedOwnerTenantId}
-                                  </div>
-                                </div>
-                              </>
-                            ),
-                          },
-                        ]
-                      : []),
-                  ]
-                : []
-            }
+            groupHeading="Switch tenant"
+            items={tenantItems}
             footerItems={[
               {
                 key: "manage",
