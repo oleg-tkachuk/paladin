@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -12,6 +12,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
+import { useAuditStream } from "@/hooks/useAuditStream";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,21 @@ export default function AuditPage() {
   const params = useSearchParams();
   const [search, setSearch] = useState(() => params?.get("audience") ?? "");
 
+  // Live feed — SSE events are an invalidation signal, not a data source:
+  // each push triggers a trailing-debounced refresh() so a burst of audit
+  // rows costs one ListAuditLog, and the full entry (incl. before/after)
+  // flows through the same RPC path as a manual refresh.
+  const [live, setLive] = useState(true);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onStreamEvent = useCallback(() => {
+    if (refreshTimer.current) return;
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refresh();
+    }, 800);
+  }, [refresh]);
+  const { connected } = useAuditStream(live, onStreamEvent);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return entries;
@@ -103,17 +119,42 @@ export default function AuditPage() {
         description="Append-only log of every mutation served by the control plane."
         showDefaultActions={false}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refresh()}
-            disabled={loading}
-          >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
-            />
-            Refresh
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLive((v) => !v)}
+              aria-pressed={live}
+              title={
+                live
+                  ? connected
+                    ? "Live — new entries appear automatically"
+                    : "Live enabled — reconnecting…"
+                  : "Live updates paused"
+              }
+            >
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  live && connected && "bg-emerald-500 animate-pulse",
+                  live && !connected && "bg-amber-500",
+                  !live && "bg-muted-foreground/40",
+                )}
+              />
+              Live
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refresh()}
+              disabled={loading}
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+              Refresh
+            </Button>
+          </>
         }
       />
 

@@ -241,23 +241,25 @@ the same commit. Treat this file like a runtime invariant.
 
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
-- **Status:** Aspirational
-- **Reason:** No realtime subscription feature today. When live
-  audit-log streaming, capability-budget alerts, or tool-call
-  spectator views land, they're long-lived connections with a
-  totally different memory profile (one connection holds for
-  minutes/hours vs ms-scale RPC). They don't belong on api pods
-  that scale on request rate — pod restart latency would drop
-  every active connection.
-- **Definition of Done:**
-  - `serve realtime` role with SSE / WebSocket handlers backed by a
-    Postgres LISTEN/NOTIFY pump (or NATS / Redis pub/sub once
-    that's around).
+- **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays
+  trigger-gated on connection volume.
+- **Shipped — live audit feed:** migration 050 NOTIFYs on every `audit_log`
+  insert; `internal/auditstream.Hub` (one LISTEN connection per admin pod,
+  per-tenant fan-out, slow consumers drop instead of back-pressuring) serves
+  `GET /audit/stream` as bearer-authenticated SSE scoped to the JWT tenant.
+  The UI consumes it through the BFF proxy (`/api/audit/stream`, session
+  cookie → ExchangeAudience → pipe) with a Live toggle on `/audit`; SSE
+  events are an invalidation signal (debounced ListAuditLog refresh), not a
+  data source, so the full row incl. before/after keeps one code path.
+- **Definition of Done (remaining — the actual role split):**
+  - `serve realtime` role hosting the SSE/WebSocket handlers when long-lived
+    connections stop belonging on the admin pod (restart latency drops every
+    active stream; admin scales on RPC rate, not connection count).
   - Per-tenant connection limits.
-  - Graceful shutdown that drains existing connections instead of
-    SIGKILLing them.
-- **Trigger to do:** when the first real subscription feature
-  ships. Skip until then.
+  - Graceful shutdown draining connections instead of SIGKILLing them.
+- **Trigger to do:** when concurrent stream connections grow past what an
+  admin pod restart may reasonably drop (rule of thumb: >100 concurrent, or a
+  second streaming surface — budget alerts / tool-call spectator — lands).
 
 ### Phase 5b.1 — Drop user-authn IAM, accept OIDC — WITHDRAWN
 
