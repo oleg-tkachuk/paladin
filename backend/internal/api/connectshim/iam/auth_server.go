@@ -151,4 +151,44 @@ func (s *AuthServer) ExchangeAudience(ctx context.Context, req *connect.Request[
 	}), nil
 }
 
+func (s *AuthServer) ListMyMemberships(ctx context.Context, _ *connect.Request[pb.ListMyMembershipsRequest]) (*connect.Response[pb.ListMyMembershipsResponse], error) {
+	ms, err := s.H.ListMyMemberships(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*pb.Membership, len(ms))
+	for i, m := range ms {
+		out[i] = &pb.Membership{
+			TenantId:   m.TenantID.String(),
+			TenantSlug: m.TenantSlug,
+			Roles:      m.Roles,
+			Disabled:   m.Disabled,
+			Current:    m.Current,
+		}
+	}
+	return connect.NewResponse(&pb.ListMyMembershipsResponse{Memberships: out}), nil
+}
+
+func (s *AuthServer) SwitchTenant(ctx context.Context, req *connect.Request[pb.SwitchTenantRequest]) (*connect.Response[pb.SwitchTenantResponse], error) {
+	target, err := uuid.Parse(req.Msg.GetTargetTenantId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	out, err := s.H.SwitchTenant(ctx, target, req.Msg.GetRequestedAudience())
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	return connect.NewResponse(&pb.SwitchTenantResponse{
+		Tokens: &pb.TokenPair{
+			AccessToken:             out.AccessToken,
+			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
+			RefreshToken:            out.RefreshToken,
+			RefreshExpiresInSeconds: int32(out.RefreshExpiresAt.Sub(now).Seconds()),
+			TokenType:               "Bearer",
+		},
+		User: userToProto(&out.User),
+	}), nil
+}
+
 var _ paladiniamv1connect.AuthServiceHandler = (*AuthServer)(nil)

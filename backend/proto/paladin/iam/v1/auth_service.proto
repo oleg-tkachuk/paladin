@@ -37,6 +37,18 @@ service AuthService {
   // server-side audience escalation rules apply (admin requires an
   // admin-tier role on the principal).
   rpc ExchangeAudience(ExchangeAudienceRequest) returns (ExchangeAudienceResponse);
+
+  // ListMyMemberships returns every tenant the caller's subject belongs to.
+  // Under the 1:1-per-tenant user model a "membership" is a users row, so a
+  // subject registered in tenants A and B has two memberships with independent
+  // roles. Used by the SPA to render the tenant switcher.
+  rpc ListMyMemberships(ListMyMembershipsRequest) returns (ListMyMembershipsResponse);
+
+  // SwitchTenant mints a fresh access+refresh pair scoped to a DIFFERENT
+  // tenant the caller is already a member of — no password re-check (the
+  // caller already proved identity, and could log in to the target directly,
+  // so switching grants no new authority). A new refresh family is started.
+  rpc SwitchTenant(SwitchTenantRequest) returns (SwitchTenantResponse);
 }
 
 message LoginRequest {
@@ -141,4 +153,36 @@ message ExchangeAudienceResponse {
   int32 access_expires_in_seconds = 2;
   // Always "Bearer" today; reserved for future scoped-token kinds.
   string token_type = 3;
+}
+
+message ListMyMembershipsRequest {}
+
+message Membership {
+  string tenant_id = 1;
+  string tenant_slug = 2;
+  // Roles the caller holds in THIS tenant (per-membership, not global).
+  repeated string roles = 3;
+  // The user row for this tenant is disabled — the caller cannot switch into
+  // it, but it's surfaced so the UI can show why.
+  bool disabled = 4;
+  // True for the tenant the caller's current session is scoped to.
+  bool current = 5;
+}
+
+message ListMyMembershipsResponse {
+  repeated Membership memberships = 1;
+}
+
+message SwitchTenantRequest {
+  // The tenant to switch into. The caller MUST have a (non-disabled) user row
+  // there or the call is PermissionDenied.
+  string target_tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Audience for the new access token. Empty keeps the caller's current
+  // audience (so a switch preserves the plane they were working in).
+  string requested_audience = 2;
+}
+
+message SwitchTenantResponse {
+  TokenPair tokens = 1;
+  User user = 2;
 }

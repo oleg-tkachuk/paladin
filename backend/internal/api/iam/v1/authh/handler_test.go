@@ -233,6 +233,108 @@ func ctxAsUser(id uuid.UUID) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{Subject: id.String()})
 }
 
+// ─── Memberships / SwitchTenant ───────────────────────────────────────────────
+
+func TestListMyMemberships_Success(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", Roles: []string{"platform.admin"}}
+	other := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", Roles: []string{"tenant.user"}}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller, other}}
+	h := newHandler(users, &fakeRefresh{}, &stubMinter{})
+
+	ms, err := h.ListMyMemberships(ctxAsUser(caller.UserID))
+	if err != nil {
+		t.Fatalf("ListMyMemberships: %v", err)
+	}
+	if len(ms) != 2 {
+		t.Fatalf("memberships = %d, want 2", len(ms))
+	}
+	var current int
+	for _, m := range ms {
+		if m.Current {
+			current++
+			if m.TenantID != caller.TenantID {
+				t.Errorf("current membership = %s, want caller tenant %s", m.TenantID, caller.TenantID)
+			}
+		}
+	}
+	if current != 1 {
+		t.Errorf("current memberships = %d, want exactly 1", current)
+	}
+}
+
+func TestListMyMemberships_Unauthenticated(t *testing.T) {
+	h := newHandler(&fakeUsers{}, &fakeRefresh{}, &stubMinter{})
+	if _, err := h.ListMyMemberships(context.Background()); code(err) != connect.CodeUnauthenticated {
+		t.Errorf("code = %v, want Unauthenticated", code(err))
+	}
+}
+
+func TestSwitchTenant_Success(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", Roles: []string{"tenant.user"}}
+	targetTenant := uuid.New()
+	target := authstore.User{UserID: uuid.New(), TenantID: targetTenant, Subject: "alice", Roles: []string{"platform.admin"}}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller, target}}
+	refresh := &fakeRefresh{}
+	minter := &stubMinter{}
+	h := newHandler(users, refresh, minter)
+
+	out, err := h.SwitchTenant(ctxAsUser(caller.UserID), targetTenant, "")
+	if err != nil {
+		t.Fatalf("SwitchTenant: %v", err)
+	}
+	if out.User.TenantID != targetTenant {
+		t.Errorf("minted user tenant = %s, want %s", out.User.TenantID, targetTenant)
+	}
+	// The access token must be scoped to the TARGET tenant, not the caller's.
+	if minter.accessClaims.TenantID != targetTenant {
+		t.Errorf("access-token tenant = %s, want target %s", minter.accessClaims.TenantID, targetTenant)
+	}
+	if refresh.inserts != 1 {
+		t.Errorf("refresh inserts = %d, want 1 (fresh family)", refresh.inserts)
+	}
+	if users.touched != 1 {
+		t.Errorf("TouchLogin calls = %d, want 1", users.touched)
+	}
+}
+
+func TestSwitchTenant_NotAMember(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice"}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller}} // only the current tenant
+	refresh := &fakeRefresh{}
+	h := newHandler(users, refresh, &stubMinter{})
+
+	if _, err := h.SwitchTenant(ctxAsUser(caller.UserID), uuid.New(), ""); code(err) != connect.CodePermissionDenied {
+		t.Errorf("code = %v, want PermissionDenied", code(err))
+	}
+	if refresh.inserts != 0 {
+		t.Errorf("refresh inserts = %d, want 0", refresh.inserts)
+	}
+}
+
+func TestSwitchTenant_DisabledInTarget(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice"}
+	targetTenant := uuid.New()
+	target := authstore.User{UserID: uuid.New(), TenantID: targetTenant, Subject: "alice", Disabled: true}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller, target}}
+	refresh := &fakeRefresh{}
+	h := newHandler(users, refresh, &stubMinter{})
+
+	if _, err := h.SwitchTenant(ctxAsUser(caller.UserID), targetTenant, ""); code(err) != connect.CodePermissionDenied {
+		t.Errorf("code = %v, want PermissionDenied", code(err))
+	}
+	if refresh.inserts != 0 {
+		t.Errorf("refresh inserts = %d, want 0 (no token for disabled target)", refresh.inserts)
+	}
+}
+
+func TestSwitchTenant_TargetRequired(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice"}
+	h := newHandler(&fakeUsers{user: caller}, &fakeRefresh{}, &stubMinter{})
+	if _, err := h.SwitchTenant(ctxAsUser(caller.UserID), uuid.Nil, ""); code(err) != connect.CodeInvalidArgument {
+		t.Errorf("code = %v, want InvalidArgument", code(err))
+	}
+}
+
 func TestChangePassword_NewRequired(t *testing.T) {
 	id := uuid.New()
 	h := newHandler(&fakeUsers{}, &fakeRefresh{}, &stubMinter{})

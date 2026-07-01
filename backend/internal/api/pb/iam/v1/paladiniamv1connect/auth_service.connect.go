@@ -49,6 +49,12 @@ const (
 	// AuthServiceExchangeAudienceProcedure is the fully-qualified name of the AuthService's
 	// ExchangeAudience RPC.
 	AuthServiceExchangeAudienceProcedure = "/paladin.iam.v1.AuthService/ExchangeAudience"
+	// AuthServiceListMyMembershipsProcedure is the fully-qualified name of the AuthService's
+	// ListMyMemberships RPC.
+	AuthServiceListMyMembershipsProcedure = "/paladin.iam.v1.AuthService/ListMyMemberships"
+	// AuthServiceSwitchTenantProcedure is the fully-qualified name of the AuthService's SwitchTenant
+	// RPC.
+	AuthServiceSwitchTenantProcedure = "/paladin.iam.v1.AuthService/SwitchTenant"
 )
 
 // AuthServiceClient is a client for the paladin.iam.v1.AuthService service.
@@ -74,6 +80,16 @@ type AuthServiceClient interface {
 	// server-side audience escalation rules apply (admin requires an
 	// admin-tier role on the principal).
 	ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error)
+	// ListMyMemberships returns every tenant the caller's subject belongs to.
+	// Under the 1:1-per-tenant user model a "membership" is a users row, so a
+	// subject registered in tenants A and B has two memberships with independent
+	// roles. Used by the SPA to render the tenant switcher.
+	ListMyMemberships(context.Context, *connect.Request[v1.ListMyMembershipsRequest]) (*connect.Response[v1.ListMyMembershipsResponse], error)
+	// SwitchTenant mints a fresh access+refresh pair scoped to a DIFFERENT
+	// tenant the caller is already a member of — no password re-check (the
+	// caller already proved identity, and could log in to the target directly,
+	// so switching grants no new authority). A new refresh family is started.
+	SwitchTenant(context.Context, *connect.Request[v1.SwitchTenantRequest]) (*connect.Response[v1.SwitchTenantResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the paladin.iam.v1.AuthService service. By default, it
@@ -123,17 +139,31 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("ExchangeAudience")),
 			connect.WithClientOptions(opts...),
 		),
+		listMyMemberships: connect.NewClient[v1.ListMyMembershipsRequest, v1.ListMyMembershipsResponse](
+			httpClient,
+			baseURL+AuthServiceListMyMembershipsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("ListMyMemberships")),
+			connect.WithClientOptions(opts...),
+		),
+		switchTenant: connect.NewClient[v1.SwitchTenantRequest, v1.SwitchTenantResponse](
+			httpClient,
+			baseURL+AuthServiceSwitchTenantProcedure,
+			connect.WithSchema(authServiceMethods.ByName("SwitchTenant")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login            *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	refreshToken     *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
-	revoke           *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
-	whoAmI           *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
-	changePassword   *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
-	exchangeAudience *connect.Client[v1.ExchangeAudienceRequest, v1.ExchangeAudienceResponse]
+	login             *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	refreshToken      *connect.Client[v1.RefreshTokenRequest, v1.RefreshTokenResponse]
+	revoke            *connect.Client[v1.RevokeRequest, v1.RevokeResponse]
+	whoAmI            *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
+	changePassword    *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
+	exchangeAudience  *connect.Client[v1.ExchangeAudienceRequest, v1.ExchangeAudienceResponse]
+	listMyMemberships *connect.Client[v1.ListMyMembershipsRequest, v1.ListMyMembershipsResponse]
+	switchTenant      *connect.Client[v1.SwitchTenantRequest, v1.SwitchTenantResponse]
 }
 
 // Login calls paladin.iam.v1.AuthService.Login.
@@ -166,6 +196,16 @@ func (c *authServiceClient) ExchangeAudience(ctx context.Context, req *connect.R
 	return c.exchangeAudience.CallUnary(ctx, req)
 }
 
+// ListMyMemberships calls paladin.iam.v1.AuthService.ListMyMemberships.
+func (c *authServiceClient) ListMyMemberships(ctx context.Context, req *connect.Request[v1.ListMyMembershipsRequest]) (*connect.Response[v1.ListMyMembershipsResponse], error) {
+	return c.listMyMemberships.CallUnary(ctx, req)
+}
+
+// SwitchTenant calls paladin.iam.v1.AuthService.SwitchTenant.
+func (c *authServiceClient) SwitchTenant(ctx context.Context, req *connect.Request[v1.SwitchTenantRequest]) (*connect.Response[v1.SwitchTenantResponse], error) {
+	return c.switchTenant.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the paladin.iam.v1.AuthService service.
 type AuthServiceHandler interface {
 	// Login exchanges username+password (or upstream IdP code) for a TokenPair.
@@ -189,6 +229,16 @@ type AuthServiceHandler interface {
 	// server-side audience escalation rules apply (admin requires an
 	// admin-tier role on the principal).
 	ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error)
+	// ListMyMemberships returns every tenant the caller's subject belongs to.
+	// Under the 1:1-per-tenant user model a "membership" is a users row, so a
+	// subject registered in tenants A and B has two memberships with independent
+	// roles. Used by the SPA to render the tenant switcher.
+	ListMyMemberships(context.Context, *connect.Request[v1.ListMyMembershipsRequest]) (*connect.Response[v1.ListMyMembershipsResponse], error)
+	// SwitchTenant mints a fresh access+refresh pair scoped to a DIFFERENT
+	// tenant the caller is already a member of — no password re-check (the
+	// caller already proved identity, and could log in to the target directly,
+	// so switching grants no new authority). A new refresh family is started.
+	SwitchTenant(context.Context, *connect.Request[v1.SwitchTenantRequest]) (*connect.Response[v1.SwitchTenantResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -234,6 +284,18 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("ExchangeAudience")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceListMyMembershipsHandler := connect.NewUnaryHandler(
+		AuthServiceListMyMembershipsProcedure,
+		svc.ListMyMemberships,
+		connect.WithSchema(authServiceMethods.ByName("ListMyMemberships")),
+		connect.WithHandlerOptions(opts...),
+	)
+	authServiceSwitchTenantHandler := connect.NewUnaryHandler(
+		AuthServiceSwitchTenantProcedure,
+		svc.SwitchTenant,
+		connect.WithSchema(authServiceMethods.ByName("SwitchTenant")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.iam.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceLoginProcedure:
@@ -248,6 +310,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceChangePasswordHandler.ServeHTTP(w, r)
 		case AuthServiceExchangeAudienceProcedure:
 			authServiceExchangeAudienceHandler.ServeHTTP(w, r)
+		case AuthServiceListMyMembershipsProcedure:
+			authServiceListMyMembershipsHandler.ServeHTTP(w, r)
+		case AuthServiceSwitchTenantProcedure:
+			authServiceSwitchTenantHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -279,4 +345,12 @@ func (UnimplementedAuthServiceHandler) ChangePassword(context.Context, *connect.
 
 func (UnimplementedAuthServiceHandler) ExchangeAudience(context.Context, *connect.Request[v1.ExchangeAudienceRequest]) (*connect.Response[v1.ExchangeAudienceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.AuthService.ExchangeAudience is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ListMyMemberships(context.Context, *connect.Request[v1.ListMyMembershipsRequest]) (*connect.Response[v1.ListMyMembershipsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.AuthService.ListMyMemberships is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) SwitchTenant(context.Context, *connect.Request[v1.SwitchTenantRequest]) (*connect.Response[v1.SwitchTenantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.AuthService.SwitchTenant is not implemented"))
 }

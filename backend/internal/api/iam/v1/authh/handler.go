@@ -435,6 +435,160 @@ func (h *Handler) WhoAmI(ctx context.Context) (*WhoAmIOutput, error) {
 	return out, nil
 }
 
+// ─── Memberships / tenant switch ─────────────────────────────────────────────
+
+// Membership is one tenant the caller's subject belongs to. Under the
+// 1:1-per-tenant user model a membership == a `users` row, so roles are
+// per-membership (the caller can be platform.admin in one tenant and a plain
+// user in another).
+type Membership struct {
+	TenantID   uuid.UUID
+	TenantSlug string
+	Roles      []string
+	Disabled   bool
+	Current    bool
+}
+
+// ListMyMemberships returns every tenant the caller's subject has a user row
+// in. The caller is identified from their access token (Subject = user_id); we
+// resolve that row's login subject, then scan all tenants for it.
+func (h *Handler) ListMyMemberships(ctx context.Context) ([]Membership, error) {
+	cur, err := h.callerUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	matches, err := h.users.FindBySubjectGlobal(ctx, cur.Subject)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]Membership, 0, len(matches))
+	for _, m := range matches {
+		var slug string
+		if h.tenantSlug != nil && m.TenantID != uuid.Nil {
+			slug, _ = h.tenantSlug(ctx, m.TenantID)
+		}
+		out = append(out, Membership{
+			TenantID:   m.TenantID,
+			TenantSlug: slug,
+			Roles:      m.Roles,
+			Disabled:   m.Disabled,
+			Current:    m.TenantID == cur.TenantID,
+		})
+	}
+	return out, nil
+}
+
+type SwitchTenantOutput struct {
+	User             authstore.User
+	AccessToken      string
+	RefreshToken     string
+	AccessExpiresAt  time.Time
+	RefreshExpiresAt time.Time
+}
+
+// SwitchTenant mints a fresh access+refresh pair scoped to targetTenantID,
+// provided the caller's subject has a non-disabled user row there. No password
+// re-check: the caller already proved identity via their access token and could
+// log in to the target tenant directly, so switching escalates nothing. A new
+// refresh family is started (this is a distinct session), so revoking the old
+// tenant's session does not touch the new one.
+func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, requestedAudience string) (*SwitchTenantOutput, error) {
+	if targetTenantID == uuid.Nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("target tenant required"))
+	}
+	cur, err := h.callerUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p, _ := auth.PrincipalFromContext(ctx) // callerUser already validated it
+
+	matches, err := h.users.FindBySubjectGlobal(ctx, cur.Subject)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	var target *authstore.User
+	for i := range matches {
+		if matches[i].TenantID == targetTenantID {
+			target = &matches[i]
+			break
+		}
+	}
+	// Same generic phrasing whether the tenant exists or the caller just isn't
+	// a member — don't leak tenant existence.
+	if target == nil {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("not a member of the target tenant"))
+	}
+	if target.Disabled {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			errors.New("user is disabled in the target tenant"))
+	}
+
+	audience := requestedAudience
+	if audience == "" {
+		audience = p.Audience // keep the plane the caller was working in
+	}
+	if audience == "" {
+		audience = auth.AudienceData
+	}
+	if err := h.assertAudienceAllowed(*target, audience); err != nil {
+		return nil, err
+	}
+
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := h.users.TouchLogin(ctx, target.UserID, h.now()); err != nil {
+		_ = err // non-fatal — the switch succeeded
+	}
+	h.auditTenantSwitch(ctx, cur, *target)
+
+	return &SwitchTenantOutput{
+		User:             *target,
+		AccessToken:      access,
+		RefreshToken:     refresh,
+		AccessExpiresAt:  accessExp,
+		RefreshExpiresAt: refreshExp,
+	}, nil
+}
+
+// callerUser resolves the authenticated caller's current user row from the
+// access-token principal (Subject = user_id).
+func (h *Handler) callerUser(ctx context.Context) (authstore.User, error) {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	id, perr := uuid.Parse(p.Subject)
+	if perr != nil {
+		return authstore.User{}, connect.NewError(connect.CodeInternal,
+			fmt.Errorf("malformed principal subject %q", p.Subject))
+	}
+	u, err := h.users.GetByID(ctx, id)
+	if err != nil {
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, err)
+	}
+	return u, nil
+}
+
+// auditTenantSwitch records a best-effort audit row so operator scope changes
+// are observable. Never blocks or fails the switch.
+func (h *Handler) auditTenantSwitch(ctx context.Context, from, to authstore.User) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+		EntryID:       uuid.Must(uuid.NewV7()),
+		At:            h.now().UTC(),
+		ActorSubject:  to.UserID.String(),
+		ActorTenantID: to.TenantID,
+		ActorAudience: auth.AudienceIAM,
+		Action:        "iam.TenantSwitched",
+		ResourceName:  "tenants/" + to.TenantID.String(),
+	})
+}
+
 // ─── ChangePassword ─────────────────────────────────────────────────────────
 
 func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error {

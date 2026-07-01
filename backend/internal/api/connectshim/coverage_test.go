@@ -42,15 +42,17 @@ var gateMarkers = []string{
 // principal is established. Adding a new RPC here requires explicit
 // justification in code review.
 var preAuthnAllowlist = map[string]struct{}{
-	"Login":            {}, // mints the token
-	"RefreshToken":     {}, // exchanges refresh for access
-	"ExchangeAudience": {}, // derives a per-audience access token from a refresh; gated by assertAudienceAllowed
-	"Revoke":           {}, // revokes by token (caller proves possession)
-	"WhoAmI":           {}, // self-introspection; tenant comes from context
-	"ChangePassword":   {}, // operates on the caller's own password
-	"GetMine":          {}, // self-service: caller reads their own user_settings
-	"UpdateMine":       {}, // self-service: caller writes their own user_settings
-	"ValidatePolicy":   {}, // gated, but intentionally syntactic-only
+	"Login":             {}, // mints the token
+	"RefreshToken":      {}, // exchanges refresh for access
+	"ExchangeAudience":  {}, // derives a per-audience access token from a refresh; gated by assertAudienceAllowed
+	"Revoke":            {}, // revokes by token (caller proves possession)
+	"WhoAmI":            {}, // self-introspection; tenant comes from context
+	"ChangePassword":    {}, // operates on the caller's own password
+	"ListMyMemberships": {}, // self-scoped: lists the caller's own tenant memberships
+	"SwitchTenant":      {}, // self-scoped: gated by the caller's own membership row (must have a non-disabled users row in the target)
+	"GetMine":           {}, // self-service: caller reads their own user_settings
+	"UpdateMine":        {}, // self-service: caller writes their own user_settings
+	"ValidatePolicy":    {}, // gated, but intentionally syntactic-only
 }
 
 // shimMethodCallRE matches `s.H.<MethodName>(` — the only way a shim

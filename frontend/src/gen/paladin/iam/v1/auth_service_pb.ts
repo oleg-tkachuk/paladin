@@ -23,7 +23,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_auth_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QinQEKDldob0FtSVJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC5vY3AuaWFtLnYxLlVzZXISEAoIYXVkaWVuY2UYAiABKAkSEwoLdGVuYW50X3NsdWcYAyABKAkSKgoGcm91dGVzGAQgAygLMhoub2NwLmlhbS52MS5PYmplY3RLZXlSb3V0ZRIYChByb3V0ZXNfdHJ1bmNhdGVkGAUgASgIIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAky2AMKC0F1dGhTZXJ2aWNlEjwKBUxvZ2luEhgub2NwLmlhbS52MS5Mb2dpblJlcXVlc3QaGS5vY3AuaWFtLnYxLkxvZ2luUmVzcG9uc2USUQoMUmVmcmVzaFRva2VuEh8ub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiAub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRI/CgZSZXZva2USGS5vY3AuaWFtLnYxLlJldm9rZVJlcXVlc3QaGi5vY3AuaWFtLnYxLlJldm9rZVJlc3BvbnNlEj8KBldob0FtSRIZLm9jcC5pYW0udjEuV2hvQW1JUmVxdWVzdBoaLm9jcC5pYW0udjEuV2hvQW1JUmVzcG9uc2USVwoOQ2hhbmdlUGFzc3dvcmQSIS5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBoiLm9jcC5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJdChBFeGNoYW5nZUF1ZGllbmNlEiMub2NwLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBokLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlQk5aTGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL29iamVjdC1jb250cm9sLXBsYW5lL2ludGVybmFsL2FwaS9wYi9pYW0vdjE7b2NwaWFtdjFiBnByb3RvMw",
+    "Ch1vY3AvaWFtL3YxL2F1dGhfc2VydmljZS5wcm90bxIKb2NwLmlhbS52MSJtCgxMb2dpblJlcXVlc3QSGAoHc3ViamVjdBgBIAEoCUIHukgEcgIQARIQCghwYXNzd29yZBgCIAEoCRIVCg11cHN0cmVhbV9jb2RlGAMgASgJEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgEIAEoCSJWCg1Mb2dpblJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIiUQoTUmVmcmVzaFRva2VuUmVxdWVzdBIeCg1yZWZyZXNoX3Rva2VuGAEgASgJQge6SARyAhABEhoKEnJlcXVlc3RlZF9hdWRpZW5jZRgCIAEoCSI9ChRSZWZyZXNoVG9rZW5SZXNwb25zZRIlCgZ0b2tlbnMYASABKAsyFS5vY3AuaWFtLnYxLlRva2VuUGFpciInCg1SZXZva2VSZXF1ZXN0EhYKBXRva2VuGAEgASgJQge6SARyAhABIhAKDlJldm9rZVJlc3BvbnNlIg8KDVdob0FtSVJlcXVlc3QinQEKDldob0FtSVJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC5vY3AuaWFtLnYxLlVzZXISEAoIYXVkaWVuY2UYAiABKAkSEwoLdGVuYW50X3NsdWcYAyABKAkSKgoGcm91dGVzGAQgAygLMhoub2NwLmlhbS52MS5PYmplY3RLZXlSb3V0ZRIYChByb3V0ZXNfdHJ1bmNhdGVkGAUgASgIIm0KDk9iamVjdEtleVJvdXRlEhEKCWNhbm9uaWNhbBgBIAEoCRITCgt0ZW5hbnRfcGF0aBgCIAEoCRISCgpiYXJlX2FsaWFzGAMgASgJEg8KB2JhY2tlbmQYBCABKAkSDgoGYnVja2V0GAUgASgJIlUKFUNoYW5nZVBhc3N3b3JkUmVxdWVzdBIdCgxvbGRfcGFzc3dvcmQYASABKAlCB7pIBHICEAESHQoMbmV3X3Bhc3N3b3JkGAIgASgJQge6SARyAhAMIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiWwoXRXhjaGFuZ2VBdWRpZW5jZVJlcXVlc3QSHgoNcmVmcmVzaF90b2tlbhgBIAEoCUIHukgEcgIQARIgCg90YXJnZXRfYXVkaWVuY2UYAiABKAlCB7pIBHICEAEiZwoYRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIhChlhY2Nlc3NfZXhwaXJlc19pbl9zZWNvbmRzGAIgASgFEhIKCnRva2VuX3R5cGUYAyABKAkiGgoYTGlzdE15TWVtYmVyc2hpcHNSZXF1ZXN0ImYKCk1lbWJlcnNoaXASEQoJdGVuYW50X2lkGAEgASgJEhMKC3RlbmFudF9zbHVnGAIgASgJEg0KBXJvbGVzGAMgAygJEhAKCGRpc2FibGVkGAQgASgIEg8KB2N1cnJlbnQYBSABKAgiSAoZTGlzdE15TWVtYmVyc2hpcHNSZXNwb25zZRIrCgttZW1iZXJzaGlwcxgBIAMoCzIWLm9jcC5pYW0udjEuTWVtYmVyc2hpcCJUChNTd2l0Y2hUZW5hbnRSZXF1ZXN0EiEKEHRhcmdldF90ZW5hbnRfaWQYASABKAlCB7pIBHICEAESGgoScmVxdWVzdGVkX2F1ZGllbmNlGAIgASgJIl0KFFN3aXRjaFRlbmFudFJlc3BvbnNlEiUKBnRva2VucxgBIAEoCzIVLm9jcC5pYW0udjEuVG9rZW5QYWlyEh4KBHVzZXIYAiABKAsyEC5vY3AuaWFtLnYxLlVzZXIyjQUKC0F1dGhTZXJ2aWNlEjwKBUxvZ2luEhgub2NwLmlhbS52MS5Mb2dpblJlcXVlc3QaGS5vY3AuaWFtLnYxLkxvZ2luUmVzcG9uc2USUQoMUmVmcmVzaFRva2VuEh8ub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GiAub2NwLmlhbS52MS5SZWZyZXNoVG9rZW5SZXNwb25zZRI/CgZSZXZva2USGS5vY3AuaWFtLnYxLlJldm9rZVJlcXVlc3QaGi5vY3AuaWFtLnYxLlJldm9rZVJlc3BvbnNlEj8KBldob0FtSRIZLm9jcC5pYW0udjEuV2hvQW1JUmVxdWVzdBoaLm9jcC5pYW0udjEuV2hvQW1JUmVzcG9uc2USVwoOQ2hhbmdlUGFzc3dvcmQSIS5vY3AuaWFtLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdBoiLm9jcC5pYW0udjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZRJdChBFeGNoYW5nZUF1ZGllbmNlEiMub2NwLmlhbS52MS5FeGNoYW5nZUF1ZGllbmNlUmVxdWVzdBokLm9jcC5pYW0udjEuRXhjaGFuZ2VBdWRpZW5jZVJlc3BvbnNlEmAKEUxpc3RNeU1lbWJlcnNoaXBzEiQub2NwLmlhbS52MS5MaXN0TXlNZW1iZXJzaGlwc1JlcXVlc3QaJS5vY3AuaWFtLnYxLkxpc3RNeU1lbWJlcnNoaXBzUmVzcG9uc2USUQoMU3dpdGNoVGVuYW50Eh8ub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXF1ZXN0GiAub2NwLmlhbS52MS5Td2l0Y2hUZW5hbnRSZXNwb25zZUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvaWFtL3YxO29jcGlhbXYxYgZwcm90bzM",
     [file_buf_validate_validate, file_paladin_iam_v1_types],
   );
 
@@ -397,6 +397,137 @@ export const ExchangeAudienceResponseSchema: GenMessage<ExchangeAudienceResponse
   messageDesc(file_paladin_iam_v1_auth_service, 12);
 
 /**
+ * @generated from message paladin.iam.v1.ListMyMembershipsRequest
+ */
+export type ListMyMembershipsRequest =
+  Message<"paladin.iam.v1.ListMyMembershipsRequest"> & {};
+
+/**
+ * Describes the message paladin.iam.v1.ListMyMembershipsRequest.
+ * Use `create(ListMyMembershipsRequestSchema)` to create a new message.
+ */
+export const ListMyMembershipsRequestSchema: GenMessage<ListMyMembershipsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 13);
+
+/**
+ * @generated from message paladin.iam.v1.Membership
+ */
+export type Membership = Message<"paladin.iam.v1.Membership"> & {
+  /**
+   * @generated from field: string tenant_id = 1;
+   */
+  tenantId: string;
+
+  /**
+   * @generated from field: string tenant_slug = 2;
+   */
+  tenantSlug: string;
+
+  /**
+   * Roles the caller holds in THIS tenant (per-membership, not global).
+   *
+   * @generated from field: repeated string roles = 3;
+   */
+  roles: string[];
+
+  /**
+   * The user row for this tenant is disabled — the caller cannot switch into
+   * it, but it's surfaced so the UI can show why.
+   *
+   * @generated from field: bool disabled = 4;
+   */
+  disabled: boolean;
+
+  /**
+   * True for the tenant the caller's current session is scoped to.
+   *
+   * @generated from field: bool current = 5;
+   */
+  current: boolean;
+};
+
+/**
+ * Describes the message paladin.iam.v1.Membership.
+ * Use `create(MembershipSchema)` to create a new message.
+ */
+export const MembershipSchema: GenMessage<Membership> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 14);
+
+/**
+ * @generated from message paladin.iam.v1.ListMyMembershipsResponse
+ */
+export type ListMyMembershipsResponse =
+  Message<"paladin.iam.v1.ListMyMembershipsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.iam.v1.Membership memberships = 1;
+     */
+    memberships: Membership[];
+  };
+
+/**
+ * Describes the message paladin.iam.v1.ListMyMembershipsResponse.
+ * Use `create(ListMyMembershipsResponseSchema)` to create a new message.
+ */
+export const ListMyMembershipsResponseSchema: GenMessage<ListMyMembershipsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 15);
+
+/**
+ * @generated from message paladin.iam.v1.SwitchTenantRequest
+ */
+export type SwitchTenantRequest = Message<"paladin.iam.v1.SwitchTenantRequest"> & {
+  /**
+   * The tenant to switch into. The caller MUST have a (non-disabled) user row
+   * there or the call is PermissionDenied.
+   *
+   * @generated from field: string target_tenant_id = 1;
+   */
+  targetTenantId: string;
+
+  /**
+   * Audience for the new access token. Empty keeps the caller's current
+   * audience (so a switch preserves the plane they were working in).
+   *
+   * @generated from field: string requested_audience = 2;
+   */
+  requestedAudience: string;
+};
+
+/**
+ * Describes the message paladin.iam.v1.SwitchTenantRequest.
+ * Use `create(SwitchTenantRequestSchema)` to create a new message.
+ */
+export const SwitchTenantRequestSchema: GenMessage<SwitchTenantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 16);
+
+/**
+ * @generated from message paladin.iam.v1.SwitchTenantResponse
+ */
+export type SwitchTenantResponse =
+  Message<"paladin.iam.v1.SwitchTenantResponse"> & {
+    /**
+     * @generated from field: paladin.iam.v1.TokenPair tokens = 1;
+     */
+    tokens?: TokenPair | undefined;
+
+    /**
+     * @generated from field: paladin.iam.v1.User user = 2;
+     */
+    user?: User | undefined;
+  };
+
+/**
+ * Describes the message paladin.iam.v1.SwitchTenantResponse.
+ * Use `create(SwitchTenantResponseSchema)` to create a new message.
+ */
+export const SwitchTenantResponseSchema: GenMessage<SwitchTenantResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_auth_service, 17);
+
+/**
  * AuthService handles login + token lifecycle. Public-facing endpoints
  * (Login, RefreshToken) accept unauthenticated callers; everything else
  * requires a valid access token.
@@ -472,5 +603,31 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof ExchangeAudienceRequestSchema;
     output: typeof ExchangeAudienceResponseSchema;
+  };
+  /**
+   * ListMyMemberships returns every tenant the caller's subject belongs to.
+   * Under the 1:1-per-tenant user model a "membership" is a users row, so a
+   * subject registered in tenants A and B has two memberships with independent
+   * roles. Used by the SPA to render the tenant switcher.
+   *
+   * @generated from rpc paladin.iam.v1.AuthService.ListMyMemberships
+   */
+  listMyMemberships: {
+    methodKind: "unary";
+    input: typeof ListMyMembershipsRequestSchema;
+    output: typeof ListMyMembershipsResponseSchema;
+  };
+  /**
+   * SwitchTenant mints a fresh access+refresh pair scoped to a DIFFERENT
+   * tenant the caller is already a member of — no password re-check (the
+   * caller already proved identity, and could log in to the target directly,
+   * so switching grants no new authority). A new refresh family is started.
+   *
+   * @generated from rpc paladin.iam.v1.AuthService.SwitchTenant
+   */
+  switchTenant: {
+    methodKind: "unary";
+    input: typeof SwitchTenantRequestSchema;
+    output: typeof SwitchTenantResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_auth_service, 0);
