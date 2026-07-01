@@ -729,6 +729,12 @@ open deliberately — each notes why._
 
 ### Phase 3: deprecate redundant resource-name shapes
 
+- **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)
+  (2026-07-01).** In the plan's authoritative numbering this is **Phase 5**
+  (soft-deprecate C on the wire) — gated on ≥1 week of real
+  `paladin_resource_name_shape_total` data, which a deploy window does NOT supply.
+  C is never dropped from the server (operator UI depends on it). Rest below
+  kept for detail.
 - **Status:** Open — gated on real-world shape-distribution data. The Phase-2
   central resolver is DONE: `internal/api/connectshim/resolve` exports
   `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)` handling all three
@@ -768,6 +774,16 @@ open deliberately — each notes why._
 
 ### Cedar policy templates: canonical resource literals
 
+- **Ratified under [ADR-0010](backend/docs/adr/0010-canonical-resource-names.md)
+  (2026-07-01).** This is part of the plan's **Phase 1** (canonical A
+  internally) and must land WITH the audit/event canonicalization in one deploy
+  window (Invariant 1 — no mixed shapes), not as a standalone batch. Key
+  constraint found during ratification: the canonical ObjectKey EUID needs
+  `(backend, bucket)`, which `engine.go::objectKeyUID` does not receive today —
+  it requires threading the binding into the authz path. Deployed policies do
+  NOT hardcode ObjectKey EUID literals, so the rewrite risk is low, but the
+  builder switch is authz-visible → gate behind a shadow-eval soak. Rest below
+  kept for detail.
 - **Status:** Aspirational
 - **Reason:** Phase 1 of `backend/docs/canonical-resource-names.md`
   switches audit_log and event payload `resource_name` to the A-shape
