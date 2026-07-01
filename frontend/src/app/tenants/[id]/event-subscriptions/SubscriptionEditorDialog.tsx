@@ -30,6 +30,7 @@ import {
   TEMPLATES,
   SINK_OPTIONS,
   HTTP_FORMAT_OPTIONS,
+  KAFKA_SASL_OPTIONS,
   EMPTY_FORM,
   formFromSubscription,
   buildSink,
@@ -202,7 +203,7 @@ export function SubscriptionEditorDialog({
           <DialogDescription>
             {editing
               ? "Update the sink configuration and CEL filter for this subscription."
-              : "Forward events from this tenant to a webhook (HTTP) or NATS subject. Kafka / SQS sinks are roadmap stubs."}
+              : "Forward events from this tenant to a webhook (HTTP) or a broker sink — NATS, Kafka, SQS, or RabbitMQ."}
           </DialogDescription>
         </DialogHeader>
 
@@ -398,6 +399,78 @@ export function SubscriptionEditorDialog({
                       setForm((p) => ({ ...p, kafkaTopic: e.target.value }))
                     }
                   />
+                </Field>
+                <Field
+                  label="SASL"
+                  hint="Broker authentication. SASL_SSL = pick a mechanism AND enable TLS below. mTLS client certs are API/config-only."
+                >
+                  <ToggleRow
+                    options={KAFKA_SASL_OPTIONS}
+                    selected={
+                      (["plain", "scram-sha-256", "scram-sha-512"].includes(
+                        form.kafkaSaslMechanism,
+                      )
+                        ? form.kafkaSaslMechanism
+                        : "") as
+                        "" | "plain" | "scram-sha-256" | "scram-sha-512"
+                    }
+                    onSelect={(id) =>
+                      setForm((p) => ({ ...p, kafkaSaslMechanism: id }))
+                    }
+                  />
+                </Field>
+                {form.kafkaSaslMechanism && (
+                  <>
+                    <Field
+                      label="SASL username"
+                      htmlFor="sub-kafka-sasl-user"
+                      error={errors.kafkaSaslUsername}
+                    >
+                      <Input
+                        id="sub-kafka-sasl-user"
+                        value={form.kafkaSaslUsername}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            kafkaSaslUsername: e.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label="SASL password"
+                      htmlFor="sub-kafka-sasl-pass"
+                      optional
+                    >
+                      <Input
+                        id="sub-kafka-sasl-pass"
+                        type="password"
+                        value={form.kafkaSaslPassword}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            kafkaSaslPassword: e.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  </>
+                )}
+                <Field
+                  label="TLS"
+                  hint="Wrap the broker connection in TLS (server verified via system root CAs)."
+                >
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={form.kafkaTlsEnabled}
+                      onCheckedChange={(v) =>
+                        setForm((p) => ({ ...p, kafkaTlsEnabled: v }))
+                      }
+                    />
+                    <span className={T.hint}>
+                      {form.kafkaTlsEnabled ? "Enabled" : "Plaintext"}
+                    </span>
+                  </div>
                 </Field>
               </>
             )}

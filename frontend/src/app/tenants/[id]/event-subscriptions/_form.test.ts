@@ -205,3 +205,85 @@ describe("SQS sink role_arn (cross-account)", () => {
     expect(f.sqsRoleArn).toBe("arn:aws:iam::999:role/deliver");
   });
 });
+
+// Kafka SASL / TLS auth — build + hydrate + validation. mTLS client cert/key
+// are API-only, so the UI always builds them empty.
+describe("Kafka sink auth", () => {
+  const kafkaTarget = (sink: ReturnType<typeof buildSink>) =>
+    sink.target.case === "kafka" ? sink.target.value : undefined;
+
+  it("builds SASL_SSL (SCRAM-256 + TLS), leaving mTLS PEM empty", () => {
+    const v = kafkaTarget(
+      buildSink({
+        ...EMPTY_FORM,
+        sinkType: "kafka",
+        kafkaBrokers: "b1:9092,b2:9092",
+        kafkaTopic: "paladin.events",
+        kafkaSaslMechanism: "scram-sha-256",
+        kafkaSaslUsername: "  svc-paladin  ",
+        kafkaSaslPassword: "s3cret",
+        kafkaTlsEnabled: true,
+      }),
+    );
+    expect(v?.saslMechanism).toBe("scram-sha-256");
+    expect(v?.saslUsername).toBe("svc-paladin"); // trimmed
+    expect(v?.saslPassword).toBe("s3cret"); // not trimmed
+    expect(v?.tlsEnabled).toBe(true);
+    expect(v?.tlsClientCert).toBe("");
+    expect(v?.tlsClientKey).toBe("");
+  });
+
+  it("hydrates the auth fields from an existing kafka subscription", () => {
+    const f = formFromSubscription({
+      $typeName: "paladin.admin.v1.EventSubscription",
+      name: "tenants/t-1/eventSubscriptions/s1",
+      tenantId: "t-1",
+      filter: "",
+      disabled: false,
+      resourceVersion: "v1",
+      sink: {
+        $typeName: "paladin.admin.v1.EventSink",
+        target: {
+          case: "kafka",
+          value: {
+            $typeName: "paladin.admin.v1.KafkaSink",
+            brokers: "b:9092",
+            topic: "t",
+            saslMechanism: "plain",
+            saslUsername: "u",
+            saslPassword: "p",
+            tlsEnabled: true,
+            tlsClientCert: "",
+            tlsClientKey: "",
+          },
+        },
+      },
+    } as EventSubscription);
+    expect(f.sinkType).toBe("kafka");
+    expect(f.kafkaSaslMechanism).toBe("plain");
+    expect(f.kafkaSaslUsername).toBe("u");
+    expect(f.kafkaTlsEnabled).toBe(true);
+  });
+
+  it("requires a SASL username once a mechanism is chosen", () => {
+    const errs = validateForm({
+      ...EMPTY_FORM,
+      sinkType: "kafka",
+      kafkaBrokers: "b:9092",
+      kafkaTopic: "t",
+      kafkaSaslMechanism: "plain",
+      kafkaSaslUsername: "",
+    });
+    expect(errs.kafkaSaslUsername).toBeTruthy();
+  });
+
+  it("no SASL selected → no auth-field errors", () => {
+    const errs = validateForm({
+      ...EMPTY_FORM,
+      sinkType: "kafka",
+      kafkaBrokers: "b:9092",
+      kafkaTopic: "t",
+    });
+    expect(errs.kafkaSaslUsername).toBeUndefined();
+  });
+});

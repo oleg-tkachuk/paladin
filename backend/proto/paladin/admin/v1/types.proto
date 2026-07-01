@@ -376,6 +376,22 @@ message HttpSink {
 message KafkaSink {
   string brokers = 1;
   string topic = 2;
+  // SASL mechanism: "" (none) | "plain" | "scram-sha-256" | "scram-sha-512".
+  // With any non-empty value the dispatcher authenticates the broker
+  // connection with sasl_username / sasl_password.
+  string sasl_mechanism = 3;
+  string sasl_username = 4;
+  // sasl_password is inline today (lab-grade, matching NatsSink.credentials_ref);
+  // a secret-store-resolved ref is a follow-up (see BACKLOG).
+  string sasl_password = 5;
+  // tls_enabled wraps the broker connection in TLS (server verified via the
+  // system root CAs) — SASL_SSL is sasl_mechanism + tls_enabled.
+  bool tls_enabled = 6;
+  // Optional mTLS client cert + key (PEM). When both are set the dispatcher
+  // presents them on the TLS handshake (implies TLS). Inline PEM is lab-grade;
+  // a secret-store ref is a follow-up.
+  string tls_client_cert = 7;
+  string tls_client_key = 8;
 }
 
 message SqsSink {

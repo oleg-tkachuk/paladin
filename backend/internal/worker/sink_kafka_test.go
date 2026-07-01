@@ -27,7 +27,7 @@ func (f *fakeKafka) Close() error { f.closed++; return nil }
 func kafkaTestDispatcher(fake kafkaWriter) (*Dispatcher, *int) {
 	builds := 0
 	pool := NewKafkaWriterPool(nil)
-	pool.newWriter = func([]string, string) kafkaWriter { builds++; return fake }
+	pool.newWriter = func([]string, string, *kafka.Transport) kafkaWriter { builds++; return fake }
 	return &Dispatcher{Kafka: pool}, &builds
 }
 

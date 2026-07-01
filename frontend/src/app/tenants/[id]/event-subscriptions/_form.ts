@@ -96,6 +96,18 @@ export const HTTP_FORMAT_OPTIONS: readonly {
   { id: "cloudevents", label: "CloudEvents 1.0" },
 ] as const;
 
+// Kafka SASL mechanism (KafkaSink.sasl_mechanism). "" = no SASL. mTLS client
+// certs are API/config-only (not surfaced here — see the sink form).
+export const KAFKA_SASL_OPTIONS: readonly {
+  id: "" | "plain" | "scram-sha-256" | "scram-sha-512";
+  label: string;
+}[] = [
+  { id: "", label: "None" },
+  { id: "plain", label: "PLAIN" },
+  { id: "scram-sha-256", label: "SCRAM-256" },
+  { id: "scram-sha-512", label: "SCRAM-512" },
+] as const;
+
 export type TestResult = {
   delivered: boolean;
   statusCode: number;
@@ -177,6 +189,10 @@ export type FormState = {
   // Kafka
   kafkaBrokers: string;
   kafkaTopic: string;
+  kafkaSaslMechanism: string; // "" | plain | scram-sha-256 | scram-sha-512
+  kafkaSaslUsername: string;
+  kafkaSaslPassword: string;
+  kafkaTlsEnabled: boolean;
   // SQS
   sqsQueueUrl: string;
   sqsRegion: string;
@@ -202,6 +218,10 @@ export const EMPTY_FORM: FormState = {
   natsCredentialsRef: "",
   kafkaBrokers: "",
   kafkaTopic: "",
+  kafkaSaslMechanism: "",
+  kafkaSaslUsername: "",
+  kafkaSaslPassword: "",
+  kafkaTlsEnabled: false,
   sqsQueueUrl: "",
   sqsRegion: "",
   sqsRoleArn: "",
@@ -234,6 +254,10 @@ export function formFromSubscription(sub: EventSubscription): FormState {
     next.sinkType = "kafka";
     next.kafkaBrokers = t.value.brokers;
     next.kafkaTopic = t.value.topic;
+    next.kafkaSaslMechanism = t.value.saslMechanism;
+    next.kafkaSaslUsername = t.value.saslUsername;
+    next.kafkaSaslPassword = t.value.saslPassword;
+    next.kafkaTlsEnabled = t.value.tlsEnabled;
   } else if (t?.case === "sqs") {
     next.sinkType = "sqs";
     next.sqsQueueUrl = t.value.queueUrl;
@@ -281,6 +305,14 @@ export function buildSink(form: FormState): EventSink {
       $typeName: "paladin.admin.v1.KafkaSink",
       brokers: form.kafkaBrokers.trim(),
       topic: form.kafkaTopic.trim(),
+      saslMechanism: form.kafkaSaslMechanism,
+      saslUsername: form.kafkaSaslUsername.trim(),
+      saslPassword: form.kafkaSaslPassword,
+      tlsEnabled: form.kafkaTlsEnabled,
+      // mTLS client cert/key are API/config-only (PEM key material in a
+      // browser form is a security smell) — left empty from the UI.
+      tlsClientCert: "",
+      tlsClientKey: "",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",
@@ -318,6 +350,7 @@ export interface FormErrors {
   natsSubject?: string;
   kafkaBrokers?: string;
   kafkaTopic?: string;
+  kafkaSaslUsername?: string;
   sqsQueueUrl?: string;
   sqsRegion?: string;
   rabbitmqUrl?: string;
@@ -347,6 +380,11 @@ export function validateForm(form: FormState): FormErrors {
   } else if (form.sinkType === "kafka") {
     if (!form.kafkaBrokers.trim()) e.kafkaBrokers = "Required.";
     if (!form.kafkaTopic.trim()) e.kafkaTopic = "Required.";
+    // SASL needs a username; the password may legitimately be empty for some
+    // broker setups, so only the username is required.
+    if (form.kafkaSaslMechanism && !form.kafkaSaslUsername.trim()) {
+      e.kafkaSaslUsername = "Required for SASL.";
+    }
   } else if (form.sinkType === "sqs") {
     if (!isValidUrl(form.sqsQueueUrl.trim()))
       e.sqsQueueUrl = "Must be a valid URL.";

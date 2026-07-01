@@ -2211,9 +2211,25 @@ func (x *HttpSink) GetFormat() string {
 }
 
 type KafkaSink struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Brokers       string                 `protobuf:"bytes,1,opt,name=brokers,proto3" json:"brokers,omitempty"`
-	Topic         string                 `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Brokers string                 `protobuf:"bytes,1,opt,name=brokers,proto3" json:"brokers,omitempty"`
+	Topic   string                 `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`
+	// SASL mechanism: "" (none) | "plain" | "scram-sha-256" | "scram-sha-512".
+	// With any non-empty value the dispatcher authenticates the broker
+	// connection with sasl_username / sasl_password.
+	SaslMechanism string `protobuf:"bytes,3,opt,name=sasl_mechanism,json=saslMechanism,proto3" json:"sasl_mechanism,omitempty"`
+	SaslUsername  string `protobuf:"bytes,4,opt,name=sasl_username,json=saslUsername,proto3" json:"sasl_username,omitempty"`
+	// sasl_password is inline today (lab-grade, matching NatsSink.credentials_ref);
+	// a secret-store-resolved ref is a follow-up (see BACKLOG).
+	SaslPassword string `protobuf:"bytes,5,opt,name=sasl_password,json=saslPassword,proto3" json:"sasl_password,omitempty"`
+	// tls_enabled wraps the broker connection in TLS (server verified via the
+	// system root CAs) — SASL_SSL is sasl_mechanism + tls_enabled.
+	TlsEnabled bool `protobuf:"varint,6,opt,name=tls_enabled,json=tlsEnabled,proto3" json:"tls_enabled,omitempty"`
+	// Optional mTLS client cert + key (PEM). When both are set the dispatcher
+	// presents them on the TLS handshake (implies TLS). Inline PEM is lab-grade;
+	// a secret-store ref is a follow-up.
+	TlsClientCert string `protobuf:"bytes,7,opt,name=tls_client_cert,json=tlsClientCert,proto3" json:"tls_client_cert,omitempty"`
+	TlsClientKey  string `protobuf:"bytes,8,opt,name=tls_client_key,json=tlsClientKey,proto3" json:"tls_client_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2258,6 +2274,48 @@ func (x *KafkaSink) GetBrokers() string {
 func (x *KafkaSink) GetTopic() string {
 	if x != nil {
 		return x.Topic
+	}
+	return ""
+}
+
+func (x *KafkaSink) GetSaslMechanism() string {
+	if x != nil {
+		return x.SaslMechanism
+	}
+	return ""
+}
+
+func (x *KafkaSink) GetSaslUsername() string {
+	if x != nil {
+		return x.SaslUsername
+	}
+	return ""
+}
+
+func (x *KafkaSink) GetSaslPassword() string {
+	if x != nil {
+		return x.SaslPassword
+	}
+	return ""
+}
+
+func (x *KafkaSink) GetTlsEnabled() bool {
+	if x != nil {
+		return x.TlsEnabled
+	}
+	return false
+}
+
+func (x *KafkaSink) GetTlsClientCert() string {
+	if x != nil {
+		return x.TlsClientCert
+	}
+	return ""
+}
+
+func (x *KafkaSink) GetTlsClientKey() string {
+	if x != nil {
+		return x.TlsClientKey
 	}
 	return ""
 }
@@ -2679,10 +2737,17 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
 	"\x12signing_secret_ref\x18\x02 \x01(\tR\x10signingSecretRef\x12!\n" +
 	"\fmax_attempts\x18\x03 \x01(\x05R\vmaxAttempts\x12\x16\n" +
-	"\x06format\x18\x04 \x01(\tR\x06format\";\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\"\x9b\x02\n" +
 	"\tKafkaSink\x12\x18\n" +
 	"\abrokers\x18\x01 \x01(\tR\abrokers\x12\x14\n" +
-	"\x05topic\x18\x02 \x01(\tR\x05topic\"Y\n" +
+	"\x05topic\x18\x02 \x01(\tR\x05topic\x12%\n" +
+	"\x0esasl_mechanism\x18\x03 \x01(\tR\rsaslMechanism\x12#\n" +
+	"\rsasl_username\x18\x04 \x01(\tR\fsaslUsername\x12#\n" +
+	"\rsasl_password\x18\x05 \x01(\tR\fsaslPassword\x12\x1f\n" +
+	"\vtls_enabled\x18\x06 \x01(\bR\n" +
+	"tlsEnabled\x12&\n" +
+	"\x0ftls_client_cert\x18\a \x01(\tR\rtlsClientCert\x12$\n" +
+	"\x0etls_client_key\x18\b \x01(\tR\ftlsClientKey\"Y\n" +
 	"\aSqsSink\x12\x1b\n" +
 	"\tqueue_url\x18\x01 \x01(\tR\bqueueUrl\x12\x16\n" +
 	"\x06region\x18\x02 \x01(\tR\x06region\x12\x19\n" +

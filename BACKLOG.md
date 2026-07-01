@@ -475,8 +475,9 @@ open deliberately — each notes why._
 
 ### Event dispatcher: Kafka sink
 
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; auth/integration
-  follow-ups remain.
+- **Status:** Partially done — core sink SHIPPED 2026-06-30; SASL/SCRAM + TLS/
+  mTLS auth SHIPPED 2026-07-01; only the real-broker integration test (+ the
+  optional per-tenant topic prefix) remain.
 - **Shipped:** `KafkaSink{brokers, topic}` (already in the proto) wired
   end-to-end — `internal/worker/sink_kafka.go` with `KafkaWriterPool` (one
   `segmentio/kafka-go` writer cached per (brokers, topic), `RequireAll` acks,
@@ -486,11 +487,24 @@ open deliberately — each notes why._
   mapped; unit tests (`sink_kafka_test.go`) via a `kafkaWriter` seam covering
   envelope/key, broker-list trimming, pool reuse, error + missing-config + nil
   -pool paths. Chose `segmentio/kafka-go` (pure-Go, no CGO) over franz-go.
+- **Shipped (2026-07-01) — SASL/SCRAM + TLS/mTLS auth:** `KafkaSink` gains
+  `sasl_mechanism` ("" | plain | scram-sha-256 | scram-sha-512),
+  `sasl_username`, `sasl_password`, `tls_enabled`, and `tls_client_cert` /
+  `tls_client_key` (PEM, mTLS). `buildKafkaTransport` maps the config to a
+  `kafka.Transport{SASL, TLS}` (nil = plaintext); the writer pool now keys by
+  `(brokers, topic, auth-hash)` so distinct-credential sinks never share a
+  writer; unsupported mechanism / bad mTLS keypair fail the delivery with a
+  clear error. Admin form exposes the SASL mechanism + username/password + a
+  TLS toggle; mTLS client-cert/key stay API/config-only (PEM key material in a
+  browser form is a security smell). Unit-tested transport construction (SASL
+  mechanisms, TLS, mTLS keypair incl. a generated cert, error paths) + the
+  cache-key uniqueness + delivery threading. Inline creds are lab-grade — a
+  secret-store-resolved ref is the remaining hardening (shared with NATS).
 - **Definition of Done (remaining):**
-  - Auth: SASL/SCRAM + mTLS via `kafka.Writer.Transport` (today: PLAINTEXT /
-    broker-list only). Credentials reference on the sink config.
   - Real-broker integration test (testcontainers redpanda / kafka): outbox
-    row → publish round-trip. (Unit tests use a writer seam.)
+    row → publish round-trip, incl. a SASL_SSL connection. (Unit tests use a
+    writer seam; the SASL/TLS handshake itself is only broker-verifiable.)
+  - Secret-store-resolved credentials (inline `sasl_password` / PEM today).
   - Optional: per-tenant topic prefix vs operator-defined topic — operator
     -defined shipped; revisit if a customer needs auto-fan-out by tenant.
 - **Blockers:** none — incremental; driven by a customer's auth posture.

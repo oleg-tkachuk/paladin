@@ -2,6 +2,9 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +12,9 @@ import (
 	"sync"
 
 	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -28,6 +34,16 @@ type kafkaWriter interface {
 type kafkaSinkConfig struct {
 	Brokers string `json:"brokers"`
 	Topic   string `json:"topic"`
+	// Auth (all optional). SASLMechanism: "" | plain | scram-sha-256 |
+	// scram-sha-512. TLSEnabled wraps the connection in server-verified TLS;
+	// TLSClientCert/Key (PEM) present a client cert for mTLS. Inline creds are
+	// lab-grade — secret-store resolution is a follow-up.
+	SASLMechanism string `json:"sasl_mechanism"`
+	SASLUsername  string `json:"sasl_username"`
+	SASLPassword  string `json:"sasl_password"`
+	TLSEnabled    bool   `json:"tls_enabled"`
+	TLSClientCert string `json:"tls_client_cert"`
+	TLSClientKey  string `json:"tls_client_key"`
 }
 
 // KafkaWriterPool lazily builds + caches one writer per (brokers, topic),
@@ -38,42 +54,111 @@ type KafkaWriterPool struct {
 	mu      sync.Mutex
 	writers map[string]kafkaWriter
 	log     *zap.Logger
-	// newWriter builds a writer for the given brokers+topic. Overridable in
-	// tests.
-	newWriter func(brokers []string, topic string) kafkaWriter
+	// newWriter builds a writer for the given brokers+topic, wiring `transport`
+	// (SASL / TLS) when non-nil. Overridable in tests.
+	newWriter func(brokers []string, topic string, transport *kafka.Transport) kafkaWriter
 }
 
 // NewKafkaWriterPool returns an empty pool. Writers dial lazily on first
-// WriteMessages per (brokers, topic) key.
+// WriteMessages per (brokers, topic, auth) key.
 func NewKafkaWriterPool(log *zap.Logger) *KafkaWriterPool {
 	return &KafkaWriterPool{
 		writers: map[string]kafkaWriter{},
 		log:     log,
-		newWriter: func(brokers []string, topic string) kafkaWriter {
-			return &kafka.Writer{
+		newWriter: func(brokers []string, topic string, transport *kafka.Transport) kafkaWriter {
+			w := &kafka.Writer{
 				Addr:                   kafka.TCP(brokers...),
 				Topic:                  topic,
 				Balancer:               &kafka.Hash{}, // key-based partitioning → per-key ordering
 				AllowAutoTopicCreation: false,
 				RequiredAcks:           kafka.RequireAll, // ack from all in-sync replicas
 			}
+			// Only override the transport for authenticated sinks — a nil
+			// *kafka.Transport boxed into the RoundTripper interface would be a
+			// non-nil interface holding a nil pointer, breaking plaintext.
+			if transport != nil {
+				w.Transport = transport
+			}
+			return w
 		},
 	}
 }
 
-func (p *KafkaWriterPool) get(brokers []string, topic string) kafkaWriter {
-	key := strings.Join(brokers, ",") + "|" + topic
+// get returns the cached writer for `key` (which encodes brokers, topic, AND
+// auth so distinct-credential sinks never share a connection), building one
+// via newWriter on first use.
+func (p *KafkaWriterPool) get(key string, brokers []string, topic string, transport *kafka.Transport) kafkaWriter {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if w, ok := p.writers[key]; ok {
 		return w
 	}
-	w := p.newWriter(brokers, topic)
+	w := p.newWriter(brokers, topic, transport)
 	p.writers[key] = w
 	if p.log != nil {
-		p.log.Info("kafka writer built", zap.String("brokers", strings.Join(brokers, ",")), zap.String("topic", topic))
+		p.log.Info("kafka writer built",
+			zap.String("brokers", strings.Join(brokers, ",")),
+			zap.String("topic", topic),
+			zap.Bool("authenticated", transport != nil))
 	}
 	return w
+}
+
+// buildKafkaTransport turns the sink's auth config into a *kafka.Transport, or
+// (nil, nil) for a plaintext sink. Returns an error for an unsupported SASL
+// mechanism or a bad mTLS keypair, so a misconfigured sink fails the delivery
+// with a clear reason rather than silently degrading to plaintext.
+func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
+	var mech sasl.Mechanism
+	switch cfg.SASLMechanism {
+	case "", "none":
+		// no SASL
+	case "plain":
+		mech = plain.Mechanism{Username: cfg.SASLUsername, Password: cfg.SASLPassword}
+	case "scram-sha-256":
+		m, err := scram.Mechanism(scram.SHA256, cfg.SASLUsername, cfg.SASLPassword)
+		if err != nil {
+			return nil, fmt.Errorf("kafka sink: scram-sha-256: %w", err)
+		}
+		mech = m
+	case "scram-sha-512":
+		m, err := scram.Mechanism(scram.SHA512, cfg.SASLUsername, cfg.SASLPassword)
+		if err != nil {
+			return nil, fmt.Errorf("kafka sink: scram-sha-512: %w", err)
+		}
+		mech = m
+	default:
+		return nil, fmt.Errorf("kafka sink: unsupported sasl_mechanism %q", cfg.SASLMechanism)
+	}
+
+	var tlsCfg *tls.Config
+	if cfg.TLSEnabled || cfg.TLSClientCert != "" || cfg.TLSClientKey != "" {
+		tlsCfg = &tls.Config{MinVersion: tls.VersionTLS12}
+		if cfg.TLSClientCert != "" || cfg.TLSClientKey != "" {
+			crt, err := tls.X509KeyPair([]byte(cfg.TLSClientCert), []byte(cfg.TLSClientKey))
+			if err != nil {
+				return nil, fmt.Errorf("kafka sink: mTLS keypair: %w", err)
+			}
+			tlsCfg.Certificates = []tls.Certificate{crt}
+		}
+	}
+
+	if mech == nil && tlsCfg == nil {
+		return nil, nil // plaintext
+	}
+	return &kafka.Transport{SASL: mech, TLS: tlsCfg}, nil
+}
+
+// kafkaWriterKey namespaces the writer cache by brokers + topic + the full
+// auth material, so two sinks that share brokers/topic but differ in
+// credentials (or plaintext-vs-TLS) get separate writers. The credential
+// bytes are hashed (never logged) — the key is in-process only.
+func kafkaWriterKey(brokers []string, cfg kafkaSinkConfig) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00%s",
+		strings.Join(brokers, ","), cfg.Topic, cfg.SASLMechanism, cfg.SASLUsername,
+		cfg.SASLPassword, cfg.TLSEnabled, cfg.TLSClientCert, cfg.TLSClientKey)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Close flushes + closes every pooled writer. Safe to defer in the dispatcher
@@ -114,7 +199,11 @@ func (d *Dispatcher) deliverKafka(ctx context.Context, sub admindomain.EventSubs
 	if len(brokers) == 0 {
 		return 0, errors.New("kafka sink: no usable broker in brokers list")
 	}
-	w := d.Kafka.get(brokers, cfg.Topic)
+	transport, err := buildKafkaTransport(cfg)
+	if err != nil {
+		return 0, err
+	}
+	w := d.Kafka.get(kafkaWriterKey(brokers, cfg), brokers, cfg.Topic, transport)
 	if err := w.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(evt.TenantID),
 		Value: body,
