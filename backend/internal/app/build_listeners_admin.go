@@ -59,17 +59,22 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// which intentionally bypasses the outbox: operator clicked
 	// "Test delivery", they want the result now.
 	//
-	// NATS pool is wired here too — TestSubscription on a NATS sink
-	// runs through this Dispatcher (not the dispatcher pod's), so
-	// without an attached pool deliverNATS errors with "dispatcher
-	// has no NATS pool". The pool is lazy: NewNatsConnPool allocates
-	// no sockets, and the per-(url, credentials_ref) `get` only
-	// dials on first use — admin pods that never see a NATS Test
-	// pay nothing.
+	// Every broker pool is wired here too — TestSubscription runs
+	// through THIS Dispatcher (not the dispatcher pod's), so without an
+	// attached pool the matching deliver* rejects the row with
+	// "dispatcher has no <kind> pool" and the operator's Test button is
+	// dead for that sink kind. Every pool is lazy: the constructor
+	// allocates no sockets and the per-target `get` only dials on first
+	// use, so an admin pod that never runs a Test for a given kind pays
+	// nothing. (The dispatcher pod closes these on shutdown; the admin
+	// pod relies on process exit — same as the NATS pool always has.)
 	dispatcher := &worker.Dispatcher{
 		Store:       worker.NewRepoSubscriptionStore(repos.EventSub),
 		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
 		NATS:        worker.NewNatsConnPool(l.Named("nats-pool")),
+		SQS:         worker.NewSQSClientPool(l.Named("sqs-pool")),
+		RabbitMQ:    worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool")),
+		Kafka:       worker.NewKafkaWriterPool(l.Named("kafka-pool")),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}
