@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   createBackend: vi.fn(() => Promise.resolve()),
   setBackendEnabled: vi.fn(() => Promise.resolve({})),
   setBackendReadOnly: vi.fn(() => Promise.resolve({})),
+  setBackendMaintenance: vi.fn(() => Promise.resolve({})),
   showNotification: vi.fn(),
   backends: [] as unknown[],
 }));
@@ -21,6 +22,7 @@ vi.mock("@/hooks/useBackends", () => ({
     createBackend: h.createBackend,
     setBackendEnabled: h.setBackendEnabled,
     setBackendReadOnly: h.setBackendReadOnly,
+    setBackendMaintenance: h.setBackendMaintenance,
   }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -48,6 +50,7 @@ beforeEach(() => {
   h.createBackend.mockClear();
   h.setBackendEnabled.mockClear();
   h.setBackendReadOnly.mockClear();
+  h.setBackendMaintenance.mockClear();
   h.showNotification.mockClear();
   h.backends = [];
 });
@@ -64,6 +67,7 @@ const makeBackend = (over: Record<string, unknown> = {}) => ({
   name: "storageBackends/primary",
   healthStatus: "unknown",
   healthMessage: "",
+  maintenance: false,
   ...over,
 });
 
@@ -197,5 +201,52 @@ describe("StorageBackendsPage", () => {
     h.backends = [makeBackend({ backendId: "a" })];
     render(<StorageBackendsPage />);
     expect(screen.queryByRole("button", { name: "Bulk disable" })).toBeNull();
+  });
+
+  // Operator-set maintenance flag (migration 049) — advisory, orthogonal.
+  it("flags a backend for maintenance via setBackendMaintenance", async () => {
+    h.backends = [makeBackend({ maintenance: false, resourceVersion: "7" })];
+    render(<StorageBackendsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Flag primary for maintenance" }),
+    );
+    expect(h.setBackendMaintenance).toHaveBeenCalledWith("primary", true, "7");
+  });
+
+  it("shows a Maintenance badge and a Clear control when flagged", () => {
+    h.backends = [makeBackend({ maintenance: true })];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Clear maintenance on primary" }),
+    ).toBeInTheDocument();
+  });
+
+  it("maintenance is settable on a DISABLED backend (advisory, orthogonal)", async () => {
+    // Unlike drain, the maintenance control is not gated on enabled.
+    h.backends = [
+      makeBackend({ backendId: "a", enabled: false, resourceVersion: "3" }),
+    ];
+    render(<StorageBackendsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Flag a for maintenance" }),
+    );
+    expect(h.setBackendMaintenance).toHaveBeenCalledWith("a", true, "3");
+  });
+
+  it("bulk-flags maintenance across the selection, skipping already-flagged", async () => {
+    h.backends = [
+      makeBackend({ backendId: "a", maintenance: false, resourceVersion: "1" }),
+      makeBackend({ backendId: "b", maintenance: true, resourceVersion: "2" }),
+    ];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByLabelText("Select all backends"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Bulk maintenance" }),
+    );
+    await waitFor(() =>
+      expect(h.setBackendMaintenance).toHaveBeenCalledTimes(1),
+    );
+    expect(h.setBackendMaintenance).toHaveBeenCalledWith("a", true, "1");
   });
 });

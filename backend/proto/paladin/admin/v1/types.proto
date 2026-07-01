@@ -61,6 +61,11 @@ message StorageBackend {
   string health_status = 20;
   string health_message = 21;
   google.protobuf.Timestamp health_checked_at = 22;
+  // Operator-set, advisory maintenance flag (migration 049): "under
+  // maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
+  // and operator-set (unlike the derived health_*). Managed via
+  // SetBackendMaintenance; NOT mirrored from static config.
+  bool maintenance = 23;
 }
 
 enum StorageKind {

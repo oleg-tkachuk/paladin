@@ -31,7 +31,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,
@@ -51,7 +51,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,
@@ -99,6 +99,15 @@ WHERE id = sqlc.arg('id')
 -- SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 UPDATE storage_backends
 SET read_only = sqlc.arg('read_only')
+WHERE id = sqlc.arg('id')
+  AND (sqlc.arg('expected_version')::bigint = 0
+       OR resource_version = sqlc.arg('expected_version')::bigint);
+
+-- name: SetStorageBackendMaintenance :execrows
+-- Flip the operator-set maintenance flag (migration 049). Same OCC +
+-- operator-managed contract as the enable/read-only setters; advisory only.
+UPDATE storage_backends
+SET maintenance = sqlc.arg('maintenance')
 WHERE id = sqlc.arg('id')
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint);

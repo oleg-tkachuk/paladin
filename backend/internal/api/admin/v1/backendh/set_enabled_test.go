@@ -15,13 +15,15 @@ import (
 // behaviour can be asserted without a database.
 type stateBackendRepo struct {
 	fakeBackendRepo
-	enabled        bool
-	readOnly       bool
-	rv             int64
-	mismatch       bool // when true, SetEnabled/SetReadOnly returns ErrVersionMismatch
-	notFound       bool // when true, SetEnabled/SetReadOnly returns ErrNotFound
-	setEnabledHit  int
-	setReadOnlyHit int
+	enabled           bool
+	readOnly          bool
+	rv                int64
+	mismatch          bool // when true, SetEnabled/SetReadOnly returns ErrVersionMismatch
+	notFound          bool // when true, SetEnabled/SetReadOnly returns ErrNotFound
+	setEnabledHit     int
+	setReadOnlyHit    int
+	maintenance       bool
+	setMaintenanceHit int
 	// Health probe recording (migration 048).
 	healthStatus  string
 	healthMessage string
@@ -65,10 +67,24 @@ func (r *stateBackendRepo) SetReadOnly(_ context.Context, _ string, readOnly boo
 	return nil
 }
 
+func (r *stateBackendRepo) SetMaintenance(_ context.Context, _ string, maintenance bool, _ int64) error {
+	r.setMaintenanceHit++
+	if r.notFound {
+		return admindomain.ErrNotFound
+	}
+	if r.mismatch {
+		return admindomain.ErrVersionMismatch
+	}
+	r.maintenance = maintenance
+	r.rv++
+	return nil
+}
+
 func (r *stateBackendRepo) Get(_ context.Context, _ string) (admindomain.StorageBackend, error) {
 	return admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
-		Enabled: r.enabled, ReadOnly: r.readOnly, ResourceVersion: r.rv,
+		Enabled: r.enabled, ReadOnly: r.readOnly, Maintenance: r.maintenance,
+		ResourceVersion: r.rv,
 	}, nil
 }
 

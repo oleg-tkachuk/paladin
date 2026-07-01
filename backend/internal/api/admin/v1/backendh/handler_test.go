@@ -37,6 +37,9 @@ func (fakeBackendRepo) Update(context.Context, admindomain.StorageBackend, int64
 }
 func (fakeBackendRepo) SetEnabled(context.Context, string, bool, int64) error  { return nil }
 func (fakeBackendRepo) SetReadOnly(context.Context, string, bool, int64) error { return nil }
+func (fakeBackendRepo) SetMaintenance(context.Context, string, bool, int64) error {
+	return nil
+}
 func (fakeBackendRepo) SetHealth(context.Context, string, string, string, time.Time) error {
 	return nil
 }

@@ -141,6 +141,26 @@ func (s *BackendServer) SetBackendReadOnly(ctx context.Context, req *connect.Req
 	return connect.NewResponse(backendToProto(out)), nil
 }
 
+func (s *BackendServer) SetBackendMaintenance(ctx context.Context, req *connect.Request[pb.SetBackendMaintenanceRequest]) (*connect.Response[pb.StorageBackend], error) {
+	id, err := backendIDFromName(req.Msg.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	rv, err := parseRV(req.Msg.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if rv == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("resource_version required"))
+	}
+	out, err := s.H.SetBackendMaintenance(ctx, id, req.Msg.GetMaintenance(), rv)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(backendToProto(out)), nil
+}
+
 func (s *BackendServer) RotateCredentials(ctx context.Context, req *connect.Request[pb.RotateCredentialsRequest]) (*connect.Response[pb.StorageBackend], error) {
 	id, err := backendIDFromName(req.Msg.GetName())
 	if err != nil {

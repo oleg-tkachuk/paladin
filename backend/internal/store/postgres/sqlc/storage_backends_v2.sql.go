@@ -44,7 +44,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,
@@ -74,6 +74,7 @@ type GetStorageBackendV2Row struct {
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
 	ReadOnly                      bool               `json:"read_only"`
+	Maintenance                   bool               `json:"maintenance"`
 	HealthStatus                  string             `json:"health_status"`
 	HealthMessage                 string             `json:"health_message"`
 	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
@@ -106,6 +107,7 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, id string) (GetStorag
 		&i.CedarPolicyHash,
 		&i.Enabled,
 		&i.ReadOnly,
+		&i.Maintenance,
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
@@ -123,7 +125,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,
@@ -156,6 +158,7 @@ type ListStorageBackendsRow struct {
 	CedarPolicyHash               []byte             `json:"cedar_policy_hash"`
 	Enabled                       bool               `json:"enabled"`
 	ReadOnly                      bool               `json:"read_only"`
+	Maintenance                   bool               `json:"maintenance"`
 	HealthStatus                  string             `json:"health_status"`
 	HealthMessage                 string             `json:"health_message"`
 	HealthCheckedAt               pgtype.Timestamptz `json:"health_checked_at"`
@@ -199,6 +202,7 @@ func (q *Queries) ListStorageBackends(ctx context.Context, afterID *string, page
 			&i.CedarPolicyHash,
 			&i.Enabled,
 			&i.ReadOnly,
+			&i.Maintenance,
 			&i.HealthStatus,
 			&i.HealthMessage,
 			&i.HealthCheckedAt,
@@ -254,6 +258,24 @@ WHERE id = $2
 // config-mirror must never touch this operator-managed column.
 func (q *Queries) SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageBackendEnabled, enabled, iD, expectedVersion)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setStorageBackendMaintenance = `-- name: SetStorageBackendMaintenance :execrows
+UPDATE storage_backends
+SET maintenance = $1
+WHERE id = $2
+  AND ($3::bigint = 0
+       OR resource_version = $3::bigint)
+`
+
+// Flip the operator-set maintenance flag (migration 049). Same OCC +
+// operator-managed contract as the enable/read-only setters; advisory only.
+func (q *Queries) SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD string, expectedVersion int64) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageBackendMaintenance, maintenance, iD, expectedVersion)
 	if err != nil {
 		return 0, err
 	}

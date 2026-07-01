@@ -61,6 +61,9 @@ const (
 	// BackendServiceSetBackendReadOnlyProcedure is the fully-qualified name of the BackendService's
 	// SetBackendReadOnly RPC.
 	BackendServiceSetBackendReadOnlyProcedure = "/paladin.admin.v1.BackendService/SetBackendReadOnly"
+	// BackendServiceSetBackendMaintenanceProcedure is the fully-qualified name of the BackendService's
+	// SetBackendMaintenance RPC.
+	BackendServiceSetBackendMaintenanceProcedure = "/paladin.admin.v1.BackendService/SetBackendMaintenance"
 )
 
 // BackendServiceClient is a client for the paladin.admin.v1.BackendService service.
@@ -85,6 +88,10 @@ type BackendServiceClient interface {
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
 	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
+	// SetBackendMaintenance raises/clears the operator-set, advisory
+	// maintenance flag (migration 049). Idempotent, OCC-guarded via
+	// resource_version. Advisory — it does not gate operations.
+	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
 }
 
 // NewBackendServiceClient constructs a client for the paladin.admin.v1.BackendService service. By
@@ -152,20 +159,27 @@ func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
 			connect.WithClientOptions(opts...),
 		),
+		setBackendMaintenance: connect.NewClient[v1.SetBackendMaintenanceRequest, v1.StorageBackend](
+			httpClient,
+			baseURL+BackendServiceSetBackendMaintenanceProcedure,
+			connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // backendServiceClient implements BackendServiceClient.
 type backendServiceClient struct {
-	createBackend      *connect.Client[v1.CreateBackendRequest, v1.StorageBackend]
-	getBackend         *connect.Client[v1.GetBackendRequest, v1.StorageBackend]
-	updateBackend      *connect.Client[v1.UpdateBackendRequest, v1.StorageBackend]
-	deleteBackend      *connect.Client[v1.DeleteBackendRequest, v1.DeleteBackendResponse]
-	listBackends       *connect.Client[v1.ListBackendsRequest, v1.ListBackendsResponse]
-	rotateCredentials  *connect.Client[v1.RotateCredentialsRequest, v1.StorageBackend]
-	testBackend        *connect.Client[v1.TestBackendRequest, v1.TestBackendResponse]
-	setBackendEnabled  *connect.Client[v1.SetBackendEnabledRequest, v1.StorageBackend]
-	setBackendReadOnly *connect.Client[v1.SetBackendReadOnlyRequest, v1.StorageBackend]
+	createBackend         *connect.Client[v1.CreateBackendRequest, v1.StorageBackend]
+	getBackend            *connect.Client[v1.GetBackendRequest, v1.StorageBackend]
+	updateBackend         *connect.Client[v1.UpdateBackendRequest, v1.StorageBackend]
+	deleteBackend         *connect.Client[v1.DeleteBackendRequest, v1.DeleteBackendResponse]
+	listBackends          *connect.Client[v1.ListBackendsRequest, v1.ListBackendsResponse]
+	rotateCredentials     *connect.Client[v1.RotateCredentialsRequest, v1.StorageBackend]
+	testBackend           *connect.Client[v1.TestBackendRequest, v1.TestBackendResponse]
+	setBackendEnabled     *connect.Client[v1.SetBackendEnabledRequest, v1.StorageBackend]
+	setBackendReadOnly    *connect.Client[v1.SetBackendReadOnlyRequest, v1.StorageBackend]
+	setBackendMaintenance *connect.Client[v1.SetBackendMaintenanceRequest, v1.StorageBackend]
 }
 
 // CreateBackend calls paladin.admin.v1.BackendService.CreateBackend.
@@ -213,6 +227,11 @@ func (c *backendServiceClient) SetBackendReadOnly(ctx context.Context, req *conn
 	return c.setBackendReadOnly.CallUnary(ctx, req)
 }
 
+// SetBackendMaintenance calls paladin.admin.v1.BackendService.SetBackendMaintenance.
+func (c *backendServiceClient) SetBackendMaintenance(ctx context.Context, req *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error) {
+	return c.setBackendMaintenance.CallUnary(ctx, req)
+}
+
 // BackendServiceHandler is an implementation of the paladin.admin.v1.BackendService service.
 type BackendServiceHandler interface {
 	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
@@ -235,6 +254,10 @@ type BackendServiceHandler interface {
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
 	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
+	// SetBackendMaintenance raises/clears the operator-set, advisory
+	// maintenance flag (migration 049). Idempotent, OCC-guarded via
+	// resource_version. Advisory — it does not gate operations.
+	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
 }
 
 // NewBackendServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -298,6 +321,12 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 		connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
 		connect.WithHandlerOptions(opts...),
 	)
+	backendServiceSetBackendMaintenanceHandler := connect.NewUnaryHandler(
+		BackendServiceSetBackendMaintenanceProcedure,
+		svc.SetBackendMaintenance,
+		connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.BackendService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BackendServiceCreateBackendProcedure:
@@ -318,6 +347,8 @@ func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.Handler
 			backendServiceSetBackendEnabledHandler.ServeHTTP(w, r)
 		case BackendServiceSetBackendReadOnlyProcedure:
 			backendServiceSetBackendReadOnlyHandler.ServeHTTP(w, r)
+		case BackendServiceSetBackendMaintenanceProcedure:
+			backendServiceSetBackendMaintenanceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -361,4 +392,8 @@ func (UnimplementedBackendServiceHandler) SetBackendEnabled(context.Context, *co
 
 func (UnimplementedBackendServiceHandler) SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendReadOnly is not implemented"))
+}
+
+func (UnimplementedBackendServiceHandler) SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendMaintenance is not implemented"))
 }

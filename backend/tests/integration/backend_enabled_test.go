@@ -193,6 +193,40 @@ func TestBackendHealth_RecordAndSurface(t *testing.T) {
 	}
 }
 
+// TestBackendMaintenance_AdvisoryNotAGate proves the operator-set maintenance
+// flag (migration 049) round-trips via the repo AND is purely advisory: a
+// backend flagged for maintenance still resolves reads AND writes (it is a UI
+// label, not a resolver gate — unlike enabled/read_only).
+func TestBackendMaintenance_AdvisoryNotAGate(t *testing.T) {
+	h := pgharness.Setup(t)
+	repo := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	be := adapters.NewBackendRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	ctx := context.Background()
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "maint-tenant")
+	seedBackend(t, h.PoolMigrate, "maint-be")
+	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "maint-be", "maint-bucket", "docs")
+
+	cur, _ := be.Get(ctx, "maint-be")
+	if cur.Maintenance {
+		t.Fatal("maintenance should default to false")
+	}
+	if err := be.SetMaintenance(ctx, "maint-be", true, cur.ResourceVersion); err != nil {
+		t.Fatalf("set maintenance: %v", err)
+	}
+	got, _ := be.Get(ctx, "maint-be")
+	if !got.Maintenance {
+		t.Error("maintenance flag did not persist")
+	}
+	// Advisory: neither reads nor writes are gated by maintenance.
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+		t.Errorf("read under maintenance should resolve: %v", err)
+	}
+	if _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+		t.Errorf("write under maintenance should resolve (advisory, not a gate): %v", err)
+	}
+}
+
 // TestBackendReadOnly_ResolverGate proves the drain (read-only) split by
 // operation class (migration 047): on an enabled+read_only backend, the
 // resolver refuses MUTATIONS (write=true) with object.ErrBackendReadOnly but

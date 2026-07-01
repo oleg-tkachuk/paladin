@@ -38,6 +38,11 @@ type StorageBackend struct {
 	// writes) are refused, so an operator can migrate data off before fully
 	// disabling. Operator-managed via SetBackendReadOnly; not config-mirrored.
 	ReadOnly bool
+	// Maintenance is the OPERATOR-SET, advisory flag (migration 049): a label
+	// signalling "under maintenance" surfaced in the UI. Unlike enabled /
+	// read_only it does NOT gate operations; unlike Health it's operator-set,
+	// not derived. Operator-managed via SetBackendMaintenance; not config-mirrored.
+	Maintenance bool
 	// Health is the DERIVED, advisory health state (migration 048): the
 	// outcome of the last TestBackend probe. "unknown" | "ok" | "error".
 	// Surfaced in the UI but NOT a gate — the operator decides whether to

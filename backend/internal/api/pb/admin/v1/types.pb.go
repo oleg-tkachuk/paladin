@@ -282,8 +282,13 @@ type StorageBackend struct {
 	HealthStatus    string                 `protobuf:"bytes,20,opt,name=health_status,json=healthStatus,proto3" json:"health_status,omitempty"`
 	HealthMessage   string                 `protobuf:"bytes,21,opt,name=health_message,json=healthMessage,proto3" json:"health_message,omitempty"`
 	HealthCheckedAt *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=health_checked_at,json=healthCheckedAt,proto3" json:"health_checked_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Operator-set, advisory maintenance flag (migration 049): "under
+	// maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
+	// and operator-set (unlike the derived health_*). Managed via
+	// SetBackendMaintenance; NOT mirrored from static config.
+	Maintenance   bool `protobuf:"varint,23,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StorageBackend) Reset() {
@@ -468,6 +473,13 @@ func (x *StorageBackend) GetHealthCheckedAt() *timestamppb.Timestamp {
 		return x.HealthCheckedAt
 	}
 	return nil
+}
+
+func (x *StorageBackend) GetMaintenance() bool {
+	if x != nil {
+		return x.Maintenance
+	}
+	return false
 }
 
 type ServerSideEncryption struct {
@@ -2459,7 +2471,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\xfc\a\n" +
+	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\x9e\b\n" +
 	"\x0eStorageBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2486,7 +2498,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\tread_only\x18\x13 \x01(\bR\breadOnly\x12#\n" +
 	"\rhealth_status\x18\x14 \x01(\tR\fhealthStatus\x12%\n" +
 	"\x0ehealth_message\x18\x15 \x01(\tR\rhealthMessage\x12F\n" +
-	"\x11health_checked_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x0fhealthCheckedAt\"X\n" +
+	"\x11health_checked_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x0fhealthCheckedAt\x12 \n" +
+	"\vmaintenance\x18\x17 \x01(\bR\vmaintenance\"X\n" +
 	"\x14ServerSideEncryption\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xbd\x01\n" +

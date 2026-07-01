@@ -81,12 +81,14 @@ export default function StorageBackendsPage() {
     createBackend,
     setBackendEnabled,
     setBackendReadOnly,
+    setBackendMaintenance,
   } = useBackends();
   const { showNotification } = useNotification();
 
   const [search, setSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [drainingId, setDrainingId] = useState<string | null>(null);
+  const [maintainingId, setMaintainingId] = useState<string | null>(null);
   // Multi-select for bulk actions (client-side fan-out over the per-backend
   // OCC-guarded RPCs — each backend carries its own resource_version).
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -159,8 +161,47 @@ export default function StorageBackendsPage() {
     }
   };
 
+  // handleMaintenance raises/clears the operator-set maintenance flag
+  // (migration 049) — an advisory label, OCC-guarded like enable/drain.
+  const handleMaintenance = async (
+    backendId: string,
+    nextMaintenance: boolean,
+    resourceVersion: string,
+  ) => {
+    try {
+      setMaintainingId(backendId);
+      await setBackendMaintenance(backendId, nextMaintenance, resourceVersion);
+      showNotification({
+        type: "success",
+        title: nextMaintenance
+          ? "Backend flagged for maintenance"
+          : "Maintenance flag cleared",
+        message: backendId,
+      });
+    } catch (err) {
+      showNotification({
+        type: "error",
+        title: "Could not change maintenance flag",
+        message:
+          err instanceof ConnectError
+            ? err.rawMessage
+            : err instanceof Error
+              ? err.message
+              : String(err),
+      });
+    } finally {
+      setMaintainingId(null);
+    }
+  };
+
   // ── bulk actions (multi-select → client-side fan-out) ────────────────────
-  type BulkAction = "enable" | "disable" | "drain" | "undrain";
+  type BulkAction =
+    | "enable"
+    | "disable"
+    | "drain"
+    | "undrain"
+    | "maintenance"
+    | "unmaintenance";
 
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((prev) => {
@@ -189,6 +230,10 @@ export default function StorageBackendsPage() {
         return b.enabled && !b.readOnly;
       case "undrain":
         return b.enabled && b.readOnly;
+      case "maintenance":
+        return !b.maintenance;
+      case "unmaintenance":
+        return b.maintenance;
     }
   };
 
@@ -218,6 +263,10 @@ export default function StorageBackendsPage() {
             return setBackendReadOnly(b.backendId, true, b.resourceVersion);
           case "undrain":
             return setBackendReadOnly(b.backendId, false, b.resourceVersion);
+          case "maintenance":
+            return setBackendMaintenance(b.backendId, true, b.resourceVersion);
+          case "unmaintenance":
+            return setBackendMaintenance(b.backendId, false, b.resourceVersion);
         }
       }),
     );
@@ -413,6 +462,24 @@ export default function StorageBackendsPage() {
             >
               Undrain
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk maintenance"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("maintenance")}
+            >
+              Maintenance
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Bulk clear maintenance"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("unmaintenance")}
+            >
+              Clear maint.
+            </Button>
           </div>
           <Button
             size="sm"
@@ -552,6 +619,11 @@ export default function StorageBackendsPage() {
                             Draining
                           </Badge>
                         )}
+                        {b.maintenance && (
+                          <Badge variant="secondary" className={T.labelTight}>
+                            Maintenance
+                          </Badge>
+                        )}
                         {/* Derived health from the last TestBackend probe
                             (migration 048). Advisory — does not gate ops. */}
                         {b.healthStatus === "error" ? (
@@ -597,6 +669,31 @@ export default function StorageBackendsPage() {
                                 : "Drain"}
                           </Button>
                         )}
+                        {/* Maintenance is advisory + orthogonal — settable on
+                            any backend regardless of enabled/drain state. */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={
+                            b.maintenance
+                              ? `Clear maintenance on ${b.backendId}`
+                              : `Flag ${b.backendId} for maintenance`
+                          }
+                          disabled={maintainingId === b.backendId}
+                          onClick={() =>
+                            void handleMaintenance(
+                              b.backendId,
+                              !b.maintenance,
+                              b.resourceVersion,
+                            )
+                          }
+                        >
+                          {maintainingId === b.backendId
+                            ? "…"
+                            : b.maintenance
+                              ? "Clear maint."
+                              : "Maintain"}
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

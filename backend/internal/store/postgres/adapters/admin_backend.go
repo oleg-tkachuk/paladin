@@ -122,6 +122,7 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 		CedarPolicy:                   row.CedarPolicy,
 		Enabled:                       row.Enabled,
 		ReadOnly:                      row.ReadOnly,
+		Maintenance:                   row.Maintenance,
 		HealthStatus:                  row.HealthStatus,
 		HealthMessage:                 row.HealthMessage,
 		HealthCheckedAt:               timeFrom(row.HealthCheckedAt),
@@ -279,6 +280,23 @@ func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readO
 	rows, err := r.q.SetStorageBackendReadOnly(ctx, readOnly, backendID, expectedVersion)
 	if err != nil {
 		return fmt.Errorf("set backend read_only: %w", err)
+	}
+	if rows == 0 {
+		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
+			return admindomain.ErrNotFound
+		}
+		return admindomain.ErrVersionMismatch
+	}
+	return nil
+}
+
+// SetMaintenance flips the operator-set maintenance flag under OCC
+// (migration 049). Same NotFound / VersionMismatch disambiguation as
+// SetEnabled / SetReadOnly.
+func (r *BackendRepoV2) SetMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) error {
+	rows, err := r.q.SetStorageBackendMaintenance(ctx, maintenance, backendID, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("set backend maintenance: %w", err)
 	}
 	if rows == 0 {
 		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {

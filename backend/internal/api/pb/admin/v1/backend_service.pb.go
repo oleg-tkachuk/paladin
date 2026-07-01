@@ -675,6 +675,66 @@ func (x *SetBackendReadOnlyRequest) GetResourceVersion() string {
 	return ""
 }
 
+type SetBackendMaintenanceRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // "storageBackends/{backend_id}"
+	Maintenance     bool                   `protobuf:"varint,2,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	ResourceVersion string                 `protobuf:"bytes,3,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"` // OCC, required
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetBackendMaintenanceRequest) Reset() {
+	*x = SetBackendMaintenanceRequest{}
+	mi := &file_paladin_admin_v1_backend_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBackendMaintenanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBackendMaintenanceRequest) ProtoMessage() {}
+
+func (x *SetBackendMaintenanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_backend_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBackendMaintenanceRequest.ProtoReflect.Descriptor instead.
+func (*SetBackendMaintenanceRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_backend_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SetBackendMaintenanceRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SetBackendMaintenanceRequest) GetMaintenance() bool {
+	if x != nil {
+		return x.Maintenance
+	}
+	return false
+}
+
+func (x *SetBackendMaintenanceRequest) GetResourceVersion() string {
+	if x != nil {
+		return x.ResourceVersion
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_backend_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
@@ -721,7 +781,11 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x19SetBackendReadOnlyRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1b\n" +
 	"\tread_only\x18\x02 \x01(\bR\breadOnly\x122\n" +
-	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\x9b\x06\n" +
+	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x91\x01\n" +
+	"\x1cSetBackendMaintenanceRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12 \n" +
+	"\vmaintenance\x18\x02 \x01(\bR\vmaintenance\x122\n" +
+	"\x10resource_version\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion2\xfe\x06\n" +
 	"\x0eBackendService\x12Q\n" +
 	"\rCreateBackend\x12\".paladin.admin.v1.CreateBackendRequest\x1a\x1c.paladin.admin.v1.StorageBackend\x12K\n" +
 	"\n" +
@@ -732,7 +796,8 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x11RotateCredentials\x12&.paladin.admin.v1.RotateCredentialsRequest\x1a\x1c.paladin.admin.v1.StorageBackend\x12R\n" +
 	"\vTestBackend\x12 .paladin.admin.v1.TestBackendRequest\x1a!.paladin.admin.v1.TestBackendResponse\x12Y\n" +
 	"\x11SetBackendEnabled\x12&.paladin.admin.v1.SetBackendEnabledRequest\x1a\x1c.paladin.admin.v1.StorageBackend\x12[\n" +
-	"\x12SetBackendReadOnly\x12'.paladin.admin.v1.SetBackendReadOnlyRequest\x1a\x1c.paladin.admin.v1.StorageBackendBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\x12SetBackendReadOnly\x12'.paladin.admin.v1.SetBackendReadOnlyRequest\x1a\x1c.paladin.admin.v1.StorageBackend\x12a\n" +
+	"\x15SetBackendMaintenance\x12*.paladin.admin.v1.SetBackendMaintenanceRequest\x1a\x1c.paladin.admin.v1.StorageBackendBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_backend_service_proto_rawDescOnce sync.Once
@@ -746,32 +811,33 @@ func file_paladin_admin_v1_backend_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_backend_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_backend_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_paladin_admin_v1_backend_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_paladin_admin_v1_backend_service_proto_goTypes = []any{
-	(*CreateBackendRequest)(nil),      // 0: paladin.admin.v1.CreateBackendRequest
-	(*GetBackendRequest)(nil),         // 1: paladin.admin.v1.GetBackendRequest
-	(*UpdateBackendRequest)(nil),      // 2: paladin.admin.v1.UpdateBackendRequest
-	(*DeleteBackendRequest)(nil),      // 3: paladin.admin.v1.DeleteBackendRequest
-	(*DeleteBackendResponse)(nil),     // 4: paladin.admin.v1.DeleteBackendResponse
-	(*ListBackendsRequest)(nil),       // 5: paladin.admin.v1.ListBackendsRequest
-	(*ListBackendsResponse)(nil),      // 6: paladin.admin.v1.ListBackendsResponse
-	(*RotateCredentialsRequest)(nil),  // 7: paladin.admin.v1.RotateCredentialsRequest
-	(*TestBackendRequest)(nil),        // 8: paladin.admin.v1.TestBackendRequest
-	(*TestBackendResponse)(nil),       // 9: paladin.admin.v1.TestBackendResponse
-	(*SetBackendEnabledRequest)(nil),  // 10: paladin.admin.v1.SetBackendEnabledRequest
-	(*SetBackendReadOnlyRequest)(nil), // 11: paladin.admin.v1.SetBackendReadOnlyRequest
-	(*StorageBackend)(nil),            // 12: paladin.admin.v1.StorageBackend
-	(*fieldmaskpb.FieldMask)(nil),     // 13: google.protobuf.FieldMask
-	(*v1.PageRequest)(nil),            // 14: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),           // 15: paladin.common.v1.PageResponse
+	(*CreateBackendRequest)(nil),         // 0: paladin.admin.v1.CreateBackendRequest
+	(*GetBackendRequest)(nil),            // 1: paladin.admin.v1.GetBackendRequest
+	(*UpdateBackendRequest)(nil),         // 2: paladin.admin.v1.UpdateBackendRequest
+	(*DeleteBackendRequest)(nil),         // 3: paladin.admin.v1.DeleteBackendRequest
+	(*DeleteBackendResponse)(nil),        // 4: paladin.admin.v1.DeleteBackendResponse
+	(*ListBackendsRequest)(nil),          // 5: paladin.admin.v1.ListBackendsRequest
+	(*ListBackendsResponse)(nil),         // 6: paladin.admin.v1.ListBackendsResponse
+	(*RotateCredentialsRequest)(nil),     // 7: paladin.admin.v1.RotateCredentialsRequest
+	(*TestBackendRequest)(nil),           // 8: paladin.admin.v1.TestBackendRequest
+	(*TestBackendResponse)(nil),          // 9: paladin.admin.v1.TestBackendResponse
+	(*SetBackendEnabledRequest)(nil),     // 10: paladin.admin.v1.SetBackendEnabledRequest
+	(*SetBackendReadOnlyRequest)(nil),    // 11: paladin.admin.v1.SetBackendReadOnlyRequest
+	(*SetBackendMaintenanceRequest)(nil), // 12: paladin.admin.v1.SetBackendMaintenanceRequest
+	(*StorageBackend)(nil),               // 13: paladin.admin.v1.StorageBackend
+	(*fieldmaskpb.FieldMask)(nil),        // 14: google.protobuf.FieldMask
+	(*v1.PageRequest)(nil),               // 15: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),              // 16: paladin.common.v1.PageResponse
 }
 var file_paladin_admin_v1_backend_service_proto_depIdxs = []int32{
-	12, // 0: paladin.admin.v1.CreateBackendRequest.backend:type_name -> paladin.admin.v1.StorageBackend
-	13, // 1: paladin.admin.v1.UpdateBackendRequest.update_mask:type_name -> google.protobuf.FieldMask
-	12, // 2: paladin.admin.v1.UpdateBackendRequest.backend:type_name -> paladin.admin.v1.StorageBackend
-	14, // 3: paladin.admin.v1.ListBackendsRequest.page:type_name -> paladin.common.v1.PageRequest
-	12, // 4: paladin.admin.v1.ListBackendsResponse.backends:type_name -> paladin.admin.v1.StorageBackend
-	15, // 5: paladin.admin.v1.ListBackendsResponse.page:type_name -> paladin.common.v1.PageResponse
+	13, // 0: paladin.admin.v1.CreateBackendRequest.backend:type_name -> paladin.admin.v1.StorageBackend
+	14, // 1: paladin.admin.v1.UpdateBackendRequest.update_mask:type_name -> google.protobuf.FieldMask
+	13, // 2: paladin.admin.v1.UpdateBackendRequest.backend:type_name -> paladin.admin.v1.StorageBackend
+	15, // 3: paladin.admin.v1.ListBackendsRequest.page:type_name -> paladin.common.v1.PageRequest
+	13, // 4: paladin.admin.v1.ListBackendsResponse.backends:type_name -> paladin.admin.v1.StorageBackend
+	16, // 5: paladin.admin.v1.ListBackendsResponse.page:type_name -> paladin.common.v1.PageResponse
 	0,  // 6: paladin.admin.v1.BackendService.CreateBackend:input_type -> paladin.admin.v1.CreateBackendRequest
 	1,  // 7: paladin.admin.v1.BackendService.GetBackend:input_type -> paladin.admin.v1.GetBackendRequest
 	2,  // 8: paladin.admin.v1.BackendService.UpdateBackend:input_type -> paladin.admin.v1.UpdateBackendRequest
@@ -781,17 +847,19 @@ var file_paladin_admin_v1_backend_service_proto_depIdxs = []int32{
 	8,  // 12: paladin.admin.v1.BackendService.TestBackend:input_type -> paladin.admin.v1.TestBackendRequest
 	10, // 13: paladin.admin.v1.BackendService.SetBackendEnabled:input_type -> paladin.admin.v1.SetBackendEnabledRequest
 	11, // 14: paladin.admin.v1.BackendService.SetBackendReadOnly:input_type -> paladin.admin.v1.SetBackendReadOnlyRequest
-	12, // 15: paladin.admin.v1.BackendService.CreateBackend:output_type -> paladin.admin.v1.StorageBackend
-	12, // 16: paladin.admin.v1.BackendService.GetBackend:output_type -> paladin.admin.v1.StorageBackend
-	12, // 17: paladin.admin.v1.BackendService.UpdateBackend:output_type -> paladin.admin.v1.StorageBackend
-	4,  // 18: paladin.admin.v1.BackendService.DeleteBackend:output_type -> paladin.admin.v1.DeleteBackendResponse
-	6,  // 19: paladin.admin.v1.BackendService.ListBackends:output_type -> paladin.admin.v1.ListBackendsResponse
-	12, // 20: paladin.admin.v1.BackendService.RotateCredentials:output_type -> paladin.admin.v1.StorageBackend
-	9,  // 21: paladin.admin.v1.BackendService.TestBackend:output_type -> paladin.admin.v1.TestBackendResponse
-	12, // 22: paladin.admin.v1.BackendService.SetBackendEnabled:output_type -> paladin.admin.v1.StorageBackend
-	12, // 23: paladin.admin.v1.BackendService.SetBackendReadOnly:output_type -> paladin.admin.v1.StorageBackend
-	15, // [15:24] is the sub-list for method output_type
-	6,  // [6:15] is the sub-list for method input_type
+	12, // 15: paladin.admin.v1.BackendService.SetBackendMaintenance:input_type -> paladin.admin.v1.SetBackendMaintenanceRequest
+	13, // 16: paladin.admin.v1.BackendService.CreateBackend:output_type -> paladin.admin.v1.StorageBackend
+	13, // 17: paladin.admin.v1.BackendService.GetBackend:output_type -> paladin.admin.v1.StorageBackend
+	13, // 18: paladin.admin.v1.BackendService.UpdateBackend:output_type -> paladin.admin.v1.StorageBackend
+	4,  // 19: paladin.admin.v1.BackendService.DeleteBackend:output_type -> paladin.admin.v1.DeleteBackendResponse
+	6,  // 20: paladin.admin.v1.BackendService.ListBackends:output_type -> paladin.admin.v1.ListBackendsResponse
+	13, // 21: paladin.admin.v1.BackendService.RotateCredentials:output_type -> paladin.admin.v1.StorageBackend
+	9,  // 22: paladin.admin.v1.BackendService.TestBackend:output_type -> paladin.admin.v1.TestBackendResponse
+	13, // 23: paladin.admin.v1.BackendService.SetBackendEnabled:output_type -> paladin.admin.v1.StorageBackend
+	13, // 24: paladin.admin.v1.BackendService.SetBackendReadOnly:output_type -> paladin.admin.v1.StorageBackend
+	13, // 25: paladin.admin.v1.BackendService.SetBackendMaintenance:output_type -> paladin.admin.v1.StorageBackend
+	16, // [16:26] is the sub-list for method output_type
+	6,  // [6:16] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -809,7 +877,7 @@ func file_paladin_admin_v1_backend_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_backend_service_proto_rawDesc), len(file_paladin_admin_v1_backend_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

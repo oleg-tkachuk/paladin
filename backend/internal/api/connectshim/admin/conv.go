@@ -76,6 +76,7 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		CedarPolicy:                   b.CedarPolicy,
 		Enabled:                       b.Enabled,
 		ReadOnly:                      b.ReadOnly,
+		Maintenance:                   b.Maintenance,
 		HealthStatus:                  b.HealthStatus,
 		HealthMessage:                 b.HealthMessage,
 		HealthCheckedAt:               tsProto(b.HealthCheckedAt),

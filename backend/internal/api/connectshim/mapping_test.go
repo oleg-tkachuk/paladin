@@ -101,6 +101,9 @@ var skipFields = map[string]map[string]string{
 		"HealthStatus":    "derived from TestBackend probe; not client-settable",
 		"HealthMessage":   "derived from TestBackend probe; not client-settable",
 		"HealthCheckedAt": "derived from TestBackend probe; not client-settable",
+		// Maintenance is set via SetBackendMaintenance (its own RPC), never on
+		// create/update — operator-managed flag on the StorageBackend.
+		"Maintenance": "set via SetBackendMaintenance; not client-settable on create/update",
 	},
 	"UpdateBackend": {
 		"PreviousCredentialsSecretRef":  "set by RotateCredentials; not client-settable",
@@ -108,6 +111,7 @@ var skipFields = map[string]map[string]string{
 		"HealthStatus":                  "derived from TestBackend probe; not client-settable",
 		"HealthMessage":                 "derived from TestBackend probe; not client-settable",
 		"HealthCheckedAt":               "derived from TestBackend probe; not client-settable",
+		"Maintenance":                   "set via SetBackendMaintenance; not client-settable on create/update",
 	},
 	"CreateObjectKey": {
 		// completion_mode is derived from the bucket → backend

@@ -36,6 +36,11 @@ service BackendService {
   // meaningful on an enabled backend: reads keep working, mutations are
   // refused so an operator can migrate data off before disabling.
   rpc SetBackendReadOnly(SetBackendReadOnlyRequest) returns (StorageBackend);
+
+  // SetBackendMaintenance raises/clears the operator-set, advisory
+  // maintenance flag (migration 049). Idempotent, OCC-guarded via
+  // resource_version. Advisory — it does not gate operations.
+  rpc SetBackendMaintenance(SetBackendMaintenanceRequest) returns (StorageBackend);
 }
 
 message CreateBackendRequest {
@@ -99,5 +104,11 @@ message SetBackendEnabledRequest {
 message SetBackendReadOnlyRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
   bool read_only = 2;
+  string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
+}
+
+message SetBackendMaintenanceRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1]; // "storageBackends/{backend_id}"
+  bool maintenance = 2;
   string resource_version = 3 [(buf.validate.field).string.min_len = 1]; // OCC, required
 }

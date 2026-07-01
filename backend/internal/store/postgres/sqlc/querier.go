@@ -422,6 +422,9 @@ type Querier interface {
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
 	// config-mirror must never touch this operator-managed column.
 	SetStorageBackendEnabled(ctx context.Context, enabled bool, iD string, expectedVersion int64) (int64, error)
+	// Flip the operator-set maintenance flag (migration 049). Same OCC +
+	// operator-managed contract as the enable/read-only setters; advisory only.
+	SetStorageBackendMaintenance(ctx context.Context, maintenance bool, iD string, expectedVersion int64) (int64, error)
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, iD string, expectedVersion int64) (int64, error)

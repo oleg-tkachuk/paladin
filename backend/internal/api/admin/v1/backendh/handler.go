@@ -298,6 +298,29 @@ func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, read
 	return &got, nil
 }
 
+// ─── SetBackendMaintenance ───────────────────────────────────────────────────
+
+// SetBackendMaintenance raises/clears the operator-set maintenance flag
+// (migration 049). Same platform-admin + Cedar gate, OCC, and idempotency as
+// SetBackendReadOnly. Advisory only — it does not gate operations, and (like
+// drain) the configured default backend may be flagged.
+func (h *Handler) SetBackendMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
+	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+		return nil, err
+	}
+	if err := h.repo.SetMaintenance(ctx, backendID, maintenance, expectedVersion); err != nil {
+		return nil, apiutil.MapError(err)
+	}
+	got, err := h.repo.Get(ctx, backendID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &got, nil
+}
+
 func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, grace time.Duration) (*admindomain.StorageBackend, error) {
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
