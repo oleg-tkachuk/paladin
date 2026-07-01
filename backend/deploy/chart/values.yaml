@@ -682,7 +682,18 @@ config:
     # both. An empty signing_key surfaces as a startup error rather
     # than a quietly-broken JWT verification path.
     issuer: ""
+    # signing_key is the HMAC key used to both sign and verify every JWT.
+    # Provide it ONE of two ways (mutually exclusive — setting both is a
+    # startup error):
+    #   - signing_key: "<value>"     inline (dev / lab only)
+    #   - signing_key_secret: {...}  resolved from a K8s Secret at boot (prod:
+    #     keep the key in a SealedSecret / ExternalSecret, never in values).
+    #     Add its `name` to rbac.secretReader.secretNames below.
     signing_key: ""
+    # signing_key_secret:
+    #   name: paladin-auth-signing-key
+    #   key: signing_key
+    #   namespace: ""              # "" → pod namespace
     jwks_url: ""
     leeway: 30s
     access_token_ttl: 15m
@@ -896,7 +907,14 @@ config:
     driver: webhook
     webhook:
       addr: ":8100"
+      # HMAC key the publisher signs bodies with. Inline shared_secret for
+      # dev; in prod set shared_secret_ref to resolve it from a (Sealed)Secret
+      # at boot (add its `name` to rbac.secretReader.secretNames). Set only one.
       shared_secret: ""
+      # shared_secret_ref:
+      #   name: paladin-ingest-hmac
+      #   key: secret
+      #   namespace: ""
       signature_header: "X-PALADIN-Signature"
       max_body_bytes: 1048576
     dedup_ttl: 24h
@@ -1052,8 +1070,19 @@ rbac:
     # Secret name (storage.s3CredentialsSecret.existingSecret or .name)
     # to this list at render time — no manual entry needed when the
     # storage block is enabled. See templates/rbac.yaml.
+    #
+    # If you use a SecretRef for the auth signing key
+    # (config.auth.signing_key_secret) or the ingest webhook HMAC
+    # (config.ingest.webhook.shared_secret_ref), add those Secret names here
+    # too — the resolver GETs them via this allowlist, so a missing name
+    # surfaces as a 403 at boot.
     secretNames:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user
       - paladin-admin-key
       - paladin-bootstrap-admin
+      # Default names for the optional signing-key / ingest-HMAC SecretRefs
+      # above. Pre-allowlisted so uncommenting those options "just works";
+      # granting GET on a name that doesn't exist is harmless.
+      - paladin-auth-signing-key
+      - paladin-ingest-hmac

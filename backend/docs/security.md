@@ -30,12 +30,66 @@ Access is controlled via two primary mechanisms:
 
 ## 5. Secret Management
 
-PALADIN integrates with the Kubernetes Secret API to resolve credentials for:
+At boot the `K8sSecretResolver` reads the pod's ServiceAccount token and
+resolves every `*_secret` / `*_ref` field in the config to its plaintext
+value in-memory, then clears the ref. The resolvable references are:
 
-- Postgres Password
-- S3 Access/Secret Keys
-- Admin Tokens
-- SSE KMS Keys
+- `datastores.postgres.password_secret` (runtime role) and
+  `migrate_password_secret` (DDL role)
+- `bootstrap.admin.password_secret`
+- `storage.backends.<name>.auth.{access_key,secret_key,session_token}_secret`
+- `auth.signing_key_secret` — the HMAC key that signs + verifies every JWT
+- `ingest.webhook.shared_secret_ref` — the storage-event webhook HMAC key
+
+Every referenced Secret name must appear in
+`rbac.secretReader.secretNames` (the chart auto-appends the primary-storage
+credential Secret); a missing name surfaces as a **403 at boot**, not a
+silent skip. Out-of-cluster (no SA token) the resolver no-ops and inline
+values are used instead. `signing_key` / `signing_key_secret` (and the
+webhook's inline vs ref) are mutually exclusive — setting both is a startup
+error.
+
+### SealedSecrets (kubeseal) runbook
+
+For prod-class clusters keep no key material inline in Helm values. Seal each
+secret with [Bitnami SealedSecrets](https://github.com/bitnami-labs/sealed-secrets)
+so the encrypted form is safe to commit to git (in `gitops`, alongside the
+ArgoCD ApplicationSet); the controller unseals it into a normal Secret in the
+namespace, which the resolver then reads.
+
+Seal a value with `kubeseal --raw` (scoped to the target namespace + Secret
+name, so it can't be reused elsewhere):
+
+```bash
+# 1. Auth signing key → Secret paladin-auth-signing-key, key `signing_key`
+openssl rand -hex 32 | kubeseal --raw \
+  --namespace paladin --name paladin-auth-signing-key \
+  --scope strict --from-file=/dev/stdin
+# → paste the ciphertext into the SealedSecret's spec.encryptedData.signing_key
+
+# 2. Ingest webhook HMAC → Secret paladin-ingest-hmac, key `secret`
+printf '%s' "$WEBHOOK_HMAC" | kubeseal --raw \
+  --namespace paladin --name paladin-ingest-hmac \
+  --scope strict --from-file=/dev/stdin
+```
+
+Then in the prod overlay point the config at the unsealed Secret and
+allowlist its name (see `values-prod.yaml`):
+
+```yaml
+config:
+  auth:
+    signing_key: ""                 # empty — resolved from the ref below
+    signing_key_secret: { name: paladin-auth-signing-key, key: signing_key }
+rbac:
+  secretReader:
+    secretNames: [ paladin-auth-signing-key, paladin-ingest-hmac ]   # + the base list
+```
+
+The same pattern applies to the Postgres, bootstrap-admin, and storage
+credential Secrets — seal each, reference it by `*_secret`, allowlist the
+name. The SealedSecrets **controller install** and the sealed YAML live in
+`gitops`, not this repo.
 
 ## 6. Bootstrap admin (ArgoCD-style)
 

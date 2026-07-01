@@ -1001,19 +1001,26 @@ open deliberately — each notes why._
 
 ### SealedSecrets for prod-class clusters
 
-- **Status:** Aspirational
-- **Reason:** Minikube uses plain Kubernetes Secrets seeded from
-  the helm values. A prod cluster needs the chart values
-  (`auth.signingKeySecret`, `s3.adminCredentialsSecretRef`, etc.)
-  encrypted-at-rest in git.
-- **Definition of Done:**
-  - SealedSecrets controller installed via gitops.
-  - Chart switches to referencing pre-existing Secrets (already
-    the contract today), and the SealedSecret YAML lives in
-    gitops alongside the ApplicationSet.
-  - Bootstrap docs walk through `kubeseal --raw`.
-- **Blockers:** decision between SealedSecrets vs external-secrets
-  with Vault.
+- **Status:** This-repo half SHIPPED (2026-07-01) — only the gitops
+  controller install + the SealedSecrets-vs-Vault decision remain.
+- **Shipped:** the chart already references pre-existing Secrets (the
+  SealedSecrets contract). Closed the two gaps where a `*_secret` /
+  `*_ref` field existed but the resolver never walked it, so a
+  SealedSecret-backed prod deploy would have booted with an empty value:
+  `K8sSecretResolver` now resolves `auth.signing_key_secret` (the JWT HMAC
+  key) and `ingest.webhook.shared_secret_ref` (the storage-event webhook
+  HMAC). `values.yaml` documents both SecretRef options and pre-allowlists
+  their default names in `rbac.secretReader.secretNames`;
+  `values-prod.yaml` moves the signing key off the inline placeholder onto
+  `signing_key_secret`. `docs/security.md` §5 gained a `kubeseal --raw`
+  runbook (strict-scoped per namespace+name) covering the signing key +
+  webhook HMAC. Resolver tests pin both new resolutions.
+- **Definition of Done (remaining):**
+  - SealedSecrets controller installed via gitops (out of this repo).
+  - The sealed YAML for each secret lives in gitops alongside the
+    ApplicationSet.
+- **Blockers:** decision between SealedSecrets vs external-secrets with
+  Vault — an org call that gates the controller install.
 
 ---
 

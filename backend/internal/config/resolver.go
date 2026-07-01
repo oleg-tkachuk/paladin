@@ -136,6 +136,32 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Bootstrap.Admin.PasswordSecret = nil
 	}
 
+	// Auth signing key — the HMAC key used to both sign and verify every
+	// JWT. Resolving it from a SecretRef lets prod keep the key in a
+	// (Sealed)Secret instead of inline in Helm values; Validate() already
+	// rejects setting both auth.signing_key and auth.signing_key_secret.
+	if cfg.Auth.SigningKeySecret != nil {
+		key, err := r.resolveSecret(ctx, cfg.Auth.SigningKeySecret)
+		if err != nil {
+			return fmt.Errorf("auth.signing_key_secret: %w", err)
+		}
+		cfg.Auth.SigningKey = key
+		cfg.Auth.SigningKeySecret = nil
+	}
+
+	// Ingest webhook HMAC shared secret — the key the storage-event publisher
+	// signs bodies with. SharedSecretRef is a value type, so an empty Name is
+	// "not set" (the inline shared_secret, or dev's empty-passes-check, is used
+	// instead). Resolving it keeps the HMAC key out of inline values too.
+	if cfg.Ingest.Webhook.SharedSecretRef.Name != "" {
+		sec, err := r.resolveSecret(ctx, &cfg.Ingest.Webhook.SharedSecretRef)
+		if err != nil {
+			return fmt.Errorf("ingest.webhook.shared_secret_ref: %w", err)
+		}
+		cfg.Ingest.Webhook.SharedSecret = sec
+		cfg.Ingest.Webhook.SharedSecretRef = SecretRef{}
+	}
+
 	// Per-backend credential secrets.
 	for name, b := range cfg.Storage.Backends {
 		if b.Auth.AccessKeySecret != nil {

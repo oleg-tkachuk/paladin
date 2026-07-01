@@ -67,9 +67,16 @@ config:
     # must equal config.mcp.oauth.authorization_server.issuer exactly, and a
     # trailing slash breaks the /.well-known/ metadata fetch.
     issuer: "https://paladin.example.com"
-    # signing_key MUST come from a SealedSecret / ExternalSecret —
-    # NEVER commit a real signing key here.
-    signing_key: "<prod-signing-key-from-sealed-secret>"
+    # signing_key MUST come from a SealedSecret / ExternalSecret — NEVER
+    # commit a real signing key here. Leave signing_key empty and point
+    # signing_key_secret at the Secret the SealedSecret controller unseals in
+    # this namespace; the resolver reads it at boot. The name below must also
+    # appear in rbac.secretReader.secretNames. See docs/security.md (kubeseal
+    # runbook).
+    signing_key: ""
+    signing_key_secret:
+      name: paladin-auth-signing-key
+      key: signing_key
 
     # OAuth 2.1 Authorization Server (ADR-0009): the /oauth/authorize +
     # /oauth/token + /oauth/register endpoints that mint the bearers the MCP
