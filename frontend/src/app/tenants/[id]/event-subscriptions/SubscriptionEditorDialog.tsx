@@ -29,6 +29,7 @@ import type { EventSubscription } from "@/gen/paladin/admin/v1/types_pb";
 import {
   TEMPLATES,
   SINK_OPTIONS,
+  sinkTypeLabel,
   HTTP_FORMAT_OPTIONS,
   KAFKA_SASL_OPTIONS,
   EMPTY_FORM,
@@ -240,6 +241,28 @@ export function SubscriptionEditorDialog({
                 }}
               />
             </Field>
+
+            {/* When a connector pins a sink type that isn't the obvious
+                same-named one (Redpanda → Kafka), spell out why — so the
+                Kafka fields lighting up under a "Redpanda" connector reads
+                as intended, not a mis-click. */}
+            {(() => {
+              const tpl = TEMPLATES.find((t) => t.id === form.template);
+              if (
+                !tpl?.pinnedSinkType ||
+                tpl.pinnedSinkType !== form.sinkType ||
+                tpl.pinnedSinkType === "http"
+              ) {
+                return null;
+              }
+              return (
+                <p className="text-xs text-muted-foreground">
+                  {tpl.label} speaks the {sinkTypeLabel(tpl.pinnedSinkType)}{" "}
+                  wire protocol — it delivers through the{" "}
+                  {sinkTypeLabel(tpl.pinnedSinkType)} sink, configured below.
+                </p>
+              );
+            })()}
 
             {form.sinkType === "http" && (
               <>

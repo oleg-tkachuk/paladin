@@ -98,6 +98,11 @@ export const SINK_OPTIONS: readonly { id: SinkType; label: string }[] = [
   { id: "rabbitmq", label: "RabbitMQ" },
 ] as const;
 
+/** Display label for a sink type (falls back to the raw id). */
+export function sinkTypeLabel(id: SinkType): string {
+  return SINK_OPTIONS.find((o) => o.id === id)?.label ?? id;
+}
+
 // HTTP sink payload format (HttpSink.format). "cloudevents" (the DEFAULT) wraps
 // the event in the CloudEvents 1.0 envelope like every broker sink; "raw" is the
 // legacy bare Event JSON, kept for subscribers that predate the default flip.
