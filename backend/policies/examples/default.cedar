@@ -142,6 +142,21 @@ permit (
     principal.roles.contains("policy.author")
 };
 
+// ─── Tenant record ──────────────────────────────────────────────────────────
+// Any member may read their own tenant's metadata (the UI resolves the
+// display name / slug for every signed-in user). Cross-tenant reads are
+// additionally platform-admin-gated in the handler; ManageTenant is
+// deliberately not granted here (tenant lifecycle is a platform concern).
+
+permit (
+    principal,
+    action == Action::"ReadTenant",
+    resource
+) when {
+    principal.roles.contains("platform.admin") ||
+    principal.tenant_id == resource.tenant_id
+};
+
 // ─── Async operations ──────────────────────────────────────────────────────
 
 permit (

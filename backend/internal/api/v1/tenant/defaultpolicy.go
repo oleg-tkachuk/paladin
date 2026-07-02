@@ -159,6 +159,22 @@ permit (
     principal.roles.contains("policy.author")
 };
 
+// The tenant record itself — any member may read their own tenant's
+// metadata (the UI resolves display name / slug for every signed-in
+// user, so this is a member-level need, not an admin one). Cross-tenant
+// reads are additionally platform-admin-gated in the handler before
+// Cedar runs. Tenant lifecycle (ManageTenant) is deliberately NOT
+// granted here — creating/renaming/deleting tenants stays a platform
+// concern.
+permit (
+    principal,
+    action == Action::"ReadTenant",
+    resource
+) when {
+    principal.roles.contains("platform.admin") ||
+    principal.tenant_id == resource.tenant_id
+};
+
 // Async operations — any tenant member sees / cancels operations they
 // (or someone in their tenant) spawned. Cross-tenant Read/Cancel for
 // platform-admin runs through the same permit, gated by tenant_id.
