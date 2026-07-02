@@ -36,3 +36,32 @@ func (s *SystemServer) GetConfig(ctx context.Context, _ *connect.Request[pb.GetC
 		SourcePath: sourcePath,
 	}), nil
 }
+
+func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *connect.Request[pb.GetDispatcherStatsRequest]) (*connect.Response[pb.GetDispatcherStatsResponse], error) {
+	if s.H == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+	}
+	stats, available, err := s.H.DispatcherStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.GetDispatcherStatsResponse{Available: available}
+	if stats != nil {
+		out.Pending = stats.Pending
+		out.Failed = stats.Failed
+		out.OldestPendingSeconds = stats.OldestPendingSeconds
+		out.Subscriptions = make([]*pb.SubscriptionDeliveryStat, len(stats.Subscriptions))
+		for i, sub := range stats.Subscriptions {
+			out.Subscriptions[i] = &pb.SubscriptionDeliveryStat{
+				SubscriptionId: sub.SubscriptionID,
+				TenantId:       sub.TenantID,
+				Pending:        sub.Pending,
+				Failed:         sub.Failed,
+				LastError:      sub.LastError,
+				LastStatusCode: sub.LastStatusCode,
+				LastAttemptAt:  sub.LastAttemptAt,
+			}
+		}
+	}
+	return connect.NewResponse(out), nil
+}

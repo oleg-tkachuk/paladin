@@ -264,6 +264,23 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPoo
 		r2.URL.Path = "/livez"
 		mux.ServeHTTP(w, r2)
 	})
+	// Operator view: global queue depth + per-subscription stuck-work
+	// breakdown. Computed HERE (not in the admin pod) because the
+	// dispatcher's pool is the BYPASSRLS one — event_deliveries is RLS'd
+	// per tenant and this view is deliberately cross-tenant. The admin
+	// plane's SystemService.GetDispatcherStats proxies this endpoint after
+	// its own platform-admin gate; the ops listener itself is cluster-
+	// internal only (same trust posture as /system/health.json).
+	mux.HandleFunc("GET /system/dispatcher-stats.json", func(w http.ResponseWriter, r *http.Request) {
+		stats, err := runner.DeliveryStats(r.Context())
+		if err != nil {
+			l.Warn("dispatcher stats failed", zap.Error(err))
+			http.Error(w, "stats unavailable", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(stats)
+	})
 	return mux, healthH
 }
 

@@ -710,3 +710,79 @@ func (r *OutboxRunner) PendingCount(ctx context.Context) (int64, error) {
 	}
 	return n, nil
 }
+
+// DeliveryStats is the dispatcher's operator view: global queue depth plus a
+// per-subscription breakdown of what's stuck and why. Served by the pod's
+// ops listener (/system/dispatcher-stats.json) and proxied to the console by
+// admin SystemService.GetDispatcherStats — the dispatcher pod computes it
+// because its pool is the BYPASSRLS one (event_deliveries is RLS'd per
+// tenant, and this view is deliberately cross-tenant / operator-only).
+type DeliveryStats struct {
+	Pending int64 `json:"pending"`
+	Failed  int64 `json:"failed"`
+	// OldestPendingSeconds is the age of the oldest still-pending row — the
+	// single best "is the loop keeping up" number. 0 when nothing is pending.
+	OldestPendingSeconds int64                   `json:"oldest_pending_seconds"`
+	Subscriptions        []SubscriptionDelivStat `json:"subscriptions"`
+}
+
+// SubscriptionDelivStat aggregates one subscription's undelivered work. Only
+// subscriptions with pending or failed rows appear — a healthy subscription
+// has nothing to report.
+type SubscriptionDelivStat struct {
+	SubscriptionID string `json:"subscription_id"`
+	TenantID       string `json:"tenant_id"`
+	Pending        int64  `json:"pending"`
+	Failed         int64  `json:"failed"`
+	// LastError / LastStatusCode / LastAttemptAt come from the row with the
+	// most recent attempt, so the operator sees the CURRENT failure reason.
+	LastError      string `json:"last_error,omitempty"`
+	LastStatusCode int32  `json:"last_status_code,omitempty"`
+	LastAttemptAt  string `json:"last_attempt_at,omitempty"` // RFC3339; "" = never attempted
+}
+
+// deliveryStatsMaxSubscriptions caps the per-subscription breakdown so one
+// pathological tenant can't balloon the ops payload; worst offenders (most
+// failed, then most pending) sort first, so the cap trims the healthy tail.
+const deliveryStatsMaxSubscriptions = 100
+
+// DeliveryStats computes the operator view in two cheap aggregate queries.
+func (r *OutboxRunner) DeliveryStats(ctx context.Context) (*DeliveryStats, error) {
+	out := &DeliveryStats{Subscriptions: []SubscriptionDelivStat{}}
+	err := r.Pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE status = 'pending'),
+		       count(*) FILTER (WHERE status = 'failed'),
+		       COALESCE(EXTRACT(EPOCH FROM now() - min(created_at) FILTER (WHERE status = 'pending'))::bigint, 0)
+		FROM event_deliveries`,
+	).Scan(&out.Pending, &out.Failed, &out.OldestPendingSeconds)
+	if err != nil {
+		return nil, fmt.Errorf("delivery stats: totals: %w", err)
+	}
+
+	rows, err := r.Pool.Query(ctx, `
+		SELECT subscription_id::text, tenant_id::text,
+		       count(*) FILTER (WHERE status = 'pending'),
+		       count(*) FILTER (WHERE status = 'failed'),
+		       COALESCE((array_agg(last_error       ORDER BY last_attempt_at DESC NULLS LAST))[1], ''),
+		       COALESCE((array_agg(last_status_code ORDER BY last_attempt_at DESC NULLS LAST))[1], 0),
+		       COALESCE(to_char(max(last_attempt_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
+		FROM event_deliveries
+		GROUP BY subscription_id, tenant_id
+		HAVING count(*) FILTER (WHERE status IN ('pending', 'failed')) > 0
+		ORDER BY count(*) FILTER (WHERE status = 'failed') DESC,
+		         count(*) FILTER (WHERE status = 'pending') DESC
+		LIMIT $1`, deliveryStatsMaxSubscriptions)
+	if err != nil {
+		return nil, fmt.Errorf("delivery stats: per-subscription: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var s SubscriptionDelivStat
+		if err := rows.Scan(&s.SubscriptionID, &s.TenantID, &s.Pending, &s.Failed,
+			&s.LastError, &s.LastStatusCode, &s.LastAttemptAt); err != nil {
+			return nil, fmt.Errorf("delivery stats: scan: %w", err)
+		}
+		out.Subscriptions = append(out.Subscriptions, s)
+	}
+	return out, rows.Err()
+}

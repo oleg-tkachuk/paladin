@@ -486,7 +486,13 @@ type Dispatcher struct {
 	// Ops is the dispatcher pod's HTTP listener for /healthz +
 	// /readyz + /system/health.json. Defaults to :8099 — same shape
 	// as the worker's ops listener but a different role tag.
-	Ops                HTTPServer    `yaml:"ops" json:"ops"`
+	Ops HTTPServer `yaml:"ops" json:"ops"`
+	// OpsURL is where OTHER pods reach that ops listener — the admin
+	// plane's SystemService.GetDispatcherStats proxies
+	// <ops_url>/system/dispatcher-stats.json from it. Cluster-internal
+	// Service URL (e.g. "http://paladin-dispatcher:8099");
+	// empty disables the proxy (the RPC reports available=false).
+	OpsURL             string        `yaml:"ops_url" json:"ops_url"`
 	PollInterval       time.Duration `yaml:"poll_interval" json:"poll_interval"`
 	BatchSize          int           `yaml:"batch_size" json:"batch_size"`
 	BaseBackoff        time.Duration `yaml:"base_backoff" json:"base_backoff"`

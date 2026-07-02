@@ -140,28 +140,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Role split: `event-dispatcher` — observability follow-up only
-
-- **Status:** Core split SHIPPED — only a minor ops-view remains.
-- **Shipped:** the async webhook/broker delivery loop runs in its own
-  `serve dispatcher` pod (`cmd/server/serve_dispatcher.go`): an
-  `OutboxRunner` drains `event_deliveries` via `FOR UPDATE SKIP LOCKED`
-  (multi-replica safe), retries with backoff, and POSTs to the sinks.
-  The admin pod is a pure producer — handlers `Dispatch()` one
-  `event_deliveries` row per matching subscription and return with no
-  egress I/O; admin keeps in-process sink pools ONLY for the synchronous
-  `TestSubscription` RPC (see `build_listeners_admin.go`). Helm ships a
-  dedicated `dispatcher` Deployment + ServiceAccount + Service (ops
-  listener :8099 with health). So a flaky customer endpoint can no longer
-  starve admin, and dispatchers scale independently.
-- **Definition of Done (remaining):**
-  - `MCPInspectService` gains a "dispatcher" component view (delivery
-    queue depth, last error per subscription) for at-a-glance ops.
-  - Per-role NetworkPolicy for the dispatcher (egress any:443 + Postgres,
-    ingress kube-proxy only) — tracked under *NetworkPolicies per role*.
-- **Trigger to do:** when an operator needs delivery-queue visibility
-  beyond logs/metrics, or when the NetworkPolicy item lands.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational

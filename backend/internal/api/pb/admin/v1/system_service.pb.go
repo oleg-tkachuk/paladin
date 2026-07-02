@@ -115,6 +115,220 @@ func (x *GetConfigResponse) GetSourcePath() string {
 	return ""
 }
 
+type GetDispatcherStatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDispatcherStatsRequest) Reset() {
+	*x = GetDispatcherStatsRequest{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDispatcherStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDispatcherStatsRequest) ProtoMessage() {}
+
+func (x *GetDispatcherStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDispatcherStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetDispatcherStatsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{2}
+}
+
+type GetDispatcherStatsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// available=false means the dispatcher ops endpoint is unconfigured or
+	// unreachable; every other field is zero/empty in that case.
+	Available bool `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	// Global queue depth across all tenants.
+	Pending int64 `protobuf:"varint,2,opt,name=pending,proto3" json:"pending,omitempty"`
+	Failed  int64 `protobuf:"varint,3,opt,name=failed,proto3" json:"failed,omitempty"`
+	// Age of the oldest still-pending delivery — the "is the loop keeping up"
+	// number. 0 when nothing is pending.
+	OldestPendingSeconds int64 `protobuf:"varint,4,opt,name=oldest_pending_seconds,json=oldestPendingSeconds,proto3" json:"oldest_pending_seconds,omitempty"`
+	// Per-subscription stuck work, worst offenders first (most failed, then
+	// most pending). Capped server-side; healthy subscriptions are absent.
+	Subscriptions []*SubscriptionDeliveryStat `protobuf:"bytes,5,rep,name=subscriptions,proto3" json:"subscriptions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDispatcherStatsResponse) Reset() {
+	*x = GetDispatcherStatsResponse{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDispatcherStatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDispatcherStatsResponse) ProtoMessage() {}
+
+func (x *GetDispatcherStatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDispatcherStatsResponse.ProtoReflect.Descriptor instead.
+func (*GetDispatcherStatsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetDispatcherStatsResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *GetDispatcherStatsResponse) GetPending() int64 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *GetDispatcherStatsResponse) GetFailed() int64 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *GetDispatcherStatsResponse) GetOldestPendingSeconds() int64 {
+	if x != nil {
+		return x.OldestPendingSeconds
+	}
+	return 0
+}
+
+func (x *GetDispatcherStatsResponse) GetSubscriptions() []*SubscriptionDeliveryStat {
+	if x != nil {
+		return x.Subscriptions
+	}
+	return nil
+}
+
+type SubscriptionDeliveryStat struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SubscriptionId string                 `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	TenantId       string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Pending        int64                  `protobuf:"varint,3,opt,name=pending,proto3" json:"pending,omitempty"`
+	Failed         int64                  `protobuf:"varint,4,opt,name=failed,proto3" json:"failed,omitempty"`
+	// Latest attempt's failure detail — empty when the rows were never
+	// attempted yet.
+	LastError      string `protobuf:"bytes,5,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	LastStatusCode int32  `protobuf:"varint,6,opt,name=last_status_code,json=lastStatusCode,proto3" json:"last_status_code,omitempty"`
+	// RFC3339 UTC; empty = never attempted.
+	LastAttemptAt string `protobuf:"bytes,7,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscriptionDeliveryStat) Reset() {
+	*x = SubscriptionDeliveryStat{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscriptionDeliveryStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscriptionDeliveryStat) ProtoMessage() {}
+
+func (x *SubscriptionDeliveryStat) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscriptionDeliveryStat.ProtoReflect.Descriptor instead.
+func (*SubscriptionDeliveryStat) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SubscriptionDeliveryStat) GetSubscriptionId() string {
+	if x != nil {
+		return x.SubscriptionId
+	}
+	return ""
+}
+
+func (x *SubscriptionDeliveryStat) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *SubscriptionDeliveryStat) GetPending() int64 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *SubscriptionDeliveryStat) GetFailed() int64 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *SubscriptionDeliveryStat) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *SubscriptionDeliveryStat) GetLastStatusCode() int32 {
+	if x != nil {
+		return x.LastStatusCode
+	}
+	return 0
+}
+
+func (x *SubscriptionDeliveryStat) GetLastAttemptAt() string {
+	if x != nil {
+		return x.LastAttemptAt
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
@@ -124,9 +338,26 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\x11GetConfigResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1f\n" +
 	"\vsource_path\x18\x02 \x01(\tR\n" +
-	"sourcePath2]\n" +
+	"sourcePath\"\x1b\n" +
+	"\x19GetDispatcherStatsRequest\"\xf0\x01\n" +
+	"\x1aGetDispatcherStatsResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +
+	"\apending\x18\x02 \x01(\x03R\apending\x12\x16\n" +
+	"\x06failed\x18\x03 \x01(\x03R\x06failed\x124\n" +
+	"\x16oldest_pending_seconds\x18\x04 \x01(\x03R\x14oldestPendingSeconds\x12L\n" +
+	"\rsubscriptions\x18\x05 \x03(\v2&.paladin.admin.v1.SubscriptionDeliveryStatR\rsubscriptions\"\x83\x02\n" +
+	"\x18SubscriptionDeliveryStat\x12'\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x18\n" +
+	"\apending\x18\x03 \x01(\x03R\apending\x12\x16\n" +
+	"\x06failed\x18\x04 \x01(\x03R\x06failed\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x05 \x01(\tR\tlastError\x12(\n" +
+	"\x10last_status_code\x18\x06 \x01(\x05R\x0elastStatusCode\x12&\n" +
+	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt2\xc6\x01\n" +
 	"\rSystemService\x12L\n" +
-	"\tGetConfig\x12\x1e.paladin.admin.v1.GetConfigRequest\x1a\x1f.paladin.admin.v1.GetConfigResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
+	"\tGetConfig\x12\x1e.paladin.admin.v1.GetConfigRequest\x1a\x1f.paladin.admin.v1.GetConfigResponse\x12g\n" +
+	"\x12GetDispatcherStats\x12'.paladin.admin.v1.GetDispatcherStatsRequest\x1a(.paladin.admin.v1.GetDispatcherStatsResponseBRZPgithub.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_system_service_proto_rawDescOnce sync.Once
@@ -140,19 +371,25 @@ func file_paladin_admin_v1_system_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_system_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_paladin_admin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_paladin_admin_v1_system_service_proto_goTypes = []any{
-	(*GetConfigRequest)(nil),  // 0: paladin.admin.v1.GetConfigRequest
-	(*GetConfigResponse)(nil), // 1: paladin.admin.v1.GetConfigResponse
+	(*GetConfigRequest)(nil),           // 0: paladin.admin.v1.GetConfigRequest
+	(*GetConfigResponse)(nil),          // 1: paladin.admin.v1.GetConfigResponse
+	(*GetDispatcherStatsRequest)(nil),  // 2: paladin.admin.v1.GetDispatcherStatsRequest
+	(*GetDispatcherStatsResponse)(nil), // 3: paladin.admin.v1.GetDispatcherStatsResponse
+	(*SubscriptionDeliveryStat)(nil),   // 4: paladin.admin.v1.SubscriptionDeliveryStat
 }
 var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
-	0, // 0: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
-	1, // 1: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4, // 0: paladin.admin.v1.GetDispatcherStatsResponse.subscriptions:type_name -> paladin.admin.v1.SubscriptionDeliveryStat
+	0, // 1: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
+	2, // 2: paladin.admin.v1.SystemService.GetDispatcherStats:input_type -> paladin.admin.v1.GetDispatcherStatsRequest
+	1, // 3: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
+	3, // 4: paladin.admin.v1.SystemService.GetDispatcherStats:output_type -> paladin.admin.v1.GetDispatcherStatsResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_system_service_proto_init() }
@@ -166,7 +403,7 @@ func file_paladin_admin_v1_system_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_system_service_proto_rawDesc), len(file_paladin_admin_v1_system_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

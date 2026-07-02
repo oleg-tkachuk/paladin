@@ -788,6 +788,12 @@ config:
   dispatcher:
     ops:
       addr: "0.0.0.0:8099"
+    # Where the ADMIN pod reaches the dispatcher's ops listener —
+    # SystemService.GetDispatcherStats proxies
+    # <ops_url>/system/dispatcher-stats.json (the dispatcher computes the
+    # cross-tenant queue view; its pool is the BYPASSRLS one). Matches the
+    # chart's dispatcher Service name; empty disables the proxy.
+    ops_url: "http://paladin-dispatcher:8099"
     poll_interval: 1s
     batch_size: 50
     base_backoff: 5s

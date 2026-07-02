@@ -11,14 +11,23 @@ option go_package = "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1;pa
 // platform.admin role so we can ship the running config without
 // leaking shape to regular tenants.
 //
-// Today only GetConfig lives here; future surfaces (per-replica
-// runtime stats, feature-flag dump, queue depths) will join.
 service SystemService {
   // GetConfig returns the running control-plane configuration as a
   // single YAML blob with all secrets replaced by "***". The shape
   // matches the on-disk config.yaml exactly so an operator can diff
   // what's loaded against what's checked in. Cheap; no DB touch.
   rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+
+  // GetDispatcherStats returns the event dispatcher's operator view:
+  // global delivery-queue depth plus a per-subscription breakdown of
+  // stuck work (pending/failed counts + the latest error). The admin
+  // plane PROXIES the dispatcher pod's ops endpoint — the stats are
+  // computed there because event_deliveries is RLS'd per tenant and
+  // only the dispatcher's BYPASSRLS pool sees the cross-tenant whole.
+  // Empty/zeroed response with `available=false` when the dispatcher
+  // ops endpoint is unconfigured or unreachable — the console renders
+  // "stats unavailable" rather than erroring.
+  rpc GetDispatcherStats(GetDispatcherStatsRequest) returns (GetDispatcherStatsResponse);
 }
 
 message GetConfigRequest {}
@@ -31,4 +40,34 @@ message GetConfigResponse {
   // ("/app/configs/config.yaml" in production, "—" otherwise). Helps
   // the UI label the panel.
   string source_path = 2;
+}
+
+message GetDispatcherStatsRequest {}
+
+message GetDispatcherStatsResponse {
+  // available=false means the dispatcher ops endpoint is unconfigured or
+  // unreachable; every other field is zero/empty in that case.
+  bool available = 1;
+  // Global queue depth across all tenants.
+  int64 pending = 2;
+  int64 failed = 3;
+  // Age of the oldest still-pending delivery — the "is the loop keeping up"
+  // number. 0 when nothing is pending.
+  int64 oldest_pending_seconds = 4;
+  // Per-subscription stuck work, worst offenders first (most failed, then
+  // most pending). Capped server-side; healthy subscriptions are absent.
+  repeated SubscriptionDeliveryStat subscriptions = 5;
+}
+
+message SubscriptionDeliveryStat {
+  string subscription_id = 1;
+  string tenant_id = 2;
+  int64 pending = 3;
+  int64 failed = 4;
+  // Latest attempt's failure detail — empty when the rows were never
+  // attempted yet.
+  string last_error = 5;
+  int32 last_status_code = 6;
+  // RFC3339 UTC; empty = never attempted.
+  string last_attempt_at = 7;
 }

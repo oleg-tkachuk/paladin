@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_system_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkyXQoNU3lzdGVtU2VydmljZRJMCglHZXRDb25maWcSHi5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVxdWVzdBofLm9jcC5hZG1pbi52MS5HZXRDb25maWdSZXNwb25zZUJSWlBnaXRodWIuY29tL29sZWctdGthY2h1ay9vYmplY3QtY29udHJvbC1wbGFuZS9pbnRlcm5hbC9hcGkvcGIvYWRtaW4vdjE7b2NwYWRtaW52MWIGcHJvdG8z",
+    "CiFvY3AvYWRtaW4vdjEvc3lzdGVtX3NlcnZpY2UucHJvdG8SDG9jcC5hZG1pbi52MSISChBHZXRDb25maWdSZXF1ZXN0IjYKEUdldENvbmZpZ1Jlc3BvbnNlEgwKBHlhbWwYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkiGwoZR2V0RGlzcGF0Y2hlclN0YXRzUmVxdWVzdCKvAQoaR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEg8KB3BlbmRpbmcYAiABKAMSDgoGZmFpbGVkGAMgASgDEh4KFm9sZGVzdF9wZW5kaW5nX3NlY29uZHMYBCABKAMSPQoNc3Vic2NyaXB0aW9ucxgFIAMoCzImLm9jcC5hZG1pbi52MS5TdWJzY3JpcHRpb25EZWxpdmVyeVN0YXQirgEKGFN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdBIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEg8KB3BlbmRpbmcYAyABKAMSDgoGZmFpbGVkGAQgASgDEhIKCmxhc3RfZXJyb3IYBSABKAkSGAoQbGFzdF9zdGF0dXNfY29kZRgGIAEoBRIXCg9sYXN0X2F0dGVtcHRfYXQYByABKAkyxgEKDVN5c3RlbVNlcnZpY2USTAoJR2V0Q29uZmlnEh4ub2NwLmFkbWluLnYxLkdldENvbmZpZ1JlcXVlc3QaHy5vY3AuYWRtaW4udjEuR2V0Q29uZmlnUmVzcG9uc2USZwoSR2V0RGlzcGF0Y2hlclN0YXRzEicub2NwLmFkbWluLnYxLkdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QaKC5vY3AuYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2VCUlpQZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvb2JqZWN0LWNvbnRyb2wtcGxhbmUvaW50ZXJuYWwvYXBpL3BiL2FkbWluL3YxO29jcGFkbWludjFiBnByb3RvMw",
   );
 
 /**
@@ -67,6 +67,124 @@ export const GetConfigResponseSchema: GenMessage<GetConfigResponse> =
   messageDesc(file_paladin_admin_v1_system_service, 1);
 
 /**
+ * @generated from message paladin.admin.v1.GetDispatcherStatsRequest
+ */
+export type GetDispatcherStatsRequest =
+  Message<"paladin.admin.v1.GetDispatcherStatsRequest"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.GetDispatcherStatsRequest.
+ * Use `create(GetDispatcherStatsRequestSchema)` to create a new message.
+ */
+export const GetDispatcherStatsRequestSchema: GenMessage<GetDispatcherStatsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 2);
+
+/**
+ * @generated from message paladin.admin.v1.GetDispatcherStatsResponse
+ */
+export type GetDispatcherStatsResponse =
+  Message<"paladin.admin.v1.GetDispatcherStatsResponse"> & {
+    /**
+     * available=false means the dispatcher ops endpoint is unconfigured or
+     * unreachable; every other field is zero/empty in that case.
+     *
+     * @generated from field: bool available = 1;
+     */
+    available: boolean;
+
+    /**
+     * Global queue depth across all tenants.
+     *
+     * @generated from field: int64 pending = 2;
+     */
+    pending: bigint;
+
+    /**
+     * @generated from field: int64 failed = 3;
+     */
+    failed: bigint;
+
+    /**
+     * Age of the oldest still-pending delivery — the "is the loop keeping up"
+     * number. 0 when nothing is pending.
+     *
+     * @generated from field: int64 oldest_pending_seconds = 4;
+     */
+    oldestPendingSeconds: bigint;
+
+    /**
+     * Per-subscription stuck work, worst offenders first (most failed, then
+     * most pending). Capped server-side; healthy subscriptions are absent.
+     *
+     * @generated from field: repeated paladin.admin.v1.SubscriptionDeliveryStat subscriptions = 5;
+     */
+    subscriptions: SubscriptionDeliveryStat[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GetDispatcherStatsResponse.
+ * Use `create(GetDispatcherStatsResponseSchema)` to create a new message.
+ */
+export const GetDispatcherStatsResponseSchema: GenMessage<GetDispatcherStatsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 3);
+
+/**
+ * @generated from message paladin.admin.v1.SubscriptionDeliveryStat
+ */
+export type SubscriptionDeliveryStat =
+  Message<"paladin.admin.v1.SubscriptionDeliveryStat"> & {
+    /**
+     * @generated from field: string subscription_id = 1;
+     */
+    subscriptionId: string;
+
+    /**
+     * @generated from field: string tenant_id = 2;
+     */
+    tenantId: string;
+
+    /**
+     * @generated from field: int64 pending = 3;
+     */
+    pending: bigint;
+
+    /**
+     * @generated from field: int64 failed = 4;
+     */
+    failed: bigint;
+
+    /**
+     * Latest attempt's failure detail — empty when the rows were never
+     * attempted yet.
+     *
+     * @generated from field: string last_error = 5;
+     */
+    lastError: string;
+
+    /**
+     * @generated from field: int32 last_status_code = 6;
+     */
+    lastStatusCode: number;
+
+    /**
+     * RFC3339 UTC; empty = never attempted.
+     *
+     * @generated from field: string last_attempt_at = 7;
+     */
+    lastAttemptAt: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.SubscriptionDeliveryStat.
+ * Use `create(SubscriptionDeliveryStatSchema)` to create a new message.
+ */
+export const SubscriptionDeliveryStatSchema: GenMessage<SubscriptionDeliveryStat> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 4);
+
+/**
  * SystemService on the admin plane exposes operator-only diagnostics
  * that contain redacted-but-sensitive configuration. Distinct from
  * paladin.iam.v1.SystemService (which is open to any authenticated user
@@ -74,8 +192,6 @@ export const GetConfigResponseSchema: GenMessage<GetConfigResponse> =
  * platform.admin role so we can ship the running config without
  * leaking shape to regular tenants.
  *
- * Today only GetConfig lives here; future surfaces (per-replica
- * runtime stats, feature-flag dump, queue depths) will join.
  *
  * @generated from service paladin.admin.v1.SystemService
  */
@@ -92,5 +208,23 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetConfigRequestSchema;
     output: typeof GetConfigResponseSchema;
+  };
+  /**
+   * GetDispatcherStats returns the event dispatcher's operator view:
+   * global delivery-queue depth plus a per-subscription breakdown of
+   * stuck work (pending/failed counts + the latest error). The admin
+   * plane PROXIES the dispatcher pod's ops endpoint — the stats are
+   * computed there because event_deliveries is RLS'd per tenant and
+   * only the dispatcher's BYPASSRLS pool sees the cross-tenant whole.
+   * Empty/zeroed response with `available=false` when the dispatcher
+   * ops endpoint is unconfigured or unreachable — the console renders
+   * "stats unavailable" rather than erroring.
+   *
+   * @generated from rpc paladin.admin.v1.SystemService.GetDispatcherStats
+   */
+  getDispatcherStats: {
+    methodKind: "unary";
+    input: typeof GetDispatcherStatsRequestSchema;
+    output: typeof GetDispatcherStatsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_system_service, 0);

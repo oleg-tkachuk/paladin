@@ -36,6 +36,9 @@ const (
 const (
 	// SystemServiceGetConfigProcedure is the fully-qualified name of the SystemService's GetConfig RPC.
 	SystemServiceGetConfigProcedure = "/paladin.admin.v1.SystemService/GetConfig"
+	// SystemServiceGetDispatcherStatsProcedure is the fully-qualified name of the SystemService's
+	// GetDispatcherStats RPC.
+	SystemServiceGetDispatcherStatsProcedure = "/paladin.admin.v1.SystemService/GetDispatcherStats"
 )
 
 // SystemServiceClient is a client for the paladin.admin.v1.SystemService service.
@@ -45,6 +48,16 @@ type SystemServiceClient interface {
 	// matches the on-disk config.yaml exactly so an operator can diff
 	// what's loaded against what's checked in. Cheap; no DB touch.
 	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
+	// GetDispatcherStats returns the event dispatcher's operator view:
+	// global delivery-queue depth plus a per-subscription breakdown of
+	// stuck work (pending/failed counts + the latest error). The admin
+	// plane PROXIES the dispatcher pod's ops endpoint — the stats are
+	// computed there because event_deliveries is RLS'd per tenant and
+	// only the dispatcher's BYPASSRLS pool sees the cross-tenant whole.
+	// Empty/zeroed response with `available=false` when the dispatcher
+	// ops endpoint is unconfigured or unreachable — the console renders
+	// "stats unavailable" rather than erroring.
+	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service. By
@@ -64,17 +77,29 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
 			connect.WithClientOptions(opts...),
 		),
+		getDispatcherStats: connect.NewClient[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse](
+			httpClient,
+			baseURL+SystemServiceGetDispatcherStatsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	getConfig *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
+	getConfig          *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
+	getDispatcherStats *connect.Client[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse]
 }
 
 // GetConfig calls paladin.admin.v1.SystemService.GetConfig.
 func (c *systemServiceClient) GetConfig(ctx context.Context, req *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
 	return c.getConfig.CallUnary(ctx, req)
+}
+
+// GetDispatcherStats calls paladin.admin.v1.SystemService.GetDispatcherStats.
+func (c *systemServiceClient) GetDispatcherStats(ctx context.Context, req *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
+	return c.getDispatcherStats.CallUnary(ctx, req)
 }
 
 // SystemServiceHandler is an implementation of the paladin.admin.v1.SystemService service.
@@ -84,6 +109,16 @@ type SystemServiceHandler interface {
 	// matches the on-disk config.yaml exactly so an operator can diff
 	// what's loaded against what's checked in. Cheap; no DB touch.
 	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
+	// GetDispatcherStats returns the event dispatcher's operator view:
+	// global delivery-queue depth plus a per-subscription breakdown of
+	// stuck work (pending/failed counts + the latest error). The admin
+	// plane PROXIES the dispatcher pod's ops endpoint — the stats are
+	// computed there because event_deliveries is RLS'd per tenant and
+	// only the dispatcher's BYPASSRLS pool sees the cross-tenant whole.
+	// Empty/zeroed response with `available=false` when the dispatcher
+	// ops endpoint is unconfigured or unreachable — the console renders
+	// "stats unavailable" rather than erroring.
+	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -99,10 +134,18 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceGetDispatcherStatsHandler := connect.NewUnaryHandler(
+		SystemServiceGetDispatcherStatsProcedure,
+		svc.GetDispatcherStats,
+		connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServiceGetConfigProcedure:
 			systemServiceGetConfigHandler.ServeHTTP(w, r)
+		case SystemServiceGetDispatcherStatsProcedure:
+			systemServiceGetDispatcherStatsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -114,4 +157,8 @@ type UnimplementedSystemServiceHandler struct{}
 
 func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetConfig is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetDispatcherStats is not implemented"))
 }

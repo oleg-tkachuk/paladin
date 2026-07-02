@@ -114,6 +114,14 @@ spec:
         - { protocol: TCP, port: {{ $p }} }
         {{- end }}
     {{- end }}
+    # SystemService.GetDispatcherStats proxies the dispatcher's ops listener.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: dispatcher
+      ports:
+        - { protocol: TCP, port: 8099 }
 {{- end }}
 {{- if .Values.deployments.worker.enabled }}
 ---
@@ -155,6 +163,11 @@ spec:
   ingress:
     - from:
         - {{ $fromMonitoring | toJson }}
+        # Admin proxies /system/dispatcher-stats.json for the console.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: admin
       ports:
         - { protocol: TCP, port: 8099 }
   # Open egress by design: the dispatcher delivers to CUSTOMER sinks —
