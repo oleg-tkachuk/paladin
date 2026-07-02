@@ -79,10 +79,14 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			l.Named("reconciler"),
 		))
 		// Bucket-provision outbox worker — drives the second half of
-		// CreateBucket(provision_on_backend=true). Same S3 client + cadence.
+		// CreateBucket(provision_on_backend=true). Routed by backend id: each
+		// pending row names its backend, and a dedicated bucket may live on a
+		// non-default backend, so the reconciler must provision on the row's
+		// own backend rather than the default client (prerequisite for the
+		// per-tenant dedicated-bucket layout, ADR-0011 Phase 1).
 		bucketRec := worker.NewBucketReconciler(
 			adapters.NewBucketRepoV2(db.Queries, deps.Pool),
-			deps.S3,
+			s3adapter.NewProvisionerRouter(deps.Registry),
 			worker.BucketReconcilerConfig{
 				Interval:  cfg.Worker.Jobs.Reconciler.Interval,
 				BatchSize: int32(cfg.Worker.Jobs.Reconciler.BatchSize),
