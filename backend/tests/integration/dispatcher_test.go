@@ -358,12 +358,18 @@ func TestDispatcher_OutboxToHTTPDelivery_HappyPath(t *testing.T) {
 	if len(reqs) != 1 {
 		t.Fatalf("recorded req count = %d", len(reqs))
 	}
-	var got worker.Event
+	// Since the CloudEvents default flip (#96) an HTTP sink with an unset
+	// format receives the CloudEvents 1.0 envelope, not the raw Event.
+	var got struct {
+		SpecVersion string `json:"specversion"`
+		Type        string `json:"type"`
+		TenantID    string `json:"tenantid"`
+	}
 	if err := json.Unmarshal(reqs[0].Body, &got); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
-	if got.Type != "paladin.object.uploaded" || got.TenantID != tenant.String() {
-		t.Errorf("event payload = %+v", got)
+	if got.SpecVersion != "1.0" || got.Type != "paladin.object.uploaded" || got.TenantID != tenant.String() {
+		t.Errorf("event envelope = %+v", got)
 	}
 	if reqs[0].Header.Get("X-PALADIN-Subscription-Id") != subID.String() {
 		t.Errorf("missing/wrong subscription id header: %v", reqs[0].Header)

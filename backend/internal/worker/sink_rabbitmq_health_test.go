@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"crypto/tls"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ func TestRabbitMQConnPool_WarmupAndStatuses(t *testing.T) {
 	p := NewRabbitMQConnPool(zap.NewNop())
 	// Health is decided per-URL: brokers with "bad" in the URL dial to an
 	// unhealthy connection (the dispatcher used them, then the conn dropped).
-	p.newPub = func(url string) (rabbitPublisher, error) {
+	p.newPub = func(url string, _ *tls.Config) (rabbitPublisher, error) {
 		return &fakeRabbit{isHealthy: !strings.Contains(url, "bad")}, nil
 	}
 
@@ -41,7 +42,7 @@ func TestRabbitMQConnPool_WarmupAndStatuses(t *testing.T) {
 
 func TestRabbitMQConnPool_WarmupDialErrorNotCached(t *testing.T) {
 	p := NewRabbitMQConnPool(zap.NewNop())
-	p.newPub = func(url string) (rabbitPublisher, error) {
+	p.newPub = func(url string, _ *tls.Config) (rabbitPublisher, error) {
 		if strings.Contains(url, "unreachable") {
 			return nil, errDialFail
 		}

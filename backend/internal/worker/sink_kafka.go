@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -44,6 +45,9 @@ type kafkaSinkConfig struct {
 	TLSEnabled    bool   `json:"tls_enabled"`
 	TLSClientCert string `json:"tls_client_cert"`
 	TLSClientKey  string `json:"tls_client_key"`
+	// TLSCACert (PEM bundle) verifies the broker's server certificate for
+	// brokers behind a private CA. Empty = system roots. Implies TLS.
+	TLSCACert string `json:"tls_ca_cert"`
 }
 
 // KafkaWriterPool lazily builds + caches one writer per (brokers, topic),
@@ -132,7 +136,7 @@ func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
 	}
 
 	var tlsCfg *tls.Config
-	if cfg.TLSEnabled || cfg.TLSClientCert != "" || cfg.TLSClientKey != "" {
+	if cfg.TLSEnabled || cfg.TLSClientCert != "" || cfg.TLSClientKey != "" || cfg.TLSCACert != "" {
 		tlsCfg = &tls.Config{MinVersion: tls.VersionTLS12}
 		if cfg.TLSClientCert != "" || cfg.TLSClientKey != "" {
 			crt, err := tls.X509KeyPair([]byte(cfg.TLSClientCert), []byte(cfg.TLSClientKey))
@@ -140,6 +144,13 @@ func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
 				return nil, fmt.Errorf("kafka sink: mTLS keypair: %w", err)
 			}
 			tlsCfg.Certificates = []tls.Certificate{crt}
+		}
+		if cfg.TLSCACert != "" {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM([]byte(cfg.TLSCACert)) {
+				return nil, errors.New("kafka sink: tls_ca_cert contains no valid PEM certificate")
+			}
+			tlsCfg.RootCAs = pool
 		}
 	}
 
@@ -155,9 +166,9 @@ func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
 // bytes are hashed (never logged) — the key is in-process only.
 func kafkaWriterKey(brokers []string, cfg kafkaSinkConfig) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00%s",
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%s\x00%s\x00%s",
 		strings.Join(brokers, ","), cfg.Topic, cfg.SASLMechanism, cfg.SASLUsername,
-		cfg.SASLPassword, cfg.TLSEnabled, cfg.TLSClientCert, cfg.TLSClientKey)
+		cfg.SASLPassword, cfg.TLSEnabled, cfg.TLSClientCert, cfg.TLSClientKey, cfg.TLSCACert)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -203,7 +214,7 @@ func (d *Dispatcher) deliverKafka(ctx context.Context, sub admindomain.EventSubs
 	// them BEFORE the transport build and the pool-key hash: the key is then
 	// computed over the resolved material, so a rotated Secret naturally
 	// hashes to a new key and gets a freshly-dialed writer.
-	for _, f := range []*string{&cfg.SASLUsername, &cfg.SASLPassword, &cfg.TLSClientCert, &cfg.TLSClientKey} {
+	for _, f := range []*string{&cfg.SASLUsername, &cfg.SASLPassword, &cfg.TLSClientCert, &cfg.TLSClientKey, &cfg.TLSCACert} {
 		v, rerr := d.resolveSinkValue(ctx, *f)
 		if rerr != nil {
 			return 0, fmt.Errorf("kafka sink: %w", rerr)

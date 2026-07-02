@@ -578,6 +578,19 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 	// Process each row inside the same tx. The row locks live until the
 	// commit at the end — the loop's wallclock budget is bounded by
 	// per-delivery HTTP timeouts.
+	//
+	// SQS rows targeting the SAME (queue, region, role) are collected and
+	// flushed through SendMessageBatch after the loop — one API call per ≤10
+	// rows instead of one per row. Batching changes the transport only:
+	// every row keeps its own attempts / backoff / permanent bookkeeping via
+	// the per-row outcome map.
+	type sqsQueued struct {
+		row  pending
+		sub  admindomain.EventSubscription
+		item sqsBatchItem
+	}
+	sqsGroups := map[string][]sqsQueued{}
+	sqsCfgs := map[string]sqsSinkConfig{}
 	for _, p := range batchRows {
 		evt := Event{}
 		if err := json.Unmarshal(p.payload, &evt); err != nil {
@@ -603,19 +616,19 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 			continue
 		}
 
+		if key, cfg, ok := sqsGroupTarget(sub); ok && r.Dispatcher.SQS != nil {
+			sqsCfgs[key] = cfg
+			sqsGroups[key] = append(sqsGroups[key], sqsQueued{
+				row: p, sub: sub,
+				item: sqsBatchItem{RowID: p.id, Sub: sub, Evt: evt},
+			})
+			continue
+		}
+
 		status, deliverErr := r.Dispatcher.deliver(ctx, sub, evt)
 		if deliverErr == nil {
-			if _, err := tx.Exec(ctx,
-				`UPDATE event_deliveries
-				    SET status='delivered',
-				        attempts=attempts+1,
-				        last_attempt_at=now(),
-				        last_status_code=$2,
-				        delivered_at=now()
-				  WHERE id=$1`,
-				p.id, status,
-			); err != nil {
-				return 0, fmt.Errorf("mark delivered: %w", err)
+			if err := r.markDelivered(ctx, tx, p.id, status); err != nil {
+				return 0, err
 			}
 			continue
 		}
@@ -627,11 +640,48 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		r.markFailed(ctx, tx, p.id, p.attempts, status, deliverErr.Error(), permanent)
 	}
 
+	for key, queued := range sqsGroups {
+		items := make([]sqsBatchItem, len(queued))
+		for i, q := range queued {
+			items[i] = q.item
+		}
+		outcome := r.Dispatcher.deliverSQSBatch(ctx, sqsCfgs[key], items)
+		for _, q := range queued {
+			if derr := outcome[q.row.id]; derr == nil {
+				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
+					return 0, err
+				}
+			} else {
+				max := r.maxAttemptsFor(q.sub)
+				permanent := q.row.attempts+1 >= max
+				r.markFailed(ctx, tx, q.row.id, q.row.attempts, 0, derr.Error(), permanent)
+			}
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit batch: %w", err)
 	}
 	committed = true
 	return len(batchRows), nil
+}
+
+// markDelivered stamps a row delivered. Shared by the per-row and the
+// SQS-batched paths so the success bookkeeping can't drift.
+func (r *OutboxRunner) markDelivered(ctx context.Context, tx pgx.Tx, id uuid.UUID, statusCode int) error {
+	if _, err := tx.Exec(ctx,
+		`UPDATE event_deliveries
+		    SET status='delivered',
+		        attempts=attempts+1,
+		        last_attempt_at=now(),
+		        last_status_code=$2,
+		        delivered_at=now()
+		  WHERE id=$1`,
+		id, statusCode,
+	); err != nil {
+		return fmt.Errorf("mark delivered: %w", err)
+	}
+	return nil
 }
 
 // markFailed bumps attempts, records the error, and either schedules

@@ -313,10 +313,11 @@ export function buildSink(form: FormState): EventSink {
       saslUsername: form.kafkaSaslUsername.trim(),
       saslPassword: form.kafkaSaslPassword,
       tlsEnabled: form.kafkaTlsEnabled,
-      // mTLS client cert/key are API/config-only (PEM key material in a
-      // browser form is a security smell) — left empty from the UI.
+      // mTLS client cert/key + private-CA bundle are API/config-only (PEM
+      // material in a browser form is a security smell) — left empty here.
       tlsClientCert: "",
       tlsClientKey: "",
+      tlsCaCert: "",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",
@@ -329,6 +330,10 @@ export function buildSink(form: FormState): EventSink {
       url: form.rabbitmqUrl.trim(),
       exchange: form.rabbitmqExchange.trim(),
       routingKey: form.rabbitmqRoutingKey.trim(),
+      // AMQPS client-cert PEM material is API/config-only, like Kafka's.
+      tlsClientCert: "",
+      tlsClientKey: "",
+      tlsCaCert: "",
     };
     return {
       $typeName: "paladin.admin.v1.EventSink",

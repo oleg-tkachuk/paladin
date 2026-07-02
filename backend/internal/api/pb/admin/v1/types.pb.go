@@ -2226,10 +2226,15 @@ type KafkaSink struct {
 	// system root CAs) — SASL_SSL is sasl_mechanism + tls_enabled.
 	TlsEnabled bool `protobuf:"varint,6,opt,name=tls_enabled,json=tlsEnabled,proto3" json:"tls_enabled,omitempty"`
 	// Optional mTLS client cert + key (PEM). When both are set the dispatcher
-	// presents them on the TLS handshake (implies TLS). Inline PEM is lab-grade;
-	// a secret-store ref is a follow-up.
+	// presents them on the TLS handshake (implies TLS). Inline PEM is
+	// lab-grade; every credential field also accepts a "k8s:<name>/<key>"
+	// Secret ref resolved at delivery time.
 	TlsClientCert string `protobuf:"bytes,7,opt,name=tls_client_cert,json=tlsClientCert,proto3" json:"tls_client_cert,omitempty"`
 	TlsClientKey  string `protobuf:"bytes,8,opt,name=tls_client_key,json=tlsClientKey,proto3" json:"tls_client_key,omitempty"`
+	// Optional CA bundle (PEM) the broker's server certificate is verified
+	// against — for brokers behind a private CA. Empty = system roots.
+	// Setting it implies TLS.
+	TlsCaCert     string `protobuf:"bytes,9,opt,name=tls_ca_cert,json=tlsCaCert,proto3" json:"tls_ca_cert,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2320,6 +2325,13 @@ func (x *KafkaSink) GetTlsClientKey() string {
 	return ""
 }
 
+func (x *KafkaSink) GetTlsCaCert() string {
+	if x != nil {
+		return x.TlsCaCert
+	}
+	return ""
+}
+
 type SqsSink struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	QueueUrl string                 `protobuf:"bytes,1,opt,name=queue_url,json=queueUrl,proto3" json:"queue_url,omitempty"`
@@ -2397,7 +2409,14 @@ type RabbitMqSink struct {
 	// which case routing_key is the destination queue name.
 	Exchange string `protobuf:"bytes,2,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Routing key (or queue name when exchange is empty).
-	RoutingKey    string `protobuf:"bytes,3,opt,name=routing_key,json=routingKey,proto3" json:"routing_key,omitempty"`
+	RoutingKey string `protobuf:"bytes,3,opt,name=routing_key,json=routingKey,proto3" json:"routing_key,omitempty"`
+	// AMQPS client-certificate auth (PEM; each field also accepts a
+	// "k8s:<name>/<key>" Secret ref). cert+key present a client certificate
+	// on the TLS handshake; tls_ca_cert verifies a broker behind a private
+	// CA. amqps:// URLs without these use system roots.
+	TlsClientCert string `protobuf:"bytes,4,opt,name=tls_client_cert,json=tlsClientCert,proto3" json:"tls_client_cert,omitempty"`
+	TlsClientKey  string `protobuf:"bytes,5,opt,name=tls_client_key,json=tlsClientKey,proto3" json:"tls_client_key,omitempty"`
+	TlsCaCert     string `protobuf:"bytes,6,opt,name=tls_ca_cert,json=tlsCaCert,proto3" json:"tls_ca_cert,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2449,6 +2468,27 @@ func (x *RabbitMqSink) GetExchange() string {
 func (x *RabbitMqSink) GetRoutingKey() string {
 	if x != nil {
 		return x.RoutingKey
+	}
+	return ""
+}
+
+func (x *RabbitMqSink) GetTlsClientCert() string {
+	if x != nil {
+		return x.TlsClientCert
+	}
+	return ""
+}
+
+func (x *RabbitMqSink) GetTlsClientKey() string {
+	if x != nil {
+		return x.TlsClientKey
+	}
+	return ""
+}
+
+func (x *RabbitMqSink) GetTlsCaCert() string {
+	if x != nil {
+		return x.TlsCaCert
 	}
 	return ""
 }
@@ -2737,7 +2777,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12,\n" +
 	"\x12signing_secret_ref\x18\x02 \x01(\tR\x10signingSecretRef\x12!\n" +
 	"\fmax_attempts\x18\x03 \x01(\x05R\vmaxAttempts\x12\x16\n" +
-	"\x06format\x18\x04 \x01(\tR\x06format\"\x9b\x02\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\"\xbb\x02\n" +
 	"\tKafkaSink\x12\x18\n" +
 	"\abrokers\x18\x01 \x01(\tR\abrokers\x12\x14\n" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12%\n" +
@@ -2747,16 +2787,20 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vtls_enabled\x18\x06 \x01(\bR\n" +
 	"tlsEnabled\x12&\n" +
 	"\x0ftls_client_cert\x18\a \x01(\tR\rtlsClientCert\x12$\n" +
-	"\x0etls_client_key\x18\b \x01(\tR\ftlsClientKey\"Y\n" +
+	"\x0etls_client_key\x18\b \x01(\tR\ftlsClientKey\x12\x1e\n" +
+	"\vtls_ca_cert\x18\t \x01(\tR\ttlsCaCert\"Y\n" +
 	"\aSqsSink\x12\x1b\n" +
 	"\tqueue_url\x18\x01 \x01(\tR\bqueueUrl\x12\x16\n" +
 	"\x06region\x18\x02 \x01(\tR\x06region\x12\x19\n" +
-	"\brole_arn\x18\x03 \x01(\tR\aroleArn\"]\n" +
+	"\brole_arn\x18\x03 \x01(\tR\aroleArn\"\xcb\x01\n" +
 	"\fRabbitMqSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1a\n" +
 	"\bexchange\x18\x02 \x01(\tR\bexchange\x12\x1f\n" +
 	"\vrouting_key\x18\x03 \x01(\tR\n" +
-	"routingKey\"_\n" +
+	"routingKey\x12&\n" +
+	"\x0ftls_client_cert\x18\x04 \x01(\tR\rtlsClientCert\x12$\n" +
+	"\x0etls_client_key\x18\x05 \x01(\tR\ftlsClientKey\x12\x1e\n" +
+	"\vtls_ca_cert\x18\x06 \x01(\tR\ttlsCaCert\"_\n" +
 	"\bNatsSink\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12'\n" +

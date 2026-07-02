@@ -389,10 +389,15 @@ message KafkaSink {
   // system root CAs) — SASL_SSL is sasl_mechanism + tls_enabled.
   bool tls_enabled = 6;
   // Optional mTLS client cert + key (PEM). When both are set the dispatcher
-  // presents them on the TLS handshake (implies TLS). Inline PEM is lab-grade;
-  // a secret-store ref is a follow-up.
+  // presents them on the TLS handshake (implies TLS). Inline PEM is
+  // lab-grade; every credential field also accepts a "k8s:<name>/<key>"
+  // Secret ref resolved at delivery time.
   string tls_client_cert = 7;
   string tls_client_key = 8;
+  // Optional CA bundle (PEM) the broker's server certificate is verified
+  // against — for brokers behind a private CA. Empty = system roots.
+  // Setting it implies TLS.
+  string tls_ca_cert = 9;
 }
 
 message SqsSink {
@@ -418,6 +423,13 @@ message RabbitMqSink {
   string exchange = 2;
   // Routing key (or queue name when exchange is empty).
   string routing_key = 3;
+  // AMQPS client-certificate auth (PEM; each field also accepts a
+  // "k8s:<name>/<key>" Secret ref). cert+key present a client certificate
+  // on the TLS handshake; tls_ca_cert verifies a broker behind a private
+  // CA. amqps:// URLs without these use system roots.
+  string tls_client_cert = 4;
+  string tls_client_key = 5;
+  string tls_ca_cert = 6;
 }
 
 // NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS

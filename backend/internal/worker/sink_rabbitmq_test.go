@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -43,7 +44,7 @@ func rabbitTestSub(t *testing.T, cfg rabbitSinkConfig) admindomain.EventSubscrip
 
 func rabbitTestDispatcher(fake rabbitPublisher) *Dispatcher {
 	pool := NewRabbitMQConnPool(nil)
-	pool.newPub = func(string) (rabbitPublisher, error) { return fake, nil }
+	pool.newPub = func(string, *tls.Config) (rabbitPublisher, error) { return fake, nil }
 	return &Dispatcher{RabbitMQ: pool}
 }
 
@@ -94,17 +95,17 @@ func TestRabbitMQConnPool_RedialsUnhealthy(t *testing.T) {
 	dials := 0
 	stale := &fakeRabbit{isHealthy: false}
 	pool := NewRabbitMQConnPool(nil)
-	pool.newPub = func(string) (rabbitPublisher, error) {
+	pool.newPub = func(string, *tls.Config) (rabbitPublisher, error) {
 		dials++
 		if dials == 1 {
 			return stale, nil
 		}
 		return &fakeRabbit{isHealthy: true}, nil
 	}
-	if _, err := pool.get("amqp://h"); err != nil {
+	if _, err := pool.get("k", "amqp://h", nil); err != nil {
 		t.Fatalf("get #1: %v", err)
 	}
-	if _, err := pool.get("amqp://h"); err != nil {
+	if _, err := pool.get("k", "amqp://h", nil); err != nil {
 		t.Fatalf("get #2: %v", err)
 	}
 	if dials != 2 {
@@ -112,5 +113,34 @@ func TestRabbitMQConnPool_RedialsUnhealthy(t *testing.T) {
 	}
 	if stale.closed != 1 {
 		t.Errorf("stale conn closed = %d, want 1", stale.closed)
+	}
+}
+
+func TestBuildRabbitTLS(t *testing.T) {
+	if cfg, err := buildRabbitTLS(rabbitSinkConfig{URL: "amqp://h"}); err != nil || cfg != nil {
+		t.Errorf("no TLS material → (nil, nil), got (%v, %v)", cfg, err)
+	}
+	cert, key := genTestKeypair(t)
+	cfg, err := buildRabbitTLS(rabbitSinkConfig{TLSClientCert: cert, TLSClientKey: key, TLSCACert: cert})
+	if err != nil {
+		t.Fatalf("valid material: %v", err)
+	}
+	if len(cfg.Certificates) != 1 || cfg.RootCAs == nil {
+		t.Error("client keypair + RootCAs must both be set")
+	}
+	if _, err := buildRabbitTLS(rabbitSinkConfig{TLSClientCert: "junk", TLSClientKey: key}); err == nil {
+		t.Error("bad keypair must error")
+	}
+	if _, err := buildRabbitTLS(rabbitSinkConfig{TLSCACert: "junk"}); err == nil {
+		t.Error("bad CA must error")
+	}
+}
+
+func TestRabbitConnKey_TLSDistinguishes(t *testing.T) {
+	plain := rabbitSinkConfig{URL: "amqps://h"}
+	withCert := plain
+	withCert.TLSClientCert = "PEM"
+	if rabbitConnKey(plain) == rabbitConnKey(withCert) {
+		t.Error("conn key must differ when client-cert material differs")
 	}
 }

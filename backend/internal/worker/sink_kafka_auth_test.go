@@ -163,3 +163,27 @@ func genTestKeypair(t *testing.T) (certPEM, keyPEM string) {
 	keyPEM = string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}))
 	return certPEM, keyPEM
 }
+
+func TestBuildKafkaTransport_PrivateCA(t *testing.T) {
+	ca, _ := genTestKeypair(t)
+	tr, err := buildKafkaTransport(kafkaSinkConfig{TLSCACert: ca})
+	if err != nil {
+		t.Fatalf("valid CA bundle: %v", err)
+	}
+	if tr == nil || tr.TLS == nil || tr.TLS.RootCAs == nil {
+		t.Fatal("tls_ca_cert must imply TLS with a custom RootCAs pool")
+	}
+
+	if _, err := buildKafkaTransport(kafkaSinkConfig{TLSCACert: "not pem"}); err == nil {
+		t.Error("garbage tls_ca_cert must fail the transport build")
+	}
+}
+
+func TestKafkaWriterKey_CACertDistinguishes(t *testing.T) {
+	base := kafkaSinkConfig{Brokers: "b:9092", Topic: "t", TLSEnabled: true}
+	withCA := base
+	withCA.TLSCACert = "-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----"
+	if kafkaWriterKey([]string{"b:9092"}, base) == kafkaWriterKey([]string{"b:9092"}, withCA) {
+		t.Error("pool key must differ when tls_ca_cert differs")
+	}
+}

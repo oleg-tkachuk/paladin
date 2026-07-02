@@ -2,6 +2,10 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +33,49 @@ type rabbitSinkConfig struct {
 	URL        string `json:"url"`
 	Exchange   string `json:"exchange"`
 	RoutingKey string `json:"routing_key"`
+	// AMQPS client-cert auth (all optional, PEM; each also accepts a
+	// "k8s:<name>/<key>" Secret ref). Setting cert+key presents a client
+	// certificate on the TLS handshake; tls_ca_cert verifies a broker behind
+	// a private CA. amqps:// URLs without any of these use system roots.
+	TLSClientCert string `json:"tls_client_cert"`
+	TLSClientKey  string `json:"tls_client_key"`
+	TLSCACert     string `json:"tls_ca_cert"`
+}
+
+// buildRabbitTLS mirrors buildKafkaTransport's TLS half: nil when no TLS
+// material is configured (amqp.Dial handles plain amqp:// and system-root
+// amqps://), a *tls.Config carrying the client keypair / private CA
+// otherwise. Errors are loud — dialing with a half-built TLS config would
+// surface as an opaque broker handshake failure.
+func buildRabbitTLS(cfg rabbitSinkConfig) (*tls.Config, error) {
+	if cfg.TLSClientCert == "" && cfg.TLSClientKey == "" && cfg.TLSCACert == "" {
+		return nil, nil
+	}
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	if cfg.TLSClientCert != "" || cfg.TLSClientKey != "" {
+		crt, err := tls.X509KeyPair([]byte(cfg.TLSClientCert), []byte(cfg.TLSClientKey))
+		if err != nil {
+			return nil, fmt.Errorf("rabbitmq sink: client keypair: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{crt}
+	}
+	if cfg.TLSCACert != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(cfg.TLSCACert)) {
+			return nil, errors.New("rabbitmq sink: tls_ca_cert contains no valid PEM certificate")
+		}
+		tlsCfg.RootCAs = pool
+	}
+	return tlsCfg, nil
+}
+
+// rabbitConnKey namespaces the connection cache by URL + TLS material so
+// sinks that share a URL but differ in client certs never share a
+// connection. Hashed — never logged.
+func rabbitConnKey(cfg rabbitSinkConfig) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s", cfg.URL, cfg.TLSClientCert, cfg.TLSClientKey, cfg.TLSCACert)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // RabbitMQConnPool lazily dials + caches one connection per AMQP URL, mirroring
@@ -36,20 +83,37 @@ type rabbitSinkConfig struct {
 // next use. Owned by the dispatcher pod; Close() drains every connection.
 type RabbitMQConnPool struct {
 	mu   sync.Mutex
-	pubs map[string]rabbitPublisher
+	pubs map[string]pooledRabbitPub
 	log  *zap.Logger
-	// newPub dials url → publisher. Overridable in tests.
-	newPub func(url string) (rabbitPublisher, error)
+	// newPub dials url (with the optional TLS config for AMQPS client
+	// certs / private CAs) → publisher. Overridable in tests.
+	newPub func(url string, tlsCfg *tls.Config) (rabbitPublisher, error)
+}
+
+// pooledRabbitPub keeps the human-readable URL next to the publisher so
+// Statuses() can report per-broker health without leaking the hashed key.
+type pooledRabbitPub struct {
+	pub rabbitPublisher
+	url string
 }
 
 // NewRabbitMQConnPool returns an empty pool whose connections dial on first
 // use per URL.
 func NewRabbitMQConnPool(log *zap.Logger) *RabbitMQConnPool {
 	return &RabbitMQConnPool{
-		pubs: map[string]rabbitPublisher{},
+		pubs: map[string]pooledRabbitPub{},
 		log:  log,
-		newPub: func(url string) (rabbitPublisher, error) {
-			conn, err := amqp.Dial(url)
+		newPub: func(url string, tlsCfg *tls.Config) (rabbitPublisher, error) {
+			var (
+				conn *amqp.Connection
+				err  error
+			)
+			if tlsCfg != nil {
+				conn, err = amqp.DialTLS(url, tlsCfg)
+			} else {
+				// amqp.Dial handles both amqp:// and system-root amqps://.
+				conn, err = amqp.Dial(url)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("dial: %w", err)
 			}
@@ -58,23 +122,27 @@ func NewRabbitMQConnPool(log *zap.Logger) *RabbitMQConnPool {
 	}
 }
 
-func (p *RabbitMQConnPool) get(url string) (rabbitPublisher, error) {
+// get returns the cached publisher for `key` (URL + TLS material — see
+// rabbitConnKey), dialing via newPub on first use or after a dropped
+// connection.
+func (p *RabbitMQConnPool) get(key, url string, tlsCfg *tls.Config) (rabbitPublisher, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if pub, ok := p.pubs[url]; ok {
-		if pub.healthy() {
-			return pub, nil
+	if e, ok := p.pubs[key]; ok {
+		if e.pub.healthy() {
+			return e.pub, nil
 		}
-		_ = pub.close()
-		delete(p.pubs, url)
+		_ = e.pub.close()
+		delete(p.pubs, key)
 	}
-	pub, err := p.newPub(url)
+	pub, err := p.newPub(url, tlsCfg)
 	if err != nil {
 		return nil, err
 	}
-	p.pubs[url] = pub
+	p.pubs[key] = pooledRabbitPub{pub: pub, url: url}
 	if p.log != nil {
-		p.log.Info("rabbitmq connection dialed", zap.String("url", url))
+		p.log.Info("rabbitmq connection dialed",
+			zap.String("url", url), zap.Bool("client_tls", tlsCfg != nil))
 	}
 	return pub, nil
 }
@@ -87,8 +155,11 @@ func (p *RabbitMQConnPool) Statuses() map[string]bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make(map[string]bool, len(p.pubs))
-	for url, pub := range p.pubs {
-		out[url] = pub.healthy()
+	for _, e := range p.pubs {
+		// Keyed by URL for operator readability; two same-URL sinks with
+		// different client certs collapse to one row (AND of health would
+		// need a richer shape — fine for a coarse probe).
+		out[e.url] = e.pub.healthy()
 	}
 	return out
 }
@@ -98,8 +169,11 @@ func (p *RabbitMQConnPool) Statuses() map[string]bool {
 // are logged, not returned; the per-row deliver path retries under the row's
 // normal budget.
 func (p *RabbitMQConnPool) Warmup(urls []string) {
+	// Warmup only covers URL-auth sinks: client-cert sinks need their PEM
+	// material (possibly a k8s: Secret ref), so they dial lazily on first
+	// delivery instead.
 	for _, url := range urls {
-		if _, err := p.get(url); err != nil && p.log != nil {
+		if _, err := p.get(rabbitConnKey(rabbitSinkConfig{URL: url}), url, nil); err != nil && p.log != nil {
 			p.log.Warn("rabbitmq: pre-warm dial failed",
 				zap.String("url", url), zap.Error(err))
 		}
@@ -111,9 +185,9 @@ func (p *RabbitMQConnPool) Warmup(urls []string) {
 func (p *RabbitMQConnPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for url, pub := range p.pubs {
-		_ = pub.close()
-		delete(p.pubs, url)
+	for key, e := range p.pubs {
+		_ = e.pub.close()
+		delete(p.pubs, key)
 	}
 }
 
@@ -183,14 +257,23 @@ func (d *Dispatcher) deliverRabbitMQ(ctx context.Context, sub admindomain.EventS
 	if err != nil {
 		return 0, fmt.Errorf("rabbitmq sink: marshal envelope: %w", err)
 	}
-	// The AMQP URL embeds the credentials (amqps://user:pass@host/vhost), so
-	// the whole URL may be a "k8s:" Secret ref (sink_secrets.go). The
-	// resolved URL keys the pool, so a rotated Secret dials fresh.
-	amqpURL, err := d.resolveSinkValue(ctx, cfg.URL)
-	if err != nil {
-		return 0, fmt.Errorf("rabbitmq sink: %w", err)
+	// The AMQP URL embeds the credentials (amqps://user:pass@host/vhost) and
+	// the TLS fields carry PEM material — any of them may be a "k8s:" Secret
+	// ref (sink_secrets.go). Resolve BEFORE the TLS build and the pool key,
+	// so the key covers the resolved material and a rotated Secret dials
+	// fresh.
+	for _, f := range []*string{&cfg.URL, &cfg.TLSClientCert, &cfg.TLSClientKey, &cfg.TLSCACert} {
+		v, rerr := d.resolveSinkValue(ctx, *f)
+		if rerr != nil {
+			return 0, fmt.Errorf("rabbitmq sink: %w", rerr)
+		}
+		*f = v
 	}
-	pub, err := d.RabbitMQ.get(amqpURL)
+	tlsCfg, err := buildRabbitTLS(cfg)
+	if err != nil {
+		return 0, err
+	}
+	pub, err := d.RabbitMQ.get(rabbitConnKey(cfg), cfg.URL, tlsCfg)
 	if err != nil {
 		return 0, err
 	}

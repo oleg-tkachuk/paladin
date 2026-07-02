@@ -12,7 +12,9 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/internal/api/admin/v1/admindomain"
@@ -23,6 +25,7 @@ import (
 // without the SDK or a live queue.
 type sqsSender interface {
 	SendMessage(ctx context.Context, in *sqs.SendMessageInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
+	SendMessageBatch(ctx context.Context, in *sqs.SendMessageBatchInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageBatchOutput, error)
 }
 
 // sqsSinkConfig is the JSON shape stored in event_subscriptions.sink_config
@@ -119,26 +122,16 @@ func (d *Dispatcher) deliverSQS(ctx context.Context, sub admindomain.EventSubscr
 	if cfg.Region == "" {
 		return 0, errors.New("sqs sink: missing region")
 	}
-	body, err := json.Marshal(d.newCloudEventEnvelope(sub, evt))
+	body, groupID, dedupID, err := d.buildSQSMessage(cfg, sub, evt)
 	if err != nil {
-		return 0, fmt.Errorf("sqs sink: marshal envelope: %w", err)
+		return 0, err
 	}
 
 	in := &sqs.SendMessageInput{
-		QueueUrl:    aws.String(cfg.QueueURL),
-		MessageBody: aws.String(string(body)),
-	}
-	// FIFO queues (URL suffix ".fifo") REQUIRE a MessageGroupId and, with
-	// content-based dedup off, a MessageDeduplicationId. Group per tenant so
-	// a tenant's events stay ordered; dedup on the (stable) delivery-row id
-	// so a retried row is collapsed by SQS rather than double-delivered.
-	if strings.HasSuffix(cfg.QueueURL, ".fifo") {
-		dedup := evt.ID
-		if dedup == "" {
-			dedup = sub.SubscriptionID.String()
-		}
-		in.MessageGroupId = aws.String(evt.TenantID)
-		in.MessageDeduplicationId = aws.String(dedup)
+		QueueUrl:               aws.String(cfg.QueueURL),
+		MessageBody:            aws.String(body),
+		MessageGroupId:         groupID,
+		MessageDeduplicationId: dedupID,
 	}
 
 	client, err := d.SQS.get(ctx, cfg.Region, cfg.RoleArn)
@@ -149,4 +142,151 @@ func (d *Dispatcher) deliverSQS(ctx context.Context, sub admindomain.EventSubscr
 		return 0, fmt.Errorf("sqs send: %w", err)
 	}
 	return 0, nil
+}
+
+// buildSQSMessage renders the CloudEvents body plus the FIFO attributes
+// shared by the single-send and batch paths. FIFO queues (URL suffix
+// ".fifo") REQUIRE a MessageGroupId and, with content-based dedup off, a
+// MessageDeduplicationId: group per tenant so a tenant's events stay
+// ordered; dedup on the (stable) delivery-row id so a retried row is
+// collapsed by SQS rather than double-delivered.
+func (d *Dispatcher) buildSQSMessage(cfg sqsSinkConfig, sub admindomain.EventSubscription, evt Event) (body string, groupID, dedupID *string, err error) {
+	raw, err := json.Marshal(d.newCloudEventEnvelope(sub, evt))
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("sqs sink: marshal envelope: %w", err)
+	}
+	if strings.HasSuffix(cfg.QueueURL, ".fifo") {
+		dedup := evt.ID
+		if dedup == "" {
+			dedup = sub.SubscriptionID.String()
+		}
+		groupID = aws.String(evt.TenantID)
+		dedupID = aws.String(dedup)
+	}
+	return string(raw), groupID, dedupID, nil
+}
+
+// ─── Batched delivery (outbox fan-in) ────────────────────────────────────────
+
+// SQS batch limits: 10 entries per SendMessageBatch call, 256 KiB summed
+// payload. We chunk under both, with headroom on the byte budget for the
+// per-entry attribute overhead the sum doesn't count.
+const (
+	sqsMaxBatchEntries = 10
+	sqsMaxBatchBytes   = 240 * 1024
+)
+
+// sqsBatchItem is one outbox row headed for a shared SQS queue.
+type sqsBatchItem struct {
+	RowID uuid.UUID // delivery-row id: result mapping + FIFO dedup
+	Sub   admindomain.EventSubscription
+	Evt   Event
+}
+
+// sqsGroupTarget derives the batch-group key for a subscription IFF it is a
+// well-formed SQS sink. Rows whose config doesn't parse (or lacks the
+// required fields) return ok=false and take the per-row deliver path, so
+// they fail with exactly the same error text as before batching existed.
+func sqsGroupTarget(sub admindomain.EventSubscription) (key string, cfg sqsSinkConfig, ok bool) {
+	if sub.SinkKind != "sqs" {
+		return "", cfg, false
+	}
+	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
+		return "", cfg, false
+	}
+	if cfg.QueueURL == "" || cfg.Region == "" {
+		return "", cfg, false
+	}
+	return cfg.QueueURL + "\x00" + cfg.Region + "\x00" + cfg.RoleArn, cfg, true
+}
+
+// deliverSQSBatch sends one group's rows via SendMessageBatch, chunked under
+// the entry/byte limits, and returns a per-row outcome (nil = delivered).
+// A whole-call failure marks every row of that chunk failed (retryable);
+// a partial failure maps each BatchResultErrorEntry back to its row. Rows
+// therefore keep their individual attempts/backoff/permanent bookkeeping —
+// batching changes the transport, not the outbox contract.
+func (d *Dispatcher) deliverSQSBatch(ctx context.Context, cfg sqsSinkConfig, items []sqsBatchItem) map[uuid.UUID]error {
+	out := make(map[uuid.UUID]error, len(items))
+	if d.SQS == nil {
+		for _, it := range items {
+			out[it.RowID] = errors.New("sqs sink: dispatcher has no SQS client pool")
+		}
+		return out
+	}
+	client, err := d.SQS.get(ctx, cfg.Region, cfg.RoleArn)
+	if err != nil {
+		for _, it := range items {
+			out[it.RowID] = err
+		}
+		return out
+	}
+
+	type entry struct {
+		rowID uuid.UUID
+		in    sqstypes.SendMessageBatchRequestEntry
+		size  int
+	}
+	var pendingEntries []entry
+	for _, it := range items {
+		body, groupID, dedupID, berr := d.buildSQSMessage(cfg, it.Sub, it.Evt)
+		if berr != nil {
+			out[it.RowID] = berr
+			continue
+		}
+		pendingEntries = append(pendingEntries, entry{
+			rowID: it.RowID,
+			in: sqstypes.SendMessageBatchRequestEntry{
+				Id:                     aws.String(it.RowID.String()),
+				MessageBody:            aws.String(body),
+				MessageGroupId:         groupID,
+				MessageDeduplicationId: dedupID,
+			},
+			size: len(body),
+		})
+	}
+
+	flush := func(chunk []entry) {
+		if len(chunk) == 0 {
+			return
+		}
+		byID := make(map[string]uuid.UUID, len(chunk))
+		in := &sqs.SendMessageBatchInput{QueueUrl: aws.String(cfg.QueueURL)}
+		for _, e := range chunk {
+			byID[*e.in.Id] = e.rowID
+			in.Entries = append(in.Entries, e.in)
+		}
+		resp, err := client.SendMessageBatch(ctx, in)
+		if err != nil {
+			for _, e := range chunk {
+				out[e.rowID] = fmt.Errorf("sqs batch send: %w", err)
+			}
+			return
+		}
+		for _, ok := range resp.Successful {
+			if ok.Id != nil {
+				out[byID[*ok.Id]] = nil
+			}
+		}
+		for _, f := range resp.Failed {
+			if f.Id == nil {
+				continue
+			}
+			code, msg := aws.ToString(f.Code), aws.ToString(f.Message)
+			out[byID[*f.Id]] = fmt.Errorf("sqs batch entry failed: %s: %s", code, msg)
+		}
+	}
+
+	var chunk []entry
+	var chunkBytes int
+	for _, e := range pendingEntries {
+		if len(chunk) > 0 && (len(chunk) >= sqsMaxBatchEntries || chunkBytes+e.size > sqsMaxBatchBytes) {
+			flush(chunk)
+			chunk, chunkBytes = nil, 0
+		}
+		chunk = append(chunk, e)
+		chunkBytes += e.size
+	}
+	flush(chunk)
+	return out
 }

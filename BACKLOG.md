@@ -113,12 +113,13 @@ the same commit. Treat this file like a runtime invariant.
   and the dispatcher gets OPEN egress by design (customer sinks live on
   arbitrary endpoints — the blast-radius win of the split is that only it
   needs that). External namespaces/selectors are values-configurable.
-- **Definition of Done (remaining):**
-  - Verify enforcement on a cluster whose CNI implements NetworkPolicy —
-    the lab's orbstack does NOT (probe pod reached api:8080 through
-    default-deny), so the objects render + apply + the stack stays healthy,
-    but allow/deny semantics are untested against real enforcement.
-- **Blockers:** an NP-capable cluster (kind+calico would do for CI).
+- **Verified (2026-07-02):** enforcement semantics confirmed on kind+calico
+  (the lab's orbstack CNI doesn't enforce NP): with the chart's rendered
+  policies applied, an unlabeled pod → api:8080 is DENIED (default-deny
+  ingress), a UI-labeled pod → api:8080 is ALLOWED (per-role allow),
+  api-pod egress to an arbitrary intra-ns pod is DENIED (default-deny
+  egress), and api-pod DNS egress works. Entry complete — delete on next
+  touch if nothing new accrues.
 
 ### KMS-wrapped capability signing key
 
@@ -481,10 +482,18 @@ open deliberately — each notes why._
   `k8s:<name>/<key>` Secret refs resolved at delivery time
   (worker/sink_secrets.go; TTL-cached, pool key hashes the RESOLVED material
   so rotation dials a fresh writer).
+- **Shipped (2026-07-02) — SASL_SSL vs certs-mounted broker + private CA:**
+  `KafkaSink.tls_ca_cert` (PEM bundle; also accepts a k8s: Secret ref)
+  verifies brokers behind a private CA — setting it implies TLS and keys the
+  writer pool. `TestKafkaSinkDelivery_SASL_SSL` runs DeliverOne over
+  SCRAM-SHA-256 + TLS against a redpanda mounted with a generated server
+  cert, verified via tls_ca_cert; PASSED locally against Docker.
 - **Definition of Done (remaining):**
-  - TLS/mTLS handshake against a certs-mounted broker (the SCRAM test runs
-    on the PLAINTEXT listener; redpanda-with-TLS needs generated certs
-    mounted into the container).
+  - Optional: mTLS handshake against a broker REQUIRING client certs
+    (require_client_auth) — the client-cert presentation is unit-covered
+    and the equivalent broker-side verification is proven on the RabbitMQ
+    sink (fail_if_no_peer_cert); redpanda-side plumbing wasn't worth the
+    testcontainers bootstrap depth yet.
   - Optional: per-tenant topic prefix vs operator-defined topic — operator
     -defined shipped; revisit if a customer needs auto-fan-out by tenant.
 - **Blockers:** none — incremental; driven by a customer's auth posture.
@@ -523,11 +532,19 @@ open deliberately — each notes why._
   consumed back as the CloudEvents envelope; passed locally against Docker.
   The AMQP URL (credentials embedded) now accepts a `k8s:<name>/<key>`
   Secret ref resolved at delivery time.
+- **Shipped (2026-07-02) — AMQPS client certs:** `RabbitMqSink` gains
+  `tls_client_cert` / `tls_client_key` / `tls_ca_cert` (PEM; each also
+  accepts a k8s: Secret ref). `buildRabbitTLS` mirrors the Kafka transport
+  build; the conn pool now keys by URL + TLS material so same-URL sinks
+  with different certs never share a connection (Warmup covers URL-auth
+  sinks only — client-cert sinks dial lazily).
+  `TestRabbitMQSinkDelivery_AMQPSClientCert` runs DeliverOne against a
+  RabbitMQ whose TLS listener REQUIRES a client cert (verify_peer +
+  fail_if_no_peer_cert), including the negative (no client cert → handshake
+  refused); PASSED locally against Docker.
 - **Definition of Done (remaining):**
   - Channel-drop-mid-publish behaviour under the real broker (the happy
     round-trip is covered; the drop path still relies on the unit seam).
-  - AMQPS with TLS **client certs** (today only URL-embedded creds /
-    server-TLS via `amqps://`).
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 
@@ -586,11 +603,18 @@ open deliberately — each notes why._
   (internal/integration, tags=integration) runs DeliverOne against a real
   elasticmq — SendMessage → ReceiveMessage round-trip with the CloudEvents
   envelope; passed locally against Docker.
+- **Shipped (2026-07-02) — `SendMessageBatch`:** the outbox tick now
+  collects rows targeting the same (queue, region, role) and flushes them
+  through SendMessageBatch, chunked at 10 entries / ~240KiB. Batching
+  changes the TRANSPORT only: each row keeps its own attempts / backoff /
+  permanent bookkeeping via a per-row outcome map (partial batch failures
+  map BatchResultErrorEntry back to the exact row; a whole-call failure
+  marks the chunk's rows retryable). Malformed SQS configs deliberately
+  fall back to the per-row path so their error text is unchanged.
+  Unit-tested (chunking, partial-fail mapping, whole-call fail, FIFO
+  attrs, group keying) + `TestSQSSinkBatchDelivery_Wire` (12 rows → 10+2
+  calls → all consumed) against a real elasticmq; PASSED locally.
 - **Definition of Done (remaining):**
-  - `SendMessageBatch` when an outbox poll returns multiple rows targeting
-    the same queue (today one SendMessage per row) — the elasticmq test it
-    was waiting on now exists; still deferred because it restructures the
-    correctness-critical OutboxRunner tick loop.
   - Doc: IAM wiring for non-EKS / off-AWS (explicit keys via SecretRef).
 - **Trigger to do:** AWS-native customer with SQS as their bus + a
   throughput profile that warrants batching.
