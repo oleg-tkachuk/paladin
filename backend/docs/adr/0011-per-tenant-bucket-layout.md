@@ -112,7 +112,8 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   `SQSClientPool` / `RabbitMQConnPool`. `LookupBucket` already returns
   `backend_id`, so resolution becomes `registry.For(backend_id).Presign(…)`.
   This unblocks per-tenant **region pinning** and per-tenant **IAM** (a distinct
-  AssumeRole / credential per backend).
+  AssumeRole / credential per backend). Detailed component design:
+  [docs/backend-registry.md](../backend-registry.md).
 - **Phase 3 — shared→dedicated migration job (reuse StorageReplicator).**
   Because keys are uniform: provision the dedicated bucket → server-side
   `CopyObject` every object under the `<tenant_id>/` prefix with the **same**
