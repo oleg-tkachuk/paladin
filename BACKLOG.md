@@ -100,19 +100,25 @@ the same commit. Treat this file like a runtime invariant.
 
 ### NetworkPolicies per role
 
-- **Status:** Deferred
-- **Reason:** Phase 4 landed per-role Deployments / Services / SAs but
-  not NetworkPolicies. Today every pod can reach every other pod in
-  the namespace; the role split is purely a process-isolation gain.
-- **Definition of Done:**
-  - Per-role `NetworkPolicy` keyed off `app.kubernetes.io/component`
-    selectors. Default-deny ingress in the namespace, with explicit
-    allow rules for ingress → api / mcp from ingress-controller pods,
-    api → admin only from the worker (event dispatcher reasons), and
-    api/admin/worker → Postgres + S3 egress.
-  - Toggleable via `values.yaml` `networkPolicies.enabled` because
-    not every operator runs a CNI that enforces them.
-- **Blockers:** none. Pure chart work.
+- **Status:** SHIPPED (2026-07-02) — only enforcement verification on an
+  NP-capable cluster remains.
+- **Shipped:** `templates/networkpolicy.yaml` behind
+  `networkPolicies.enabled` (default off). Default-deny ingress+egress
+  scoped to the chart's own pods (`chart.selectorLabels`), then per-role
+  allows keyed off `app.kubernetes.io/component`: ingress-controller/UI/mcp
+  → api (8080/8085) + admin (8090), monitoring → ops ports, storage-ns →
+  ingest webhook (8100); egress common (DNS, 443/6443 for the K8s API +
+  https, Postgres, OTLP 4317) plus per-role storage/NATS, admin gets a
+  configurable `adminBrokerPorts` list for the synchronous TestSubscription,
+  and the dispatcher gets OPEN egress by design (customer sinks live on
+  arbitrary endpoints — the blast-radius win of the split is that only it
+  needs that). External namespaces/selectors are values-configurable.
+- **Definition of Done (remaining):**
+  - Verify enforcement on a cluster whose CNI implements NetworkPolicy —
+    the lab's orbstack does NOT (probe pod reached api:8080 through
+    default-deny), so the objects render + apply + the stack stays healthy,
+    but allow/deny semantics are untested against real enforcement.
+- **Blockers:** an NP-capable cluster (kind+calico would do for CI).
 
 ### KMS-wrapped capability signing key
 

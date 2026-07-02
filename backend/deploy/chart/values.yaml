@@ -1086,3 +1086,44 @@ rbac:
       # granting GET on a name that doesn't exist is harmless.
       - paladin-auth-signing-key
       - paladin-ingest-hmac
+
+# ─── NetworkPolicies (per role) ───────────────────────────────────────────────
+# Default-deny ingress+egress scoped to THIS chart's pods, with explicit
+# per-role allows. Off by default: enforcement needs a CNI that implements
+# NetworkPolicy (Calico / Cilium / kube-router); on clusters without one the
+# objects apply but are inert, so enabling is always safe — just possibly
+# meaningless. Note on probes: kubelet health checks originate from the node
+# and bypass policy enforcement in mainstream CNIs, so liveness/readiness keep
+# working under default-deny.
+#
+# The namespace selectors below match the standard `kubernetes.io/metadata.name`
+# label; adjust per environment if your dependencies live elsewhere.
+networkPolicies:
+  enabled: false
+  # Ingress controller pods allowed to reach api / admin / mcp.
+  ingressController:
+    namespace: networking
+    podLabels:
+      app.kubernetes.io/name: traefik
+  # Prometheus (ServiceMonitor scraper) allowed to reach the ops/metrics ports.
+  monitoring:
+    namespace: monitoring
+  # The UI (BFF) pods — same namespace, separate chart.
+  ui:
+    podLabels:
+      app.kubernetes.io/name: paladin-ui
+  postgres:
+    namespace: database
+    port: 5432
+  # Object storage (SeaweedFS / Garage / MinIO). No port pin — deployments
+  # differ (8333, 3900, 9000…); the namespace scope is the boundary.
+  storage:
+    namespace: storage
+  nats:
+    namespace: nats
+    port: 4222
+  # Broker ports the ADMIN pod may dial for the synchronous TestSubscription
+  # RPC (443 is always allowed for K8s API + https webhooks). The dispatcher
+  # is NOT limited by this list — it gets open egress, since customer sinks
+  # live on arbitrary endpoints.
+  adminBrokerPorts: [4222, 5671, 5672, 9092, 9093]

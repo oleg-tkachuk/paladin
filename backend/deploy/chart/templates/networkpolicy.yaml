@@ -1,0 +1,233 @@
+{{/*
+  Per-role NetworkPolicies — default-deny ingress+egress for every pod this
+  chart owns, then explicit allows per role. Gated on
+  networkPolicies.enabled (off by default: needs an enforcing CNI; inert
+  but harmless otherwise). See the values block for the flow matrix
+  rationale; the short version:
+
+    api        ← ingress-controller / UI / mcp     → common + storage
+    admin      ← ingress-controller / UI / mcp     → common + storage + NATS
+                                                     + adminBrokerPorts (Test)
+    worker     ← monitoring (ops)                  → common + storage
+    dispatcher ← monitoring (ops)                  → OPEN egress (customer
+                                                     sinks live anywhere)
+    ingest     ← storage ns (webhook) / monitoring → common + NATS
+    mcp        ← ingress-controller / monitoring   → common + api/admin pods
+
+  "common" egress = DNS (kube-system:53), 443/6443 anywhere (K8s API for the
+  secret resolver + https webhooks/JWKS), Postgres, OTLP 4317 in-cluster.
+
+  Kubelet liveness/readiness probes originate on the node and bypass policy
+  enforcement in mainstream CNIs, so default-deny ingress does not break
+  health checks.
+*/}}
+{{- if .Values.networkPolicies.enabled }}
+{{- $np := .Values.networkPolicies }}
+{{- $common := list }}
+{{/* DNS */}}
+{{- $dns := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "kube-system")))) "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53)) }}
+{{/* K8s API + any https (secret resolver, JWKS fetch, webhook sinks on 443) */}}
+{{- $https := dict "ports" (list (dict "protocol" "TCP" "port" 443) (dict "protocol" "TCP" "port" 6443)) }}
+{{/* Postgres */}}
+{{- $pg := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.postgres.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.postgres.port)) }}
+{{/* OTLP collector — in-cluster, any namespace */}}
+{{- $otlp := dict "ports" (list (dict "protocol" "TCP" "port" 4317)) }}
+{{- $common = list $dns $https $pg $otlp }}
+{{- $storageEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.storage.namespace)))) }}
+{{- $natsEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.nats.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.nats.port)) }}
+{{- $fromController := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.ingressController.namespace)) "podSelector" (dict "matchLabels" $np.ingressController.podLabels) }}
+{{- $fromMonitoring := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.monitoring.namespace)) }}
+{{- $fromUI := dict "podSelector" (dict "matchLabels" $np.ui.podLabels) }}
+{{- $fromMCP := dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "mcp" "app.kubernetes.io/instance" .Release.Name)) }}
+---
+# Baseline: default-deny both directions for every pod of this release.
+# Per-role policies below are purely additive allows.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-default-deny
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+{{- if .Values.deployments.api.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-api
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "api") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromController | toJson }}
+        - {{ $fromUI | toJson }}
+        - {{ $fromMCP | toJson }}
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8085 }
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+    - {{ $storageEgress | toJson }}
+{{- end }}
+{{- if .Values.deployments.admin.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-admin
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "admin") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "admin") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromController | toJson }}
+        - {{ $fromUI | toJson }}
+        - {{ $fromMCP | toJson }}
+      ports:
+        - { protocol: TCP, port: 8090 }
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+    - {{ $storageEgress | toJson }}
+    - {{ $natsEgress | toJson }}
+    {{- if $np.adminBrokerPorts }}
+    # Synchronous TestSubscription from the admin pod may dial broker sinks
+    # on these ports (any namespace / external). Trim per environment.
+    - ports:
+        {{- range $p := $np.adminBrokerPorts }}
+        - { protocol: TCP, port: {{ $p }} }
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- if .Values.deployments.worker.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-worker
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "worker") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "worker") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromMonitoring | toJson }}
+      ports:
+        - { protocol: TCP, port: 8099 }
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+    - {{ $storageEgress | toJson }}
+{{- end }}
+{{- if .Values.deployments.dispatcher.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-dispatcher
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "dispatcher") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "dispatcher") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromMonitoring | toJson }}
+      ports:
+        - { protocol: TCP, port: 8099 }
+  # Open egress by design: the dispatcher delivers to CUSTOMER sinks —
+  # webhooks, brokers, queues — on arbitrary endpoints and ports. The
+  # blast-radius win of the role split is that ONLY this pod needs it.
+  egress:
+    - {}
+{{- end }}
+{{- if .Values.deployments.ingest.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-ingest
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "ingest") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "ingest") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Webhook driver: the storage system POSTs bucket events to :8100.
+    # NATS driver deploys need no ingress at all — this allow is harmless.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.storage.namespace }}
+        - {{ $fromMonitoring | toJson }}
+      ports:
+        - { protocol: TCP, port: 8100 }
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+    - {{ $natsEgress | toJson }}
+{{- end }}
+{{- if .Values.deployments.mcp.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-mcp
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "mcp") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "mcp") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromController | toJson }}
+        - {{ $fromMonitoring | toJson }}
+      ports:
+        - { protocol: TCP, port: 8095 }
+  egress:
+    {{- range $r := $common }}
+    - {{ $r | toJson }}
+    {{- end }}
+    # Bridge mode proxies MCP tool calls to the api / admin planes.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: admin
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 8085 }
+        - { protocol: TCP, port: 8090 }
+{{- end }}
+{{- end }}
