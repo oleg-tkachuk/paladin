@@ -397,6 +397,24 @@ permit (
   action == Action::"AuthorizeOAuth",
   resource
 );
+
+// Built-in: any member may read their OWN tenant's record — the UI resolves
+// the display name / slug for every signed-in user, so this is self-service
+// like the OAuth consent above, not an admin grant. Matters especially for
+// tenants with an EMPTY stored policy (the bootstrap tenant), which
+// otherwise deny everything to non-platform-admins. Cross-tenant reads are
+// handler-gated to platform.admin before Cedar runs, and a tenant policy
+// can still forbid this (first-forbid wins).
+permit (
+  principal,
+  action == Action::"ReadTenant",
+  resource
+)
+when {
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
 `
 
 // compile parses the policy text into a cedar.PolicySet, prepending the

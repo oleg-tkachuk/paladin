@@ -63,3 +63,37 @@ when { context.oauth_scopes.contains("paladin.read") };`
 		t.Fatalf("scope-forbid decision = %v, want Deny", got)
 	}
 }
+
+// TestBuiltin_ReadOwnTenant pins the builtin member-level ReadTenant permit
+// against an EMPTY stored policy — the bootstrap tenant's shape, where only
+// the builtins apply. Own-tenant reads allow for any member; foreign-tenant
+// reads stay denied (the handler additionally platform-admin-gates them).
+func TestBuiltin_ReadOwnTenant(t *testing.T) {
+	e := NewEngine(fakeStore{text: ""}, time.Minute)
+	tid := uuid.MustParse("0a8c0000-0000-7000-8000-000000000aaa")
+	foreign := uuid.MustParse("0a8c0000-0000-7000-8000-000000000bbb")
+
+	authz := func(roles []string, resourceTenant uuid.UUID) Decision {
+		t.Helper()
+		dec, err := e.IsAuthorized(context.Background(),
+			&Principal{Subject: "op-1", TenantID: tid, Roles: roles},
+			ActionReadTenant,
+			&Resource{TenantID: resourceTenant},
+			RequestContext{Now: time.Now()},
+		)
+		if err != nil {
+			t.Fatalf("IsAuthorized: %v", err)
+		}
+		return dec
+	}
+
+	if got := authz([]string{"tenant.admin"}, tid); got != DecisionAllow {
+		t.Errorf("tenant.admin own-tenant read on empty policy = %v, want Allow", got)
+	}
+	if got := authz([]string{"tenant.user"}, tid); got != DecisionAllow {
+		t.Errorf("plain member own-tenant read on empty policy = %v, want Allow", got)
+	}
+	if got := authz([]string{"tenant.admin"}, foreign); got != DecisionDeny {
+		t.Errorf("foreign-tenant read = %v, want Deny", got)
+	}
+}
