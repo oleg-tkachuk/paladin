@@ -488,12 +488,14 @@ open deliberately — each notes why._
   writer pool. `TestKafkaSinkDelivery_SASL_SSL` runs DeliverOne over
   SCRAM-SHA-256 + TLS against a redpanda mounted with a generated server
   cert, verified via tls_ca_cert; PASSED locally against Docker.
+- **Shipped (2026-07-02) — mTLS vs require_client_auth broker:**
+  `TestKafkaSinkDelivery_MTLSRequireClientAuth` hand-rolls the redpanda
+  module's two-phase config trick (the module's embedded template can't
+  express client-auth) to run a broker with `require_client_auth: true` +
+  a truststore: the sink delivers with `tls_client_cert/key`, and the same
+  transport WITHOUT the keypair is refused at the handshake (negative
+  pinned). PASSED locally against Docker.
 - **Definition of Done (remaining):**
-  - Optional: mTLS handshake against a broker REQUIRING client certs
-    (require_client_auth) — the client-cert presentation is unit-covered
-    and the equivalent broker-side verification is proven on the RabbitMQ
-    sink (fail_if_no_peer_cert); redpanda-side plumbing wasn't worth the
-    testcontainers bootstrap depth yet.
   - Optional: per-tenant topic prefix vs operator-defined topic — operator
     -defined shipped; revisit if a customer needs auto-fan-out by tenant.
 - **Blockers:** none — incremental; driven by a customer's auth posture.
@@ -542,9 +544,14 @@ open deliberately — each notes why._
   RabbitMQ whose TLS listener REQUIRES a client cert (verify_peer +
   fail_if_no_peer_cert), including the negative (no client cert → handshake
   refused); PASSED locally against Docker.
-- **Definition of Done (remaining):**
-  - Channel-drop-mid-publish behaviour under the real broker (the happy
-    round-trip is covered; the drop path still relies on the unit seam).
+- **Shipped (2026-07-02) — connection-drop recovery under the real
+  broker:** `TestRabbitMQSinkDelivery_ConnectionDropRedial` delivers, has
+  the broker force-close every AMQP connection (`rabbitmqctl
+  close_all_connections`), then proves deliveries either fail loudly
+  (retryable) or succeed after the pool's health-check redial — and drains
+  the queue to confirm every reported success actually landed (publisher
+  confirms → no silent losses). Entry complete — delete on next touch if
+  nothing new accrues.
 - **Trigger to do:** customer ask — banking / fintech enterprise already
   running a RabbitMQ cluster as their event bus.
 

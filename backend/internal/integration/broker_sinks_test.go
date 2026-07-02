@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"strings"
@@ -589,4 +590,279 @@ ssl_options.fail_if_no_peer_cert = true
 		t.Fatal("queue empty — confirmed publish did not land")
 	}
 	assertEnvelope(t, msg.Body, "paladin.bucket.updated")
+}
+
+// TestKafkaSinkDelivery_MTLSRequireClientAuth runs the sink against a
+// redpanda whose kafka listener REQUIRES a client certificate
+// (require_client_auth + truststore). The testcontainers redpanda module's
+// embedded config template can't express that, so this hand-rolls the
+// module's own two-phase trick: start the container with an entrypoint that
+// waits for the injected node config (the advertised port is only known
+// after start), then inject a config carrying require_client_auth. Positive:
+// the sink delivers using tls_client_cert/key. Negative: the same transport
+// minus the client keypair is refused at the handshake.
+func TestKafkaSinkDelivery_MTLSRequireClientAuth(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	ctx := context.Background()
+
+	ca, caKey, caPEM := genCA(t)
+	srvCert, srvKey := genLeaf(t, ca, caKey, "redpanda-server", true)
+	cliCert, cliKey := genLeaf(t, ca, caKey, "paladin-dispatcher", false)
+
+	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "docker.redpanda.com/redpandadata/redpanda:v24.3.6",
+			ExposedPorts: []string{"9092/tcp", "9644/tcp"},
+			// Injected files (docker cp) land root-owned and rpk rewrites the
+			// node config with a chown — run as root so that succeeds (the
+			// stock image user can't chown root-owned files).
+			User: "root",
+			// Two-phase start (the trick the redpanda module itself uses): the
+			// inline entrypoint waits for the injected node config — whose
+			// advertised port is only known after docker start — then execs the
+			// image's real entrypoint.
+			Entrypoint: []string{"/bin/bash", "-c",
+				`until grep -q "# Injected by test" /etc/redpanda/redpanda.yaml 2>/dev/null; do sleep 0.1; done; exec /entrypoint.sh "$@"`,
+				"--"},
+			Cmd: []string{"redpanda", "start", "--mode=dev-container", "--smp=1", "--memory=1G"},
+			Files: []testcontainers.ContainerFile{
+				{Reader: strings.NewReader(caPEM), ContainerFilePath: "/etc/redpanda/ca.pem", FileMode: 0o644},
+				{Reader: strings.NewReader(srvCert), ContainerFilePath: "/etc/redpanda/cert.pem", FileMode: 0o644},
+				{Reader: strings.NewReader(srvKey), ContainerFilePath: "/etc/redpanda/key.pem", FileMode: 0o644},
+			},
+			// Only wait for the port MAPPING here — redpanda itself starts
+			// after the config injection below.
+			WaitingFor: wait.ForMappedPort("9092/tcp"),
+		},
+		Started: true,
+	})
+	if err != nil {
+		t.Fatalf("start redpanda(mtls): %v", err)
+	}
+	defer func() { _ = testcontainers.TerminateContainer(ctr) }()
+	host, err := ctr.Host(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kafkaPort, err := ctr.MappedPort(ctx, "9092/tcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nodeCfg := fmt.Sprintf(`# Injected by test
+redpanda:
+  admin:
+    address: 0.0.0.0
+    port: 9644
+  kafka_api:
+    - address: 0.0.0.0
+      name: external
+      port: 9092
+      authentication_method: none
+  advertised_kafka_api:
+    - address: %s
+      name: external
+      port: %s
+  kafka_api_tls:
+    - name: external
+      enabled: true
+      cert_file: /etc/redpanda/cert.pem
+      key_file: /etc/redpanda/key.pem
+      truststore_file: /etc/redpanda/ca.pem
+      require_client_auth: true
+`, host, kafkaPort.Port())
+	if err := ctr.CopyToContainer(ctx, []byte(nodeCfg), "/etc/redpanda/redpanda.yaml", 0o644); err != nil {
+		t.Fatalf("inject node config: %v", err)
+	}
+	if err := wait.ForLog("Successfully started Redpanda!").
+		WithStartupTimeout(120*time.Second).WaitUntilReady(ctx, ctr); err != nil {
+		t.Fatalf("redpanda never started: %v", err)
+	}
+	broker := fmt.Sprintf("%s:%s", host, kafkaPort.Port())
+
+	caPool := x509.NewCertPool()
+	caPool.AppendCertsFromPEM([]byte(caPEM))
+	cliPair, err := tls.X509KeyPair([]byte(cliCert), []byte(cliKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtlsCfg := &tls.Config{RootCAs: caPool, Certificates: []tls.Certificate{cliPair}, MinVersion: tls.VersionTLS12}
+
+	const topic = "paladin-events-mtls-it"
+	kc := &kafka.Client{Addr: kafka.TCP(broker), Transport: &kafka.Transport{TLS: mtlsCfg}}
+	cctx, ccancel := context.WithTimeout(ctx, 30*time.Second)
+	defer ccancel()
+	if _, err := kc.CreateTopics(cctx, &kafka.CreateTopicsRequest{
+		Topics: []kafka.TopicConfig{{Topic: topic, NumPartitions: 1, ReplicationFactor: 1}},
+	}); err != nil {
+		t.Fatalf("create topic over mTLS: %v", err)
+	}
+
+	// NEGATIVE: same CA trust but NO client certificate — the broker must
+	// refuse the handshake (require_client_auth).
+	noCert := &kafka.Client{Addr: kafka.TCP(broker), Transport: &kafka.Transport{
+		TLS: &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
+	}}
+	nctx, ncancel := context.WithTimeout(ctx, 15*time.Second)
+	defer ncancel()
+	if _, err := noCert.Metadata(nctx, &kafka.MetadataRequest{}); err == nil {
+		t.Fatal("metadata WITHOUT a client cert must fail against require_client_auth")
+	}
+
+	d := &worker.Dispatcher{Kafka: worker.NewKafkaWriterPool(nil), MaxAttempts: 1}
+	defer d.Kafka.Close()
+	sub := brokerTestSub(t, "kafka", map[string]any{
+		"brokers":         broker,
+		"topic":           topic,
+		"tls_enabled":     true,
+		"tls_client_cert": cliCert,
+		"tls_client_key":  cliKey,
+		"tls_ca_cert":     caPEM,
+	})
+	if err := d.DeliverOne(ctx, sub, "paladin.bucket.updated"); err != nil {
+		t.Fatalf("DeliverOne(kafka mTLS): %v", err)
+	}
+
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     []string{broker},
+		Topic:       topic,
+		Dialer:      &kafka.Dialer{Timeout: 10 * time.Second, TLS: mtlsCfg},
+		StartOffset: kafka.FirstOffset,
+		MaxWait:     time.Second,
+	})
+	defer func() { _ = reader.Close() }()
+	rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
+	defer rcancel()
+	msg, err := reader.ReadMessage(rctx)
+	if err != nil {
+		t.Fatalf("consume over mTLS: %v", err)
+	}
+	assertEnvelope(t, msg.Value, "paladin.bucket.updated")
+}
+
+// TestRabbitMQSinkDelivery_ConnectionDropRedial pins the drop-mid-stream
+// behaviour under the real broker: after a successful delivery the broker
+// force-closes every AMQP connection (rabbitmqctl close_all_connections);
+// subsequent deliveries either fail loudly (retryable — the outbox re-runs
+// them) or succeed after the pool's health check redials, and publisher
+// confirms guarantee no silent losses: every reported success is on the
+// queue afterwards.
+func TestRabbitMQSinkDelivery_ConnectionDropRedial(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	ctx := context.Background()
+	const user, pass = "paladin", "paladin-secret-pw"
+
+	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "rabbitmq:4.0-alpine",
+			ExposedPorts: []string{"5672/tcp"},
+			Env: map[string]string{
+				"RABBITMQ_DEFAULT_USER": user,
+				"RABBITMQ_DEFAULT_PASS": pass,
+			},
+			WaitingFor: wait.ForLog("Server startup complete").WithStartupTimeout(90 * time.Second),
+		},
+		Started: true,
+	})
+	if err != nil {
+		t.Fatalf("start rabbitmq: %v", err)
+	}
+	defer func() { _ = testcontainers.TerminateContainer(ctr) }()
+	host, err := ctr.Host(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := ctr.MappedPort(ctx, "5672/tcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := fmt.Sprintf("amqp://%s:%s@%s:%s/", user, pass, host, port.Port())
+
+	adminConn, err := amqp.Dial(url)
+	if err != nil {
+		t.Fatalf("amqp dial: %v", err)
+	}
+	ch, err := adminConn.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const queue = "paladin-events-drop-it"
+	if _, err := ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
+		t.Fatalf("declare queue: %v", err)
+	}
+	// The admin connection will be dropped too — close it now, count later
+	// over a fresh one.
+	_ = adminConn.Close()
+
+	pool := worker.NewRabbitMQConnPool(nil)
+	defer pool.Close()
+	d := &worker.Dispatcher{RabbitMQ: pool, MaxAttempts: 1}
+	sub := brokerTestSub(t, "rabbitmq", map[string]any{
+		"url": url, "exchange": "", "routing_key": queue,
+	})
+
+	// 1) Happy delivery establishes the pooled connection.
+	if err := d.DeliverOne(ctx, sub, "paladin.bucket.updated"); err != nil {
+		t.Fatalf("initial DeliverOne: %v", err)
+	}
+	delivered := 1
+
+	// 2) Broker force-closes EVERY connection — the pooled one included.
+	code, out, err := ctr.Exec(ctx, []string{"rabbitmqctl", "close_all_connections", "test-forced-drop"})
+	if err != nil || code != 0 {
+		b, _ := io.ReadAll(out)
+		t.Fatalf("close_all_connections: code=%d err=%v out=%s", code, err, b)
+	}
+
+	// 3) Deliver repeatedly. Early attempts may hit the not-yet-detected dead
+	// connection and MUST fail loudly (the outbox would retry them); once the
+	// pool's health check notices, it redials and deliveries succeed again.
+	deadline := time.Now().Add(30 * time.Second)
+	recovered := false
+	for time.Now().Before(deadline) {
+		if err := d.DeliverOne(ctx, sub, "paladin.bucket.updated"); err == nil {
+			delivered++
+			recovered = true
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !recovered {
+		t.Fatal("delivery never recovered after the broker dropped the connection")
+	}
+
+	// 4) One more for good measure on the redialed connection.
+	if err := d.DeliverOne(ctx, sub, "paladin.bucket.updated"); err != nil {
+		t.Fatalf("post-recovery DeliverOne: %v", err)
+	}
+	delivered++
+
+	// 5) Confirms contract: every success is actually on the queue.
+	checkConn, err := amqp.Dial(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = checkConn.Close() }()
+	checkCh, err := checkConn.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := 0
+	for {
+		_, ok, err := checkCh.Get(queue, true)
+		if err != nil {
+			t.Fatalf("drain: %v", err)
+		}
+		if !ok {
+			break
+		}
+		got++
+	}
+	if got != delivered {
+		t.Fatalf("queue holds %d messages, want %d (confirmed deliveries must never be lost)", got, delivered)
+	}
 }
