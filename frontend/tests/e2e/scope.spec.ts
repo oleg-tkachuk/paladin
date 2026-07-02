@@ -1,20 +1,22 @@
 /**
- * US2 — Backend + bucket scope switching.
+ * US2 — Tenant + backend + bucket scope switching.
  *
  * Spec: specs/001-frontend-playwright-e2e/spec.md §"User Story 2".
  *
- * Re-scoped during /speckit-implement from the original "tenant
- * switching" wording because the current UI's `<ScopePicker>`
- * holds tenant as a JWT-derived read-only field — cross-tenant
- * switching needs a backend SwitchTenant RPC that doesn't yet
- * exist. The cross-tenant work is tracked in
- * BACKLOG.md §"Cross-tenant scope switcher".
+ * The original "tenant scope switching" wording is BACK: the backend now
+ * ships ListMyMemberships + SwitchTenant (#99) and the ScopePicker's
+ * tenant row is a real switcher (#100). The backend/bucket scenarios that
+ * carried US2 while switching didn't exist stay as a regression guard for
+ * the picker plumbing.
  *
- * Three scenarios exercise the scope axes the UI ACTUALLY
- * exposes today:
+ * Scenarios:
  *   1. picker opens; sections render with current state
  *   2. selecting a bucket flips the topbar breadcrumb label
  *   3. reload preserves the localStorage'd scope
+ *   4. switching to a second tenant re-scopes the session — a real
+ *      SwitchTenant round-trip: the fixture seeds a membership (a users
+ *      row for the same subject in a fresh tenant), the picker switches
+ *      into it, and the topbar re-labels
  *
  * Per-test fixture: one seeded bucket under the default
  * `primary` backend. The picker needs at least one selectable
@@ -22,7 +24,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
-import { seedBucket } from "./fixtures/seed";
+import { seedBucket, seedTenantMembership } from "./fixtures/seed";
 
 // The ScopePicker is a two-level Radix popover (ScopePicker.tsx): the main
 // trigger ("Scope picker — …") opens a popover holding two ScopeRow buttons —
@@ -45,7 +47,7 @@ async function selectBucket(
     .click();
 }
 
-test.describe("US2 — Backend + bucket scope switching", () => {
+test.describe("US2 — Tenant + backend + bucket scope switching", () => {
   test("picker opens with backend + bucket switchers", async ({ page }) => {
     // Seed BEFORE login so the bucket exists when the picker's first
     // ListBuckets fetch runs (seeding after login races that fetch).
@@ -109,5 +111,48 @@ test.describe("US2 — Backend + bucket scope switching", () => {
     await expect(
       page.getByRole("button", { name: /^Scope picker —/ }),
     ).toHaveAttribute("aria-label", new RegExp(`bucket ${bucket.bucketName}`));
+  });
+
+  test("switching to a second tenant re-scopes the session", async ({
+    page,
+  }) => {
+    // Seed BEFORE login: a fresh tenant + a users row for the SAME subject
+    // inside it (per-membership roles: tenant.admin there, not
+    // platform.admin). SwitchTenant needs no password in the target —
+    // the switch re-mints off the caller's existing identity.
+    const membership = await seedTenantMembership();
+    await loginAsAdmin(page);
+
+    // Open the picker, then the tenant ScopeRow. Memberships load lazily
+    // when the picker opens (useMemberships), so the row's cmdk list may
+    // briefly show only the signed-in tenant — the search below waits for
+    // the target option to render.
+    await page.getByRole("button", { name: /^Scope picker —/ }).click();
+    await page.getByRole("button", { name: /^Switch tenant/ }).click();
+    await page.getByPlaceholder("Search tenants…").fill(membership.slug);
+    await page
+      .getByRole("option", { name: new RegExp(membership.slug) })
+      .first()
+      .click();
+
+    // The switch swaps the token cache + user record (AuthContext), which
+    // re-labels the topbar trigger with the TARGET tenant. Assert on the
+    // tenant-id prefix, not displayName: the label falls back to
+    // `<uuid8>…` until GetTenant resolves the record, and for a fresh
+    // tenant.admin membership that lookup may be Cedar-denied — the id
+    // prefix is the invariant that proves the session re-scoped.
+    await expect(
+      page.getByRole("button", { name: /^Scope picker —/ }),
+    ).toHaveAttribute(
+      "aria-label",
+      new RegExp(`tenant .*${membership.tenantId.slice(0, 8)}`),
+      { timeout: 10_000 },
+    );
+
+    // The soft scope reset on tenant change: backend/bucket fall back to
+    // "any" — the previous tenant's coordinates must not leak across.
+    await expect(
+      page.getByRole("button", { name: /^Scope picker —/ }),
+    ).toHaveAttribute("aria-label", /backend any, bucket any/);
   });
 });

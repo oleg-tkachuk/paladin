@@ -29,6 +29,7 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
+import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
@@ -405,4 +406,93 @@ export async function seedCapability(opts: {
     );
   }
   return { id, tenantId: opts.tenantId, subject };
+}
+
+// ─── cross-tenant membership seeding ───────────────────────
+//
+// SwitchTenant (US2 tenant switching) needs the signed-in subject to hold a
+// users row in a SECOND tenant — a "membership" under the 1:1-per-tenant
+// user model. platform.admin may create users in foreign tenants, so we
+// seed: fresh tenant → CreateUser(same subject) in it. The membership's
+// password is irrelevant to switching (SwitchTenant re-mints off the
+// caller's existing identity, no password re-check), but CreateUser
+// requires one ≥12 chars.
+
+async function getIamToken(): Promise<string> {
+  const cached = tokenCache.get("paladin-iam");
+  if (cached) return cached;
+  const iam = createClient(
+    AuthService,
+    createConnectTransport({
+      baseUrl: IAM_URL,
+      httpVersion: "1.1",
+      useBinaryFormat: false,
+    }),
+  );
+  const res = await iam.login({
+    subject: SEEDED_ADMIN.subject,
+    password: SEEDED_ADMIN.password,
+    requestedAudience: "paladin-iam",
+  });
+  const access = res.tokens?.accessToken;
+  if (!access) {
+    throw new Error(
+      `seed.ts: Login(audience=paladin-iam) returned no access_token — ` +
+        `check the bootstrap container provisioned ${SEEDED_ADMIN.subject}`,
+    );
+  }
+  tokenCache.set("paladin-iam", access);
+  return access;
+}
+
+function iamAdminTransport() {
+  return createConnectTransport({
+    baseUrl: IAM_URL,
+    httpVersion: "1.1",
+    useBinaryFormat: false,
+    interceptors: [
+      (next) => async (req) => {
+        const token = await getIamToken();
+        req.header.set("Authorization", `Bearer ${token}`);
+        if (!req.header.has("Idempotency-Key")) {
+          req.header.set("Idempotency-Key", crypto.randomUUID());
+        }
+        return next(req);
+      },
+    ],
+  });
+}
+
+export interface SeededMembership {
+  /** The second tenant the seeded admin subject is now a member of. */
+  tenantId: string;
+  slug: string;
+  displayName: string;
+}
+
+/**
+ * Seed a second tenant + a users row for SEEDED_ADMIN's subject inside it,
+ * so the ScopePicker's tenant switcher has a real target. Roles:
+ * tenant.admin — deliberately NOT platform.admin, proving roles are
+ * per-membership.
+ */
+export async function seedTenantMembership(): Promise<SeededMembership> {
+  const tenant = await seedTenant({
+    slugPrefix: "switch",
+    displayNamePrefix: "Switch Target",
+  });
+  const users = createClient(UserService, iamAdminTransport());
+  await users.createUser({
+    parent: `tenants/${tenant.tenantId}`,
+    subject: SEEDED_ADMIN.subject,
+    displayName: "e2e-admin (switch membership)",
+    initialPassword: "e2e-switch-not-a-secret-2026",
+    roles: ["tenant.admin"],
+    scopes: [],
+  });
+  return {
+    tenantId: tenant.tenantId,
+    slug: tenant.slug,
+    displayName: tenant.displayName,
+  };
 }

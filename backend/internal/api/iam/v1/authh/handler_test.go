@@ -215,15 +215,64 @@ func TestLogin_Success(t *testing.T) {
 	}
 }
 
-func TestLogin_AmbiguousGlobalLookup(t *testing.T) {
-	// No tenant hint + subject in two tenants → ask the client to disambiguate.
-	users := &fakeUsers{global: []authstore.User{
-		userWithPassword(t, "pw"), userWithPassword(t, "pw"),
-	}}
+// Multi-tenant subject, no hint: the password picks the memberships it
+// opens and the most recently used one wins — the login form has no tenant
+// field, so the old "supply X-Tenant-Id" InvalidArgument locked multi-tenant
+// subjects out of the UI entirely. Re-scoping is the tenant switcher's job.
+func TestLogin_MultiTenantSubject_MostRecentWins(t *testing.T) {
+	older, newer := userWithPassword(t, "pw"), userWithPassword(t, "pw")
+	t1 := time.Unix(1_700_000_000, 0)
+	t2 := time.Unix(1_800_000_000, 0)
+	older.LastLoginAt = &t1
+	newer.LastLoginAt = &t2
+	users := &fakeUsers{global: []authstore.User{older, newer}}
+	minter := &stubMinter{}
+	h := newHandler(users, &fakeRefresh{}, minter)
+
+	out, err := h.Login(context.Background(), LoginInput{Subject: "u1", Password: "pw"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if out.User.TenantID != newer.TenantID {
+		t.Errorf("landed in tenant %s, want the most recently used %s", out.User.TenantID, newer.TenantID)
+	}
+	if minter.accessClaims.TenantID != newer.TenantID {
+		t.Errorf("access token tenant = %s, want %s", minter.accessClaims.TenantID, newer.TenantID)
+	}
+}
+
+func TestLogin_MultiTenantSubject_PasswordPicksTheMembership(t *testing.T) {
+	// Same subject, DIFFERENT passwords per tenant: only the matching row
+	// logs in — even when the non-matching one has a fresher last_login.
+	match, other := userWithPassword(t, "right-pw"), userWithPassword(t, "other-pw")
+	fresh := time.Unix(1_900_000_000, 0)
+	other.LastLoginAt = &fresh
+	users := &fakeUsers{global: []authstore.User{match, other}}
 	h := newHandler(users, &fakeRefresh{}, &stubMinter{})
+
+	out, err := h.Login(context.Background(), LoginInput{Subject: "u1", Password: "right-pw"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if out.User.TenantID != match.TenantID {
+		t.Errorf("landed in tenant %s, want the password-matching %s", out.User.TenantID, match.TenantID)
+	}
+}
+
+func TestLogin_MultiTenantSubject_DisabledSkippedAndAllBadIsUnauthenticated(t *testing.T) {
+	disabled := userWithPassword(t, "pw")
+	disabled.Disabled = true
+	federated := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"} // no hash
+	users := &fakeUsers{global: []authstore.User{disabled, federated}}
+	minter := &stubMinter{}
+	h := newHandler(users, &fakeRefresh{}, minter)
+
 	_, err := h.Login(context.Background(), LoginInput{Subject: "u1", Password: "pw"})
-	if code(err) != connect.CodeInvalidArgument {
-		t.Fatalf("code = %v, want InvalidArgument (ambiguous)", code(err))
+	if code(err) != connect.CodeUnauthenticated {
+		t.Fatalf("code = %v, want Unauthenticated (generic — no per-tenant detail leak)", code(err))
+	}
+	if minter.calls != 0 {
+		t.Error("no token must be minted when no membership accepts the password")
 	}
 }
 

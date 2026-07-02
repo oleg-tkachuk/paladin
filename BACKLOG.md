@@ -867,26 +867,6 @@ open deliberately — each notes why._
 
 ## Architecture (post-review 2026-05)
 
-### Cross-tenant scope switcher (ListMyMemberships + SwitchTenant)
-
-- **Status:** SHIPPED (backend + UI) — only a Playwright e2e revert remains.
-- **Shipped:** `AuthService.ListMyMemberships` + `SwitchTenant` (backend, #99)
-  and the interactive `<ScopePicker>` tenant switcher (UI). Built on the
-  existing schema (a subject can hold a `users` row per tenant, so a
-  "membership" IS a row — no join table / migration). The Cedar blocker
-  dissolved: membership is per-tenant (you can only switch into a tenant where
-  you hold an explicit row), so `platform.admin` is naturally non-transitive.
-  SwitchTenant mints a fresh iam pair (new refresh family) with **no password
-  re-check** (the caller could log in there directly) and writes an
-  `iam.TenantSwitched` audit row. The BFF gained `/api/auth/memberships` +
-  `/api/auth/switch-tenant`; `AuthContext.switchTenant` reseeds the token cache
-  and `ScopeContext` resets the tenant-specific soft scope (backend/bucket/
-  objectKey) on a switch.
-- **Definition of Done (remaining):**
-  - Frontend Playwright e2e suite's US2 reverts to its original "Tenant scope
-    switching" wording — gated on a 2-tenant e2e fixture (a subject with a
-    users row in two tenants) so the switch is exercisable end-to-end.
-- **Blockers:** none — the Cedar question is resolved (per-tenant membership).
 
 ### Audit form (B): staging table + projector (latency mitigation only)
 

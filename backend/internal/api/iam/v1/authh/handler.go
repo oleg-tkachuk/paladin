@@ -164,19 +164,9 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("password required"))
 	}
 
-	u, err := h.resolveUser(ctx, in.Subject, in.TenantHint)
+	u, err := h.resolveLoginUser(ctx, in)
 	if err != nil {
 		return nil, err
-	}
-	if u.Disabled {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("user disabled"))
-	}
-	if len(u.PasswordHash) == 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("user has no password (federated)"))
-	}
-	if err := auth.CheckPassword(u.PasswordHash, in.Password); err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
 	}
 
 	audience := in.RequestedAudience
@@ -650,34 +640,78 @@ func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error
 	}
 }
 
-// resolveUser looks up the user by subject. With a tenant hint, scoped to
-// that tenant. Without one, scans across tenants and requires a unique
-// match — multiple matches are reported as InvalidArgument so the frontend
-// knows to re-prompt for a tenant.
-func (h *Handler) resolveUser(ctx context.Context, subject string, hint uuid.UUID) (authstore.User, error) {
-	if hint != uuid.Nil {
-		u, err := h.users.GetBySubject(ctx, hint, subject)
+// resolveLoginUser picks the user row a Login authenticates against and
+// verifies the password. With a tenant hint the lookup is scoped to that
+// tenant. Without one the subject may hold a row in SEVERAL tenants (one
+// membership per tenant — the model behind SwitchTenant), so the password is
+// checked against every candidate (FindBySubjectGlobal caps at 5 rows, so at
+// most 5 bcrypt comparisons) and the session lands in the most recently
+// used matching tenant; re-scoping afterwards is what the tenant switcher is
+// for. This replaced the earlier "multiple tenants — supply X-Tenant-Id"
+// InvalidArgument: the login form sends no hint, so a multi-tenant subject
+// could never sign in through the UI at all.
+func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstore.User, error) {
+	if in.TenantHint != uuid.Nil {
+		u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
 		if err != nil {
 			if errors.Is(err, authstore.ErrNotFound) {
+				// Same generic message — do not leak whether subject exists.
 				return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
 			}
 			return authstore.User{}, connect.NewError(connect.CodeInternal, err)
 		}
-		return u, nil
+		return checkLoginRow(u, in.Password)
 	}
-	matches, err := h.users.FindBySubjectGlobal(ctx, subject)
+	matches, err := h.users.FindBySubjectGlobal(ctx, in.Subject)
 	if err != nil {
 		return authstore.User{}, connect.NewError(connect.CodeInternal, err)
 	}
 	switch len(matches) {
 	case 0:
-		// Same generic message — do not leak whether subject exists.
 		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
 	case 1:
-		return matches[0], nil
+		// Single membership keeps the precise error taxonomy (disabled /
+		// federated) — nothing to disambiguate, so nothing leaks.
+		return checkLoginRow(matches[0], in.Password)
 	}
-	return authstore.User{}, connect.NewError(connect.CodeInvalidArgument,
-		errors.New("subject is registered in multiple tenants — supply X-Tenant-Id"))
+	// Multi-tenant subject: the password picks the memberships it actually
+	// opens; the most recently used one wins. Disabled / federated rows are
+	// silently skipped here (unlike the single-row path) — with several
+	// candidates, per-row detail would leak which tenants the subject is in.
+	var best *authstore.User
+	for i := range matches {
+		m := &matches[i]
+		if m.Disabled || len(m.PasswordHash) == 0 {
+			continue
+		}
+		if auth.CheckPassword(m.PasswordHash, in.Password) != nil {
+			continue
+		}
+		if best == nil ||
+			(m.LastLoginAt != nil && (best.LastLoginAt == nil || m.LastLoginAt.After(*best.LastLoginAt))) {
+			best = m
+		}
+	}
+	if best == nil {
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+	}
+	return *best, nil
+}
+
+// checkLoginRow applies the single-row login checks: disabled, federated
+// (no local password), and the bcrypt comparison itself.
+func checkLoginRow(u authstore.User, password string) (authstore.User, error) {
+	if u.Disabled {
+		return authstore.User{}, connect.NewError(connect.CodePermissionDenied, errors.New("user disabled"))
+	}
+	if len(u.PasswordHash) == 0 {
+		return authstore.User{}, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("user has no password (federated)"))
+	}
+	if err := auth.CheckPassword(u.PasswordHash, password); err != nil {
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+	}
+	return u, nil
 }
 
 func isAdminRole(r string) bool {
