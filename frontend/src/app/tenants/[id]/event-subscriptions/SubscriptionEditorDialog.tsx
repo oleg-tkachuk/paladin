@@ -103,7 +103,7 @@ export function SubscriptionEditorDialog({
     setForm((prev) => ({
       ...prev,
       template: id,
-      sinkType: tpl.forcesHttp ? "http" : prev.sinkType,
+      sinkType: tpl.pinnedSinkType ?? prev.sinkType,
       filter: tpl.filter !== undefined ? tpl.filter : prev.filter,
     }));
   };
@@ -212,7 +212,7 @@ export function SubscriptionEditorDialog({
             <FormSection title="Template">
               <Field
                 label="Connector"
-                hint="Pick a known connector to prefill the URL placeholder and a recommended CEL filter. Pick Custom for full manual control."
+                hint="Pick a known connector to pin the sink type and prefill placeholders + a recommended CEL filter (Slack/Discord/PagerDuty → HTTP, Redpanda → Kafka). Pick Custom for full manual control."
               >
                 <ToggleRow
                   options={TEMPLATES.map((t) => ({
@@ -376,6 +376,10 @@ export function SubscriptionEditorDialog({
                 >
                   <Input
                     id="sub-kafka-brokers"
+                    placeholder={
+                      TEMPLATES.find((t) => t.id === form.template)
+                        ?.brokersPlaceholder ?? "broker1:9092,broker2:9092"
+                    }
                     value={form.kafkaBrokers}
                     onChange={(e) =>
                       setForm((p) => ({

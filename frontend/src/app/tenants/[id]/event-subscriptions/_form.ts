@@ -18,14 +18,19 @@ import type {
 // of "template"; it's just an HttpSink with whatever URL the user
 // pastes. "custom" is the no-prefill option for everything else.
 export type TemplateId =
-  "slack" | "discord" | "pagerduty" | "plain-http" | "custom";
+  "slack" | "discord" | "pagerduty" | "plain-http" | "redpanda" | "custom";
+
+export type SinkType = "http" | "nats" | "kafka" | "sqs" | "rabbitmq";
 
 export interface TemplateDef {
   id: TemplateId;
   label: string;
-  /** When non-null, the template auto-pins the sink type to HTTP. */
-  forcesHttp: boolean;
+  /** When set, the template auto-pins the sink type (HTTP for webhooks,
+   *  Kafka for Redpanda, etc.). Undefined = don't touch the current type. */
+  pinnedSinkType?: SinkType;
   urlPlaceholder?: string;
+  /** Brokers placeholder for Kafka-wire templates (Redpanda). */
+  brokersPlaceholder?: string;
   secretHint?: string;
   filter?: string;
   description?: string;
@@ -35,7 +40,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
   {
     id: "slack",
     label: "Slack",
-    forcesHttp: true,
+    pinnedSinkType: "http",
     urlPlaceholder: "https://hooks.slack.com/services/...",
     secretHint: "Slack's incoming-webhook URL — paste it as-is.",
     filter: "",
@@ -43,7 +48,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
   {
     id: "discord",
     label: "Discord",
-    forcesHttp: true,
+    pinnedSinkType: "http",
     urlPlaceholder: "https://discord.com/api/webhooks/...",
     secretHint: "Discord webhook URL.",
     filter: "",
@@ -51,7 +56,7 @@ export const TEMPLATES: readonly TemplateDef[] = [
   {
     id: "pagerduty",
     label: "PagerDuty",
-    forcesHttp: true,
+    pinnedSinkType: "http",
     urlPlaceholder: "https://events.pagerduty.com/v2/enqueue",
     secretHint:
       "PagerDuty Events API V2 endpoint. Routing key goes in the request body — set signing_secret_ref to the integration key Secret.",
@@ -60,19 +65,26 @@ export const TEMPLATES: readonly TemplateDef[] = [
   {
     id: "plain-http",
     label: "Plain HTTP",
-    forcesHttp: true,
+    pinnedSinkType: "http",
     urlPlaceholder: "https://example.com/webhook",
     secretHint: "Any HTTPS endpoint.",
     filter: "",
   },
   {
+    // Redpanda speaks the Kafka wire protocol, so it uses the Kafka sink —
+    // this preset just pins that type and prefills a Redpanda broker
+    // address so operators find it under its own name.
+    id: "redpanda",
+    label: "Redpanda",
+    pinnedSinkType: "kafka",
+    brokersPlaceholder: "redpanda.redpanda.svc.cluster.local:9093",
+    filter: "",
+  },
+  {
     id: "custom",
     label: "Custom",
-    forcesHttp: false,
   },
 ] as const;
-
-export type SinkType = "http" | "nats" | "kafka" | "sqs" | "rabbitmq";
 
 // HTTP, NATS, Kafka, and SQS sinks are all delivery-wired (2026-06-30) and
 // have no create-time restriction. RabbitMQ is also wired in the backend but

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { EventSubscription } from "@/gen/paladin/admin/v1/types_pb";
 import {
   EMPTY_FORM,
+  TEMPLATES,
   buildSink,
   formFromSubscription,
   validateForm,
@@ -289,5 +290,27 @@ describe("Kafka sink auth", () => {
       kafkaTopic: "t",
     });
     expect(errs.kafkaSaslUsername).toBeUndefined();
+  });
+});
+
+// ─── Connector templates ─────────────────────────────────────────────────────
+
+describe("connector templates", () => {
+  it("Redpanda pins the Kafka sink and prefills a broker placeholder", () => {
+    const rp = TEMPLATES.find((t) => t.id === "redpanda");
+    expect(rp).toBeDefined();
+    // Redpanda is Kafka-wire — the preset must pin the Kafka sink so its
+    // fields (brokers / topic / SASL / TLS) render.
+    expect(rp?.pinnedSinkType).toBe("kafka");
+    expect(rp?.brokersPlaceholder).toMatch(/:\d+$/);
+  });
+
+  it("webhook connectors pin HTTP; Custom pins nothing", () => {
+    for (const id of ["slack", "discord", "pagerduty", "plain-http"]) {
+      expect(TEMPLATES.find((t) => t.id === id)?.pinnedSinkType).toBe("http");
+    }
+    expect(
+      TEMPLATES.find((t) => t.id === "custom")?.pinnedSinkType,
+    ).toBeUndefined();
   });
 });
