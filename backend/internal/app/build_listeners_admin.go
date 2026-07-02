@@ -38,7 +38,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	polEngine := deps.PolEngine
 
 	// ─── Admin handlers ──────────────────────────────────────────────────
-	tenantH := wire.ProvideTenantHandler(repos, polEngine)
+	tenantH := wire.ProvideTenantHandler(repos, polEngine, cfg)
 	objectKeyH := wire.ProvideObjectKeyHandler(repos, polEngine, cfg)
 	opH := wire.ProvideOperationHandler(repos, polEngine)
 	policyH := wire.ProvidePolicyHandler(polEngine, deps.PolStore)

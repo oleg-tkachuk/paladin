@@ -88,6 +88,11 @@ type CreateTenantArgs struct {
 	// StorageLayout — "shared" (default) or "dedicated" (ADR-0011). Settable
 	// only at create; empty defaults to "shared".
 	StorageLayout string
+	// DedicatedBackend is set by the handler (not the client) for a dedicated
+	// tenant: the backend its own bucket is provisioned on. The repo derives
+	// the bucket name and inserts a pending row + default binding in the
+	// create tx; the bucket reconciler provisions it physically.
+	DedicatedBackend string
 }
 
 type UpdateTenantArgs struct {
@@ -200,6 +205,10 @@ const (
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer
+	// defaultBackend is the storage backend a dedicated tenant's bucket is
+	// provisioned on when the caller doesn't name one. Sourced from
+	// cfg.Storage.DefaultBackend at construction.
+	defaultBackend string
 
 	// events is optional — when nil, lifecycle Dispatch calls are
 	// silent no-ops. Set via SetEventProducer once the dispatcher is
@@ -211,11 +220,12 @@ type Handler struct {
 
 // NewHandler builds a tenant handler. policyEngine is required — production
 // wiring passes the live Cedar engine; tests inject a fake Authorizer.
-func NewHandler(repo Repository, policyEngine cedar.Authorizer) *Handler {
+// defaultBackend is the fallback backend for dedicated-layout provisioning.
+func NewHandler(repo Repository, policyEngine cedar.Authorizer, defaultBackend string) *Handler {
 	if policyEngine == nil {
 		panic("tenant: policy authorizer is required")
 	}
-	return &Handler{repo: repo, policy: policyEngine, log: zap.NewNop()}
+	return &Handler{repo: repo, policy: policyEngine, defaultBackend: defaultBackend, log: zap.NewNop()}
 }
 
 // SetEventProducer attaches the optional outbox producer. nil clears
@@ -365,6 +375,19 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	case "", "shared":
 		args.StorageLayout = "shared"
 	case "dedicated":
+		// A dedicated tenant gets its own bucket on the default backend
+		// (per-tenant backend selection is a follow-up). Reject if no default
+		// backend is configured — there's nowhere to provision it.
+		args.DedicatedBackend = h.defaultBackend
+		if args.DedicatedBackend == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("storage_layout 'dedicated' requires a configured default storage backend"))
+		}
+		// The dedicated path owns the binding; reject a conflicting explicit one.
+		if args.DefaultBackendID != "" || args.DefaultBucketName != "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				errors.New("default_bucket cannot be combined with storage_layout 'dedicated'"))
+		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout))

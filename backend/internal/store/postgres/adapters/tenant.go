@@ -106,6 +106,31 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 		return fmt.Errorf("create tenant: %w", err)
 	}
 
+	// Dedicated layout: provision the tenant's own bucket in the same tx
+	// (ADR-0011). The row lands provision_state='pending' with the tenant as
+	// owner; the bucket reconciler (backend-routed) creates it physically.
+	// The default binding points at it so the tenant's object_keys land there.
+	// Bucket name is derived from the tenant id (globally unique per
+	// deployment; an org prefix for cross-account uniqueness is a follow-up).
+	if args.StorageLayout == "dedicated" {
+		bucketName := "paladin-" + args.TenantID.String()
+		actor := actorFromContext(ctx)
+		if err := qtx.CreateBucketV2(ctx,
+			args.DedicatedBackend, bucketName,
+			nil, nil, []byte("{}"), // display_name, region, labels
+			pgUUID(args.TenantID), // owner_tenant_id
+			"", []byte("{}"),      // cedar_policy, constraints
+			"pending", // provision_state
+		); err != nil {
+			return fmt.Errorf("create tenant: provision dedicated bucket: %w", err)
+		}
+		if err := qtx.SetTenantDefaultBinding(ctx,
+			pgUUID(args.TenantID), args.DedicatedBackend, bucketName, actor,
+		); err != nil {
+			return fmt.Errorf("create tenant: bind dedicated bucket: %w", err)
+		}
+	}
+
 	// Optional default binding. The handler validates that backend +
 	// bucket are paired (both empty or both set); we just translate
 	// "both set" into a row in tenant_default_bindings.
