@@ -1,8 +1,8 @@
 -- Tenant queries.
 
 -- name: CreateTenant :exec
-INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetTenant :one
 -- LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its PK),

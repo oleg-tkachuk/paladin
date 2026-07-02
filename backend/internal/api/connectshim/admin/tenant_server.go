@@ -47,6 +47,7 @@ func parseCreateTenantArgs(m *pb.CreateTenantRequest) (tenant.CreateTenantArgs, 
 		Slug:                 src.GetSlug(),
 		DisplayName:          src.GetDisplayName(),
 		InheritedCedarPolicy: src.GetInheritedCedarPolicy(),
+		StorageLayout:        src.GetStorageLayout(),
 	}
 	if id := m.GetTenantId(); id != "" {
 		parsed, err := uuid.Parse(id)
@@ -316,6 +317,7 @@ func tenantDomainToProto(t *tenant.Tenant) *pb.Tenant {
 		CreatedAt:            tsProto(t.CreatedAt),
 		UpdatedAt:            tsProto(t.UpdatedAt),
 		DefaultBucket:        t.DefaultBucket,
+		StorageLayout:        t.StorageLayout,
 	}
 	if !t.DeletedAt.IsZero() {
 		out.DeletedAt = tsProto(t.DeletedAt)

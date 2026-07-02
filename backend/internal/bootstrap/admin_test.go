@@ -41,6 +41,7 @@ func (f *fakeTenants) CreateTenant(
 	displayName string,
 	_ []byte,
 	_ string,
+	_ string,
 ) error {
 	if f.bySlug == nil {
 		f.bySlug = map[string]sqlc.Tenant{}

@@ -513,6 +513,7 @@ type Tenant struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	Slug                 string             `json:"slug"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	StorageLayout        string             `json:"storage_layout"`
 }
 
 type TenantBudget struct {

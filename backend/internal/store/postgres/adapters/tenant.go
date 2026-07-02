@@ -77,12 +77,17 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenant.Create
 	}
 	qtx := r.q.WithTx(tx)
 
+	storageLayout := args.StorageLayout
+	if storageLayout == "" {
+		storageLayout = "shared"
+	}
 	if err := qtx.CreateTenant(ctx,
 		pgUUID(args.TenantID),
 		args.Slug,
 		args.DisplayName,
 		labels,
 		args.InheritedCedarPolicy,
+		storageLayout,
 	); err != nil {
 		// Map UNIQUE violations to typed sentinels so the handler can
 		// surface ALREADY_EXISTS with the offending field. Constraint
@@ -650,5 +655,6 @@ func tenantFromSQLC(t sqlc.Tenant) tenant.Tenant {
 		CreatedAt:            timeFrom(t.CreatedAt),
 		UpdatedAt:            timeFrom(t.UpdatedAt),
 		DeletedAt:            timeFrom(t.DeletedAt),
+		StorageLayout:        t.StorageLayout,
 	}
 }

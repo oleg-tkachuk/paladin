@@ -1311,6 +1311,10 @@ type Tenant struct {
 	// empty when the tenant has no default binding (legacy / never set).
 	// Read-only here — set the binding via CreateTenant.default_bucket.
 	DefaultBucket string `protobuf:"bytes,11,opt,name=default_bucket,json=defaultBucket,proto3" json:"default_bucket,omitempty"`
+	// storage_layout — "shared" (default) or "dedicated" (ADR-0011). A dedicated
+	// tenant gets its own physical bucket (owner_tenant_id = the tenant),
+	// provisioned at CreateTenant time. Settable only at create; read-only after.
+	StorageLayout string `protobuf:"bytes,12,opt,name=storage_layout,json=storageLayout,proto3" json:"storage_layout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1418,6 +1422,13 @@ func (x *Tenant) GetDeletedAt() *timestamppb.Timestamp {
 func (x *Tenant) GetDefaultBucket() string {
 	if x != nil {
 		return x.DefaultBucket
+	}
+	return ""
+}
+
+func (x *Tenant) GetStorageLayout() string {
+	if x != nil {
+		return x.StorageLayout
 	}
 	return ""
 }
@@ -2682,7 +2693,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x11BucketReplication\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
 	"\x12destination_bucket\x18\x02 \x01(\tR\x11destinationBucket\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\x9e\x04\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xc5\x04\n" +
 	"\x06Tenant\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12!\n" +
@@ -2698,7 +2709,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"deleted_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12%\n" +
-	"\x0edefault_bucket\x18\v \x01(\tR\rdefaultBucket\x1a9\n" +
+	"\x0edefault_bucket\x18\v \x01(\tR\rdefaultBucket\x12%\n" +
+	"\x0estorage_layout\x18\f \x01(\tR\rstorageLayout\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x03\n" +

@@ -66,6 +66,8 @@ type Tenant struct {
 	// — sourced from tenant_default_bindings on read. Empty when unbound.
 	// Populated only by the read paths (Get / GetBySlug / List).
 	DefaultBucket string
+	// StorageLayout — "shared" or "dedicated" (ADR-0011). Populated on read.
+	StorageLayout string
 }
 
 type CreateTenantArgs struct {
@@ -83,6 +85,9 @@ type CreateTenantArgs struct {
 	// Empty strings = no binding (legacy / scripted-bootstrap path).
 	DefaultBackendID  string
 	DefaultBucketName string
+	// StorageLayout — "shared" (default) or "dedicated" (ADR-0011). Settable
+	// only at create; empty defaults to "shared".
+	StorageLayout string
 }
 
 type UpdateTenantArgs struct {
@@ -352,6 +357,17 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if (args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("default_binding requires both backend and bucket"))
+	}
+	// storage_layout defaults to "shared"; "dedicated" (ADR-0011) is accepted
+	// and persisted here. The dedicated-bucket provisioning is wired in a
+	// follow-up; until then a dedicated tenant behaves like a shared one.
+	switch args.StorageLayout {
+	case "", "shared":
+		args.StorageLayout = "shared"
+	case "dedicated":
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout))
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err

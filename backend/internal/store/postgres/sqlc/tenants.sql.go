@@ -13,24 +13,25 @@ import (
 
 const createTenant = `-- name: CreateTenant :exec
 
-INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO tenants (tenant_id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 // Tenant queries.
-func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string) error {
+func (q *Queries) CreateTenant(ctx context.Context, tenantID pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout string) error {
 	_, err := q.db.Exec(ctx, createTenant,
 		tenantID,
 		slug,
 		displayName,
 		labels,
 		inheritedCedarPolicy,
+		storageLayout,
 	)
 	return err
 }
 
 const getTenant = `-- name: GetTenant :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
 WHERE tenants.tenant_id = $1
@@ -58,6 +59,7 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
+		&i.Tenant.StorageLayout,
 		&i.BackendID,
 		&i.BucketName,
 	)
@@ -65,7 +67,7 @@ func (q *Queries) GetTenant(ctx context.Context, tenantID pgtype.UUID) (GetTenan
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
 WHERE tenants.slug = $1
@@ -91,6 +93,7 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 		&i.Tenant.UpdatedAt,
 		&i.Tenant.Slug,
 		&i.Tenant.DeletedAt,
+		&i.Tenant.StorageLayout,
 		&i.BackendID,
 		&i.BucketName,
 	)
@@ -115,7 +118,7 @@ func (q *Queries) HardDeleteTenant(ctx context.Context, tenantID pgtype.UUID, ex
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tdb.backend_id, tdb.bucket_name
+SELECT tenants.tenant_id, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.slug, tenants.deleted_at, tenants.storage_layout, tdb.backend_id, tdb.bucket_name
 FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.tenant_id
 WHERE ($1::uuid IS NULL OR tenants.tenant_id > $1::uuid)
@@ -166,6 +169,7 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 			&i.Tenant.UpdatedAt,
 			&i.Tenant.Slug,
 			&i.Tenant.DeletedAt,
+			&i.Tenant.StorageLayout,
 			&i.BackendID,
 			&i.BucketName,
 		); err != nil {

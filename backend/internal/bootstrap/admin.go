@@ -47,6 +47,7 @@ type TenantStore interface {
 		displayName string,
 		labels []byte,
 		inheritedCedarPolicy string,
+		storageLayout string,
 	) error
 }
 
@@ -240,7 +241,8 @@ func ensureTenant(
 		cfg.TenantSlug,
 		display,
 		labels,
-		"", // inherited_cedar_policy — empty default
+		"",       // inherited_cedar_policy — empty default
+		"shared", // storage_layout — the platform tenant is shared
 	); err != nil {
 		return uuid.Nil, false, fmt.Errorf("create tenant: %w", err)
 	}

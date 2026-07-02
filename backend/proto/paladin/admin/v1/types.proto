@@ -238,6 +238,10 @@ message Tenant {
   // empty when the tenant has no default binding (legacy / never set).
   // Read-only here — set the binding via CreateTenant.default_bucket.
   string default_bucket = 11;
+  // storage_layout — "shared" (default) or "dedicated" (ADR-0011). A dedicated
+  // tenant gets its own physical bucket (owner_tenant_id = the tenant),
+  // provisioned at CreateTenant time. Settable only at create; read-only after.
+  string storage_layout = 12;
 }
 
 // ─── ObjectKey ──────────────────────────────────────────────────────────────
