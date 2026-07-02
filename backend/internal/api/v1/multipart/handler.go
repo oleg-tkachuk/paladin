@@ -81,9 +81,11 @@ type Repository interface {
 	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
 	GetObjectLocation(ctx context.Context, objectID uuid.UUID) (objectKey, key string, err error)
-	// LookupBucket returns the physical S3 bucket bound to the ObjectKey.
-	// Used to route storage calls to the right bucket.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error)
+	// LookupBucket returns the storage backend id and the physical S3 bucket
+	// bound to the ObjectKey. Used to route storage calls to the right
+	// (backend, bucket); callers that don't route on backend yet may discard
+	// backendID (docs/backend-registry.md).
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
 	// ListParts returns recorded parts for an upload, ordered by part_number.
 	// Pagination is keyset on part_number; pageToken is the last seen number.
 	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string) ([]Part, string, error)
@@ -162,7 +164,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation)
+	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation); positional Initiate routes in step 3
 	if err != nil {
 		return nil, object.MapResolveErr(err)
 	}
@@ -203,7 +205,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	}
 	bucket := sess.Bucket
 	if bucket == "" {
-		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation)
+		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation); positional Complete routes in step 3
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
@@ -260,7 +262,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	}
 	bucket := sess.Bucket
 	if bucket == "" {
-		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation)
+		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation); positional Abort routes in step 3
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
@@ -313,7 +315,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	}
 	bucket := sess.Bucket
 	if bucket == "" {
-		bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation)
+		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation); positional PresignPart routes in step 3
 		if err != nil {
 			return "", nil, time.Time{}, object.MapResolveErr(err)
 		}

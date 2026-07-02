@@ -93,11 +93,11 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 
 	// Bucket lookups are batch-invariant: same source / dest object_key
 	// across the whole batch ⇒ resolve once.
-	srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcObjectKey, false) // copy source (read)
+	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcObjectKey, false) // copy source (read)
 	if err != nil {
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
-	dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstObjectKey, true) // copy dest (mutation)
+	dstBackendID, dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstObjectKey, true) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
 	}
@@ -130,7 +130,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operation.Operation)
 			})
 			continue
 		}
-		if err := e.copyOne(ctx, args, src, srcBucket, dstBucket, presignTTL); err != nil {
+		if err := e.copyOne(ctx, args, src, srcBackendID, srcBucket, dstBackendID, dstBucket, presignTTL); err != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchCopyFailure{
 				ObjectID: srcID.String(),
@@ -157,7 +157,7 @@ func (e *BatchCopyExecutor) copyOne(
 	ctx context.Context,
 	args batch.BatchCopyArgs,
 	src object.Object,
-	srcBucket, dstBucket string,
+	srcBackendID, srcBucket, dstBackendID, dstBucket string,
 	presignTTL time.Duration,
 ) error {
 	if src.State != statemachine.StateAvailable {
@@ -181,8 +181,8 @@ func (e *BatchCopyExecutor) copyOne(
 	}
 
 	if err := e.Storage.CopyObject(ctx,
-		object.Location{TenantID: args.TenantID, Bucket: srcBucket, ObjectKey: args.SrcObjectKey, Key: src.Key},
-		object.Location{TenantID: args.TenantID, Bucket: dstBucket, ObjectKey: args.DstObjectKey, Key: dstKey},
+		object.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, ObjectKey: args.SrcObjectKey, Key: src.Key},
+		object.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, ObjectKey: args.DstObjectKey, Key: dstKey},
 	); err != nil {
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).

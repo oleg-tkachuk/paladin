@@ -327,35 +327,36 @@ func (r *ObjectRepo) ListDistinctTags(ctx context.Context, tenantID uuid.UUID, o
 // ObjectKey. Hits idx_object_keys_bucket_routing. After migration 005
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
-func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error) {
+func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
 	// JOIN storage_backends so a disabled backend is refused at the single
 	// resolution chokepoint (feature 002) — zero extra round trip. The
 	// read_only (drain) state is split by operation class here (migration
 	// 047): a mutation (`write`) against a read-only backend is refused;
 	// reads still resolve.
 	const q = `
-		SELECT ok.bucket_name, sb.enabled, sb.read_only
+		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only
 		FROM object_keys ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
 		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
 	var (
-		bucket   string
-		enabled  bool
-		readOnly bool
+		backendID string
+		bucket    string
+		enabled   bool
+		readOnly  bool
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled, &readOnly); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly); err != nil {
 		if isNoRows(err) {
-			return "", fmt.Errorf("objectKey %q not found", objectKey)
+			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
-		return "", fmt.Errorf("lookup bucket: %w", err)
+		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
 	if !enabled {
-		return "", object.ErrBackendDisabled
+		return "", "", object.ErrBackendDisabled
 	}
 	if write && readOnly {
-		return "", object.ErrBackendReadOnly
+		return "", "", object.ErrBackendReadOnly
 	}
-	return bucket, nil
+	return backendID, bucket, nil
 }
 
 // LookupBucketMeta returns the bucket binding plus versioning + lock flags

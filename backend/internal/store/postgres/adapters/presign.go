@@ -63,28 +63,29 @@ func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID strin
 // read, presign-PUT / presign-part are writes. Both the disabled (feature
 // 002) and drain gates are enforced here so a presign URL is never issued
 // against a backend that can't serve the op.
-func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error) {
+func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
 	const q = `
-		SELECT ok.bucket_name, sb.enabled, sb.read_only
+		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only
 		FROM object_keys ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
 		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
 	var (
-		bucket   string
-		enabled  bool
-		readOnly bool
+		backendID string
+		bucket    string
+		enabled   bool
+		readOnly  bool
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&bucket, &enabled, &readOnly); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly); err != nil {
 		if isNoRows(err) {
-			return "", fmt.Errorf("objectKey %q not found", objectKey)
+			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
-		return "", fmt.Errorf("lookup bucket: %w", err)
+		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
 	if !enabled {
-		return "", object.ErrBackendDisabled
+		return "", "", object.ErrBackendDisabled
 	}
 	if write && readOnly {
-		return "", object.ErrBackendReadOnly
+		return "", "", object.ErrBackendReadOnly
 	}
-	return bucket, nil
+	return backendID, bucket, nil
 }

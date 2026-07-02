@@ -161,10 +161,14 @@ const (
 	CompletionModeExplicit
 )
 
-// Location identifies an S3 object: the physical bucket plus the
-// composed key (tenant_id/object_key/key). Bucket may be empty, in
-// which case the storage adapter falls back to its configured default.
+// Location identifies an S3 object: the physical (backend, bucket) plus the
+// composed key (tenant_id/object_key/key). Bucket may be empty, in which case
+// the storage adapter falls back to its configured default; BackendID likewise
+// empty selects the default backend. Together (BackendID, Bucket) are the
+// physical-location key the multi-backend routing dispatches on — src and dst
+// may differ for a cross-backend copy (docs/backend-registry.md).
 type Location struct {
+	BackendID string // storage backend id; "" = default backend
 	TenantID  uuid.UUID
 	Bucket    string // physical S3 bucket
 	ObjectKey string // PALADIN namespace within the bucket
@@ -172,6 +176,7 @@ type Location struct {
 }
 
 type PresignPutArgs struct {
+	BackendID       string // storage backend id; "" = default backend
 	TenantID        uuid.UUID
 	Bucket          string // physical S3 bucket; resolved from ObjectKey row
 	ObjectKey       string
@@ -184,6 +189,7 @@ type PresignPutArgs struct {
 }
 
 type PresignPostArgs struct {
+	BackendID    string // storage backend id; "" = default backend
 	TenantID     uuid.UUID
 	Bucket       string
 	ObjectKey    string
@@ -195,6 +201,7 @@ type PresignPostArgs struct {
 }
 
 type PresignGetArgs struct {
+	BackendID          string // storage backend id; "" = default backend
 	TenantID           uuid.UUID
 	Bucket             string
 	ObjectKey          string
@@ -225,15 +232,18 @@ type Repository interface {
 	// ObjectKey's live (non-DELETED) objects, each value list sorted. Backs
 	// the tag-facet filter dropdown.
 	ListDistinctTags(ctx context.Context, tenantID uuid.UUID, objectKey string) (map[string][]string, error)
-	// LookupBucket returns the physical S3 bucket for a tenant's ObjectKey.
-	// Cheap lookup (covered by idx_object_keys_bucket_routing). Empty
-	// string means the row exists but no bucket has been bound — the
-	// storage adapter falls back to its configured default in that case.
+	// LookupBucket returns the storage backend id and the physical S3 bucket
+	// for a tenant's ObjectKey. Cheap lookup (covered by
+	// idx_object_keys_bucket_routing). An empty bucket means the row exists
+	// but no bucket has been bound — the storage adapter falls back to its
+	// configured default in that case. backendID is the physical-location
+	// half the multi-backend routing keys on (docs/backend-registry.md);
+	// callers that don't route yet may discard it.
 	// `write` classifies the operation for the read-only (drain) gate
 	// (migration 047): pass true for mutations (PUT/POST/multipart-init/
 	// copy-dest/delete/version-write), false for reads (GET/HEAD/list). A
 	// write against a read-only backend returns ErrBackendReadOnly.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (backendID, bucket string, err error)
 	// LookupBucketMeta returns the bucket binding plus the metadata needed for
 	// versioning / lock decisions on the hot path. Implementations should
 	// satisfy this with a single query — handlers call it on every promote.
@@ -588,6 +598,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 	}
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
+			BackendID:    meta.BackendID,
 			TenantID:     tenantID,
 			Bucket:       bucket,
 			ObjectKey:    in.ObjectKey,
@@ -606,6 +617,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (*Uplo
 		out.ExpiresAt = exp
 	} else {
 		url, headers, exp, err := h.storage.PresignPut(ctx, PresignPutArgs{
+			BackendID:       meta.BackendID,
 			TenantID:        tenantID,
 			Bucket:          bucket,
 			ObjectKey:       in.ObjectKey,
@@ -682,7 +694,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	}
 
 	// Materialize authoritative values via HEAD against the object's bucket.
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation)
+	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation); positional Head routes in step 3
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -983,7 +995,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // download (read)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // download (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -991,6 +1003,7 @@ func (h *Handler) DownloadObject(ctx context.Context, objectKey, objectID string
 		ttl = h.presign.DefaultTTL
 	}
 	url, headers, expires, err := h.storage.PresignGet(ctx, PresignGetArgs{
+		BackendID:          backendID,
 		TenantID:           tenantID,
 		Bucket:             bucket,
 		ObjectKey:          objectKey,
@@ -1151,7 +1164,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation)
+	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation); positional DeleteObject routes in step 3
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -1372,11 +1385,11 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, err
 	}
 
-	srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey, false) // copy source (read)
+	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceObjectKey, false) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
+	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestObjectKey, true) // copy dest (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -1399,9 +1412,9 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, mapCreateErr(err)
 	}
 	if err := h.storage.CopyObject(ctx, Location{
-		TenantID: tenantID, Bucket: srcBucket, ObjectKey: in.SourceObjectKey, Key: src.Key,
+		BackendID: srcBackendID, TenantID: tenantID, Bucket: srcBucket, ObjectKey: in.SourceObjectKey, Key: src.Key,
 	}, Location{
-		TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
+		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, ObjectKey: in.DestObjectKey, Key: destKey,
 	}); err != nil {
 		// Compensate: the destination row was created PENDING. Without this
 		// transition the row would linger forever, since the reconciler only

@@ -51,7 +51,7 @@ func (*fakeObjectRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]Obj
 func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLock, error) {
 	panic("not used")
 }
-func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, error) {
+func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	panic("not used")
 }
 func (*fakeObjectRepo) HardDelete(context.Context, uuid.UUID, uuid.UUID, int64) error {

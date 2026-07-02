@@ -48,7 +48,7 @@ func (*copyFakeRepo) CountObjects(context.Context, object.CountObjectsArgs) (int
 func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string) (map[string][]string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, error) {
+func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
 	panic("unused")
 }
 func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (object.BucketMeta, error) {
@@ -128,7 +128,7 @@ func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "src", "dst", time.Minute)
+	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
 	if err == nil || !strings.Contains(err.Error(), "storage copy") {
 		t.Fatalf("want storage copy error, got %v", err)
 	}
@@ -149,7 +149,7 @@ func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "src", "dst", time.Minute)
+	err := e.copyOne(context.Background(), batch.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
 	if err == nil {
 		t.Fatal("want error")
 	}

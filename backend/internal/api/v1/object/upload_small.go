@@ -142,7 +142,7 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, mapCreateErr(err)
 	}
 
-	bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation)
+	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation); positional Open routes in step 3
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
