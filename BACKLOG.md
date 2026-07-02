@@ -94,6 +94,11 @@ the same commit. Treat this file like a runtime invariant.
     request body and producing a streamed response on the fly.
   - Smoke test: a server-streaming RPC (when one is added) returns
     chunks before the handler completes.
+- **Guard in place:** `TestInlineRoundTripper_BuffersFullResponse`
+  (internal/mcp/inline_test.go) executably pins the current buffering
+  behaviour — a client sees no bytes until the handler fully returns.
+  It fails the moment the recorder is swapped for the `io.Pipe` pair,
+  which is the signal to write the real streaming smoke test above.
 - **Blockers:** No streaming RPC in the current proto surface. Land
   the first one (likely a `WatchEvents` for the agentic event bus)
   before this becomes load-bearing.

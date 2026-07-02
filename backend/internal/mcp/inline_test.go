@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestInlineRoundTripper_Routes confirms the in-memory transport routes
@@ -88,6 +89,85 @@ func TestInlineRoundTripper_UnknownHost(t *testing.T) {
 	if err == nil {
 		_ = resp.Body.Close()
 		t.Fatal("expected error for unknown host, got nil")
+	}
+}
+
+// TestInlineRoundTripper_BuffersFullResponse is an executable guard on the
+// documented streaming limitation (BACKLOG: "Streaming RPCs through the inline
+// transport"). The recorder-based transport buffers the ENTIRE response before
+// RoundTrip returns — a client observes no bytes until the handler has fully
+// returned. That buffering is precisely why a server-streaming RPC would
+// deadlock through this transport today: the client waits for a response the
+// recorder won't produce until the handler reads its whole request and exits.
+//
+// When someone swaps httptest.ResponseRecorder for an io.Pipe pair to support
+// streaming (the BACKLOG Definition of Done), RoundTrip will begin returning
+// before the handler completes and this guard will fail — the signal to add
+// real server-streaming coverage instead of this negative characterization.
+func TestInlineRoundTripper_BuffersFullResponse(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	flushedChunk1 := make(chan struct{})
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("chunk1"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush() // a streaming transport would surface chunk1 to the client here
+		}
+		close(flushedChunk1)
+		<-release // hold the handler open mid-"stream"
+		_, _ = w.Write([]byte("chunk2"))
+	})
+
+	tr := NewInlineTransport(InlineHandlers{Data: handler})
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, InlineDataURL+"/stream", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	type result struct {
+		resp *http.Response
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, rtErr := tr.RoundTrip(req) //nolint:bodyclose // ownership passes to the receiver; both select arms Close()
+		done <- result{resp, rtErr}
+	}()
+
+	<-flushedChunk1 // handler has written + flushed chunk1 but not yet returned
+
+	// The client must NOT have a response yet: the recorder buffers, so
+	// RoundTrip is still blocked inside ServeHTTP. A streaming transport would
+	// have returned by now with chunk1 readable. (Only an early return can fail
+	// this select; continued buffering always takes the timeout path, so the
+	// negative assertion can't flake under scheduler load.)
+	select {
+	case r := <-done:
+		if r.resp != nil {
+			_ = r.resp.Body.Close()
+		}
+		close(release)
+		t.Fatal("RoundTrip returned before the handler completed — the inline transport now streams; add server-streaming RPC coverage and retire this guard")
+	case <-time.After(100 * time.Millisecond):
+		// Expected: still buffering inside ServeHTTP.
+	}
+
+	close(release) // let the handler write chunk2 and return
+	r := <-done
+	if r.err != nil {
+		t.Fatalf("roundtrip: %v", r.err)
+	}
+	body, err := io.ReadAll(r.resp.Body)
+	_ = r.resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if got := string(body); got != "chunk1chunk2" {
+		t.Fatalf("buffered body = %q, want both chunks concatenated %q", got, "chunk1chunk2")
 	}
 }
 
