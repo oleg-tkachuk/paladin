@@ -32,6 +32,10 @@ type ChangeEvent struct {
 
 // PostgresStore reads policy text from tenants and object_keys and uses
 // LISTEN/NOTIFY on channel "policy_changed" to stream invalidations.
+// The NOTIFY side is emitted by AFTER INSERT/UPDATE/DELETE triggers on
+// tenants.inherited_cedar_policy and object_keys.cedar_policy (migration
+// 051_policy_changed_notify.sql), so every writer — admin plane, seed jobs,
+// manual psql — invalidates without remembering to notify.
 type PostgresStore struct {
 	pool *pgxpool.Pool
 }

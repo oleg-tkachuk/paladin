@@ -999,6 +999,28 @@ elsewhere in this file. Handler-level tracing/metrics intentionally has
 no entry here — it shipped as [ADR-0001](docs/adr/0001-otel-observability-baseline.md)
 (traces + RED metrics + log↔trace correlation)._
 
+### Cedar policy Watch has no LISTEN reconnect
+
+- **Status:** Deferred (surfaced 2026-07-02 while wiring the
+  `policy_changed` NOTIFY triggers, migration 051).
+- **Reason:** `cedar.PostgresStore.Watch` holds one pooled connection in
+  `LISTEN policy_changed`. If that connection dies (Postgres restart,
+  failover, network blip), `WaitForNotification` errors, the goroutine
+  closes the channel, and `Engine.Start`'s consumer loop exits — for the
+  rest of the process lifetime, cache invalidation silently degrades to
+  the ~30s TTL. Correctness is preserved (the TTL is exactly the
+  self-correction bound the Engine documents), so a reconnect loop was
+  deliberately left out of the trigger-wiring change.
+- **Definition of Done:**
+  - `Watch` (or a wrapper in `Engine.Start`) re-acquires + re-`LISTEN`s
+    with backoff on connection error instead of closing the channel.
+  - On reconnect, flush the whole compiled cache once (notifications
+    were lost while disconnected).
+  - A counter metric for watch drops/reconnects.
+  - Test: kill the LISTEN connection mid-watch, prove a subsequent
+    policy UPDATE still produces an invalidation.
+- **Blockers:** none — small, self-contained.
+
 ## CI / Delivery pipeline
 
 _Context: `.github/workflows/test.yml` + `security.yml` (added 2026-06-11)

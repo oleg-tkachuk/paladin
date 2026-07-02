@@ -1,0 +1,77 @@
+package cedar
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// watchStore is a Store whose Watch hands back a caller-controlled channel.
+type watchStore struct{ ch chan ChangeEvent }
+
+func (w watchStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, error) {
+	return "", nil, nil
+}
+func (w watchStore) Watch(context.Context) (<-chan ChangeEvent, error) { return w.ch, nil }
+
+// waitInvalidated polls until every key matching keep==false is gone.
+func waitTenantEntries(t *testing.T, e *Engine, tenant uuid.UUID, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n := 0
+		e.compiled.Range(func(k, _ any) bool {
+			if k.(cacheKey).tenant == tenant {
+				n++
+			}
+			return true
+		})
+		if n == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tenant %s cache entries = %d, want %d", tenant, n, want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A tenant-level ChangeEvent (empty ObjectKey) must drop every cache entry
+// for that tenant — the inherited policy text is concatenated into all
+// objectKey-scoped compiles — while other tenants' entries survive. A
+// scoped event drops exactly its own entry.
+func TestStartInvalidation(t *testing.T) {
+	events := make(chan ChangeEvent)
+	e := NewEngine(watchStore{ch: events}, time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := e.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	tid, other := uuid.New(), uuid.New()
+	for _, k := range []cacheKey{
+		{tenant: tid},
+		{tenant: tid, objectKey: "a"},
+		{tenant: tid, objectKey: "b"},
+		{tenant: other, objectKey: "a"},
+	} {
+		e.compiled.Store(k, &compiledPolicy{})
+	}
+
+	// Scoped event → only (tid, "a") goes.
+	events <- ChangeEvent{TenantID: tid, ObjectKey: "a"}
+	waitTenantEntries(t, e, tid, 2)
+	if _, ok := e.compiled.Load(cacheKey{tenant: tid, objectKey: "b"}); !ok {
+		t.Fatalf("scoped event evicted an unrelated objectKey entry")
+	}
+
+	// Tenant-level event → everything under tid goes, other tenant untouched.
+	events <- ChangeEvent{TenantID: tid}
+	waitTenantEntries(t, e, tid, 0)
+	if _, ok := e.compiled.Load(cacheKey{tenant: other, objectKey: "a"}); !ok {
+		t.Fatalf("tenant-level event evicted another tenant's entry")
+	}
+}

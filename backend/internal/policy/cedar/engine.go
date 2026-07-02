@@ -283,7 +283,19 @@ func (e *Engine) Start(ctx context.Context) error {
 				if !ok {
 					return
 				}
-				e.compiled.Delete(cacheKey{tenant: ev.TenantID, objectKey: ev.ObjectKey})
+				if ev.ObjectKey == "" {
+					// Tenant-level change: the inherited text is concatenated
+					// into every objectKey-scoped compile, so drop all of the
+					// tenant's entries, not just the tenant-level one.
+					e.compiled.Range(func(k, _ any) bool {
+						if k.(cacheKey).tenant == ev.TenantID {
+							e.compiled.Delete(k)
+						}
+						return true
+					})
+				} else {
+					e.compiled.Delete(cacheKey{tenant: ev.TenantID, objectKey: ev.ObjectKey})
+				}
 			}
 		}
 	}()
