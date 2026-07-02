@@ -46,6 +46,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -162,8 +163,9 @@ type Dispatcher struct {
 	// Secrets resolves "k8s:<name>/<key>" refs in sink-credential fields
 	// (see sink_secrets.go). nil = inline-only configs; a ref with no
 	// resolver fails the delivery loudly rather than using the literal.
-	Secrets     SinkSecretResolver
-	secretCache *sinkSecretCache
+	Secrets         SinkSecretResolver
+	secretCache     *sinkSecretCache
+	secretCacheOnce sync.Once
 }
 
 // Dispatch enumerates every enabled subscription for tenantID whose

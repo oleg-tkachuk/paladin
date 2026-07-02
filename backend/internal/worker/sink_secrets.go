@@ -73,12 +73,13 @@ func (d *Dispatcher) resolveSinkValue(ctx context.Context, v string) (string, er
 		return "", err
 	}
 
-	if d.secretCache == nil {
-		// Lazily initialised under the struct-literal construction style the
-		// Dispatcher uses everywhere; guarded by the cache mutex below being
-		// per-instance. A race on first use at worst double-allocates.
+	// Lazily initialised (the Dispatcher is built as a struct literal in
+	// several places, so there's no constructor to seed it). sync.Once makes
+	// the init race-free — the admin pod shares one Dispatcher across
+	// concurrent TestSubscription RPCs, so two callers can reach here at once.
+	d.secretCacheOnce.Do(func() {
 		d.secretCache = &sinkSecretCache{m: map[string]cachedSinkSecret{}}
-	}
+	})
 	c := d.secretCache
 	now := time.Now()
 	c.mu.Lock()

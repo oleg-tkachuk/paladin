@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -169,4 +170,22 @@ func TestDeliverKafka_SecretRefResolvedIntoPoolKey(t *testing.T) {
 	if len(keys) != 1 || keys[0] != kafkaWriterKey([]string{"b:9092"}, resolved) {
 		t.Errorf("pool keys = %v, want the resolved-material key", keys)
 	}
+}
+
+// TestResolveSinkValue_ConcurrentFirstUse pins the lazy-init of the secret
+// cache against a data race: the admin pod shares one Dispatcher across
+// concurrent TestSubscription RPCs, so two callers can hit resolveSinkValue's
+// first-use path simultaneously. Fails under -race without a synchronized
+// init.
+func TestResolveSinkValue_ConcurrentFirstUse(t *testing.T) {
+	d := &Dispatcher{Secrets: &fakeSinkSecrets{values: map[string]string{"/h/k": "v"}}}
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = d.resolveSinkValue(context.Background(), "k8s:h/k")
+		}()
+	}
+	wg.Wait()
 }
