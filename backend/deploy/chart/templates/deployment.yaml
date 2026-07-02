@@ -74,6 +74,13 @@ spec:
               value: {{ $.Values.metadata.buildTime | quote }}
             - name: PALADIN_ROLE
               value: {{ $role | quote }}
+            {{- with default $defaults.extraEnv $spec.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with default $defaults.extraEnvFrom $spec.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             {{- toYaml $spec.ports | nindent 12 }}
           {{- with $spec.livenessProbe }}

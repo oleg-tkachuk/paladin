@@ -584,48 +584,6 @@ open deliberately — each notes why._
 - **Trigger to do:** before any non-lab deployment of the SF NATS
   publisher (the PALADIN sink half is ready now).
 
-### Event dispatcher: SQS sink
-
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; cross-account
-  `role_arn` SHIPPED 2026-07-01; batching + integration test + doc remain.
-- **Shipped:** `SqsSink{queue_url, region}` (already in the proto) wired
-  end-to-end — `internal/worker/sink_sqs.go` with `SQSClientPool` (one
-  `aws-sdk-go-v2/service/sqs` client cached per region, lazy AWS-config
-  resolution), `deliverSQS` publishes the CloudEvents 1.0 envelope as the
-  SQS message body and sets `MessageGroupId`(tenant) + `MessageDeduplicationId`
-  (stable delivery-row id) for **`.fifo`** queues; wired into `deliver()` +
-  the delivery dispatcher; unit tests (`sink_sqs_test.go`) via an `sqsSender`
-  seam covering standard + FIFO + error/missing-config paths. Auth = the
-  default AWS credential chain (IRSA / env / shared config).
-- **Shipped (2026-07-01) — cross-account `role_arn`:** `SqsSink.role_arn`
-  (proto field 3). When set, `SQSClientPool.newClient` wraps the ambient
-  credentials in an `stscreds.AssumeRoleProvider` (cached) so a queue in
-  another AWS account is reachable; the pool now keys clients by
-  `(region, role_arn)` so same- and cross-account sinks to one region don't
-  share a client. `deliverSQS` threads `cfg.RoleArn`; the `/events` SQS
-  connector form gains an optional "Assume-role ARN" field. Unit-tested via
-  the `newClient` seam (pool keying + threading); the actual STS AssumeRole is
-  only reachable against live AWS.
-- **Shipped (2026-07-02) — queue verify:** `TestSQSSinkDelivery`
-  (internal/integration, tags=integration) runs DeliverOne against a real
-  elasticmq — SendMessage → ReceiveMessage round-trip with the CloudEvents
-  envelope; passed locally against Docker.
-- **Shipped (2026-07-02) — `SendMessageBatch`:** the outbox tick now
-  collects rows targeting the same (queue, region, role) and flushes them
-  through SendMessageBatch, chunked at 10 entries / ~240KiB. Batching
-  changes the TRANSPORT only: each row keeps its own attempts / backoff /
-  permanent bookkeeping via a per-row outcome map (partial batch failures
-  map BatchResultErrorEntry back to the exact row; a whole-call failure
-  marks the chunk's rows retryable). Malformed SQS configs deliberately
-  fall back to the per-row path so their error text is unchanged.
-  Unit-tested (chunking, partial-fail mapping, whole-call fail, FIFO
-  attrs, group keying) + `TestSQSSinkBatchDelivery_Wire` (12 rows → 10+2
-  calls → all consumed) against a real elasticmq; PASSED locally.
-- **Definition of Done (remaining):**
-  - Doc: IAM wiring for non-EKS / off-AWS (explicit keys via SecretRef).
-- **Trigger to do:** AWS-native customer with SQS as their bus + a
-  throughput profile that warrants batching.
-
 ### Storage event ingest pipeline — JetStream upgrade + integration coverage
 
 - **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)

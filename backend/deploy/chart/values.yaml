@@ -120,6 +120,19 @@ defaults:
     minReplicas: 1
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
+  # Extra container env, appended after the chart's built-in vars. Empty by
+  # default (the pods run on the ambient credential chain). The canonical use
+  # is handing static cloud credentials to a role off its native platform —
+  # e.g. the dispatcher's SQS sink outside EKS, where there's no IRSA to
+  # assume. Reference a Secret rather than inlining values:
+  #   deployments.dispatcher.extraEnvFrom:
+  #     - secretRef:
+  #         name: paladin-dispatcher-aws
+  # (Secret keys AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY [/ AWS_SESSION_TOKEN]
+  #  feed the SDK's default chain — see docs/runbooks/sqs-sink-credentials.md.)
+  # extraEnv takes the standard EnvVar shape for one-off valueFrom refs.
+  extraEnv: []
+  extraEnvFrom: []
 
 # ─── Per-role Deployments ──────────────────────────────────────────────────
 #
