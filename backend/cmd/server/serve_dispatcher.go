@@ -117,7 +117,12 @@ var serveDispatcherCmd = &cobra.Command{
 			SQS:      sqsPool,
 			RabbitMQ: rabbitPool,
 			Kafka:    kafkaPool,
-			Logger:   l.Named("event-dispatcher"),
+			// Delivery-time resolver for "k8s:<name>/<key>" refs in sink
+			// credential fields (HTTP HMAC, Kafka SASL/mTLS, NATS creds,
+			// AMQP URL). Referenced Secret names must be in the pod's RBAC
+			// secret allowlist.
+			Secrets: app.NewSinkSecretResolver(l.Named("sink-secrets")),
+			Logger:  l.Named("event-dispatcher"),
 		}
 
 		// Pre-warm: scan event_subscriptions WHERE sink_kind='nats'

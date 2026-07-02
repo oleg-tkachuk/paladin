@@ -1082,6 +1082,12 @@ rbac:
     # (config.ingest.webhook.shared_secret_ref), add those Secret names here
     # too — the resolver GETs them via this allowlist, so a missing name
     # surfaces as a 403 at boot.
+    #
+    # The same applies to "k8s:<name>/<key>" refs inside EVENT-SINK configs
+    # (HTTP signing_secret_ref, Kafka sasl_password / mTLS PEM, NATS
+    # credentials_ref, the AMQP URL): the dispatcher + admin pods resolve
+    # them at delivery time through this allowlist — a missing name fails
+    # the delivery with an RBAC error.
     secretNames:
       - paladin-postgresql-app-user
       - paladin-postgresql-migrate-user

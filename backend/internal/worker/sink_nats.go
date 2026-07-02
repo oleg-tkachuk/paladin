@@ -324,7 +324,14 @@ func (d *Dispatcher) deliverNATS(ctx context.Context, sub admindomain.EventSubsc
 		return 0, err
 	}
 
-	conn, err := d.NATS.get(cfg.URL, cfg.CredentialsRef)
+	// credentials_ref may itself be a "k8s:" Secret ref (sink_secrets.go);
+	// the resolved value carries the usual scheme string (token:/nkey:/jwt:).
+	// The resolved form keys the pool, so a rotated Secret dials fresh.
+	credentialsRef, err := d.resolveSinkValue(ctx, cfg.CredentialsRef)
+	if err != nil {
+		return 0, fmt.Errorf("nats sink: %w", err)
+	}
+	conn, err := d.NATS.get(cfg.URL, credentialsRef)
 	if err != nil {
 		return 0, err
 	}

@@ -183,7 +183,14 @@ func (d *Dispatcher) deliverRabbitMQ(ctx context.Context, sub admindomain.EventS
 	if err != nil {
 		return 0, fmt.Errorf("rabbitmq sink: marshal envelope: %w", err)
 	}
-	pub, err := d.RabbitMQ.get(cfg.URL)
+	// The AMQP URL embeds the credentials (amqps://user:pass@host/vhost), so
+	// the whole URL may be a "k8s:" Secret ref (sink_secrets.go). The
+	// resolved URL keys the pool, so a rotated Secret dials fresh.
+	amqpURL, err := d.resolveSinkValue(ctx, cfg.URL)
+	if err != nil {
+		return 0, fmt.Errorf("rabbitmq sink: %w", err)
+	}
+	pub, err := d.RabbitMQ.get(amqpURL)
 	if err != nil {
 		return 0, err
 	}

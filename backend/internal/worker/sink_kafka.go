@@ -199,6 +199,17 @@ func (d *Dispatcher) deliverKafka(ctx context.Context, sub admindomain.EventSubs
 	if len(brokers) == 0 {
 		return 0, errors.New("kafka sink: no usable broker in brokers list")
 	}
+	// Credential fields may be "k8s:" Secret refs (sink_secrets.go). Resolve
+	// them BEFORE the transport build and the pool-key hash: the key is then
+	// computed over the resolved material, so a rotated Secret naturally
+	// hashes to a new key and gets a freshly-dialed writer.
+	for _, f := range []*string{&cfg.SASLUsername, &cfg.SASLPassword, &cfg.TLSClientCert, &cfg.TLSClientKey} {
+		v, rerr := d.resolveSinkValue(ctx, *f)
+		if rerr != nil {
+			return 0, fmt.Errorf("kafka sink: %w", rerr)
+		}
+		*f = v
+	}
 	transport, err := buildKafkaTransport(cfg)
 	if err != nil {
 		return 0, err

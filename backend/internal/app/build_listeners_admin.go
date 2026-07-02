@@ -76,6 +76,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		SQS:         worker.NewSQSClientPool(l.Named("sqs-pool")),
 		RabbitMQ:    worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool")),
 		Kafka:       worker.NewKafkaWriterPool(l.Named("kafka-pool")),
+		Secrets:     NewSinkSecretResolver(l.Named("sink-secrets")),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}

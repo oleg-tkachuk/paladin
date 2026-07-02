@@ -472,11 +472,19 @@ open deliberately — each notes why._
   mechanisms, TLS, mTLS keypair incl. a generated cert, error paths) + the
   cache-key uniqueness + delivery threading. Inline creds are lab-grade — a
   secret-store-resolved ref is the remaining hardening (shared with NATS).
+- **Shipped (2026-07-02) — broker verify + secret-store creds:**
+  `TestKafkaSinkDelivery_SCRAM` (internal/integration, tags=integration) runs
+  DeliverOne against a real redpanda with SASL/SCRAM-SHA-256 + authorization
+  enabled — handshake, per-tenant message key, and CloudEvents envelope all
+  consumed back; passed locally against Docker. Credential fields
+  (`sasl_username/password`, `tls_client_cert/key`) now accept
+  `k8s:<name>/<key>` Secret refs resolved at delivery time
+  (worker/sink_secrets.go; TTL-cached, pool key hashes the RESOLVED material
+  so rotation dials a fresh writer).
 - **Definition of Done (remaining):**
-  - Real-broker integration test (testcontainers redpanda / kafka): outbox
-    row → publish round-trip, incl. a SASL_SSL connection. (Unit tests use a
-    writer seam; the SASL/TLS handshake itself is only broker-verifiable.)
-  - Secret-store-resolved credentials (inline `sasl_password` / PEM today).
+  - TLS/mTLS handshake against a certs-mounted broker (the SCRAM test runs
+    on the PLAINTEXT listener; redpanda-with-TLS needs generated certs
+    mounted into the container).
   - Optional: per-tenant topic prefix vs operator-defined topic — operator
     -defined shipped; revisit if a customer needs auto-fan-out by tenant.
 - **Blockers:** none — incremental; driven by a customer's auth posture.
@@ -509,10 +517,15 @@ open deliberately — each notes why._
   (`_form.ts` build/hydrate/validate + `SubscriptionEditorDialog`); the stale
   "Kafka/SQS are roadmap stubs" Target hint was corrected (all sinks are
   delivery-wired). `_form.test.ts` covers build + hydrate + validation.
+- **Shipped (2026-07-02) — broker verify + secret URL:**
+  `TestRabbitMQSinkDelivery` (internal/integration, tags=integration) runs
+  DeliverOne against a real rabbitmq:4.0 — publisher-confirmed publish
+  consumed back as the CloudEvents envelope; passed locally against Docker.
+  The AMQP URL (credentials embedded) now accepts a `k8s:<name>/<key>`
+  Secret ref resolved at delivery time.
 - **Definition of Done (remaining):**
-  - Real-broker integration test (testcontainers RabbitMQ): outbox row →
-    publish round-trip + channel-drop-mid-publish behaviour. (The unit
-    tests use a publisher seam, so wire compatibility is unproven.)
+  - Channel-drop-mid-publish behaviour under the real broker (the happy
+    round-trip is covered; the drop path still relies on the unit seam).
   - AMQPS with TLS **client certs** (today only URL-embedded creds /
     server-TLS via `amqps://`).
 - **Trigger to do:** customer ask — banking / fintech enterprise already
@@ -569,13 +582,15 @@ open deliberately — each notes why._
   connector form gains an optional "Assume-role ARN" field. Unit-tested via
   the `newClient` seam (pool keying + threading); the actual STS AssumeRole is
   only reachable against live AWS.
+- **Shipped (2026-07-02) — queue verify:** `TestSQSSinkDelivery`
+  (internal/integration, tags=integration) runs DeliverOne against a real
+  elasticmq — SendMessage → ReceiveMessage round-trip with the CloudEvents
+  envelope; passed locally against Docker.
 - **Definition of Done (remaining):**
-  - Real-queue integration test (elasticmq / localstack testcontainer):
-    outbox row → SendMessage round-trip. (Unit tests use a sender seam.)
   - `SendMessageBatch` when an outbox poll returns multiple rows targeting
-    the same queue (today one SendMessage per row) — deferred: it restructures
-    the correctness-critical OutboxRunner tick loop, which is integration-only
-    testable, so it wants the elasticmq test landed first.
+    the same queue (today one SendMessage per row) — the elasticmq test it
+    was waiting on now exists; still deferred because it restructures the
+    correctness-critical OutboxRunner tick loop.
   - Doc: IAM wiring for non-EKS / off-AWS (explicit keys via SecretRef).
 - **Trigger to do:** AWS-native customer with SQS as their bus + a
   throughput profile that warrants batching.

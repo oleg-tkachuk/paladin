@@ -158,6 +158,12 @@ type Dispatcher struct {
 	MaxAttempts int
 	// BaseBackoff is the per-attempt backoff seed for DeliverOne.
 	BaseBackoff time.Duration
+
+	// Secrets resolves "k8s:<name>/<key>" refs in sink-credential fields
+	// (see sink_secrets.go). nil = inline-only configs; a ref with no
+	// resolver fails the delivery loudly rather than using the literal.
+	Secrets     SinkSecretResolver
+	secretCache *sinkSecretCache
 }
 
 // Dispatch enumerates every enabled subscription for tenantID whose
@@ -357,11 +363,17 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("X-PALADIN-Event-Type", evt.Type)
 		req.Header.Set("X-PALADIN-Subscription-Id", sub.SubscriptionID.String())
-		// Slice 8: resolve sink.SigningSecretRef from the secret manager
-		// and sign the body. Inline-secret-by-value is reserved for
-		// tests and SHOULD NOT be used in production.
+		// signing_secret_ref: either the HMAC key inline (lab-grade) or a
+		// "k8s:<name>/<key>" Secret ref resolved at delivery time — see
+		// sink_secrets.go. Resolution errors fail the attempt (retryable):
+		// signing with the literal ref string would produce signatures the
+		// subscriber can never verify.
 		if sink.SigningSecretRef != "" {
-			sig := signHMAC(body, sink.SigningSecretRef)
+			secret, serr := d.resolveSinkValue(ctx, sink.SigningSecretRef)
+			if serr != nil {
+				return 0, serr
+			}
+			sig := signHMAC(body, secret)
 			req.Header.Set("X-PALADIN-Signature", "sha256="+sig)
 		}
 		resp, err := httpClient.Do(req)
