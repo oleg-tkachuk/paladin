@@ -264,9 +264,10 @@ type Querier interface {
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
 	// Sessions whose client never Completed/Aborted, past the cooling-off
 	// window. Joins objects + object_keys to materialise everything
-	// AbortMultipart needs (bucket, tenant, storage upload id, key) so the
-	// reaper aborts the S3-side session (which otherwise accrues part-storage
-	// charges forever) in one round-trip per row. Bounded by batch_size.
+	// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
+	// the reaper aborts the S3-side session (which otherwise accrues part-storage
+	// charges forever) on the object's own backend, in one round-trip per row.
+	// Bounded by batch_size.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
 	// an empty/NULL cursor on the first page, and a bare `id > NULL`

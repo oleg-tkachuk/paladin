@@ -30,7 +30,7 @@ type MultipartReaper struct {
 
 // MultipartAborter is the slice of the storage adapter the reaper needs.
 type MultipartAborter interface {
-	AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
+	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
 }
 
 func (r *MultipartReaper) Run(ctx context.Context) error {
@@ -66,7 +66,7 @@ func (r *MultipartReaper) sweep(ctx context.Context, batch int32) {
 		// Abort the S3 session first. If it fails we keep the DB row so
 		// the next sweep retries — deleting it would orphan the S3
 		// session with no record to reclaim it from.
-		if err := r.Storage.AbortMultipart(ctx, row.BucketName, tenantID,
+		if err := r.Storage.AbortMultipart(ctx, row.BackendID, row.BucketName, tenantID,
 			row.StorageUploadID, row.ObjectKey, row.Key); err != nil {
 			r.log().Warn("abort multipart failed; will retry next sweep",
 				zap.String("upload_id", row.UploadID),

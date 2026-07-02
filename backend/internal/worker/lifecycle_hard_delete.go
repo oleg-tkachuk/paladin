@@ -58,7 +58,7 @@ type LifecycleHardDeleter struct {
 type StorageDeleter interface {
 	DeleteObject(
 		ctx context.Context,
-		bucket string,
+		backendID, bucket string,
 		tenantID uuid.UUID,
 		objectKey, key string,
 	) error
@@ -144,7 +144,7 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		zap.String("key", r.Key),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BucketName, tenantID, r.ObjectKey, r.Key); err != nil {
+	if err := w.Storage.DeleteObject(ctx, r.BackendID, r.BucketName, tenantID, r.ObjectKey, r.Key); err != nil {
 		// We don't fail the whole sweep — log and try the next row.
 		// Storage-side missing-key errors should be tolerated by
 		// the adapter (S3 DELETE on absent key is a 204; SeaweedFS

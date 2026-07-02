@@ -102,7 +102,7 @@ func (q *Queries) ListMultipartParts(ctx context.Context, uploadID string) ([]Mu
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
 SELECT m.upload_id, m.storage_upload_id,
        o.object_id, o.tenant_id, o.object_key, o.key,
-       k.bucket_name
+       k.backend_id, k.bucket_name
 FROM multipart_uploads m
 JOIN objects o      ON o.object_id = m.object_id
 JOIN object_keys k  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
@@ -118,14 +118,16 @@ type ListStaleMultipartUploadsRow struct {
 	TenantID        pgtype.UUID `json:"tenant_id"`
 	ObjectKey       string      `json:"object_key"`
 	Key             string      `json:"key"`
+	BackendID       string      `json:"backend_id"`
 	BucketName      string      `json:"bucket_name"`
 }
 
 // Sessions whose client never Completed/Aborted, past the cooling-off
 // window. Joins objects + object_keys to materialise everything
-// AbortMultipart needs (bucket, tenant, storage upload id, key) so the
-// reaper aborts the S3-side session (which otherwise accrues part-storage
-// charges forever) in one round-trip per row. Bounded by batch_size.
+// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
+// the reaper aborts the S3-side session (which otherwise accrues part-storage
+// charges forever) on the object's own backend, in one round-trip per row.
+// Bounded by batch_size.
 func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
 	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, batchSize)
 	if err != nil {
@@ -142,6 +144,7 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 			&i.TenantID,
 			&i.ObjectKey,
 			&i.Key,
+			&i.BackendID,
 			&i.BucketName,
 		); err != nil {
 			return nil, err

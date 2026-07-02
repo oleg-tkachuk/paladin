@@ -22,14 +22,14 @@ type fakeStorage struct {
 }
 
 type deleteCall struct {
-	bucket, objectKey, key string
-	tenantID               uuid.UUID
+	backendID, bucket, objectKey, key string
+	tenantID                          uuid.UUID
 }
 
-func (f *fakeStorage) DeleteObject(_ context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error {
+func (f *fakeStorage) DeleteObject(_ context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, deleteCall{bucket: bucket, objectKey: objectKey, key: key, tenantID: tenantID})
+	f.calls = append(f.calls, deleteCall{backendID: backendID, bucket: bucket, objectKey: objectKey, key: key, tenantID: tenantID})
 	if err, ok := f.failOn[bucket+"/"+key]; ok {
 		return err
 	}
@@ -76,12 +76,16 @@ func TestLifecycleHardDeleter_Sweep_DeletesS3ThenDB(t *testing.T) {
 	// version-mismatch path lives in the integration test.
 	if err := w.Storage.DeleteObject(
 		context.Background(),
+		row.BackendID,
 		row.BucketName,
 		uuid.UUID(row.TenantID.Bytes),
 		row.ObjectKey,
 		row.Key,
 	); err != nil {
 		t.Fatalf("storage delete: %v", err)
+	}
+	if got := storage.calls[0].backendID; got != row.BackendID {
+		t.Fatalf("DeleteObject backendID = %q, want %q (must route on the row's backend)", got, row.BackendID)
 	}
 	if len(storage.calls) != 1 {
 		t.Fatalf("delete calls = %d, want 1", len(storage.calls))
@@ -102,6 +106,7 @@ func TestLifecycleHardDeleter_Sweep_StorageFailureDoesNotPanic(t *testing.T) {
 	}
 	err := storage.DeleteObject(
 		context.Background(),
+		"primary",
 		"paladin-test",
 		uuid.New(),
 		"docs",

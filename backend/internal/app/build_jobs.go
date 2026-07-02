@@ -70,7 +70,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
 			deps.SM,
-			adapters.NewReconcilerProbe(db.Queries, deps.S3),
+			adapters.NewReconcilerProbe(db.Queries, s3adapter.NewObjectRouter(deps.Registry)),
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
@@ -162,8 +162,10 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// forever). 0 disables it.
 	if cfg.Worker.Jobs.Housekeeping.MultipartTTL > 0 {
 		out = append(out, &worker.MultipartReaper{
-			Q:         db.Queries,
-			Storage:   deps.S3,
+			Q: db.Queries,
+			// Routed: ListStaleMultipartUploads returns each session's backend,
+			// so the abort targets the object's own backend.
+			Storage:   s3adapter.NewMultipartRouter(deps.Registry),
 			TTL:       cfg.Worker.Jobs.Housekeeping.MultipartTTL,
 			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
 			BatchSize: cfg.Worker.Jobs.Housekeeping.HardDeleteBatchSize,
@@ -174,13 +176,13 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// Lifecycle hard-deleter — closes the loop on soft-delete by
 	// reclaiming the S3 bytes after the cooling-off window. 0 keeps
 	// rows DELETED forever (audit-friendly, dev default); a non-zero
-	// duration enables the cascade. Uses deps.S3 because every
-	// production path mints presigned URLs against the same client;
-	// reusing it keeps storage credentials in one place.
+	// duration enables the cascade. Routed: ListHardDeletable returns each
+	// object's backend, so the DELETE reclaims bytes on the object's own
+	// backend rather than the default.
 	if cfg.Worker.Jobs.Housekeeping.HardDeleteAfter > 0 {
 		out = append(out, &worker.LifecycleHardDeleter{
 			Q:         db.Queries,
-			Storage:   deps.S3,
+			Storage:   s3adapter.NewObjectRouter(deps.Registry),
 			TTL:       cfg.Worker.Jobs.Housekeeping.HardDeleteAfter,
 			Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
 			BatchSize: cfg.Worker.Jobs.Housekeeping.HardDeleteBatchSize,
