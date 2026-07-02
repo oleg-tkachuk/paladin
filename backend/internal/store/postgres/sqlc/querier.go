@@ -60,7 +60,10 @@ type Querier interface {
 	CreateBucketV2(ctx context.Context, backendID string, bucketName string, displayName *string, region *string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
 	CreateEventSubscription(ctx context.Context, subscriptionID pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind string, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
-	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error
+	// backend_id / bucket_name anchor the upload to the physical location resolved
+	// at initiate time, so the rest of the lifecycle targets it regardless of a
+	// later object_key rebind (see migration 053).
+	CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, backendID string, bucketName string) error
 	// Object queries.
 	CreateObject(ctx context.Context, objectID pgtype.UUID, tenantID pgtype.UUID, objectKey string, key string, state ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
 	// ObjectKey queries.
@@ -266,8 +269,10 @@ type Querier interface {
 	// window. Joins objects + object_keys to materialise everything
 	// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
 	// the reaper aborts the S3-side session (which otherwise accrues part-storage
-	// charges forever) on the object's own backend, in one round-trip per row.
-	// Bounded by batch_size.
+	// charges forever) on the backend the parts actually live on, in one
+	// round-trip per row. Prefer the session-anchored location (migration 053);
+	// fall back to the object_key's current binding for legacy rows initiated
+	// before the anchor columns existed. Bounded by batch_size.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Cursor pagination. The IS-NULL guard is mandatory: callers may pass
 	// an empty/NULL cursor on the first page, and a bare `id > NULL`

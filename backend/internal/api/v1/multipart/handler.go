@@ -47,7 +47,8 @@ type Session struct {
 	UploadID        string
 	ObjectID        uuid.UUID
 	TenantID        uuid.UUID
-	Bucket          string // physical S3 bucket; resolved from ObjectKey row at lookup
+	BackendID       string // storage backend the upload was initiated against
+	Bucket          string // physical S3 bucket; anchored at initiate time
 	ObjectKey       string
 	Key             string
 	StorageUploadID string
@@ -76,7 +77,7 @@ type CompleteArgs struct {
 }
 
 type Repository interface {
-	InitiateSession(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID string) (Session, error)
+	InitiateSession(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	GetSession(ctx context.Context, uploadID string) (Session, error)
 	RecordPart(ctx context.Context, uploadID string, part PartETag, sizeBytes int64, checksum string) error
 	DeleteSession(ctx context.Context, uploadID string) error
@@ -175,7 +176,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	}
 
 	objectID := uuid.Must(uuid.NewV7())
-	session, err := h.repo.InitiateSession(ctx, args, objectID, storageUploadID)
+	session, err := h.repo.InitiateSession(ctx, args, objectID, storageUploadID, backendID, bucket)
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
@@ -203,7 +204,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPutObject, 0, ""); err != nil {
 		return err
 	}
-	backendID, bucket := "", sess.Bucket
+	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
 		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation)
 		if err != nil {
@@ -260,7 +261,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
-	backendID, bucket := "", sess.Bucket
+	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
 		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation)
 		if err != nil {
@@ -313,7 +314,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	backendID, bucket := "", sess.Bucket
+	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
 		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation)
 		if err != nil {

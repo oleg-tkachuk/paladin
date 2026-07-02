@@ -14,18 +14,24 @@ import (
 const createMultipartUpload = `-- name: CreateMultipartUpload :exec
 
 INSERT INTO multipart_uploads (
-    upload_id, object_id, storage_upload_id, part_size_bytes, total_parts
-) VALUES ($1, $2, $3, $4, $5)
+    upload_id, object_id, storage_upload_id, part_size_bytes, total_parts,
+    backend_id, bucket_name
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 // Multipart upload queries.
-func (q *Queries) CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32) error {
+// backend_id / bucket_name anchor the upload to the physical location resolved
+// at initiate time, so the rest of the lifecycle targets it regardless of a
+// later object_key rebind (see migration 053).
+func (q *Queries) CreateMultipartUpload(ctx context.Context, uploadID string, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, backendID string, bucketName string) error {
 	_, err := q.db.Exec(ctx, createMultipartUpload,
 		uploadID,
 		objectID,
 		storageUploadID,
 		partSizeBytes,
 		totalParts,
+		backendID,
+		bucketName,
 	)
 	return err
 }
@@ -41,7 +47,7 @@ func (q *Queries) DeleteMultipartUpload(ctx context.Context, uploadID string) er
 }
 
 const getMultipartUpload = `-- name: GetMultipartUpload :one
-SELECT multipart_uploads.upload_id, multipart_uploads.object_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.created_at, multipart_uploads.updated_at
+SELECT multipart_uploads.upload_id, multipart_uploads.object_id, multipart_uploads.storage_upload_id, multipart_uploads.part_size_bytes, multipart_uploads.total_parts, multipart_uploads.created_at, multipart_uploads.updated_at, multipart_uploads.backend_id, multipart_uploads.bucket_name
 FROM multipart_uploads
 WHERE upload_id = $1
 `
@@ -61,6 +67,8 @@ func (q *Queries) GetMultipartUpload(ctx context.Context, uploadID string) (GetM
 		&i.MultipartUpload.TotalParts,
 		&i.MultipartUpload.CreatedAt,
 		&i.MultipartUpload.UpdatedAt,
+		&i.MultipartUpload.BackendID,
+		&i.MultipartUpload.BucketName,
 	)
 	return i, err
 }
@@ -102,7 +110,8 @@ func (q *Queries) ListMultipartParts(ctx context.Context, uploadID string) ([]Mu
 const listStaleMultipartUploads = `-- name: ListStaleMultipartUploads :many
 SELECT m.upload_id, m.storage_upload_id,
        o.object_id, o.tenant_id, o.object_key, o.key,
-       k.backend_id, k.bucket_name
+       COALESCE(NULLIF(m.backend_id, ''), k.backend_id)   AS backend_id,
+       COALESCE(NULLIF(m.bucket_name, ''), k.bucket_name) AS bucket_name
 FROM multipart_uploads m
 JOIN objects o      ON o.object_id = m.object_id
 JOIN object_keys k  ON k.tenant_id = o.tenant_id AND k.object_key = o.object_key
@@ -126,8 +135,10 @@ type ListStaleMultipartUploadsRow struct {
 // window. Joins objects + object_keys to materialise everything
 // AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
 // the reaper aborts the S3-side session (which otherwise accrues part-storage
-// charges forever) on the object's own backend, in one round-trip per row.
-// Bounded by batch_size.
+// charges forever) on the backend the parts actually live on, in one
+// round-trip per row. Prefer the session-anchored location (migration 053);
+// fall back to the object_key's current binding for legacy rows initiated
+// before the anchor columns existed. Bounded by batch_size.
 func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
 	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, batchSize)
 	if err != nil {

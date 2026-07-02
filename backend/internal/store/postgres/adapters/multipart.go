@@ -29,7 +29,7 @@ var _ multipart.Repository = (*MultipartRepo)(nil)
 
 const multipartSessionTTL = 24 * time.Hour
 
-func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.InitiateArgs, objectID uuid.UUID, storageUploadID string) (multipart.Session, error) {
+func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multipart.Session, error) {
 	uploadID := uuid.Must(uuid.NewV7()).String()
 
 	tx, err := r.pool.Begin(ctx)
@@ -68,6 +68,8 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 		storageUploadID,
 		args.PartSizeBytes,
 		args.TotalParts,
+		backendID,
+		bucket,
 	); err != nil {
 		return multipart.Session{}, fmt.Errorf("create multipart upload row: %w", err)
 	}
@@ -79,6 +81,8 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multipart.Init
 	return multipart.Session{
 		UploadID:        uploadID,
 		ObjectID:        objectID,
+		BackendID:       backendID,
+		Bucket:          bucket,
 		ObjectKey:       args.ObjectKey,
 		Key:             args.Key,
 		StorageUploadID: storageUploadID,
@@ -92,6 +96,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	const q = `
 		SELECT mu.upload_id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
+		       mu.backend_id, mu.bucket_name,
 		       o.tenant_id, o.object_key, o.key
 		FROM multipart_uploads mu
 		JOIN objects o ON o.object_id = mu.object_id
@@ -114,6 +119,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		&partSize,
 		&totalParts,
 		&createdAt,
+		&s.BackendID,
+		&s.Bucket,
 		&tenantID,
 		&objectKey,
 		&key,

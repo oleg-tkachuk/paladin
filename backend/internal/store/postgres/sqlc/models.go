@@ -318,6 +318,8 @@ type MultipartUpload struct {
 	TotalParts      int32              `json:"total_parts"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	BackendID       string             `json:"backend_id"`
+	BucketName      string             `json:"bucket_name"`
 }
 
 type OauthAuthorizationCode struct {
