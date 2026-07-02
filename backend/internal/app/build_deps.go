@@ -81,11 +81,18 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	if defaultName == "" {
 		return nil, errors.New("app: storage.default_backend not set")
 	}
-	backend, ok := cfg.Storage.Backends[defaultName]
-	if !ok {
-		return nil, fmt.Errorf("app: storage.backends.%s not configured", defaultName)
+	// One client per backend, keyed by backend id (docs/backend-registry.md).
+	// Warmup(false) eagerly builds only the default — identical to the single
+	// New-at-boot it replaces; other backends build lazily on first use. The
+	// default client still backs all five storage interfaces below; Step 3 of
+	// the landing swaps these for the per-backend routers. Sourcing it through
+	// the registry proves the registry on the boot path with zero behavioural
+	// change on a single-backend config.
+	registry := s3adapter.NewBackendRegistry(cfg.Storage)
+	if err := registry.Warmup(ctx, false); err != nil {
+		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
 	}
-	s3c, err := s3adapter.New(ctx, backend)
+	s3c, err := registry.For(ctx, defaultName)
 	if err != nil {
 		return nil, fmt.Errorf("app: s3 adapter: %w", err)
 	}
