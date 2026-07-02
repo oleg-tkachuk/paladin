@@ -907,25 +907,31 @@ open deliberately — each notes why._
 
 ### Per-tenant S3 bucket layout
 
-- **Status:** Deferred — explicitly held for product discussion
-- **Reason:** Today every tenant lands inside one shared physical
-  S3 bucket keyed by `tenants/<tenant_uuid>/buckets/<logical>/…`. A
-  per-tenant *physical* bucket would simplify IAM blast radius
-  (one AWS-side policy per tenant), unlock lifecycle / replication
-  rules per customer, and remove the prefix-scan hotspot on the
-  shared listing index. It would also complicate provisioning,
-  multiply per-account bucket-quota pressure, fork the storage
-  cost model, and require a backfill plan for existing data.
-- **Definition of Done:** the user explicitly signals "go" — not
-  before. When greenlit, design must cover: (1) provisioning flow
-  (synchronous on CreateTenant vs async via outbox), (2) bucket
-  naming + region pinning, (3) migration of existing tenants
-  (rename in place via prefix copy, or treat legacy tenants as
-  shared-bucket forever and only new tenants get their own bucket),
-  (4) cost-attribution wiring (bucket name → tenant), (5) cleanup
-  on PurgeTenant.
-- **Blockers:** product decision. Do NOT start design without an
-  explicit user request.
+- **Status:** Design recorded 2026-07-02 in
+  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md) (on explicit
+  request). **Rollout remains product-gated** — the ADR is the architecture,
+  not a commitment to build.
+- **Reason:** Today every tenant lands inside one shared physical S3 bucket,
+  isolated by the key prefix `<tenant_id>/<object_key>/<key>`
+  (`s3adapter.composeKey`). A per-tenant *physical* bucket would simplify IAM
+  blast radius (one AWS-side policy per tenant), unlock lifecycle / replication
+  rules per customer, enable native cost attribution (bucket→tenant tag), and
+  remove the prefix-scan hotspot on the shared listing index. It also multiplies
+  per-account bucket-quota pressure (hence hybrid, not replace) and needs a
+  migration path for existing data.
+- **Design (ADR-0011):** layout is a **per-tenant** property; `shared` and
+  `dedicated` coexist. Most machinery already exists (`buckets.owner_tenant_id`,
+  `provision_state` + `BucketReconciler`, `tenant_default_bindings`, the tenancy
+  trigger, `CopyObject`). Net-new: a `tenants.storage_layout` column +
+  provision-on-create wiring (Phase 1, works on current single-client wiring); a
+  `BackendRegistry` for multi-backend/region routing (Phase 2, the real
+  unblock); a shared→dedicated copy job (Phase 3). Keys stay uniform so a move
+  is a same-key `CopyObject`. All five original DoD points (provisioning flow,
+  naming/region, migration, cost attribution, purge) are answered in the ADR.
+- **Definition of Done:** execute Phases 1–3 per ADR-0011, once rollout is
+  greenlit.
+- **Blockers:** product decision to roll out (design is no longer a blocker —
+  ADR-0011 records it).
 
 ### Redis capability counter cache
 
