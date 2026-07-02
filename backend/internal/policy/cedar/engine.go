@@ -283,6 +283,18 @@ func (e *Engine) Start(ctx context.Context) error {
 				if !ok {
 					return
 				}
+				if ev.ResyncAll {
+					// The watcher reconnected after a dropped LISTEN and may
+					// have missed invalidations. Drop the whole compiled cache;
+					// every scope re-fetches on next use (bounded staleness
+					// ends now instead of at the TTL).
+					e.m.watchResyncs.Add(1)
+					e.compiled.Range(func(k, _ any) bool {
+						e.compiled.Delete(k)
+						return true
+					})
+					continue
+				}
 				if ev.ObjectKey == "" {
 					// Tenant-level change: the inherited text is concatenated
 					// into every objectKey-scoped compile, so drop all of the
@@ -746,9 +758,18 @@ type metrics struct {
 	compileErrs  atomic.Uint64
 	cacheHits    atomic.Uint64
 	cacheMisses  atomic.Uint64
+	// watchResyncs counts full-cache flushes triggered by a Store reconnect
+	// (ResyncAll). Non-zero means the LISTEN link dropped at least once and
+	// the cache was conservatively cleared.
+	watchResyncs atomic.Uint64
 }
 
 // Stats returns a snapshot of the internal metrics.
 func (e *Engine) Stats() (allowed, denied, compileErrs, hits, misses uint64) {
 	return e.m.authzAllowed.Load(), e.m.authzDenied.Load(), e.m.compileErrs.Load(), e.m.cacheHits.Load(), e.m.cacheMisses.Load()
 }
+
+// WatchResyncs returns how many times the invalidation loop flushed the whole
+// compiled cache in response to a Store reconnect. Exposed separately from
+// Stats so a health probe can alarm on a flapping LISTEN link.
+func (e *Engine) WatchResyncs() uint64 { return e.m.watchResyncs.Load() }

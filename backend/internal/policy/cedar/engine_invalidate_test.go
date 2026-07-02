@@ -75,3 +75,42 @@ func TestStartInvalidation(t *testing.T) {
 		t.Fatalf("tenant-level event evicted another tenant's entry")
 	}
 }
+
+// A ResyncAll control event (emitted after the Store's LISTEN connection
+// reconnects) must flush the entire compiled cache — every tenant, not just
+// one — because an unknown set of invalidations was missed during the gap.
+// The WatchResyncs counter increments so a flapping link is observable.
+func TestStartInvalidation_ResyncAll(t *testing.T) {
+	events := make(chan ChangeEvent)
+	e := NewEngine(watchStore{ch: events}, time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := e.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	a, b := uuid.New(), uuid.New()
+	for _, k := range []cacheKey{
+		{tenant: a},
+		{tenant: a, objectKey: "x"},
+		{tenant: b, objectKey: "y"},
+	} {
+		e.compiled.Store(k, &compiledPolicy{})
+	}
+
+	events <- ChangeEvent{ResyncAll: true}
+
+	// Every entry, across both tenants, must be gone.
+	waitTenantEntries(t, e, a, 0)
+	waitTenantEntries(t, e, b, 0)
+
+	// Counter is bumped once per resync (poll: the loop runs the flush before
+	// it's observable, so give it the same slack as the cache assertions).
+	deadline := time.Now().Add(5 * time.Second)
+	for e.WatchResyncs() != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("WatchResyncs = %d, want 1", e.WatchResyncs())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
