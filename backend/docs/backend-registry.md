@@ -324,3 +324,20 @@ integration tests.
 **Out (Phase 3+):** `streamThrough` cross-backend copy, `LISTEN`-driven
 credential invalidation, and the per-tenant backend-selection policy at
 `CreateObjectKey`.
+
+**Deferred follow-ups surfaced while landing Phase 2 (correct on a
+single-backend deployment; needed before dedicated buckets on a non-default
+backend are safe):**
+
+- **Maintenance-worker routing.** The reconciler probe (`HeadProber`), the
+  multipart reaper (`MultipartAborter`), the lifecycle hard-deleter, and the
+  bucket reconciler use worker-local storage interfaces that don't carry a
+  backend id, so they run against the default backend. `BatchCopy` already
+  routes (its `Location` carries the backend id). Thread the backend id into
+  those worker interfaces + the queries that feed them.
+- **Multipart session backend.** `multipart.Session` carries no `BackendID`
+  and `GetSession` doesn't select the bucket, so complete/abort/presign-part
+  re-resolve `(backend, bucket)` from the current object_key binding rather
+  than the one the upload was initiated against — a pre-existing rebind gap
+  that multi-backend inherits. Persist `(backend_id, bucket)` on
+  `multipart_uploads` and read it back.

@@ -36,7 +36,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/multipart"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/object"
-	"github.com/oleg-tkachuk/paladin/internal/api/v1/presign"
 	"github.com/oleg-tkachuk/paladin/internal/config"
 )
 
@@ -316,9 +315,12 @@ func (c *Client) DeleteBucket(ctx context.Context, backendID, bucketName string)
 	return nil
 }
 
-// ─── object.Storage ────────────────────────────────────────────────────────
-
-var _ object.Storage = (*Client)(nil)
+// ─── object.Storage (methods; the ObjectRouter satisfies the interface) ─────
+//
+// The narrow storage interfaces now carry a backend id so the router can
+// dispatch per backend; *Client implements the per-backend method bodies and
+// is reached only through the router (see router.go), so it no longer asserts
+// the interfaces directly.
 
 func (c *Client) PresignPut(ctx context.Context, args object.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.PutObjectInput{
@@ -431,9 +433,7 @@ func (c *Client) CompletionMode(objectKey string) object.CompletionMode {
 	return c.mode
 }
 
-// ─── multipart.Storage ─────────────────────────────────────────────────────
-
-var _ multipart.Storage = (*Client)(nil)
+// ─── multipart.Storage (methods; MultipartRouter satisfies the interface) ───
 
 func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (string, error) {
 	in := &s3.CreateMultipartUploadInput{
@@ -508,7 +508,8 @@ type PresignView struct{ c *Client }
 
 func (c *Client) Presign() *PresignView { return &PresignView{c: c} }
 
-var _ presign.Storage = (*PresignView)(nil)
+// PresignView carries the per-backend presign method bodies; PresignRouter
+// satisfies the presign.Storage interface and delegates here.
 
 func (p *PresignView) PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
 	return p.c.PresignGet(ctx, object.PresignGetArgs{
@@ -544,9 +545,7 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 	return (&PresignView{c: c}).PresignPart(ctx, bucket, tenantID, storageUploadID, objectKey, key, partNumber, ttl)
 }
 
-// ─── object.StreamSink ─────────────────────────────────────────────────────
-
-var _ object.StreamSink = (*Client)(nil)
+// ─── object.StreamSink (methods; StreamRouter satisfies the interface) ──────
 
 // Open returns a StreamWriter that uploads a single object via S3 multipart.
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.

@@ -64,12 +64,10 @@ type Storage interface {
 	PresignPut(ctx context.Context, args PresignPutArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 	PresignPost(ctx context.Context, args PresignPostArgs) (action string, fields map[string]string, expiresAt time.Time, err error)
 	PresignGet(ctx context.Context, args PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
-	Head(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
 	// DeleteObject is optional — for permanent deletes only.
-	DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string) error
-	// CompletionMode is derived from the objectKey's storage backend config.
-	CompletionMode(objectKey string) CompletionMode
+	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string) error
 }
 
 // BucketMeta is the minimal projection of bucket metadata the object
@@ -694,11 +692,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	}
 
 	// Materialize authoritative values via HEAD against the object's bucket.
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation); positional Head routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.ObjectKey, true) // complete/promote (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	etag, size, checksum, seq, err := h.storage.Head(ctx, bucket, tenantID, obj.ObjectKey, obj.Key)
+	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.ObjectKey, obj.Key)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object not uploaded yet: %w", err))
@@ -1164,7 +1162,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation); positional DeleteObject routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -1225,7 +1223,7 @@ func (h *Handler) DeleteObject(ctx context.Context, objectKey, objectIDStr, reso
 	// DB row is gone (and the event is enqueued). Now remove the bytes; a
 	// failure here orphans the object in S3 but cannot resurrect a dangling
 	// row. Log loudly so a sweeper / operator can reclaim it.
-	if err := h.storage.DeleteObject(ctx, bucket, tenantID, objectKey, obj.Key); err != nil {
+	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, objectKey, obj.Key); err != nil {
 		if h.log != nil {
 			h.log.Error("permanent delete: DB row removed but storage delete failed; object orphaned in S3",
 				zap.String("tenant_id", tenantID.String()),

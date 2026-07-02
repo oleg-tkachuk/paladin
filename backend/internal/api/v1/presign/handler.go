@@ -38,9 +38,9 @@ const (
 )
 
 type Storage interface {
-	PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignGet(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPut(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 type Repository interface {
@@ -105,7 +105,7 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // presign GET (read); positional PresignGet routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, false) // presign GET (read)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
@@ -115,7 +115,7 @@ func (h *Handler) PresignGet(ctx context.Context, objectKey, objectIDStr string,
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignGet(ctx, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
+	return h.storage.PresignGet(ctx, backendID, bucket, tenantID, objectKey, key, h.resolveTTL(ttl), disposition)
 }
 
 func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
@@ -151,14 +151,14 @@ func (h *Handler) PresignPut(ctx context.Context, objectKey, objectIDStr, conten
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign PUT (mutation); positional PresignPut routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign PUT (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPut(ctx, bucket, tenantID, objectKey, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
+	return h.storage.PresignPut(ctx, backendID, bucket, tenantID, objectKey, key, contentType, checksumAlgo, h.resolveTTL(ttl), sizeHint)
 }
 
 func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
@@ -180,14 +180,14 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, objectKey, key, cedar.ActionPresignPut); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign part upload (mutation); positional PresignPart routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, objectKey, true) // presign part upload (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, object.MapResolveErr(err)
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignPart(ctx, bucket, tenantID, storageUploadID, objectKey, key, partNumber, h.resolveTTL(ttl))
+	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, storageUploadID, objectKey, key, partNumber, h.resolveTTL(ttl))
 }
 
 func (h *Handler) resolveTTL(requested time.Duration) time.Duration {

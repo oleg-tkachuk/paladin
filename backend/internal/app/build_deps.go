@@ -43,9 +43,17 @@ type SharedDeps struct {
 	SM        *statemachine.Transitioner
 	CELEval   *cel.Evaluator
 
-	// S3 is the concrete client built from cfg.Storage.Backends[default].
-	// Workers and admin bucket-provision flows reuse this single client.
-	// Stored as *s3adapter.Client; the wire.Storage view above wraps it.
+	// Registry hands out one *s3adapter.Client per storage backend
+	// (docs/backend-registry.md). The wire.Storage routers dispatch through
+	// it, and any consumer that needs a backend-routed storage view builds
+	// one via s3adapter.New*Router(deps.Registry).
+	Registry *s3adapter.BackendRegistry
+
+	// S3 is the default-backend client, sourced from Registry. The
+	// maintenance workers (reconciler probe, multipart reaper, hard-deleter,
+	// bucket reconciler) use their own narrow interfaces that don't carry a
+	// backend id yet, so they operate on the default backend — correct on a
+	// single-backend deployment; per-backend worker routing is a follow-up.
 	S3 *s3adapter.Client
 
 	// Capability is the agent-runtime authorisation primitive. Nil when
@@ -83,15 +91,17 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 	// One client per backend, keyed by backend id (docs/backend-registry.md).
 	// Warmup(false) eagerly builds only the default — identical to the single
-	// New-at-boot it replaces; other backends build lazily on first use. The
-	// default client still backs all five storage interfaces below; Step 3 of
-	// the landing swaps these for the per-backend routers. Sourcing it through
-	// the registry proves the registry on the boot path with zero behavioural
-	// change on a single-backend config.
+	// New-at-boot it replaces; other backends build lazily on first use. Each
+	// storage interface below is a router that resolves the target client from
+	// the registry per call, keyed on the object's backend id. On a
+	// single-backend config every call resolves to the same client, so
+	// behaviour is identical to the pre-registry wiring.
 	registry := s3adapter.NewBackendRegistry(cfg.Storage)
 	if err := registry.Warmup(ctx, false); err != nil {
 		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
 	}
+	// Default-backend client for the maintenance workers that still use
+	// backend-id-free interfaces (see SharedDeps.S3).
 	s3c, err := registry.For(ctx, defaultName)
 	if err != nil {
 		return nil, fmt.Errorf("app: s3 adapter: %w", err)
@@ -118,11 +128,11 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Idempotency:   adapters.NewIdempotencyRepo(db.Queries),
 	}
 	storage := wire.Storage{
-		Object:      s3c,
-		Multipart:   s3c,
-		Presign:     s3c.Presign(),
-		Stream:      s3c,
-		Provisioner: s3c,
+		Object:      s3adapter.NewObjectRouter(registry),
+		Multipart:   s3adapter.NewMultipartRouter(registry),
+		Presign:     s3adapter.NewPresignRouter(registry),
+		Stream:      s3adapter.NewStreamRouter(registry),
+		Provisioner: s3adapter.NewProvisionerRouter(registry),
 	}
 
 	polStore := policy.NewPostgresStore(pool)
@@ -143,6 +153,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		PolStore:  polStore,
 		SM:        statemachine.New(pool),
 		CELEval:   cel.NewEvaluator(),
+		Registry:  registry,
 		S3:        s3c,
 	}
 

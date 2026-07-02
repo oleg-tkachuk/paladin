@@ -40,7 +40,7 @@ import (
 // StreamSink is the storage-side sink for UploadSmall. Implementations may
 // pick PutObject (small) or multipart (large) based on total size.
 type StreamSink interface {
-	Open(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string, sizeHint int64) (StreamWriter, error)
+	Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType string, sizeHint int64) (StreamWriter, error)
 }
 
 // StreamWriter is the per-upload handle returned by StreamSink.Open.
@@ -142,11 +142,11 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 		return nil, mapCreateErr(err)
 	}
 
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation); positional Open routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, init.ObjectKey, true) // small-object upload (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	writer, err := deps.Sink.Open(ctx, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
+	writer, err := deps.Sink.Open(ctx, backendID, bucket, tenantID, init.ObjectKey, key, init.ContentType, init.SizeHint)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open sink: %w", err))
 	}

@@ -88,13 +88,12 @@ func (*copyFakeStorage) PresignPost(context.Context, object.PresignPostArgs) (st
 func (*copyFakeStorage) PresignGet(context.Context, object.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) Head(context.Context, string, uuid.UUID, string, string) (string, int64, string, string, error) {
+func (*copyFakeStorage) Head(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) DeleteObject(context.Context, string, uuid.UUID, string, string) error {
+func (*copyFakeStorage) DeleteObject(context.Context, string, string, uuid.UUID, string, string) error {
 	panic("unused")
 }
-func (*copyFakeStorage) CompletionMode(string) object.CompletionMode { panic("unused") }
 
 type copyFakeTransitioner struct {
 	markFailedErr error

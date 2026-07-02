@@ -23,10 +23,10 @@ import (
 )
 
 type Storage interface {
-	InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (storageUploadID string, err error)
-	CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
-	AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
-	PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, objectKey, key, contentType string) (storageUploadID string, err error)
+	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
+	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string) error
+	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, objectKey, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 // Part is a record of an uploaded multipart part as stored in multipart_parts.
@@ -164,12 +164,12 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 
-	_, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation); positional Initiate routes in step 3
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.ObjectKey, true) // multipart init (mutation)
 	if err != nil {
 		return nil, object.MapResolveErr(err)
 	}
 
-	storageUploadID, err := h.storage.InitiateMultipart(ctx, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
+	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.ObjectKey, args.Key, args.ContentType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
@@ -179,7 +179,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
-		_ = h.storage.AbortMultipart(ctx, bucket, tenantID, storageUploadID, args.ObjectKey, args.Key)
+		_ = h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.ObjectKey, args.Key)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &session, nil
@@ -203,14 +203,14 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPutObject, 0, ""); err != nil {
 		return err
 	}
-	bucket := sess.Bucket
+	backendID, bucket := "", sess.Bucket
 	if bucket == "" {
-		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation); positional Complete routes in step 3
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // multipart complete (mutation)
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
 	}
-	etag, size, err := h.storage.CompleteMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, args.Parts)
+	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, args.Parts)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
@@ -260,14 +260,14 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string) err
 	if err := h.authorize(ctx, principal, tenantID, sess.ObjectKey, sess.Key, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
-	bucket := sess.Bucket
+	backendID, bucket := "", sess.Bucket
 	if bucket == "" {
-		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation); positional Abort routes in step 3
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // abort multipart (mutation)
 		if err != nil {
 			return object.MapResolveErr(err)
 		}
 	}
-	if err := h.storage.AbortMultipart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key); err != nil {
+	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	// Mark the underlying object FAILED so reconciler won't promote it.
@@ -313,9 +313,9 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, sess.ObjectKey, sess.Key, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	bucket := sess.Bucket
+	backendID, bucket := "", sess.Bucket
 	if bucket == "" {
-		_, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation); positional PresignPart routes in step 3
+		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.ObjectKey, true) // presign part (mutation)
 		if err != nil {
 			return "", nil, time.Time{}, object.MapResolveErr(err)
 		}
@@ -323,7 +323,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
-	return h.storage.PresignPart(ctx, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, partNumber, ttl)
+	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.ObjectKey, sess.Key, partNumber, ttl)
 }
 
 // ListParts returns the parts already recorded for an upload session. Used

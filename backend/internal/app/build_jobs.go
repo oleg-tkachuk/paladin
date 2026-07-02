@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	authstore "github.com/oleg-tkachuk/paladin/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/worker"
 	"github.com/oleg-tkachuk/paladin/internal/worker/operations"
@@ -223,8 +224,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Transitions: deps.SM,
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
-				Objects:           deps.Repos.Object,
-				Storage:           deps.S3,
+				Objects: deps.Repos.Object,
+				// Routed: BatchCopy resolves (backend, bucket) per object_key
+				// and builds Locations carrying BackendID, so the router
+				// dispatches each copy to the right backend.
+				Storage:           s3adapter.NewObjectRouter(deps.Registry),
 				Transitions:       deps.SM,
 				PresignDefaultTTL: cfg.Limits.Presign.DefaultTTL,
 			},
