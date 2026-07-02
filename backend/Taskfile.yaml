@@ -129,12 +129,56 @@ tasks:
   # refuses to run against URLs that don't smell like a dev cluster
   # unless PALADIN_FIXTURE_OK=1 — that's where the production guard lives;
   # the Taskfile just makes the entrypoint ergonomic.
+  # From OUTSIDE the cluster the CLI's default URLs (ingress DNS) often
+  # don't resolve, so seed:up/down port-forward the admin + api Services
+  # themselves, point the CLI at localhost (which the dev guard accepts),
+  # and tear the forwards down on exit — no hand-pasted URLs. Override the
+  # target via K8S_CONTEXT / K8S_NAMESPACE; FLAVOUR=demo|load|stress, COUNT=N.
   seed:up:
-    desc: "Apply the demo fixture to the cluster (idempotent)"
+    desc: "Apply the fixture (idempotent) — auto port-forwards the planes"
     cmds:
-      - go run ./cmd/seed-fixture up --flavour={{.FLAVOUR | default "demo"}}
+      - task: _seed:run
+        vars:
+          ACTION: up
+          FLAVOUR: '{{.FLAVOUR | default "demo"}}'
+          COUNT: "{{.COUNT}}"
 
   seed:down:
-    desc: "Remove the demo fixture from the cluster"
+    desc: "Remove the fixture — auto port-forwards the planes"
     cmds:
-      - go run ./cmd/seed-fixture down --flavour={{.FLAVOUR | default "demo"}}
+      - task: _seed:run
+        vars:
+          ACTION: down
+          FLAVOUR: '{{.FLAVOUR | default "demo"}}'
+          COUNT: ""
+
+  _seed:run:
+    internal: true
+    cmds:
+      - cmd: |-
+          set -eu
+          ctx="${K8S_CONTEXT:-orbstack}"
+          ns="${K8S_NAMESPACE:-paladin}"
+          pids=""
+          cleanup() { kill $pids 2>/dev/null || true; }
+          # task's shell (mvdan/sh) implements only the EXIT trap; it fires
+          # on normal exit AND when the run is interrupted, so the forwards
+          # never outlive the CLI.
+          trap cleanup EXIT
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-admin 18090:8090 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-api 18085:8085 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-api 18080:8080 >/dev/null 2>&1 & pids="$pids $!"
+          for p in 18090 18085 18080; do
+            ok=0
+            for _ in $(seq 1 40); do
+              if curl -sk -m 1 -o /dev/null "https://localhost:$p/" 2>/dev/null; then ok=1; break; fi
+              sleep 0.5
+            done
+            [ "$ok" = 1 ] || { echo "[seed] port-forward :$p never became ready (context=$ctx ns=$ns)" >&2; exit 1; }
+          done
+          go run ./cmd/seed-fixture {{.ACTION}} \
+            --flavour={{.FLAVOUR}} {{if .COUNT}}--count={{.COUNT}}{{end}} \
+            --admin-url=https://localhost:18090 \
+            --iam-url=https://localhost:18085 \
+            --data-url=https://localhost:18080 \
+            --insecure-tls

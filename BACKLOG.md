@@ -867,11 +867,16 @@ open deliberately — each notes why._
     API (it stamps `created_at = now()`; no backdating). Needs a server
     test-hook or a direct-SQL seeder — a separate concern from the API-driven
     fixture, deliberately out of scope here.
-  - First-run UX: today the CLI requires `--admin-url=` etc.
-    when run from outside the cluster (DNS doesn't resolve
-    cluster-internal Service names). A `task seed:up` wrapper
-    that does port-forward → exec → cleanup would remove that
-    friction; today operators hand-paste the localhost URLs.
+  - ~~First-run UX: a `task seed:up` port-forward wrapper.~~ **DONE
+    (2026-07-02):** `task seed:up` / `seed:down` now port-forward the
+    admin + api Services themselves, point the CLI at localhost with the
+    new `--insecure-tls` flag (the planes present the cluster cert for a
+    Service DNS name), and tear the forwards down on exit. Fixing this
+    also surfaced + fixed a real CLI break: the idempotency middleware
+    (RequireOnCreate) rejected every seed Create* — the CLI now stamps an
+    Idempotency-Key per request like the frontend transport. Verified
+    live: up seeds 4 subscriptions, down removes them, no leftover
+    forwards.
 - **Trigger to do load / stress:** the next time UI / UX work
   blocks on "I need to see this with real data" beyond what
   the 4 demo subscriptions cover — most likely `/billing`
@@ -1003,20 +1008,21 @@ of the pipeline._
 
 ### Playwright e2e suite wired into CI
 
-- **Status:** Deferred
-- **Reason:** the runtime sign-off is now closed (2026-06-30: suite is
-  17/17 green, 170/170 under `--repeat-each=10` with zero flake, single
-  run <10 s — well inside the SC-002 <3 min budget), so the suite has
-  earned its flake budget and is safe to gate on. The remaining work is
-  purely authoring the workflow file + flipping it to required.
-- **Definition of Done:**
-  - `.github/workflows/e2e.yml` builds both images, boots
-    `tests/e2e/docker-compose.test.yaml`, runs `pnpm run test:e2e`,
-    and uploads the Playwright report as an artifact on failure.
-  - Workflow is required for merge alongside `test` / `security`.
-- **Blockers:** none — sign-off complete. Note CI needs a reachable S3
-  (the suite uses an external Garage via `PALADIN_E2E_S3_ACCESS_KEY/_SECRET_KEY`);
-  the workflow must provision or point at one.
+- **Status:** Workflow AUTHORED (2026-07-02) — first green run + the
+  required-check flip remain, both blocked on Actions billing.
+- **Shipped:** `.github/workflows/e2e.yml` — builds both images from the
+  deploy Dockerfiles (`:latest` tags the compose file references), starts a
+  MinIO service as the S3 endpoint (compose containers reach it via the
+  docker0 gateway, the Playwright host's presigned PUTs via localhost),
+  installs pnpm + Chromium, runs `pnpm run test:e2e` (Playwright's webServer
+  boots the compose stack itself), uploads the report artifact + stack logs
+  on failure. Suite is currently 18/18 locally (incl. tenant switching).
+- **Definition of Done (remaining):**
+  - First green run on Actions — unverifiable until the account's billing
+    is fixed (every run currently fails at startup with steps=0).
+  - Flip to a required check alongside `test` / `security` (see the
+    *Branch protection* entry — same billing gate).
+- **Blockers:** GitHub Actions billing (account-level, repo owner only).
 
 
 ### Branch protection on `main` and `develop` — require status checks

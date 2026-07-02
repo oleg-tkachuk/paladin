@@ -47,6 +47,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -56,6 +57,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/internal/api/pb/admin/v1"
@@ -112,6 +114,10 @@ func main() {
 		c.Flags().String("data-url", "https://paladin.local/api/rpc/data", "Data plane URL")
 		c.Flags().String("user", "admin", "Bootstrap admin subject")
 		c.Flags().String("password", "password", "Bootstrap admin password")
+		// Port-forwarded planes present the cluster's self-signed cert for a
+		// Service DNS name while the CLI dials localhost — verification can
+		// never pass there. Dev-tool escape hatch; `task seed:up` sets it.
+		c.Flags().Bool("insecure-tls", false, "Skip TLS certificate verification (port-forwarded self-signed dev planes)")
 		root.AddCommand(c)
 	}
 	for _, c := range []*cobra.Command{upCmd, downCmd} {
@@ -166,8 +172,35 @@ func assertDevTarget(adminURL string) error {
 // caller that touches both (e.g. smoke-upload reads admin for
 // resolving tenant + writes data for UploadObject) needs separate
 // tokens.
-func login(ctx context.Context, iamURL, user, password, audience string) (string, error) {
-	httpc := &http.Client{Timeout: 30 * time.Second}
+// httpClientFor honours --insecure-tls: a port-forwarded plane presents the
+// cluster's self-signed cert for its Service DNS name while the CLI dials
+// localhost, so verification can never pass there. Dev-tool escape hatch.
+func httpClientFor(cmd *cobra.Command) *http.Client {
+	base := http.DefaultTransport
+	if insecure, _ := cmd.Flags().GetBool("insecure-tls"); insecure {
+		base = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 — guarded dev flag
+		}
+	}
+	// The idempotency middleware rejects Create*/Issue* RPCs without an
+	// Idempotency-Key (RequireOnCreate=true on every plane). Mirror the
+	// frontend transport: stamp a fresh UUID on every outgoing request —
+	// reads ignore the header, mutations need it, and the CLI's idempotency
+	// story is resource-name-keyed (fixturePrefix), not retry-collapse.
+	return &http.Client{Timeout: 30 * time.Second, Transport: idempotencyTransport{base: base}}
+}
+
+type idempotencyTransport struct{ base http.RoundTripper }
+
+func (t idempotencyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("Idempotency-Key") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("Idempotency-Key", uuid.NewString())
+	}
+	return t.base.RoundTrip(req)
+}
+
+func login(ctx context.Context, httpc *http.Client, iamURL, user, password, audience string) (string, error) {
 	authClient := mcp.NewClients(httpc, "", "", iamURL, "").Auth
 	resp, err := authClient.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{
 		Subject:           user,
@@ -233,17 +266,18 @@ func runUp(cmd *cobra.Command) error {
 	adminURL, _ := cmd.Flags().GetString("admin-url")
 	iamURL, _ := cmd.Flags().GetString("iam-url")
 	dataURL, _ := cmd.Flags().GetString("data-url")
+	httpc := httpClientFor(cmd)
 	user, _ := cmd.Flags().GetString("user")
 	password, _ := cmd.Flags().GetString("password")
 
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	tok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
+	tok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceAdmin))
 	if err != nil {
 		return err
 	}
-	clients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, dataURL, iamURL, tok)
+	clients := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
 
 	switch flavour {
 	case "demo":
@@ -263,12 +297,13 @@ func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, use
 	objectKey, _ := cmd.Flags().GetString("object-key")
 	tenant, _ := cmd.Flags().GetString("tenant")
 	countOverride, _ := cmd.Flags().GetInt("count")
+	httpc := httpClientFor(cmd)
 
-	dataTok, err := login(ctx, iamURL, user, password, string(auth.AudienceData))
+	dataTok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceData))
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
 	}
-	dc := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, "", dataURL, iamURL, dataTok)
+	dc := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
 	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenant, objectKey)
 
 	if !seed {
@@ -284,17 +319,18 @@ func runDown(cmd *cobra.Command) error {
 	adminURL, _ := cmd.Flags().GetString("admin-url")
 	iamURL, _ := cmd.Flags().GetString("iam-url")
 	dataURL, _ := cmd.Flags().GetString("data-url")
+	httpc := httpClientFor(cmd)
 	user, _ := cmd.Flags().GetString("user")
 	password, _ := cmd.Flags().GetString("password")
 
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	tok, err := login(ctx, iamURL, user, password, string(auth.AudienceAdmin))
+	tok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceAdmin))
 	if err != nil {
 		return err
 	}
-	clients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, adminURL, dataURL, iamURL, tok)
+	clients := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
 
 	switch flavour {
 	case "demo":
@@ -658,6 +694,7 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	adminURL, _ := cmd.Flags().GetString("admin-url")
 	iamURL, _ := cmd.Flags().GetString("iam-url")
 	dataURL, _ := cmd.Flags().GetString("data-url")
+	httpc := httpClientFor(cmd)
 	user, _ := cmd.Flags().GetString("user")
 	password, _ := cmd.Flags().GetString("password")
 	objectKey, _ := cmd.Flags().GetString("object-key")
@@ -674,11 +711,11 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	// at handler time and only uses parent's tenant segment for
 	// resource-name shape, (b) double-login amplified port-forward
 	// flakiness on round trips.
-	dataTok, err := login(ctx, iamURL, user, password, string(auth.AudienceData))
+	dataTok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceData))
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
 	}
-	dataClients := mcp.NewClients(&http.Client{Timeout: 30 * time.Second}, "", dataURL, iamURL, dataTok)
+	dataClients := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
 
 	parent := fmt.Sprintf("tenants/%s/objectKeys/%s", tenantHint, objectKey)
 
