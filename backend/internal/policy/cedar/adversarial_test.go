@@ -8,14 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// Adversarial authorization matrix. These are the security invariants the
-// slug-inheritance path (own-tenant slug borrow) must never break — a
-// mismatched or spoofed slug must FAIL CLOSED and must never let a principal
-// reach another tenant's grants. The default policy keys member permits on
-// `Tenant::"<slug>"`, so slug handling is the whole ballgame.
+// Adversarial tenant-isolation matrix (ADR-0012). Membership keys on the
+// DB-authoritative slug (the fake's `slug`) and trusted-UUID equality, so Cedar
+// is an INDEPENDENT second isolation layer — a spoofed JWT slug changes
+// nothing, and a cross-tenant caller cannot satisfy a member permit even
+// knowing the victim's slug.
 
-// bravoMemberPolicy mimics the rendered default policy for a tenant whose slug
-// is "bravo": members may GetObject / PresignPut on their own tenant.
 const bravoMemberPolicy = `
 permit (
     principal in Tenant::"bravo",
@@ -23,7 +21,6 @@ permit (
     resource
 );`
 
-// alphaMemberPolicy is the same for tenant "alpha".
 const alphaMemberPolicy = `
 permit (
     principal in Tenant::"alpha",
@@ -31,9 +28,12 @@ permit (
     resource
 );`
 
-func decide(t *testing.T, policy string, p *Principal, r *Resource) Decision {
+// decide evaluates GetObject with an engine whose store returns `policy` and
+// the authoritative `authSlug` for EVERY tenant (tenant-agnostic fake — fine,
+// because the isolation logic keys on trusted UUID equality, not the fake).
+func decide(t *testing.T, policy, authSlug string, p *Principal, r *Resource) Decision {
 	t.Helper()
-	e := NewEngine(fakeStore{text: policy}, time.Minute)
+	e := NewEngine(fakeStore{text: policy, slug: authSlug}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(), p, ActionGetObject, r, RequestContext{})
 	if err != nil {
 		t.Fatalf("authz error: %v", err)
@@ -41,60 +41,57 @@ func decide(t *testing.T, policy string, p *Principal, r *Resource) Decision {
 	return dec
 }
 
-// A principal that spoofs its OWN slug to a different value must fail closed on
-// its own tenant — the policy is keyed on the real slug, the entity graph on
-// the spoofed one, so no permit matches. Critically, it gains nothing.
-func TestAdversarial_OwnSlugSpoofFailsClosed(t *testing.T) {
-	tenantB := uuid.New()
-	// JWT claims tenant=B but tenant_slug="acme" (not B's real "bravo" slug).
-	spoof := &Principal{Subject: "u", TenantID: tenantB, TenantSlug: "acme", Roles: []string{"tenant.user"}}
-	// Accessing B's own resource; B's policy is keyed "bravo".
-	if got := decide(t, bravoMemberPolicy, spoof, &Resource{TenantID: tenantB, ObjectKey: "k"}); got != DecisionDeny {
-		t.Fatal("slug-spoof on own tenant did not fail closed — a spoofed slug matched a permit")
+// Positive control: a legitimate member (own tenant, matching authoritative
+// slug) is allowed — proves the deny cases below are real isolation.
+func TestAdversarial_LegitMemberAllowed(t *testing.T) {
+	b := uuid.New()
+	member := &Principal{Subject: "u", TenantID: b, TenantSlug: "bravo", Roles: []string{"tenant.user"}}
+	if got := decide(t, bravoMemberPolicy, "bravo", member, &Resource{TenantID: b, ObjectKey: "k"}); got != DecisionAllow {
+		t.Fatal("legit member denied on own tenant")
 	}
 }
 
-// The decisive cross-tenant case: a principal in tenant B, EVEN KNOWING tenant
-// A's real slug and claiming it, must not reach A's resources. r.TenantID (A)
-// != p.TenantID (B) ⇒ no slug borrow ⇒ the Tenant entity is A-by-UUID, A's
-// slug-keyed permit never matches.
-func TestAdversarial_CrossTenantWithVictimSlugDenied(t *testing.T) {
-	tenantA, tenantB := uuid.New(), uuid.New()
-	attacker := &Principal{Subject: "evil", TenantID: tenantB, TenantSlug: "alpha", Roles: []string{"tenant.admin"}}
-	// Attacker reaches for A's resource; the compiled policy is A's (keyed "alpha").
-	if got := decide(t, alphaMemberPolicy, attacker, &Resource{TenantID: tenantA, ObjectKey: "k"}); got != DecisionDeny {
-		t.Fatal("cross-tenant access with the victim's slug was ALLOWED — tenant isolation hole")
+// THE core invariant (ADR-0012): a caller in tenant B cannot satisfy tenant A's
+// member permit — EVEN when it claims A's slug in its JWT. Cedar denies
+// independently of the shim, because membership anchors on the principal's
+// trusted UUID, which differs from the resource tenant.
+func TestAdversarial_CrossTenantMemberPermitDenied(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	// Attacker in B, claiming A's slug, reaching A's resource.
+	attacker := &Principal{Subject: "evil", TenantID: b, TenantSlug: "alpha", Roles: []string{"tenant.admin"}}
+	if got := decide(t, alphaMemberPolicy, "alpha", attacker, &Resource{TenantID: a, ObjectKey: "k"}); got != DecisionDeny {
+		t.Fatal("SECURITY: cross-tenant caller matched a member permit — tenant isolation hole")
 	}
 }
 
-// A principal with NO tenant (nil) must never match a tenant-scoped permit.
+// A spoofed tenant_slug is simply IGNORED for the caller's OWN tenant: the
+// authoritative slug is used, so the caller keeps its legitimate access and
+// gains nothing. (Contrast the reverted JWT-slug design, where a spoof could
+// borrow a victim's grants.)
+func TestAdversarial_SpoofedSlugIgnoredOnOwnTenant(t *testing.T) {
+	b := uuid.New()
+	// Real slug is "bravo"; the JWT claims "acme". Accessing own tenant B.
+	spoofer := &Principal{Subject: "u", TenantID: b, TenantSlug: "acme", Roles: []string{"tenant.user"}}
+	if got := decide(t, bravoMemberPolicy, "bravo", spoofer, &Resource{TenantID: b, ObjectKey: "k"}); got != DecisionAllow {
+		t.Fatal("own-tenant access broke when the JWT slug was spoofed — authoritative slug not used")
+	}
+}
+
+// A tenant-less principal never satisfies a tenant-scoped member permit.
 func TestAdversarial_NilTenantPrincipalDenied(t *testing.T) {
 	noTenant := &Principal{Subject: "u", Roles: []string{"tenant.user"}}
-	if got := decide(t, bravoMemberPolicy, noTenant, &Resource{TenantID: uuid.New(), ObjectKey: "k"}); got != DecisionDeny {
+	if got := decide(t, bravoMemberPolicy, "bravo", noTenant, &Resource{TenantID: uuid.New(), ObjectKey: "k"}); got != DecisionDeny {
 		t.Fatal("tenant-less principal matched a tenant-scoped permit")
 	}
 }
 
-// Positive control: a legitimate member (correct slug, own tenant) is allowed —
-// proves the deny results above are real isolation, not a policy that denies
-// everyone.
-func TestAdversarial_LegitMemberAllowed(t *testing.T) {
-	tenantB := uuid.New()
-	member := &Principal{Subject: "u", TenantID: tenantB, TenantSlug: "bravo", Roles: []string{"tenant.user"}}
-	if got := decide(t, bravoMemberPolicy, member, &Resource{TenantID: tenantB, ObjectKey: "k"}); got != DecisionAllow {
-		t.Fatal("legitimate member denied on own tenant — the isolation tests would be vacuous")
+// Cross-tenant reach via a ROLE permit (platform.admin) is preserved — the
+// builtin grants by roles, not membership, so legitimate admin flows still
+// work under the isolation model.
+func TestAdversarial_CrossTenantRolePermitStillAllowed(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	admin := &Principal{Subject: "root", TenantID: b, Roles: []string{"platform.admin"}}
+	if got := decide(t, alphaMemberPolicy, "alpha", admin, &Resource{TenantID: a, ObjectKey: "k"}); got != DecisionAllow {
+		t.Fatal("platform.admin cross-tenant reach was denied — role permits must not depend on membership")
 	}
 }
-
-// NOTE (design boundary, verified live + at the e2e layer, not here):
-// Cedar does NOT independently enforce cross-tenant isolation. buildEntities
-// anchors the User under the RESOURCE's tenant, so a member permit
-// `principal in Tenant::"X"` matches whenever the resource carries tenant X's
-// slug — regardless of who the caller is. Isolation is enforced BY COMPOSITION
-// upstream: the data-plane shim's assertJWTTenant rejects URL-tenant !=
-// JWT-tenant for non-admins BEFORE Cedar runs, and compiledFor loads the policy
-// by the trusted tenant UUID. The e2e adversarial probe
-// (tests/api/security-probe.sh) exercises that boundary against the live API.
-// Anchoring membership on the principal's JWT slug to make Cedar a "second
-// layer" was tried and reverted: the slug is attacker-controlled, so it let a
-// caller claim a victim's slug and match a member permit — strictly worse.

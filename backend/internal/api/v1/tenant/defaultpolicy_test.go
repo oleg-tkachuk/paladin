@@ -60,10 +60,10 @@ func TestRenderDefaultPolicy(t *testing.T) {
 // default policy through the real engine: own-tenant reads allow (admin and
 // plain member alike), foreign-tenant reads stay denied at the policy layer.
 
-type staticPolicyStore struct{ text string }
+type staticPolicyStore struct{ text, slug string }
 
-func (s staticPolicyStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, error) {
-	return s.text, []byte("h"), nil
+func (s staticPolicyStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
+	return s.text, []byte("h"), s.slug, nil
 }
 func (s staticPolicyStore) Watch(context.Context) (<-chan cedar.ChangeEvent, error) {
 	return nil, nil
@@ -72,7 +72,7 @@ func (s staticPolicyStore) Watch(context.Context) (<-chan cedar.ChangeEvent, err
 func TestDefaultPolicy_ReadTenant(t *testing.T) {
 	tid := uuid.MustParse("0a8c0000-0000-7000-8000-000000000f12")
 	foreign := uuid.MustParse("0a8c0000-0000-7000-8000-00000000beef")
-	engine := cedar.NewEngine(staticPolicyStore{text: renderDefaultPolicy(tid, "acme")}, time.Minute)
+	engine := cedar.NewEngine(staticPolicyStore{text: renderDefaultPolicy(tid, "acme"), slug: "acme"}, time.Minute)
 
 	authz := func(roles []string, resourceTenant uuid.UUID) cedar.Decision {
 		t.Helper()

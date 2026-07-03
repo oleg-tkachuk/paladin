@@ -253,7 +253,11 @@ type cacheKey struct {
 type compiledPolicy struct {
 	hash      []byte
 	policySet *cedar.PolicySet
-	expiresAt time.Time
+	// tenantSlug is the DB-authoritative slug for this policy's tenant
+	// (ADR-0012). Cached with the policy so keying tenant membership on the
+	// trusted slug costs no extra query on the authz hot path.
+	tenantSlug string
+	expiresAt  time.Time
 }
 
 // NewEngine constructs an Engine. Call Start to kick off the invalidation loop.
@@ -325,32 +329,21 @@ type Authorizer interface {
 // Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
 // Errors indicate engine faults (policy fetch/compile), not denials.
 func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
-	// Same-tenant slug inheritance: the Tenant entity UID prefers the slug
-	// (tenantUID), and the rendered default policy keys its member permits on
-	// `Tenant::"<slug>"` — but most data-plane call sites build the Resource
-	// with only the tenant UUID. Without this, the entity graph keys the
-	// tenant by UUID, the slug-keyed group permit never matches, and tenant
-	// MEMBERS are denied everywhere only platform.admin survives (confirmed
-	// live). Inherit the principal's slug when the resource targets the
-	// principal's own tenant; cross-tenant resources (platform-admin reach)
-	// keep their own identity and never borrow the caller's slug.
-	if r.TenantSlug == "" && p.TenantSlug != "" && r.TenantID == p.TenantID {
-		patched := *r
-		patched.TenantSlug = p.TenantSlug
-		r = &patched
-	}
-
-	set, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
+	// compiledFor loads the resource-tenant's policy by the TRUSTED UUID and
+	// returns that tenant's DB-authoritative slug. The slug — never the
+	// JWT-supplied one — keys tenant membership in the entity graph (ADR-0012),
+	// so a spoofed tenant_slug claim cannot satisfy a member permit.
+	set, authSlug, err := e.compiledFor(ctx, r.TenantID, r.ObjectKey)
 	if err != nil {
 		e.m.compileErrs.Add(1)
 		return DecisionDeny, err
 	}
 
-	entities := e.buildEntities(p, r)
+	entities := e.buildEntities(p, r, authSlug)
 	req := cedartypes.Request{
 		Principal: userUID(p),
 		Action:    actionUID(action),
-		Resource:  e.resourceUID(r),
+		Resource:  e.resourceUID(r, authSlug),
 		Context:   buildContext(rc),
 	}
 
@@ -363,32 +356,33 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 	return DecisionDeny, nil
 }
 
-func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, error) {
+func (e *Engine) compiledFor(ctx context.Context, tenantID uuid.UUID, objectKey string) (*cedar.PolicySet, string, error) {
 	key := cacheKey{tenant: tenantID, objectKey: objectKey}
 	if v, ok := e.compiled.Load(key); ok {
 		cp := v.(*compiledPolicy)
 		if time.Now().Before(cp.expiresAt) {
 			e.m.cacheHits.Add(1)
-			return cp.policySet, nil
+			return cp.policySet, cp.tenantSlug, nil
 		}
 	}
 	e.m.cacheMisses.Add(1)
 
-	text, hash, err := e.store.Fetch(ctx, tenantID, objectKey)
+	text, hash, slug, err := e.store.Fetch(ctx, tenantID, objectKey)
 	if err != nil {
-		return nil, fmt.Errorf("cedar: fetch policy: %w", err)
+		return nil, "", fmt.Errorf("cedar: fetch policy: %w", err)
 	}
 	set, err := compile(text)
 	if err != nil {
-		return nil, fmt.Errorf("cedar: compile policy: %w", err)
+		return nil, "", fmt.Errorf("cedar: compile policy: %w", err)
 	}
 	cp := &compiledPolicy{
-		hash:      hash,
-		policySet: set,
-		expiresAt: time.Now().Add(e.ttl),
+		hash:       hash,
+		policySet:  set,
+		tenantSlug: slug,
+		expiresAt:  time.Now().Add(e.ttl),
 	}
 	e.compiled.Store(key, cp)
-	return set, nil
+	return set, slug, nil
 }
 
 // builtinPolicy is concatenated with every fetched tenant/objectKey
@@ -525,7 +519,7 @@ func storageBackendUID(backendID string) cedartypes.EntityUID {
 //   - ApiKey         when TargetApiKeyID set
 //   - User           when TargetUserID or TargetSubject set
 //   - Tenant         when only TenantID set (admin tenant ops)
-func (e *Engine) resourceUID(r *Resource) cedartypes.EntityUID {
+func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID {
 	if r.Key != "" || r.ObjectID != uuid.Nil {
 		id := r.ObjectID.String()
 		if r.ObjectID == uuid.Nil {
@@ -548,7 +542,9 @@ func (e *Engine) resourceUID(r *Resource) cedartypes.EntityUID {
 	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
 		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
 	}
-	return tenantUID(r.TenantID, r.TenantSlug)
+	// Tenant-as-resource: key on the DB-authoritative slug so this UID matches
+	// the Tenant entity buildEntities emits (ADR-0012).
+	return tenantUID(r.TenantID, authSlug)
 }
 
 // targetUserUID encodes a user-as-resource UID. The principal-User entity
@@ -580,7 +576,11 @@ func actionUID(name string) cedartypes.EntityUID {
 // Entities are emitted only when the corresponding resource fields are
 // populated, so admin-plane requests against a StorageBackend don't bring
 // along an unrelated Tenant entity that the policy never references.
-func (e *Engine) buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
+// authSlug is the DB-authoritative slug of the resource's tenant (from the
+// policy fetch). It — not r.TenantSlug — keys the resource Tenant entity, and
+// the User's membership anchors on the resource tenant only when the principal
+// provably belongs to it (trusted-UUID equality). See ADR-0012.
+func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedartypes.EntityMap {
 	uUID := userUID(p)
 	rolesSet := make([]cedartypes.Value, 0, len(p.Roles))
 	for _, role := range p.Roles {
@@ -593,39 +593,56 @@ func (e *Engine) buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 
 	m := cedartypes.EntityMap{}
 
-	// Tenant — emitted whenever a tenant is in scope (either the principal's
-	// or the resource's). Most data-plane calls hit this branch.
+	// Tenant (resource scope) — keyed on the DB-AUTHORITATIVE slug (authSlug),
+	// not the request/JWT slug, so the entity graph reflects the tenant's real
+	// identity. The ObjectKey/Object hierarchy parents under this entity.
 	var tUID cedartypes.EntityUID
 	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
-		// Prefer slug for the Tenant UID when known so policies key on the
-		// human-readable handle. Both tenant_id (uuid) and slug are exposed
-		// as attributes so policies can match either form.
-		tUID = tenantUID(r.TenantID, r.TenantSlug)
+		tUID = tenantUID(r.TenantID, authSlug)
 		m[tUID] = cedartypes.Entity{
 			UID: tUID,
 			Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
 				"tenant_id":    cedartypes.String(r.TenantID.String()),
-				"slug":         cedartypes.String(r.TenantSlug),
+				"slug":         cedartypes.String(authSlug),
 				"display_name": cedartypes.String(""),
 				"labels":       cedartypes.NewSet(),
 			}),
 		}
 	}
 
-	// User — anchored under the in-scope Tenant entity (built above from the
-	// resource; for a same-tenant call — the only case Cedar sees for
-	// non-admins, since assertJWTTenant forces URL-tenant == JWT-tenant — this
-	// is the caller's own tenant). Cross-tenant isolation is enforced BY
-	// COMPOSITION, not by Cedar alone (see the block comment on IsAuthorized):
-	// compiledFor loads the policy by the TRUSTED tenant UUID, and that policy
-	// is keyed on the tenant's real slug, so a spoofed tenant_slug claim never
-	// matches the loaded policy — it fails closed. Anchoring membership on the
-	// principal's JWT slug instead would be WORSE: the slug is attacker-
-	// controlled, so a caller could claim a victim's slug and match a member
-	// permit. Do not "fix" this here without making the slug DB-authoritative.
+	// User membership — anchored on the PRINCIPAL's tenant, gated by
+	// trusted-UUID equality (ADR-0012). The principal is placed under the
+	// resource's Tenant entity ONLY when p.TenantID == r.TenantID (both trusted
+	// UUIDs), so `principal in Tenant::"<slug>"` means "this caller really
+	// belongs to this tenant" — making Cedar an independent second isolation
+	// layer, not a rubber stamp for whatever tenant the resource is in. When
+	// the tenants differ (a cross-tenant admin, or a call that slipped past
+	// assertJWTTenant), the User is anchored under the principal's own
+	// UUID-keyed Tenant, which cannot match a slug-keyed member permit → deny
+	// (role permits like platform.admin are unaffected — they don't key on
+	// membership).
 	userParents := cedartypes.EntityUIDSet{}
-	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
-		userParents = cedartypes.NewEntityUIDSet(tUID)
+	if p.TenantID != uuid.Nil || p.TenantSlug != "" {
+		var pTUID cedartypes.EntityUID
+		if r.TenantID != uuid.Nil && p.TenantID == r.TenantID {
+			pTUID = tUID // same tenant → the DB-authoritative resource Tenant entity
+		} else {
+			// Different (or no) resource tenant → anchor under the principal's
+			// own UUID-keyed Tenant. Never the JWT slug (attacker-controlled).
+			pTUID = tenantUID(p.TenantID, "")
+			if _, ok := m[pTUID]; !ok {
+				m[pTUID] = cedartypes.Entity{
+					UID: pTUID,
+					Attributes: cedartypes.NewRecord(cedartypes.RecordMap{
+						"tenant_id":    cedartypes.String(p.TenantID.String()),
+						"slug":         cedartypes.String(""),
+						"display_name": cedartypes.String(""),
+						"labels":       cedartypes.NewSet(),
+					}),
+				}
+			}
+		}
+		userParents = cedartypes.NewEntityUIDSet(pTUID)
 	}
 	m[uUID] = cedartypes.Entity{
 		UID:     uUID,
@@ -691,7 +708,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource) cedartypes.EntityMap {
 
 	// Object — child of ObjectKey.
 	if r.Key != "" || r.ObjectID != uuid.Nil {
-		oUID := e.resourceUID(r)
+		oUID := e.resourceUID(r, authSlug)
 		tagsSet := make([]cedartypes.Value, 0, len(r.Tags))
 		for k := range r.Tags {
 			tagsSet = append(tagsSet, cedartypes.String(k))

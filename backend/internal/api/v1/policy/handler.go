@@ -164,7 +164,7 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	if err := h.authorizeInspect(ctx, tenantID, objectKey); err != nil {
 		return nil, err
 	}
-	merged, _, err := h.store.Fetch(ctx, tenantID, objectKey)
+	merged, _, _, err := h.store.Fetch(ctx, tenantID, objectKey)
 	if err != nil {
 		return nil, err
 	}

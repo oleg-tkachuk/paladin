@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,6 +14,7 @@ import (
 
 	objecth "github.com/oleg-tkachuk/paladin/internal/api/v1/object"
 	"github.com/oleg-tkachuk/paladin/internal/api/v1/tenant"
+	"github.com/oleg-tkachuk/paladin/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/internal/store/postgres/sqlc"
 )
@@ -181,5 +183,45 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	mustExec(t, ctx, pool, `UPDATE buckets SET provision_state='ready' WHERE backend_id=$1 AND bucket_name=$2`, backendID, bucket)
 	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", true); err != nil {
 		t.Fatalf("upload-path meta lookup after ready: %v, want success", err)
+	}
+}
+
+// TestAdversarial_CedarAuthoritativeSlugIsolation proves ADR-0012 end-to-end
+// against the REAL PostgresStore: tenant membership keys on the DB slug, so a
+// caller in tenant B cannot satisfy tenant A's member permit — not even by
+// claiming A's slug in its principal. Verifies the slug genuinely flows from
+// the tenants row, not the request.
+func TestAdversarial_CedarAuthoritativeSlugIsolation(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	// Tenant A (slug "alpha") with a member permit keyed on its slug.
+	alpha := uuid.New()
+	const alphaPolicy = `permit ( principal in Tenant::"alpha", action in [Action::"GetObject"], resource );`
+	mustExec(t, ctx, pool,
+		`INSERT INTO tenants (tenant_id, slug, display_name, inherited_cedar_policy) VALUES ($1,'alpha','Alpha',$2)`,
+		alpha, alphaPolicy)
+	// Tenant B — no relation to A.
+	bravo, _ := mkTenant(t, ctx, pool, "shared")
+
+	eng := cedar.NewEngine(cedar.NewPostgresStore(pool), time.Minute)
+	res := &cedar.Resource{TenantID: alpha, ObjectKey: "docs", Key: "f"}
+
+	// A's own member is allowed (authoritative slug "alpha" matches).
+	aMember := &cedar.Principal{Subject: "a@alpha", TenantID: alpha, TenantSlug: "alpha", Roles: []string{"tenant.user"}}
+	if d, err := eng.IsAuthorized(ctx, aMember, cedar.ActionGetObject, res, cedar.RequestContext{}); err != nil || d != cedar.DecisionAllow {
+		t.Fatalf("A's own member: decision=%v err=%v, want Allow", d, err)
+	}
+
+	// B's admin, EVEN claiming slug "alpha", is denied A's member permit.
+	bSpoof := &cedar.Principal{Subject: "b@bravo", TenantID: bravo, TenantSlug: "alpha", Roles: []string{"tenant.admin"}}
+	if d, err := eng.IsAuthorized(ctx, bSpoof, cedar.ActionGetObject, res, cedar.RequestContext{}); err != nil || d != cedar.DecisionDeny {
+		t.Fatalf("SECURITY: B-principal claiming A's slug: decision=%v err=%v, want Deny", d, err)
+	}
+
+	// B's platform.admin is still allowed (role permit, not membership).
+	bAdmin := &cedar.Principal{Subject: "root", TenantID: bravo, Roles: []string{"platform.admin"}}
+	if d, err := eng.IsAuthorized(ctx, bAdmin, cedar.ActionGetObject, res, cedar.RequestContext{}); err != nil || d != cedar.DecisionAllow {
+		t.Fatalf("platform.admin cross-tenant: decision=%v err=%v, want Allow", d, err)
 	}
 }

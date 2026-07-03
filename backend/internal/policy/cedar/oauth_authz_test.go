@@ -9,11 +9,13 @@ import (
 )
 
 // fakeStore returns a fixed tenant policy text (concatenated with the
-// built-in policy by the engine) and a no-op Watch.
-type fakeStore struct{ text string }
+// built-in policy by the engine), a fixed authoritative slug, and a no-op
+// Watch. slug defaults to "" (membership-irrelevant tests); isolation tests
+// set it to the tenant's real slug (ADR-0012).
+type fakeStore struct{ text, slug string }
 
-func (f fakeStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, error) {
-	return f.text, []byte(f.text), nil
+func (f fakeStore) Fetch(context.Context, uuid.UUID, string) (string, []byte, string, error) {
+	return f.text, []byte(f.text), f.slug, nil
 }
 func (f fakeStore) Watch(context.Context) (<-chan ChangeEvent, error) { return nil, nil }
 
