@@ -46,8 +46,9 @@ config:
         # co-located SeaweedFS was swapped out — its volume server hit its
         # volume-count cap (-max=0 → 18 volumes, one collection per bucket)
         # and 500-ed every upload. Garage has no per-bucket volume reservation.
-        # public_endpoint is a Traefik route (see deploy/local/garage-s3-
-        # ingressroute.yaml) so presigned URLs are reachable from host/browser.
+        # public_endpoint resolves via the Garage Traefik route owned by
+        # gitops (base/storage/seaweedfs/routes/values.yaml, host
+        # s3-garage.paladin) so presigned URLs are reachable from host/browser.
         # The access key is a LOCAL dev credential (Garage `paladin-key`, granted
         # create-bucket); rotate/scope for any non-local overlay.
         endpoint: "http://garage-s3.storage.svc.cluster.local:3900"

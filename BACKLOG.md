@@ -944,8 +944,7 @@ open deliberately — each notes why._
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
-  route in `deploy/local/garage-s3-ingressroute.yaml`) — see
-  `values-local.yaml`. We swapped off the co-located **SeaweedFS**
+  route owned by gitops's storage route bundle) — see `values-local.yaml`. We swapped off the co-located **SeaweedFS**
   (`seaweedfs-filer:8333`) because it maps each S3 bucket to a *collection*
   reserving its own volume(s); with the volume server at `-max=0`
   (auto-capped by disk → 18 volumes) ~10 buckets exhausted it
