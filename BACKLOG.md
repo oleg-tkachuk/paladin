@@ -905,33 +905,40 @@ open deliberately — each notes why._
 - **Blockers:** none — gated purely on a measured p99 regression. Until
   then form (A) is correct and simpler.
 
-### Per-tenant S3 bucket layout
+### Per-tenant S3 bucket layout — Phase 3 (shared→dedicated copy job)
 
-- **Status:** Design recorded 2026-07-02 in
-  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md) (on explicit
-  request). **Rollout remains product-gated** — the ADR is the architecture,
-  not a commitment to build.
-- **Reason:** Today every tenant lands inside one shared physical S3 bucket,
-  isolated by the key prefix `<tenant_id>/<object_key>/<key>`
-  (`s3adapter.composeKey`). A per-tenant *physical* bucket would simplify IAM
-  blast radius (one AWS-side policy per tenant), unlock lifecycle / replication
-  rules per customer, enable native cost attribution (bucket→tenant tag), and
-  remove the prefix-scan hotspot on the shared listing index. It also multiplies
-  per-account bucket-quota pressure (hence hybrid, not replace) and needs a
-  migration path for existing data.
-- **Design (ADR-0011):** layout is a **per-tenant** property; `shared` and
-  `dedicated` coexist. Most machinery already exists (`buckets.owner_tenant_id`,
-  `provision_state` + `BucketReconciler`, `tenant_default_bindings`, the tenancy
-  trigger, `CopyObject`). Net-new: a `tenants.storage_layout` column +
-  provision-on-create wiring (Phase 1, works on current single-client wiring); a
-  `BackendRegistry` for multi-backend/region routing (Phase 2, the real
-  unblock); a shared→dedicated copy job (Phase 3). Keys stay uniform so a move
-  is a same-key `CopyObject`. All five original DoD points (provisioning flow,
-  naming/region, migration, cost attribution, purge) are answered in the ADR.
-- **Definition of Done:** execute Phases 1–3 per ADR-0011, once rollout is
-  greenlit.
-- **Blockers:** product decision to roll out (design is no longer a blocker —
-  ADR-0011 records it).
+- **Status:** Phases 1 + 2 SHIPPED 2026-07-02/03 per
+  [ADR-0011](backend/docs/adr/0011-per-tenant-bucket-layout.md); only
+  **Phase 3** (the migration copy job) remains.
+- **Shipped — Phase 2 (multi-backend routing):** `BackendRegistry`
+  (client-per-backend, #121) → `backend_id` threading resolver→storage
+  boundary (#122) → per-backend routers on `wire.Storage` (#123), proven
+  end-to-end against two real MinIO backends (#124). Maintenance workers
+  route by backend id (#125 bucket reconciler, #126 reconciler probe /
+  hard-deleter / multipart reaper) and multipart uploads are anchored to
+  their initiate-time (backend, bucket) — migration 053 (#127).
+- **Shipped — Phase 1 (dedicated layout):** `tenants.storage_layout`
+  (migration 054, proto field 12, end-to-end #128); CreateTenant with
+  `dedicated` provisions a pending tenant-owned bucket + default binding
+  in the same tx, physically created by the (backend-routed) reconciler
+  (#129); mutations are gated on `provision_state='ready'` with a clean
+  retryable FailedPrecondition (#130).
+- **Definition of Done (remaining — Phase 3):**
+  - `streamThrough` cross-backend copy (GET(src)→PUT(dst), multipart for
+    large objects) behind the `CopyObject` router branch that currently
+    refuses cross-backend pairs loudly.
+  - An admin-triggered per-tenant migration job: provision dedicated
+    bucket → same-key `CopyObject` sweep of the `<tenant_id>/` prefix
+    with watermark/retry → transactional `object_keys` rebind (FK is
+    DEFERRABLE) → verify → delete old prefix (or tombstone).
+  - Two-MinIO integration test of the full migration.
+- **Deferred (smaller follow-ups):** per-tenant backend selection at
+  CreateTenant (currently the config default backend); org-prefix in the
+  derived bucket name for cross-account global uniqueness; bucket tagging
+  (`tenant_id`) at provision time for native cost attribution; frontend
+  proto regen to surface `storage_layout` in the console.
+- **Blockers:** none technical — Phase 3 is an explicit admin action per
+  tenant; build it when the first shared→dedicated migration is needed.
 
 ### Redis capability counter cache
 

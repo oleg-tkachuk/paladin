@@ -152,14 +152,33 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
 - **Does not commit to a rollout** — that is product-gated. This ADR is the
   architecture, ready to execute on green-light.
 
-## Implementation status (2026-07-02)
+## Implementation status (2026-07-03)
 
-Nothing built. Prerequisite machinery already present and reusable:
-`buckets.owner_tenant_id`, `buckets.provision_state`, `BucketReconciler`,
-`tenant_default_bindings`, `enforce_object_key_bucket_tenancy`, and the
-`CopyObject` sink. The net-new work is: the `storage_layout` column + a
-provision-on-create wiring (Phase 1), the `BackendRegistry` (Phase 2), and the
-copy job (Phase 3).
+**Phases 1 and 2 are SHIPPED; only Phase 3 (the migration copy job) remains.**
+
+- **Phase 2** landed first as the enabling refactor (#121–#124): the
+  `BackendRegistry` (client-per-backend), `backend_id` threaded from the
+  bucket resolver to the storage boundary, per-backend routers behind every
+  `wire.Storage` interface — proven end-to-end against two physically
+  distinct MinIO backends. Follow-ups shipped with it: the maintenance
+  workers (bucket reconciler, reconciler probe, hard-deleter, multipart
+  reaper) route by backend id (#125–#126), and multipart uploads are
+  anchored to their initiate-time `(backend, bucket)` (migration 053, #127),
+  closing the `BindObjectKeyToBucket` rebind gap.
+- **Phase 1** shipped on top (#128–#130): `tenants.storage_layout`
+  (migration 054, proto `Tenant.storage_layout`), provision-on-create — a
+  `dedicated` tenant gets a pending tenant-owned bucket + default binding in
+  the CreateTenant tx, physically created by the backend-routed reconciler —
+  and the mutation gate on `provision_state='ready'`
+  (`ErrBucketProvisioning` → FailedPrecondition, retryable).
+- **Phase 3** (shared→dedicated copy job + `streamThrough` cross-backend
+  copy) is tracked in BACKLOG; the `CopyObject` router refuses cross-backend
+  pairs loudly until it lands. Smaller deferrals (per-tenant backend
+  selection, org-prefixed bucket names, provision-time cost-attribution
+  tagging, frontend field surfacing) are listed there too.
+
+Component-level design for the Phase 2 machinery:
+[docs/backend-registry.md](../backend-registry.md).
 
 ## Consequences
 
