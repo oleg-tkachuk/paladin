@@ -334,17 +334,20 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 	// 047): a mutation (`write`) against a read-only backend is refused;
 	// reads still resolve.
 	const q = `
-		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only
+		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only,
+		       COALESCE(bk.provision_state, 'ready')
 		FROM object_keys ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
+		LEFT JOIN buckets bk ON bk.backend_id = ok.backend_id AND bk.bucket_name = ok.bucket_name
 		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
 	var (
-		backendID string
-		bucket    string
-		enabled   bool
-		readOnly  bool
+		backendID      string
+		bucket         string
+		enabled        bool
+		readOnly       bool
+		provisionState string
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
 		if isNoRows(err) {
 			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
@@ -355,6 +358,9 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objec
 	}
 	if write && readOnly {
 		return "", "", object.ErrBackendReadOnly
+	}
+	if write && provisionState != "ready" {
+		return "", "", object.ErrBucketProvisioning
 	}
 	return backendID, bucket, nil
 }
@@ -383,7 +389,8 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		SELECT b.backend_id, b.bucket_name,
 		       COALESCE(bk.versioning_enabled, false),
 		       COALESCE(bk.object_lock_enabled, false),
-		       b.constraints, sb.enabled, sb.read_only, sb.events_enabled
+		       b.constraints, sb.enabled, sb.read_only, sb.events_enabled,
+		       COALESCE(bk.provision_state, 'ready')
 		FROM object_keys b
 		JOIN storage_backends sb ON sb.id = b.backend_id
 		LEFT JOIN buckets bk
@@ -395,10 +402,11 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 		constraintsJSON []byte
 		enabled         bool
 		readOnly        bool
+		provisionState  string
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
-		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled,
+		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState,
 	); err != nil {
 		if isNoRows(err) {
 			return object.BucketMeta{}, fmt.Errorf("objectKey %q not found", objectKey)
@@ -410,6 +418,9 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, o
 	}
 	if write && readOnly {
 		return object.BucketMeta{}, object.ErrBackendReadOnly
+	}
+	if write && provisionState != "ready" {
+		return object.BucketMeta{}, object.ErrBucketProvisioning
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v

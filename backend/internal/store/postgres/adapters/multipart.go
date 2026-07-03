@@ -214,17 +214,20 @@ func (r *MultipartRepo) ListParts(ctx context.Context, uploadID string, pageSize
 // pass write=true; the disabled (feature 002) gate applies to all.
 func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, objectKey string, write bool) (string, string, error) {
 	const q = `
-		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only
+		SELECT ok.backend_id, ok.bucket_name, sb.enabled, sb.read_only,
+		       COALESCE(bk.provision_state, 'ready')
 		FROM object_keys ok
 		JOIN storage_backends sb ON sb.id = ok.backend_id
+		LEFT JOIN buckets bk ON bk.backend_id = ok.backend_id AND bk.bucket_name = ok.bucket_name
 		WHERE ok.tenant_id = $1 AND ok.object_key = $2`
 	var (
-		backendID string
-		bucket    string
-		enabled   bool
-		readOnly  bool
+		backendID      string
+		bucket         string
+		enabled        bool
+		readOnly       bool
+		provisionState string
 	)
-	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly); err != nil {
+	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), objectKey).Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
 		if isNoRows(err) {
 			return "", "", fmt.Errorf("objectKey %q not found", objectKey)
 		}
@@ -235,6 +238,9 @@ func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, ob
 	}
 	if write && readOnly {
 		return "", "", object.ErrBackendReadOnly
+	}
+	if write && provisionState != "ready" {
+		return "", "", object.ErrBucketProvisioning
 	}
 	return backendID, bucket, nil
 }

@@ -140,12 +140,22 @@ var ErrBackendDisabled = errors.New("storage backend is disabled")
 // chokepoint + FailedPrecondition mapping as ErrBackendDisabled.
 var ErrBackendReadOnly = errors.New("storage backend is read-only (draining)")
 
+// ErrBucketProvisioning is returned by the resolution path for a MUTATION when
+// the target bucket exists in the catalog but is not provisioned yet
+// (provision_state != 'ready') — the dedicated-bucket window between
+// CreateTenant and the reconciler creating the physical bucket (ADR-0011
+// Phase 1). Mapped to FailedPrecondition so a client retries once the bucket
+// is ready rather than presigning a PUT against a bucket S3 doesn't have.
+var ErrBucketProvisioning = errors.New("storage bucket is still provisioning")
+
 // mapResolveErr maps a bucket-resolution error to the right Connect code:
-// a disabled or read-only backend is FailedPrecondition (the resource
-// exists but is not in a state that permits the op); anything else is
-// treated as NotFound (the historical behaviour for an unresolved object key).
+// a disabled/read-only backend or a still-provisioning bucket is
+// FailedPrecondition (the resource exists but is not in a state that permits
+// the op); anything else is treated as NotFound (the historical behaviour for
+// an unresolved object key).
 func MapResolveErr(err error) error {
-	if errors.Is(err, ErrBackendDisabled) || errors.Is(err, ErrBackendReadOnly) {
+	if errors.Is(err, ErrBackendDisabled) || errors.Is(err, ErrBackendReadOnly) ||
+		errors.Is(err, ErrBucketProvisioning) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeNotFound, err)
