@@ -12,9 +12,16 @@ import (
 // ─── Storage backend ────────────────────────────────────────────────────────
 
 type StorageBackend struct {
-	BackendID            string
-	DisplayName          string
-	Kind                 string // "aws-s3" | "s3-compatible" | "gcs"
+	BackendID   string
+	DisplayName string
+	Kind        string // "aws-s3" | "s3-compatible" | "gcs"
+	// Provider is the vendor/implementation behind Kind — free-form slug
+	// ("garage" | "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …).
+	// Kind is too coarse (every self-hosted S3 is "s3-compatible"); Provider
+	// records which one, for UI display and vendor-specific handling. Mirrored
+	// from static config; empty when unset (the UI falls back to an endpoint
+	// heuristic).
+	Provider             string
 	Endpoint             string
 	PublicEndpoint       string
 	Region               string

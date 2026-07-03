@@ -66,6 +66,12 @@ message StorageBackend {
   // and operator-set (unlike the derived health_*). Managed via
   // SetBackendMaintenance; NOT mirrored from static config.
   bool maintenance = 23;
+  // Vendor/implementation behind `kind` — a free-form slug ("garage" |
+  // "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …). `kind` is
+  // too coarse (every self-hosted S3 is S3_COMPATIBLE); `provider` records
+  // which one, for UI display. Mirrored from static config (migration 055);
+  // empty when unset (the UI falls back to an endpoint heuristic).
+  string provider = 24;
 }
 
 enum StorageKind {

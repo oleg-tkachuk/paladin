@@ -42,6 +42,7 @@ config:
   storage:
     backends:
       primary:
+        provider: garage
         # Local dev object store: Garage S3 (garage-s3.storage:3900). The
         # co-located SeaweedFS was swapped out — its volume server hit its
         # volume-count cap (-max=0 → 18 volumes, one collection per bucket)

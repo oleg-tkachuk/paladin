@@ -73,6 +73,53 @@ const KIND_LABELS: Record<number, string> = {
   [StorageKind.UNSPECIFIED]: "—",
 };
 
+// Vendor/implementation behind `kind` (`kind` is too coarse — every
+// self-hosted S3 is S3_COMPATIBLE). The server carries an explicit `provider`
+// slug (mirrored from config); when unset we fall back to an endpoint
+// heuristic so the "Type" column is still useful for backends predating the
+// field. Known slugs get a nice label; unknown ones render verbatim.
+const PROVIDER_LABELS: Record<string, string> = {
+  garage: "Garage",
+  seaweedfs: "SeaweedFS",
+  minio: "MinIO",
+  ceph: "Ceph",
+  aws: "AWS",
+  gcp: "GCP",
+  azure: "Azure",
+  digitalocean: "DigitalOcean",
+  wasabi: "Wasabi",
+  backblaze: "Backblaze",
+  cloudflare: "Cloudflare R2",
+};
+
+function providerFromEndpoint(endpoint: string): string {
+  const e = endpoint.toLowerCase();
+  if (e.includes("garage")) return "garage";
+  if (e.includes("seaweed")) return "seaweedfs";
+  if (e.includes("minio")) return "minio";
+  if (e.includes("amazonaws.com")) return "aws";
+  if (e.includes("googleapis") || e.includes("storage.google")) return "gcp";
+  if (e.includes("digitaloceanspaces") || e.includes("digitalocean"))
+    return "digitalocean";
+  if (e.includes("r2.cloudflarestorage")) return "cloudflare";
+  if (e.includes("wasabisys")) return "wasabi";
+  if (e.includes("backblazeb2")) return "backblaze";
+  if (e.includes("blob.core.windows.net")) return "azure";
+  return "";
+}
+
+// providerLabel resolves the display label: explicit `provider` wins, else
+// the endpoint heuristic, else "—". `derived` flags a heuristic guess so the
+// UI can mark it as unconfirmed.
+function providerLabel(b: { provider: string; endpoint: string }): {
+  label: string;
+  derived: boolean;
+} {
+  const slug = b.provider || providerFromEndpoint(b.endpoint);
+  if (!slug) return { label: "—", derived: false };
+  return { label: PROVIDER_LABELS[slug] || slug, derived: !b.provider };
+}
+
 export default function StorageBackendsPage() {
   const {
     backends,
@@ -515,6 +562,7 @@ export default function StorageBackendsPage() {
               <TableHead className="w-[220px]">Backend ID</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead className="hidden md:table-cell">Kind</TableHead>
+              <TableHead className="hidden md:table-cell">Type</TableHead>
               <TableHead className="hidden md:table-cell">Region</TableHead>
               <TableHead className="hidden lg:table-cell">Endpoint</TableHead>
               <TableHead className="w-[160px] text-right">Status</TableHead>
@@ -524,14 +572,14 @@ export default function StorageBackendsPage() {
             {loading && backends.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={7} className="py-3">
+                  <TableCell colSpan={8} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-48 text-center">
+                <TableCell colSpan={8} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -592,6 +640,31 @@ export default function StorageBackendsPage() {
                       <Badge variant="outline" className={T.labelTight}>
                         {KIND_LABELS[b.kind] || "—"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {(() => {
+                        const p = providerLabel(b);
+                        if (p.label === "—")
+                          return (
+                            <span className="text-muted-foreground">—</span>
+                          );
+                        return (
+                          <Badge
+                            variant="secondary"
+                            className={T.labelTight}
+                            title={
+                              p.derived
+                                ? "Inferred from the endpoint (no provider set)"
+                                : undefined
+                            }
+                          >
+                            {p.label}
+                            {p.derived && (
+                              <span className="ml-1 opacity-60">?</span>
+                            )}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <span className="font-mono text-xs text-muted-foreground">

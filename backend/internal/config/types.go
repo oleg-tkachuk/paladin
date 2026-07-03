@@ -658,6 +658,12 @@ type Idempotency struct {
 // that drives CompletionMode (IMPLICIT when events.enabled, EXPLICIT otherwise).
 type StorageBackend struct {
 	Kind string `yaml:"kind" json:"kind"` // aws-s3 | s3-compatible | gcs
+	// Provider is the vendor/implementation behind Kind — a free-form slug
+	// ("garage" | "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …).
+	// Optional: Kind is too coarse (every self-hosted S3 is "s3-compatible"),
+	// so Provider records which one for UI display. Mirrored into
+	// storage_backends.provider by the bootstrap reconciler.
+	Provider string `yaml:"provider" json:"provider"`
 	// Bucket is the physical S3 bucket name. PALADIN "ObjectKey" entries
 	// become a tenant-scoped prefix within this bucket; the full S3 key
 	// for any object is "<tenant_id>/<object_key>/<key>".

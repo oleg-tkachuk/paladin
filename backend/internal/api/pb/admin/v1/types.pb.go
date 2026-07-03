@@ -286,7 +286,13 @@ type StorageBackend struct {
 	// maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
 	// and operator-set (unlike the derived health_*). Managed via
 	// SetBackendMaintenance; NOT mirrored from static config.
-	Maintenance   bool `protobuf:"varint,23,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	Maintenance bool `protobuf:"varint,23,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	// Vendor/implementation behind `kind` — a free-form slug ("garage" |
+	// "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …). `kind` is
+	// too coarse (every self-hosted S3 is S3_COMPATIBLE); `provider` records
+	// which one, for UI display. Mirrored from static config (migration 055);
+	// empty when unset (the UI falls back to an endpoint heuristic).
+	Provider      string `protobuf:"bytes,24,opt,name=provider,proto3" json:"provider,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -480,6 +486,13 @@ func (x *StorageBackend) GetMaintenance() bool {
 		return x.Maintenance
 	}
 	return false
+}
+
+func (x *StorageBackend) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
 }
 
 type ServerSideEncryption struct {
@@ -2592,7 +2605,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\x9e\b\n" +
+	"\x18ocp/admin/v1/types.proto\x12\focp.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cocp/common/v1/resource.proto\"\xba\b\n" +
 	"\x0eStorageBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2620,7 +2633,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\rhealth_status\x18\x14 \x01(\tR\fhealthStatus\x12%\n" +
 	"\x0ehealth_message\x18\x15 \x01(\tR\rhealthMessage\x12F\n" +
 	"\x11health_checked_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x0fhealthCheckedAt\x12 \n" +
-	"\vmaintenance\x18\x17 \x01(\bR\vmaintenance\"X\n" +
+	"\vmaintenance\x18\x17 \x01(\bR\vmaintenance\x12\x1a\n" +
+	"\bprovider\x18\x18 \x01(\tR\bprovider\"X\n" +
 	"\x14ServerSideEncryption\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.paladin.admin.v1.SseTypeR\x04type\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\"\xbd\x01\n" +

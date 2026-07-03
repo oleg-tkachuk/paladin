@@ -6,9 +6,9 @@ INSERT INTO storage_backends (
     id, kind, endpoint, region, events_enabled, events_target,
     display_name, public_endpoint, force_path_style,
     credentials_secret_ref, sse_type, sse_key_id,
-    events_queue_url, events_poll_interval_ms, cedar_policy
+    events_queue_url, events_poll_interval_ms, cedar_policy, provider
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 ON CONFLICT (id) DO UPDATE SET
     kind                    = EXCLUDED.kind,
     endpoint                = EXCLUDED.endpoint,
@@ -24,6 +24,7 @@ ON CONFLICT (id) DO UPDATE SET
     events_queue_url        = EXCLUDED.events_queue_url,
     events_poll_interval_ms = EXCLUDED.events_poll_interval_ms,
     cedar_policy            = EXCLUDED.cedar_policy,
+    provider                = EXCLUDED.provider,
     updated_at              = now();
 
 -- name: GetStorageBackendV2 :one
@@ -31,7 +32,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance, provider,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,
@@ -51,7 +52,7 @@ SELECT id, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
        credentials_secret_ref, sse_type, sse_key_id,
        events_queue_url, events_poll_interval_ms,
-       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance,
+       cedar_policy, cedar_policy_hash, enabled, read_only, maintenance, provider,
        COALESCE(h.status, 'unknown') AS health_status,
        COALESCE(h.message, '') AS health_message,
        h.checked_at AS health_checked_at,

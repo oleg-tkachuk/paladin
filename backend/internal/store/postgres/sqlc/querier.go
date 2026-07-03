@@ -498,7 +498,7 @@ type Querier interface {
 	UpsertStorageBackendHealth(ctx context.Context, backendID string, status string, message string, checkedAt pgtype.Timestamptz) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// Used by both Create RPC (new row) and config seeding (idempotent on re-deploy).
-	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string) error
+	UpsertStorageBackendV2(ctx context.Context, iD string, kind string, endpoint *string, region *string, eventsEnabled bool, eventsTarget *string, displayName *string, publicEndpoint *string, forcePathStyle bool, credentialsSecretRef *string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
 	UpsertTenantQuota(ctx context.Context, quotaID pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64) error
 	// Insert-or-update with a single round trip. Returns the post-write row so
 	// the handler can echo the bumped resource_version back to the caller.

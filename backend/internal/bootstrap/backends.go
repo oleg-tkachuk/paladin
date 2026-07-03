@@ -138,6 +138,7 @@ func domainBackendFromYAML(id string, b config.StorageBackend) v1admindomain.Sto
 	return v1admindomain.StorageBackend{
 		BackendID:      id,
 		Kind:           b.Kind,
+		Provider:       b.Provider,
 		Endpoint:       b.Endpoint,
 		PublicEndpoint: b.PublicEndpoint,
 		Region:         b.Region,
@@ -160,6 +161,7 @@ func domainBackendFromYAML(id string, b config.StorageBackend) v1admindomain.Sto
 // owns, so they don't count toward "converged".
 func equalForBootstrap(a, b v1admindomain.StorageBackend) bool {
 	return a.Kind == b.Kind &&
+		a.Provider == b.Provider &&
 		a.Endpoint == b.Endpoint &&
 		a.PublicEndpoint == b.PublicEndpoint &&
 		a.Region == b.Region &&

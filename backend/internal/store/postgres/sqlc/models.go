@@ -493,6 +493,7 @@ type StorageBackend struct {
 	PreviousCredentialsValidUntil pgtype.Timestamptz `json:"previous_credentials_valid_until"`
 	ReadOnly                      bool               `json:"read_only"`
 	Maintenance                   bool               `json:"maintenance"`
+	Provider                      string             `json:"provider"`
 }
 
 type StorageBackendHealth struct {

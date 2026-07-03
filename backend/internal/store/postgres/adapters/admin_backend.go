@@ -83,6 +83,7 @@ func (r *BackendRepoV2) Upsert(ctx context.Context, b admindomain.StorageBackend
 		b.Events.QueueURL,
 		b.Events.PollInterval.Milliseconds(),
 		b.CedarPolicy,
+		b.Provider,
 	)
 }
 
@@ -104,6 +105,7 @@ func backendFromGetRow(row sqlc.GetStorageBackendV2Row) admindomain.StorageBacke
 		BackendID:            row.ID,
 		DisplayName:          derefStr(row.DisplayName),
 		Kind:                 row.Kind,
+		Provider:             row.Provider,
 		Endpoint:             derefStr(row.Endpoint),
 		PublicEndpoint:       derefStr(row.PublicEndpoint),
 		Region:               derefStr(row.Region),
@@ -158,6 +160,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID string
 			BackendID:            row.ID,
 			DisplayName:          derefStr(row.DisplayName),
 			Kind:                 row.Kind,
+			Provider:             row.Provider,
 			Endpoint:             derefStr(row.Endpoint),
 			PublicEndpoint:       derefStr(row.PublicEndpoint),
 			Region:               derefStr(row.Region),
